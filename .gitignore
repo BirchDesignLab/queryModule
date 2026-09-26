@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.dev/
+deploy/.env
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/web/test-results/
+apps/web/playwright-report/
+licences.json

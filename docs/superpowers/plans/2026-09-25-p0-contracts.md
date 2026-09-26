@@ -251,13 +251,13 @@ Seat plan for this phase: 28 implementer seats (Tasks 4, 5, 17 to 22, 26 and 28 
 
 **IDs:** none (scaffolding)
 
-- [ ] **Step 1: Branch.**
+- [x] **Step 1: Branch.**
 
 ```bash
 git switch main && git pull --ff-only && git switch -c feat/a-<n>
 ```
 
-- [ ] **Step 2: Check the toolchain.**
+- [x] **Step 2: Check the toolchain.**
 
 ```bash
 node --version
@@ -266,7 +266,7 @@ corepack enable
 
 Expected: `v24.` prefix. If not, `fnm use 24` first (master plan 9).
 
-- [ ] **Step 3: Write `package.json`.**
+- [x] **Step 3: Write `package.json`.**
 
 ```json
 {
@@ -292,7 +292,7 @@ Expected: `v24.` prefix. If not, `fnm use 24` first (master plan 9).
 }
 ```
 
-- [ ] **Step 4: Pin pnpm through corepack and add root dev tools.**
+- [x] **Step 4: Pin pnpm through corepack and add root dev tools.**
 
 ```bash
 corepack use pnpm@latest
@@ -301,7 +301,7 @@ pnpm add -D -w typescript@latest @biomejs/biome@latest vitest@latest @vitest/cov
 
 Expected: `package.json` gains `"packageManager": "pnpm@<version>+sha512..."` and a `devDependencies` block; `pnpm-lock.yaml` exists. `tsx` runs the TypeScript scripts under `scripts/` because Node's built-in type stripping does not resolve extensionless imports into workspace source packages.
 
-- [ ] **Step 5: Write `pnpm-workspace.yaml`.**
+- [x] **Step 5: Write `pnpm-workspace.yaml`.**
 
 ```yaml
 packages:
@@ -309,7 +309,7 @@ packages:
   - "apps/*"
 ```
 
-- [ ] **Step 6: Write `.npmrc`, `.nvmrc`, `.gitattributes`.**
+- [x] **Step 6: Write `.npmrc`, `.nvmrc`, `.gitattributes`.**
 
 `.npmrc`:
 
@@ -329,7 +329,7 @@ engine-strict=true
 * text=auto eol=lf
 ```
 
-- [ ] **Step 7: Write `.gitignore`.**
+- [x] **Step 7: Write `.gitignore`.**
 
 ```
 node_modules/
@@ -345,7 +345,7 @@ apps/web/playwright-report/
 licences.json
 ```
 
-- [ ] **Step 8: Write `tsconfig.base.json`.**
+- [x] **Step 8: Write `tsconfig.base.json`.**
 
 ```json
 {
@@ -369,7 +369,7 @@ licences.json
 }
 ```
 
-- [ ] **Step 9: Write `tsconfig.json` (solution file; later tasks append references).**
+- [x] **Step 9: Write `tsconfig.json` (solution file; later tasks append references).**
 
 ```json
 {
@@ -378,7 +378,7 @@ licences.json
 }
 ```
 
-- [ ] **Step 10: Write `biome.json`.**
+- [x] **Step 10: Write `biome.json`.**
 
 ```json
 {
@@ -401,7 +401,7 @@ licences.json
 }
 ```
 
-- [ ] **Step 11: Write `vitest.config.ts`.**
+- [x] **Step 11: Write `vitest.config.ts`.**
 
 ```ts
 import { defineConfig } from "vitest/config";
@@ -426,7 +426,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 12: Write `README.md`.**
+- [x] **Step 12: Write `README.md`.**
 
 ```markdown
 # Query Module 2.0
@@ -466,7 +466,7 @@ Node 24 (`.nvmrc`), pnpm through corepack.
 Most code in this repository is written by AI agents (Claude Code) under a solo developer's direction, with Opus review on sensitive areas. An independent human security review is required before handoff (spec 14).
 ```
 
-- [ ] **Step 13: Write the placeholder directories' files.**
+- [x] **Step 13: Write the placeholder directories' files.**
 
 `deploy/README.md`:
 
@@ -503,7 +503,7 @@ Static host page for embedded-mode testing (spec 6.9): signs demo JWTs, frames `
 }
 ```
 
-- [ ] **Step 14: Verify.**
+- [x] **Step 14: Verify.**
 
 ```bash
 pnpm install
@@ -513,7 +513,7 @@ pnpm typecheck
 
 Expected: install completes with no engine warning; `biome ci` reports no errors; `tsc -b` exits 0 with no output.
 
-- [ ] **Step 15: Commit.**
+- [x] **Step 15: Commit.**
 
 ```bash
 git add -A
@@ -535,7 +535,7 @@ git commit -m "chore(a): workspace root skeleton
 
 **IDs:** none (scaffolding)
 
-- [ ] **Step 1: Write `packages/core/package.json` and add zod.**
+- [x] **Step 1: Write `packages/core/package.json` and add zod.**
 
 ```json
 {
@@ -558,7 +558,7 @@ git commit -m "chore(a): workspace root skeleton
 pnpm --filter @querymodule/core add zod@latest
 ```
 
-- [ ] **Step 2: Write `packages/core/tsconfig.json` and `packages/core/vitest.config.ts`.**
+- [x] **Step 2: Write `packages/core/tsconfig.json` and `packages/core/vitest.config.ts`.**
 
 ```json
 {
@@ -580,7 +580,7 @@ export default defineProject({
 });
 ```
 
-- [ ] **Step 3: Write the failing test `packages/core/src/contracts/version.test.ts`.**
+- [x] **Step 3: Write the failing test `packages/core/src/contracts/version.test.ts`.**
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -617,7 +617,7 @@ describe("version constants (spec 4.7)", () => {
 });
 ```
 
-- [ ] **Step 4: Run it.**
+- [x] **Step 4: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/contracts/version.test.ts
@@ -625,7 +625,7 @@ pnpm vitest run packages/core/src/contracts/version.test.ts
 
 Expected: FAIL, `Failed to resolve import "./version"`.
 
-- [ ] **Step 5: Implement.** `packages/core/src/contracts/version.ts`:
+- [x] **Step 5: Implement.** `packages/core/src/contracts/version.ts`:
 
 ```ts
 export const API_VERSION = "v1" as const;
@@ -650,7 +650,7 @@ export * from "./version";
 export { CONFIG_SCHEMA_VERSION } from "../contracts/version";
 ```
 
-- [ ] **Step 6: Add the reference.** `tsconfig.json`:
+- [x] **Step 6: Add the reference.** `tsconfig.json`:
 
 ```json
 {
@@ -659,7 +659,7 @@ export { CONFIG_SCHEMA_VERSION } from "../contracts/version";
 }
 ```
 
-- [ ] **Step 7: Run tests and typecheck.**
+- [x] **Step 7: Run tests and typecheck.**
 
 ```bash
 pnpm vitest run --project core
@@ -668,7 +668,7 @@ pnpm typecheck
 
 Expected: `3 passed`; `tsc -b` exits 0.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 git add -A
@@ -690,7 +690,7 @@ git commit -m "feat(core): core package with version constants
 
 **IDs:** NFR-001, FR-055
 
-- [ ] **Step 1: Write the failing test `packages/core/src/contracts/errors.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/contracts/errors.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -755,7 +755,7 @@ describe("ApiError shape (spec 4.7)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/contracts/errors.test.ts
@@ -763,7 +763,7 @@ pnpm vitest run packages/core/src/contracts/errors.test.ts
 
 Expected: FAIL, `Failed to resolve import "./api-error"`.
 
-- [ ] **Step 3: Implement `packages/core/src/contracts/validation-error.ts`.**
+- [x] **Step 3: Implement `packages/core/src/contracts/validation-error.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -776,7 +776,7 @@ export const ValidationErrorSchema = z.strictObject({
 export type ValidationError = z.infer<typeof ValidationErrorSchema>;
 ```
 
-- [ ] **Step 4: Implement `packages/core/src/contracts/api-error.ts`.**
+- [x] **Step 4: Implement `packages/core/src/contracts/api-error.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -833,7 +833,7 @@ export const ApiErrorSchema = z.strictObject({
 export type ApiError = z.infer<typeof ApiErrorSchema>;
 ```
 
-- [ ] **Step 5: Barrel.** `packages/core/src/contracts/index.ts`:
+- [x] **Step 5: Barrel.** `packages/core/src/contracts/index.ts`:
 
 ```ts
 export * from "./api-error";
@@ -841,7 +841,7 @@ export * from "./validation-error";
 export * from "./version";
 ```
 
-- [ ] **Step 6: Run.**
+- [x] **Step 6: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -849,7 +849,7 @@ pnpm vitest run --project core
 
 Expected: `9 passed`.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add -A
@@ -875,7 +875,7 @@ git commit -m "feat(core): ValidationError and ApiError contracts
 
 **IDs:** SEC-010, SEC-011, SEC-012, SEC-013, FR-042, FR-043, NFR-004; story A9 (schema only; the A9 test is M2)
 
-- [ ] **Step 1: Write the failing test `packages/core/src/contracts/audit.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/contracts/audit.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1018,7 +1018,7 @@ describe("FR-043 source status", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/contracts/audit.test.ts
@@ -1026,7 +1026,7 @@ pnpm vitest run packages/core/src/contracts/audit.test.ts
 
 Expected: FAIL, `Failed to resolve import "./audit"`.
 
-- [ ] **Step 3: Implement `packages/core/src/contracts/identity.ts`.**
+- [x] **Step 3: Implement `packages/core/src/contracts/identity.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -1040,7 +1040,7 @@ export const IdentitySourceSchema = z.enum(IDENTITY_SOURCES);
 export type IdentitySource = z.infer<typeof IdentitySourceSchema>;
 ```
 
-- [ ] **Step 4: Implement `packages/core/src/contracts/source-status.ts`.**
+- [x] **Step 4: Implement `packages/core/src/contracts/source-status.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -1078,7 +1078,7 @@ export const AdapterErrorCodeSchema = z.enum(ADAPTER_ERROR_CODES);
 export type AdapterErrorCode = z.infer<typeof AdapterErrorCodeSchema>;
 ```
 
-- [ ] **Step 5: Implement `packages/core/src/contracts/audit.ts`.**
+- [x] **Step 5: Implement `packages/core/src/contracts/audit.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -1207,7 +1207,7 @@ export const AuditEventSchema = z.discriminatedUnion("type", [
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 ```
 
-- [ ] **Step 6: Barrel.** `packages/core/src/contracts/index.ts`:
+- [x] **Step 6: Barrel.** `packages/core/src/contracts/index.ts`:
 
 ```ts
 export * from "./api-error";
@@ -1218,7 +1218,7 @@ export * from "./validation-error";
 export * from "./version";
 ```
 
-- [ ] **Step 7: Run.**
+- [x] **Step 7: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -1227,7 +1227,7 @@ pnpm typecheck
 
 Expected: all core tests pass (audit file: 21 tests); `tsc -b` exits 0.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 git add -A
@@ -1236,7 +1236,7 @@ git commit -m "feat(core): source status and query audit catalogue
 <attribution trailer given by your session's system reminder>"
 ```
 
-- [ ] **Step 9: Sensitive review.** Run the Opus 5.5 `xhigh` whole-branch review; it writes `docs/reviews/pr-<PR number>.md` with front matter `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"` after findings are fixed. Commit it:
+- [x] **Step 9: Sensitive review.** Run the Opus 5.5 `xhigh` whole-branch review; it writes `docs/reviews/pr-<PR number>.md` with front matter `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"` after findings are fixed. Commit it:
 
 ```bash
 git add docs/reviews/pr-<PR number>.md
@@ -1254,11 +1254,11 @@ git commit -m "docs(core): sensitive review for audit catalogue
 
 **Interfaces:**
 - Consumes: `WS_PROTOCOL_VERSION` (Task 2), `SourceStatusSchema` (Task 4).
-- Produces: `HelloMessageSchema`, `PingMessageSchema`, `AckReceiptMessageSchema`, `WelcomeMessageSchema`, `PongMessageSchema`, `SourceStatusEventSchema`; `WsClientMessageSchema` (union of hello, ping, ackReceipt), `type WsClientMessage`; `WsServerMessageSchema` (union of welcome, pong, sourceStatus), `type WsServerMessage`; `WsEventSchema` (state-changing server events carrying `seq`; M0 P0: `sourceStatus` only), `type WsEvent`; `WS_CLOSE_CODES = { sessionEnded: 4001, sessionRevoked: 4003 }`; `WS_PING_INTERVAL_MS = 20000`. `resultHidden` and `resync` join in M2 P0, `delegationChanged` in M3 P0 (additive, master plan 8). Per lead ruling R3, the Origin check (spec 5.3, 10.3) is an HTTP 403 rejection before the WebSocket upgrade completes, never a WS close: no session gives HTTP 401 pre-upgrade, a foreign or missing Origin without a bearer header gives HTTP 403 pre-upgrade, and close code 4003 is reserved for mid-session session revocation or expiry (`sessionRevoked`), not for Origin rejection.
+- Produces: `HelloMessageSchema`, `PingMessageSchema`, `AckReceiptMessageSchema`, `WelcomeMessageSchema`, `PongMessageSchema`, `SourceStatusEventSchema`; `WsClientMessageSchema` (union of hello, ping, ackReceipt), `type WsClientMessage`; `WsServerMessageSchema` (union of welcome, pong, sourceStatus), `type WsServerMessage`; `WsEventSchema` (state-changing server events carrying `seq`; M0 P0: `sourceStatus` only), `type WsEvent`; `WS_CLOSE_CODES = { sessionEnded: 4001 }`; `WS_PING_INTERVAL_MS = 20000`. `resultHidden` and `resync` join in M2 P0, `delegationChanged` in M3 P0 (additive, master plan 8). Per ADR-0004 (which replaces lead ruling R3), 4001 closes the socket on every session end (logout, session expiry, session revocation, user disable; spec 4.7, 5.2, 5.3). Origin and session checks reject the upgrade with HTTP before any socket exists (401 without a live session; 403 for a foreign Origin, or a missing Origin without `Authorization: Bearer`; spec 5.3, 10.3), so they are never close codes. There is no `sessionRevoked` and no `originRejected`; 4003 stays unassigned, and a later code is additive (master plan 8).
 
 **IDs:** FR-043, FR-065, NFR-003, NFR-004, SEC-014
 
-- [ ] **Step 1: Write the failing test `packages/core/src/contracts/ws.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/contracts/ws.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1313,13 +1313,13 @@ describe("SEC-014 FR-043 WebSocket messages (spec 4.7)", () => {
     expect(WsEventSchema.safeParse({ ...sourceStatus, seq: 0 }).success).toBe(false);
   });
 
-  it("close codes match spec 4.7 as narrowed by lead ruling R3 (4003 is mid-session revocation/expiry, not Origin rejection)", () => {
-    expect(WS_CLOSE_CODES).toEqual({ sessionEnded: 4001, sessionRevoked: 4003 });
+  it("close codes match spec 4.7/5.3: 4001 on every session end, Origin is an HTTP rejection (ADR-0004)", () => {
+    expect(WS_CLOSE_CODES).toEqual({ sessionEnded: 4001 });
   });
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/contracts/ws.test.ts
@@ -1327,7 +1327,7 @@ pnpm vitest run packages/core/src/contracts/ws.test.ts
 
 Expected: FAIL, `Failed to resolve import "./ws"`.
 
-- [ ] **Step 3: Implement `packages/core/src/contracts/ws.ts`.**
+- [x] **Step 3: Implement `packages/core/src/contracts/ws.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -1340,8 +1340,8 @@ const EpochMs = z.int().min(0);
 const Seq = z.int().min(1);
 
 export const WS_PING_INTERVAL_MS = 20_000;
-/** sessionRevoked (4003) is mid-session only: session revocation or expiry after the upgrade. Origin rejection is an HTTP 403 before the upgrade completes (spec 5.3, 10.3; lead ruling R3), never a WS close code. */
-export const WS_CLOSE_CODES = { sessionEnded: 4001, sessionRevoked: 4003 } as const;
+/** 4001 closes the socket on every session end: logout, session expiry, session revocation, user disable (spec 4.7, 5.2, 5.3). Origin and session checks reject the upgrade with HTTP before any socket exists (401 without a live session; 403 for a foreign Origin, or a missing Origin without `Authorization: Bearer`; spec 5.3, 10.3), so they are never close codes. 4003 is unassigned; a later code is additive (master plan 8). ADR-0004. */
+export const WS_CLOSE_CODES = { sessionEnded: 4001 } as const;
 
 export const HelloMessageSchema = z.strictObject({ v, type: z.literal("hello"), lastSeq: Seq.nullable() });
 export const PingMessageSchema = z.strictObject({ v, type: z.literal("ping"), nonce: Id });
@@ -1385,7 +1385,7 @@ export const WsEventSchema = z.discriminatedUnion("type", [SourceStatusEventSche
 export type WsEvent = z.infer<typeof WsEventSchema>;
 ```
 
-- [ ] **Step 4: Barrel.** Add `export * from "./ws";` to `packages/core/src/contracts/index.ts` (keep lines sorted):
+- [x] **Step 4: Barrel.** Add `export * from "./ws";` to `packages/core/src/contracts/index.ts` (keep lines sorted):
 
 ```ts
 export * from "./api-error";
@@ -1397,7 +1397,7 @@ export * from "./version";
 export * from "./ws";
 ```
 
-- [ ] **Step 5: Run.**
+- [x] **Step 5: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -1405,7 +1405,7 @@ pnpm vitest run --project core
 
 Expected: all pass (ws file: 6 tests).
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add -A
@@ -1427,7 +1427,7 @@ git commit -m "feat(core): WebSocket message schemas v1
 
 **IDs:** FR-006, FR-007, FR-053, FR-056, BR-001
 
-- [ ] **Step 1: Write the failing test `packages/core/src/config/shortcuts.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/config/shortcuts.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1505,7 +1505,7 @@ describe("FR-006 FR-007 FR-053 shortcut catalogue (spec 6.4)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/shortcuts.test.ts
@@ -1513,7 +1513,7 @@ pnpm vitest run packages/core/src/config/shortcuts.test.ts
 
 Expected: FAIL, `Failed to resolve import "./features"`.
 
-- [ ] **Step 3: Implement `packages/core/src/config/features.ts`.**
+- [x] **Step 3: Implement `packages/core/src/config/features.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -1524,7 +1524,7 @@ export const FeatureKeySchema = z.enum(FEATURES);
 export type FeatureKey = z.infer<typeof FeatureKeySchema>;
 ```
 
-- [ ] **Step 4: Implement `packages/core/src/config/shortcuts.ts`.**
+- [x] **Step 4: Implement `packages/core/src/config/shortcuts.ts`.**
 
 ```ts
 export const SHORTCUT_CONTEXTS = ["global", "panel", "results", "terminal"] as const;
@@ -1664,7 +1664,7 @@ export function usLayoutChar(keys: string): string | null {
 }
 ```
 
-- [ ] **Step 5: Barrel.** `packages/core/src/config/index.ts`:
+- [x] **Step 5: Barrel.** `packages/core/src/config/index.ts`:
 
 ```ts
 export { CONFIG_SCHEMA_VERSION } from "../contracts/version";
@@ -1672,7 +1672,7 @@ export * from "./features";
 export * from "./shortcuts";
 ```
 
-- [ ] **Step 6: Run.**
+- [x] **Step 6: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -1680,7 +1680,7 @@ pnpm vitest run --project core
 
 Expected: all pass (shortcuts file: 7 tests).
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add -A

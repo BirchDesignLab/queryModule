@@ -1,0 +1,33 @@
+{
+  "name": "querymodule",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "lint": "biome ci --error-on-warnings .",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "contracts:gen": "tsx scripts/ci/contracts-gen.ts",
+    "tokens:gen": "pnpm --filter @querymodule/tokens gen",
+    "gen:check": "tsx scripts/ci/check-generated.ts",
+    "config:validate": "tsx scripts/ci/config-validate.ts",
+    "config:migrate": "tsx scripts/ci/config-migrate.ts",
+    "dev:web": "pnpm --filter @querymodule/web dev",
+    "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm config:validate && pnpm gen:check"
+  },
+  "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@types/node": "^26.6.2",
+    "@types/picomatch": "^4.0.3",
+    "@vitest/coverage-v8": "^5.0.1",
+    "picomatch": "^4.0.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1",
+    "zod": "^4.6.5"
+  }
+}
