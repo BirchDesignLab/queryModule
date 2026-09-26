@@ -68,6 +68,7 @@ async function run(mod, args, responder) {
     if (opts.schema) checkSchema(opts.schema);
     const call = { label: opts.label, model: opts.model, effort: opts.effort, prompt, opts };
     calls.push(call);
+    assert.ok(calls.length <= 200, "runaway loop: more than 200 agent calls");
     const r = responder(opts.label, prompt, calls);
     if (r && opts.schema) validate(opts.schema, r, opts.label);
     return r ?? null;
@@ -532,6 +533,180 @@ await test("sdd: implementer BLOCKED stops with questions", async () => {
   assert.deepEqual(r.labels, ["implementer", "ledger"]);
 });
 
+// ---------- fix pass 2: N1 to N6 (sdd-task) ----------
+const criticC1 = {
+  verdict: "fail",
+  findings: [F("C1", "critical", { planMandated: true })],
+  cannotVerify: [],
+};
+
+await test("sdd N1: an answered critical-stands closes without a ruler or fix loop and is ledgered as controller", async () => {
+  const resp = sddResponder({
+    "critic-review": criticC1,
+    "ruler-review": {
+      rulings: [{ item: "critic:C1", decision: "stands", reason: "plan", costIfWrong: "c" }],
+    },
+  });
+  const first = await run(sdd, { ...BASE, sensitive: true }, resp);
+  assert.equal(first.res.stopped, "ruler-review");
+  const answers = {
+    at: "ruler-review",
+    decisions: [{ item: "critic:C1", decision: "stands", reason: "false positive" }],
+  };
+  const second = await run(sdd, { ...BASE, sensitive: true, answers }, resp);
+  for (const l of ["implementer", "spec-review", "quality-review", "critic-review"]) {
+    assert.equal(second.find(l).prompt, first.find(l).prompt, `${l} prompt changed`);
+  }
+  assert.ok(!second.labels.includes("ruler-review"), second.labels.join(","));
+  assert.ok(!second.labels.some((l) => l.startsWith("fixer")), second.labels.join(","));
+  assert.equal(second.res.status, "complete");
+  const c1 = second.res.rulings.find((r) => r.item === "critic:C1");
+  assert.equal(c1.source, "controller");
+  assert.equal(c1.decision, "stands");
+  assert.ok(second.res.ledgerLines.some((l) => l.includes("Ruling (controller): ")));
+});
+
+await test("sdd N1: an answered fix reaches the fixer with its fixInstruction", async () => {
+  const answers = {
+    at: "ruler-review",
+    decisions: [
+      {
+        item: "critic:C1",
+        decision: "fix",
+        reason: "real",
+        fixInstruction: "guard the audit write",
+      },
+    ],
+  };
+  const r = await run(
+    sdd,
+    { ...BASE, sensitive: true, answers },
+    sddResponder({ "critic-review": criticC1 }),
+  );
+  assert.ok(r.find("fixer-r1").prompt.includes("guard the audit write"));
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd N3: every stop point names its consumer; an unknown at throws listing the valid ones", async () => {
+  await assert.rejects(
+    run(sdd, { ...BASE, answers: { at: "gate", text: "x" } }, sddResponder()),
+    /gate-0.*gate-r<r>/s,
+  );
+  await assert.rejects(
+    run(sdd, { ...BASE, answers: { at: "ruler-review" } }, sddResponder()),
+    /text or decisions/,
+  );
+  const review = await run(
+    sdd,
+    { ...BASE, answers: { at: "review", text: "ANS-REVIEW" } },
+    sddResponder({
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "important", { planMandated: true })],
+        cannotVerify: [],
+      },
+    }),
+  );
+  assert.ok(review.find("ruler-review").prompt.includes("ANS-REVIEW"));
+  assert.ok(!review.find("spec-review").prompt.includes("ANS-REVIEW"));
+  let gates = 0;
+  const gate = await run(
+    sdd,
+    { ...BASE, answers: { at: "gate-0", text: "ANS-GATE" } },
+    sddResponder({
+      "gate*": () =>
+        ++gates === 1 ? { ok: false, head: "h", problems: ["lint red"] } : GATE_OK("h2"),
+    }),
+  );
+  assert.ok(gate.find("fixer-r1").prompt.includes("ANS-GATE"));
+  assert.ok(!gate.find("gate-0").prompt.includes("ANS-GATE"));
+  const unused = await run(
+    sdd,
+    { ...BASE, answers: { at: "fixer-r2", text: "never used" } },
+    sddResponder(),
+  );
+  assert.ok(
+    unused.logs.some((l) => /answers .*not consumed/.test(l)),
+    unused.logs.join(" | "),
+  );
+  assert.equal(unused.res.answersUnconsumed, true);
+});
+
+await test("sdd N4: a later ruling supersedes the earlier one; only rulings in force reach the fixer", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      implementer: work("h0", { concerns: [{ kind: "planVsSpec", text: "plan vs spec" }] }),
+      "ruler-concerns": {
+        rulings: [{ item: "IC1", decision: "stands", reason: "plan wins", costIfWrong: "c" }],
+      },
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "important", { contestsRuling: "IC1" })],
+        cannotVerify: [],
+      },
+      "ruler-review": {
+        rulings: [
+          {
+            item: "spec:S1",
+            decision: "fix",
+            reason: "spec wins",
+            costIfWrong: "c",
+            fixInstruction: "follow spec",
+          },
+        ],
+      },
+    }),
+  );
+  const fx = r.find("fixer-r1").prompt;
+  assert.ok(fx.includes("[spec:S1] fix"), fx);
+  assert.ok(!fx.includes("[IC1] stands"), "superseded ruling shown to the fixer");
+  assert.equal(r.res.supersededRulings.length, 1);
+  assert.equal(r.res.supersededRulings[0].item, "IC1");
+  assert.ok(r.res.ledgerLines.some((l) => l.includes("Ruling superseded: IC1")));
+  assert.ok(!r.res.rulings.some((x) => x.item === "IC1"));
+});
+
+await test("sdd N5: an implementer precondition failure stops the run; answers at precondition retry it", async () => {
+  const resp = sddResponder({
+    implementer: work("h", {
+      status: "BLOCKED",
+      commits: [],
+      preconditionFailed: "HEAD is abc, not aaaaaaa1111",
+    }),
+    "implementer-retry": work("h-retry"),
+  });
+  const r = await run(sdd, BASE, resp);
+  assert.equal(r.res.stopped, "precondition");
+  assert.ok(r.res.problem.includes("HEAD is abc"));
+  assert.deepEqual(r.labels, ["implementer", "ledger"]);
+  const again = await run(
+    sdd,
+    { ...BASE, answers: { at: "precondition", text: "Reset to base; retry." } },
+    resp,
+  );
+  assert.ok(again.find("implementer-retry").prompt.includes("Reset to base; retry."));
+  assert.equal(again.res.status, "complete");
+});
+
+await test("sdd N5: a gate head mismatch stops as a precondition, never reaching a fixer", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "gate*": {
+        ok: false,
+        head: "zzz",
+        problems: [],
+        preconditionFailed: "HEAD zzz, expected h-impl",
+      },
+    }),
+  );
+  assert.equal(r.res.stopped, "precondition");
+  assert.ok(!r.labels.some((l) => l.startsWith("fixer")));
+});
+
 // ================= wave-review =================
 const WBASE = {
   pr: 32,
@@ -586,6 +761,7 @@ function wrResponder(over = {}) {
 const reviewWith = (findings) => ({
   verdict: "fixes",
   reviewedSha: "h0full",
+  preconditionFailed: "",
   findings,
   answers: [],
   declined: [],
@@ -743,6 +919,118 @@ await test("wr: dead reviewer returns verdict fixes with stopped reviewer; label
 
 await test("wr: missing required arg throws", async () => {
   await assert.rejects(run(wr, { ...WBASE, pr: "" }, wrResponder()), /"pr"/);
+});
+
+// ---------- fix pass 2: N1 to N6 (wave-review) ----------
+await test("wr N2: an escalation is answered; the review replays from cache and the run reaches the fix pass", async () => {
+  const resp = wrResponder({
+    reviewer: reviewWith([WF("C1", "critical", { planMandated: true })]),
+    ruler: { rulings: [{ item: "C1", decision: "stands", reason: "plan", costIfWrong: "c" }] },
+  });
+  const first = await run(wr, WBASE, resp);
+  assert.equal(first.res.stopped, "ruler");
+  const answers = {
+    at: "ruler",
+    text: "ANS-WR",
+    decisions: [
+      { item: "C1", decision: "fix", reason: "real", fixInstruction: "close the fail-open path" },
+    ],
+  };
+  const second = await run(wr, { ...WBASE, answers }, resp);
+  assert.equal(
+    second.find("reviewer").prompt,
+    first.find("reviewer").prompt,
+    "reviewer prompt changed, cache would miss",
+  );
+  assert.deepEqual(second.find("reviewer").opts, first.find("reviewer").opts);
+  assert.ok(!second.labels.includes("ruler"), second.labels.join(","));
+  assert.ok(second.find("fixer").prompt.includes("close the fail-open path"));
+  assert.ok(second.find("fixer").prompt.includes("ANS-WR"));
+  assert.equal(second.res.verdict, "approve");
+  assert.equal(second.res.rulings.find((r) => r.item === "C1").source, "controller");
+});
+
+await test("wr N1: a controller stands on a critical is final through the re-review", async () => {
+  const answers = {
+    at: "ruler",
+    decisions: [{ item: "C1", decision: "stands", reason: "false positive" }],
+  };
+  const r = await run(
+    wr,
+    { ...WBASE, answers },
+    wrResponder({
+      reviewer: reviewWith([WF("C1", "critical", { planMandated: true }), WF("I2", "important")]),
+      "re-reviewer": {
+        verdict: "approve",
+        reviewedSha: "h1full",
+        verdicts: [
+          { id: "C1", verdict: "STANDS", evidence: "controller" },
+          { id: "I2", verdict: "ADDRESSED", evidence: "e" },
+        ],
+        acceptedStands: [],
+        newFindings: [],
+        artifactWritten: true,
+      },
+    }),
+  );
+  assert.ok(!r.labels.includes("ruler"));
+  assert.equal(r.res.verdict, "approve");
+  assert.ok(!r.res.residual.some((f) => f.id === "C1"));
+});
+
+await test("wr N3: an unknown at throws listing the valid stop points; answers at reviewer reach the ruler", async () => {
+  await assert.rejects(
+    run(wr, { ...WBASE, answers: { at: "gate", text: "x" } }, wrResponder()),
+    /reviewer.*precondition.*ruler.*fixer.*re-review/s,
+  );
+  const r = await run(
+    wr,
+    { ...WBASE, answers: { at: "reviewer", text: "ANS-R" } },
+    wrResponder({ reviewer: reviewWith([WF("I1", "important", { planMandated: true })]) }),
+  );
+  assert.ok(!r.find("reviewer").prompt.includes("ANS-R"));
+  assert.ok(r.find("ruler").prompt.includes("ANS-R"));
+});
+
+await test("wr N5: a reviewer precondition failure stops before any ruler or fixer; answers retry the reviewer", async () => {
+  const resp = wrResponder({
+    reviewer: {
+      ...reviewWith([WF("X", "critical")]),
+      preconditionFailed: "b0 is not an ancestor of h0",
+    },
+    "reviewer-retry": { ...reviewWith([]), verdict: "approve", artifactWritten: true },
+  });
+  const r = await run(wr, WBASE, resp);
+  assert.equal(r.res.stopped, "precondition");
+  assert.ok(r.res.problem.includes("not an ancestor"));
+  assert.deepEqual(r.labels, ["reviewer"]);
+  const again = await run(
+    wr,
+    { ...WBASE, answers: { at: "precondition", text: "base fixed to the merge-base" } },
+    resp,
+  );
+  assert.ok(again.find("reviewer-retry").prompt.includes("base fixed to the merge-base"));
+  assert.equal(again.res.verdict, "approve");
+});
+
+await test("wr N5: a fixer precondition failure stops the run", async () => {
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({
+      reviewer: reviewWith([WF("I1", "important")]),
+      fixer: work("h", { status: "BLOCKED", commits: [], preconditionFailed: "HEAD moved" }),
+    }),
+  );
+  assert.equal(r.res.stopped, "precondition");
+  assert.ok(!r.labels.includes("progress"));
+});
+
+await test("wr N5: a wrong artifactPath throws at start", async () => {
+  await assert.rejects(
+    run(wr, { ...WBASE, artifactPath: "docs/reviews/pr-31.md" }, wrResponder()),
+    /artifactPath/,
+  );
 });
 
 // ---------- report ----------

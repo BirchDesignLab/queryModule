@@ -12,38 +12,51 @@
  *   sensitive: false, ui: false,
  *   ids: "BR-001, FR-032", specRefs: "spec 4.1 lines 140-260; ...",
  *   requirementsDoc,                         // optional; default the repo-root Requirements Definition
- *   globalConstraints: "<plan bullets>",     // required, non-empty
+ *   globalConstraints: "<product and code constraints>",   // required, non-empty; see below
  *   carries: "<rulings, interfaces>",        // never edit between re-runs of one task
  *   trailer: "Co-Authored-By: ...",          // fallback commit trailer
  *   roles: { implementer: { model: "opus", effort: "medium" }, ... },   // optional overrides
  *   maxRounds: 5,                            // fix-round cap; numeric strings and floats are
  *                                            // coerced (logged), then clamped to 1..8
- *   answers: { at: "<the stopped value>", text: "<answers>" }   // only on a re-run after a stop
+ *   answers: { at, text?, decisions? }       // only on a re-run after a stop (below)
  * } })
  * Required: task, title, repoDir, branch, base, briefPath, reportPath, workDir, scratchRoot,
- * runLabel, specRefs, globalConstraints, trailer.
+ * runLabel, specRefs, globalConstraints, trailer. A missing one throws before any agent runs.
+ * globalConstraints carries product and code constraints only (runtime, TDD, purity, fixtures,
+ * logging, docs style). Never process bullets (model and effort plan, PR and push steps, commit
+ * trailers, branch naming): every agent treats globalConstraints as binding.
  * Roles: implementer, specReviewer, qualityReviewer, critic, ruler, fixer, escalatedFixer,
  * progressChecker, reReviewer, gate, ledger (Haiku, model only).
  *
- * Returns { task, status, base, head, commits, rounds, rulings, carryForward, deferredMinors,
- * parked, questions, concerns, ledgerLines? } and, when status is "stopped", also
- * stopped: "implementer" | "ruler-concerns" | "fixer-pre" | "review" | "ruler-review" |
- * "fixer-r<r>" | "gate", plus escalated: [ruling] when a ruler escalated.
+ * Returns { task, status, base, head, commits, rounds, rulings (in force, one per item, each
+ * with source "ruler" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
+ * questions, concerns, answersUnconsumed?, ledgerLines? } and, when status is "stopped", also
+ * stopped (a stop point, with the agent that consumes answers there):
+ *   "implementer"     -> implementer-continue finishes on top of the existing commits
+ *   "precondition"    -> (problem says what: branch, HEAD, dirty tree) fix the repo; the failing
+ *                        agent re-runs once as implementer-retry or gate-...-retry
+ *   "ruler-concerns"  -> ruler-concerns        "fixer-pre" -> fixer-pre
+ *   "review"          -> ruler-review, then the fixers (a reviewer returned nothing)
+ *   "ruler-review"    -> ruler-review          "fixer-r<r>" -> fixer-r<r>
+ *   "gate-0" | "gate-r<r>" -> fixer-r1 | fixer-r<r+1> (the gate returned nothing)
+ * plus escalated: [ruling] when a ruler escalated, and problem on a precondition stop.
  *   status "complete": review clean and the gate passed. Tick the plan checkboxes, move
  *     carryForward into the next task's carries, read rulings.
  *   status "parked": the fix cap was reached or an item got no ruling. Adjudicate parked.
- *   status "stopped": a controller decision is needed (questions, escalated).
+ *   status "stopped": a controller decision is needed (questions, escalated, problem).
  *
  * Controller before: wave branch checked out in repoDir, clean tree, base = git rev-parse HEAD,
  * brief written with `bash scripts/sdd/task-brief.sh PLAN N <briefPath>`.
  * Answering a stop (never re-implements): re-run with resumeFromRunId, the SAME args (carries
- * unchanged) plus answers: { at: <the returned stopped value>, text }. Answers reach only the
- * agent calls at and after that stop point, so every earlier call replays from cache. After an
- * implementer stop, the cached implementer replays and an "implementer-continue" agent gets the
- * brief, the report, the questions and the answers and finishes on top of the existing commits.
+ * unchanged) plus answers: { at: <the returned stopped value>, text: "...", decisions: [{ item,
+ * decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }. An unknown at throws.
+ * text reaches only the consumer and the rulers and fixers after it, so every earlier call
+ * replays from cache. decisions become controller rulings for their items: final for the run,
+ * never re-escalated (a controller stands on a Critical stands), fix goes to the fixer with its
+ * fixInstruction. On a second stop, append to answers.text and add to decisions; never replace.
  *   Workflow({ scriptPath: ".claude/workflows/sdd-task.js", args: <same args + answers>,
  *              resumeFromRunId: "<runId>" })
- * Resume after a pause, kill or script edit: the same call without answers.
+ * Resume after a pause, kill or script edit: the same call without new answers.
  * This script never pushes or merges.
  */
 export const meta = {
@@ -92,28 +105,53 @@ if (MAX_ROUNDS < 1 || MAX_ROUNDS > 8) {
   MAX_ROUNDS = clamped
 }
 
-// Answers to a stopped run: used only by agent calls at and after the stop point.
-const STAGES = ['implementer', 'ruler-concerns', 'fixer-pre', 'review', 'ruler-review', 'fix', 'gate']
-let ANSWERS = null
-if (A.answers !== undefined && A.answers !== null) {
-  const at = A.answers && A.answers.at
-  const text = A.answers && A.answers.text
-  const m = /^fixer-r(\d+)$/.exec(String(at))
-  const stage = m ? 'fix' : at
-  if (!STAGES.includes(stage) || stage === 'fix' && !m) {
-    throw new Error(`sdd-task: answers.at "${at}" is not a stop point (${STAGES.filter((s) => s !== 'fix').join(', ')}, fixer-r<r>)`)
-  }
-  if (typeof text !== 'string' || text.trim() === '') throw new Error('sdd-task: answers.text is missing or empty')
-  ANSWERS = { stage, round: m ? Number(m[1]) : 0, text }
-  log(`answers: given for stop point "${at}"; earlier agent calls replay from cache`)
+// Answers to a stopped run. Every stopped value is a stop point with a named consumer:
+//   implementer   -> implementer-continue          precondition -> the agent that failed it, re-run once as <label>-retry
+//   ruler-concerns -> ruler-concerns               fixer-pre    -> fixer-pre
+//   review        -> ruler-review (then fixers)    ruler-review -> ruler-review
+//   fixer-r<r>    -> fixer-r<r>                    gate-0 / gate-r<r> -> fixer-r1 / fixer-r<r+1>
+// text reaches the consumer and the rulers and fixers after it, never an earlier agent (so earlier
+// calls replay from cache); decisions become controller rulings wherever their item appears.
+const STOP_POINTS = 'implementer, precondition, ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
+function stopPos(at) {
+  const fixed = { implementer: 0, 'ruler-concerns': 1, 'fixer-pre': 2, review: 3, 'ruler-review': 4 }
+  if (at in fixed) return fixed[at]
+  let m = /^fixer-r([1-9]\d*)$/.exec(at)
+  if (m) return 10 + 2 * Number(m[1])
+  if (at === 'gate-0') return 11
+  m = /^gate-r([1-9]\d*)$/.exec(at)
+  if (m) return 11 + 2 * Number(m[1])
+  return -1
 }
-function answersFor(stage, round) {
-  if (!ANSWERS) return ''
-  const si = STAGES.indexOf(stage)
-  const ai = STAGES.indexOf(ANSWERS.stage)
-  if (si < ai) return ''
-  if (si === ai && stage === 'fix' && (round || 0) < ANSWERS.round) return ''
+let ANSWERS = null
+const CONTROLLER = new Map()
+if (A.answers !== undefined && A.answers !== null) {
+  const at = String((A.answers && A.answers.at) || '')
+  if (at !== 'precondition' && stopPos(at) < 0) {
+    throw new Error(`sdd-task: answers.at "${at}" is not a stop point; use the returned stopped value: ${STOP_POINTS}`)
+  }
+  const text = typeof A.answers.text === 'string' ? A.answers.text.trim() : ''
+  const decisions = Array.isArray(A.answers.decisions) ? A.answers.decisions : []
+  if (!text && !decisions.length) throw new Error('sdd-task: answers needs text or decisions (or both)')
+  for (const d of decisions) {
+    if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
+      throw new Error(`sdd-task: answers.decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
+    }
+    CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' })
+  }
+  ANSWERS = { at, pos: at === 'precondition' ? -1 : stopPos(at), text, consumed: false, decisionsUsed: new Set() }
+  log(`answers: stop point "${at}"${text ? ', text' : ''}${decisions.length ? `, ${decisions.length} controller decision(s)` : ''}; earlier agent calls replay from cache`)
+}
+// consumerPos: the position of the agent asking (see stopPos). Returns the text block or ''.
+function answersFor(consumerPos) {
+  if (!ANSWERS || !ANSWERS.text || ANSWERS.pos < 0 || consumerPos < ANSWERS.pos) return ''
+  ANSWERS.consumed = true
   return `Controller answers to the questions of the stopped run (binding):\n${ANSWERS.text}`
+}
+function preconditionAnswers() {
+  if (!ANSWERS || ANSWERS.at !== 'precondition') return ''
+  ANSWERS.consumed = true
+  return ANSWERS.text ? `Controller answer to the precondition failure (binding):\n${ANSWERS.text}` : 'The controller reports the precondition failure resolved; check again.'
 }
 
 // ---------- roles ----------
@@ -208,6 +246,7 @@ const WORK = {
       },
     },
     questions: { type: 'array', items: { type: 'string' } },
+    preconditionFailed: { type: 'string', description: 'set (with what you found) only when the stated precondition does not hold; then change nothing' },
   },
   required: ['status', 'commits', 'head', 'testSummary', 'concerns', 'questions'],
 }
@@ -289,6 +328,7 @@ const GATE = {
     ok: { type: 'boolean' },
     head: { type: 'string', description: 'full sha from git rev-parse HEAD' },
     problems: { type: 'array', items: { type: 'string' } },
+    preconditionFailed: { type: 'string', description: 'set only when the branch or HEAD check fails' },
   },
   required: ['ok', 'head', 'problems'],
 }
@@ -337,7 +377,8 @@ const state = {
   head: null,
   commits: [],
   rounds: 0,
-  rulings: [],
+  rulings: new Map(), // item id -> ruling in force (one per item)
+  superseded: [], // { item, old, new }
   carryForward: [],
   deferredMinors: [],
   parked: [],
@@ -347,12 +388,61 @@ const state = {
   preReviewProblems: [],
 }
 
-// Rulings so far, for reviewers, re-reviewers, fixers and later rulers. "* [id]" bullets on purpose.
+// ---------- rulings: one in force per item; controller > ruler, later > earlier ----------
+const inForce = () => [...state.rulings.values()]
+function retire(item, by) {
+  const old = state.rulings.get(item)
+  if (!old) return
+  if (old.source === 'controller' && by.source !== 'controller') {
+    log(`rule: ${by.source} ruling on ${by.item} cannot supersede the controller ruling on ${item}; the controller ruling stays`)
+    return
+  }
+  state.rulings.delete(item)
+  state.superseded.push({ item, old, new: by })
+  log(`rule: ruling on ${item} (${old.decision}) superseded by ${by.item} (${by.decision})`)
+}
+// Records a ruling. supersedes: the id of a ruling in force that this one replaces (a contested ruling).
+function setRuling(rec, supersedes) {
+  const old = state.rulings.get(rec.item)
+  if (old && old.source === 'controller' && rec.source !== 'controller') {
+    log(`rule: ${rec.source} ruling on ${rec.item} ignored; the controller ruling stays`)
+    return false
+  }
+  if (old) {
+    state.rulings.delete(rec.item)
+    state.superseded.push({ item: rec.item, old, new: rec })
+  }
+  state.rulings.set(rec.item, rec)
+  if (supersedes && supersedes !== rec.item && rec.decision !== 'stands' && rec.decision !== 'escalate') retire(supersedes, rec)
+  return true
+}
+// Applies answers.decisions to items. Returns { fixes, rest } where rest still needs the ruler.
+function applyController(items) {
+  const fixes = [], rest = []
+  for (const it of items) {
+    const d = CONTROLLER.get(it.id)
+    if (!d) { rest.push(it); continue }
+    ANSWERS.decisionsUsed.add(it.id)
+    ANSWERS.consumed = true
+    const rec = { item: it.id, what: it.text.slice(0, 160), decision: d.decision, reason: d.reason, costIfWrong: 'controller decision', fixInstruction: d.fixInstruction, command: '', source: 'controller' }
+    setRuling(rec, it.contests)
+    log(`rule: ${it.id} settled by controller decision: ${d.decision}`)
+    if (d.decision === 'fix') fixes.push(fixFrom(it, d.fixInstruction || d.reason))
+  }
+  return { fixes, rest }
+}
+function fixFrom(it, instruction) {
+  const f = it.finding || {}
+  return { id: it.id, severity: f.severity === 'critical' ? 'critical' : 'important', file: f.file || '', line: f.line || '', summary: it.text, fix: instruction, planMandated: false, contestsRuling: '' }
+}
+
+// Rulings in force, for reviewers, re-reviewers, fixers and later rulers. "* [id]" bullets on purpose.
 function rulingsText() {
-  if (!state.rulings.length) return ''
+  const list = inForce()
+  if (!list.length) return ''
   return [
     'Rulings in force (binding; never reverse one; a finding that contradicts one sets contestsRuling to its id):',
-    ...state.rulings.map((r) => `* [${r.item}] ${r.decision}: ${r.reason}`),
+    ...list.map((r) => `* [${r.item}] ${r.decision}${r.source === 'controller' ? ' (controller)' : ''}: ${r.reason}`),
   ].join('\n')
 }
 
@@ -362,7 +452,8 @@ function ledgerLines(result) {
   const out = []
   const b7 = String(A.base).slice(0, 7)
   const h7 = String(result.head || A.base).slice(0, 7)
-  for (const r of state.rulings) out.push(`- Task ${N}: Ruling: ${r.what} \u2014 ${r.decision}: ${r.reason} \u2014 ${r.costIfWrong}`)
+  for (const r of inForce()) out.push(`- Task ${N}: Ruling${r.source === 'controller' ? ' (controller)' : ''}: ${r.what} \u2014 ${r.decision}: ${r.reason} \u2014 ${r.costIfWrong}`)
+  for (const s of state.superseded) out.push(`- Task ${N}: Ruling superseded: ${s.item} (${s.old.decision}) by ${s.new.item} (${s.new.decision}${s.new.source === 'controller' ? ', controller' : ''}): ${s.new.reason}`)
   for (const c of state.carryForward) out.push(`- Task ${N}: carry forward: ${c}`)
   for (const l of state.roundLog) out.push(`- Task ${N}: ${l}`)
   for (const m of state.deferredMinors) out.push(`- Task ${N}: minor (deferred): ${m}`)
@@ -373,6 +464,14 @@ function ledgerLines(result) {
 }
 
 async function finish(result) {
+  if (ANSWERS) {
+    const unused = [...CONTROLLER.keys()].filter((k) => !ANSWERS.decisionsUsed.has(k))
+    if (unused.length) log(`answers: decision(s) matched no item and were not applied: ${unused.join(', ')}`)
+    if (!ANSWERS.consumed) {
+      log(`answers: stop point "${ANSWERS.at}" answers were not consumed (no consumer ran in this run)`)
+      result.answersUnconsumed = true
+    }
+  }
   if (A.ledgerPath) {
     phase('Ledger')
     const lines = ledgerLines(result)
@@ -406,7 +505,8 @@ function build(status, extra) {
       head: state.head || A.base,
       commits: state.commits,
       rounds: state.rounds,
-      rulings: state.rulings,
+      rulings: inForce(),
+      supersededRulings: state.superseded,
       carryForward: state.carryForward,
       deferredMinors: state.deferredMinors,
       parked: state.parked,
@@ -418,8 +518,15 @@ function build(status, extra) {
 }
 
 // ---------- ruler ----------
-// items: [{ id, kind, text, severity?, finding? }]. Returns { fixes:[finding], escalated:[ruling], unruled:[item] }.
-async function runRuler(items, label, headNow) {
+// items: [{ id, kind, text, severity?, finding?, contests? }]. Controller decisions settle their items
+// first; the rest go to the ruler. Returns { fixes:[finding], escalated:[ruling], unruled:[item] }.
+async function runRuler(allItems, label, headNow, pos) {
+  const pre = applyController(allItems)
+  const items = pre.rest
+  if (!items.length) {
+    log(`rule: every item settled by controller decisions; no ${label} call`)
+    return { fixes: pre.fixes, escalated: [], unruled: [] }
+  }
   log(`rule: ${items.length} item(s) to the ruler (${tier('ruler')})`)
   const res = await agent(
     [
@@ -427,7 +534,7 @@ async function runRuler(items, label, headNow) {
       `Read only what you need: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the spec sections ${A.specRefs}, the requirements doc "${REQ_DOC}" for IDs ${A.ids || '(none given)'}, and the specific files an item names. Review files for this task are in ${A.workDir} (task-${N}-review-*.md).`,
       A.carries ? `Controller rulings and interfaces already in force:\n${A.carries}` : '',
       rulingsText(),
-      answersFor(label),
+      answersFor(pos),
       `Code under judgment: ${A.base}..${headNow}. ${GIT}`,
       '',
       'Items:',
@@ -448,20 +555,19 @@ async function runRuler(items, label, headNow) {
   )
   const byId = new Map()
   for (const r of (res && res.rulings) || []) byId.set(r.item.replace(/^\[|\]$/g, '').trim(), r)
-  const fixes = [], escalated = [], unruled = []
+  const fixes = pre.fixes.slice(), escalated = [], unruled = []
   for (const it of items) {
     let r = byId.get(it.id)
     if (!r) { unruled.push(it); continue }
+    // Rule (c) never touches a controller decision: those items were settled above and never reach here.
     if (SENSITIVE && it.severity === 'critical' && (r.decision === 'stands' || r.decision === 'verified')) {
-      log(`rule: ${it.id} is critical on a sensitive task and was ruled ${r.decision}; escalated by rule (c)`)
+      log(`rule: ${it.id} is critical on a sensitive task and was ruled ${r.decision}; escalated by rule (c); answer with answers.decisions to settle it`)
       r = Object.assign({}, r, { decision: 'escalate', reason: `ruled ${r.decision} on a critical finding (sensitive rule c): ${r.reason}` })
     }
-    state.rulings.push({ item: it.id, what: it.text.slice(0, 160), decision: r.decision, reason: r.reason, costIfWrong: r.costIfWrong, fixInstruction: r.fixInstruction || '', command: r.command || '' })
+    setRuling({ item: it.id, what: it.text.slice(0, 160), decision: r.decision, reason: r.reason, costIfWrong: r.costIfWrong, fixInstruction: r.fixInstruction || '', command: r.command || '', source: 'ruler' }, it.contests)
     for (const c of r.carryForward || []) state.carryForward.push(c)
     if (r.decision === 'escalate') escalated.push(Object.assign({ text: it.text }, r))
-    if (r.decision === 'fix') {
-      fixes.push({ id: it.id, severity: it.severity || 'important', file: (it.finding && it.finding.file) || '', line: (it.finding && it.finding.line) || '', summary: it.text, fix: r.fixInstruction || r.reason, planMandated: false, contestsRuling: '' })
-    }
+    if (r.decision === 'fix') fixes.push(fixFrom(Object.assign({}, it, { finding: it.finding || { severity: it.severity } }), r.fixInstruction || r.reason))
   }
   if (!res) log('rule: ruler returned null (skipped or died); every item is unruled')
   if (unruled.length) log(`rule: ${unruled.length} item(s) got no ruling and are parked: ${unruled.map((u) => u.id).join(', ')}`)
@@ -477,7 +583,7 @@ async function runFixer(findings, label, roleName, roundTag, round) {
       `Global constraints (binding):\n${A.globalConstraints}`,
       rulingsText(),
       'Never reverse a ruling. If a finding cannot be fixed without reversing one, leave it and say so in concerns (kind planVsSpec).',
-      answersFor(label.startsWith('fixer-r') ? 'fix' : 'fixer-pre', round),
+      answersFor(label.startsWith('fixer-r') ? 10 + 2 * round : 2),
       '',
       'Findings to fix (all of them; a ruler fixInstruction is the change to make):',
       findingsText(findings),
@@ -534,12 +640,14 @@ async function runReReview(findings, label, roundBase, headNow, r) {
   )
 }
 
-async function runGate(label, expectedHead) {
+async function runGate(label, expectedHead, answerText) {
   return agent(
     [
       `You are the independent gate for Task ${N}: ${A.title}. Trust no earlier report; check the repository yourself. ${GIT}`,
+      answerText,
+      `Precondition: git branch --show-current is ${A.branch}, and git rev-parse HEAD equals ${expectedHead} (compare full shas; a short sha is a prefix match). If not, set preconditionFailed to what you found, ok false, and run nothing else.`,
       'Checks (one line per failure in problems; ok is true only with no problems):',
-      `1. git branch --show-current is ${A.branch}, and git rev-parse HEAD equals ${expectedHead} (compare full shas; a short sha is a prefix match).`,
+      '1. (precondition above)',
       '2. git status --porcelain prints nothing.',
       '3. pnpm lint exits 0.',
       '4. pnpm typecheck exits 0.',
@@ -548,7 +656,7 @@ async function runGate(label, expectedHead) {
       'head: git rev-parse HEAD (full sha).',
       'You are read-only: change nothing, commit nothing.',
       HOUSE,
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
     { label, phase: 'Gate', schema: GATE, ...role('gate') },
   )
 }
@@ -559,15 +667,14 @@ log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; $
 log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${SENSITIVE || UI ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}, ledger ${tier('ledger')}`)
 
 // The implementer prompt never carries answers, so a re-run with answers replays it from cache.
-let impl = await agent(
-  [
+const implPrompt = [
     `You are implementing Task ${N}: ${A.title}${A.issue ? ` (issue #${A.issue})` : ''}.`,
     `Read your brief first: ${A.briefPath}. It is your requirements, with exact values; follow its steps, file list and commit message.`,
     A.ids ? `Requirement IDs this task serves: ${A.ids}.` : '',
     A.carries ? `Controller rulings and interfaces the brief cannot know (binding):\n${A.carries}` : '',
     `Global constraints from the plan (binding):\n${A.globalConstraints}`,
     '',
-    `Precondition: git branch --show-current is ${A.branch} and git rev-parse HEAD is ${A.base}. If either is not so, change nothing and report BLOCKED with what you found.`,
+    `Precondition: git branch --show-current is ${A.branch}, git rev-parse HEAD is ${A.base}, and git status --porcelain prints nothing. If any is not so, change nothing, set preconditionFailed to what you found, and report BLOCKED.`,
     'Your job: implement exactly what the brief specifies, nothing more. TDD: write the failing test, run it and see it fail for the expected reason, implement, see it pass. While iterating run the focused test; run the full suite once before committing.',
     `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
     GIT,
@@ -579,16 +686,26 @@ let impl = await agent(
     'Before reporting, self-review your diff: completeness against the brief, names, YAGNI, existing patterns, tests that verify behaviour, pristine test output. Fix what you find.',
     `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the full-suite result, self-review findings, concerns.`,
     'Return: status, commits (full sha + subject), head (git rev-parse HEAD), a one-line test summary, concerns, questions.',
-  ].filter(Boolean).join('\n'),
-  { label: 'implementer', phase: 'Implement', schema: WORK, ...role('implementer') },
-)
+  ].filter(Boolean).join('\n')
+let impl = await agent(implPrompt, { label: 'implementer', phase: 'Implement', schema: WORK, ...role('implementer') })
 
 if (!impl) {
   log('implement: implementer returned null (skipped or died); stopping')
   return await finish(build('stopped', { stopped: 'implementer', questions: ['implementer returned no result'] }))
 }
 
-if ((impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') && answersFor('implementer')) {
+if (impl.preconditionFailed && ANSWERS && ANSWERS.at === 'precondition') {
+  log(`implement: cached precondition failure (${impl.preconditionFailed}); retrying the implementer with the controller answer`)
+  impl = await agent(`${implPrompt}\n\n${preconditionAnswers()}`, { label: 'implementer-retry', phase: 'Implement', schema: WORK, ...role('implementer') })
+  if (!impl) return await finish(build('stopped', { stopped: 'implementer', questions: ['implementer retry returned no result'] }))
+}
+if (impl.preconditionFailed) {
+  log(`implement: precondition failed: ${impl.preconditionFailed}; stopping before any change`)
+  return await finish(build('stopped', { stopped: 'precondition', problem: `implementer: ${impl.preconditionFailed}` }))
+}
+
+if ((impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') && ANSWERS && ANSWERS.at === 'implementer') {
+  ANSWERS.consumed = true
   log(`implement: cached implementer stopped (${impl.status}); running the continue implementer with the controller answers`)
   const cont = await agent(
     [
@@ -600,7 +717,7 @@ if ((impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') && answersFor
       'The questions the earlier implementer asked:',
       ...(impl.questions.length ? impl.questions.map((q) => `- ${q}`) : ['- (none recorded; see the report)']),
       impl.concerns.length ? `Its concerns:\n${impl.concerns.map((c) => `- ${c.kind}: ${c.text}`).join('\n')}` : '',
-      answersFor('implementer'),
+      answersFor(0),
       '',
       'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green). Run the full suite once before committing.',
       `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
@@ -640,7 +757,7 @@ let lastTests = impl.testSummary
 
 if (implConcerns.length) {
   phase('Rule')
-  const ruled = await runRuler(implConcerns, 'ruler-concerns', state.head)
+  const ruled = await runRuler(implConcerns, 'ruler-concerns', state.head, 1)
   state.parked.push(...ruled.unruled)
   if (ruled.escalated.length) {
     log(`rule: ${ruled.escalated.length} escalation(s); stopping`)
@@ -754,9 +871,11 @@ reviewers.forEach((r, i) => {
   for (const f of rv.findings) {
     const g = Object.assign({}, f, { id: `${r.key}:${f.id}` })
     const contests = (g.contestsRuling || '').trim()
-    if (contests) toRule.push({ id: g.id, kind: `finding contesting ruling ${contests}`, severity: g.severity, text: `${where(g)} ${g.summary} (reviewer fix: ${g.fix})`, finding: g })
+    const text = `${where(g)} ${g.summary} (reviewer fix: ${g.fix})`
+    if (contests) toRule.push({ id: g.id, kind: `finding contesting ruling ${contests}`, severity: g.severity, text, finding: g, contests })
+    else if (CONTROLLER.has(g.id)) toRule.push({ id: g.id, kind: 'finding with a controller decision', severity: g.severity, text, finding: g })
     else if (g.severity === 'minor') state.deferredMinors.push(`${g.id} ${where(g)} ${g.summary}`)
-    else if (g.planMandated) toRule.push({ id: g.id, kind: 'plan-mandated finding', severity: g.severity, text: `${where(g)} ${g.summary} (reviewer fix: ${g.fix})`, finding: g })
+    else if (g.planMandated) toRule.push({ id: g.id, kind: 'plan-mandated finding', severity: g.severity, text, finding: g })
     else open.push(g)
   }
   rv.cannotVerify.forEach((c, k) => toRule.push({ id: `${r.key}:CV${k + 1}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` }))
@@ -765,17 +884,13 @@ reviewers.forEach((r, i) => {
 // ================= 3. Ruler =================
 if (toRule.length) {
   phase('Rule')
-  const ruled = await runRuler(toRule, 'ruler-review', reviewHead)
+  const ruled = await runRuler(toRule, 'ruler-review', reviewHead, 4)
   state.parked.push(...ruled.unruled)
   if (ruled.escalated.length) {
     log(`rule: ${ruled.escalated.length} escalation(s); stopping`)
     return await finish(build('stopped', { stopped: 'ruler-review', escalated: ruled.escalated, open }))
   }
-  for (const f of ruled.fixes) {
-    const src = toRule.find((t) => t.id === f.id)
-    if (src && src.finding) { f.file = src.finding.file; f.line = src.finding.line; f.severity = src.finding.severity === 'minor' ? 'important' : src.finding.severity }
-    open.push(f)
-  }
+  for (const f of ruled.fixes) open.push(f)
 } else {
   log('rule: nothing for the ruler after review')
 }
@@ -854,10 +969,18 @@ for (;;) {
   // Independent gate: after a clean review and after every fix loop that ends clean.
   phase('Gate')
   const gl = state.rounds === 0 ? 'gate-0' : `gate-r${state.rounds}`
-  const g = await runGate(gl, state.head)
+  let g = await runGate(gl, state.head, '')
+  if (g && g.preconditionFailed && ANSWERS && ANSWERS.at === 'precondition' && !ANSWERS.consumed) {
+    log(`gate: cached precondition failure (${g.preconditionFailed}); retrying ${gl} with the controller answer`)
+    g = await runGate(`${gl}-retry`, state.head, preconditionAnswers())
+  }
   if (!g) {
     log(`gate: ${gl} returned null (skipped or died); stopping`)
-    return await finish(build('stopped', { stopped: 'gate', questions: state.questions.concat(['gate returned no result; re-run to resume']) }))
+    return await finish(build('stopped', { stopped: gl, questions: state.questions.concat([`${gl} returned no result; re-run (answers at "${gl}" go to the next fixer round)`]) }))
+  }
+  if (g.preconditionFailed) {
+    log(`gate: ${gl} precondition failed: ${g.preconditionFailed}; stopping, not a finding`)
+    return await finish(build('stopped', { stopped: 'precondition', problem: `${gl}: ${g.preconditionFailed}` }))
   }
   if (g.head) state.head = g.head
   if (g.ok) {
@@ -865,9 +988,10 @@ for (;;) {
     log(`gate: ${gl} green at ${String(state.head).slice(0, 7)}`)
     break
   }
-  log(`gate: ${gl} red: ${g.problems.join('; ')}`)
-  state.roundLog.push(`${gl} red (${g.problems.length} problem(s))`)
-  open = g.problems.map((p, k) => ({ id: `${gl}:${k + 1}`, severity: 'important', file: '', line: '', summary: `gate: ${p}`, fix: 'fix the cause so the gate check passes', planMandated: false, contestsRuling: '' }))
+  const problems = g.problems.length ? g.problems : ['gate reported not ok but listed no problem; re-check lint, typecheck and test']
+  log(`gate: ${gl} red: ${problems.join('; ')}`)
+  state.roundLog.push(`${gl} red (${problems.length} problem(s))`)
+  open = problems.map((p, k) => ({ id: `${gl}:${k + 1}`, severity: 'important', file: '', line: '', summary: `gate: ${p}`, fix: 'fix the cause so the gate check passes', planMandated: false, contestsRuling: '' }))
   roundBase = state.head
   if (state.rounds >= MAX_ROUNDS) break
 }
