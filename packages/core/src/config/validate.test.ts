@@ -854,6 +854,40 @@ describe("FR-051 FR-052 validateSiteConfig field, command and terminal rules (sp
     });
   }
 
+  it("a multi-field picklistFilter cycle is reported once, at its first field", () => {
+    const { errors } = run((r) => {
+      const fields = veh(r).fields;
+      const state = fields[1];
+      if (state) state.picklistFilter = { byField: "region" };
+      fields.push(
+        {
+          key: "region",
+          labelKey: "field.state",
+          dataType: "picklist",
+          picklist: "state",
+          picklistFilter: { byField: "county" },
+        },
+        {
+          key: "county",
+          labelKey: "field.state",
+          dataType: "picklist",
+          picklist: "state",
+          picklistFilter: { byField: "state" },
+        },
+        {
+          key: "town",
+          labelKey: "field.state",
+          dataType: "picklist",
+          picklist: "state",
+          picklistFilter: { byField: "state" },
+        },
+      );
+    });
+    expect(errors.filter((e) => e.key === "config.picklistFilterCycle")).toEqual([
+      expect.objectContaining({ path: "/queryTypes/0/fields/1/picklistFilter" }),
+    ]);
+  });
+
   it("the example-ok pattern passes: / delimiter with focusTerminal rebound to Ctrl+Slash", () => {
     const { errors } = run((r) => {
       r.terminal = { delimiter: "/" };

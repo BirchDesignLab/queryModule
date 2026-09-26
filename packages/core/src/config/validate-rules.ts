@@ -78,19 +78,26 @@ export function checkFieldDefs(config: SiteConfig, out: DiagnosticSink): void {
       if (f.pattern !== undefined && !compiles(f.pattern))
         out.error(`${p}/pattern`, "config.invalidPattern", { field: f.key });
     });
+    // A cycle is reported once, at its lowest-index member; a field that only leads into a cycle
+    // is not a member and reports nothing.
+    const indexOf = new Map(qt.fields.map((f, i) => [f.key, i] as const));
     qt.fields.forEach((f, i) => {
-      const seen = new Set<string>();
+      const members = new Set<string>();
       let cur = f;
       while (cur.picklistFilter) {
-        if (seen.has(cur.key)) {
-          out.error(`${base}/fields/${i}/picklistFilter`, "config.picklistFilterCycle", {
-            field: f.key,
-          });
-          break;
-        }
-        seen.add(cur.key);
+        members.add(cur.key);
         const next = byKey.get(cur.picklistFilter.byField);
         if (!next) break;
+        if (next.key === f.key) {
+          const first = Math.min(...[...members].map((k) => indexOf.get(k) ?? i));
+          if (first === i) {
+            out.error(`${base}/fields/${i}/picklistFilter`, "config.picklistFilterCycle", {
+              field: f.key,
+            });
+          }
+          break;
+        }
+        if (members.has(next.key)) break;
         cur = next;
       }
     });
