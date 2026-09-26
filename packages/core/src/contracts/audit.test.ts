@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   AUDIT_DETAILS_SCHEMAS,
   AUDIT_EVENT_TYPES,
   AuditEventSchema,
+  type AuditEventType,
   parseAuditDetails,
   SYSTEM_ACTOR,
 } from "./audit";
@@ -164,6 +166,7 @@ describe("SEC-011 SEC-012 audit envelope", () => {
       AuditEventSchema.safeParse({
         type: "interrupted",
         id: 5,
+        partId: 0,
         actor: SYSTEM_ACTOR,
         identitySource: "system",
         details: samples.interrupted,
@@ -175,5 +178,122 @@ describe("SEC-011 SEC-012 audit envelope", () => {
 describe("FR-043 source status", () => {
   it("pending is the only non-terminal status", () => {
     expect(SOURCE_STATUSES.filter((s) => !isTerminalSourceStatus(s))).toEqual(["pending"]);
+  });
+});
+
+const USER_ACTOR = { id: "u1", email: "officer@example.test", role: "user" } as const;
+const primarySubmitted = samples.submitted;
+const alsoRunSubmitted = {
+  ...samples.submitted,
+  partId: 1,
+  parentPartId: 0,
+  origin: "alsoRun",
+  fieldMapApplied: { last: "last" },
+} as const;
+
+describe("SEC-011 T4-C actor and identity source agree (spec 4.7)", () => {
+  const base = { type: "interrupted", partId: 0, details: samples.interrupted } as const;
+  it("rejects the system actor with a non-system identity source", () => {
+    expect(
+      AuditEventSchema.safeParse({ ...base, actor: SYSTEM_ACTOR, identitySource: "local" }).success,
+    ).toBe(false);
+  });
+  it("rejects a user actor with the system identity source", () => {
+    expect(
+      AuditEventSchema.safeParse({ ...base, actor: USER_ACTOR, identitySource: "system" }).success,
+    ).toBe(false);
+  });
+  it("rejects a system-role actor with another id", () => {
+    expect(
+      AuditEventSchema.safeParse({
+        ...base,
+        actor: { ...SYSTEM_ACTOR, id: "sweeper" },
+        identitySource: "system",
+      }).success,
+    ).toBe(false);
+  });
+  it("rejects a system-role actor with a non-null email", () => {
+    expect(
+      AuditEventSchema.safeParse({
+        ...base,
+        actor: { ...SYSTEM_ACTOR, email: "system@example.test" },
+        identitySource: "system",
+      }).success,
+    ).toBe(false);
+  });
+  it("accepts SYSTEM_ACTOR with the system identity source", () => {
+    expect(
+      AuditEventSchema.safeParse({ ...base, actor: SYSTEM_ACTOR, identitySource: "system" })
+        .success,
+    ).toBe(true);
+  });
+});
+
+describe("SEC-010 T4-D submitted origin invariants (spec 4.7)", () => {
+  it("every details schema is still a ZodObject after refinement (Interfaces contract)", () => {
+    const typed: { [T in AuditEventType]: z.ZodObject } = AUDIT_DETAILS_SCHEMAS;
+    for (const schema of Object.values(typed)) expect(schema).toBeInstanceOf(z.ZodObject);
+  });
+  const valid = { primary: primarySubmitted, alsoRun: alsoRunSubmitted };
+  const { fieldMapApplied: _omit, ...alsoRunNoMap } = alsoRunSubmitted;
+  const violations = {
+    "primary with a parentPartId": { ...primarySubmitted, parentPartId: 0 },
+    "primary with fieldMapApplied": { ...primarySubmitted, fieldMapApplied: { last: "last" } },
+    "alsoRun with a null parentPartId": { ...alsoRunSubmitted, parentPartId: null },
+    "alsoRun without fieldMapApplied": alsoRunNoMap,
+  };
+  const asEvent = (details: { partId: number }) => ({
+    type: "submitted",
+    partId: details.partId,
+    actor: USER_ACTOR,
+    identitySource: "local",
+    details,
+  });
+
+  for (const [name, details] of Object.entries(valid)) {
+    it(`accepts a valid ${name} part via parseAuditDetails and AuditEventSchema`, () => {
+      expect(parseAuditDetails("submitted", details)).toEqual(details);
+      expect(AuditEventSchema.safeParse(asEvent(details)).success).toBe(true);
+    });
+  }
+  for (const [name, details] of Object.entries(violations)) {
+    it(`rejects ${name} via parseAuditDetails and AuditEventSchema`, () => {
+      expect(() => parseAuditDetails("submitted", details)).toThrow();
+      expect(AuditEventSchema.safeParse(asEvent(details)).success).toBe(false);
+    });
+  }
+});
+
+describe("SEC-012 T4-E envelope partId matches details partId (ADR-0003)", () => {
+  const partScoped = [
+    "submitted",
+    "sourceDispatched",
+    "sourceResponded",
+    "interrupted",
+    "partSkipped",
+  ] as const;
+  for (const type of partScoped) {
+    const details = samples[type];
+    const event = { type, actor: USER_ACTOR, identitySource: "local", details };
+    it(`${type}: rejects a missing envelope partId`, () => {
+      expect(AuditEventSchema.safeParse(event).success).toBe(false);
+    });
+    it(`${type}: rejects a mismatched envelope partId`, () => {
+      expect(AuditEventSchema.safeParse({ ...event, partId: details.partId + 5 }).success).toBe(
+        false,
+      );
+    });
+    it(`${type}: accepts a matching envelope partId`, () => {
+      expect(AuditEventSchema.safeParse({ ...event, partId: details.partId }).success).toBe(true);
+    });
+  }
+  it("acknowledged: envelope partId stays optional", () => {
+    const event = {
+      type: "acknowledged",
+      actor: USER_ACTOR,
+      identitySource: "local",
+      details: samples.acknowledged,
+    };
+    expect(AuditEventSchema.safeParse(event).success).toBe(true);
   });
 });

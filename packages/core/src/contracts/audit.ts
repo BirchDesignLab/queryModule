@@ -37,19 +37,40 @@ export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
  * payload text, credentials, secrets, adapter error text or user free text. Additive only.
  */
 export const AUDIT_DETAILS_SCHEMAS = {
-  submitted: z.strictObject({
-    partId: PartId,
-    parentPartId: PartId.nullable(),
-    origin: z.enum(["primary", "alsoRun"]),
-    queryType: Id,
-    typeValues: TypeValues,
-    selectedSourceIds: z.array(Id),
-    dispatchedSourceIds: z.array(Id),
-    droppedSourceIds: z.array(Id),
-    plateOnly: z.boolean(),
-    configHash: Id,
-    fieldMapApplied: z.record(z.string(), z.string()).optional(),
-  }),
+  submitted: z
+    .strictObject({
+      partId: PartId,
+      parentPartId: PartId.nullable(),
+      origin: z.enum(["primary", "alsoRun"]),
+      queryType: Id,
+      typeValues: TypeValues,
+      selectedSourceIds: z.array(Id),
+      dispatchedSourceIds: z.array(Id),
+      droppedSourceIds: z.array(Id),
+      plateOnly: z.boolean(),
+      configHash: Id,
+      fieldMapApplied: z.record(z.string(), z.string()).optional(),
+    })
+    /** Spec 4.7: parentPartId is null for primary; alsoRun also carries fieldMapApplied. */
+    .superRefine((d, ctx) => {
+      const primary = d.origin === "primary";
+      if (primary !== (d.parentPartId === null)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["parentPartId"],
+          message: primary ? "primary part has no parent" : "alsoRun part needs a parent",
+        });
+      }
+      if (primary === (d.fieldMapApplied !== undefined)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["fieldMapApplied"],
+          message: primary
+            ? "primary part has no fieldMapApplied"
+            : "alsoRun part needs fieldMapApplied",
+        });
+      }
+    }),
   acknowledged: z.strictObject({
     acknowledgedAt: EpochMs,
     ackLatencyMs: DurationMs,
@@ -115,37 +136,66 @@ const envelope = {
   identitySource: IdentitySourceSchema,
   hostSubject: Id.optional(),
 };
+/** Part-scoped types: envelope partId is required and equals details.partId (ADR-0003). */
+const partEnvelope = { ...envelope, partId: PartId };
 
-export const AuditEventSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("submitted"),
-    ...envelope,
-    details: AUDIT_DETAILS_SCHEMAS.submitted,
-  }),
-  z.strictObject({
-    type: z.literal("acknowledged"),
-    ...envelope,
-    details: AUDIT_DETAILS_SCHEMAS.acknowledged,
-  }),
-  z.strictObject({
-    type: z.literal("sourceDispatched"),
-    ...envelope,
-    details: AUDIT_DETAILS_SCHEMAS.sourceDispatched,
-  }),
-  z.strictObject({
-    type: z.literal("sourceResponded"),
-    ...envelope,
-    details: AUDIT_DETAILS_SCHEMAS.sourceResponded,
-  }),
-  z.strictObject({
-    type: z.literal("interrupted"),
-    ...envelope,
-    details: AUDIT_DETAILS_SCHEMAS.interrupted,
-  }),
-  z.strictObject({
-    type: z.literal("partSkipped"),
-    ...envelope,
-    details: AUDIT_DETAILS_SCHEMAS.partSkipped,
-  }),
-]);
+export const AuditEventSchema = z
+  .discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("submitted"),
+      ...partEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.submitted,
+    }),
+    z.strictObject({
+      type: z.literal("acknowledged"),
+      ...envelope,
+      details: AUDIT_DETAILS_SCHEMAS.acknowledged,
+    }),
+    z.strictObject({
+      type: z.literal("sourceDispatched"),
+      ...partEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.sourceDispatched,
+    }),
+    z.strictObject({
+      type: z.literal("sourceResponded"),
+      ...partEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.sourceResponded,
+    }),
+    z.strictObject({
+      type: z.literal("interrupted"),
+      ...partEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.interrupted,
+    }),
+    z.strictObject({
+      type: z.literal("partSkipped"),
+      ...partEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.partSkipped,
+    }),
+  ])
+  .superRefine((e, ctx) => {
+    // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they do.
+    const systemRole = e.actor.role === "system";
+    if (systemRole !== (e.identitySource === "system")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["identitySource"],
+        message: "actor role system and identitySource system go together",
+      });
+    }
+    if (systemRole && (e.actor.id !== SYSTEM_ACTOR.id || e.actor.email !== SYSTEM_ACTOR.email)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["actor"],
+        message: "system actor must equal SYSTEM_ACTOR",
+      });
+    }
+    // ADR-0003: envelope partId equals details.partId for part-scoped types.
+    if ("partId" in e.details && e.partId !== e.details.partId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["partId"],
+        message: "envelope partId must equal details.partId",
+      });
+    }
+  });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
