@@ -19,6 +19,7 @@ export const MockScenarioSchema = z
   })
   .refine((s) => (s.respond === undefined) !== (s.behavior === undefined), {
     message: "exactly one of respond or behavior",
+    path: ["behavior"],
   });
 export type MockScenario = z.infer<typeof MockScenarioSchema>;
 

@@ -39,6 +39,16 @@ describe("FR-044 SEC-002 mock file (spec 5.4)", () => {
     const neither = structuredClone(file) as typeof both;
     neither.sources.stateSource.responses[0]?.scenarios.push({ when: { plate: "X" } });
     expect(MockFileSchema.safeParse(neither).success).toBe(false);
+    const issue = MockFileSchema.safeParse(neither).error?.issues[0];
+    expect(issue?.path).toEqual([
+      "sources",
+      "stateSource",
+      "responses",
+      0,
+      "scenarios",
+      2,
+      "behavior",
+    ]);
   });
   it("rejects an unknown behavior and a missing default", () => {
     const bad = structuredClone(file) as unknown as {
