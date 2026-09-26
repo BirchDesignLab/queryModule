@@ -7,7 +7,7 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
-    "lint": "biome ci .",
+    "lint": "biome ci --error-on-warnings .",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "contracts:gen": "tsx scripts/ci/contracts-gen.ts",
