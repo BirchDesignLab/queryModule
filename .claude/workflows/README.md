@@ -6,6 +6,7 @@ Saved Workflow scripts that run implementation plans in place of hand-dispatched
 |---|---|
 | `sdd-task.js` | One plan task: implement, review with gate-0, check, rule, fix, gate; returns the ledger lines |
 | `sdd-wave.js` | A whole wave: each task as a nested `sdd-task` run, in order, with carries flowing forward; stops at the first task that does not complete |
+| `smoke/sdd-task-stub.js` | Zero-agent stand-in for `sdd-task` (`sddTaskPath`), to smoke-test `sdd-wave` in the real runtime |
 | `wave-review.js` | Whole-branch review of a sensitive wave PR, one fix pass, one re-review, the `docs/reviews/pr-<n>.md` artifact |
 | `../../scripts/sdd/task-brief.sh` | Extracts one `### Task N:` section of a plan into a brief file |
 | `../../scripts/sdd/workflow-harness.mjs` | Mock harness: runs both scripts against stubbed agents |
@@ -175,7 +176,8 @@ Runs every task of one wave in order, each as a nested `sdd-task` run (`workflow
   sddTaskPath?: ".claude/workflows/sdd-task.js",
   tasks: [{ task: 17, title, issue?, ids?, specRefs, briefPath, carries?, reportPath?, runLabel?,
             sensitive?, ui?, critic?, criticFocus?, roles?, implemented? }, ...],
-  answers?: { "18": [{ at, text?, decisions? }] }   // per task, only on a re-run after a stop
+  answers?: { "18": [{ at, text?, decisions? }] },  // per task, only on a re-run after a stop
+  carried?: ["- Task 17 carry forward: ..."]         // a follow-on run: the carried of the run before
 }
 ```
 
@@ -183,7 +185,7 @@ Required: `wave`, `repoDir`, `branch`, `base`, `workDir`, `scratchRoot`, `global
 
 ### Flow
 
-For each task: build its `sdd-task` args (shared fields, the task's own fields, `base`, `carries`, merged `roles`, its `answers` entry), run it, and record the result without its `ledgerLines`. On `complete`, the next task's `base` is this task's `head`, and its carries gain an "Earlier in this wave" block: every earlier task's `carryForward` items and its ruler and controller rulings (item, decision, a one-line reason). Checker rulings (verified checks) carry no obligation and are left out; deferred minors are not forwarded. Any other status stops the wave; later tasks never start, because each builds on the one before.
+For each task: build its `sdd-task` args (shared fields, the task's own fields, `base`, `carries`, merged `roles`, its `answers` entry), run it, and record the result without its `ledgerLines`. On `complete`, the next task's `base` is this task's `head`, and its carries gain an "Earlier in this wave" block. It holds every earlier task's `carryForward` items (obligations; never capped) and its `stands` and `verified` ruler and controller rulings as precedents, with ids prefixed `T<n>/` so they never collide with the later task's own item ids; the most recent 30 ruling lines are kept and an omitted count is noted. A `fix` ruling was settled inside its own task and is not forwarded; checker rulings (verified checks) and deferred minors are not forwarded either. Any other status stops the wave; later tasks never start, because each builds on the one before.
 
 ### Return
 
@@ -191,14 +193,18 @@ For each task: build its `sdd-task` args (shared fields, the task's own fields, 
 { wave, status: "complete" | "stopped" | "parked", stoppedTask?, stop?: { task, status, stopped,
   stopPoint, problem, questions, escalated, parked }, base, head, tasks: [sdd-task results
   without ledgerLines], totals: { tasks, run, completed, rounds, escalations, parked,
-  deferredMinors }, ledgerLines }
+  deferredMinors }, carried, ledgerLines }
 ```
+
+`carried` is the flow built so far (the "Earlier in this wave" lines). A task entry is the `sdd-task` result without `ledgerLines`, except for a child that threw (for example on an invalid arg): then it is `{ task, status: "stopped", base, head, problem }` and the ledger gets `- Task <n>: stopped at sdd-task (<problem>)`. An error that looks like a cancel, abort or budget stop is rethrown, not reported as a task stop.
 
 `ledgerLines` is every task's lines in order plus one `- Wave <w>: complete (...)` or `- Wave <w>: stopped at Task <n> (...)` line, all at the top level, so `append-ledger.mjs` appends the whole wave in one call; a resumed wave repeats the earlier tasks' lines and `append-ledger.mjs` skips them. Wall clock and token use are not visible to a script: take them from the run's usage notice and `git log`.
 
 ### Answering a stop
 
 Keep every arg identical and add `answers["<stoppedTask>"]`: the same list of `{ at, text?, decisions? }` entries `sdd-task` takes, built from `stop` exactly as for a single task (stop points and consumers in the `sdd-task` section). Re-run with `resumeFromRunId` and the full args. Earlier tasks' nested args are unchanged, so they replay from cache; the stopped task resumes at its stop point. The fallbacks for a replayed null agent (below) apply per task: for "review stages only", add `implemented: { head }` to that task's entry.
+
+A `parked` task, or a child that threw, has no stop point to answer. Adjudicate it (inline fixes, or a fresh `sdd-task` run for that task), then run the remaining tasks as a new `sdd-wave` with `base` set to the current HEAD and `carried` set to the returned `carried`, so the flow from the finished tasks is kept.
 
 ## `wave-review`
 

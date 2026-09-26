@@ -2182,16 +2182,27 @@ await test("sdd-wave: every task runs through sdd-task in order; base and carrie
     wave,
     WAVE,
     waveResponder({
-      "spec-review@17": planMandated,
+      "spec-review@17": {
+        verdict: "fail",
+        findings: [
+          F("I1", "important", { planMandated: true }),
+          F("I2", "important", { planMandated: true }),
+        ],
+        cannotVerify: [],
+      },
       "ruler-review@17": (p) => ({
-        rulings: ids(p).map((id) => ({
-          item: id,
-          decision: "fix",
-          reason: "spec 4.7 says so",
-          costIfWrong: "c",
-          fixInstruction: "fi",
-          carryForward: ["Task 18 must bound the email"],
-        })),
+        rulings: ids(p).map((id) =>
+          id === "spec:I1"
+            ? {
+                item: id,
+                decision: "fix",
+                reason: "spec 4.7 says so",
+                costIfWrong: "c",
+                fixInstruction: "fi",
+                carryForward: ["Task 18 must bound\n   the email"],
+              }
+            : { item: id, decision: "stands", reason: "plan line 9 mandates it", costIfWrong: "c" },
+        ),
       }),
     }),
     sdd,
@@ -2216,10 +2227,16 @@ await test("sdd-wave: every task runs through sdd-task in order; base and carrie
     a18.carries,
   );
   assert.ok(
-    a18.carries.includes("Task 17 ruling spec:I1 (ruler): fix: spec 4.7 says so"),
+    a18.carries.includes("Task 17 ruling T17/spec:I2 (ruler): stands: plan line 9 mandates it"),
     a18.carries,
   );
+  assert.ok(!a18.carries.includes("spec:I1 (ruler): fix"), "a fix ruling is settled in its task");
   assert.ok(a19.carries.includes("Task 17 carry forward"), "flow accumulates");
+  assert.deepEqual(
+    r.res.carried,
+    a19.carries.split("\n").filter((l) => l.startsWith("- Task ")),
+  );
+  assert.ok(!/escalation/.test(r.res.ledgerLines.at(-1)), r.res.ledgerLines.at(-1));
   assert.equal(r.res.head, r.res.tasks[2].head);
   assert.ok(r.res.tasks.every((t) => !("ledgerLines" in t)));
   for (const n of [17, 18, 19])
@@ -2276,6 +2293,86 @@ await test("sdd-wave: a parked task stops the wave", async () => {
   assert.equal(r.res.stoppedTask, 17);
   assert.equal(r.res.stop.parked.length, 1);
   assert.equal(r.childArgs.length, 1);
+  assert.equal(r.res.head, r.res.tasks[0].head, "a parked task's head is the wave head");
+});
+
+await test("sdd-wave: a second stop at a later task; each resume keeps earlier nested args identical", async () => {
+  const blocked = (n) => ({
+    status: "BLOCKED",
+    commits: [],
+    head: `h-impl-${n - 1}`,
+    testSummary: "",
+    concerns: [],
+    questions: [`q${n}`],
+  });
+  const over = { "implementer@18": blocked(18), "implementer@19": blocked(19) };
+  const a18 = { 18: [{ at: "implementer", text: "a18" }] };
+  const two = await run(wave, { ...WAVE, answers: a18 }, waveResponder(over), sdd);
+  assert.equal(two.res.stoppedTask, 19, two.logs.join(" | "));
+  const both = { ...a18, 19: [{ at: "implementer", text: "a19" }] };
+  const three = await run(wave, { ...WAVE, answers: both }, waveResponder(over), sdd);
+  assert.equal(three.res.status, "complete", three.logs.join(" | "));
+  assert.deepEqual(three.childArgs[0].args, two.childArgs[0].args);
+  assert.deepEqual(three.childArgs[1].args, two.childArgs[1].args);
+});
+
+await test("sdd-wave: a child that throws stops the wave with a stop line; a cancel is rethrown", async () => {
+  const tasks = [WAVE.tasks[0], { ...WAVE.tasks[1], criticFocus: " " }, WAVE.tasks[2]];
+  const r = await run(wave, { ...WAVE, tasks }, waveResponder(), sdd);
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stoppedTask, 18);
+  assert.match(r.res.stop.problem, /criticFocus/);
+  assert.deepEqual(Object.keys(r.res.tasks[1]).sort(), [
+    "base",
+    "head",
+    "problem",
+    "status",
+    "task",
+  ]);
+  assert.ok(r.res.ledgerLines.some((l) => /^- Task 18: stopped at sdd-task \(/.test(l)));
+  assert.ok(r.res.carried.length === 0);
+  const cancelling = {
+    default: async () => {
+      throw new Error("Workflow aborted by user");
+    },
+  };
+  await assert.rejects(() => run(wave, WAVE, waveResponder(), cancelling), /aborted/);
+});
+
+await test("sdd-wave: carried seeds the flow of a follow-on run; the ruling block is capped", async () => {
+  const carried = ["- Task 17 carry forward: keep the audit bound"];
+  const r = await run(wave, { ...WAVE, tasks: WAVE.tasks.slice(1), carried }, waveResponder(), sdd);
+  assert.ok(
+    r.childArgs[0].args.carries.includes("keep the audit bound"),
+    r.childArgs[0].args.carries,
+  );
+  const many = Array.from(
+    { length: 45 },
+    (_, i) => `- Task 1 ruling T1/x${i} (ruler): stands: r${i}`,
+  );
+  const c = await run(
+    wave,
+    { ...WAVE, tasks: [WAVE.tasks[0]], carried: many },
+    waveResponder(),
+    sdd,
+  );
+  const lines = c.childArgs[0].args.carries
+    .split("\n")
+    .filter((l) => l.startsWith("- Task 1 ruling"));
+  assert.equal(lines.length, 30);
+  assert.ok(lines.at(-1).includes("x44"), "the most recent rulings are kept");
+  assert.ok(c.childArgs[0].args.carries.includes("15 earlier ruling line(s) omitted"));
+  await assert.rejects(
+    () => run(wave, { ...WAVE, carried: "x" }, waveResponder(), sdd),
+    /carried must be a list of strings/,
+  );
+});
+
+await test("append-ledger: the outermost ledgerLines wins over one nested in a string", async () => {
+  const al = await import(new URL("./append-ledger.mjs", import.meta.url).href);
+  const inner = JSON.stringify({ ledgerLines: ["- Task 1: inner"] });
+  const outer = { ledgerLines: ["- Wave w: outer"], tasks: [{ problem: inner }] };
+  assert.deepEqual(al.findLedgerLines(JSON.stringify(outer)), ["- Wave w: outer"]);
 });
 
 await test("sdd-wave: per-task options pass through; wave roles merge under task roles", async () => {

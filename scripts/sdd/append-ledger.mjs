@@ -81,8 +81,10 @@ function walk(v, found, depth) {
   if (typeof v === "string") collect(v, found, depth + 1);
   else if (Array.isArray(v)) for (const x of v) walk(x, found, depth);
   else if (v && typeof v === "object") {
-    if (isLines(v.ledgerLines)) found.push(v.ledgerLines);
+    // Children first, the object's own lines last: the outermost ledgerLines wins (an sdd-wave
+    // result holds the whole wave's lines at the top, and a string inside it may embed a result).
     for (const [k, x] of Object.entries(v)) if (k !== "ledgerLines") walk(x, found, depth);
+    if (isLines(v.ledgerLines)) found.push(v.ledgerLines);
   }
 }
 
