@@ -52,6 +52,12 @@ describe("FR-006 FR-007 FR-053 shortcut catalogue (spec 6.4)", () => {
     expect(usLayoutChar("Escape")).toBeNull();
   });
 
+  it("returns null for Object.prototype key names", () => {
+    expect(usLayoutChar("toString")).toBeNull();
+    expect(usLayoutChar("Shift+constructor")).toBeNull();
+    expect(usLayoutChar("__proto__")).toBeNull();
+  });
+
   it("override replaces the default binding per action", () => {
     const resolved = resolveShortcuts({ focusTerminal: { keys: "Ctrl+Slash", context: "global" } });
     expect(resolved.focusTerminal).toEqual([{ keys: "Ctrl+Slash", context: "global" }]);

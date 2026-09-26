@@ -213,7 +213,7 @@ export function usLayoutChar(keys: string): string | null {
   if (digit?.[1] && !shift) return digit[1];
   const numpadDigit = /^Numpad(\d)$/.exec(code);
   if (numpadDigit?.[1] && !shift) return numpadDigit[1];
-  if (!shift && code in NUMPAD_CHARS) return NUMPAD_CHARS[code] ?? null;
+  if (!shift && Object.hasOwn(NUMPAD_CHARS, code)) return NUMPAD_CHARS[code] ?? null;
   const table = shift ? US_SHIFTED : US_UNSHIFTED;
-  return table[code] ?? null;
+  return Object.hasOwn(table, code) ? (table[code] ?? null) : null;
 }
