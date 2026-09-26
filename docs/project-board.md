@@ -88,6 +88,7 @@ Repo settings (Settings, General):
 
 Public repository (public since 09-26-26):
 - [ ] Settings, Code security: secret scanning and push protection on (free for public repos).
+- [ ] Settings, Code security: Dependency graph on (the ci job's dependency review needs it, ADR-0007).
 - [ ] Settings, Actions, General: "Require approval for all external contributors" for fork pull request workflows; workflow permissions read-only by default.
 - [ ] Settings, General, Features: turn off Wiki if unused; keep Issues; Discussions optional.
 - [ ] Private vulnerability reporting on (Settings, Code security), since the module handles CJIS-adjacent design.
