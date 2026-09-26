@@ -3,6 +3,7 @@ export * from "./audit";
 export * from "./identity";
 export * from "./mock-file";
 export * from "./primitives";
+export * from "./routes";
 export * from "./source-status";
 export * from "./validation-error";
 export * from "./version";
