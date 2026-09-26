@@ -2705,6 +2705,27 @@ await test("tiers: maxAgents is coerced like maxRounds", async () => {
   assert.equal(f.res.stopped, "budget");
 });
 
+await test("tiers: sdd-wave passes tier and maxAgents through (task wins) and totals agents", async () => {
+  const tasks = WAVE.tasks.map((t, i) =>
+    i === 1 ? { ...t, tier: "critical", maxAgents: 30 } : i === 2 ? { ...t, sensitive: true } : t,
+  );
+  const r = await run(wave, { ...WAVE, tasks, tier: "gate", maxAgents: 20 }, waveResponder(), sdd);
+  const [a17, a18, a19] = r.childArgs.map((c) => c.args);
+  assert.equal(a17.tier, "gate");
+  assert.equal(a17.maxAgents, 20);
+  assert.equal(a18.tier, "critical");
+  assert.equal(a18.maxAgents, 30);
+  assert.ok(!("tier" in a19) && a19.sensitive === true, "sensitive task gets no wave tier");
+  assert.equal(r.res.status, "complete", r.logs.join(" | "));
+  assert.equal(r.res.totals.agents, r.calls.length);
+  assert.equal(
+    r.res.totals.agents,
+    r.res.tasks.reduce((s, t) => s + t.agents, 0),
+  );
+  const none = await run(wave, WAVE, waveResponder(), sdd);
+  assert.ok(!("tier" in none.childArgs[0].args) && !("maxAgents" in none.childArgs[0].args));
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {
