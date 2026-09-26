@@ -2655,7 +2655,8 @@ await test("fix pass C1: ruler and fixer prompts point at a review-file pattern 
   for (const l of ["ruler-review", "fixer-r1"]) {
     const globs = [...r.find(l).prompt.matchAll(/task-7-review[^\s,)]*\.md/g)].map((m) => m[0]);
     assert.ok(globs.length, `${l} names no review file pattern`);
-    const re = new RegExp(`^${globs[0].replace(/\./g, "\\.").replace(/\*/g, ".*")}$`);
+    const escapedGlob = globs[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*");
+    const re = new RegExp(`^${escapedGlob}$`);
     for (const f of ["task-7-review.md", "task-7-review-spec.md", "task-7-review-critic.md"])
       assert.ok(re.test(f), `${l} pattern ${globs[0]} misses ${f}`);
   }
