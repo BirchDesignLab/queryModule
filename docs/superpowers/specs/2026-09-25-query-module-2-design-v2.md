@@ -59,7 +59,7 @@ pnpm workspace monorepo, TypeScript strict, Node 24 LTS (ADR-0001).
 | `apps/web` | Vite + React DOM app for dispatch, mobile unit and records personas, in both modes. | `client`, `web-ui`, `tokens`, `core`, `react`, `react-dom`, `react-router` (Expo keeps `expo-router`; no routing is shared) |
 | `apps/host-simulator` | Static page, its own port and origin, never bundled into the production image (6.9). Issues test JWTs and frames `/embed` over postMessage v1 for embedded-mode testing. | `client`, `tokens` |
 | `apps/mobile` (M4) | Expo app for the mobile persona: demo shell around `rn-ui`, standalone mode only. Expo Go for development. | Expo, `expo-router`, `expo-secure-store`, `react-native`, `rn-ui`, `client`, `tokens` |
-| `deploy/` | Dockerfile, compose file, cloudflared and Watchtower config, `.env.example`, secret file templates. | |
+| `deploy/` | Dockerfile, compose file, cloudflared config, `deploy-pull` systemd unit and timer, `.env.example`, secret file templates. | |
 | `scripts/` | Committed one-off and ops scripts: `scripts/ops/` (seed, backup, restore-test, smoke, purge, grant-role, disable-user, lost-key, lost-data-key), `scripts/mock-data/` (fixture generator), `scripts/ci/`, `scripts/migrations/`. | |
 | `docs/` | Site-developer docs, API reference, embedding guide, threat model, release notes (`docs/releases/`), specs and plans. | |
 
@@ -1337,11 +1337,11 @@ Non-secret deploy config lives in `deploy/.env` (template `deploy/.env.example`,
 
 ### 8.3 Compose
 
-The laptop runs `deploy/compose.yml` with three services, each `restart: unless-stopped`:
+The laptop runs `deploy/compose.yml` with two services, each `restart: unless-stopped`, plus a systemd timer (ADR-0002):
 
-- `app`: `ghcr.io/birchdesignlab/querymodule:release`. Secrets per 8.2. Volumes `data:/data` and `./adapters:/adapters:ro`; no `/config` mount and `SITE_CONFIG` unset (8.1). No published ports: cloudflared is the sole ingress, which is what makes `CF-Connecting-IP` trustworthy (5.6). `stop_grace_period: 30s`. Label `com.centurylinklabs.watchtower.enable=true`.
+- `app`: `ghcr.io/birchdesignlab/querymodule:release`. Secrets per 8.2. Volumes `data:/data` and `./adapters:/adapters:ro`; no `/config` mount and `SITE_CONFIG` unset (8.1). No published ports: cloudflared is the sole ingress, which is what makes `CF-Connecting-IP` trustworthy (5.6). `stop_grace_period: 30s`. Label `com.centurylinklabs.watchtower.enable=false`, so any Watchtower already running on the host ignores it.
 - `cloudflared`: tunnel token from the `TUNNEL_TOKEN` secret file, routing `querymodule.birchdesignlab.com` (HTTP and WebSocket) to `app:3000`. DNS is on Cloudflare, so the route creates the CNAME.
-- `watchtower`: polls GHCR every five minutes, label-scoped to `app`, so it only follows the `release` tag named in the image reference. GHCR read-packages token from a read-only mounted Docker `config.json`.
+- `deploy-pull.timer` (systemd user unit with lingering, `deploy/systemd/`): every five minutes runs `scripts/ops/deploy-pull.sh`, which does `docker compose pull app`, and when the digest changed, `docker compose up -d app`, waits for `/api/v1/health`, runs `smoke.sh`, and logs the result. GHCR read-packages token in the deploy user's Docker `config.json`. No third-party updater and no container holds the Docker socket.
 
 On SIGTERM the app drains per 5.2; `stop_grace_period: 30s` covers the 10 s default, and a site raising any `timeoutMs` above 20 s raises it too (stated in `docs/deploy.md`, not enforced).
 
@@ -1355,9 +1355,9 @@ CI pushes `sha-<commit>` and `latest` on every merge to `main` (9.3). Nothing de
 2. For a milestone, run the story-tag gate for that milestone (10.2) and require `docs/releases/<milestone>.md` at `sha` (9.5).
 3. Retag `sha-<commit>` as `release` by manifest copy (no rebuild). For a milestone, also push git tag `<milestone>` at `sha`.
 
-Watchtower deploys the new `release` within five minutes. A milestone is a release tag. After every promote the developer runs `scripts/ops/smoke.sh` against the live URL (8.7).
+The `deploy-pull` timer deploys the new `release` within five minutes. A milestone is a release tag. After every promote the developer runs `scripts/ops/smoke.sh` against the live URL (8.7).
 
-Rollback is a promote of an older sha. `release` then points at the older digest, so Watchtower cannot restore the bad image. Migrations are expand-then-contract (9.2): an older image runs on a newer schema, its migrator finds nothing to apply, and migrations are never rolled back.
+Rollback is a promote of an older sha. `release` then points at the older digest, so the next timer run restores the older image and nothing can re-pull the bad one. Migrations are expand-then-contract (9.2): an older image runs on a newer schema, its migrator finds nothing to apply, and migrations are never rolled back.
 
 ### 8.5 Seed and demo accounts
 
@@ -1805,7 +1805,7 @@ All 87 IDs from the spec's Project Specifications table. Stories refer to Append
 - **Single node is a hard limit.** The replay cursor, dispatch queue and `EventBus` assume one process and one writer.
   The NFR-002 ceiling is stated in 11.
 - **Third-party cookies in embedded mode.** The embedded session rides a `Partitioned` third-party cookie (5.6); a browser that blocks such cookies in frames breaks embedded mode.
-- **Home laptop uptime.** Compose `restart: unless-stopped` and Watchtower cover reboots; nightly encrypted off-box backups cover disk loss; there is no failover.
+- **Home laptop uptime.** Compose `restart: unless-stopped` and the `deploy-pull` timer cover reboots; nightly encrypted off-box backups cover disk loss; there is no failover.
 - **Correlated AI authorship and review.** The same model family writes and reviews credential, audit and dispatch code, so blind spots are shared. Mitigation: `docs/threat-model.md` kept current, and an independent human security review before handoff.
 - **Bus factor.** One developer. Mitigation: runbooks in `scripts/ops/` (backup, restore, lost key, purge, grant role), specs and release notes in `docs/`.
 - **Provenance.** Most code is agent-written. Mitigation: a provenance note in the README.
