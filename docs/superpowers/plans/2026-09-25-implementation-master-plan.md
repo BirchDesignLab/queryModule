@@ -234,9 +234,9 @@ A Claude Code session follows this list verbatim. `<t>` is the track letter (`a`
 
 ### 6.3 Build
 
-11. State the seat plan before dispatching any subagent (CLAUDE.md), then use:
+11. State the model and effort plan before dispatching any agent (CLAUDE.md), then use:
 
-| Seat | Model and effort |
+| Role | Model and effort |
 |---|---|
 | Enumeration, grep, pulling IDs from the spec | Haiku 4.5, effort n/a |
 | Implement one ordinary task (TDD) | Sonnet 5 `medium` |
@@ -266,7 +266,7 @@ A Claude Code session follows this list verbatim. `<t>` is the track letter (`a`
 
 21. More open issues in your cell: back to step 7.
 22. Cell empty: set your cell `done` (small `docs/status-<t>-<yyyymmdd>` PR, or inside the last task PR).
-23. Gate check: if every cell in the row is `done`, verify the gate (section 4 "Gate verified by"), run the whole-phase review seat, then in one PR: set Gate `done`, add `Frozen: MM-DD-YY` to each phase plan of the row. A milestone exit gate also follows 4.6.
+23. Gate check: if every cell in the row is `done`, verify the gate (section 4 "Gate verified by"), run the whole-phase review, then in one PR: set Gate `done`, add `Frozen: MM-DD-YY` to each phase plan of the row. A milestone exit gate also follows 4.6.
 24. Next phase: if its inputs are met, go to step 6 and open the next phase plan. Otherwise take work per 3.4.
 25. Ending the session: follow 7.1.
 

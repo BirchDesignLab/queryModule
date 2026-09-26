@@ -1,6 +1,6 @@
 # M0 P0 Contracts Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Recommended: run each task through the `sdd-task` workflow (`.claude/workflows/sdd-task.js`) and each sensitive wave PR through `wave-review` (ADR-0006). superpowers:subagent-driven-development or superpowers:executing-plans also work. TDD is required whichever way a task runs. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up the pnpm workspace, freeze the M0/M1 contracts in `packages/core`, and land the CI, tokens, web shell and mobile placeholder skeletons so both tracks can start P1 against one green `main`.
 
@@ -21,7 +21,7 @@
 - Package manager: pnpm workspace; pnpm pinned by `packageManager` in root `package.json` through corepack; installs use `--frozen-lockfile` once the lockfile exists.
 - TypeScript strict everywhere; `tsc -b` over project references is the typecheck.
 - TDD for every task with behaviour: failing test first, run it, see the stated failure, implement, run green, commit.
-- Trunk-based: one issue, one branch `feat/<t>-<n>` (`t` = `a`, `b` or `core`), one PR, squash merge, no direct commits to `main`. Each task ends with master plan 6.4 steps 16 to 20 (push with the developer's OK, PR, checks, squash merge).
+- Trunk-based: one issue, one branch `feat/<t>-<n>` (`t` = `a`, `b` or `core`), one PR, squash merge, no direct commits to `main`. Each task ends with master plan 6.4 steps 16 to 20 (push with the developer's OK, PR, checks, squash merge). P0 exception (developer direction 09-26-26, ADR-0006): one PR per wave on `feat/p0-wave-<k>`; see Waves.
 - P0 exception to master plan 11 (dependency and root-file PRs): P0 is one session, so dependency additions and root-file edits ride inside the task PR that needs them.
 - `packages/core` is pure: no IO, runtime dependency `zod` only.
 - Contract first: after the gate, every file in master plan 8.2 changes only through the master plan 8 procedure, one change per PR.
@@ -32,8 +32,21 @@
 - Every user-facing string is a message key (NFR-001).
 - Scripts live in the repo under `scripts/` and are committed (CLAUDE.md); root scripts are Node or pnpm, identical in PowerShell and bash (master plan 9).
 - Docs: no em dashes; dates MM-DD-YY in prose, ISO in code and data.
-- Subagent seats: ordinary task Sonnet 5 `medium`; S task Opus 5.5 `medium`; spec-compliance review Sonnet 5 `medium`; code-quality review Sonnet 5 `high`; Opus 5.5 `medium` critic on this phase (it builds UI and touches sensitive code); Opus 5.5 `xhigh` whole-branch review per S PR; Opus 5.5 `xhigh` whole-phase review at the gate. State the seat plan before dispatching.
+- Model and effort per role: ordinary task Sonnet 5 `medium`; S task Opus 5.5 `medium`; spec-compliance review Sonnet 5 `medium`; code-quality review Sonnet 5 `high`; Opus 5.5 `medium` critic on this phase (it builds UI and touches sensitive code); Opus 5.5 `xhigh` whole-branch review per S PR; Opus 5.5 `xhigh` whole-phase review at the gate. State the model and effort plan before dispatching.
 - Commit trailer used in this plan: the literal placeholder `<attribution trailer given by your session's system reminder>` (the one permitted placeholder, per lead ruling R5). Every commit step ends with this line in place of any hardcoded Co-Authored-By model name.
+
+## Waves
+
+Developer direction 09-26-26 (ADR-0006): tasks land one PR per wave, on a branch `feat/p0-wave-<k>` cut from `main` after the previous wave PR merges. Each task runs through the `sdd-task` workflow; a wave that touches sensitive paths gets one `wave-review` run and its artifact `docs/reviews/pr-<n>.md`. The developer reviews and merges every wave PR. Wave boundaries may be re-cut to fit workflow runs; record any change in this table.
+
+| Wave | Tasks | Sensitive tasks | PR |
+|---|---|---|---|
+| W1 | 1 to 6 | 4, 5 | #31 (merged 09-26-26) |
+| W2 | 7 to 11 | none | |
+| W3 | 12 to 16 | none | |
+| W4 | 17 to 22 | 17 to 22 | |
+| W5 | 23 to 25, then the phase Opus critic | 23 | |
+| W6 | 26 to 28 | 26, 28 | |
 
 ## File Structure
 
@@ -236,7 +249,7 @@ gh issue create --title "Workspace root skeleton (none)" --label track-a --label
 
 Repeat the command per row with that row's title, labels, task number, IDs and `Sensitive: yes` for rows labelled `sensitive`. Write each issue number after the task heading below (`### Task N: ... (#n)`) in the Task 1 PR.
 
-Seat plan for this phase: 28 implementer seats (Tasks 4, 5, 17 to 22, 26 and 28 on Opus 5.5 `medium`; the rest on Sonnet 5 `medium`), 28 spec-compliance seats (Sonnet 5 `medium`), 28 code-quality seats (Sonnet 5 `high`), one Opus 5.5 `medium` critic after Task 25, 11 Opus 5.5 `xhigh` whole-branch reviews (S PRs: Tasks 4, 5, 17 to 23, 26, 28), one Opus 5.5 `xhigh` whole-phase review at the gate.
+Model and effort plan for this phase: 28 implementer agents (Tasks 4, 5, 17 to 22, 26 and 28 on Opus 5.5 `medium`; the rest on Sonnet 5 `medium`), 28 spec-compliance agents (Sonnet 5 `medium`), 28 code-quality agents (Sonnet 5 `high`), one Opus 5.5 `medium` critic after Task 25, 11 Opus 5.5 `xhigh` whole-branch reviews (S PRs: Tasks 4, 5, 17 to 23, 26, 28), one Opus 5.5 `xhigh` whole-phase review at the gate.
 
 
 ### Task 1: Workspace root skeleton (#2)
@@ -1698,6 +1711,12 @@ git commit -m "feat(core): feature and shortcut catalogues
 **Interfaces:**
 - Consumes: zod.
 - Produces: `type SchemaMode = "strict" | "client"`; `objectFor(mode)`; `optionalEnum(mode, values)`; `type Literal = string | number | boolean`; `type DefaultRef = { $default: string }`; `type Condition` (spec 4.2 union); `type LeafCondition`; `DATA_TYPES`, `type DataType`; `ORDERING_OPS`; `DEFAULT_INPUT_FORMATS`; `DATE_FORMAT_PATTERN`; `MAX_VALUE_LENGTH = 4096`; `MAX_ALSO_RUN = 4`; `makeFieldSchemas(mode)` returning `{ Key, Literal, DefaultRef, Condition, DateFormat, SectionDef, FieldDef, FieldRule, QueryTypeSource, NestedQuery, QueryType }`. Strict mode rejects unknown keys (server, spec 5.8 step 4); client mode strips them and catches unknown values on optional enums (spec 4.1 Client view).
+- Amended 09-26-26 (ADR-0005, PR #31 review; made precise in the prep PR review): `schema-fields.ts` imports `FieldKeySchema` and `BoundedIdSchema` by the relative path `../contracts/primitives` (as its `MAX_ALSO_RUN` re-export does), never from `@querymodule/core/contracts`. In `makeFieldSchemas` below, replace `Key` at these spots and nowhere else:
+  - `FieldKeySchema` (field keys and every field reference by key): `FieldDef.key`; the `field` of every leaf `Condition`; `FieldRule.field`; `FieldDef.picklistFilter.byField`; `NestedQuery.fieldMap`, keys and values, as `z.record(FieldKeySchema, FieldKeySchema)`. Task 8 applies the same schema to field references in commands and positional fields.
+  - `BoundedIdSchema`: `QueryType.code`, `NestedQuery.queryType` and `QueryTypeSource.sourceId`. The site id is Task 8 (`site.id`).
+  - Unchanged, still `Key` (`z.string().min(1)`): message keys, which contain dots (`SectionDef.labelKey`, `FieldDef.labelKey`, `QueryType.labelKey`), plus the section keys `SectionDef.key` and `FieldDef.section` (ADR-0005 bounds field keys only), `FieldDef.picklist` and `DefaultRef.$default`. `makeFieldSchemas` still returns `Key`.
+  - Tests first, added to Step 1's `schema-fields.test.ts` and seen failing before the change: a `FieldDef.key` that fails `FieldKeySchema` (`"plate.no"`, `"1plate"`) is rejected, and so are the same values as a `Condition` `field` and as a `fieldMap` key and value; a dotted `labelKey` (`"field.plate"`) is accepted; the bounds hold at their limits (a 64-character field key accepted, 65 rejected; a 64-character query-type code and `sourceId` accepted, 65 rejected, as is `"PRO/1"`).
+  - `schema-fields.ts` does not define `MAX_ALSO_RUN`; it re-exports it from the contracts primitives, so Task 13's `import { MAX_ALSO_RUN, MAX_VALUE_LENGTH } from "./schema-fields"` keeps working.
 
 **IDs:** BR-001, FR-002, FR-003, FR-004, FR-008, FR-011, FR-032; stories A1, A2, B7
 
@@ -1829,7 +1848,7 @@ export const DEFAULT_INPUT_FORMATS = ["MMDDYYYY", "MM/DD/YYYY", "MM-DD-YYYY", "Y
 /** Tokens MM, DD, YY, YYYY and literal non-alphanumeric separators. */
 export const DATE_FORMAT_PATTERN = /^(?:MM|DD|YYYY|YY|[^A-Za-z0-9])+$/;
 export const MAX_VALUE_LENGTH = 4096;
-export const MAX_ALSO_RUN = 4;
+export { MAX_ALSO_RUN } from "../contracts/primitives";
 
 export function makeFieldSchemas(mode: SchemaMode) {
   const obj = objectFor(mode);
@@ -1942,6 +1961,7 @@ git commit -m "feat(core): config schema v1 fields, conditions and query types
 - Consumes: `makeFieldSchemas`, `objectFor` (Task 7); `RoleSchema` (Task 4); `CONFIG_SCHEMA_VERSION` (Task 2); `SHORTCUT_CONTEXTS`, `isValidShortcutKeys` (Task 6).
 - Produces: `makeSiteConfigSchemas(mode: SchemaMode)`; `SiteConfigSchema`; `type SiteConfig` (output), `type SiteConfigInput` (input); exported types `QueryType`, `FieldDef`, `FieldRule`, `SectionDef`, `QueryTypeSource`, `NestedQuery`, `Picklist`, `PicklistValue`, `Source`, `CommandDef`, `CommandPosition`, `KeywordStyle`, `SeverityStyle`, `Severity`, `Format`, `MappingElement`, `ResponseMapping`, `ThemeConfig`, `PersonaDef`, `AuthConfig`, `DelegationConfig`; constants `SEVERITIES`, `SOURCE_SCOPES`, `PERSONA_LAYOUTS`, `THEME_MODES = ["day", "night", "redShift"]`, `LOCALE_PATTERN`, `DEFAULT_DELEGATION_PURPOSE`. Test helpers `minimalSiteConfigInput(): SiteConfigInput`, `MINIMAL_LOCALES`, `TEST_TOKEN_NAMES`.
 - Resolution recorded: `$schema?: string` is accepted at the root so site files can point editors at `packages/config/schema/site-config.schema.json`; it never reaches `ClientSiteConfig`.
+- Amended 09-26-26 (ADR-0005, PR #31 review): `Source.kind` and `site.id` use `BoundedIdSchema`; field references in commands and positional fields use `FieldKeySchema` (as Task 7). Import both by the relative path `../contracts/primitives`. Tests first: a field reference failing `FieldKeySchema` is rejected.
 
 **IDs:** BR-001, FR-007, FR-031, FR-051, FR-052, FR-060, NFR-001, UX-011, SEC-005 (auth block shape), SEC-004 (delegation block shape)
 
@@ -3336,6 +3356,7 @@ git commit -m "feat(core): validateSiteConfig keys, references and labels
 - Consumes: Task 12 exports; `configuredDefault` (Task 12); `resolveShortcuts`, `strokesCollide`, `usLayoutChar` (Task 6); `MAX_VALUE_LENGTH`, `MAX_ALSO_RUN` (Task 7).
 - Produces: `MAX_SOURCES_PER_SUBMIT = 8`; `DELIMITER_PATTERN`; `checkFieldDefs`, `checkCommands`, `checkTerminal`, `checkShortcuts`, `checkLimits`, `checkWarnings` (each `(config: SiteConfig, out: DiagnosticSink) => void`); `validateSiteConfig` now runs all of them.
 - Rule split (resolution recorded in the summary): M0 P0 ships every spec 4.1 rule that needs neither canonicalisation nor token values. Track A M1 P2 adds, in `validate-rules.ts` through the contract procedure: literal canonicalisation of defaults, `setDefault` values, presets and condition values; `require`/`setDefault` on unreachable fields; `setDefault` dependency cycles and read-before-write order; the conditionally-required-without-position warning; the disabled-picklist-code-in-condition warning; contrast checks for `keywordSeverityStyles` and theme token pairs (context gains `tokenValues`). `config:validate` mapping-path resolution against mocks is M2 P2 (master plan 4.2); fixture-policy payload checks land with `scripts/mock-data/generate.ts` in M1 P3; `Source.kind` against the adapter registry is the API's startup check.
+- Amended 09-26-26 (ADR-0005, PR #31 review): picklists for `role: "type"` fields validate their codes with `TypePicklistCodeSchema`. Before using `usLayoutChar`, extend it in `packages/core/src/config/shortcuts.ts` to cover the numpad character keys: Numpad0 to Numpad9 give the digits; NumpadAdd `+`, NumpadSubtract `-`, NumpadMultiply `*`, NumpadDivide `/`, NumpadDecimal `.`, NumpadEqual `=`, NumpadComma `,`. Write the tests first.
 
 **IDs:** BR-001, FR-012, FR-031, FR-032, FR-042, FR-051, FR-052, FR-053, FR-055, UX-011
 
@@ -6002,6 +6023,7 @@ git commit -m "docs(a): sensitive review for sensitive-review check
 **Interfaces:**
 - Consumes: root scripts (Task 1); `scripts/ci/check-licences.ts` (Task 19); `scripts/ci/check-story-tags.ts` (Task 20); `scripts/ci/check-sensitive-review.ts` (Task 21); `pnpm gen:check` (Task 17); `pnpm config:validate` (Task 18).
 - Produces: workflow `ci` with jobs `ci` and `sensitive-review` (the two required status checks, spec 9.1); `isDocsOnly(files: string[]): boolean` and the step output `docs_only` from `scripts/ci/changed-paths.mjs` (master plan 11 docs-only fast path: heavy steps skip, both jobs still report); Dependabot for npm (weekly, minor and patch grouped, majors separate) and github-actions (weekly). Later plans append to `ci.yml`: step 9 `expo export` (Task 26, this plan), steps 10 to 12 image build, boot smoke, Playwright (Track A and B P1), step 13 publish (Track A P1), `scripts/ci/check-audit-migrations.ts` (Track A P1). The Dependabot `docker` ecosystem entry lands with `deploy/Dockerfile` in Track A P1, because an entry pointing at a directory with no Dockerfile errors.
+- Amended 09-26-26 (ADR-0005, PR #31 review): M3, `vitest.config.ts` coverage no longer excludes every `index.ts`. Either exclude only files that are pure re-export barrels, or keep the exclusion and add a check that every `index.ts` under `packages/*/src` holds only `export ... from` lines. M4, enforce core purity (no IO) by lint: configure a Biome restricted-imports rule for `packages/core/src/**`, excluding test files (`**/*.test.ts`, `**/*.test.tsx`), that forbids `node:*`, `fs`, `path`, `child_process`, `http`, `https` and `net`. Tests are excluded because they may read files: `packages/core/src/contracts/version.test.ts` reads `package.json` through `node:fs`. Both land test-first, where a test applies.
 
 **IDs:** BR-006, BR-007, SEC-020
 
@@ -7230,7 +7252,7 @@ git commit -m "feat(b): Vite + React web shell reading tokens
 <attribution trailer given by your session's system reminder>"
 ```
 
-- [ ] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic seat over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
+- [ ] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
 
 ### Task 26: Mobile placeholder and CI steps 8 and 9 (S) (#27)
 
@@ -7387,6 +7409,7 @@ Expected: `ci` green with the `Web build` and `Expo export` steps passing on `ub
 **Interfaces:**
 - Consumes: `@querymodule/api` test setup (Task 17); Task 26 export result.
 - Produces: `@libsql/client` as a runtime dependency of `@querymodule/api` (Track A P1 builds the encrypted SQLite layer on it, spec 5.5); a recorded Node 24 result for ADR-0001's consequence "P0 contracts plan adds a check that `expo export` and `@libsql/client` load on Node 24; failure of either reopens this ADR".
+- Amended 09-26-26 (ADR-0005, PR #31 review): M5, pin `@types/node` to the Node 24 major (`@types/node@24`), matching `.nvmrc`.
 
 **IDs:** none (scaffolding); ADR-0001
 
