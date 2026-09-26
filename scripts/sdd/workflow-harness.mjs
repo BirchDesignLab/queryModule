@@ -1340,6 +1340,7 @@ await test("sdd P8: implementer, continue, retry and every fixer self-check lint
     assert.ok(p.includes("Before each commit run pnpm lint"), `${l} lacks the lint self-check`);
     assert.ok(p.includes("pnpm exec biome format --write <files>"), `${l} lacks the format fix`);
     assert.ok(p.includes("pnpm coverage"), `${l} lacks pnpm coverage`);
+    assert.ok(p.includes("pnpm typecheck"), `${l} lacks pnpm typecheck`);
     assert.ok(/do not commit on red/i.test(p), `${l} lacks "do not commit on red"`);
   }
 });
@@ -1582,6 +1583,33 @@ await test("sdd P6: needsJudgment and unanswered items go to the ruler; the rule
   assert.ok(r.find("ruler-review").prompt.includes("ambiguous"));
   const dead = await run(sdd, BASE, sddResponder({ "spec-review": specCV(), checker: null }));
   assert.deepEqual(ids(dead.find("ruler-review").prompt), ["spec:CV1"]);
+});
+
+await test("sdd N1: a null checker with no later tree check stops at precondition:checker; the answer retries it", async () => {
+  const late = {
+    at: "ruler-review",
+    decisions: [{ item: "spec:CV1", decision: "verified", reason: "controller ran it" }],
+  };
+  const over = {
+    "spec-review": specCV(),
+    checker: null,
+    "checker-retry": (p) => checkAll("verified")(p),
+  };
+  const r = await run(sdd, { ...BASE, answers: [late] }, sddResponder(over));
+  assert.equal(r.res.status, "stopped", r.logs.join(" | "));
+  assert.equal(r.res.stopPoint, "precondition:checker");
+  assert.ok(!r.labels.some((l) => l.startsWith("ruler")), r.labels.join(","));
+  const again = await run(
+    sdd,
+    { ...BASE, answers: [late, { at: "precondition:checker", text: "tree verified clean" }] },
+    sddResponder(over),
+  );
+  assert.ok(again.labels.includes("checker-retry"), again.labels.join(","));
+  assert.equal(again.res.status, "complete", again.logs.join(" | "));
+  // A null checker whose items reach a running ruler needs no stop: the ruler checks the tree.
+  const ruled = await run(sdd, BASE, sddResponder({ "spec-review": specCV(), checker: null }));
+  assert.ok(ruled.labels.includes("ruler-review"));
+  assert.notEqual(ruled.res.stopPoint, "precondition:checker");
 });
 
 await test("sdd P6: a controller-decided cannot-verify item never reaches the checker", async () => {
@@ -2009,8 +2037,27 @@ await test("append-ledger FP-M7: an already-appended block is skipped; UTF-16 an
   assert.equal(al.appendText("head\nx\ny\n", ["x", "y"]), null, "tail already holds the block");
   assert.equal(al.appendText("x\ny", ["x", "y"]), null);
   assert.equal(al.appendText("head\r\nx\r\ny\r\n", ["x", "y"]), null);
-  assert.equal(al.appendText("ax\ny\n", ["x", "y"]), "x\ny\n", "a partial line is not the block");
-  assert.equal(al.appendText("x\ny\nz\n", ["x", "y"]), "x\ny\n", "only the tail counts");
+  assert.equal(al.appendText("ax\ny\n", ["x", "y"]), "x\n", "a partial line is not a match; y is");
+  assert.equal(
+    al.appendText("x\ny\nz\n", ["x", "y"]),
+    null,
+    "lines already anywhere in the ledger are skipped",
+  );
+  // Stop and resume: the resumed result repeats the rulings the stopped run already ledgered.
+  const stopped =
+    "- Task 9: Ruling: a -- fix: r -- c\n- Task 9: stopped at review (head abc1234); controller action needed\n";
+  const resumed = [
+    "- Task 9: Ruling: a -- fix: r -- c",
+    "- Task 9: fix round 1/5 (1 addressed, 0 open; head def5678)",
+    "- Task 9: complete (commits a..b, review clean, gate green)",
+  ];
+  assert.equal(al.appendText(stopped, resumed), `${resumed[1]}\n${resumed[2]}\n`, "only new lines");
+  assert.deepEqual(al.freshLines(stopped, resumed), resumed.slice(1));
+  assert.equal(
+    al.appendText("a\n", ["b", "b"]),
+    "b\n",
+    "a line repeated in one block is written once",
+  );
   const res = {
     task: 7,
     ledgerLines: ["- Task 7: complete (commits a..b, review clean, gate green)"],
