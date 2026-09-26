@@ -10,14 +10,17 @@
  *   scratchRoot, runLabel: "w2-t7",          // agent scratch: <scratchRoot>/<runLabel>/<agent>/
  *   ledgerPath,                              // optional; only named in the log: the controller
  *                                            // appends ledgerLines (scripts/sdd/append-ledger.mjs)
- *   sensitive: false, ui: false,
- *   critic: false, criticFocus: "...",       // optional: critic on without sensitive or ui; focus text
+ *   tier: "ordinary",                        // optional: "ordinary" (default) | "gate" | "critical" (ADR-0007)
+ *   sensitive: false, ui: false,             // sensitive: true is an alias for tier "critical"; the two must agree
+ *   critic: false, criticFocus: "...",       // optional: critic on for an ordinary task; focus text
  *   ids: "BR-001, FR-032", specRefs: "spec 4.1 lines 140-260; ...",
  *   requirementsDoc,                         // optional; default the repo-root Requirements Definition
  *   globalConstraints: "<product and code constraints>",   // required, non-empty; see below
  *   carries: "<rulings, interfaces>",        // never edit between re-runs of one task
  *   trailer: "Co-Authored-By: ...",          // fallback commit trailer
  *   roles: { implementer: { model: "opus", effort: "medium" }, ... },   // optional overrides
+ *   maxAgents: 16,                           // agent budget (every agent() call); coerced like maxRounds;
+ *                                            // past it the run stops at "budget"
  *   maxRounds: 5,                            // fix-round cap; numeric strings and floats are
  *                                            // coerced (logged), then clamped to 1..8
  *   answers: [{ at, text?, decisions? }],    // only on a re-run after a stop (below)
@@ -29,14 +32,18 @@
  * globalConstraints carries product and code constraints only (runtime, TDD, purity, fixtures,
  * logging, docs style). Never process bullets (model and effort plan, PR and push steps, commit
  * trailers, branch naming): every agent treats globalConstraints as binding.
- * Roles: implementer, specReviewer, qualityReviewer, critic, checker, ruler, fixer, escalatedFixer,
+ * Tiers: ordinary and gate run one combined reviewer (role reviewer: spec and quality, findings keep
+ * kind spec | quality); critical keeps specReviewer and qualityReviewer. The critic runs on gate,
+ * critical, ui or critic: true; the sensitive ruler rule on gate and critical. Reviewers, critic and
+ * re-reviewers are diff-scoped.
+ * Roles: implementer, reviewer, specReviewer, qualityReviewer, critic, checker, ruler, fixer, escalatedFixer,
  * progressChecker, reReviewer, gate. There is no ledger role (roles.ledger is logged and ignored).
  * gate-0 runs in parallel with the reviewers; cannot-verify items go to the checker; a fix round
  * with only gate or progress findings skips the re-reviewer.
  *
  * Returns { task, status, base, head, commits, rounds, rulings (in force, one per item, each
  * with source "ruler" | "checker" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
- * questions, concerns, answersUnconsumed?, ledgerLines } and, when status is "stopped", also
+ * questions, concerns, agents (agent calls in this run), answersUnconsumed?, ledgerLines } and, when status is "stopped", also
  * stopped (a stop point, with the agent that consumes answers there):
  *   "implementer"     -> implementer-continue finishes on top of the existing commits
  *   "precondition"    -> (problem says what: branch, HEAD, dirty tree with the files named; stopPoint
@@ -46,7 +53,8 @@
  *   "review"          -> ruler-review, then the fixers (a reviewer returned nothing)
  *   "ruler-review"    -> ruler-review          "fixer-r<r>" -> fixer-r<r>
  *   "gate-0" | "gate-r<r>" -> fixer-r1 | fixer-r<r+1> (the gate returned nothing)
- * plus escalated: [ruling] when a ruler escalated, and problem on a precondition stop.
+ *   "budget"          -> no agent: each answer raises maxAgents by 16; the run resumes from cache where it stopped
+ * plus escalated: [ruling] when a ruler escalated, and problem on a precondition or budget stop.
  *   status "complete": review clean and the gate passed. Tick the plan checkboxes, move
  *     carryForward into the next task's carries, read rulings.
  *   status "parked": the fix cap was reached or an item got no ruling. Adjudicate parked.
@@ -72,12 +80,12 @@
  */
 export const meta = {
   name: 'sdd-task',
-  description: 'Implement one plan task with TDD, review it (spec, quality, critic), rule, fix and gate it to a clean head',
+  description: 'Implement one plan task with TDD, review it (spec and quality, critic by tier), rule, fix and gate it to a clean head',
   whenToUse: 'Running one task of an implementation plan on a wave branch in place of hand-dispatched subagent-driven development',
   phases: [
     { title: 'Implement', detail: 'implementer builds the task from its brief with TDD and commits' },
     { title: 'Rule', detail: 'ruler decides implementer concerns, plan-mandated or contested findings and cannot-verify items the checker could not settle' },
-    { title: 'Review', detail: 'spec reviewer, quality reviewer, critic (sensitive, UI or critic: true) and gate-0 in parallel' },
+    { title: 'Review', detail: 'combined reviewer (ordinary, gate) or spec and quality reviewers (critical), critic (gate, critical, UI or critic: true) and gate-0 in parallel' },
     { title: 'Check', detail: 'checker runs the suggested check for each cannot-verify item' },
     { title: 'Fix', detail: 'fixer, progress checker and re-reviewer per round, up to maxRounds' },
     { title: 'Gate', detail: 'independent lint, typecheck, coverage, head and clean-tree check' },
@@ -93,9 +101,23 @@ for (const k of ['task', 'title', 'repoDir', 'branch', 'base', 'briefPath', 'rep
   }
 }
 const N = A.task
-const SENSITIVE = !!A.sensitive
+// Review tier (ADR-0007, issue #78): ordinary | gate | critical. sensitive: true is an alias for
+// critical; sensitive and tier together must agree.
+const TIERS = ['ordinary', 'gate', 'critical']
+const hasTier = A.tier !== undefined && A.tier !== null
+if (hasTier && !TIERS.includes(A.tier)) throw new Error(`sdd-task: tier must be one of ${TIERS.join(', ')}, got ${JSON.stringify(A.tier)}`)
+const hasSensitive = A.sensitive !== undefined && A.sensitive !== null
+if (hasTier && hasSensitive && !!A.sensitive !== (A.tier === 'critical')) {
+  throw new Error(`sdd-task: sensitive ${JSON.stringify(A.sensitive)} and tier "${A.tier}" disagree (sensitive: true means tier "critical"); set one of them`)
+}
+const TIER = hasTier ? A.tier : A.sensitive ? 'critical' : 'ordinary'
+if (!hasTier && A.sensitive) log('tier: sensitive: true is an alias for tier "critical"')
+// SENSITIVE: the critical tier (split reviewers, Opus implementer). GUARDED: gate or critical
+// (critic on, the sensitive ruler rule and the script's rule (c)).
+const SENSITIVE = TIER === 'critical'
+const GUARDED = TIER !== 'ordinary'
 const UI = !!A.ui
-// critic: true turns the critic on without sensitive or ui; no tier or ruler rule changes with it.
+// critic: true turns the critic on without a gate or critical tier or ui; no tier or ruler rule changes with it.
 if (A.critic !== undefined && A.critic !== null && typeof A.critic !== 'boolean') {
   throw new Error(`sdd-task: critic must be a boolean (true or false), got ${JSON.stringify(A.critic)}`)
 }
@@ -103,8 +125,8 @@ if (A.criticFocus !== undefined && A.criticFocus !== null && (typeof A.criticFoc
   throw new Error('sdd-task: criticFocus must be a non-empty string when given')
 }
 const CRITIC_FOCUS = A.criticFocus ? A.criticFocus.trim() : ''
-const CRITIC = SENSITIVE || UI || A.critic === true
-if (CRITIC_FOCUS && !CRITIC) log('review: criticFocus ignored (critic off: set critic: true, sensitive or ui to run it)')
+const CRITIC = GUARDED || UI || A.critic === true
+if (CRITIC_FOCUS && !CRITIC) log('review: criticFocus ignored (critic off: set critic: true, a gate or critical tier, or ui to run it)')
 const DEFAULT_CRITIC_FOCUS = 'correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 
@@ -127,17 +149,40 @@ if (MAX_ROUNDS < 1 || MAX_ROUNDS > 8) {
   MAX_ROUNDS = clamped
 }
 
+// Agent budget: every agent() call in the run counts, cached replays included. The call that would
+// exceed MAX_AGENTS is not made; the run stops at "budget". Each answer at "budget" raises the cap
+// by DEFAULT_MAX_AGENTS once (below, with the answers).
+const DEFAULT_MAX_AGENTS = 16
+let MAX_AGENTS = DEFAULT_MAX_AGENTS
+if (A.maxAgents !== undefined && A.maxAgents !== null) {
+  const raw = A.maxAgents
+  const n = typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '') ? Number(raw) : Number.NaN
+  if (!Number.isFinite(n)) {
+    log(`budget: maxAgents ${JSON.stringify(raw)} is not a number; using ${DEFAULT_MAX_AGENTS}`)
+  } else if (typeof raw !== 'number' || !Number.isInteger(n)) {
+    MAX_AGENTS = Math.trunc(n)
+    log(`budget: maxAgents ${JSON.stringify(raw)} coerced to ${MAX_AGENTS}`)
+  } else {
+    MAX_AGENTS = n
+  }
+}
+if (MAX_AGENTS < 1) {
+  log(`budget: maxAgents ${MAX_AGENTS} clamped to 1`)
+  MAX_AGENTS = 1
+}
+
 // Answers to stopped runs: a history, one entry per answered stop, appended across re-runs and
 // never replaced. Every stopped value is a stop point with a named consumer:
 //   implementer   -> implementer-continue          precondition[:<label>] -> <label>-retry, once
 //   ruler-concerns -> ruler-concerns               fixer-pre    -> fixer-pre
 //   review        -> ruler-review (else a fixer)   ruler-review -> ruler-review
 //   fixer-r<r>    -> fixer-r<r>                    gate-0 / gate-r<r> -> fixer-r1 / fixer-r<r+1>
+//   budget        -> no agent: the cap rises by DEFAULT_MAX_AGENTS and the run goes on where it stopped
 // Each entry's text is delivered to exactly one agent: the first consumer at or after its stop
 // point that runs. So an agent's prompt holds only the entries for its own stop point, and a
 // later entry never changes an earlier agent's prompt (earlier calls replay from cache).
 // Decisions from all entries become controller rulings; a later entry wins for the same item.
-const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
+const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>, budget'
 function stopPos(at) {
   const fixed = { implementer: 0, 'ruler-concerns': 1, 'fixer-pre': 2, review: 3, 'ruler-review': 4 }
   if (at in fixed) return fixed[at]
@@ -162,7 +207,8 @@ if (A.answers !== undefined && A.answers !== null) {
   const entries = list.map((e, i) => {
     const at = String((e && e.at) || '')
     const pre = PRECONDITION_AT.exec(at)
-    if (!pre && stopPos(at) < 0) {
+    const isBudget = at === 'budget'
+    if (!isBudget && !pre && stopPos(at) < 0) {
       throw new Error(`sdd-task: answers[${i}].at "${at}" is not a stop point; use the returned stopped value: ${STOP_POINTS}`)
     }
     const text = typeof e.text === 'string' ? e.text.trim() : ''
@@ -174,10 +220,19 @@ if (A.answers !== undefined && A.answers !== null) {
         throw new Error(`sdd-task: answers[${i}].decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
       }
       CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' }) // later entry wins
-      if (pre ? ['', 'implementer', 'gate-0'].includes(pre[1] || '') : stopPos(at) <= 3) EARLY_DECIDED.add(d.item)
+      // budget decisions apply like later-stop decisions (after the checker)
+      if (!isBudget && (pre ? ['', 'implementer', 'gate-0'].includes(pre[1] || '') : stopPos(at) <= 3)) EARLY_DECIDED.add(d.item)
+    }
+    if (isBudget) {
+      // No consumer: the text is logged, never put in a prompt, so every call replays from cache.
+      MAX_AGENTS += DEFAULT_MAX_AGENTS
+      if (text) log(`budget: answers[${i}]: ${text}`)
+      return { index: i, at, pos: -1, preLabel: null, text, delivered: true }
     }
     return { index: i, at, pos: pre ? -1 : stopPos(at), preLabel: pre ? pre[1] || '' : null, text, delivered: !text }
   })
+  const raised = entries.filter((e) => e.at === 'budget').length
+  if (raised) log(`budget: maxAgents ${MAX_AGENTS - raised * DEFAULT_MAX_AGENTS} raised to ${MAX_AGENTS} (${raised} answer(s) at budget, +${DEFAULT_MAX_AGENTS} each)`)
   ANSWERS = { entries, decisionsUsed: new Set() }
   log(`answers: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (${entries.map((e) => e.at).join(', ')}), ${CONTROLLER.size} controller decision(s); earlier agent calls replay from cache`)
 }
@@ -218,29 +273,32 @@ if (A.implemented !== undefined && A.implemented !== null) {
 // ---------- roles ----------
 const MODELS = ['haiku', 'sonnet', 'opus']
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
-const DEFAULTS = SENSITIVE
-  ? {
-      implementer: { model: 'opus', effort: 'medium' },
-      specReviewer: { model: 'sonnet', effort: 'medium' },
-      qualityReviewer: { model: 'sonnet', effort: 'high' },
-      critic: { model: 'opus', effort: 'medium' },
-      ruler: { model: 'opus', effort: 'medium' },
-      checker: { model: 'sonnet', effort: 'low' },
-      progressChecker: { model: 'sonnet', effort: 'low' },
-      reReviewer: { model: 'opus', effort: 'medium' },
-      gate: { model: 'sonnet', effort: 'low' },
-    }
-  : {
-      implementer: { model: 'sonnet', effort: 'medium' },
-      specReviewer: { model: 'sonnet', effort: 'medium' },
-      qualityReviewer: { model: 'sonnet', effort: 'high' },
-      critic: { model: 'opus', effort: 'medium' },
-      ruler: { model: 'opus', effort: 'low' },
-      checker: { model: 'sonnet', effort: 'low' },
-      progressChecker: { model: 'sonnet', effort: 'low' },
-      reReviewer: { model: 'sonnet', effort: 'medium' },
-      gate: { model: 'sonnet', effort: 'low' },
-    }
+// Per tier (README "Roles and defaults"). ordinary and gate run one combined reviewer (reviewer);
+// critical keeps the split specReviewer and qualityReviewer. A roles override still wins per role.
+const COMMON_ROLES = {
+  implementer: { model: 'sonnet', effort: 'medium' },
+  reviewer: { model: 'sonnet', effort: 'high' },
+  specReviewer: { model: 'sonnet', effort: 'medium' },
+  qualityReviewer: { model: 'sonnet', effort: 'high' },
+  critic: { model: 'opus', effort: 'medium' },
+  ruler: { model: 'opus', effort: 'low' },
+  checker: { model: 'sonnet', effort: 'low' },
+  progressChecker: { model: 'sonnet', effort: 'low' },
+  reReviewer: { model: 'sonnet', effort: 'medium' },
+  gate: { model: 'sonnet', effort: 'low' },
+}
+const TIER_ROLES = {
+  ordinary: {},
+  gate: { reReviewer: { model: 'sonnet', effort: 'high' } },
+  critical: {
+    implementer: { model: 'opus', effort: 'medium' },
+    ruler: { model: 'opus', effort: 'medium' },
+    reReviewer: { model: 'opus', effort: 'medium' },
+  },
+}
+const DEFAULTS = Object.assign({}, COMMON_ROLES, TIER_ROLES[TIER])
+// escalatedFixer base: ordinary steps up from the fixer; gate and critical are fixed.
+const ESCALATED_FIXER = { gate: { model: 'opus', effort: 'medium' }, critical: { model: 'opus', effort: 'high' } }
 const OVR = Object.assign({}, A.roles || {})
 // The ledger agent was removed (post-pilot): the controller appends ledgerLines with
 // scripts/sdd/append-ledger.mjs. An old roles.ledger override is ignored, not an error.
@@ -267,7 +325,7 @@ function stepUp(r) {
 function resolve(name) {
   if (name === 'fixer') return Object.assign({}, resolve('implementer'), OVR.fixer || {})
   if (name === 'escalatedFixer') {
-    const base = SENSITIVE ? { model: 'opus', effort: 'high' } : stepUp(resolve('fixer'))
+    const base = ESCALATED_FIXER[TIER] || stepUp(resolve('fixer'))
     return Object.assign({}, base, OVR.escalatedFixer || {})
   }
   if (!DEFAULTS[name]) throw new Error(`sdd-task: unknown role "${name}"`)
@@ -285,6 +343,24 @@ function role(name) {
   return { model: r.model, effort: r.effort }
 }
 const tier = (name) => { const r = role(name); return r.effort ? `${r.model}/${r.effort}` : r.model }
+
+// ---------- agent budget ----------
+// Every agent call goes through call(); a parallel block reserves its calls first, so the budget
+// never stops half a block. Past the cap, BudgetStop is thrown and the run returns stopped "budget".
+let agentsUsed = 0
+function budgetStop(n, label, stage) {
+  const e = new Error(`budget: agent ${agentsUsed + n} would exceed maxAgents ${MAX_AGENTS} at ${label} (${stage})`)
+  e.budgetStop = { label, stage, count: agentsUsed }
+  return e
+}
+function reserve(n, label, stage) {
+  if (agentsUsed + n > MAX_AGENTS) throw budgetStop(n, label, stage)
+}
+async function call(prompt, opts) {
+  reserve(1, opts.label, opts.phase)
+  agentsUsed++
+  return agent(prompt, opts)
+}
 
 // ---------- paths ----------
 // Forward slashes throughout: Git Bash and the Windows file tools both accept C:/x/y.
@@ -339,6 +415,18 @@ const REVIEW = {
     cannotVerify: { type: 'array', items: { type: 'object', properties: { item: { type: 'string' }, check: { type: 'string' } }, required: ['item', 'check'] } },
   },
   required: ['verdict', 'findings', 'cannotVerify'],
+}
+// The combined reviewer (ordinary and gate tiers) tags each finding and cannot-verify item with its
+// kind; ids become spec:<id> or quality:<id>, as with the split reviewers.
+const KIND = { type: 'string', enum: ['spec', 'quality'], description: 'spec: spec compliance; quality: code quality' }
+const REVIEW_COMBINED = {
+  type: 'object',
+  properties: {
+    verdict: REVIEW.properties.verdict,
+    findings: { type: 'array', items: { type: 'object', properties: Object.assign({}, FINDING.properties, { kind: KIND }), required: FINDING.required.concat(['kind']) } },
+    cannotVerify: { type: 'array', items: { type: 'object', properties: { item: { type: 'string' }, check: { type: 'string' }, kind: KIND }, required: ['item', 'check', 'kind'] } },
+  },
+  required: REVIEW.required,
 }
 // Agents that run after gate-0 (checker, ruler-review) report the repository state they leave.
 const POST_GATE_PROPS = {
@@ -464,7 +552,7 @@ function postGateProblem(res, expected) {
 // Moves that make a gate green without fixing the cause (critic I2). Fixers are told not to make
 // them; the progress checker flags them, and a flag brings the re-reviewer into the next round.
 const GATE_GUARD = 'Never change vitest config files (vitest*.config.*), biome.json, tsconfig*.json, package.json scripts or coverage thresholds or excludes, and never add suppression comments (biome-ignore, @ts-ignore, @ts-expect-error, istanbul ignore, v8 ignore, c8 ignore, eslint-disable) or delete the code a gate complains about, unless the brief or a ruling in force asks for it.'
-const SENSITIVE_RULE = 'This task is sensitive. On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.'
+const SENSITIVE_RULE = `This task is ${SENSITIVE ? 'sensitive' : 'gate-tier, so the sensitive rule applies'}. On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.`
 
 function diffStep(base, head, out) {
   return [
@@ -473,9 +561,11 @@ function diffStep(base, head, out) {
     `mkdir -p "${out.replace(/\/[^/]+$/, '')}"`,
     `cd "${REPO}" && { echo "## Commits"; git log --oneline ${base}..${head}; echo; echo "## Files changed"; git diff --stat ${base}..${head}; echo; echo "## Diff"; git diff -U10 ${base}..${head}; } > "${out}"`,
     '```',
-    'Read a changed file separately only when a hunk you must judge is cut off; say so. Inspect code outside the diff only for a concrete risk you can name, one focused check per risk, and name both in your review.',
+    DIFF_SCOPE,
   ].join('\n')
 }
+// Reviewers, the critic and re-reviewers are diff-scoped (issue #78).
+const DIFF_SCOPE = `Diff scope: after the diff, read only the files that call or are called by the changed code, and the spec lines in ${A.specRefs}; do not read unrelated files. Read a changed file separately only when a hunk you must judge is cut off; say so. Name each file you read outside the diff and why.`
 
 const TESTS_RULE = 'The implementer already ran the tests and put the evidence in the report. Do not re-run the suite (an independent gate runs pnpm lint, pnpm typecheck and pnpm coverage on this same head). Run a focused test only for a specific doubt no existing run answers. Warnings or noise in reported test output are findings. Missing or garbled evidence is a gap to report, not a reason to re-run.'
 const CALIBRATION = [
@@ -571,8 +661,9 @@ function ledgerLines(result) {
   for (const c of state.carryForward) out.push(`- Task ${N}: carry forward: ${c}`)
   for (const l of state.roundLog) out.push(`- Task ${N}: ${l}`)
   for (const m of state.deferredMinors) out.push(`- Task ${N}: minor (deferred): ${m}`)
-  if (result.status === 'complete') out.push(`- Task ${N}: complete (commits ${b7}..${h7}, review clean, gate green)`)
-  else if (result.status === 'parked') out.push(`- Task ${N}: complete (commits ${b7}..${h7}, ${result.parked.length} parked)`)
+  const ag = `; ${agentsUsed} agent${agentsUsed === 1 ? '' : 's'}`
+  if (result.status === 'complete') out.push(`- Task ${N}: complete (commits ${b7}..${h7}, review clean, gate green${ag})`)
+  else if (result.status === 'parked') out.push(`- Task ${N}: complete (commits ${b7}..${h7}, ${result.parked.length} parked${ag})`)
   else out.push(`- Task ${N}: stopped at ${result.stopped} (head ${h7}); controller action needed`)
   return out.map((l) => l.replace(/[\r\n]+/g, ' '))
 }
@@ -611,6 +702,7 @@ function build(status, extra) {
       parked: state.parked,
       questions: state.questions,
       concerns: state.concerns,
+      agents: agentsUsed,
     },
     extra || {},
   )
@@ -645,7 +737,7 @@ async function runRuler(allItems, label, headNow, pos, postGateHead) {
     '- stands: the code stays. Give the reason (spec or plan citation).',
     '- verified: a cannot-verify item you checked yourself and that passed. Put the command you ran and its result in command. A check that fails is fix, not verified.',
     '- escalate: only when every path is a guess, or the action is irreversible or security-sensitive.',
-    SENSITIVE ? SENSITIVE_RULE : '',
+    GUARDED ? SENSITIVE_RULE : '',
     'costIfWrong: one line, what it costs if your ruling is wrong. carryForward: obligations a later task must meet because of your ruling (e.g. "Task 8 must show tsc -b exit 0"); omit when none.',
     'You are read-only: do not edit, commit or change any git state. Scratch, if needed: ' + scratch(label),
     postGateHead ? postGateCheck(postGateHead) : '',
@@ -653,13 +745,13 @@ async function runRuler(allItems, label, headNow, pos, postGateHead) {
     'Return one ruling per item, with item set to the id exactly as given.',
   ].filter(Boolean).join('\n')
   const schema = postGateHead ? RULINGS_POST : RULINGS
-  let res = await agent(rulerPrompt, { label, phase: 'Rule', schema, ...role('ruler') })
+  let res = await call(rulerPrompt, { label, phase: 'Rule', schema, ...role('ruler') })
   if (postGateHead) {
     let bad = postGateProblem(res, postGateHead)
     const ans = bad ? preconditionAnswers(label) : ''
     if (ans) {
       log(`rule: cached ${label} left the repository changed (${bad}); retrying with the controller answer`)
-      res = await agent(`${rulerPrompt}\n\n${ans}`, { label: `${label}-retry`, phase: 'Rule', schema, ...role('ruler') })
+      res = await call(`${rulerPrompt}\n\n${ans}`, { label: `${label}-retry`, phase: 'Rule', schema, ...role('ruler') })
       bad = postGateProblem(res, postGateHead)
     }
     if (bad) {
@@ -674,8 +766,8 @@ async function runRuler(allItems, label, headNow, pos, postGateHead) {
     let r = byId.get(it.id)
     if (!r) { unruled.push(it); continue }
     // Rule (c) never touches a controller decision: those items were settled above and never reach here.
-    if (SENSITIVE && it.severity === 'critical' && (r.decision === 'stands' || r.decision === 'verified')) {
-      log(`rule: ${it.id} is critical on a sensitive task and was ruled ${r.decision}; escalated by rule (c); answer with answers.decisions to settle it`)
+    if (GUARDED && it.severity === 'critical' && (r.decision === 'stands' || r.decision === 'verified')) {
+      log(`rule: ${it.id} is critical on a ${TIER}-tier task and was ruled ${r.decision}; escalated by rule (c); answer with answers.decisions to settle it`)
       r = Object.assign({}, r, { decision: 'escalate', reason: `ruled ${r.decision} on a critical finding (sensitive rule c): ${r.reason}` })
     }
     setRuling({ item: it.id, what: it.text.slice(0, 160), decision: r.decision, reason: r.reason, costIfWrong: r.costIfWrong, fixInstruction: r.fixInstruction || '', command: r.command || '', source: 'ruler' }, it.contests)
@@ -690,7 +782,7 @@ async function runRuler(allItems, label, headNow, pos, postGateHead) {
 
 // ---------- fixer, progress checker, re-reviewer, gate ----------
 async function runFixer(findings, label, roleName, roundTag, round) {
-  return agent(
+  return call(
     [
       `You are fixing review findings on Task ${N}: ${A.title} (${roundTag}). You are a fresh agent: read the brief ${A.briefPath} (your requirements, exact values), the implementer report ${A.reportPath}, and the review files in ${A.workDir} (task-${N}-review-*.md, task-${N}-re-review-*.md) as you need them.`,
       A.carries ? `Controller rulings and interfaces in force:\n${A.carries}` : '',
@@ -717,7 +809,7 @@ async function runFixer(findings, label, roleName, roundTag, round) {
 
 // Cannot-verify items: one read-only checker runs each item's suggested check.
 async function runChecker(items, headNow, expectedHead, answerText, label) {
-  return agent(
+  return call(
     [
       `You are the checker for Task ${N}: ${A.title}. Reviewers could not verify the items below from the diff alone. Run each item's suggested check (or the closest equivalent) and report what you found.`,
       `Context as you need it: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the requirements doc "${REQ_DOC}". Code under check: ${A.base}..${headNow}. ${GIT}`,
@@ -740,7 +832,7 @@ async function runChecker(items, headNow, expectedHead, answerText, label) {
 }
 
 async function runProgress(label, roundBase, priorTests) {
-  return agent(
+  return call(
     [
       `Check a fix round on Task ${N} in ${REPO}. Round base: ${roundBase}. ${GIT}`,
       'Checks (report each failure as one line in problems; ok is true only with no problems):',
@@ -762,7 +854,7 @@ async function runProgress(label, roundBase, priorTests) {
 // verdict them (it does not re-run the suite); gate-r<r> decides them.
 async function runReReview(findings, gateFindings, label, roundBase, headNow, r) {
   const out = wjoin(`task-${N}-re-review-${r}.md`)
-  return agent(
+  return call(
     [
       `You are re-reviewing fix round ${r} of Task ${N}: ${A.title}. A review produced the findings below; a fixer attempted them. Verdict each finding and inspect the fix diff, nothing else.`,
       `Brief: ${A.briefPath}. Fix report: the "Fix" sections at the end of ${A.reportPath}.`,
@@ -785,7 +877,7 @@ async function runReReview(findings, gateFindings, label, roundBase, headNow, r)
 }
 
 async function runGate(label, expectedHead, answerText) {
-  return agent(
+  return call(
     [
       `You are the independent gate for Task ${N}: ${A.title}. Trust no earlier report; check the repository yourself. ${GIT}`,
       answerText,
@@ -832,10 +924,13 @@ async function gateOutcome(gl, g, expectedHead) {
   return { ok: false, findings: problems.map((p, k) => ({ id: `${gl}:${k + 1}`, severity: 'important', file: '', line: '', summary: `gate: ${p}`, fix: 'fix the cause so the gate check passes', planMandated: false, contestsRuling: '' })) }
 }
 
+// The flow runs inside one try so a budget stop anywhere returns a stopped result (the flow below
+// is deliberately not re-indented).
+try {
 // ================= 1. Implement =================
 phase('Implement')
-log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; ${SENSITIVE ? 'sensitive' : 'ordinary'}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}`)
-log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}`)
+log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; tier ${TIER}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}; maxAgents ${MAX_AGENTS}`)
+log(`roles: implementer ${tier('implementer')}, ${SENSITIVE ? `spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}` : `reviewer (spec and quality) ${tier('reviewer')}`}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}`)
 
 // The implementer prompt never carries answers, so a re-run with answers replays it from cache.
 const implPrompt = [
@@ -863,7 +958,7 @@ const implPrompt = [
 // { impl } or { stop: <finished result> }.
 async function implementStage() {
   let impl
-  impl = await agent(implPrompt, { label: 'implementer', phase: 'Implement', schema: WORK, ...role('implementer') })
+  impl = await call(implPrompt, { label: 'implementer', phase: 'Implement', schema: WORK, ...role('implementer') })
 
   if (!impl) {
     log('implement: implementer returned null (skipped or died); stopping')
@@ -873,7 +968,7 @@ async function implementStage() {
   const implPre = impl.preconditionFailed ? preconditionAnswers('implementer') : ''
   if (implPre) {
     log(`implement: cached precondition failure (${impl.preconditionFailed}); retrying the implementer with the controller answer`)
-    impl = await agent(`${implPrompt}\n\n${implPre}`, { label: 'implementer-retry', phase: 'Implement', schema: WORK, ...role('implementer') })
+    impl = await call(`${implPrompt}\n\n${implPre}`, { label: 'implementer-retry', phase: 'Implement', schema: WORK, ...role('implementer') })
     if (!impl) return { stop: await finish(build('stopped', { stopped: 'implementer', questions: ['implementer retry returned no result'] })) }
   }
   if (impl.preconditionFailed) {
@@ -884,7 +979,7 @@ async function implementStage() {
   const contAnswers = impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT' ? answersFor(0) : ''
   if (contAnswers) {
     log(`implement: cached implementer stopped (${impl.status}); running the continue implementer with the controller answers`)
-    const cont = await agent(
+    const cont = await call(
       [
         `You are continuing Task ${N}: ${A.title}${A.issue ? ` (issue #${A.issue})` : ''}. An earlier implementer stopped with ${impl.status}; the controller has answered.`,
         `Read the brief ${A.briefPath} (requirements, exact values) and the earlier report ${A.reportPath}. Check what is already committed: git log --oneline ${A.base}..HEAD. Build on those commits; do not redo committed work and do not reset or rewrite history.`,
@@ -999,38 +1094,64 @@ const common = (roleLabel) => [
   HOUSE,
 ].filter(Boolean).join('\n')
 
-const reviewers = [
-  {
-    key: 'spec',
-    roleName: 'specReviewer',
-    prompt: [
-      `You are the spec reviewer for Task ${N}: ${A.title}. Task-scoped gate, not a merge review.`,
-      common('spec-review'),
-      '',
-      `Spec compliance only. Compare the diff with the brief and with the spec sections ${A.specRefs}. Requirement IDs: ${A.ids || '(none given)'}; cite each ID verbatim as it appears in "${REQ_DOC}" (read the IDs there), never a paraphrase.`,
-      'Report Missing (skipped or claimed without implementing), Extra (unrequested features, over-engineering) and Misunderstood (right feature built wrong). If the brief lists several files each with its own change, check every listed file has its hunk; an untouched listed file is a Missing finding.',
-      'Check every fixture and test value in the diff against the fixture policy in the global constraints; a real-looking person, vehicle or property record is a critical finding.',
-      'TDD evidence: missing or implausible RED evidence for a behavioural change is an important finding.',
-      `Write your full review to ${wjoin(`task-${N}-review-spec.md`)}: Spec Compliance verdict with file:line per finding, per-ID verdicts, Cannot verify, Strengths, Issues by severity. No preamble.`,
-      'verdict: pass only with no critical or important finding.',
-    ].join('\n'),
-  },
-  {
-    key: 'quality',
-    roleName: 'qualityReviewer',
-    prompt: [
-      `You are the quality reviewer for Task ${N}: ${A.title}. Task-scoped gate, not a merge review.`,
-      common('quality-review'),
-      '',
-      'Code quality only (spec compliance is another reviewer\'s job): separation of concerns, error handling, DRY without premature abstraction, edge cases; tests verify real behaviour and cover the task\'s edge cases; each file has one responsibility and follows the plan\'s file structure; flag new files that are already large or files this change grew a lot.',
-      `Write your full review to ${wjoin(`task-${N}-review-quality.md`)}: Strengths, Issues (Critical, Important, Minor) with file:line, why it matters, how to fix; Assessment. No preamble.`,
-      'verdict: pass only with no critical or important finding.',
-    ].join('\n'),
-  },
+// Spec and quality instructions, shared by the split reviewers (critical) and the combined reviewer
+// (ordinary and gate).
+const SPEC_CHECKS = [
+  `Spec compliance: compare the diff with the brief and with the spec sections ${A.specRefs}. Requirement IDs: ${A.ids || '(none given)'}; cite each ID verbatim as it appears in "${REQ_DOC}" (read the IDs there; FR-, UX-, SEC-, BR-, NFR- and the rest), never a paraphrase.`,
+  'Report Missing (skipped or claimed without implementing), Extra (unrequested features, over-engineering) and Misunderstood (right feature built wrong). If the brief lists several files each with its own change, check every listed file has its hunk; an untouched listed file is a Missing finding.',
+  'Check every fixture and test value in the diff against the fixture policy in the global constraints; a real-looking person, vehicle or property record is a critical finding.',
+  'TDD evidence: missing or implausible RED evidence for a behavioural change is an important finding.',
 ]
+const QUALITY_CHECKS = "Code quality: separation of concerns, error handling, DRY without premature abstraction, edge cases; tests verify real behaviour and cover the task's edge cases; each file has one responsibility and follows the plan's file structure; flag new files that are already large or files this change grew a lot."
+const reviewers = SENSITIVE
+  ? [
+      {
+        key: 'spec',
+        roleName: 'specReviewer',
+        prompt: [
+          `You are the spec reviewer for Task ${N}: ${A.title}. Task-scoped gate, not a merge review.`,
+          common('spec-review'),
+          '',
+          "Spec compliance only (code quality is another reviewer's job).",
+          ...SPEC_CHECKS,
+          `Write your full review to ${wjoin(`task-${N}-review-spec.md`)}: Spec Compliance verdict with file:line per finding, per-ID verdicts, Cannot verify, Strengths, Issues by severity. No preamble.`,
+          'verdict: pass only with no critical or important finding.',
+        ].join('\n'),
+      },
+      {
+        key: 'quality',
+        roleName: 'qualityReviewer',
+        prompt: [
+          `You are the quality reviewer for Task ${N}: ${A.title}. Task-scoped gate, not a merge review.`,
+          common('quality-review'),
+          '',
+          `${QUALITY_CHECKS} Code quality only (spec compliance is another reviewer's job).`,
+          `Write your full review to ${wjoin(`task-${N}-review-quality.md`)}: Strengths, Issues (Critical, Important, Minor) with file:line, why it matters, how to fix; Assessment. No preamble.`,
+          'verdict: pass only with no critical or important finding.',
+        ].join('\n'),
+      },
+    ]
+  : [
+      {
+        key: 'combined',
+        roleName: 'reviewer',
+        combined: true,
+        prompt: [
+          `You are the reviewer for Task ${N}: ${A.title}. You do both the spec-compliance review and the code-quality review. Task-scoped gate, not a merge review.`,
+          common('combined-review'),
+          '',
+          ...SPEC_CHECKS,
+          QUALITY_CHECKS,
+          'Tag every finding and every cannotVerify item with kind: spec (spec compliance: requirements, IDs, fixtures, RED evidence) or kind: quality (code quality). Use S1, S2 ids for spec findings and Q1, Q2 for quality findings.',
+          `Write your full review to ${wjoin(`task-${N}-review.md`)}: Spec Compliance (verdict, file:line per finding, per-ID verdicts), Code Quality (Strengths; Issues by severity with file:line, why it matters, how to fix), Cannot verify, Assessment. No preamble.`,
+          'verdict: pass only with no critical or important finding of either kind.',
+        ].join('\n'),
+      },
+    ]
 if (CRITIC) {
   const focusParts = []
   if (SENSITIVE) focusParts.push('sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)')
+  if (TIER === 'gate') focusParts.push('gate-tier risk (CI workflows, check scripts, config and tooling that guard the verify gate: fail-open checks, git or tool failures read as pass, shallow clones, empty inputs, rename or path bypasses, a weakened threshold)')
   if (UI) focusParts.push('UI risk (accessibility, keyboard paths, focus, states the brief names, regressions to existing components, tokens instead of literals)')
   if (CRITIC_FOCUS) focusParts.push(CRITIC_FOCUS)
   if (!focusParts.length) focusParts.push(DEFAULT_CRITIC_FOCUS)
@@ -1047,13 +1168,14 @@ if (CRITIC) {
     ].join('\n'),
   })
 } else {
-  log('review: critic off (task is neither sensitive nor UI, and critic is not set)')
+  log('review: critic off (ordinary tier, not UI, and critic is not set)')
 }
 
 // gate-0 runs in parallel with the reviewers on the same head (reviewHead).
 log(`review: ${reviewers.map((r) => r.key).join(', ')} and gate-0 in parallel on ${String(reviewHead).slice(0, 7)}`)
+reserve(reviewers.length + 1, `${reviewers.map((r) => `${r.key}-review`).join(', ')} and gate-0`, 'Review')
 const reviewAndGate = await parallel([
-  ...reviewers.map((r) => () => agent(r.prompt, { label: `${r.key}-review`, phase: 'Review', schema: REVIEW, ...role(r.roleName) })),
+  ...reviewers.map((r) => () => call(r.prompt, { label: `${r.key}-review`, phase: 'Review', schema: r.combined ? REVIEW_COMBINED : REVIEW, ...role(r.roleName) })),
   () => runGate('gate-0', reviewHead, ''),
 ])
 const reviews = reviewAndGate.slice(0, reviewers.length)
@@ -1073,7 +1195,8 @@ reviewers.forEach((r, i) => {
   const rv = reviews[i]
   log(`review: ${r.key} ${rv.verdict}, ${rv.findings.length} finding(s), ${rv.cannotVerify.length} cannot-verify`)
   for (const f of rv.findings) {
-    const g = Object.assign({}, f, { id: `${r.key}:${f.id}` })
+    // the combined reviewer's findings keep their kind: spec:<id> or quality:<id>
+    const g = Object.assign({}, f, { id: `${r.combined ? f.kind : r.key}:${f.id}` })
     const contests = (g.contestsRuling || '').trim()
     const text = `${where(g)} ${g.summary} (reviewer fix: ${g.fix})`
     if (contests) toRule.push({ id: g.id, kind: `finding contesting ruling ${contests}`, severity: g.severity, text, finding: g, contests })
@@ -1082,7 +1205,12 @@ reviewers.forEach((r, i) => {
     else if (g.planMandated) toRule.push({ id: g.id, kind: 'plan-mandated finding', severity: g.severity, text, finding: g })
     else open.push(g)
   }
-  rv.cannotVerify.forEach((c, k) => cannotVerify.push({ id: `${r.key}:CV${k + 1}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` }))
+  const cvCount = {}
+  rv.cannotVerify.forEach((c) => {
+    const key = r.combined ? c.kind : r.key
+    cvCount[key] = (cvCount[key] || 0) + 1
+    cannotVerify.push({ id: `${key}:CV${cvCount[key]}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` })
+  })
 })
 for (const f of gate0.findings || []) open.push(f)
 
@@ -1282,3 +1410,8 @@ if (state.deferredMinors.length) log(`deferred: ${state.deferredMinors.length} m
 if (state.carryForward.length) log(`carry forward: ${state.carryForward.length} obligation(s) for later tasks, returned as carryForward`)
 if (state.parked.length || !gatePassed) return await finish(build('parked'))
 return await finish(build('complete'))
+} catch (e) {
+  if (!e || !e.budgetStop) throw e
+  log(`${e.message}; stopping. Answer at "budget" to raise the cap by ${DEFAULT_MAX_AGENTS} and resume from cache`)
+  return await finish(build('stopped', { stopped: 'budget', stopPoint: 'budget', problem: `${e.message}; ${agentsUsed} agent(s) ran. Answer { at: "budget", text } to raise the cap by ${DEFAULT_MAX_AGENTS} and resume where it stopped` }))
+}
