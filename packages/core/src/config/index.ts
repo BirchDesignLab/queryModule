@@ -1,5 +1,7 @@
 export { CONFIG_SCHEMA_VERSION } from "../contracts/version";
 export * from "./client-config";
+export * from "./conditions";
+export * from "./defaults";
 export * from "./diagnostic";
 export * from "./features";
 export * from "./merge";
@@ -8,3 +10,4 @@ export * from "./schema";
 export * from "./schema-fields";
 export * from "./schema-mode";
 export * from "./shortcuts";
+export * from "./validate";
