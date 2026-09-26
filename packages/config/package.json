@@ -1,0 +1,21 @@
+{
+  "name": "@querymodule/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sites/*": "./sites/*",
+    "./locales/*": "./locales/*",
+    "./mock/*": "./mock/*",
+    "./test/*": "./test/*",
+    "./schema/*": "./schema/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@querymodule/core": "workspace:*"
+  }
+}

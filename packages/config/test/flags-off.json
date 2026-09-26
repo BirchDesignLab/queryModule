@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "extends": "default",
+  "features": {
+    "credentials": false,
+    "delegation": false,
+    "resultHide": false,
+    "adminAudit": false
+  }
+}

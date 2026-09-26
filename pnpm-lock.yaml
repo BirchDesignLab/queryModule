@@ -196,6 +196,12 @@ importers:
 
   apps/host-simulator: {}
 
+  packages/config:
+    devDependencies:
+      '@querymodule/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/core:
     dependencies:
       zod:
