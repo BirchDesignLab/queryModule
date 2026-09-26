@@ -168,6 +168,7 @@ if (A.answers !== undefined && A.answers !== null) {
     const text = typeof e.text === 'string' ? e.text.trim() : ''
     const decisions = Array.isArray(e.decisions) ? e.decisions : []
     if (!text && !decisions.length) throw new Error(`sdd-task: answers[${i}] needs text or decisions (or both)`)
+    if (at === 'precondition' && decisions.length) throw new Error(`sdd-task: answers[${i}] carries decisions at a plain precondition stop; use the returned stopPoint (for example precondition:checker) as at`)
     for (const d of decisions) {
       if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
         throw new Error(`sdd-task: answers[${i}].decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
@@ -452,7 +453,7 @@ const postGateCheck = (expected) => `Before you reply, run git rev-parse HEAD an
 function postGateProblem(res, expected) {
   if (!res) return ''
   const h = String(res.head || ''), e = String(expected)
-  const moved = !h || !(h.startsWith(e) || e.startsWith(h))
+  const moved = h.length < Math.min(7, e.length) || !(h.startsWith(e) || e.startsWith(h))
   const dirty = res.treeClean !== true
   if (!moved && !dirty) return ''
   const parts = []

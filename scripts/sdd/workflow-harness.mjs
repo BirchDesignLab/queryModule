@@ -1709,6 +1709,36 @@ await test("sdd FP-I1: a checker that reports another head or a dirty tree stops
   assert.equal(again.res.status, "complete");
 });
 
+await test("sdd N2: a checker head shorter than 7 characters counts as moved (full-sha gate head)", async () => {
+  const resp = sddResponder({
+    "spec-review": specCV(),
+    checker: (p) => ({ ...checkAll("verified")(p), head: "h", treeClean: true, dirtyFiles: [] }),
+  });
+  const r = await run(sdd, BASE, resp);
+  assert.equal(r.res.stopPoint, "precondition:checker");
+  assert.ok(r.res.problem.includes("HEAD is h,"), r.res.problem);
+});
+
+await test("sdd N3: decisions in a plain precondition answer throw; use the returned stopPoint", async () => {
+  await assert.rejects(
+    run(
+      sdd,
+      {
+        ...BASE,
+        answers: [
+          {
+            at: "precondition",
+            text: "x",
+            decisions: [{ item: "spec:CV1", decision: "verified", reason: "r" }],
+          },
+        ],
+      },
+      sddResponder({}),
+    ),
+    /stopPoint/,
+  );
+});
+
 await test("sdd FP-I1: a ruler-review that reports another head stops at precondition:ruler-review", async () => {
   const resp = sddResponder({
     "spec-review": specS1Mandated,
