@@ -11,6 +11,13 @@ export const SOURCE_SCOPES = ["state", "national", "local"] as const;
 export const PERSONA_LAYOUTS = ["dispatch", "mobileUnit", "mobile"] as const;
 export const THEME_MODES = ["day", "night", "redShift"] as const;
 export const LOCALE_PATTERN = /^[a-z]{2,3}(-[A-Z]{2})?$/;
+
+// Task W2F (BR-001, FR-050, FR-051): CommandDef.code bounds. Printable ASCII "!" to "~",
+// excluding space and "=" (the site terminal delimiter is any printable non-alphanumeric ASCII
+// except those two, spec 4.1, 4.4). Radio-style codes such as "10-28" must stay valid.
+export const COMMAND_CODE_MAX_LENGTH = 32;
+export const COMMAND_CODE_PATTERN = /^[!-<>-~]{1,32}$/;
+export const CommandCodeSchema = z.string().regex(COMMAND_CODE_PATTERN);
 export const DEFAULT_DELEGATION_PURPOSE = {
   key: "training",
   labelKey: "delegation.training",
@@ -31,8 +38,9 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
   const Picklist = obj({ id: Key, values: z.array(PicklistValue).min(1) });
 
   // ADR-0005 / W1 xhigh ruling 2 / ledger Ruling P-7: Source.kind is BoundedIdSchema.
+  // Task W2F (BR-001): Source.id bounded too (QueryTypeSource.sourceId already is).
   const Source = obj({
-    id: Key,
+    id: BoundedIdSchema,
     labelKey: Key,
     scope: z.enum(SOURCE_SCOPES),
     kind: BoundedIdSchema,
@@ -45,10 +53,16 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
   // ADR-0005: positional field references (both the bare-string and the rest-object forms) are
   // FieldKeySchema, same as CommandDef/CommandPosition field refs elsewhere in config (Task 7).
   const Position = z.union([FieldKeySchema, obj({ field: FieldKeySchema, rest: z.literal(true) })]);
+  // Task W2F (BR-001, FR-050, FR-051): the first terminal token is split on the site
+  // delimiter, any printable non-alphanumeric ASCII except "=" and space (spec 4.1, 4.4).
+  // Radio-style codes like "10-28" must stay possible when the delimiter is ".". checkCommands
+  // (Task 13) rejects a code containing the site's own delimiter; this schema does not.
   const CommandDef = obj({
-    code: Key,
-    queryType: Key,
-    presets: z.record(z.string(), Literal).optional(),
+    code: CommandCodeSchema,
+    // Task W2F (BR-001): references QueryType.code, already BoundedIdSchema.
+    queryType: BoundedIdSchema,
+    // Task W2F (BR-001): keys are field keys (spec 4.1 presets?: { [fieldKey]: Literal }).
+    presets: z.record(FieldKeySchema, Literal).optional(),
     positions: z.array(Position),
   });
 
@@ -162,7 +176,8 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
   const SiteConfig = obj({
     $schema: z.string().optional(),
     schemaVersion: z.literal(CONFIG_SCHEMA_VERSION),
-    extends: Key.optional(),
+    // Task W2F (BR-001): extends names a site id; site.id is already BoundedIdSchema.
+    extends: BoundedIdSchema.optional(),
     // ADR-0005 / W1 xhigh ruling 2 / ledger Ruling P-7: site.id is BoundedIdSchema.
     site: obj({ id: BoundedIdSchema, labelKey: Key }),
     locales: z.array(z.string().regex(LOCALE_PATTERN)).min(1).default(["en"]),

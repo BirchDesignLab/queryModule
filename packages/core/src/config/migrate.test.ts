@@ -42,10 +42,32 @@ describe("BR-004 migrateConfig (spec 5.8)", () => {
       },
     });
   });
-  it("rejects a missing or non-integer schemaVersion and a non-object", () => {
-    expect(migrateConfig({}).ok).toBe(false);
-    expect(migrateConfig({ schemaVersion: "1" }).ok).toBe(false);
-    expect(migrateConfig([1]).ok).toBe(false);
+  it("rejects a missing schemaVersion with the full diagnostic", () => {
+    expect(migrateConfig({})).toEqual({
+      ok: false,
+      error: {
+        level: "error",
+        path: "/schemaVersion",
+        key: "config.schemaVersionMissing",
+        params: {},
+      },
+    });
+    expect(migrateConfig({ schemaVersion: "1" })).toEqual({
+      ok: false,
+      error: {
+        level: "error",
+        path: "/schemaVersion",
+        key: "config.schemaVersionMissing",
+        params: {},
+      },
+    });
+  });
+
+  it("rejects a non-object with the full diagnostic", () => {
+    expect(migrateConfig([1])).toEqual({
+      ok: false,
+      error: { level: "error", path: "", key: "config.notAnObject", params: {} },
+    });
   });
   it("reports a gap in the migration chain", () => {
     expect(migrateConfig({ schemaVersion: 1 }, [], 2)).toEqual({
@@ -56,6 +78,49 @@ describe("BR-004 migrateConfig (spec 5.8)", () => {
         key: "config.missingMigration",
         params: { from: 1 },
       },
+    });
+  });
+
+  // Task W2F (BR-004, quality M1 on Task 11): a step whose `to` is not `from + 1` either loops
+  // forever (to <= from) or skips versions; migrateConfig must guard it instead of trusting it.
+  describe("Task W2F step guard: to must be from + 1", () => {
+    it("rejects a step whose to equals its from (would loop forever before the guard)", () => {
+      const steps = [{ from: 1, to: 1, migrate: (r: Record<string, unknown>) => r }];
+      expect(migrateConfig({ schemaVersion: 1 }, steps, 2)).toEqual({
+        ok: false,
+        error: {
+          level: "error",
+          path: "/schemaVersion",
+          key: "config.invalidMigrationStep",
+          params: { from: 1, to: 1 },
+        },
+      });
+    }, 1000);
+
+    it("rejects a step that skips a version (to is from + 2)", () => {
+      const steps = [
+        { from: 1, to: 3, migrate: (r: Record<string, unknown>) => ({ ...r, schemaVersion: 3 }) },
+      ];
+      expect(migrateConfig({ schemaVersion: 1 }, steps, 3)).toEqual({
+        ok: false,
+        error: {
+          level: "error",
+          path: "/schemaVersion",
+          key: "config.invalidMigrationStep",
+          params: { from: 1, to: 3 },
+        },
+      });
+    }, 1000);
+
+    it("still applies a valid from -> from+1 chain", () => {
+      const steps = [
+        { from: 1, to: 2, migrate: (r: Record<string, unknown>) => ({ ...r, schemaVersion: 2 }) },
+      ];
+      expect(migrateConfig({ schemaVersion: 1 }, steps, 2)).toEqual({
+        ok: true,
+        config: { schemaVersion: 2 },
+        applied: [{ from: 1, to: 2 }],
+      });
     });
   });
 });

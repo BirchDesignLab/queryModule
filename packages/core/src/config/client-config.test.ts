@@ -1,7 +1,83 @@
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
 import { ClientSiteConfigSchema, toClientSiteConfig } from "./client-config";
 import { SiteConfigSchema } from "./schema";
 import { minimalSiteConfigInput } from "./test-fixtures";
+
+// Task W2F (SEC-006, critic M1 on Task 9): walks every zod object key path reachable from
+// ClientSiteConfigSchema (through arrays, optionals, defaults, records, unions and
+// discriminated unions) so a server-only key added to a shared shape later fails this test
+// instead of silently reaching GET /api/v1/config. Kept small and in this file on purpose.
+function collectKeyPaths(
+  schema: z.ZodType,
+  prefix: string,
+  out: Set<string>,
+  ancestors: Set<z.ZodType>,
+): void {
+  const def = (schema as unknown as { def: { type: string } }).def;
+  switch (def.type) {
+    case "object": {
+      const shape = (schema as unknown as z.ZodObject).shape;
+      for (const key of Object.keys(shape)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        out.add(path);
+        collectKeyPaths(shape[key] as z.ZodType, path, out, ancestors);
+      }
+      return;
+    }
+    case "array":
+      collectKeyPaths((def as unknown as { element: z.ZodType }).element, prefix, out, ancestors);
+      return;
+    case "record":
+      collectKeyPaths(
+        (def as unknown as { valueType: z.ZodType }).valueType,
+        prefix,
+        out,
+        ancestors,
+      );
+      return;
+    case "union":
+      for (const opt of (def as unknown as { options: z.ZodType[] }).options) {
+        collectKeyPaths(opt, prefix, out, ancestors);
+      }
+      return;
+    case "optional":
+    case "nullable":
+    case "default":
+    case "catch":
+    case "readonly":
+    case "nonoptional":
+      collectKeyPaths(
+        (def as unknown as { innerType: z.ZodType }).innerType,
+        prefix,
+        out,
+        ancestors,
+      );
+      return;
+    case "lazy": {
+      if (ancestors.has(schema)) return; // recursive Condition: stop, keys already collected once
+      ancestors.add(schema);
+      collectKeyPaths(
+        (def as unknown as { getter: () => z.ZodType }).getter(),
+        prefix,
+        out,
+        ancestors,
+      );
+      ancestors.delete(schema);
+      return;
+    }
+    case "string":
+    case "number":
+    case "boolean":
+    case "enum":
+    case "literal":
+    case "unknown":
+    case "any":
+      return; // leaf types: no keys
+    default:
+      throw new Error(`Task W2F key-path walker: cannot walk zod type "${def.type}"`);
+  }
+}
 
 const HASH = "a".repeat(64);
 
@@ -116,6 +192,200 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     expect(parsed).not.toHaveProperty("futureBlock");
     expect(parsed.queryTypes[0]).not.toHaveProperty("futureFlag");
     expect(parsed.queryTypes[0]?.fields[0]?.role).toBeUndefined();
+  });
+
+  // Task W2F (SEC-006, critic M1 on Task 9): every key path reachable from
+  // ClientSiteConfigSchema, reviewed for whether it is safe to send to a client. A new key here
+  // must go through that same review before this list is updated.
+  const EXPECTED_CLIENT_KEY_PATHS = [
+    "commands",
+    "commands.code",
+    "commands.positions",
+    "commands.positions.field",
+    "commands.positions.rest",
+    "commands.presets",
+    "commands.queryType",
+    "configHash",
+    "defaults",
+    "delegation",
+    "delegation.maxDurationMinutes",
+    "delegation.purposes",
+    "delegation.purposes.key",
+    "delegation.purposes.labelKey",
+    "delegation.purposes.maxDurationMinutes",
+    "features",
+    "keywordSeverityStyles",
+    "keywordSeverityStyles.critical",
+    "keywordSeverityStyles.critical.audibleCue",
+    "keywordSeverityStyles.critical.background",
+    "keywordSeverityStyles.critical.bold",
+    "keywordSeverityStyles.critical.color",
+    "keywordSeverityStyles.critical.icon",
+    "keywordSeverityStyles.critical.marker",
+    "keywordSeverityStyles.info",
+    "keywordSeverityStyles.info.audibleCue",
+    "keywordSeverityStyles.info.background",
+    "keywordSeverityStyles.info.bold",
+    "keywordSeverityStyles.info.color",
+    "keywordSeverityStyles.info.icon",
+    "keywordSeverityStyles.info.marker",
+    "keywordSeverityStyles.warning",
+    "keywordSeverityStyles.warning.audibleCue",
+    "keywordSeverityStyles.warning.background",
+    "keywordSeverityStyles.warning.bold",
+    "keywordSeverityStyles.warning.color",
+    "keywordSeverityStyles.warning.icon",
+    "keywordSeverityStyles.warning.marker",
+    "keywords",
+    "keywords.except",
+    "keywords.keyword",
+    "keywords.severity",
+    "locales",
+    "personas",
+    "personas.key",
+    "personas.labelKey",
+    "personas.layout",
+    "picklists",
+    "picklists.id",
+    "picklists.values",
+    "picklists.values.code",
+    "picklists.values.enabled",
+    "picklists.values.labelKey",
+    "picklists.values.parent",
+    "queryTypes",
+    "queryTypes.allowPlateOnly",
+    "queryTypes.alsoRun",
+    "queryTypes.alsoRun.fieldMap",
+    "queryTypes.alsoRun.queryType",
+    "queryTypes.alsoRun.when",
+    "queryTypes.alsoRun.when.all",
+    "queryTypes.alsoRun.when.any",
+    "queryTypes.alsoRun.when.field",
+    "queryTypes.alsoRun.when.not",
+    "queryTypes.alsoRun.when.op",
+    "queryTypes.alsoRun.when.value",
+    "queryTypes.alsoRun.when.value.$default",
+    "queryTypes.code",
+    "queryTypes.defaults",
+    "queryTypes.fields",
+    "queryTypes.fields.century",
+    "queryTypes.fields.charset",
+    "queryTypes.fields.custom",
+    "queryTypes.fields.dataType",
+    "queryTypes.fields.defaultValue",
+    "queryTypes.fields.inputFormats",
+    "queryTypes.fields.key",
+    "queryTypes.fields.labelKey",
+    "queryTypes.fields.maxLength",
+    "queryTypes.fields.minLength",
+    "queryTypes.fields.numberKind",
+    "queryTypes.fields.outputFormat",
+    "queryTypes.fields.pattern",
+    "queryTypes.fields.picklist",
+    "queryTypes.fields.picklistFilter",
+    "queryTypes.fields.picklistFilter.byField",
+    "queryTypes.fields.required",
+    "queryTypes.fields.role",
+    "queryTypes.fields.section",
+    "queryTypes.fields.transform",
+    "queryTypes.fields.visible",
+    "queryTypes.labelKey",
+    "queryTypes.rules",
+    "queryTypes.rules.effect",
+    "queryTypes.rules.field",
+    "queryTypes.rules.value",
+    "queryTypes.rules.when",
+    "queryTypes.rules.when.all",
+    "queryTypes.rules.when.any",
+    "queryTypes.rules.when.field",
+    "queryTypes.rules.when.not",
+    "queryTypes.rules.when.op",
+    "queryTypes.rules.when.value",
+    "queryTypes.rules.when.value.$default",
+    "queryTypes.sections",
+    "queryTypes.sections.key",
+    "queryTypes.sections.labelKey",
+    "queryTypes.sections.when",
+    "queryTypes.sections.when.all",
+    "queryTypes.sections.when.any",
+    "queryTypes.sections.when.field",
+    "queryTypes.sections.when.not",
+    "queryTypes.sections.when.op",
+    "queryTypes.sections.when.value",
+    "queryTypes.sections.when.value.$default",
+    "queryTypes.sources",
+    "queryTypes.sources.plateOnly",
+    "queryTypes.sources.selectedByDefault",
+    "queryTypes.sources.sourceId",
+    "queryTypes.sources.when",
+    "queryTypes.sources.when.all",
+    "queryTypes.sources.when.any",
+    "queryTypes.sources.when.field",
+    "queryTypes.sources.when.not",
+    "queryTypes.sources.when.op",
+    "queryTypes.sources.when.value",
+    "queryTypes.sources.when.value.$default",
+    "quickAccess",
+    "responseMappings",
+    "responseMappings.elements",
+    "responseMappings.elements.columns",
+    "responseMappings.elements.columns.format",
+    "responseMappings.elements.columns.format.pattern",
+    "responseMappings.elements.columns.format.template",
+    "responseMappings.elements.columns.format.type",
+    "responseMappings.elements.columns.highlight",
+    "responseMappings.elements.columns.labelKey",
+    "responseMappings.elements.columns.path",
+    "responseMappings.elements.format",
+    "responseMappings.elements.format.pattern",
+    "responseMappings.elements.format.template",
+    "responseMappings.elements.format.type",
+    "responseMappings.elements.highlight",
+    "responseMappings.elements.kind",
+    "responseMappings.elements.labelKey",
+    "responseMappings.elements.path",
+    "responseMappings.elements.view",
+    "responseMappings.id",
+    "responseMappings.persona",
+    "responseMappings.queryType",
+    "responseMappings.sourceId",
+    "responseMappings.when",
+    "responseMappings.when.all",
+    "responseMappings.when.any",
+    "responseMappings.when.field",
+    "responseMappings.when.not",
+    "responseMappings.when.op",
+    "responseMappings.when.value",
+    "responseMappings.when.value.$default",
+    "schemaVersion",
+    "shortcuts",
+    "shortcuts.context",
+    "shortcuts.keys",
+    "site",
+    "site.id",
+    "site.labelKey",
+    "sources",
+    "sources.id",
+    "sources.labelKey",
+    "sources.requiresCredentials",
+    "sources.scope",
+    "sources.timeoutMs",
+    "terminal",
+    "terminal.delimiter",
+    "theme",
+    "theme.auto",
+    "theme.defaultMode",
+    "theme.tokens",
+    "theme.tokens.all",
+    "theme.tokens.day",
+    "theme.tokens.night",
+    "theme.tokens.redShift",
+  ];
+
+  it("never gains a key beyond this reviewed allowlist (SEC-006)", () => {
+    const paths = new Set<string>();
+    collectKeyPaths(ClientSiteConfigSchema, "", paths, new Set());
+    expect([...paths].sort()).toEqual(EXPECTED_CLIENT_KEY_PATHS);
   });
 
   it("rejects a non-hex configHash", () => {

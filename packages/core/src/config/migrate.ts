@@ -43,6 +43,14 @@ export function migrateConfig(
   while (current < target) {
     const step = migrations.find((m) => m.from === current);
     if (!step) return fail(pointer("schemaVersion"), "config.missingMigration", { from: current });
+    // Task W2F (BR-004): each step must be pure n -> n+1 (spec 5.8). A step whose `to` is not
+    // `from + 1` either loops forever (to <= from) or skips versions (to > from + 1).
+    if (step.to !== step.from + 1) {
+      return fail(pointer("schemaVersion"), "config.invalidMigrationStep", {
+        from: step.from,
+        to: step.to,
+      });
+    }
     config = step.migrate(config);
     applied.push({ from: step.from, to: step.to });
     current = step.to;

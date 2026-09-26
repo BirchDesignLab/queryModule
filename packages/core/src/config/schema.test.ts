@@ -228,6 +228,102 @@ describe("BR-001 SiteConfig v1 (spec 4.1)", () => {
     });
   });
 
+  // Task W2F: BR-001, BR-004, SEC-006, FR-050, FR-051 - ADR-0005 bounds Task 8 left as Key.
+  describe("Task W2F ADR-0005 bounds: Source.id, CommandDef.queryType, SiteConfig.extends", () => {
+    it("accepts a 64-character Source.id and rejects 65 characters", () => {
+      const ok = minimalSiteConfigInput();
+      ok.sources = [{ ...ok.sources[0], id: "a".repeat(64) }];
+      ok.queryTypes[0].sources = [{ sourceId: "a".repeat(64), selectedByDefault: true }];
+      expect(SiteConfigSchema.safeParse(ok).success).toBe(true);
+
+      const bad = minimalSiteConfigInput();
+      bad.sources = [{ ...bad.sources[0], id: "a".repeat(65) }];
+      expect(SiteConfigSchema.safeParse(bad).success).toBe(false);
+    });
+
+    it("rejects a Source.id containing '/'", () => {
+      const raw = minimalSiteConfigInput();
+      raw.sources = [{ ...raw.sources[0], id: "a/b" }];
+      expect(SiteConfigSchema.safeParse(raw).success).toBe(false);
+    });
+
+    it("accepts a 64-character CommandDef.queryType and rejects 65 characters", () => {
+      const ok = minimalSiteConfigInput();
+      ok.commands = [{ code: "VEH", queryType: "a".repeat(64), positions: ["plate", "state"] }];
+      expect(SiteConfigSchema.safeParse(ok).success).toBe(true);
+
+      const bad = minimalSiteConfigInput();
+      bad.commands = [{ code: "VEH", queryType: "a".repeat(65), positions: ["plate", "state"] }];
+      expect(SiteConfigSchema.safeParse(bad).success).toBe(false);
+    });
+
+    it("rejects a CommandDef.queryType containing '/'", () => {
+      const raw = minimalSiteConfigInput();
+      raw.commands = [{ code: "VEH", queryType: "a/b", positions: ["plate", "state"] }];
+      expect(SiteConfigSchema.safeParse(raw).success).toBe(false);
+    });
+
+    it("accepts a 64-character SiteConfig.extends and rejects 65 characters", () => {
+      const ok = { ...minimalSiteConfigInput(), extends: "a".repeat(64) };
+      expect(SiteConfigSchema.safeParse(ok).success).toBe(true);
+
+      const bad = { ...minimalSiteConfigInput(), extends: "a".repeat(65) };
+      expect(SiteConfigSchema.safeParse(bad).success).toBe(false);
+    });
+
+    it("rejects a SiteConfig.extends containing '/'", () => {
+      const raw = { ...minimalSiteConfigInput(), extends: "a/b" };
+      expect(SiteConfigSchema.safeParse(raw).success).toBe(false);
+    });
+  });
+
+  describe("Task W2F CommandDef.presets keys are field keys", () => {
+    it("rejects a preset key containing '.'", () => {
+      const raw = minimalSiteConfigInput();
+      raw.commands = [
+        {
+          code: "VEH",
+          queryType: "VEH",
+          positions: ["plate", "state"],
+          presets: { "plate.no": "x" },
+        },
+      ];
+      expect(SiteConfigSchema.safeParse(raw).success).toBe(false);
+    });
+
+    it("accepts a preset key that is a plain field key", () => {
+      const raw = minimalSiteConfigInput();
+      raw.commands = [
+        { code: "VEH", queryType: "VEH", positions: ["plate", "state"], presets: { type: "x" } },
+      ];
+      expect(SiteConfigSchema.safeParse(raw).success).toBe(true);
+    });
+  });
+
+  describe("Task W2F CommandDef.code (spec 4.1, 4.4): printable ASCII '!'-'~' minus space and '='", () => {
+    it("accepts VEH, 10-28 and P/1", () => {
+      for (const code of ["VEH", "10-28", "P/1"]) {
+        const raw = minimalSiteConfigInput();
+        raw.commands = [{ code, queryType: "VEH", positions: ["plate", "state"] }];
+        expect(SiteConfigSchema.safeParse(raw).success).toBe(true);
+      }
+    });
+
+    it("rejects empty, a space, an '=', a non-ASCII character and a 33-character code", () => {
+      for (const code of ["", "A B", "A=B", "É", "a".repeat(33)]) {
+        const raw = minimalSiteConfigInput();
+        raw.commands = [{ code, queryType: "VEH", positions: ["plate", "state"] }];
+        expect(SiteConfigSchema.safeParse(raw).success).toBe(false);
+      }
+    });
+
+    it("accepts a 32-character code", () => {
+      const raw = minimalSiteConfigInput();
+      raw.commands = [{ code: "a".repeat(32), queryType: "VEH", positions: ["plate", "state"] }];
+      expect(SiteConfigSchema.safeParse(raw).success).toBe(true);
+    });
+  });
+
   // quality:S1: DEFAULT_DELEGATION_PURPOSE must not be shared by reference across parses.
   describe("quality:S1 delegation.purposes default is not a shared reference", () => {
     it("two parses omitting purposes return non-identical purpose objects and delegatorRoles arrays", () => {
