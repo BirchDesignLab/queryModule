@@ -151,7 +151,27 @@ const SENSITIVE_RULE =
   "escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.";
 
 // Generic sdd-task responder; override per label with `over`.
+// Agents that run after gate-0 (checker, ruler-review) report head and treeClean; the script
+// compares head with the gate-0 head. Unless a test sets head itself, the fixture reports the
+// head the prompt expects and a clean tree.
+const expectedHead = (p) => (/git rev-parse HEAD must equal (\S+?)\./.exec(p) || [])[1];
+const POST_GATE = /^(checker|ruler-review)/;
+function postFill(label, prompt, r) {
+  if (!r || typeof r !== "object") return r;
+  if (POST_GATE.test(label) && !("head" in r))
+    return {
+      ...r,
+      head: expectedHead(prompt) || "no-expected-head",
+      treeClean: true,
+      dirtyFiles: [],
+    };
+  return r;
+}
 function sddResponder(over = {}) {
+  const base = sddBase(over);
+  return (label, prompt, calls) => postFill(label, prompt, base(label, prompt, calls));
+}
+function sddBase(over) {
   return (label, prompt, calls) => {
     for (const [k, v] of Object.entries(over)) {
       if (label === k || (k.endsWith("*") && label.startsWith(k.slice(0, -1)))) {
@@ -1652,6 +1672,138 @@ await test("README P3: a resume re-passes the full args; stopping mid-review los
   assert.ok(/partial work/.test(readme) && /cheap place to intervene is at a stop/.test(readme));
   assert.ok(readme.includes("node scripts/sdd/append-ledger.mjs"), "append-ledger not documented");
   assert.ok(!/\| ledger \|/.test(readme), "README still lists a ledger role");
+});
+
+// ---------- fix pass (critic review post-pilot-critic.md; controller rulings) ----------
+await test("sdd FP-I1: a checker that reports another head or a dirty tree stops at precondition:checker", async () => {
+  const resp = sddResponder({
+    "spec-review": specCV(),
+    checker: (p) => ({
+      ...checkAll("verified")(p),
+      head: "moved000",
+      treeClean: false,
+      dirtyFiles: ["packages/core/src/x.ts"],
+    }),
+    "checker-retry": checkAll("verified"),
+  });
+  const r = await run(sdd, BASE, resp);
+  const c = r.find("checker").prompt;
+  assert.ok(c.includes("git rev-parse HEAD must equal h-gate-0."), c);
+  assert.ok(c.includes("git status --porcelain") && /never edit/i.test(c));
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:checker");
+  assert.ok(r.res.problem.includes("packages/core/src/x.ts") && r.res.problem.includes("moved000"));
+  assert.ok(
+    !r.labels.some((l) => l.startsWith("ruler") || l.startsWith("fixer")),
+    r.labels.join(","),
+  );
+  const again = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition:checker", text: "tree restored" }] },
+    resp,
+  );
+  assert.equal(again.find("checker").prompt, r.find("checker").prompt);
+  assert.ok(again.find("checker-retry").prompt.includes("tree restored"));
+  assert.equal(again.res.status, "complete");
+});
+
+await test("sdd FP-I1: a ruler-review that reports another head stops at precondition:ruler-review", async () => {
+  const resp = sddResponder({
+    "spec-review": specS1Mandated,
+    "ruler-review": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: "stands",
+        reason: "r",
+        costIfWrong: "c",
+      })),
+      head: "moved111",
+      treeClean: true,
+      dirtyFiles: [],
+    }),
+    "ruler-review-retry": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: "stands",
+        reason: "r",
+        costIfWrong: "c",
+      })),
+    }),
+  });
+  const r = await run(sdd, BASE, resp);
+  assert.ok(r.find("ruler-review").prompt.includes("git rev-parse HEAD must equal h-gate-0."));
+  assert.equal(r.res.stopPoint, "precondition:ruler-review");
+  assert.ok(r.res.problem.includes("moved111"));
+  assert.equal(r.res.rulings.length, 0, "rulings from a moved head must not be applied");
+  const again = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition:ruler-review", text: "HEAD reset" }] },
+    resp,
+  );
+  assert.ok(again.find("ruler-review-retry").prompt.includes("HEAD reset"));
+  assert.equal(again.res.status, "complete");
+  // ruler-concerns runs before gate-0 and carries no head check
+  const pre = await run(
+    sdd,
+    BASE,
+    sddResponder({ implementer: work("h0", { concerns: [{ kind: "correctness", text: "u" }] }) }),
+  );
+  assert.ok(!pre.find("ruler-concerns").prompt.includes("must equal"));
+});
+
+await test("sdd FP-I3: a ruler-review answer on a checked item keeps the checker prompt cache-stable", async () => {
+  const resp = sddResponder({
+    "spec-review": specCV(2),
+    checker: () => ({
+      results: [
+        { id: "spec:CV1", result: "verified", evidence: "ok" },
+        { id: "spec:CV2", result: "needsJudgment", evidence: "ambiguous" },
+      ],
+    }),
+    "ruler-review": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: "escalate",
+        reason: "guess",
+        costIfWrong: "c",
+      })),
+    }),
+  });
+  const first = await run(sdd, BASE, resp);
+  assert.equal(first.res.stopped, "ruler-review");
+  const answers = [
+    {
+      at: "ruler-review",
+      decisions: [{ item: "spec:CV2", decision: "verified", reason: "ran it" }],
+    },
+  ];
+  const second = await run(sdd, { ...BASE, answers }, resp);
+  assert.equal(
+    second.find("checker").prompt,
+    first.find("checker").prompt,
+    "checker cache would miss",
+  );
+  assert.ok(!second.labels.includes("ruler-review"), second.labels.join(","));
+  assert.equal(second.res.rulings.find((x) => x.item === "spec:CV2").source, "controller");
+  assert.equal(second.res.rulings.find((x) => x.item === "spec:CV1").source, "checker");
+  assert.equal(second.res.status, "complete");
+  // a later decision overrides the checker's own result
+  const failed = await run(
+    sdd,
+    {
+      ...BASE,
+      answers: [
+        {
+          at: "ruler-review",
+          decisions: [{ item: "spec:CV1", decision: "stands", reason: "known" }],
+        },
+      ],
+    },
+    sddResponder({ "spec-review": specCV(), checker: checkAll("failed") }),
+  );
+  assert.ok(!failed.labels.some((l) => l.startsWith("fixer")), failed.labels.join(","));
+  assert.equal(failed.res.rulings.find((x) => x.item === "spec:CV1").source, "controller");
 });
 
 // ---------- report ----------

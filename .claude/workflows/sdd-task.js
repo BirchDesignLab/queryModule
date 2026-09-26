@@ -136,7 +136,7 @@ if (MAX_ROUNDS < 1 || MAX_ROUNDS > 8) {
 // point that runs. So an agent's prompt holds only the entries for its own stop point, and a
 // later entry never changes an earlier agent's prompt (earlier calls replay from cache).
 // Decisions from all entries become controller rulings; a later entry wins for the same item.
-const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
+const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
 function stopPos(at) {
   const fixed = { implementer: 0, 'ruler-concerns': 1, 'fixer-pre': 2, review: 3, 'ruler-review': 4 }
   if (at in fixed) return fixed[at]
@@ -147,9 +147,14 @@ function stopPos(at) {
   if (m) return 11 + 2 * Number(m[1])
   return -1
 }
-const PRECONDITION_AT = /^precondition(?::(implementer|gate-0|gate-r[1-9]\d*))?$/
+const PRECONDITION_AT = /^precondition(?::(implementer|gate-0|checker|ruler-review|gate-r[1-9]\d*))?$/
 let ANSWERS = null
 const CONTROLLER = new Map()
+// Items decided in entries at or before the review stop (implementer .. review, and the
+// implementer and gate-0 precondition stops). Only these keep an item away from the checker;
+// later decisions apply after the checker and override its result, so the checker prompt stays
+// cache-stable when a ruler-review stop is answered.
+const EARLY_DECIDED = new Set()
 if (A.answers !== undefined && A.answers !== null) {
   const list = Array.isArray(A.answers) ? A.answers : [A.answers] // a single object is a one-entry list
   if (!list.length) throw new Error('sdd-task: answers is an empty list')
@@ -167,6 +172,7 @@ if (A.answers !== undefined && A.answers !== null) {
         throw new Error(`sdd-task: answers[${i}].decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
       }
       CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' }) // later entry wins
+      if (pre ? ['', 'implementer', 'gate-0'].includes(pre[1] || '') : stopPos(at) <= 3) EARLY_DECIDED.add(d.item)
     }
     return { index: i, at, pos: pre ? -1 : stopPos(at), preLabel: pre ? pre[1] || '' : null, text, delivered: !text }
   })
@@ -332,6 +338,12 @@ const REVIEW = {
   },
   required: ['verdict', 'findings', 'cannotVerify'],
 }
+// Agents that run after gate-0 (checker, ruler-review) report the repository state they leave.
+const POST_GATE_PROPS = {
+  head: { type: 'string', description: 'full sha from git rev-parse HEAD, run just before you reply' },
+  treeClean: { type: 'boolean', description: 'true only when git status --porcelain prints nothing' },
+  dirtyFiles: { type: 'array', items: { type: 'string' }, description: 'each path git status --porcelain prints; [] when clean' },
+}
 const CHECK = {
   type: 'object',
   properties: {
@@ -347,8 +359,9 @@ const CHECK = {
         required: ['id', 'result', 'evidence'],
       },
     },
+    ...POST_GATE_PROPS,
   },
-  required: ['results'],
+  required: ['results', 'head', 'treeClean', 'dirtyFiles'],
 }
 const RULINGS = {
   type: 'object',
@@ -371,6 +384,11 @@ const RULINGS = {
     },
   },
   required: ['rulings'],
+}
+const RULINGS_POST = {
+  type: 'object',
+  properties: Object.assign({}, RULINGS.properties, POST_GATE_PROPS),
+  required: RULINGS.required.concat(['head', 'treeClean', 'dirtyFiles']),
 }
 const PROGRESS = {
   type: 'object',
@@ -425,6 +443,20 @@ const TRAILER = `End every commit message with the attribution trailer your sess
 // and opened a PR after reading project memory). Implementer and fixers carry SELF_CHECK.
 const NO_REMOTE = 'Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.'
 const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only) and pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
+// The repository-state check for agents that run after gate-0 (checker, ruler-review).
+const postGateCheck = (expected) => `Before you reply, run git rev-parse HEAD and git status --porcelain in ${REPO}. git rev-parse HEAD must equal ${expected}. Report head (full sha), treeClean (true only when git status --porcelain prints nothing) and dirtyFiles (each path it prints). You must leave both exactly as you found them.`
+// Returns '' when res left the repository as gate-0 saw it, else what changed.
+function postGateProblem(res, expected) {
+  if (!res) return ''
+  const h = String(res.head || ''), e = String(expected)
+  const moved = !h || !(h.startsWith(e) || e.startsWith(h))
+  const dirty = res.treeClean !== true
+  if (!moved && !dirty) return ''
+  const parts = []
+  if (moved) parts.push(`HEAD is ${h || '(not reported)'}, expected ${e} (the head gate-0 checked)`)
+  if (dirty) parts.push(`tree dirty: ${(res.dirtyFiles || []).join(', ') || '(files not reported)'}`)
+  return parts.join('; ')
+}
 const SENSITIVE_RULE = 'This task is sensitive. On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.'
 
 function diffStep(base, head, out) {
@@ -580,7 +612,9 @@ function build(status, extra) {
 // ---------- ruler ----------
 // items: [{ id, kind, text, severity?, finding?, contests? }]. Controller decisions settle their items
 // first; the rest go to the ruler. Returns { fixes:[finding], escalated:[ruling], unruled:[item] }.
-async function runRuler(allItems, label, headNow, pos) {
+// postGateHead: set for ruler-review (it runs after gate-0); the ruler then reports head and tree,
+// and a moved head or dirty tree returns { precondition } without applying any ruling.
+async function runRuler(allItems, label, headNow, pos, postGateHead) {
   const pre = applyController(allItems)
   const items = pre.rest
   if (!items.length) {
@@ -588,31 +622,44 @@ async function runRuler(allItems, label, headNow, pos) {
     return { fixes: pre.fixes, escalated: [], unruled: [] }
   }
   log(`rule: ${items.length} item(s) to the ruler (${tier('ruler')})`)
-  const res = await agent(
-    [
-      `You are the ruler for Task ${N}: ${A.title}. Rule on each item below. The spec is binding; the plan is not when it conflicts with the spec.`,
-      `Read only what you need: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the spec sections ${A.specRefs}, the requirements doc "${REQ_DOC}" for IDs ${A.ids || '(none given)'}, and the specific files an item names. Review files for this task are in ${A.workDir} (task-${N}-review-*.md).`,
-      A.carries ? `Controller rulings and interfaces already in force:\n${A.carries}` : '',
-      rulingsText(),
-      answersFor(pos),
-      `Code under judgment: ${A.base}..${headNow}. ${GIT}`,
-      '',
-      'Items:',
-      ...items.map((it) => `- [${it.id}] (${it.kind}${it.severity ? `, ${it.severity}` : ''}) ${it.text}`),
-      '',
-      'Decide each item:',
-      '- fix: the code must change. Give fixInstruction: the smallest change that satisfies the spec.',
-      '- stands: the code stays. Give the reason (spec or plan citation).',
-      '- verified: a cannot-verify item you checked yourself and that passed. Put the command you ran and its result in command. A check that fails is fix, not verified.',
-      '- escalate: only when every path is a guess, or the action is irreversible or security-sensitive.',
-      SENSITIVE ? SENSITIVE_RULE : '',
-      'costIfWrong: one line, what it costs if your ruling is wrong. carryForward: obligations a later task must meet because of your ruling (e.g. "Task 8 must show tsc -b exit 0"); omit when none.',
-      'You are read-only: do not edit, commit or change any git state. Scratch, if needed: ' + scratch(label),
-      HOUSE,
-      'Return one ruling per item, with item set to the id exactly as given.',
-    ].filter(Boolean).join('\n'),
-    { label, phase: 'Rule', schema: RULINGS, ...role('ruler') },
-  )
+  const rulerPrompt = [
+    `You are the ruler for Task ${N}: ${A.title}. Rule on each item below. The spec is binding; the plan is not when it conflicts with the spec.`,
+    `Read only what you need: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the spec sections ${A.specRefs}, the requirements doc "${REQ_DOC}" for IDs ${A.ids || '(none given)'}, and the specific files an item names. Review files for this task are in ${A.workDir} (task-${N}-review-*.md).`,
+    A.carries ? `Controller rulings and interfaces already in force:\n${A.carries}` : '',
+    rulingsText(),
+    answersFor(pos),
+    `Code under judgment: ${A.base}..${headNow}. ${GIT}`,
+    '',
+    'Items:',
+    ...items.map((it) => `- [${it.id}] (${it.kind}${it.severity ? `, ${it.severity}` : ''}) ${it.text}`),
+    '',
+    'Decide each item:',
+    '- fix: the code must change. Give fixInstruction: the smallest change that satisfies the spec.',
+    '- stands: the code stays. Give the reason (spec or plan citation).',
+    '- verified: a cannot-verify item you checked yourself and that passed. Put the command you ran and its result in command. A check that fails is fix, not verified.',
+    '- escalate: only when every path is a guess, or the action is irreversible or security-sensitive.',
+    SENSITIVE ? SENSITIVE_RULE : '',
+    'costIfWrong: one line, what it costs if your ruling is wrong. carryForward: obligations a later task must meet because of your ruling (e.g. "Task 8 must show tsc -b exit 0"); omit when none.',
+    'You are read-only: do not edit, commit or change any git state. Scratch, if needed: ' + scratch(label),
+    postGateHead ? postGateCheck(postGateHead) : '',
+    HOUSE,
+    'Return one ruling per item, with item set to the id exactly as given.',
+  ].filter(Boolean).join('\n')
+  const schema = postGateHead ? RULINGS_POST : RULINGS
+  let res = await agent(rulerPrompt, { label, phase: 'Rule', schema, ...role('ruler') })
+  if (postGateHead) {
+    let bad = postGateProblem(res, postGateHead)
+    const ans = bad ? preconditionAnswers(label) : ''
+    if (ans) {
+      log(`rule: cached ${label} left the repository changed (${bad}); retrying with the controller answer`)
+      res = await agent(`${rulerPrompt}\n\n${ans}`, { label: `${label}-retry`, phase: 'Rule', schema, ...role('ruler') })
+      bad = postGateProblem(res, postGateHead)
+    }
+    if (bad) {
+      log(`rule: ${label} precondition failed after gate-0: ${bad}; stopping, no ruling applied`)
+      return { fixes: [], escalated: [], unruled: [], precondition: `${label}: ${bad}` }
+    }
+  }
   const byId = new Map()
   for (const r of (res && res.rulings) || []) byId.set(r.item.replace(/^\[|\]$/g, '').trim(), r)
   const fixes = pre.fixes.slice(), escalated = [], unruled = []
@@ -662,7 +709,7 @@ async function runFixer(findings, label, roleName, roundTag, round) {
 }
 
 // Cannot-verify items: one read-only checker runs each item's suggested check.
-async function runChecker(items, headNow) {
+async function runChecker(items, headNow, expectedHead, answerText, label) {
   return agent(
     [
       `You are the checker for Task ${N}: ${A.title}. Reviewers could not verify the items below from the diff alone. Run each item's suggested check (or the closest equivalent) and report what you found.`,
@@ -676,11 +723,13 @@ async function runChecker(items, headNow) {
       '- failed: the check ran and failed. evidence: the command and the failing lines.',
       '- needsJudgment: the check cannot settle the item (it needs a reading of the spec or a design decision). evidence: why.',
       `You are read-only: you may run commands (tests, grep, git log, git diff, git show), but never edit a file, stage, commit or change any git state. Scratch, if needed: ${scratch('checker')}`,
+      postGateCheck(expectedHead),
       NO_REMOTE,
       HOUSE,
       'Return one result per item, with id set to the id exactly as given.',
+      ...(answerText ? ['', answerText] : []),
     ].join('\n'),
-    { label: 'checker', phase: 'Check', schema: CHECK, ...role('checker') },
+    { label, phase: 'Check', schema: CHECK, ...role('checker') },
   )
 }
 
@@ -1031,18 +1080,34 @@ for (const f of gate0.findings || []) open.push(f)
 
 // Cannot-verify items: controller decisions settle theirs first; the checker runs the rest.
 // verified -> a checker ruling; failed -> an open important finding; needsJudgment or no result -> the ruler.
+const gateHead = state.head
 if (cannotVerify.length) {
-  const pre = applyController(cannotVerify)
+  const pre = applyController(cannotVerify.filter((it) => EARLY_DECIDED.has(it.id)))
   for (const f of pre.fixes) open.push(f)
-  if (pre.rest.length) {
+  const toCheck = cannotVerify.filter((it) => !EARLY_DECIDED.has(it.id))
+  if (toCheck.length) {
     phase('Check')
-    log(`check: ${pre.rest.length} cannot-verify item(s) to the checker (${tier('checker')})`)
-    const ck = await runChecker(pre.rest, reviewHead)
+    log(`check: ${toCheck.length} cannot-verify item(s) to the checker (${tier('checker')})`)
+    let ck = await runChecker(toCheck, reviewHead, gateHead, '', 'checker')
+    let bad = postGateProblem(ck, gateHead)
+    const ans = bad ? preconditionAnswers('checker') : ''
+    if (ans) {
+      log(`check: cached checker left the repository changed (${bad}); retrying with the controller answer`)
+      ck = await runChecker(toCheck, reviewHead, gateHead, ans, 'checker-retry')
+      bad = postGateProblem(ck, gateHead)
+    }
+    if (bad) {
+      log(`check: precondition failed after gate-0: ${bad}; stopping, no check result applied`)
+      return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:checker', problem: `checker: ${bad}` }))
+    }
     if (!ck) log('check: checker returned null (skipped or died); every item goes to the ruler')
     const byId = new Map(((ck && ck.results) || []).map((x) => [x.id.replace(/^\[|\]$/g, '').trim(), x]))
-    for (const it of pre.rest) {
+    for (const it of toCheck) {
       const x = byId.get(it.id)
-      if (x && x.result === 'verified') {
+      if (CONTROLLER.has(it.id)) {
+        // a decision given after the check (e.g. at ruler-review) overrides the checker's result
+        toRule.push(Object.assign({}, it, { text: `${it.text} (checker: ${x ? x.result : 'no result'})` }))
+      } else if (x && x.result === 'verified') {
         setRuling({ item: it.id, what: it.text.slice(0, 160), decision: 'verified', reason: x.evidence, costIfWrong: 'checker verified; a wrong check hides an unmet requirement', fixInstruction: '', command: x.evidence, source: 'checker' })
       } else if (x && x.result === 'failed') {
         open.push({ id: it.id, severity: 'important', file: '', line: '', summary: `check failed: ${it.text}: ${x.evidence}`, fix: 'make the failed check pass', planMandated: false, contestsRuling: '' })
@@ -1050,14 +1115,17 @@ if (cannotVerify.length) {
         toRule.push(Object.assign({}, it, { text: `${it.text} (checker: ${x ? `needs judgment: ${x.evidence}` : 'no result'})` }))
       }
     }
-    log(`check: ${pre.rest.map((it) => `${it.id} ${byId.has(it.id) ? byId.get(it.id).result : 'no result'}`).join(', ')}`)
+    log(`check: ${toCheck.map((it) => `${it.id} ${byId.has(it.id) ? byId.get(it.id).result : 'no result'}`).join(', ')}`)
   }
 }
 
 // ================= 3. Ruler =================
 if (toRule.length) {
   phase('Rule')
-  const ruled = await runRuler(toRule, 'ruler-review', reviewHead, 4)
+  const ruled = await runRuler(toRule, 'ruler-review', reviewHead, 4, gateHead)
+  if (ruled.precondition) {
+    return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:ruler-review', problem: ruled.precondition }))
+  }
   state.parked.push(...ruled.unruled)
   if (ruled.escalated.length) {
     log(`rule: ${ruled.escalated.length} escalation(s); stopping`)
