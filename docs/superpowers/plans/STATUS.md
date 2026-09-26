@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 11:34 |
+| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 12:07 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: W3 (#13 to #17) merged in PR #35; post-W3 workflow pass merged in PR #36; sdd-wave (item 11) in PR #37; next #18 (Task 17, W4)
-- Branch / PR: docs/status-post-w3 / #37 (STATUS sync, vitest 5.0.2, sdd-wave)
-- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` (345 tests), workflow harness 88/88, sdd-wave smoke run at 8512ce1 on docs/status-post-w3
-- Next step: developer merges #37; then cut feat/p0-wave-4 and run Tasks 17 to 22 (all sensitive) through sdd-wave; wave-review after the PR opens
-- Blocked by: #37 merge
+- Issue: W4 in progress: #18 to #23 (Tasks 17 to 22, all sensitive); W3 merged in #35, workflow passes in #36 and #37
+- Branch / PR: feat/p0-wave-4 / none yet (one PR at wave end)
+- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` (345 tests), workflow harness 88/88 on main 43ace2b
+- Next step: run Tasks 17 to 22 as one sdd-wave run; wave end: checks, PR, then wave-review (Opus xhigh) for docs/reviews/pr-<n>.md
+- Blocked by: none
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: W4 carries: bound `AuditActor.email`; one shared `TypeValues` schema for audit and the mock file (both in the ledger and the #35 body)
+- Notes: W4 carries include the `AuditActor.email` bound and one shared `TypeValues` schema (Task 17), coverage index.ts and core purity lint (Task 22)
 
 ### Track B
 
