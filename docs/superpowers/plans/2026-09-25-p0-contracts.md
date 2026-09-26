@@ -33,7 +33,7 @@
 - Scripts live in the repo under `scripts/` and are committed (CLAUDE.md); root scripts are Node or pnpm, identical in PowerShell and bash (master plan 9).
 - Docs: no em dashes; dates MM-DD-YY in prose, ISO in code and data.
 - Subagent seats: ordinary task Sonnet 5 `medium`; S task Opus 5.5 `medium`; spec-compliance review Sonnet 5 `medium`; code-quality review Sonnet 5 `high`; Opus 5.5 `medium` critic on this phase (it builds UI and touches sensitive code); Opus 5.5 `xhigh` whole-branch review per S PR; Opus 5.5 `xhigh` whole-phase review at the gate. State the seat plan before dispatching.
-- Commit trailer used in this plan: `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. If the executing session's harness prescribes a different attribution line for the model actually running, use that line instead.
+- Commit trailer used in this plan: the literal placeholder `<attribution trailer given by your session's system reminder>` (the one permitted placeholder, per lead ruling R5). Every commit step ends with this line in place of any hardcoded Co-Authored-By model name.
 
 ## File Structure
 
@@ -205,7 +205,7 @@ Expected: `repo: BirchDesignLab/queryModule`, eleven `label:` lines, five `miles
 | 2 | Core package and version constants (spec 4.7) | `core`, `contract` |
 | 3 | ValidationError and ApiError contracts (NFR-001) | `core`, `contract` |
 | 4 | Source status and query audit catalogue (SEC-010, SEC-011, SEC-012, SEC-013) | `core`, `contract`, `sensitive` |
-| 5 | WebSocket message schemas (FR-043, SEC-014, NFR-003) | `core`, `contract` |
+| 5 | WebSocket message schemas (FR-043, SEC-014, NFR-003) | `core`, `contract`, `sensitive` |
 | 6 | Feature and shortcut catalogues (FR-006, FR-007, FR-053) | `core`, `contract` |
 | 7 | SiteConfig schema v1: fields, conditions, query types (BR-001, FR-032) | `core`, `contract` |
 | 8 | SiteConfig schema v1: site level (BR-001, FR-051, UX-011) | `core`, `contract` |
@@ -236,7 +236,7 @@ gh issue create --title "Workspace root skeleton (none)" --label track-a --label
 
 Repeat the command per row with that row's title, labels, task number, IDs and `Sensitive: yes` for rows labelled `sensitive`. Write each issue number after the task heading below (`### Task N: ... (#n)`) in the Task 1 PR.
 
-Seat plan for this phase: 28 implementer seats (Tasks 4, 17 to 22, 26 and 28 on Opus 5.5 `medium`; the rest on Sonnet 5 `medium`), 28 spec-compliance seats (Sonnet 5 `medium`), 28 code-quality seats (Sonnet 5 `high`), one Opus 5.5 `medium` critic after Task 25, 10 Opus 5.5 `xhigh` whole-branch reviews (S PRs: Tasks 4, 17 to 23, 26, 28), one Opus 5.5 `xhigh` whole-phase review at the gate.
+Seat plan for this phase: 28 implementer seats (Tasks 4, 5, 17 to 22, 26 and 28 on Opus 5.5 `medium`; the rest on Sonnet 5 `medium`), 28 spec-compliance seats (Sonnet 5 `medium`), 28 code-quality seats (Sonnet 5 `high`), one Opus 5.5 `medium` critic after Task 25, 11 Opus 5.5 `xhigh` whole-branch reviews (S PRs: Tasks 4, 5, 17 to 23, 26, 28), one Opus 5.5 `xhigh` whole-phase review at the gate.
 
 
 ### Task 1: Workspace root skeleton
@@ -473,7 +473,7 @@ Most code in this repository is written by AI agents (Claude Code) under a solo 
 ```markdown
 # deploy
 
-Deployment files for the single-node Docker host (spec 8): `Dockerfile`, `compose.yml`, cloudflared and Watchtower config, `.env.example`, secret file templates, systemd backup units. They land in Track A M0 P1 (`docs/superpowers/plans/2026-09-25-track-a-p1.md`).
+Deployment files for the single-node Docker host (spec 8): `Dockerfile`, `compose.yml`, cloudflared config, `deploy-pull` systemd unit and timer, `.env.example`, secret file templates, systemd backup units. Watchtower is dropped in favor of the systemd pull timer (ADR-0002, `docs/decisions/0002-drop-watchtower.md`). They land in Track A M0 P1 (`docs/superpowers/plans/2026-09-25-track-a-p1.md`).
 ```
 
 `scripts/mock-data/README.md`:
@@ -519,7 +519,7 @@ Expected: install completes with no engine warning; `biome ci` reports no errors
 git add -A
 git commit -m "chore(a): workspace root skeleton
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 2: Core package and version constants
@@ -674,7 +674,7 @@ Expected: `3 passed`; `tsc -b` exits 0.
 git add -A
 git commit -m "feat(core): core package with version constants
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 3: ValidationError and ApiError contracts
@@ -855,7 +855,7 @@ Expected: `9 passed`.
 git add -A
 git commit -m "feat(core): ValidationError and ApiError contracts
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 4: Source status and query audit catalogue (S)
@@ -871,7 +871,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   - `ROLES = ["user", "trainingOfficer", "admin"]`, `RoleSchema`, `type Role`; `IDENTITY_SOURCES = ["local", "host", "system"]`, `IdentitySourceSchema`, `type IdentitySource`.
   - `SOURCE_STATUSES`, `SourceStatusSchema`, `type SourceStatus`, `type TerminalSourceStatus = Exclude<SourceStatus, "pending">`, `TERMINAL_SOURCE_STATUSES`, `isTerminalSourceStatus(s: SourceStatus): s is TerminalSourceStatus`; `ADAPTER_ERROR_CODES = ["credentialsRejected", "failed"]`, `AdapterErrorCodeSchema`, `type AdapterErrorCode`.
   - `AUDIT_EVENT_TYPES = ["submitted", "acknowledged", "sourceDispatched", "sourceResponded", "interrupted", "partSkipped"]`, `AuditEventTypeSchema`, `type AuditEventType`; `AUDIT_DETAILS_SCHEMAS: { [T in AuditEventType]: ZodObject }`; `type AuditDetails<T extends AuditEventType>`; `parseAuditDetails<T>(type: T, details: unknown): AuditDetails<T>`; `AuditValidationErrorSchema`; `AuditActorSchema`, `type AuditActor = { id: string; email: string | null; role: Role | "system" }`; `SYSTEM_ACTOR`; `AuditEventSchema` (discriminated union on `type`, envelope `correlationId?`, `partId?`, `actor`, `credentialUserId?`, `identitySource`, `hostSubject?`, plus `details`); `type AuditEvent`. `AuditService.record(tx, event: AuditEvent)` (spec 5.5, Track A P1/P2) validates with `AuditEventSchema`. The envelope `id` and `at` are assigned by `AuditService`, not by callers.
-  - Frozen at the gate: the six query event schemas. Auth types (`loginSucceeded`, `loginFailed`, `logout`) are added by Track A M0 P1, admin and ops types plus `sessionRevoked` and `deletedFromView`, `adminViewed` by M2 P0, credential and delegation types by M3 P0, each through the master plan 8 procedure (additive only).
+  - Frozen at the gate: the six query event schemas. Auth types (`loginSucceeded`, `loginFailed`, `logout`) are added by Track A M0 P1 (also `roleChanged`, per lead ruling R4); the remaining admin and ops types plus `sessionRevoked`, `deletedFromView`, `adminViewed` by M2 P0, credential and delegation types by M3 P0, each through the master plan 8 procedure (additive only).
 
 **IDs:** SEC-010, SEC-011, SEC-012, SEC-013, FR-042, FR-043, NFR-004; story A9 (schema only; the A9 test is M2)
 
@@ -1233,7 +1233,7 @@ Expected: all core tests pass (audit file: 21 tests); `tsc -b` exits 0.
 git add -A
 git commit -m "feat(core): source status and query audit catalogue
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 - [ ] **Step 9: Sensitive review.** Run the Opus 5.5 `xhigh` whole-branch review; it writes `docs/reviews/pr-<PR number>.md` with front matter `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"` after findings are fixed. Commit it:
@@ -1242,10 +1242,10 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(core): sensitive review for audit catalogue
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
-### Task 5: WebSocket message schemas
+### Task 5: WebSocket message schemas (S)
 
 **Files:**
 - Create: `packages/core/src/contracts/ws.ts`
@@ -1254,7 +1254,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `WS_PROTOCOL_VERSION` (Task 2), `SourceStatusSchema` (Task 4).
-- Produces: `HelloMessageSchema`, `PingMessageSchema`, `AckReceiptMessageSchema`, `WelcomeMessageSchema`, `PongMessageSchema`, `SourceStatusEventSchema`; `WsClientMessageSchema` (union of hello, ping, ackReceipt), `type WsClientMessage`; `WsServerMessageSchema` (union of welcome, pong, sourceStatus), `type WsServerMessage`; `WsEventSchema` (state-changing server events carrying `seq`; M0 P0: `sourceStatus` only), `type WsEvent`; `WS_CLOSE_CODES = { sessionEnded: 4001, originRejected: 4003 }`; `WS_PING_INTERVAL_MS = 20000`. `resultHidden` and `resync` join in M2 P0, `delegationChanged` in M3 P0 (additive, master plan 8).
+- Produces: `HelloMessageSchema`, `PingMessageSchema`, `AckReceiptMessageSchema`, `WelcomeMessageSchema`, `PongMessageSchema`, `SourceStatusEventSchema`; `WsClientMessageSchema` (union of hello, ping, ackReceipt), `type WsClientMessage`; `WsServerMessageSchema` (union of welcome, pong, sourceStatus), `type WsServerMessage`; `WsEventSchema` (state-changing server events carrying `seq`; M0 P0: `sourceStatus` only), `type WsEvent`; `WS_CLOSE_CODES = { sessionEnded: 4001, sessionRevoked: 4003 }`; `WS_PING_INTERVAL_MS = 20000`. `resultHidden` and `resync` join in M2 P0, `delegationChanged` in M3 P0 (additive, master plan 8). Per lead ruling R3, the Origin check (spec 5.3, 10.3) is an HTTP 403 rejection before the WebSocket upgrade completes, never a WS close: no session gives HTTP 401 pre-upgrade, a foreign or missing Origin without a bearer header gives HTTP 403 pre-upgrade, and close code 4003 is reserved for mid-session session revocation or expiry (`sessionRevoked`), not for Origin rejection.
 
 **IDs:** FR-043, FR-065, NFR-003, NFR-004, SEC-014
 
@@ -1313,8 +1313,8 @@ describe("SEC-014 FR-043 WebSocket messages (spec 4.7)", () => {
     expect(WsEventSchema.safeParse({ ...sourceStatus, seq: 0 }).success).toBe(false);
   });
 
-  it("close codes match spec 4.7", () => {
-    expect(WS_CLOSE_CODES).toEqual({ sessionEnded: 4001, originRejected: 4003 });
+  it("close codes match spec 4.7 as narrowed by lead ruling R3 (4003 is mid-session revocation/expiry, not Origin rejection)", () => {
+    expect(WS_CLOSE_CODES).toEqual({ sessionEnded: 4001, sessionRevoked: 4003 });
   });
 });
 ```
@@ -1340,7 +1340,8 @@ const EpochMs = z.int().min(0);
 const Seq = z.int().min(1);
 
 export const WS_PING_INTERVAL_MS = 20_000;
-export const WS_CLOSE_CODES = { sessionEnded: 4001, originRejected: 4003 } as const;
+/** sessionRevoked (4003) is mid-session only: session revocation or expiry after the upgrade. Origin rejection is an HTTP 403 before the upgrade completes (spec 5.3, 10.3; lead ruling R3), never a WS close code. */
+export const WS_CLOSE_CODES = { sessionEnded: 4001, sessionRevoked: 4003 } as const;
 
 export const HelloMessageSchema = z.strictObject({ v, type: z.literal("hello"), lastSeq: Seq.nullable() });
 export const PingMessageSchema = z.strictObject({ v, type: z.literal("ping"), nonce: Id });
@@ -1410,7 +1411,7 @@ Expected: all pass (ws file: 6 tests).
 git add -A
 git commit -m "feat(core): WebSocket message schemas v1
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 6: Feature and shortcut catalogues
@@ -1685,7 +1686,7 @@ Expected: all pass (shortcuts file: 7 tests).
 git add -A
 git commit -m "feat(core): feature and shortcut catalogues
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 7: SiteConfig schema v1: fields, conditions, query types
@@ -1927,7 +1928,7 @@ Expected: `6 passed`; `tsc -b` exits 0.
 git add -A
 git commit -m "feat(core): config schema v1 fields, conditions and query types
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 8: SiteConfig schema v1: site level
@@ -2360,7 +2361,7 @@ Expected: all pass (schema file: 8 tests); `tsc -b` exits 0.
 git add -A
 git commit -m "feat(core): SiteConfig schema v1
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 9: ClientSiteConfig allowlist
@@ -2555,7 +2556,7 @@ Expected: all pass (client-config file: 4 tests); `tsc -b` exits 0.
 git add -A
 git commit -m "feat(core): ClientSiteConfig allowlist
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 10: Diagnostics and overlay merge
@@ -2806,7 +2807,7 @@ Expected: all pass (merge file: 8 tests). If biome flags `_ignored` as unused, r
 git add -A
 git commit -m "feat(core): config overlay merge and diagnostics
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 11: migrateConfig
@@ -2943,7 +2944,7 @@ Expected: all pass (migrate file: 6 tests).
 git add -A
 git commit -m "feat(core): migrateConfig with empty v1 chain
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 12: validateSiteConfig: keys, references, labels
@@ -3321,7 +3322,7 @@ Expected: all pass (validate file: 25 tests); `tsc -b` exits 0.
 git add -A
 git commit -m "feat(core): validateSiteConfig keys, references and labels
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 13: validateSiteConfig: fields, commands, terminal, shortcuts, limits
@@ -3703,7 +3704,7 @@ Expected: all pass (validate file: 58 tests); coverage for `packages/core/src/**
 git add -A
 git commit -m "feat(core): validateSiteConfig field, command, terminal, shortcut and limit rules
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 14: Mock file schema
@@ -3837,7 +3838,7 @@ Expected: all pass (mock-file file: 3 tests).
 git add -A
 git commit -m "feat(core): mock file schema
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 15: Route contracts skeleton
@@ -4066,7 +4067,7 @@ Expected: all pass (routes file: 5 tests); `tsc -b` exits 0.
 git add -A
 git commit -m "feat(core): route contracts skeleton with planned status
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 16: Shipped sites, locales and mocks
@@ -4624,7 +4625,7 @@ Expected: `9 passed`; biome clean (run `pnpm biome format --write packages/confi
 git add -A
 git commit -m "feat(core): shipped default and example-ok sites, en locale, mock files
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 17: Contract generators and drift check (S)
@@ -5035,7 +5036,7 @@ Expected: `6 passed`; `tsc -b` exits 0; `generated files match`.
 ```bash
 git commit -m "feat(a): contract generators, openapi.json and drift check
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review; commit `docs/reviews/pr-<PR number>.md` (front matter `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha`, `verdict: "approve"`):
@@ -5044,7 +5045,7 @@ Run the Opus 5.5 `xhigh` whole-branch review; commit `docs/reviews/pr-<PR number
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for contract generators
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 18: config:validate and config:migrate (S)
@@ -5355,7 +5356,7 @@ pnpm typecheck
 git add -A
 git commit -m "feat(a): config:validate and config:migrate CLIs
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -5364,7 +5365,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for config CLIs
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 19: Licence check (S)
@@ -5497,7 +5498,7 @@ Expected: tests pass (licences file: 2 tests); `licences ok (N runtime packages)
 git add -A
 git commit -m "feat(a): runtime licence allowlist check
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -5506,7 +5507,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for licence check
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 20: Story-tag gate and stories.json (S)
@@ -5706,7 +5707,7 @@ Expected: tests pass (story-tags file: 4 tests); `story tags ok (highest tag: no
 git add -A
 git commit -m "feat(a): story-tag gate and M1 story rows
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -5715,7 +5716,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for story-tag gate
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 21: Sensitive paths and sensitive-review check (S)
@@ -5932,6 +5933,7 @@ packages/core/src/contracts/audit.ts
 packages/api/src/dispatch/**
 packages/api/src/adapters/**
 packages/core/src/contracts/source-status.ts
+packages/core/src/contracts/ws.ts
 packages/core/src/planner/**
 # Delegation
 packages/api/src/delegation/**
@@ -5959,7 +5961,7 @@ Paths landed so far (kept in step with `.github/sensitive-paths`, which also
 lists the globs reserved for areas that have no code yet):
 
 - Audit logging: `packages/core/src/contracts/audit.ts`
-- Query dispatch: `packages/core/src/contracts/source-status.ts`
+- Query dispatch: `packages/core/src/contracts/source-status.ts`, `packages/core/src/contracts/ws.ts`
 - The verify gate: `.github/**`, `scripts/ci/**`, `scripts/ops/**`,
   `biome.json`, `vitest.config.ts`
 ```
@@ -5979,7 +5981,7 @@ Expected: tests pass (sensitive-review file: 8 tests); `sensitive-review: push e
 git add -A
 git commit -m "feat(a): sensitive paths and sensitive-review check
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -5988,7 +5990,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for sensitive-review check
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 22: ci.yml and Dependabot (S)
@@ -6213,7 +6215,7 @@ Expected: biome clean, `tsc -b` exits 0, all Vitest projects pass with coverage 
 git add -A
 git commit -m "ci(a): ci workflow with sensitive-review job, Dependabot
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -6222,7 +6224,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for ci workflow
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 gh pr checks <PR number> --watch
 ```
 
@@ -6238,7 +6240,7 @@ Expected: `ci` and `sensitive-review` both pass on the PR (this is the first PR 
 
 **Interfaces:**
 - Consumes: `THEME_MODES` from `@querymodule/core/config` (test only, to keep both lists equal); `checkConfigFile` (Task 18).
-- Produces: `THEME_MODES = ["day", "night", "redShift"]`, `type ThemeMode`; `COLOR_TOKENS` (semantic colour tokens, one value per mode), `SCALE_TOKENS` (spacing, type, radius, motion, `target.min`), `type ColorTokenName`, `type ScaleTokenName`, `type TokenName`, `TOKEN_NAMES: readonly TokenName[]`, `MOTION_TOKENS`, `tokenValue(name: TokenName, mode: ThemeMode): string`; `relativeLuminance(hex: string): number`, `contrastRatio(a: string, b: string): number`, `interface ContrastPair { fg: ColorTokenName; bg: ColorTokenName; min: number; use: string }`, `CONTRAST_PAIRS`, `contrastFailures(mode: ThemeMode, overrides?: Record<string, string>): { pair: ContrastPair; ratio: number }[]`; `cssVarName(name: string): string` (`color.text.body` to `--qm-color-text-body`), `buildCss(): string`; `interface ThemeObject { mode; colors: Record<ColorTokenName, string>; scale: Record<ScaleTokenName, string> }`, `buildTheme(mode: ThemeMode, overrides?: Record<string, string>): ThemeObject` (the React Native theme object, spec 6.5); export `@querymodule/tokens/tokens.css`; package script `gen` and root `pnpm tokens:gen`. `config:validate` now passes `TOKEN_NAMES` to `validateSiteConfig`. Body text is held to 7:1 in every mode, which meets the mobile-unit rule and exceeds WCAG AA elsewhere (spec 6.5).
+- Produces: `THEME_MODES = ["day", "night", "redShift"]`, `type ThemeMode`; `COLOR_TOKENS` (semantic colour tokens, one value per mode), `SCALE_TOKENS` (spacing, type, radius, motion, `target.min`), `type ColorTokenName`, `type ScaleTokenName`, `type TokenName`, `TOKEN_NAMES: readonly TokenName[]`, `MOTION_TOKENS`, `tokenValue(name: TokenName, mode: ThemeMode): string`; `relativeLuminance(hex: string): number`, `contrastRatio(a: string, b: string): number`, `interface ContrastPair { fg: ColorTokenName; bg: ColorTokenName; min: number; use: string }`, `CONTRAST_PAIRS`, `contrastFailures(mode: ThemeMode, overrides?: Record<string, string>): { pair: ContrastPair; ratio: number }[]`; `cssVarName(name: string): string` (`color.text.body` to `--qm-color-text-body`), `buildCss(): string`; `interface ThemeObject { mode; colors: Record<ColorTokenName, string>; scale: Record<ScaleTokenName, string> }`, `buildTheme(mode: ThemeMode, overrides?: Record<string, string>): ThemeObject` (the React Native theme object, spec 6.5); export `@querymodule/tokens/tokens.css`; package script `gen` and root `pnpm tokens:gen`. `config:validate` now passes `TOKEN_NAMES` to `validateSiteConfig`. Body text is held to 7:1 in every mode, which meets the mobile-unit rule and exceeds WCAG AA elsewhere (spec 6.5). Per lead ruling R1, this task is the source of truth for every name it Produces in `packages/tokens`: Track B P1 extends this package (adds files such as `native.ts`/`theme-mode.ts`) and does not recreate `tokens.ts`, `contrast.ts`, `css.ts` or `theme.ts`. Flag to the B1 checker that its Tasks 11-13 must read "Modify" (not "Create") for these files and must reuse this task's exact `contrastRatio(a: string, b: string): number` (hex colours, not luminance numbers), `buildCss(): string` (no args) and `buildTheme(...)` signatures rather than redeclaring `buildCss(input: {...})` or a separate `buildNativeTheme(...)`.
 
 **IDs:** UX-002, UX-011, BR-001
 
@@ -6618,7 +6620,7 @@ Expected: `tsc -b` exits 0; `pnpm verify` green with four `ok` lines and `genera
 ```bash
 git commit -m "feat(b): tokens skeleton with day, night and red-shift modes
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -6627,7 +6629,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(b): sensitive review for tokens wiring in scripts/ci
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 24: Client platform and web-ui skeleton
@@ -6639,7 +6641,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: nothing beyond React for web-ui.
-- Produces: `type AuthTransport = "cookie" | "bearer"`; `interface TokenStore { get(): Promise<string | null>; set(token: string): Promise<void>; clear(): Promise<void> }`; `interface PlatformSignal { current(): boolean; subscribe(listener: (value: boolean) => void): () => void }`; `interface ClientPlatform { authTransport: AuthTransport; tokenStore: TokenStore | null; online: PlatformSignal; visible: PlatformSignal }` (spec 3; `tokenStore` is null for cookie transport); `interface FakePlatform extends ClientPlatform { setOnline(v: boolean): void; setVisible(v: boolean): void }`; `createFakePlatform(opts?: { authTransport?: AuthTransport; online?: boolean; visible?: boolean }): FakePlatform` (the fake every `packages/client` test uses); `visuallyHiddenStyle: CSSProperties`; `VisuallyHidden({ children }): JSX.Element` (the visually hidden "required" text of spec 6.2, applied through the CSSOM so `style-src 'self'` holds).
+- Produces: `type AuthTransport = "cookie" | "bearer"`; `interface TokenStore { get(): Promise<string | null>; set(token: string): Promise<void>; clear(): Promise<void> }`; `interface PlatformSignal { current(): boolean; subscribe(listener: (value: boolean) => void): () => void }`; `interface ClientPlatform { authTransport: AuthTransport; tokenStore: TokenStore | null; online: PlatformSignal; visible: PlatformSignal }` (spec 3; `tokenStore` is null for cookie transport); `interface FakePlatform extends ClientPlatform { setOnline(v: boolean): void; setVisible(v: boolean): void }`; `createFakePlatform(opts?: { authTransport?: AuthTransport; online?: boolean; visible?: boolean }): FakePlatform` (the fake every `packages/client` test uses); `visuallyHiddenStyle: CSSProperties`; `VisuallyHidden({ children }): JSX.Element` (the visually hidden "required" text of spec 6.2, applied through the CSSOM so `style-src 'self'` holds). Per lead ruling R1, this task is the source of truth for every name it Produces in `packages/client`: Track B P1 extends this package (adds files such as a native token store and a persistence/broadcast layer) and does not recreate `package.json`, `src/index.ts` or `src/platform.ts`. Flag to the B1 checker that its Tasks 1 and 14 must read "Modify" (not "Create") for these files and must align field names and shapes exactly to this task's `ClientPlatform`, `PlatformSignal` and `TokenStore` (non-nullable-vs-nullable `tokenStore`, `online`/`visible` field names, and the `PlatformSignal.current()/subscribe(...)` shape, not a `WritableSignal<T>` or a renamed `visibility` field).
 
 **IDs:** FR-005 (required indicator primitive), NFR-003, SEC-006
 
@@ -6960,7 +6962,7 @@ Expected: `6 passed`; `tsc -b` exits 0; `licences ok`.
 git add -A
 git commit -m "feat(b): ClientPlatform contract with fake, web-ui VisuallyHidden
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 25: Web shell scaffold
@@ -7225,7 +7227,7 @@ Open `http://localhost:5173`: heading "Query Module" on the day theme. In devtoo
 git add -A
 git commit -m "feat(b): Vite + React web shell reading tokens
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 - [ ] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic seat over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
@@ -7361,7 +7363,7 @@ Expected: every package `typecheck` exits 0, including `@querymodule/mobile`; `p
 git add -A
 git commit -m "feat(a): placeholder Expo app, CI web build and expo export
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -7370,7 +7372,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for CI steps 8 and 9
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 gh pr checks <PR number> --watch
 ```
 
@@ -7450,7 +7452,7 @@ fnm exec --using=22 pnpm vitest run --project api
 fnm exec --using=22 pnpm --filter @querymodule/mobile export
 ```
 
-A failure that passes on Node 22 reopens ADR-0001: stop P0, open an issue titled `Reopen ADR-0001: <package> fails on Node 24 (ADR-0001)` labelled `core`, `p0`, milestone `M0 Skeleton`, with both outputs, and write the next ADR (`docs/decisions/0002-...`) before continuing. A failure that also happens on Node 22 is not an ADR matter: fix it inside this task (for Expo in a pnpm workspace, the documented fix is `node-linker=hoisted` in `.npmrc`, in its own commit with the reason in the message).
+A failure that passes on Node 22 reopens ADR-0001: stop P0, open an issue titled `Reopen ADR-0001: <package> fails on Node 24 (ADR-0001)` labelled `core`, `p0`, milestone `M0 Skeleton`, with both outputs, and write the next ADR (`docs/decisions/0003-...`, since `docs/decisions/0002-drop-watchtower.md` already exists) before continuing. A failure that also happens on Node 22 is not an ADR matter: fix it inside this task (for Expo in a pnpm workspace, the documented fix is `node-linker=hoisted` in `.npmrc`, in its own commit with the reason in the message).
 
 - [ ] **Step 6: Commit.**
 
@@ -7458,7 +7460,7 @@ A failure that passes on Node 22 reopens ADR-0001: stop P0, open an issue titled
 git add -A
 git commit -m "test(a): Node 24 compatibility check for @libsql/client
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 ### Task 28: Ruleset on main and security updates (S)
@@ -7573,7 +7575,7 @@ Expected: `syntax ok`.
 git add scripts/ops/gh-setup-repo.sh
 git commit -m "chore(a): repo ruleset and security settings script
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR number>.md` with `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"`), then:
@@ -7582,7 +7584,7 @@ Run the Opus 5.5 `xhigh` whole-branch review (it writes `docs/reviews/pr-<PR num
 git add docs/reviews/pr-<PR number>.md
 git commit -m "docs(a): sensitive review for repo setup script
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 ```
 
 - [ ] **Step 4: Run it once from `main` after the merge (developer approves: it changes repository settings).**
@@ -7686,7 +7688,7 @@ In this plan, add the line `Frozen: MM-DD-YY` directly under the title, and fill
 git add docs/superpowers/plans/STATUS.md docs/superpowers/plans/2026-09-25-p0-contracts.md
 git commit -m "docs(a): M0 P0 gate done, contracts frozen
 
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+<attribution trailer given by your session's system reminder>"
 gh pr create --title "docs(a): M0 P0 gate done, contracts frozen" --body "Gate verified per master plan 4.1 row P0. Docs only."
 gh pr checks <PR> --watch
 gh pr merge <PR> --squash --delete-branch
@@ -7713,3 +7715,5 @@ Spec coverage gaps found and fixed while writing:
 Placeholder scan: searched the plan for `TBD`, `TODO`, `implement later`, `add validation`, `handle edge cases`, `write tests for the above`, `similar to Task`, `as in Task`; no matches remain (one `as in Task 17 Step 13` reference in Task 18 was replaced with the full commands). `<n>`, `<PR number>`, `<short sha>` and `MM-DD-YY` are runtime values the executing session fills, not unfinished content.
 
 Type-consistency check: every name in an `Interfaces: Consumes` block is produced by an earlier task (for example `configuredDefault` Task 12 into Task 13; `ClientSiteConfigSchema` Task 9 into Task 15; `TOKEN_NAMES` Task 23 into Tasks 23 and 25; `checkConfigFile` Task 18 into Task 23). Corrected during review: `SHORTCUT_ACTIONS` is 20 keys, not 19; audit test count 21; sensitive-review test count 8; tokens test count 11; `THEME_MODES` exists in both core (config schema) and tokens, with a test holding them equal; `ShortcutBinding` is defined once (Task 6) and the schema only validates it; `LOCALE_PATTERN` lives in `config/schema.ts` and `routes.ts` imports it from there.
+
+Wave F checker items applied: 6 must-fix, 2 should-fix (09-25-26).
