@@ -1871,6 +1871,64 @@ await test("sdd FP-I2: the progress checker flags gate-weakening moves; a hit ma
   );
 });
 
+const gate0Red = () => {
+  let gates = 0;
+  return () =>
+    ++gates === 1
+      ? { ok: false, head: "h-impl", problems: ["pnpm coverage red"] }
+      : GATE_OK("h-final");
+};
+
+await test("sdd FP-M1: in a mixed round the re-reviewer does not verdict gate findings; gate-r decides them", async () => {
+  let rr = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "gate*": gate0Red(),
+      "re-review*": (p) => (++rr === 1 ? neverAddressed(p) : addressAll(p)),
+    }),
+  );
+  const p1 = r.find("re-review-r1").prompt;
+  assert.deepEqual(ids(p1), ["spec:S1"], "gate findings must not be up for a verdict");
+  assert.ok(p1.includes("[gate-0:1]") && p1.includes("verified by gate-r1"), p1);
+  // S1 still open after round 1, so the gate finding stays open and reaches the round-2 fixer
+  assert.ok(r.find("fixer-r2").prompt.includes("[gate-0:1]"), "gate finding dropped after round 1");
+  assert.ok(!r.labels.includes("gate-r1"), "no gate while a review finding is open");
+  assert.ok(r.find("re-review-r2").prompt.includes("verified by gate-r2"));
+  assert.ok(r.labels.includes("gate-r2"));
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd FP-M2: gate findings open at the round cap are parked, never dropped", async () => {
+  const prog = await run(
+    sdd,
+    { ...BASE, maxRounds: 1 },
+    sddResponder({
+      "gate*": gate0Red(),
+      "progress-r1": { ...progress("progress-r1"), ok: false, problems: ["tree dirty"] },
+    }),
+  );
+  const parkedIds = (x) => x.res.parked.map((f) => f.id);
+  assert.equal(prog.res.status, "parked");
+  assert.ok(parkedIds(prog).includes("gate-0:1"), parkedIds(prog).join(","));
+  assert.ok(parkedIds(prog).includes("progress-r1-1"));
+  const mixed = await run(
+    sdd,
+    { ...BASE, maxRounds: 1 },
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "gate*": gate0Red(),
+      "re-review*": neverAddressed,
+    }),
+  );
+  assert.ok(
+    parkedIds(mixed).includes("gate-0:1") && parkedIds(mixed).includes("spec:S1"),
+    parkedIds(mixed).join(","),
+  );
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {

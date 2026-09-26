@@ -757,7 +757,9 @@ async function runProgress(label, roundBase, priorTests) {
   )
 }
 
-async function runReReview(findings, label, roundBase, headNow, r) {
+// gateFindings: gate-* findings still open in a mixed round. The re-reviewer sees them but does not
+// verdict them (it does not re-run the suite); gate-r<r> decides them.
+async function runReReview(findings, gateFindings, label, roundBase, headNow, r) {
   const out = wjoin(`task-${N}-re-review-${r}.md`)
   return agent(
     [
@@ -767,6 +769,7 @@ async function runReReview(findings, label, roundBase, headNow, r) {
       '',
       'Findings under verification:',
       findingsText(findings),
+      gateFindings.length ? `\nGate findings, not yours to verdict (each is verified by gate-r${r}, which re-runs lint, typecheck and coverage); leave them out of verdicts:\n${findingsText(gateFindings).replace(/^- /gm, '* ')}` : '',
       '',
       diffStep(roundBase, headNow, join(scratch(label), 'fix.diff')),
       READONLY,
@@ -1195,15 +1198,18 @@ while (!gatePassed) {
     log(mechanical
       ? `fix: round ${r} is mechanical (gate and progress findings only); re-reviewer skipped, progress checker and gate-r${r} decide`
       : `fix: round ${r} has review findings; re-reviewer runs`)
-    const rr = mechanical ? null : await runReReview(open, `re-review-r${r}`, roundBase, state.head, r)
+    // Gate findings are never verdicted by a re-reviewer; they stay open until a gate runs.
+    const gateOpen = open.filter((f) => /^gate-/.test(f.id))
+    const reviewed = open.filter((f) => !/^gate-/.test(f.id))
+    const rr = mechanical ? null : await runReReview(reviewed, gateOpen, `re-review-r${r}`, roundBase, state.head, r)
     if (mechanical) {
       // closed unless the progress checker reports a problem (below); gate-r<r> checks the rest
     } else if (!rr) {
       log(`fix: round ${r} re-reviewer returned null; every finding stays open`)
-      for (const f of open) { naCount[f.id] = (naCount[f.id] || 0) + 1; next.push(f) }
+      for (const f of reviewed) { naCount[f.id] = (naCount[f.id] || 0) + 1; next.push(f) }
     } else {
       const v = new Map(rr.verdicts.map((x) => [x.id.replace(/^\[|\]$/g, '').trim(), x]))
-      for (const f of open) {
+      for (const f of reviewed) {
         const x = v.get(f.id)
         if (x && x.verdict === 'ADDRESSED') continue
         naCount[f.id] = (naCount[f.id] || 0) + 1
@@ -1223,6 +1229,9 @@ while (!gatePassed) {
     guardHits.forEach((g, k) => next.push({ id: `progress-r${r}-guard-${k + 1}`, severity: 'important', file: '', line: '', summary: `gate weakening: ${g}`, fix: 'revert the change, or show that the brief or a ruling in force asks for it', planMandated: false, contestsRuling: '', guard: true }))
     if (guardHits.length) log(`fix: round ${r} progress check flagged ${guardHits.length} gate-weakening change(s); the next round gets the re-reviewer`)
     progressProblems.forEach((p, k) => next.push({ id: `progress-r${r}-${k + 1}`, severity: 'important', file: '', line: '', summary: `progress check: ${p}`, fix: 'restore the invariant the progress check names', planMandated: false, contestsRuling: '' }))
+    // While anything else is open, the gate findings stay open too (no gate runs yet; never dropped
+    // at the cap). When only they would remain, the round closes them and gate-r<r> decides.
+    if (next.length && gateOpen.length) next.push(...gateOpen)
 
     const closed = open.length - open.filter((f) => next.some((n) => n.id === f.id)).length
     state.roundLog.push(`fix round ${r}/${MAX_ROUNDS} (${closed} addressed, ${next.length} open; head ${String(state.head).slice(0, 7)})`)
