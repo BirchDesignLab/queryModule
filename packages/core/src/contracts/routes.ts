@@ -98,6 +98,7 @@ export const ROUTES: readonly RouteDef[] = [
     request: { params: LocaleParamsSchema },
     responses: {
       200: { description: "Bundle", schema: LocaleBundleSchema },
+      400: error("Malformed locale parameter (validationFailed)"),
       404: error("Locale not listed in SiteConfig.locales"),
     },
   },

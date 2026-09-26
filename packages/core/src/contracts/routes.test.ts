@@ -72,6 +72,14 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     );
   });
 
+  it("every route that validates request input declares a 400 ApiError response", () => {
+    for (const r of ROUTES) {
+      if (!r.request) continue;
+      expect(r.responses[400]?.schema, r.id).toBe(ApiErrorSchema);
+    }
+    expect(findRoute("getLocale").responses[400]?.schema).toBe(ApiErrorSchema);
+  });
+
   it("locale param accepts en and en-US only shapes", () => {
     expect(LocaleParamsSchema.safeParse({ locale: "en" }).success).toBe(true);
     expect(LocaleParamsSchema.safeParse({ locale: "en-US" }).success).toBe(true);
