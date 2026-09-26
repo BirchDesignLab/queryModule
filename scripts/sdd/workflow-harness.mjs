@@ -1974,6 +1974,31 @@ await test("sdd FP-M5: criticFocus with the critic off logs a warning and runs n
   assert.ok(!on.logs.some((l) => /criticFocus ignored/.test(l)));
 });
 
+await test("append-ledger FP-M7: an already-appended block is skipped; UTF-16 and UTF-8 BOM input decode", async () => {
+  const al = await import(new URL("./append-ledger.mjs", import.meta.url).href);
+  assert.equal(al.appendText("head\nx\ny\n", ["x", "y"]), null, "tail already holds the block");
+  assert.equal(al.appendText("x\ny", ["x", "y"]), null);
+  assert.equal(al.appendText("head\r\nx\r\ny\r\n", ["x", "y"]), null);
+  assert.equal(al.appendText("ax\ny\n", ["x", "y"]), "x\ny\n", "a partial line is not the block");
+  assert.equal(al.appendText("x\ny\nz\n", ["x", "y"]), "x\ny\n", "only the tail counts");
+  const res = {
+    task: 7,
+    ledgerLines: ["- Task 7: complete (commits a..b, review clean, gate green)"],
+  };
+  const json = JSON.stringify(res);
+  const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, "utf16le")]);
+  assert.deepEqual(al.findLedgerLines(al.decodeText(le)), res.ledgerLines, "UTF-16LE");
+  const be = Buffer.from(json, "utf16le").swap16();
+  assert.deepEqual(
+    al.findLedgerLines(al.decodeText(Buffer.concat([Buffer.from([0xfe, 0xff]), be]))),
+    res.ledgerLines,
+    "UTF-16BE",
+  );
+  const u8 = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(json, "utf8")]);
+  assert.equal(al.decodeText(u8), json, "UTF-8 BOM stripped");
+  assert.equal(al.decodeText(Buffer.from(json, "utf8")), json);
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {

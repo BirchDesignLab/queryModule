@@ -8,7 +8,9 @@
 // <workflow-output-file> holds the result: a bare result object, or any text that contains the
 // result JSON (a task output file, a fenced block, a JSON-escaped string). When several results
 // are present the last one wins. The ledger must already exist; lines are appended with the
-// ledger's own line ending and a trailing newline.
+// ledger's own line ending and a trailing newline. Re-running with the same result is a no-op
+// when those lines are already the ledger's tail ("already appended"). Input written as UTF-16
+// (PowerShell 5.1 Out-File or >) is decoded by its BOM; a UTF-16 ledger is refused (exit 2).
 //
 // Exit codes: 0 appended (prints the count), 2 usage error or unreadable file, 3 no ledgerLines.
 // Node only, no dependencies.
@@ -90,11 +92,28 @@ export function findLedgerLines(text) {
   return found.length ? found[found.length - 1] : null;
 }
 
-// Returns the text to append to a ledger whose current content is existing.
+// Returns the text to append to a ledger whose current content is existing, or null when the
+// exact block of lines is already the ledger's tail (a re-run of the same result appends nothing).
 export function appendText(existing, lines) {
   const eol = existing.includes("\r\n") ? "\r\n" : "\n";
+  const body = existing.replace(/(\r?\n)+$/, "").split(/\r?\n/);
+  const tail = body.slice(-lines.length);
+  if (tail.length === lines.length && tail.every((l, i) => l === lines[i])) return null;
   const lead = existing.length && !existing.endsWith("\n") ? eol : "";
   return `${lead}${lines.join(eol)}${eol}`;
+}
+
+// Decodes a file's bytes: UTF-16LE or UTF-16BE with a BOM (PowerShell 5.1 Out-File and >
+// write UTF-16LE), otherwise UTF-8 with any UTF-8 BOM stripped.
+export function decodeText(buf) {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe)
+    return buf.subarray(2).toString("utf16le");
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    const body = Buffer.from(buf.subarray(2, 2 + ((buf.length - 2) & ~1)));
+    return body.swap16().toString("utf16le");
+  }
+  const text = buf.toString("utf8");
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 function main(argv) {
@@ -105,7 +124,7 @@ function main(argv) {
   const [input, ledger] = argv;
   let text;
   try {
-    text = fs.readFileSync(input, "utf8");
+    text = decodeText(fs.readFileSync(input));
   } catch (e) {
     console.error(`append-ledger: cannot read ${input}: ${e.message}`);
     return 2;
@@ -115,14 +134,30 @@ function main(argv) {
     console.error(`append-ledger: no ledgerLines found in ${input}`);
     return 3;
   }
-  let existing;
+  let raw;
   try {
-    existing = fs.readFileSync(ledger, "utf8");
+    raw = fs.readFileSync(ledger);
   } catch (e) {
     console.error(`append-ledger: cannot read the ledger ${ledger}: ${e.message}`);
     return 2;
   }
-  fs.appendFileSync(ledger, appendText(existing, lines), "utf8");
+  if (
+    raw.length >= 2 &&
+    ((raw[0] === 0xff && raw[1] === 0xfe) || (raw[0] === 0xfe && raw[1] === 0xff))
+  ) {
+    console.error(
+      `append-ledger: the ledger ${ledger} is UTF-16; convert it to UTF-8 first (appending UTF-8 would corrupt it)`,
+    );
+    return 2;
+  }
+  const add = appendText(decodeText(raw), lines);
+  if (add === null) {
+    console.log(
+      `append-ledger: already appended (the ${lines.length} line(s) are the tail of ${ledger}); nothing written`,
+    );
+    return 0;
+  }
+  fs.appendFileSync(ledger, add, "utf8");
   console.log(`append-ledger: appended ${lines.length} line(s) to ${ledger}`);
   return 0;
 }
