@@ -30,11 +30,63 @@ export function storiesInScope(
   });
 }
 
+/**
+ * True when `text` holds a test that runs and whose title carries `[story]`.
+ * Commented-out tests and .skip/.todo/.fixme variants never run, so they
+ * never count (spec 10.2 "green on main", spec 12.7). .only and .each count.
+ */
 export function hasTaggedTest(text: string, story: string): boolean {
+  const live = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
   const title = new RegExp(
-    `\\b(?:it|test|describe)(?:\\.\\w+)*\\(\\s*["'\`][^"'\`\\n]*\\[${story}\\]`,
+    `\\b(?:it|test|describe)(?:\\.(?!skip\\b|todo\\b|fixme\\b)\\w+)*\\(\\s*["'\`][^"'\`\\n]*\\[${story}\\]`,
   );
-  return title.test(text);
+  return title.test(live);
+}
+
+export const USAGE = "usage: check-story-tags [--milestone <m0|m1|m2|m3|m4>]";
+
+export type ParsedArgs = { ok: true; milestone?: Milestone } | { ok: false; message: string };
+
+/** Strict CLI parse: [] or one --milestone with a known value, nothing else. */
+export function parseArgs(args: string[]): ParsedArgs {
+  if (args.length === 0) return { ok: true };
+  let value: string | undefined;
+  if (args.length === 1 && args[0]?.startsWith("--milestone=")) {
+    value = args[0].slice("--milestone=".length);
+  } else if (args.length === 2 && args[0] === "--milestone") {
+    value = args[1];
+  } else {
+    return { ok: false, message: USAGE };
+  }
+  const i = (MILESTONES as readonly string[]).indexOf(value ?? "");
+  const milestone = MILESTONES[i];
+  if (milestone === undefined) return { ok: false, message: `unknown milestone; ${USAGE}` };
+  return { ok: true, milestone };
+}
+
+export type GitResult = { status: number | null; stdout: string | null };
+export type TagReadResult =
+  | { ok: true; tags: string[] }
+  | { ok: false; reason: "git-failed" | "shallow" };
+
+/**
+ * Read the milestone tags. Fails closed: a git call that fails or cannot
+ * start is a failure, and so is a shallow clone (its tag list cannot be
+ * trusted), never an empty tag list (spec 10.2 bullet 1).
+ */
+export function readMilestoneTags(runGit: (args: string[]) => GitResult): TagReadResult {
+  const tags = runGit(["tag", "--list", "m*"]);
+  if (tags.status !== 0 || tags.stdout === null) return { ok: false, reason: "git-failed" };
+  const shallow = runGit(["rev-parse", "--is-shallow-repository"]);
+  if (shallow.status !== 0 || shallow.stdout?.trim() !== "false")
+    return { ok: false, reason: "shallow" };
+  return {
+    ok: true,
+    tags: tags.stdout
+      .split("\n")
+      .map((t) => t.trim())
+      .filter((t) => t !== ""),
+  };
 }
 
 export function checkStoryTags(
