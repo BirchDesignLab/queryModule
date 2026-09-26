@@ -18,7 +18,9 @@
  *   roles: { implementer: { model: "opus", effort: "medium" }, ... },   // optional overrides
  *   maxRounds: 5,                            // fix-round cap; numeric strings and floats are
  *                                            // coerced (logged), then clamped to 1..8
- *   answers: [{ at, text?, decisions? }]     // only on a re-run after a stop (below)
+ *   answers: [{ at, text?, decisions? }],    // only on a re-run after a stop (below)
+ *   implemented: { head: "<full sha>" }      // optional: review stages only; skips the implementer
+ *                                            // and reviews base..head (README "Fallbacks")
  * } })
  * Required: task, title, repoDir, branch, base, briefPath, reportPath, workDir, scratchRoot,
  * runLabel, specRefs, globalConstraints, trailer. A missing one throws before any agent runs.
@@ -176,6 +178,18 @@ function preconditionAnswers(label) {
   for (const e of es) { e.usedPre = true; e.delivered = true }
   const withText = es.filter((e) => e.text)
   return withText.length ? answerBlock(withText, 'the precondition failure') : 'The controller reports the precondition failure resolved; check again.'
+}
+
+// Review stages only: the task's commits are already on the branch (base..implemented.head), for
+// example a fresh run after the implementer committed. The implementer is skipped.
+let IMPLEMENTED = null
+if (A.implemented !== undefined && A.implemented !== null) {
+  const head = A.implemented && typeof A.implemented.head === 'string' ? A.implemented.head.trim() : ''
+  if (!head) throw new Error('sdd-task: implemented.head is missing or empty (the full sha of the task head, git rev-parse HEAD)')
+  if (ANSWERS && ANSWERS.entries.some((e) => e.at === 'implementer' || e.preLabel === 'implementer')) {
+    throw new Error('sdd-task: implemented skips the implementer, so answers for "implementer" or "precondition:implementer" cannot apply; drop them or drop implemented')
+  }
+  IMPLEMENTED = { head }
 }
 
 // ---------- roles ----------
@@ -711,53 +725,68 @@ const implPrompt = [
     `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the full-suite result, self-review findings, concerns.`,
     'Return: status, commits (full sha + subject), head (git rev-parse HEAD), a one-line test summary, concerns, questions.',
   ].filter(Boolean).join('\n')
-let impl = await agent(implPrompt, { label: 'implementer', phase: 'Implement', schema: WORK, ...role('implementer') })
+// The implement stage: the implementer, its precondition retry and its continuation. Returns
+// { impl } or { stop: <finished result> }.
+async function implementStage() {
+  let impl
+  impl = await agent(implPrompt, { label: 'implementer', phase: 'Implement', schema: WORK, ...role('implementer') })
 
-if (!impl) {
-  log('implement: implementer returned null (skipped or died); stopping')
-  return await finish(build('stopped', { stopped: 'implementer', questions: ['implementer returned no result'] }))
-}
-
-const implPre = impl.preconditionFailed ? preconditionAnswers('implementer') : ''
-if (implPre) {
-  log(`implement: cached precondition failure (${impl.preconditionFailed}); retrying the implementer with the controller answer`)
-  impl = await agent(`${implPrompt}\n\n${implPre}`, { label: 'implementer-retry', phase: 'Implement', schema: WORK, ...role('implementer') })
-  if (!impl) return await finish(build('stopped', { stopped: 'implementer', questions: ['implementer retry returned no result'] }))
-}
-if (impl.preconditionFailed) {
-  log(`implement: precondition failed: ${impl.preconditionFailed}; stopping before any change`)
-  return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:implementer', problem: `implementer: ${impl.preconditionFailed}` }))
-}
-
-const contAnswers = impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT' ? answersFor(0) : ''
-if (contAnswers) {
-  log(`implement: cached implementer stopped (${impl.status}); running the continue implementer with the controller answers`)
-  const cont = await agent(
-    [
-      `You are continuing Task ${N}: ${A.title}${A.issue ? ` (issue #${A.issue})` : ''}. An earlier implementer stopped with ${impl.status}; the controller has answered.`,
-      `Read the brief ${A.briefPath} (requirements, exact values) and the earlier report ${A.reportPath}. Check what is already committed: git log --oneline ${A.base}..HEAD. Build on those commits; do not redo committed work and do not reset or rewrite history.`,
-      A.carries ? `Controller rulings and interfaces the brief cannot know (binding):\n${A.carries}` : '',
-      `Global constraints from the plan (binding):\n${A.globalConstraints}`,
-      '',
-      'The questions the earlier implementer asked:',
-      ...(impl.questions.length ? impl.questions.map((q) => `- ${q}`) : ['- (none recorded; see the report)']),
-      impl.concerns.length ? `Its concerns:\n${impl.concerns.map((c) => `- ${c.kind}: ${c.text}`).join('\n')}` : '',
-      contAnswers,
-      '',
-      'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green). Run the full suite once before committing.',
-      `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
-      `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the full-suite result.`,
-      GIT,
-      HOUSE,
-      'Return: status, commits you created (full sha + subject), head, a one-line test summary, concerns, questions. BLOCKED or NEEDS_CONTEXT only when the answers still leave you unable to proceed.',
-    ].filter(Boolean).join('\n'),
-    { label: 'implementer-continue', phase: 'Implement', schema: WORK, ...role('implementer') },
-  )
-  if (!cont) {
-    log('implement: continue implementer returned null; stopping')
-    return await finish(build('stopped', { stopped: 'implementer', questions: ['continue implementer returned no result'] }))
+  if (!impl) {
+    log('implement: implementer returned null (skipped or died); stopping')
+    return { stop: await finish(build('stopped', { stopped: 'implementer', questions: ['implementer returned no result'] })) }
   }
-  impl = Object.assign({}, cont, { commits: impl.commits.concat(cont.commits) })
+
+  const implPre = impl.preconditionFailed ? preconditionAnswers('implementer') : ''
+  if (implPre) {
+    log(`implement: cached precondition failure (${impl.preconditionFailed}); retrying the implementer with the controller answer`)
+    impl = await agent(`${implPrompt}\n\n${implPre}`, { label: 'implementer-retry', phase: 'Implement', schema: WORK, ...role('implementer') })
+    if (!impl) return { stop: await finish(build('stopped', { stopped: 'implementer', questions: ['implementer retry returned no result'] })) }
+  }
+  if (impl.preconditionFailed) {
+    log(`implement: precondition failed: ${impl.preconditionFailed}; stopping before any change`)
+    return { stop: await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:implementer', problem: `implementer: ${impl.preconditionFailed}` })) }
+  }
+
+  const contAnswers = impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT' ? answersFor(0) : ''
+  if (contAnswers) {
+    log(`implement: cached implementer stopped (${impl.status}); running the continue implementer with the controller answers`)
+    const cont = await agent(
+      [
+        `You are continuing Task ${N}: ${A.title}${A.issue ? ` (issue #${A.issue})` : ''}. An earlier implementer stopped with ${impl.status}; the controller has answered.`,
+        `Read the brief ${A.briefPath} (requirements, exact values) and the earlier report ${A.reportPath}. Check what is already committed: git log --oneline ${A.base}..HEAD. Build on those commits; do not redo committed work and do not reset or rewrite history.`,
+        A.carries ? `Controller rulings and interfaces the brief cannot know (binding):\n${A.carries}` : '',
+        `Global constraints from the plan (binding):\n${A.globalConstraints}`,
+        '',
+        'The questions the earlier implementer asked:',
+        ...(impl.questions.length ? impl.questions.map((q) => `- ${q}`) : ['- (none recorded; see the report)']),
+        impl.concerns.length ? `Its concerns:\n${impl.concerns.map((c) => `- ${c.kind}: ${c.text}`).join('\n')}` : '',
+        contAnswers,
+        '',
+        'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green). Run the full suite once before committing.',
+        `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
+        `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the full-suite result.`,
+        GIT,
+        HOUSE,
+        'Return: status, commits you created (full sha + subject), head, a one-line test summary, concerns, questions. BLOCKED or NEEDS_CONTEXT only when the answers still leave you unable to proceed.',
+      ].filter(Boolean).join('\n'),
+      { label: 'implementer-continue', phase: 'Implement', schema: WORK, ...role('implementer') },
+    )
+    if (!cont) {
+      log('implement: continue implementer returned null; stopping')
+      return { stop: await finish(build('stopped', { stopped: 'implementer', questions: ['continue implementer returned no result'] })) }
+    }
+    impl = Object.assign({}, cont, { commits: impl.commits.concat(cont.commits) })
+  }
+  return { impl }
+}
+let impl
+if (IMPLEMENTED) {
+  log(`implement: skipped (implemented.head ${IMPLEMENTED.head}); reviewing ${A.base}..${IMPLEMENTED.head}, review stages only`)
+  impl = { status: 'DONE', commits: [], head: IMPLEMENTED.head, testSummary: 'review-only re-run: no implementer evidence in this run; the gate re-runs lint, typecheck and test', concerns: [], questions: [] }
+} else {
+  const stage = await implementStage()
+  if (stage.stop) return stage.stop
+  impl = stage.impl
 }
 
 state.commits.push(...impl.commits)
@@ -769,7 +798,7 @@ if (impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') {
   state.concerns.push(...impl.concerns)
   return await finish(build('stopped', { stopped: 'implementer' }))
 }
-if (!impl.commits.length) {
+if (!impl.commits.length && !IMPLEMENTED) {
   log('implement: no commits reported; stopping')
   state.concerns.push(...impl.concerns)
   return await finish(build('stopped', { stopped: 'implementer', questions: state.questions.concat(['implementer reported DONE with no commits']) }))

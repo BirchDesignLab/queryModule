@@ -1176,6 +1176,23 @@ await test("wr R3: the reviewer precondition names files and calls out a stray a
   assert.ok(p.includes("stray artifact") && p.includes("docs/reviews/pr-32.md"));
 });
 
+await test("sdd R2: implemented { head } skips the implementer and reviews base..head (review stages only)", async () => {
+  const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
+  assert.ok(!r.labels.includes("implementer"), r.labels.join(","));
+  assert.deepEqual(r.labels, ["spec-review", "quality-review", "gate-0", "ledger"]);
+  assert.ok(r.find("spec-review").prompt.includes("aaaaaaa1111..cafe1234cafe1234"));
+  assert.equal(r.res.status, "complete");
+  await assert.rejects(run(sdd, { ...BASE, implemented: {} }, sddResponder()), /implemented\.head/);
+  await assert.rejects(
+    run(
+      sdd,
+      { ...BASE, implemented: { head: "x" }, answers: [{ at: "implementer", text: "t" }] },
+      sddResponder(),
+    ),
+    /implemented/,
+  );
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {
