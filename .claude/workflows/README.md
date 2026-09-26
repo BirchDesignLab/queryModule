@@ -39,7 +39,8 @@ Vocabulary: **role** (implementer, spec reviewer, quality reviewer, critic, rule
   trailer: "Co-Authored-By: ...",          // fallback commit trailer
   roles: { ... optional overrides ... },
   maxRounds: 5,                            // numeric strings and floats are coerced (logged); clamped to 1..8
-  answers: { at, text?, decisions? }      // only on a re-run after a stop (below)
+  answers: [{ at, text?, decisions? }],   // only on a re-run after a stop: one entry per answered stop
+  implemented: { head: "<full sha>" }      // optional: review stages only (see Fallbacks)
 }
 ```
 
@@ -68,7 +69,8 @@ Step-up ladder: haiku to sonnet/medium; sonnet/low to sonnet/medium; sonnet/medi
 ### Flow
 
 1. **Implement.** The implementer reads the brief, checks the precondition (branch is `branch`, HEAD is `base`, clean tree), works TDD, commits only its files with the brief's message and the trailer, and writes `reportPath`. Returns `{ status, commits, head, testSummary, concerns:[{kind: planVsSpec|correctness|observation, text}], questions }`.
-   - A failed precondition stops the run (`stopped: "precondition"`, `problem`); it never becomes a finding.
+   - A failed precondition stops the run (`stopped: "precondition"`, `stopPoint: "precondition:implementer"`, `problem`, which names each untracked or modified file for a dirty tree); it never becomes a finding.
+   - With `implemented: { head }` the implementer is skipped and the run reviews `base..head` (review stages only).
    - BLOCKED or NEEDS_CONTEXT: stop (`stopped: "implementer"`), unless `answers` is given (below).
    - A planVsSpec or correctness concern goes to the ruler (`ruler-concerns`). A `fix` ruling gets one pre-review fixer and progress check; progress problems there are passed to the reviewers.
    - Observations become deferred minors.
@@ -94,7 +96,7 @@ Worst case at the default maxRounds 5: 30 agents (implementer, concern ruler, pr
 ```
 { task, status: "complete" | "parked" | "stopped", base, head, commits, rounds,
   rulings, supersededRulings, carryForward, deferredMinors, parked, questions, concerns,
-  answersUnconsumed?, ledgerLines?,
+  answersUnconsumed?, ledgerLines?, stopPoint?,
   stopped?: "implementer" | "precondition" | "ruler-concerns" | "fixer-pre" | "review" |
             "ruler-review" | "fixer-r<r>" | "gate-0" | "gate-r<r>",
   problem?, escalated?: [ruling] }
@@ -109,7 +111,7 @@ Stop points and the agent that consumes the answers there:
 | `stopped` | Consumer of `answers` |
 |---|---|
 | `implementer` | `implementer-continue`, which finishes on top of the existing commits |
-| `precondition` | the agent that failed it, re-run once as `implementer-retry` or `gate-...-retry` |
+| `precondition` (`stopPoint` `precondition:implementer`, `precondition:gate-0`, `precondition:gate-r<r>`) | the agent that failed it, re-run once as `implementer-retry` or `gate-...-retry` |
 | `ruler-concerns` | `ruler-concerns` |
 | `fixer-pre` | `fixer-pre` |
 | `review` | `ruler-review`, then the fixers |
@@ -117,7 +119,7 @@ Stop points and the agent that consumes the answers there:
 | `fixer-r<r>` | `fixer-r<r>` |
 | `gate-0`, `gate-r<r>` | `fixer-r1`, `fixer-r<r+1>` |
 
-Text reaches the consumer and the rulers and fixers after it. An `at` that is not in this table throws at start. Answers that no agent consumed in the run are logged and returned as `answersUnconsumed: true`.
+Each entry's text is delivered to exactly one agent: the first consumer at or after its stop point that runs (normally the consumer in this table). So an agent's prompt holds only the entries for its own stop point, and a later entry never changes an earlier agent's prompt. For a precondition entry, use the returned `stopPoint` as `at`; a plain `precondition` goes to the first precondition failure. An `at` that is not in this table throws at start. Answers that no agent consumed in the run are logged and returned as `answersUnconsumed: true`.
 
 ### Ledger lines
 
@@ -143,7 +145,7 @@ Text reaches the consumer and the rulers and fixers after it. An `at` that is no
 { pr, base, head, repoDir, planPath, ledgerPath, workDir, scratchRoot, runLabel,
   sensitiveFiles: [], questions: [], artifactPath: "docs/reviews/pr-<pr>.md",
   specPath?, requirementsDoc?, date?: "MM-DD-YY", trailer, roles,
-  answers?: { at, text?, decisions? } }
+  answers?: [{ at, text?, decisions? }] }
 ```
 
 Required: `pr`, `base`, `head`, `repoDir`, `planPath`, `workDir`, `scratchRoot`, `runLabel`, `trailer`. `artifactPath` must be `docs/reviews/pr-<pr>.md`; anything else throws. `wave-review` takes no `globalConstraints`, and the same rule applies to `questions` and `answers`: product and code constraints only, never process bullets.
@@ -185,14 +187,14 @@ Front matter comes from the role that writes it; an override changes it, so the 
 ```
 { verdict: "approve" | "fixes", reviewedSha, artifactWritten, findings, residual, answers,
   declined, rulings, supersededRulings, fixCommits?, strayArtifact?, answersUnconsumed?,
-  stopped?: "reviewer" | "precondition" | "ruler" | "fixer" | "re-review",
+  stopped?: "reviewer" | "precondition" | "ruler" | "fixer" | "re-review", stopPoint?,
   problem?, escalated?, questions? }
 ```
 
 - `approve` with `artifactWritten`: commit the artifact on top of the reviewed head and push.
 - `approve` without `artifactWritten`: re-run the review. Never hand-write the artifact.
 - `fixes` without `stopped`: adjudicate `residual`.
-- `stopped` set: a decision is needed. Stop points and consumers: `reviewer` (the reviewer returned nothing): the ruler, fixer and re-reviewer; `precondition`: the failing agent re-runs once as `reviewer-retry` or `fixer-retry`; `ruler`: decisions settle the escalated items and text goes to the fixer and re-reviewer; `fixer`: the fixer; `re-review`: the re-reviewer. Another `at` throws.
+- `stopped` set: a decision is needed. Stop points and consumers: `reviewer` (the reviewer returned nothing): the ruler, fixer and re-reviewer; `precondition` (`stopPoint` `precondition:reviewer` or `precondition:fixer`; the problem names each untracked or modified file and calls out a stray artifact): the failing agent re-runs once as `reviewer-retry` or `fixer-retry`; `ruler`: decisions settle the escalated items and text goes to the fixer and re-reviewer; `fixer`: the fixer; `re-review`: the re-reviewer. Another `at` throws.
 - `strayArtifact` set: delete that file.
 - `declined` lists behaviours the reviewer set aside; the controller rules on each.
 
@@ -207,17 +209,46 @@ Before an `sdd-task` run:
 After it: act on `status` (above). Every run leaves its review files in `workDir`.
 
 Answering a stop, without re-implementing:
-1. Keep every arg identical, `carries` and `questions` included. Add `answers: { at: <the returned stopped value>, text: "<answers>", decisions: [{ item, decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }`. Use `decisions` to settle an escalated item; the item id is the one in `escalated`.
+1. Keep every arg identical, `carries` and `questions` included. `answers` is a list with one entry per answered stop: append `{ at: <the returned stopped value, or stopPoint for a precondition>, text: "<answers>", decisions: [{ item, decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }`. Use `decisions` to settle an escalated item; the item id is the one in `escalated`. A single object is accepted as a one-entry list.
 2. Re-run: `Workflow({ scriptPath: ".claude/workflows/<sdd-task | wave-review>.js", args: <same args + answers>, resumeFromRunId: "<runId>" })`.
-3. Text goes only into the stop point's consumer and the rulers and fixers after it, never into the implementer's or the reviewer's prompt, so every earlier call replays from cache. Never answer by editing `questions` or `carries`: that re-runs the review or the implementation.
-4. Decisions become controller rulings (`source: "controller"`, ledgered as `Ruling (controller)`). They are final for the run and never re-escalated; a controller `stands` on a Critical stands, and a controller `fix` goes to the fixer with its `fixInstruction`.
+3. Each entry's text goes to exactly one agent, the consumer for its stop point, never into the implementer's or the reviewer's prompt, so every earlier call replays from cache. Never answer by editing `questions` or `carries`: that re-runs the review or the implementation.
+4. Decisions from all entries become controller rulings (`source: "controller"`, ledgered as `Ruling (controller)`); a later entry wins for the same item. They are final for the run and never re-escalated; a controller `stands` on a Critical stands, and a controller `fix` goes to the fixer with its `fixInstruction`.
 5. After an implementer stop, the cached implementer replays and `implementer-continue` gets the brief, the report, the questions and the answers, and finishes on top of the existing commits.
-6. Answers accumulate. On a second stop, set `at` to the new stop point, append the new text to the earlier `answers.text`, and add new entries to `decisions`; never replace or drop earlier ones.
+6. Answers accumulate. On a second stop, keep every earlier entry exactly as it was and append a new entry for the new stop point. Never edit, replace or drop an earlier entry: its consumer's cache key depends on it, and the earlier stop's continue or retry agent then replays from cache. If the same stop point stops again, append another entry with the same `at`; its consumer re-runs with both.
 
 Resume after a pause, kill or script edit: the same call without new answers. Changing `roles` or any prompt input invalidates the cache from that call on.
 
 Before a `wave-review` run: every task of the wave is `complete`, the branch is committed and clean, the ledger is current, `head` is the sha to review. After it: see Return.
 
+## Fallbacks: a resumed run replays a null or failed agent
+
+Whether the Workflow runtime caches an agent that returned nothing is runtime behaviour this repo has not verified. If a resumed run (`resumeFromRunId`) replays the same null or failed agent and stops again at the same place, stop resuming and use the fallback below. A fresh run means the same args without `resumeFromRunId`, so every agent runs live.
+
+**sdd-task: a fresh run after the implementer committed fails the `base` precondition** (HEAD is no longer `base`), and stops with `stopped: "precondition"`. That stop is safe but a dead end. Two ways on:
+- **Review stages only (default).** Keep `base` (the commit before the task) and add `implemented: { head: "<git rev-parse HEAD>" }`. The implementer is skipped, and the run reviews `base..head`, rules, fixes and gates as usual. Carry any earlier answers except `implementer` and `precondition:implementer` entries (those throw with `implemented`). The implementer's report and TDD evidence stay in `reportPath` from the earlier run.
+- **Reset and redo.** `git reset --hard <base>` on the wave branch, then a fresh run. This discards the task's commits, so it needs the developer's OK first. Never reset silently.
+
+| `stopped` (sdd-task) | How to answer (resume) | If the resumed run replays a null or failed agent |
+|---|---|---|
+| `implementer` | append `{ at: "implementer", text }`; `implementer-continue` finishes the task | No commits since `base`: a fresh run. Commits since `base`: review stages only, or reset with the developer's OK. |
+| `precondition` (`precondition:implementer`) | fix the repo (branch, HEAD, the files named), append `{ at: stopPoint, text }`; `implementer-retry` runs | A fresh run (HEAD is still `base`, nothing was committed). |
+| `precondition` (`precondition:gate-...`) | fix the branch or HEAD, append `{ at: stopPoint, text }`; the gate re-runs as `gate-...-retry` | Review stages only with `implemented.head` set to the current HEAD. |
+| `ruler-concerns` | append `{ at: "ruler-concerns", text, decisions }` | Review stages only, with the decisions carried in `answers`. |
+| `fixer-pre` | append `{ at: "fixer-pre", text }` | Review stages only. |
+| `review` | append `{ at: "review", text }` (it reaches `ruler-review`) | Review stages only. |
+| `ruler-review` | append `{ at: "ruler-review", text, decisions }` | Review stages only, with the decisions carried in `answers`. |
+| `fixer-r<r>` | append `{ at: "fixer-r<r>", text }` | Review stages only; the fixes already committed are reviewed with the rest. |
+| `gate-0`, `gate-r<r>` | append `{ at: "gate-...", text }` (it reaches the next fixer round) | Review stages only; the gate runs again at the end. |
+
+| `stopped` (wave-review) | How to answer (resume) | If the resumed run replays a null or failed agent |
+|---|---|---|
+| `reviewer` | append `{ at: "reviewer", text }` (it reaches the ruler, else the fixer, else the re-reviewer) | A fresh run. Always safe: nothing changes before the fixer. |
+| `precondition` (`precondition:reviewer`) | fix the repo (delete a named stray artifact, commit or stash the named files), append `{ at: stopPoint, text }`; `reviewer-retry` runs | A fresh run. |
+| `precondition` (`precondition:fixer`) | fix the repo, append `{ at: stopPoint, text }`; `fixer-retry` runs | A fresh run with `head` set to the current HEAD. |
+| `ruler` | append `{ at: "ruler", text, decisions }` | A fresh run with the same `answers`: the decisions settle the escalated items again. |
+| `fixer` | append `{ at: "fixer", text }` | A fresh run with `head` set to the current HEAD (commit or discard the fixer's partial work with the developer's OK first). |
+| `re-review` | append `{ at: "re-review", text }` | A fresh run with `head` set to the fix head: the whole-branch review covers the fix. |
+
 ## Harness
 
-`node scripts/sdd/workflow-harness.mjs` (repo root, PowerShell or Git Bash). It imports each script from a data URL with the body wrapped in an async function, stubs `agent()` and `parallel()`, and asserts: every call has a model and an effort (none for Haiku); no prompt contains `undefined`; every schema has an object root with `required` inside `properties`; every mock return validates. A runaway-loop guard fails any scenario past 200 agent calls. Scenarios cover the happy path, the gate, worst-case counts, rulings routing and supersession, the sensitive ruler rule, answers re-runs and controller decisions in both scripts, stop-point consumers, precondition stops, arg validation, `maxRounds` coercion, and the `wave-review` guards. Run it after any change to a workflow; it exits 1 on a failure.
+`node scripts/sdd/workflow-harness.mjs` (repo root, PowerShell or Git Bash). It imports each script from a data URL with the body wrapped in an async function, stubs `agent()` and `parallel()`, and asserts: every call has a model and an effort (none for Haiku); no prompt contains `undefined`; every schema has an object root with `required` inside `properties`; every mock return validates. A runaway-loop guard fails any scenario past 200 agent calls. Scenarios cover two answered stops in a row for both scripts, the review-stages-only run, the happy path, the gate, worst-case counts, rulings routing and supersession, the sensitive ruler rule, answers re-runs and controller decisions in both scripts, stop-point consumers, precondition stops, arg validation, `maxRounds` coercion, and the `wave-review` guards. Run it after any change to a workflow; it exits 1 on a failure.
