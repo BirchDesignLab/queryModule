@@ -9,7 +9,7 @@ import {
   type ValidateContext,
   validateSiteConfig,
 } from "@querymodule/core/config";
-import { MockFileSchema } from "@querymodule/core/contracts";
+import { BOUNDED_ID_PATTERN, MockFileSchema } from "@querymodule/core/contracts";
 
 export interface ConfigIo {
   /** undefined when the file does not exist; throws on invalid JSON. */
@@ -61,6 +61,10 @@ export function checkConfigFile(
 
   let merged: unknown = migrated.config;
   const ext = migrated.config.extends;
+  // BR-001: mergeSiteOverlay drops `extends` before the strict parse, so check the id here,
+  // before it becomes a path. Never echo the value (spec 5.9).
+  if (ext !== undefined && (typeof ext !== "string" || !BOUNDED_ID_PATTERN.test(ext)))
+    return fail([err("/extends", "config.schema", { code: "invalid_format" })]);
   if (typeof ext === "string") {
     const baseRaw = read(io, resolve(dirname(file), "..", "sites", `${ext}.json`));
     if (!baseRaw.ok) return fail([err("/extends", "config.invalidJson", { extends: ext })]);

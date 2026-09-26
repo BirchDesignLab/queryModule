@@ -48,6 +48,22 @@ describe("config:validate failures carry JSON paths", () => {
     ]);
   });
 
+  it("extends outside the bounded id pattern is rejected before any read (BR-001)", () => {
+    const r = checkConfigFile(
+      broken,
+      layered({ [broken]: { schemaVersion: 1, extends: "../sites/default" } }),
+    );
+    expect(r.errors).toEqual([
+      {
+        level: "error",
+        path: "/extends",
+        key: "config.schema",
+        params: { code: "invalid_format" },
+      },
+    ]);
+    expect(r.resolved).toBeUndefined();
+  });
+
   it("schema error maps the zod path to a pointer", () => {
     const site = defaultSite();
     delete site.sources[0]?.kind;
