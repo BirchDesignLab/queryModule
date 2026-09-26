@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 14:07 |
+| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 17:09 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: W4 (#18 to #23) done in PR #38 (review approved, CI green); next #24 (Task 23, W5)
-- Branch / PR: feat/p0-wave-4 / #38
-- Last green: `pnpm verify` (449 tests), `pnpm audit --prod` 0; CI `ci` and `sensitive-review` green on #38
-- Next step: developer merges #38; then cut feat/p0-wave-5 (Tasks 23 to 25, then the phase Opus critic)
-- Blocked by: #38 merge; developer decision on unbounded audit and config message keys before the P0 freeze (ADR-0005)
+- Issue: W4 merged (#38); board, automation and tiered review (ADR-0007) merged (#76); #78 review-rule recalibration in progress; next #24 (Task 23, W5)
+- Branch / PR: chore/review-tiers / (#78 PR, opening)
+- Last green: CI `ci` and `sensitive-review` on #76 at ec0c1cd (audit, dependency review, actionlint, zizmor green)
+- Next step: merge the #78 PR; then W5 in a new session on the recalibrated sdd-task and wave-review (tier-aware roles)
+- Blocked by: decision #61 (bound message and label keys) before the P0 freeze
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: W5 carry: list `**/biome.json` and `.gitignore` in sensitive-paths (wave-review RR-M1). Track A carry: host email vs `AuditActorSchema.shape.email` at embedded login
+- Notes: W5 carries: #79 board tooling minors; SVG progress dashboard (README option B) and parent date roll-up in project-sync; W5 is gate tier (Task 23 touches scripts/ci)
 
 ### Track B
 

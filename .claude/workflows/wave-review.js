@@ -14,12 +14,15 @@
  *   specPath, requirementsDoc,                // optional; defaults below
  *   date: "09-27-26",                         // optional MM-DD-YY for the artifact body
  *   trailer: "Co-Authored-By: ...",           // fallback commit trailer for the fixer
- *   roles: { reviewer: { model: "opus", effort: "xhigh" }, ... },  // optional overrides
+ *   tier: "critical",                         // optional: "critical" (default) | "gate" (ADR-0007);
+ *                                             // "ordinary" throws (no wave-review needed)
+ *   roles: { reviewer: { model: "opus", effort: "xhigh" }, ... },  // optional overrides; win over tier
  *   answers: [{ at, text?, decisions? }]      // only on a re-run after a stop (below)
  * } })
  * Required: pr, base, head, repoDir, planPath, workDir, scratchRoot, runLabel, trailer.
  * Roles and defaults: reviewer opus/xhigh, ruler opus/high, fixer opus/medium,
- * progressChecker sonnet/low, reReviewer opus/xhigh.
+ * progressChecker sonnet/low, reReviewer opus/xhigh. tier "gate": reviewer and reReviewer opus/high
+ * (the artifact front matter then reads effort "high", which the check accepts for gate paths only).
  *
  * Returns { verdict: "approve" | "fixes", reviewedSha, artifactWritten, findings, residual,
  * answers, declined, rulings, supersededRulings, fixCommits?, strayArtifact?, answersUnconsumed?,
@@ -87,6 +90,11 @@ const ARTIFACT = A.artifactPath || `docs/reviews/pr-${A.pr}.md`
 if (String(ARTIFACT).replace(/\\/g, '/') !== `docs/reviews/pr-${A.pr}.md`) {
   throw new Error(`wave-review: artifactPath "${ARTIFACT}" must be docs/reviews/pr-${A.pr}.md (the sensitive-review check reads that path)`)
 }
+// Review tier (ADR-0007): the PR's highest tier in .github/sensitive-paths.
+const TIERS = ['critical', 'gate']
+const TIER = A.tier === undefined || A.tier === null ? 'critical' : A.tier
+if (TIER === 'ordinary') throw new Error('wave-review: tier "ordinary": no wave-review needed (a PR with only [deps] or [exempt] changes, or no sensitive path, needs no artifact)')
+if (!TIERS.includes(TIER)) throw new Error(`wave-review: tier must be "critical" or "gate", got ${JSON.stringify(A.tier)}`)
 const SPEC = A.specPath || 'docs/superpowers/specs/2026-09-25-query-module-2-design-v2.md'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 const MAX_LISTED_FILES = 200
@@ -158,6 +166,10 @@ const DEFAULTS = {
   fixer: { model: 'opus', effort: 'medium' },
   progressChecker: { model: 'sonnet', effort: 'low' },
   reReviewer: { model: 'opus', effort: 'xhigh' },
+}
+if (TIER === 'gate') {
+  DEFAULTS.reviewer = { model: 'opus', effort: 'high' }
+  DEFAULTS.reReviewer = { model: 'opus', effort: 'high' }
 }
 const OVR = A.roles || {}
 
@@ -347,7 +359,7 @@ function done(extra) {
 
 // ================= 1. Whole-branch review =================
 phase('Review')
-log(`wave-review PR #${A.pr} ${String(A.base).slice(0, 7)}..${String(A.head).slice(0, 7)}; roles: reviewer ${tier('reviewer')}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}`)
+log(`wave-review PR #${A.pr} ${String(A.base).slice(0, 7)}..${String(A.head).slice(0, 7)}; tier ${TIER}; roles: reviewer ${tier('reviewer')}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}`)
 // The reviewer prompt never carries answers, so a re-run with answers replays it from cache.
 const reviewPrompt = [
   `You are the whole-branch reviewer for wave PR #${A.pr}: every commit in ${A.base}..${A.head}. Review completed work against its plan and requirements and find issues before they merge.`,
@@ -359,6 +371,7 @@ const reviewPrompt = [
   '',
   `Precondition, checked first: git rev-parse ${A.head} resolves, ${A.base} is its ancestor (git merge-base --is-ancestor ${A.base} ${A.head}), and git status --porcelain prints nothing. If any fails, set preconditionFailed to what you found, write nothing, report no findings, and stop. It is never a finding. For a dirty tree, name each untracked or modified file from git status --porcelain; an untracked ${ARTIFACT} is a stray artifact from an earlier run, so say "stray artifact ${ARTIFACT}: delete it before re-running".`,
   `Build your view first: mkdir -p "${scratch('reviewer')}" && cd "${REPO}" && { git log --oneline ${A.base}..${A.head}; echo; git diff --stat ${A.base}..${A.head}; echo; git diff -U10 ${A.base}..${A.head}; } > "${scratch('reviewer')}/branch.diff"; then read it. Resolve reviewedSha with git rev-parse ${A.head}.`,
+  'Diff scope: after the diff, read the sensitive files listed above; read outside the diff only files that call or are called by the changed code, and only for a concrete risk you can name, one focused check per risk; the plan, spec and requirement lines the changed tasks cite and the ledger Rulings still apply; do not read unrelated files. The controller questions and the sensitive-file list steer where you look first. Name each file you read outside the diff and the risk that sent you there.',
   READONLY,
   'Tests: each task already ran its suite and an independent gate. Run pnpm lint, pnpm typecheck or pnpm test at the head only for a named doubt; record the result.',
   '',

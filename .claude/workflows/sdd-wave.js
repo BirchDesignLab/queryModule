@@ -12,10 +12,12 @@ export const meta = {
  * Invoke: Workflow({ scriptPath: ".claude/workflows/sdd-wave.js", args: {
  *   wave: "w4", repoDir, branch: "feat/p0-wave-4", base: "<full sha, HEAD before the first task>",
  *   workDir, scratchRoot, ledgerPath?, globalConstraints, trailer, requirementsDoc?, maxRounds?,
+ *   tier?: "ordinary" | "gate" | "critical", // wave default; a task that sets tier or sensitive wins
+ *   maxAgents?: 16,                          // wave default agent budget per task; a task's maxAgents wins
  *   roles?: { ... },                         // wave defaults; a task's roles override per role
  *   sddTaskPath?: ".claude/workflows/sdd-task.js",
  *   tasks: [{ task: 17, title, issue?, ids?, specRefs, briefPath, carries?, reportPath?, runLabel?,
- *             sensitive?, ui?, critic?, criticFocus?, roles?, implemented? }, ...],
+ *             tier?, sensitive?, ui?, critic?, criticFocus?, maxAgents?, roles?, implemented? }, ...],
  *   answers?: { "18": [{ at, text?, decisions? }] },  // per task, only on a re-run after a stop
  *   carried?: ["- Task 17 carry forward: ..."]         // a follow-on run: the carried of the run before
  * } })
@@ -27,7 +29,8 @@ export const meta = {
  * whose status is not "complete".
  *
  * Returns { wave, status: "complete" | "stopped" | "parked", stoppedTask?, stop?, base, head, tasks:
- * [sdd-task result without ledgerLines], totals, carried, ledgerLines } where ledgerLines is every
+ * [sdd-task result without ledgerLines], totals (with agents: the sum of the tasks' agent calls), carried,
+ * ledgerLines } where ledgerLines is every
  * task's lines in order plus one "- Wave <w>: ..." line (append with scripts/sdd/append-ledger.mjs).
  * carried is the flow so far: after a parked task or a thrown child, adjudicate, then run the
  * remaining tasks as a new sdd-wave with base: head and carried: the returned carried.
@@ -84,7 +87,12 @@ function childArgs(t, base, flow) {
   const out = {}
   const put = (k, v) => { if (v !== undefined && v !== null) out[k] = v }
   for (const k of ['repoDir', 'branch', 'workDir', 'scratchRoot', 'ledgerPath', 'globalConstraints', 'trailer', 'requirementsDoc', 'maxRounds']) put(k, A[k])
-  for (const k of ['task', 'title', 'issue', 'ids', 'specRefs', 'briefPath', 'sensitive', 'ui', 'critic', 'criticFocus', 'implemented']) put(k, t[k])
+  for (const k of ['task', 'title', 'issue', 'ids', 'specRefs', 'briefPath', 'tier', 'sensitive', 'ui', 'critic', 'criticFocus', 'maxAgents', 'implemented']) put(k, t[k])
+  // Wave defaults: the task's own value wins. A task that sets sensitive (true or false) gets no
+  // wave tier: sensitive: true is critical, sensitive: false is ordinary, and a wave tier could
+  // conflict with either in sdd-task.
+  if (!('tier' in out) && !('sensitive' in out)) put('tier', A.tier)
+  if (!('maxAgents' in out)) put('maxAgents', A.maxAgents)
   put('reportPath', t.reportPath || `${A.workDir}/task-${t.task}-report.md`)
   put('runLabel', t.runLabel || `${W}-t${t.task}`)
   put('base', base)
@@ -159,6 +167,7 @@ const totals = {
   escalations: results.reduce((s, r) => s + ((r.escalated || []).length), 0),
   parked: results.reduce((s, r) => s + ((r.parked || []).length), 0),
   deferredMinors: results.reduce((s, r) => s + ((r.deferredMinors || []).length), 0),
+  agents: results.reduce((s, r) => s + (r.agents || 0), 0),
 }
 const head = results.length ? results[results.length - 1].head || base : base
 if (stop) {
@@ -166,6 +175,6 @@ if (stop) {
   ledger.push(`- Wave ${W}: stopped at Task ${stop.task} (${stop.status}${stop.stopped ? `: ${stop.stopped}` : ''}; ${done.length} of ${A.tasks.length} task(s) complete, head ${h7(head)}); controller action needed`)
   return { wave: W, status: stop.status === 'parked' ? 'parked' : 'stopped', stoppedTask: stop.task, stop, base: A.base, head, tasks: results, totals, carried: flow, ledgerLines: ledger }
 }
-log(`wave ${W}: complete, ${done.length} task(s), ${totals.rounds} fix round(s), ${totals.deferredMinors} deferred minor(s)`)
+log(`wave ${W}: complete, ${done.length} task(s), ${totals.rounds} fix round(s), ${totals.deferredMinors} deferred minor(s), ${totals.agents} agent(s)`)
 ledger.push(`- Wave ${W}: complete (Tasks ${A.tasks.map((t) => t.task).join(', ')}; commits ${h7(A.base)}..${h7(head)}; ${totals.rounds} fix round(s))`)
 return { wave: W, status: 'complete', base: A.base, head, tasks: results, totals, carried: flow, ledgerLines: ledger }

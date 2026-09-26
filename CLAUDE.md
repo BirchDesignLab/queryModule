@@ -97,12 +97,12 @@ credential handling or audit logging is a compliance failure, not a bug.
 | Opus 5.5 | `max` | Only when the developer asks, or `xhigh` fell short on a correctness-critical question. One agent, never a fleet. |
 | Opus 5.5 | `xhigh` | Whole-branch review of a PR that touches a critical-tier path (ADR-0007). Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. |
 | Opus 5.5 | `high` | Hard finders, design and judge panels, whole-branch review of an ordinary PR or of a gate-tier PR (ADR-0007: CI, scripts, workflows, config; no critical path). Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
-| Opus 5.5 | `medium` | Implementing a sensitive-code task from a plan. Synthesizing several agents' reports into one answer. The critic role on a UI-building workflow. |
+| Opus 5.5 | `medium` | Implementing a critical-tier task from a plan (ruler and re-reviewer on it too). The critic role on a gate-tier or critical-tier task and on a UI-building workflow. Synthesizing several agents' reports into one answer. |
 | Opus 5.5 | `low` | A narrow judgment call that needs Opus-grade reasoning but no exploration ("is this credential-storage change CJIS-safe, given these three lines"). |
 | Sonnet 5 | `max` | Not used. Work that hard goes to Opus. |
 | Sonnet 5 | `xhigh` | Rarely. A long unsupervised implementation that touches no sensitive code. If it is hard, use Opus instead. |
-| Sonnet 5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task. |
-| Sonnet 5 | `medium` | Implementing one plan task with its tests (TDD) in one to three files; routine finders over a bounded area; spec-compliance review of one task against its FR/UX/SEC IDs. |
+| Sonnet 5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task; the combined spec and quality reviewer on an ordinary or gate-tier task (and the re-reviewer on a gate-tier task). |
+| Sonnet 5 | `medium` | Implementing one ordinary or gate-tier plan task with its tests (TDD) in one to three files; routine finders over a bounded area; spec-compliance review of one critical-tier task against its FR/UX/SEC IDs. |
 | Sonnet 5 | `low` | Verify or refute one claim against named files; a fully specified mechanical edit (a rename, one function to a given spec); run the suite and report. |
 | Haiku 4.5 | n/a | Enumeration and extraction: list, grep, pull fields, summarize one file, pull requirement IDs out of the spec. |
 
@@ -130,6 +130,19 @@ credential handling or audit logging is a compliance failure, not a bug.
 ## Execution: workflows first, skills recommended
 
 Plans run task by task through the saved workflow `.claude/workflows/sdd-task.js`, or a whole wave at once through `.claude/workflows/sdd-wave.js` (it nests `sdd-task` per task, carries flow forward, and it stops at the first task that does not complete), and each wave PR that touches sensitive paths through `.claude/workflows/wave-review.js` (ADR-0006). One PR per wave; the developer approves pushes and merges. Workflow `agent()` calls take `model` and `effort` directly, so every call sets both (Haiku: model only). The `.claude/agents/<model>-<effort>.md` definitions stay available through `agentType` and for the Agent tool.
+
+Each task runs at the review tier of the highest `.github/sensitive-paths` tier it touches (`sdd-task` `tier`; README "Review tiers"):
+
+| Task tier | Implementer | Review | Critic | Ruler |
+|---|---|---|---|---|
+| Ordinary (no sensitive path) | Sonnet `medium` | one combined spec and quality reviewer, Sonnet `high` | only for UI or `critic: true` | Opus `low` |
+| Gate | Sonnet `medium` | one combined spec and quality reviewer, Sonnet `high` | Opus `medium` | Opus `low`, sensitive ruler rule |
+| Critical | Opus `medium` | spec reviewer Sonnet `medium` and quality reviewer Sonnet `high` | Opus `medium` | Opus `medium`, sensitive ruler rule |
+
+Controller rules for every workflow run:
+
+- Freeze a PR's scope before its review starts. Nothing joins the PR after its review begins; later work goes in the next PR (PR #76 paid one more xhigh review for scope that grew mid-review).
+- Never write to the repository tree while a workflow run is active: no edits, commits, checkouts or stashes until it returns (a mid-run edit on PR #76 cost one extra xhigh reviewer).
 
 The superpowers skills (brainstorming, writing specs and plans, subagent-driven development, executing plans) are recommended, not required. The plugin's rule that a skill must be invoked before any response does not apply in this repo. TDD is required for every task with behaviour, whichever way the task runs.
 

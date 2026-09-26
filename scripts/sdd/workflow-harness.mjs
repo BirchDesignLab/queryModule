@@ -194,8 +194,30 @@ function sddResponder(over = {}) {
   const base = sddBase(over);
   return (label, prompt, calls) => postFill(label, prompt, base(label, prompt, calls));
 }
+// Ordinary and gate tasks run one combined reviewer ("combined-review") in place of the spec and
+// quality reviewers. Unless a test overrides "combined-review" itself, the fixture answers it by
+// merging the "spec-review" and "quality-review" answers (PASS when not overridden), each finding
+// and cannot-verify item tagged with its kind, so a scenario reads the same on every tier.
+function combineReviews(get) {
+  const s = get("spec-review");
+  const q = get("quality-review");
+  if (!s || !q) return null;
+  const tag = (r, kind) => ({
+    findings: r.findings.map((f) => ({ ...f, kind })),
+    cannotVerify: r.cannotVerify.map((c) => ({ ...c, kind })),
+  });
+  const a = tag(s, "spec");
+  const b = tag(q, "quality");
+  return {
+    verdict: s.verdict === "fail" || q.verdict === "fail" ? "fail" : "pass",
+    findings: [...a.findings, ...b.findings],
+    cannotVerify: [...a.cannotVerify, ...b.cannotVerify],
+  };
+}
 function sddBase(over) {
-  return (label, prompt, calls) => {
+  const self = (label, prompt, calls) => {
+    if (label === "combined-review" && !("combined-review" in over))
+      return combineReviews((l) => self(l, prompt, calls));
     for (const [k, v] of Object.entries(over)) {
       if (label === k || (k.endsWith("*") && label.startsWith(k.slice(0, -1)))) {
         return typeof v === "function" ? v(prompt, calls, label) : v;
@@ -222,6 +244,7 @@ function sddBase(over) {
     if (label.startsWith("gate")) return GATE_OK(`h-${label}`);
     return null;
   };
+  return self;
 }
 
 // ---------- runner ----------
@@ -240,9 +263,9 @@ const wr = await load("wave-review.js");
 const wave = await load("sdd-wave.js");
 
 // ================= sdd-task =================
-await test("sdd: happy path runs implementer, spec, quality and gate-0, and completes", async () => {
+await test("sdd: happy path runs implementer, the combined reviewer and gate-0, and completes", async () => {
   const r = await run(sdd, BASE, sddResponder());
-  assert.deepEqual(r.labels, ["implementer", "spec-review", "quality-review", "gate-0"]);
+  assert.deepEqual(r.labels, ["implementer", "combined-review", "gate-0"]);
   assert.equal(r.res.status, "complete");
   assert.equal(r.find("gate-0").model, "sonnet");
   assert.equal(r.find("gate-0").effort, "low");
@@ -266,8 +289,7 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
   );
   assert.deepEqual(r.labels, [
     "implementer",
-    "spec-review",
-    "quality-review",
+    "combined-review",
     "gate-0",
     "fixer-r1",
     "progress-r1",
@@ -284,7 +306,7 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
 await test("sdd: gate failing every round parks at the cap (worst case 26 agents at maxRounds 5)", async () => {
   const r = await run(
     sdd,
-    { ...BASE, sensitive: true, ui: true },
+    { ...BASE, sensitive: true, ui: true, maxAgents: 40 },
     sddResponder({
       implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
       "spec-review": { verdict: "pass", findings: [], cannotVerify: [{ item: "i", check: "c" }] },
@@ -314,7 +336,7 @@ await test("sdd: gate failing every round parks at the cap (worst case 26 agents
 await test("sdd: worst case with every finding NOT ADDRESSED is 24 agents; escalated fixer after a repeat", async () => {
   const r = await run(
     sdd,
-    { ...BASE, sensitive: true, ui: true },
+    { ...BASE, sensitive: true, ui: true, maxAgents: 40 },
     sddResponder({
       implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
       "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
@@ -370,7 +392,7 @@ await test("sdd: rulings reach reviewers, fixers and re-reviewers; fixers are to
       "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
     }),
   );
-  for (const l of ["spec-review", "quality-review", "fixer-r1", "re-review-r1"]) {
+  for (const l of ["combined-review", "fixer-r1", "re-review-r1"]) {
     assert.ok(r.find(l).prompt.includes("[IC1] stands"), `${l} lacks the IC1 ruling`);
   }
   assert.ok(/never reverse a ruling/i.test(r.find("fixer-r1").prompt));
@@ -496,7 +518,7 @@ await test("sdd: answers at a later stop leave earlier prompts unchanged and rea
     { ...BASE, answers: { at: "ruler-review", text: "Spec wins." } },
     resp,
   );
-  for (const l of ["implementer", "spec-review", "quality-review"]) {
+  for (const l of ["implementer", "combined-review"]) {
     assert.equal(second.find(l).prompt, first.find(l).prompt, `${l} prompt changed`);
   }
   assert.ok(second.find("ruler-review").prompt.includes("Spec wins."));
@@ -561,10 +583,10 @@ await test("sdd: carryForward from rulings is returned", async () => {
 await test("sdd: role overrides (Haiku drops effort; Fable throws)", async () => {
   const r = await run(
     sdd,
-    { ...BASE, roles: { specReviewer: { model: "haiku", effort: "low" } } },
+    { ...BASE, roles: { reviewer: { model: "haiku", effort: "low" } } },
     sddResponder(),
   );
-  assert.equal(r.find("spec-review").effort, undefined);
+  assert.equal(r.find("combined-review").effort, undefined);
   await assert.rejects(
     run(
       sdd,
@@ -661,7 +683,7 @@ await test("sdd N3: every stop point names its consumer; an unknown at throws li
     }),
   );
   assert.ok(review.find("ruler-review").prompt.includes("ANS-REVIEW"));
-  assert.ok(!review.find("spec-review").prompt.includes("ANS-REVIEW"));
+  assert.ok(!review.find("combined-review").prompt.includes("ANS-REVIEW"));
   let gates = 0;
   const gate = await run(
     sdd,
@@ -1122,7 +1144,7 @@ await test("sdd R1: two stops (implementer NEEDS_CONTEXT, then a ruler escalatio
     { ...BASE, answers: [e1, { at: "ruler-review", text: "ANS-2" }] },
     resp,
   );
-  for (const l of ["implementer", "implementer-continue", "spec-review", "quality-review"]) {
+  for (const l of ["implementer", "implementer-continue", "combined-review"]) {
     assert.equal(
       run3.find(l).prompt,
       run2.find(l).prompt,
@@ -1232,8 +1254,8 @@ await test("wr R3: the reviewer precondition names files and calls out a stray a
 await test("sdd R2: implemented { head } skips the implementer and reviews base..head (review stages only)", async () => {
   const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
   assert.ok(!r.labels.includes("implementer"), r.labels.join(","));
-  assert.deepEqual(r.labels, ["spec-review", "quality-review", "gate-0"]);
-  assert.ok(r.find("spec-review").prompt.includes("aaaaaaa1111..cafe1234cafe1234"));
+  assert.deepEqual(r.labels, ["combined-review", "gate-0"]);
+  assert.ok(r.find("combined-review").prompt.includes("aaaaaaa1111..cafe1234cafe1234"));
   assert.equal(r.res.status, "complete");
   await assert.rejects(run(sdd, { ...BASE, implemented: {} }, sddResponder()), /implemented\.head/);
   await assert.rejects(
@@ -1258,7 +1280,7 @@ const neverAddressed = (p) => ({
 async function shellRuns() {
   const loop = await run(
     sdd,
-    BASE,
+    { ...BASE, maxAgents: 40 },
     sddResponder({
       implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
       "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
@@ -1431,14 +1453,14 @@ await test("sdd P7: gate-0 runs in parallel with the reviewers on the review hea
   );
   const at = (l) => r.labels.indexOf(l);
   assert.ok(
-    at("gate-0") > at("quality-review") && at("gate-0") < at("ruler-review"),
+    at("gate-0") > at("combined-review") && at("gate-0") < at("ruler-review"),
     r.labels.join(","),
   );
   assert.ok(
     r.find("gate-0").prompt.includes("equals h-progress-pre"),
     "gate-0 not on the review head",
   );
-  assert.ok(r.find("spec-review").prompt.includes("head h-progress-pre"));
+  assert.ok(r.find("combined-review").prompt.includes("head h-progress-pre"));
   assert.equal(r.labels.filter((l) => l.startsWith("gate")).join(","), "gate-0,gate-r1");
   assert.equal(r.res.status, "complete");
 });
@@ -1487,7 +1509,7 @@ await test("sdd P7: a gate-0 precondition failure stops after the parallel revie
   const r = await run(sdd, BASE, resp);
   assert.equal(r.res.stopped, "precondition");
   assert.equal(r.res.stopPoint, "precondition:gate-0");
-  assert.ok(r.labels.includes("spec-review") && r.labels.includes("quality-review"));
+  assert.ok(r.labels.includes("combined-review"));
   assert.ok(!r.labels.includes("ruler-review") && !r.labels.some((l) => l.startsWith("fixer")));
   const again = await run(
     sdd,
@@ -1495,7 +1517,7 @@ await test("sdd P7: a gate-0 precondition failure stops after the parallel revie
     resp,
   );
   assert.ok(again.find("gate-0-retry").prompt.includes("HEAD reset"));
-  assert.equal(again.find("spec-review").prompt, r.find("spec-review").prompt);
+  assert.equal(again.find("combined-review").prompt, r.find("combined-review").prompt);
   assert.equal(again.res.status, "complete");
 });
 
@@ -1505,7 +1527,7 @@ await test("sdd P7: review stages only (implemented) runs gate-0 in parallel on 
     { ...BASE, implemented: { head: "cafe1234cafe1234" } },
     sddResponder({ "spec-review": specS1Mandated }),
   );
-  assert.equal(r.labels.slice(0, 3).join(","), "spec-review,quality-review,gate-0");
+  assert.equal(r.labels.slice(0, 2).join(","), "combined-review,gate-0");
   assert.ok(r.find("gate-0").prompt.includes("equals cafe1234cafe1234"));
 });
 
@@ -2160,9 +2182,11 @@ const WAVE = {
 // in the prompt.
 function waveResponder(over = {}) {
   const base = sddResponder();
-  return (label, prompt, calls) => {
+  const self = (label, prompt, calls) => {
     const n = (/task-(\d+)-(?:brief|report|review)/.exec(prompt) || [])[1];
     const k = `${label}@${n}`;
+    if (label === "combined-review" && !(k in over))
+      return combineReviews((l) => self(l, prompt, calls));
     if (k in over) {
       const v = over[k];
       return postFill(label, prompt, typeof v === "function" ? v(prompt, calls, label) : v);
@@ -2170,6 +2194,7 @@ function waveResponder(over = {}) {
     if (label === "implementer") return work(`h-impl-${n}`);
     return base(label, prompt, calls);
   };
+  return self;
 }
 const planMandated = {
   verdict: "fail",
@@ -2417,6 +2442,389 @@ await test("sdd-wave: argument validation", async () => {
     /answers for task 99/,
   );
   await bad({ ...WAVE, tasks: [{ ...WAVE.tasks[0], base: "x" }] }, /base/);
+});
+
+// ---------- review tiers (issue #78, ADR-0007, P0 review-roles retro) ----------
+const tierOf = (c) => (c.effort ? `${c.model}/${c.effort}` : c.model);
+const DIFF_SCOPE = "read outside the diff only files that call or are called by the changed code";
+const COST_LIMIT = "only for a concrete risk you can name, one focused check per risk";
+const specQ = (extra = {}) => ({
+  "spec-review": { verdict: "fail", findings: [F("S1", "important", extra)], cannotVerify: [] },
+});
+// Round 1 and 2 NOT ADDRESSED, so round 3 runs the escalated fixer (a repeat).
+const twiceNotAddressed = () => {
+  let n = 0;
+  return (p) => (++n <= 2 ? neverAddressed(p) : addressAll(p));
+};
+
+await test("tiers: ordinary defaults, one combined reviewer, no critic", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, maxAgents: 40 },
+    sddResponder({ ...specQ(), "re-review*": twiceNotAddressed() }),
+  );
+  assert.ok(!r.labels.includes("spec-review") && !r.labels.includes("quality-review"));
+  assert.ok(!r.labels.includes("critic-review"), r.labels.join(","));
+  assert.equal(r.labels.slice(0, 3).join(","), "implementer,combined-review,gate-0");
+  const want = {
+    implementer: "sonnet/medium",
+    "combined-review": "sonnet/high",
+    "gate-0": "sonnet/low",
+    "fixer-r1": "sonnet/medium",
+    "progress-r1": "sonnet/low",
+    "re-review-r1": "sonnet/medium",
+    "fixer-r3": "sonnet/high",
+    "gate-r3": "sonnet/low",
+  };
+  for (const [l, t] of Object.entries(want)) assert.equal(tierOf(r.find(l)), t, l);
+  assert.equal(r.res.status, "complete", r.logs.join(" | "));
+  const pm = await run(sdd, BASE, sddResponder(specQ({ planMandated: true })));
+  assert.equal(tierOf(pm.find("ruler-review")), "opus/low");
+  assert.ok(!pm.find("ruler-review").prompt.includes(SENSITIVE_RULE));
+  const crit = await run(sdd, { ...BASE, critic: true }, sddResponder());
+  assert.equal(tierOf(crit.find("critic-review")), "opus/medium");
+});
+
+await test("tiers: gate defaults (combined reviewer, Opus medium critic, sensitive ruler rule)", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, tier: "gate", maxAgents: 40 },
+    sddResponder({ ...specQ(), "re-review*": twiceNotAddressed() }),
+  );
+  assert.equal(
+    r.labels.slice(0, 4).join(","),
+    "implementer,combined-review,critic-review,gate-0",
+    r.labels.join(","),
+  );
+  const want = {
+    implementer: "sonnet/medium",
+    "combined-review": "sonnet/high",
+    "critic-review": "opus/medium",
+    "fixer-r1": "sonnet/medium",
+    "re-review-r1": "sonnet/high",
+    "fixer-r3": "opus/medium",
+    "gate-0": "sonnet/low",
+    "progress-r1": "sonnet/low",
+  };
+  for (const [l, t] of Object.entries(want)) assert.equal(tierOf(r.find(l)), t, l);
+  assert.ok(r.find("critic-review").prompt.includes("gate-tier risk"), "gate critic focus");
+  const pm = await run(
+    sdd,
+    { ...BASE, tier: "gate" },
+    sddResponder({
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "critical", { planMandated: true })],
+        cannotVerify: [],
+      },
+      "ruler-review": {
+        rulings: [{ item: "spec:S1", decision: "stands", reason: "plan", costIfWrong: "c" }],
+      },
+    }),
+  );
+  assert.equal(tierOf(pm.find("ruler-review")), "opus/low");
+  assert.ok(pm.find("ruler-review").prompt.includes(SENSITIVE_RULE));
+  assert.equal(pm.res.stopped, "ruler-review", "a critical ruled stands escalates on gate");
+  assert.equal(pm.res.escalated[0].item, "spec:S1");
+});
+
+await test("tiers: critical keeps today's sensitive roles and the split reviewers", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, tier: "critical", maxAgents: 40 },
+    sddResponder({ ...specQ({ planMandated: true }), "re-review*": twiceNotAddressed() }),
+  );
+  assert.ok(!r.labels.includes("combined-review"), r.labels.join(","));
+  const want = {
+    implementer: "opus/medium",
+    "spec-review": "sonnet/medium",
+    "quality-review": "sonnet/high",
+    "critic-review": "opus/medium",
+    "ruler-review": "opus/medium",
+    "fixer-r1": "opus/medium",
+    "re-review-r1": "opus/medium",
+    "fixer-r3": "opus/high",
+    "gate-0": "sonnet/low",
+  };
+  for (const [l, t] of Object.entries(want)) assert.equal(tierOf(r.find(l)), t, l);
+  assert.ok(r.find("ruler-review").prompt.includes(SENSITIVE_RULE));
+  assert.ok(r.find("critic-review").prompt.includes("sensitive-code risk"));
+  const ov = await run(
+    sdd,
+    { ...BASE, tier: "gate", roles: { reviewer: { model: "opus", effort: "low" } } },
+    sddResponder(),
+  );
+  assert.equal(tierOf(ov.find("combined-review")), "opus/low", "a roles override still wins");
+});
+
+await test("tiers: the combined reviewer does spec and quality, writes task-<n>-review.md, keeps kinds", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "combined-review": {
+        verdict: "fail",
+        findings: [
+          F("S1", "important", { kind: "spec", planMandated: true }),
+          F("Q1", "important", { kind: "quality" }),
+          F("M1", "minor", { kind: "quality" }),
+        ],
+        cannotVerify: [{ item: "i", check: "c", kind: "spec" }],
+      },
+    }),
+  );
+  const p = r.find("combined-review").prompt;
+  assert.ok(p.includes("C:/w/task-7-review.md"), "review file");
+  assert.ok(!/task-7-review-(spec|quality)\.md/.test(p), "no split review files");
+  assert.ok(/cite each ID verbatim/.test(p), "requirement IDs verbatim");
+  assert.ok(p.includes("BR-001") && /FR-, UX-, SEC-, BR-, NFR-/.test(p), "ID families");
+  assert.ok(/fixture policy/.test(p) && /RED evidence/.test(p), "fixtures and RED evidence");
+  assert.ok(/separation of concerns/.test(p), "quality review");
+  assert.ok(/kind: spec/.test(p) && /kind: quality/.test(p), "finding kinds");
+  assert.ok(ids(r.find("ruler-review").prompt).includes("spec:S1"));
+  assert.ok(r.find("fixer-r1").prompt.includes("[quality:Q1]"));
+  assert.ok(r.res.deferredMinors.some((m) => m.startsWith("quality:M1")));
+  assert.ok(r.labels.includes("checker") && ids(r.find("checker").prompt).includes("spec:CV1"));
+});
+
+await test("tiers: sensitive is an alias for critical (logged); a conflict or an unknown tier throws", async () => {
+  const s = await run(sdd, { ...BASE, sensitive: true }, sddResponder());
+  assert.ok(
+    s.logs.some((l) => /sensitive: true is an alias for tier "critical"/.test(l)),
+    s.logs.join(" | "),
+  );
+  assert.ok(s.labels.includes("spec-review") && s.labels.includes("critic-review"));
+  const both = await run(sdd, { ...BASE, sensitive: true, tier: "critical" }, sddResponder());
+  assert.equal(both.res.status, "complete");
+  await assert.rejects(
+    run(sdd, { ...BASE, sensitive: true, tier: "gate" }, sddResponder()),
+    /sensitive.*tier/,
+  );
+  await assert.rejects(
+    run(sdd, { ...BASE, sensitive: false, tier: "critical" }, sddResponder()),
+    /sensitive.*tier/,
+  );
+  await assert.rejects(run(sdd, { ...BASE, tier: "high" }, sddResponder()), /tier/);
+  const o = await run(sdd, BASE, sddResponder());
+  assert.ok(
+    o.logs.some((l) => /tier ordinary/.test(l)),
+    o.logs.join(" | "),
+  );
+});
+
+await test("tiers: reviewer, critic and re-reviewer prompts are diff-scoped", async () => {
+  const g = await run(sdd, { ...BASE, tier: "gate" }, sddResponder(specQ()));
+  const c = await run(sdd, { ...BASE, tier: "critical" }, sddResponder(specQ()));
+  const calls = [...g.calls, ...c.calls].filter((x) =>
+    /^(combined|spec|quality|critic)-review$|^re-review-r/.test(x.label),
+  );
+  const seen = new Set(calls.map((x) => x.label));
+  for (const l of [
+    "combined-review",
+    "spec-review",
+    "quality-review",
+    "critic-review",
+    "re-review-r1",
+  ])
+    assert.ok(seen.has(l), `no ${l} call`);
+  for (const x of calls) {
+    const rr = x.label.startsWith("re-review");
+    if (rr) {
+      assert.ok(x.prompt.includes("Re-review scope: the fix diff"), `${x.label} lacks its scope`);
+      assert.ok(!x.prompt.includes(DIFF_SCOPE), `${x.label} carries the reviewer scope`);
+      assert.ok(!/nothing else/.test(x.prompt), `${x.label} still says nothing else`);
+    } else assert.ok(x.prompt.includes(DIFF_SCOPE), `${x.label} is not diff-scoped`);
+    assert.ok(x.prompt.includes(COST_LIMIT), `${x.label} lacks the cost limit`);
+    assert.ok(x.prompt.includes("do not read unrelated files"), `${x.label} lacks the limit`);
+    assert.ok(x.prompt.includes("spec 4.1"), `${x.label} lacks the specRefs lines`);
+  }
+});
+
+await test("fix pass C1: ruler and fixer prompts point at a review-file pattern that matches every tier", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "important", { planMandated: true }), F("S2", "important")],
+        cannotVerify: [],
+      },
+    }),
+  );
+  for (const l of ["ruler-review", "fixer-r1"]) {
+    const globs = [...r.find(l).prompt.matchAll(/task-7-review[^\s,)]*\.md/g)].map((m) => m[0]);
+    assert.ok(globs.length, `${l} names no review file pattern`);
+    const escapedGlob = globs[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*");
+    const re = new RegExp(`^${escapedGlob}$`);
+    for (const f of ["task-7-review.md", "task-7-review-spec.md", "task-7-review-critic.md"])
+      assert.ok(re.test(f), `${l} pattern ${globs[0]} misses ${f}`);
+  }
+});
+
+await test("tiers: the agent budget stops the run at the next call past maxAgents", async () => {
+  const resp = sddResponder({ ...specQ(), "re-review*": twiceNotAddressed() });
+  const r = await run(sdd, { ...BASE, maxAgents: 6 }, resp);
+  assert.equal(r.calls.length, 6, r.labels.join(","));
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stopped, "budget");
+  assert.equal(r.res.stopPoint, "budget");
+  assert.ok(
+    /7/.test(r.res.problem) && /6/.test(r.res.problem) && /fixer-r2/.test(r.res.problem),
+    r.res.problem,
+  );
+  assert.equal(r.res.agents, 6);
+  assert.ok(
+    r.res.parked.some((f) => f.id === "spec:S1"),
+    "open findings return as parked at a budget stop",
+  );
+  assert.ok(r.res.ledgerLines.at(-1).includes("stopped at budget"), r.res.ledgerLines.at(-1));
+  // parallel reviewers are reserved up front: a cap of 2 stops before the review block
+  const p = await run(sdd, { ...BASE, maxAgents: 2 }, sddResponder());
+  assert.deepEqual(p.labels, ["implementer"]);
+  assert.equal(p.res.stopped, "budget");
+  assert.ok(/combined-review/.test(p.res.problem), p.res.problem);
+});
+
+await test("tiers: a budget answer raises the cap by the default once and replays from cache", async () => {
+  const resp = () => sddResponder({ ...specQ(), "re-review*": twiceNotAddressed() });
+  const r = await run(sdd, { ...BASE, maxAgents: 6 }, resp());
+  const again = await run(
+    sdd,
+    { ...BASE, maxAgents: 6, answers: [{ at: "budget", text: "go on" }] },
+    resp(),
+  );
+  for (let i = 0; i < r.calls.length; i++)
+    assert.equal(
+      again.calls[i].prompt,
+      r.calls[i].prompt,
+      `call ${i} (${r.calls[i].label}) changed`,
+    );
+  assert.ok(!again.calls.some((c) => c.prompt.includes("go on")), "budget text reaches no agent");
+  assert.equal(again.res.status, "complete", again.logs.join(" | "));
+  assert.equal(again.res.agents, again.calls.length);
+  assert.ok(
+    again.logs.some((l) => /maxAgents 6 raised to 20/.test(l)),
+    again.logs.join(" | "),
+  );
+  assert.ok(
+    again.res.ledgerLines.at(-1).endsWith(`gate green; ${again.calls.length} agents)`),
+    again.res.ledgerLines.at(-1),
+  );
+  // default cap 16: the 26-agent worst case stops at budget
+  const w = await run(
+    sdd,
+    { ...BASE, sensitive: true, ui: true },
+    sddResponder({
+      "critic-review": { verdict: "fail", findings: [F("C1", "important")], cannotVerify: [] },
+      "gate*": { ok: false, head: "hg", problems: ["red"] },
+    }),
+  );
+  assert.equal(w.calls.length, 20, "critical default is 20");
+  assert.equal(w.res.stopped, "budget");
+});
+
+await test("tiers: maxAgents is coerced like maxRounds", async () => {
+  const s = await run(sdd, { ...BASE, maxAgents: "2" }, sddResponder());
+  assert.equal(s.res.stopped, "budget");
+  assert.ok(
+    s.logs.some((l) => /maxAgents "2" coerced to 2/.test(l)),
+    s.logs.join(" | "),
+  );
+  const j = await run(sdd, { ...BASE, maxAgents: "lots" }, sddResponder());
+  assert.ok(j.logs.some((l) => /maxAgents "lots" is not a number; using 14/.test(l)));
+  assert.equal(j.res.status, "complete");
+  const f = await run(sdd, { ...BASE, maxAgents: 2.9 }, sddResponder());
+  assert.equal(f.res.stopped, "budget");
+});
+
+await test("tiers: sdd-wave passes tier and maxAgents through (task wins) and totals agents", async () => {
+  const tasks = WAVE.tasks.map((t, i) =>
+    i === 1 ? { ...t, tier: "critical", maxAgents: 30 } : i === 2 ? { ...t, sensitive: true } : t,
+  );
+  const r = await run(wave, { ...WAVE, tasks, tier: "gate", maxAgents: 20 }, waveResponder(), sdd);
+  const [a17, a18, a19] = r.childArgs.map((c) => c.args);
+  assert.equal(a17.tier, "gate");
+  assert.equal(a17.maxAgents, 20);
+  assert.equal(a18.tier, "critical");
+  assert.equal(a18.maxAgents, 30);
+  assert.ok(!("tier" in a19) && a19.sensitive === true, "sensitive task gets no wave tier");
+  assert.equal(r.res.status, "complete", r.logs.join(" | "));
+  assert.equal(r.res.totals.agents, r.calls.length);
+  assert.equal(
+    r.res.totals.agents,
+    r.res.tasks.reduce((s, t) => s + t.agents, 0),
+  );
+  const none = await run(wave, WAVE, waveResponder(), sdd);
+  assert.ok(!("tier" in none.childArgs[0].args) && !("maxAgents" in none.childArgs[0].args));
+});
+
+await test("tiers: wave-review gate tier runs Opus high; the artifact records high; ordinary throws", async () => {
+  const worst = {
+    reviewer: reviewWith([WF("C1", "critical"), WF("I1", "important", { planMandated: true })]),
+  };
+  const g = await run(wr, { ...WBASE, tier: "gate" }, wrResponder(worst));
+  assert.equal(tierOf(g.find("reviewer")), "opus/high");
+  assert.equal(tierOf(g.find("re-reviewer")), "opus/high");
+  assert.ok(g.find("reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
+  assert.ok(g.find("re-reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
+  assert.equal(tierOf(g.find("ruler")), "opus/high");
+  const c = await run(wr, WBASE, wrResponder(worst));
+  assert.equal(tierOf(c.find("reviewer")), "opus/xhigh");
+  assert.equal(tierOf(c.find("re-reviewer")), "opus/xhigh");
+  const cx = await run(wr, { ...WBASE, tier: "critical" }, wrResponder(worst));
+  assert.equal(tierOf(cx.find("reviewer")), "opus/xhigh");
+  await assert.rejects(
+    run(wr, { ...WBASE, tier: "ordinary" }, wrResponder()),
+    /no wave-review needed/,
+  );
+  await assert.rejects(run(wr, { ...WBASE, tier: "low" }, wrResponder()), /tier/);
+  const ov = await run(
+    wr,
+    { ...WBASE, tier: "gate", roles: { reviewer: { model: "opus", effort: "max" } } },
+    wrResponder(worst),
+  );
+  assert.equal(tierOf(ov.find("reviewer")), "opus/max", "a roles override still wins");
+});
+
+await test("tiers: the wave-review reviewer prompt is diff-scoped", async () => {
+  const r = await run(wr, WBASE, wrResponder({ reviewer: reviewWith([WF("I1", "important")]) }));
+  const p = r.find("reviewer").prompt;
+  assert.ok(p.includes(DIFF_SCOPE), p);
+  assert.ok(p.includes("do not read unrelated files"));
+  assert.ok(
+    p.includes("* a.ts") && p.includes("1. q1"),
+    "sensitive files and questions still steer it",
+  );
+});
+
+await test("fix pass: maxAgents defaults per tier (ordinary 14, gate 16, critical 20); explicit wins", async () => {
+  for (const [tier, n] of [
+    ["ordinary", 14],
+    ["gate", 16],
+    ["critical", 20],
+  ]) {
+    const r = await run(sdd, { ...BASE, tier }, sddResponder());
+    assert.ok(
+      r.logs.some((l) => l.includes(`maxAgents ${n}`)),
+      `${tier}: ${r.logs.join(" | ")}`,
+    );
+  }
+  const e = await run(sdd, { ...BASE, tier: "critical", maxAgents: 9 }, sddResponder());
+  assert.ok(e.logs.some((l) => l.includes("maxAgents 9")));
+});
+
+await test("fix pass C4: a task that sets sensitive gets no wave tier (sensitive: false under a critical wave)", async () => {
+  const tasks = WAVE.tasks.map((t, i) => (i === 0 ? { ...t, sensitive: false } : t));
+  const r = await run(wave, { ...WAVE, tasks, tier: "critical" }, waveResponder(), sdd);
+  assert.equal(r.res.status, "complete", r.logs.join(" | "));
+  const a17 = r.childArgs[0].args;
+  assert.ok(!("tier" in a17) && a17.sensitive === false, JSON.stringify(a17));
+  assert.equal(r.childArgs[1].args.tier, "critical");
+  assert.ok(
+    r.logs.some((l) => /task 17 .*tier ordinary/.test(l)),
+    r.logs.join(" | "),
+  );
 });
 
 // ---------- report ----------
