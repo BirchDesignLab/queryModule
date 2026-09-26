@@ -5,6 +5,8 @@
     { "path": "packages/config" },
     { "path": "packages/tokens" },
     { "path": "packages/api" },
+    { "path": "packages/client" },
+    { "path": "packages/web-ui" },
     { "path": "scripts" }
   ]
 }
