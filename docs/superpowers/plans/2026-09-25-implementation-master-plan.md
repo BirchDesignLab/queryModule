@@ -350,7 +350,7 @@ Root scripts are the interface between machines. The M0 P0 workspace skeleton cr
 
 Assumes Ubuntu 24.04 LTS.
 
-Base tools and Node 22 LTS (version pinned by `.nvmrc`; pnpm pinned by `packageManager` in root `package.json`):
+Base tools and Node 24 LTS per ADR-0001 (version pinned by `.nvmrc`; pnpm pinned by `packageManager` in root `package.json`):
 
 ```bash
 sudo apt-get update
@@ -510,5 +510,5 @@ Expo Go (Track D, from M4):
 | ADR number collision from parallel PRs | Take the next free number at branch time; on conflict the later PR renumbers before merge. |
 | Sensitive-review bottleneck (Opus `xhigh` per sensitive PR) | Keep sensitive PRs small, one task each; non-sensitive work in the same cell proceeds while a review runs. |
 | Push discipline versus the global "ask before push" rule | Pushes happen only at 6.4 step 16, 7.1 step 1 and status PRs; the session asks the developer each time. |
-| Node 22 is maintenance LTS by 09-26 (Node 24 is active LTS) | Spec 3 pins Node 22. Moving to 24 is a spec change: an ADR plus one `chore/` PR updating `.nvmrc`, `engines` and the image base. |
+| Node runtime drift | ADR-0001 pins Node 24 LTS; P0 verifies `expo export` and `@libsql/client` on 24. A later major needs a new ADR plus one `chore/` PR updating `.nvmrc`, `engines` and the image base. |
 | Lost context between sessions | State lives only in `main`, issues, PRs and the Handoff note (7.1); plans are frozen at gates, so a fresh session trusts them. |

@@ -45,7 +45,7 @@ Covers BR-001, BR-003, BR-004, BR-005, BR-006, UX-001.
 
 ## 3 Architecture
 
-pnpm workspace monorepo, TypeScript strict, Node 22 LTS.
+pnpm workspace monorepo, TypeScript strict, Node 24 LTS (ADR-0001).
 
 | Path | Role | Runtime deps |
 |---|---|---|
