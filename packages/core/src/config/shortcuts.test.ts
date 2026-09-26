@@ -74,6 +74,29 @@ describe("FR-006 FR-007 FR-053 shortcut catalogue (spec 6.4)", () => {
   });
 });
 
+describe("Task 13 amendment (09-26-26): usLayoutChar covers numpad character keys", () => {
+  it("resolves Numpad0-Numpad9 to their digits", () => {
+    expect(usLayoutChar("Numpad0")).toBe("0");
+    expect(usLayoutChar("Numpad1")).toBe("1");
+    expect(usLayoutChar("Numpad5")).toBe("5");
+    expect(usLayoutChar("Numpad9")).toBe("9");
+  });
+
+  it("resolves numpad operator and punctuation keys", () => {
+    expect(usLayoutChar("NumpadAdd")).toBe("+");
+    expect(usLayoutChar("NumpadSubtract")).toBe("-");
+    expect(usLayoutChar("NumpadMultiply")).toBe("*");
+    expect(usLayoutChar("NumpadDivide")).toBe("/");
+    expect(usLayoutChar("NumpadDecimal")).toBe(".");
+    expect(usLayoutChar("NumpadEqual")).toBe("=");
+    expect(usLayoutChar("NumpadComma")).toBe(",");
+  });
+
+  it("still returns null for NumpadEnter, which types no character", () => {
+    expect(usLayoutChar("NumpadEnter")).toBeNull();
+  });
+});
+
 describe("fix round 1: I1 stroke allowlist (spec 4.1, 6.4)", () => {
   it("rejects non-code strokes and modifier misuse", () => {
     expect(isValidShortcutKeys("A")).toBe(false);

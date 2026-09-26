@@ -5,6 +5,14 @@ import { FEATURES } from "./features";
 import { type QueryType, SEVERITIES, type SiteConfig } from "./schema";
 import { type Condition, ORDERED_DATA_TYPES, ORDERING_OPS } from "./schema-fields";
 import { SHORTCUT_ACTIONS } from "./shortcuts";
+import {
+  checkCommands,
+  checkFieldDefs,
+  checkLimits,
+  checkShortcuts,
+  checkTerminal,
+  checkWarnings,
+} from "./validate-rules";
 
 export type LocaleBundles = Readonly<Record<string, Readonly<Record<string, string>>>>;
 export interface ValidateContext {
@@ -29,6 +37,12 @@ export function validateSiteConfig(
   checkDuplicates(config, out);
   checkReferences(config, out, context);
   checkLabels(config, locales, out);
+  checkFieldDefs(config, out);
+  checkCommands(config, out);
+  checkTerminal(config, out);
+  checkShortcuts(config, out);
+  checkLimits(config, out);
+  checkWarnings(config, out);
   return out.result();
 }
 

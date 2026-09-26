@@ -11,3 +11,4 @@ export * from "./schema-fields";
 export * from "./schema-mode";
 export * from "./shortcuts";
 export * from "./validate";
+export * from "./validate-rules";

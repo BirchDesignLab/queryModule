@@ -9,14 +9,19 @@ export function run(mutate: (raw: SiteConfigInput) => void, locales = MINIMAL_LO
   return validateSiteConfig(SiteConfigSchema.parse(raw), locales, { tokenNames: TEST_TOKEN_NAMES });
 }
 
-type Case = { name: string; mutate: (raw: SiteConfigInput) => void; path: string; key: string };
+export type Case = {
+  name: string;
+  mutate: (raw: SiteConfigInput) => void;
+  path: string;
+  key: string;
+};
 
-const veh = (raw: SiteConfigInput) => {
+export const veh = (raw: SiteConfigInput) => {
   const q = raw.queryTypes[0];
   if (!q) throw new Error("fixture has VEH");
   return q;
 };
-const wnt = (raw: SiteConfigInput) =>
+export const wnt = (raw: SiteConfigInput) =>
   raw.queryTypes.push({
     code: "WNT",
     labelKey: "queryType.VEH",
@@ -477,10 +482,13 @@ describe("BR-001 validateSiteConfig referential pass (spec 4.1 Validation)", () 
     );
   });
 
-  it("a command preset naming a known field produces no error", () => {
+  it("a command preset naming a known, non-positioned field produces no error", () => {
     const { errors } = run((r) => {
       const c = r.commands?.[0];
-      if (c) c.presets = { plate: "TX" };
+      if (c) {
+        c.positions = ["plate"];
+        c.presets = { state: "TX" };
+      }
     });
     expect(errors).toEqual([]);
   });
@@ -541,5 +549,503 @@ describe("BR-001 validateSiteConfig referential pass (spec 4.1 Validation)", () 
     const s = raw.sources[0];
     if (s) s.kind = "totally-unknown-adapter";
     expect(validateSiteConfig(SiteConfigSchema.parse(raw), MINIMAL_LOCALES).errors).toEqual([]);
+  });
+});
+
+const PART2_CASES: Case[] = [
+  {
+    name: "no base section",
+    mutate: (r) => {
+      veh(r).sections = [{ key: "main", labelKey: "section.base" }];
+    },
+    path: "/queryTypes/0/sections",
+    key: "config.missingBaseSection",
+  },
+  {
+    name: "picklist field without picklist",
+    mutate: (r) =>
+      veh(r).fields.push({ key: "colour", labelKey: "field.plate", dataType: "picklist" }),
+    path: "/queryTypes/0/fields/2/picklist",
+    key: "config.picklistRequired",
+  },
+  {
+    name: "picklist on a non-picklist field",
+    mutate: (r) => {
+      const f = veh(r).fields[0];
+      if (f) f.picklist = "state";
+    },
+    path: "/queryTypes/0/fields/0/picklist",
+    key: "config.picklistNotAllowed",
+  },
+  {
+    name: "role type on a non-picklist field",
+    mutate: (r) => {
+      const f = veh(r).fields[0];
+      if (f) f.role = "type";
+    },
+    path: "/queryTypes/0/fields/0/role",
+    key: "config.typeRoleOnNonPicklist",
+  },
+  {
+    name: "picklistFilter on a non-picklist field",
+    mutate: (r) => {
+      const f = veh(r).fields[0];
+      if (f) f.picklistFilter = { byField: "state" };
+    },
+    path: "/queryTypes/0/fields/0/picklistFilter",
+    key: "config.picklistFilterOnNonPicklist",
+  },
+  {
+    name: "byField is not a picklist field",
+    mutate: (r) => {
+      const f = veh(r).fields[1];
+      if (f) f.picklistFilter = { byField: "plate" };
+    },
+    path: "/queryTypes/0/fields/1/picklistFilter/byField",
+    key: "config.byFieldNotPicklist",
+  },
+  {
+    name: "parent code absent from the byField picklist",
+    mutate: (r) => {
+      r.picklists?.push({
+        id: "city",
+        values: [{ code: "AUS", labelKey: "field.plate", parent: "ZZ" }],
+      });
+      veh(r).fields.push({
+        key: "city",
+        labelKey: "field.plate",
+        dataType: "picklist",
+        picklist: "city",
+        picklistFilter: { byField: "state" },
+      });
+    },
+    path: "/picklists/1/values/0/parent",
+    key: "config.unknownParent",
+  },
+  {
+    name: "picklistFilter cycle",
+    mutate: (r) => {
+      const f = veh(r).fields[1];
+      if (f) f.picklistFilter = { byField: "state" };
+    },
+    path: "/queryTypes/0/fields/1/picklistFilter",
+    key: "config.picklistFilterCycle",
+  },
+  {
+    name: "minLength above maxLength",
+    mutate: (r) => {
+      const f = veh(r).fields[0];
+      if (f) {
+        f.minLength = 10;
+        f.maxLength = 5;
+      }
+    },
+    path: "/queryTypes/0/fields/0/minLength",
+    key: "config.minAboveMax",
+  },
+  {
+    name: "maxLength above 4096",
+    mutate: (r) => {
+      const f = veh(r).fields[0];
+      if (f) f.maxLength = 5000;
+    },
+    path: "/queryTypes/0/fields/0/maxLength",
+    key: "config.maxLengthTooLarge",
+  },
+  {
+    name: "pattern does not compile",
+    mutate: (r) => {
+      const f = veh(r).fields[0];
+      if (f) f.pattern = "[A-";
+    },
+    path: "/queryTypes/0/fields/0/pattern",
+    key: "config.invalidPattern",
+  },
+  {
+    name: "setDefault without value",
+    mutate: (r) => {
+      veh(r).rules = [
+        { field: "state", when: { field: "plate", op: "notEmpty" }, effect: "setDefault" },
+      ];
+    },
+    path: "/queryTypes/0/rules/0/value",
+    key: "config.ruleValueMismatch",
+  },
+  {
+    name: "allowPlateOnly without a plateOnly source",
+    mutate: (r) => {
+      veh(r).allowPlateOnly = true;
+    },
+    path: "/queryTypes/0/allowPlateOnly",
+    key: "config.plateOnlyUnsupported",
+  },
+  {
+    name: "more than 4 alsoRun entries",
+    mutate: (r) => {
+      wnt(r);
+      veh(r).alsoRun = [1, 2, 3, 4, 5].map(() => ({ queryType: "WNT", fieldMap: {} }));
+    },
+    path: "/queryTypes/0/alsoRun",
+    key: "config.tooManyAlsoRun",
+  },
+  {
+    name: "nested query type declares alsoRun",
+    mutate: (r) => {
+      wnt(r);
+      const w = r.queryTypes[1];
+      if (w) w.alsoRun = [{ queryType: "VEH", fieldMap: {} }];
+      veh(r).alsoRun = [{ queryType: "WNT", fieldMap: {} }];
+    },
+    path: "/queryTypes/0/alsoRun/0/queryType",
+    key: "config.nestedAlsoRun",
+  },
+  {
+    name: "rest position not last",
+    mutate: (r) => {
+      const c = r.commands?.[0];
+      if (c) c.positions = [{ field: "plate", rest: true }, "state"];
+    },
+    path: "/commands/0/positions/0",
+    key: "config.restNotLast",
+  },
+  {
+    name: "rest position on a non-string field",
+    mutate: (r) => {
+      const c = r.commands?.[0];
+      if (c) c.positions = ["plate", { field: "state", rest: true }];
+    },
+    path: "/commands/0/positions/1",
+    key: "config.restNotString",
+  },
+  {
+    name: "field both preset and positioned",
+    mutate: (r) => {
+      const c = r.commands?.[0];
+      if (c) c.presets = { state: "TX" };
+    },
+    path: "/commands/0/presets/state",
+    key: "config.presetAndPositioned",
+  },
+  {
+    name: "required field with no position, preset or default",
+    mutate: (r) => {
+      const c = r.commands?.[0];
+      if (c) c.positions = ["state"];
+    },
+    path: "/commands/0/positions",
+    key: "config.requiredWithoutPosition",
+  },
+  {
+    name: "delimiter is =",
+    mutate: (r) => {
+      r.terminal = { delimiter: "=" };
+    },
+    path: "/terminal/delimiter",
+    key: "config.invalidDelimiter",
+  },
+  {
+    name: "delimiter is alphanumeric",
+    mutate: (r) => {
+      r.terminal = { delimiter: "x" };
+    },
+    path: "/terminal/delimiter",
+    key: "config.invalidDelimiter",
+  },
+  {
+    name: "delimiter inside a date input format",
+    mutate: (r) => {
+      r.terminal = { delimiter: "-" };
+      veh(r).fields.push({ key: "dob", labelKey: "field.plate", dataType: "date" });
+    },
+    path: "/queryTypes/0/fields/2/inputFormats",
+    key: "config.delimiterInDateFormat",
+  },
+  {
+    name: "decimal field in a position with the . delimiter",
+    mutate: (r) => {
+      veh(r).fields.push({
+        key: "weight",
+        labelKey: "field.plate",
+        dataType: "number",
+        numberKind: "decimal",
+      });
+      const c = r.commands?.[0];
+      if (c) c.positions = ["plate", "state", "weight"];
+    },
+    path: "/commands/0/positions/2",
+    key: "config.decimalWithDotDelimiter",
+  },
+  {
+    name: "delimiter typed by a single-key shortcut",
+    mutate: (r) => {
+      r.terminal = { delimiter: "/" };
+    },
+    path: "/terminal/delimiter",
+    key: "config.delimiterShortcutCollision",
+  },
+  {
+    name: "shortcut prefix collision",
+    mutate: (r) => {
+      r.shortcuts = { goPanel: { keys: "KeyG", context: "global" } };
+    },
+    path: "/shortcuts/goPanel",
+    key: "config.shortcutCollision",
+  },
+  {
+    name: "two mappings with equal keys",
+    mutate: (r) => {
+      const el = {
+        kind: "value" as const,
+        path: "status",
+        labelKey: "field.plate",
+        view: "both" as const,
+      };
+      r.responseMappings = [
+        { id: "m1", queryType: "VEH", elements: [el] },
+        { id: "m2", queryType: "VEH", elements: [el] },
+      ];
+    },
+    path: "/responseMappings/1",
+    key: "config.duplicateMapping",
+  },
+  {
+    name: "except phrase without its keyword",
+    mutate: (r) => {
+      const k = r.keywords?.[0];
+      if (k) k.except = ["RECOVERED"];
+    },
+    path: "/keywords/0/except/0",
+    key: "config.exceptWithoutKeyword",
+  },
+  {
+    name: "purpose duration above the site cap",
+    mutate: (r) => {
+      r.delegation = {
+        maxDurationMinutes: 60,
+        purposes: [
+          {
+            key: "training",
+            labelKey: "delegation.training",
+            delegatorRoles: ["trainingOfficer"],
+            maxDurationMinutes: 120,
+          },
+        ],
+      };
+    },
+    path: "/delegation/purposes/0/maxDurationMinutes",
+    key: "config.purposeDurationTooLong",
+  },
+  {
+    name: "retention days not positive",
+    mutate: (r) => {
+      r.retention = { payloadDays: 0, valuesDays: null };
+    },
+    path: "/retention/payloadDays",
+    key: "config.retentionNotPositive",
+  },
+];
+
+describe("FR-051 FR-052 validateSiteConfig field, command and terminal rules (spec 4.1)", () => {
+  for (const c of PART2_CASES) {
+    it(`error: ${c.name} at ${c.path}`, () => {
+      expect(run(c.mutate).errors).toContainEqual(
+        expect.objectContaining({ level: "error", path: c.path, key: c.key }),
+      );
+    });
+  }
+
+  it("the example-ok pattern passes: / delimiter with focusTerminal rebound to Ctrl+Slash", () => {
+    const { errors } = run((r) => {
+      r.terminal = { delimiter: "/" };
+      r.shortcuts = { focusTerminal: { keys: "Ctrl+Slash", context: "global" } };
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("a configured default exempts a required field from needing a position", () => {
+    const { errors } = run((r) => {
+      const plate = veh(r).fields[0];
+      if (plate) plate.defaultValue = "ZZ-0000";
+      const c = r.commands?.[0];
+      if (c) c.positions = ["state"];
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("warning: site default used by no field", () => {
+    expect(
+      run((r) => {
+        r.defaults = { state: "TX", colour: "RED" };
+      }).warnings,
+    ).toContainEqual({
+      level: "warning",
+      path: "/defaults/colour",
+      key: "config.unusedSiteDefault",
+      params: { field: "colour" },
+    });
+  });
+
+  it("warning: worst-case (part, source) count above 8", () => {
+    const { warnings } = run((r) => {
+      for (let i = 2; i <= 9; i++) {
+        r.sources.push({
+          id: `src${i}`,
+          labelKey: "source.src1",
+          scope: "state",
+          kind: "mock",
+          requiresCredentials: false,
+        });
+        veh(r).sources.push({ sourceId: `src${i}`, selectedByDefault: false });
+      }
+    });
+    expect(warnings).toContainEqual({
+      level: "warning",
+      path: "/queryTypes/0",
+      key: "config.tooManySourcesPossible",
+      params: { max: 8 },
+    });
+  });
+});
+
+describe("Task 13 controller ruling 1: CommandDef.code vs config.terminal.delimiter", () => {
+  it("error: default . delimiter rejects a command code containing it", () => {
+    const { errors } = run((r) => {
+      r.commands?.push({ code: "V.EH", queryType: "VEH", positions: ["plate", "state"] });
+    });
+    expect(errors).toContainEqual({
+      level: "error",
+      path: "/commands/1/code",
+      key: "config.commandCodeContainsDelimiter",
+      params: { delimiter: "." },
+    });
+  });
+
+  it("a radio-style code with an internal hyphen passes under the default . delimiter", () => {
+    const { errors } = run((r) => {
+      r.commands?.push({ code: "10-28", queryType: "VEH", positions: ["plate", "state"] });
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("error: with delimiter -, 10-28 is rejected", () => {
+    const { errors } = run((r) => {
+      r.terminal = { delimiter: "-" };
+      r.commands?.push({ code: "10-28", queryType: "VEH", positions: ["plate", "state"] });
+    });
+    expect(errors).toContainEqual({
+      level: "error",
+      path: "/commands/1/code",
+      key: "config.commandCodeContainsDelimiter",
+      params: { delimiter: "-" },
+    });
+  });
+});
+
+describe('Task 13 amendment (ADR-0005): role:"type" field picklists validate with TypePicklistCodeSchema', () => {
+  it("error: a role:type field's picklist has a code TypePicklistCodeSchema rejects", () => {
+    const { errors } = run((r) => {
+      r.picklists?.push({
+        id: "queryKind",
+        values: [{ code: "BLK/WHI", labelKey: "field.plate" }],
+      });
+      veh(r).fields.push({
+        key: "kind",
+        labelKey: "field.plate",
+        dataType: "picklist",
+        picklist: "queryKind",
+        role: "type",
+      });
+    });
+    expect(errors).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        path: "/picklists/1/values/0/code",
+        key: "config.invalidTypePicklistCode",
+      }),
+    );
+  });
+
+  it("a picklist referenced by a non-type field keeps wider codes such as BLK/WHI", () => {
+    const { errors } = run((r) => {
+      r.picklists?.push({ id: "color", values: [{ code: "BLK/WHI", labelKey: "field.plate" }] });
+      veh(r).fields.push({
+        key: "colour",
+        labelKey: "field.plate",
+        dataType: "picklist",
+        picklist: "color",
+      });
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("a role:type field's picklist with only TypePicklistCodeSchema-valid codes produces no error", () => {
+    const { errors } = run((r) => {
+      r.picklists?.push({ id: "queryKind", values: [{ code: "VEH2", labelKey: "field.plate" }] });
+      veh(r).fields.push({
+        key: "kind",
+        labelKey: "field.plate",
+        dataType: "picklist",
+        picklist: "queryKind",
+        role: "type",
+      });
+    });
+    expect(errors).toEqual([]);
+  });
+});
+
+describe("Task 13 branch coverage", () => {
+  it("error: shortcutCollision names the overridden later action when the earlier one is still default", () => {
+    const { errors } = run((r) => {
+      r.shortcuts = { goResults: { keys: "KeyG", context: "global" } };
+    });
+    expect(errors).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        path: "/shortcuts/goResults",
+        key: "config.shortcutCollision",
+      }),
+    );
+  });
+
+  it("a keyword with no except phrases produces no error", () => {
+    const { errors } = run((r) => {
+      r.keywords?.push({ keyword: "WANTED", severity: "warning" });
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it("error: delimiter inside a date field's outputFormat, with inputFormats clean", () => {
+    const { errors } = run((r) => {
+      r.terminal = { delimiter: "-" };
+      veh(r).fields.push({
+        key: "dob",
+        labelKey: "field.plate",
+        dataType: "date",
+        inputFormats: ["MMDDYYYY"],
+        outputFormat: "MM-DD-YYYY",
+      });
+    });
+    expect(errors).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        path: "/queryTypes/0/fields/2/outputFormat",
+        key: "config.delimiterInDateFormat",
+      }),
+    );
+  });
+
+  it("error: delimiterShortcutCollision names the overridden action's own path", () => {
+    const { errors } = run((r) => {
+      r.terminal = { delimiter: "," };
+      r.shortcuts = { dismiss: { keys: "Comma", context: "global" } };
+    });
+    expect(errors).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        path: "/shortcuts/dismiss",
+        key: "config.delimiterShortcutCollision",
+        params: { action: "dismiss" },
+      }),
+    );
   });
 });
