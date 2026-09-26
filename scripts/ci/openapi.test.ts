@@ -1,7 +1,7 @@
 import { ROUTES, type RouteDef } from "@querymodule/core/contracts";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { buildOpenApiDocument } from "./openapi";
+import { buildOpenApiDocument, toJsonSchema } from "./openapi";
 
 function refs(value: unknown, out: string[] = []): string[] {
   if (Array.isArray(value)) for (const v of value) refs(v, out);
@@ -81,5 +81,12 @@ describe("BR-007 OpenAPI generated from route contracts (spec 5.1)", () => {
       content: { "application/json": { schema: { $ref: "#/components/schemas/putDevThingBody" } } },
     });
     expect(op.responses).toEqual({ 204: { description: "Done" } });
+  });
+});
+
+describe("toJsonSchema fails closed (review W4 M9)", () => {
+  it("throws on an unrepresentable type instead of publishing {}", () => {
+    expect(() => toJsonSchema(z.date())).toThrow();
+    expect(() => toJsonSchema(z.object({ n: z.bigint() }))).toThrow();
   });
 });

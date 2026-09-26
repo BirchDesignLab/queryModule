@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { type ConfigIo, checkConfigFile } from "./config-files";
+import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
 
 type Json = Record<string, unknown>;
 /** Raw site JSON, typed only as far as these tests mutate it (ruling S12: no `any`). */
@@ -147,5 +147,17 @@ describe("config:validate failures carry JSON paths", () => {
     expect(r.errors).toContainEqual(
       expect.objectContaining({ path: "/quickAccess/1", key: "config.unknownQueryType" }),
     );
+  });
+});
+
+describe("config:validate targets (fails closed on empty input)", () => {
+  it("fails when no config file is found in the default directories", () => {
+    const r = configTargets([], () => []);
+    expect(r.ok).toBe(false);
+  });
+
+  it("uses explicit files when given, else the default listing", () => {
+    expect(configTargets(["a.json"], () => ["b.json"])).toEqual({ ok: true, targets: ["a.json"] });
+    expect(configTargets([], () => ["b.json"])).toEqual({ ok: true, targets: ["b.json"] });
   });
 });

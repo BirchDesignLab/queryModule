@@ -14,7 +14,8 @@ export function toJsonSchema(schema: z.ZodType): JsonSchema {
   const json = z.toJSONSchema(schema, {
     target: "draft-2020-12",
     io: "output",
-    unrepresentable: "any",
+    // unrepresentable left at its default ("throw"): a type JSON Schema cannot
+    // express fails generation instead of publishing {} (a loosened contract).
   }) as JsonSchema;
   const { $schema: _dropped, ...rest } = json;
   return rest;

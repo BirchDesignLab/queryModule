@@ -7,6 +7,7 @@ packages/api/src/credentials/**
 packages/api/src/audit/**
 packages/core/src/contracts/audit.ts
 packages/core/src/contracts/primitives.ts
+packages/core/src/contracts/identity.ts
 # Query dispatch, source adapters, nested-query planner
 packages/api/src/dispatch/**
 packages/api/src/adapters/**
@@ -28,4 +29,7 @@ packages/api/drizzle/**
 scripts/ci/**
 scripts/ops/**
 biome.json
-vitest.config.ts
+**/vitest.config.ts
+package.json
+tsconfig.base.json
+**/tsconfig.json

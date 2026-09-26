@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   evaluateSensitiveReview,
@@ -15,6 +16,8 @@ const globs = parseSensitiveGlobs(
   "# comment\npackages/api/src/audit/**\n\n.github/**\nscripts/ci/**\n",
 );
 const sha = "0123456789abcdef0123456789abcdef01234567";
+const BASE = "abc1234000000000000000000000000000000000";
+const HEAD = "def5678000000000000000000000000000000000";
 const artifact = `---\nreviewer: "opus-5.5"\neffort: "xhigh"\nreviewedSha: "${sha}"\nverdict: "approve"\n---\n\nFindings: none.\n`;
 
 describe("sensitive-review (spec 9.1)", () => {
@@ -29,6 +32,27 @@ describe("sensitive-review (spec 9.1)", () => {
         globs,
       ),
     ).toEqual([".github/workflows/ci.yml", "packages/api/src/audit/service.ts"]);
+  });
+
+  it("the shipped glob file covers the files that define the verify gate (spec 9.1)", () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const shipped = parseSensitiveGlobs(
+      readFileSync(join(repoRoot, ".github/sensitive-paths"), "utf8"),
+    );
+    const gate = [
+      "package.json",
+      "tsconfig.json",
+      "tsconfig.base.json",
+      "scripts/tsconfig.json",
+      "vitest.config.ts",
+      "scripts/vitest.config.ts",
+      "packages/api/vitest.config.ts",
+      "packages/core/vitest.config.ts",
+      "packages/config/vitest.config.ts",
+      "packages/core/src/contracts/identity.ts",
+    ];
+    expect(sensitiveFiles(gate, shipped)).toEqual(gate);
+    expect(sensitiveFiles(["packages/api/package.json"], shipped)).toEqual([]);
   });
 
   it("parses front matter and rejects missing fields", () => {
@@ -117,8 +141,8 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
   const ok = (stdout = "") => ({ status: 0, stdout, stderr: "" });
   const env = {
     EVENT_NAME: "pull_request",
-    BASE_SHA: "abc1234",
-    HEAD_SHA: "def5678",
+    BASE_SHA: BASE,
+    HEAD_SHA: HEAD,
     PR_NUMBER: "7",
   };
   const files: Record<string, string> = { ".github/sensitive-paths": "scripts/ci/**\n" };
@@ -154,7 +178,16 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
   });
 
   it("exits 2 without calling git when BASE_SHA or HEAD_SHA is not a hex sha", () => {
-    for (const bad of ["--output=f", "HEAD", "main", "abc123", "ABC1234"]) {
+    for (const bad of [
+      "--output=f",
+      "HEAD",
+      "main",
+      "abc123",
+      "ABC1234",
+      "abc1234",
+      BASE.slice(0, 39),
+      `${BASE}0`,
+    ]) {
       for (const key of ["BASE_SHA", "HEAD_SHA"]) {
         const calls: string[][] = [];
         const runGit = (args: string[]) => {
@@ -210,20 +243,20 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
     calls.length = 0;
     const runGit = (args: string[]) => {
       calls.push(args);
-      if (args[0] === "diff" && args.at(-1) === "abc1234...def5678") return ok("scripts/ci/x.ts\0");
+      if (args[0] === "diff" && args.at(-1) === `${BASE}...${HEAD}`) return ok("scripts/ci/x.ts\0");
       return ok();
     };
     const r = runSensitiveReview(env, { runGit, readFile: withArtifact });
     expect(r.code).toBe(0);
-    expect(calls).toContainEqual(["merge-base", "--is-ancestor", sha, "def5678"]);
+    expect(calls).toContainEqual(["merge-base", "--is-ancestor", sha, HEAD]);
     expect(calls).toContainEqual([
       "diff",
       "--name-only",
       "-z",
       "--no-renames",
-      "abc1234...def5678",
+      `${BASE}...${HEAD}`,
     ]);
-    expect(calls).toContainEqual(["diff", "--name-only", "-z", "--no-renames", sha, "def5678"]);
+    expect(calls).toContainEqual(["diff", "--name-only", "-z", "--no-renames", sha, HEAD]);
   });
 
   it("exits 1 when reviewedSha is not an ancestor (merge-base status 1)", () => {
@@ -268,6 +301,18 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
     expect(calls.some((c) => c[0] === "merge-base")).toBe(false);
   });
 
+  it("exits 1 on an abbreviated reviewedSha, which git could resolve as a ref", () => {
+    calls.length = 0;
+    const shortSha = artifact.replace(sha, sha.slice(0, 12));
+    const r = runSensitiveReview(env, {
+      runGit: gitWith({ "diff --name-only": ok("scripts/ci/x.ts\0") }),
+      readFile: (p) => (p === "docs/reviews/pr-7.md" ? shortSha : readFile(p)),
+    });
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain("reviewedSha is not a commit sha");
+    expect(calls.some((c) => c[0] === "merge-base")).toBe(false);
+  });
+
   it("exits 2 when .github/sensitive-paths is missing", () => {
     const runGit = gitWith({ "diff --name-only": ok("scripts/ci/x.ts\0") });
     const r = runSensitiveReview(env, { runGit, readFile: () => undefined });
@@ -287,7 +332,7 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
     const runGit = gitWith({
       "diff --name-only": ok(".github/sensitive-paths\0packages/api/src/audit/a.ts\0"),
       "ls-tree --name-only": ok(".github/sensitive-paths\0"),
-      "show abc1234:.github/sensitive-paths": ok(".github/**\npackages/api/src/audit/**\n"),
+      [`show ${BASE}:.github/sensitive-paths`]: ok(".github/**\npackages/api/src/audit/**\n"),
     });
     const readHead = (p: string) => (p === ".github/sensitive-paths" ? "docs/**\n" : undefined);
     const r = runSensitiveReview(env, { runGit, readFile: readHead });
@@ -297,14 +342,14 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
       "ls-tree",
       "--name-only",
       "-z",
-      "abc1234",
+      BASE,
       "--",
       ".github/sensitive-paths",
     ]);
   });
 
   it("exits 2 when the base glob file cannot be read", () => {
-    for (const failing of ["ls-tree --name-only", "show abc1234:.github/sensitive-paths"]) {
+    for (const failing of ["ls-tree --name-only", `show ${BASE}:.github/sensitive-paths`]) {
       const runGit = gitWith({
         "diff --name-only": ok("docs/a.md\0"),
         "ls-tree --name-only": ok(".github/sensitive-paths\0"),

@@ -12,8 +12,12 @@ export function sensitiveFiles(files: string[], globs: string[]): string[] {
   return files.filter((f) => isMatch(f));
 }
 
-/** a commit sha, abbreviated or full; checked before reviewedSha reaches git argv */
-export const SHA_RE = /^[0-9a-f]{7,40}$/;
+/**
+ * A full commit sha (40 hex, or 64 in a SHA-256 repository); checked before any
+ * sha reaches git argv. Abbreviated names are refused: git resolves refs before
+ * short object names, so a hex-like tag could stand in for the commit.
+ */
+export const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 export interface ReviewFrontMatter {
   reviewer: string;

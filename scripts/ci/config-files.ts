@@ -42,6 +42,20 @@ function read(io: ConfigIo, path: string): { ok: true; value: unknown } | { ok: 
   }
 }
 
+/**
+ * The files config:validate checks: the explicit ones, else the default listing.
+ * An empty result fails, so an emptied sites/ and test/ never passes silently.
+ */
+export function configTargets(
+  explicit: string[],
+  listDefault: () => string[],
+): { ok: true; targets: string[] } | { ok: false; message: string } {
+  const targets = explicit.length > 0 ? explicit : listDefault();
+  if (targets.length === 0)
+    return { ok: false, message: "config:validate: no config files found to check" };
+  return { ok: true, targets };
+}
+
 export function checkConfigFile(
   file: string,
   io: ConfigIo,

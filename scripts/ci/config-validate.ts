@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type ConfigIo, checkConfigFile } from "./config-files";
+import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const cwd = process.env.INIT_CWD ?? process.cwd();
@@ -13,13 +13,15 @@ const listJson = (dir: string) =>
     .filter((f) => f.endsWith(".json"))
     .sort()
     .map((f) => join(dir, f));
-const targets =
-  explicit.length > 0
-    ? explicit
-    : [
-        ...listJson(join(root, "packages/config/sites")),
-        ...listJson(join(root, "packages/config/test")),
-      ];
+const found = configTargets(explicit, () => [
+  ...listJson(join(root, "packages/config/sites")),
+  ...listJson(join(root, "packages/config/test")),
+]);
+if (!found.ok) {
+  console.error(found.message);
+  process.exit(1);
+}
+const targets = found.targets;
 
 const io: ConfigIo = {
   readJson: (p) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : undefined),

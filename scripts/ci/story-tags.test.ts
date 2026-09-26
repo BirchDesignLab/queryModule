@@ -6,6 +6,7 @@ import {
   highestMilestoneTag,
   parseArgs,
   readMilestoneTags,
+  StoriesFileSchema,
   type StoryRow,
   storiesInScope,
 } from "./story-tags";
@@ -129,5 +130,32 @@ describe("milestone tag read (fails closed)", () => {
     expect(readMilestoneTags(shallow)).toEqual({ ok: false, reason: "shallow" });
     const unknown = git({ [TAGS]: { status: 0, stdout: "" } });
     expect(readMilestoneTags(unknown)).toEqual({ ok: false, reason: "shallow" });
+  });
+});
+
+describe("stories.json schema (fails closed on empty input)", () => {
+  const row = { story: "A1", milestone: "m1", files: ["a1.test.ts"] };
+  it("rejects an empty list", () => {
+    expect(StoriesFileSchema.safeParse([]).success).toBe(false);
+  });
+  it("rejects a duplicate story", () => {
+    expect(StoriesFileSchema.safeParse([row, { ...row, files: ["b.test.ts"] }]).success).toBe(
+      false,
+    );
+  });
+  it("accepts distinct stories", () => {
+    expect(StoriesFileSchema.safeParse([row, { ...row, story: "A2" }]).success).toBe(true);
+  });
+});
+
+describe("hasTaggedTest known limit (review W4 M8)", () => {
+  // The regex does not track nesting: a live it() inside describe.skip or
+  // describe.todo still counts although it never runs. Documented, not fixed;
+  // at M1 the gate should read reporter JSON for passed tests carrying the tag.
+  it("counts a tagged it() nested inside describe.skip", () => {
+    const text = ['describe.skip("form", () => {', '  it("[A1] submits", () => {});', "});"].join(
+      "\n",
+    );
+    expect(hasTaggedTest(text, "A1")).toBe(true);
   });
 });
