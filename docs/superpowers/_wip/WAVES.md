@@ -18,5 +18,5 @@ Inputs: `docs/superpowers/specs/2026-09-25-query-module-2-design.md` (v1),
 ## Plans
 
 - [x] Wave D: 1 Opus/high -> `plans/2026-09-25-implementation-master-plan.md`, `plans/STATUS.md`, `docs/decisions/README.md` + `0000-template.md`, `scripts/ops/gh-setup-labels.sh`.
-- [ ] Wave E: 3 Opus/medium -> `plans/2026-09-25-p0-contracts.md`, `plans/2026-09-25-track-a-p1.md`, `plans/2026-09-25-track-b-p1.md`.
-- [ ] Wave F: 3 Sonnet/medium checkers -> `_wip/plans/check-*.md`; 3 Sonnet/medium revisers -> final plans. Delete `_wip/`. Push.
+- [x] Wave E: 3 Opus/medium -> `plans/2026-09-25-p0-contracts.md`, `plans/2026-09-25-track-a-p1.md`, `plans/2026-09-25-track-b-p1.md`.
+- [ ] Wave F: 1 Haiku interface extractor -> `_wip/plans/interfaces.md`; 3 Sonnet/high checkers -> `_wip/plans/check-*.md`; 3 Sonnet/medium revisers -> final plans. Delete `_wip/`. Push.
