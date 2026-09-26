@@ -12,7 +12,7 @@ describe("FR-005 visually hidden text (spec 6.2 required indicator)", () => {
         <input id="plate" />
       </label>,
     );
-    expect(screen.getByText("required")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: /Plate\s+required/ })).toBeTruthy();
   });
 
   it("is clipped out of view through inline CSSOM styles, not a stylesheet", () => {
