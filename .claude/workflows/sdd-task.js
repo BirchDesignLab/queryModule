@@ -446,7 +446,7 @@ const HOUSE = [
 const READONLY = 'Your review is read-only on this checkout: do not change the working tree, the index, HEAD or any branch. Write only your review file and your scratch directory.'
 const TRAILER = `End every commit message with the attribution trailer your session's system reminder gives; if it gives none, use:\n${A.trailer}`
 // Implementer and fixers carry SELF_CHECK.
-const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only) and pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
+const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only), then pnpm typecheck (tsc -b; vitest does not typecheck test files), then pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
 // The repository-state check for agents that run after gate-0 (checker, ruler-review).
 const postGateCheck = (expected) => `Before you reply, run git rev-parse HEAD and git status --porcelain in ${REPO}. git rev-parse HEAD must equal ${expected}. Report head (full sha), treeClean (true only when git status --porcelain prints nothing) and dirtyFiles (each path it prints). You must leave both exactly as you found them.`
 // Returns '' when res left the repository as gate-0 saw it, else what changed.
@@ -685,7 +685,7 @@ async function runRuler(allItems, label, headNow, pos, postGateHead) {
   }
   if (!res) log('rule: ruler returned null (skipped or died); every item is unruled')
   if (unruled.length) log(`rule: ${unruled.length} item(s) got no ruling and are parked: ${unruled.map((u) => u.id).join(', ')}`)
-  return { fixes, escalated, unruled }
+  return { fixes, escalated, unruled, probed: Boolean(postGateHead && res) }
 }
 
 // ---------- fixer, progress checker, re-reviewer, gate ----------
@@ -856,7 +856,7 @@ const implPrompt = [
     'Concerns: kind planVsSpec when the brief conflicts with the spec or requirements; kind correctness when you doubt your result is right; kind observation for anything else worth noting. A planVsSpec or correctness concern goes to a ruler before review.',
     '',
     'Before reporting, self-review your diff: completeness against the brief, names, YAGNI, existing patterns, tests that verify behaviour, pristine test output. Fix what you find.',
-    `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the pnpm lint and pnpm coverage results, self-review findings, concerns.`,
+    `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the pnpm lint, pnpm typecheck and pnpm coverage results, self-review findings, concerns.`,
     'Return: status, commits (full sha + subject), head (git rev-parse HEAD), a one-line test summary, concerns, questions.',
   ].filter(Boolean).join('\n')
 // The implement stage: the implementer, its precondition retry and its continuation. Returns
@@ -899,7 +899,7 @@ async function implementStage() {
         'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green).',
         SELF_CHECK,
         `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
-        `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the pnpm lint and pnpm coverage results.`,
+        `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the pnpm lint, pnpm typecheck and pnpm coverage results.`,
         GIT,
         HOUSE,
         'Return: status, commits you created (full sha + subject), head, a one-line test summary, concerns, questions. BLOCKED or NEEDS_CONTEXT only when the answers still leave you unable to proceed.',
@@ -1089,6 +1089,8 @@ for (const f of gate0.findings || []) open.push(f)
 // Cannot-verify items: controller decisions settle theirs first; the checker runs the rest.
 // verified -> a checker ruling; failed -> an open important finding; needsJudgment or no result -> the ruler.
 const gateHead = state.head
+// A null checker never reported HEAD and tree after gate-0; a ruler-review call that runs checks them.
+let checkerUnprobed = false
 if (cannotVerify.length) {
   const pre = applyController(cannotVerify.filter((it) => EARLY_DECIDED.has(it.id)))
   for (const f of pre.fixes) open.push(f)
@@ -1098,9 +1100,12 @@ if (cannotVerify.length) {
     log(`check: ${toCheck.length} cannot-verify item(s) to the checker (${tier('checker')})`)
     let ck = await runChecker(toCheck, reviewHead, gateHead, '', 'checker')
     let bad = postGateProblem(ck, gateHead)
-    const ans = bad ? preconditionAnswers('checker') : ''
+    // A null checker takes only answers addressed to it (precondition:checker); a plain
+    // precondition answer is left for the stop it was meant for.
+    const forChecker = ANSWERS ? ANSWERS.entries.some((e) => e.preLabel === 'checker' && !e.usedPre) : false
+    const ans = bad || (!ck && forChecker) ? preconditionAnswers('checker') : ''
     if (ans) {
-      log(`check: cached checker left the repository changed (${bad}); retrying with the controller answer`)
+      log(`check: cached checker ${bad ? `left the repository changed (${bad})` : 'returned null'}; retrying with the controller answer`)
       ck = await runChecker(toCheck, reviewHead, gateHead, ans, 'checker-retry')
       bad = postGateProblem(ck, gateHead)
     }
@@ -1108,7 +1113,15 @@ if (cannotVerify.length) {
       log(`check: precondition failed after gate-0: ${bad}; stopping, no check result applied`)
       return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:checker', problem: `checker: ${bad}` }))
     }
-    if (!ck) log('check: checker returned null (skipped or died); every item goes to the ruler')
+    if (ck && forChecker && ANSWERS) {
+      // the checker ran fresh and clean: a pending precondition:checker answer is no longer needed
+      for (const e of ANSWERS.entries) if (e.preLabel === 'checker' && !e.usedPre) { e.usedPre = true; e.delivered = true }
+      log('check: checker returned a clean result; the pending precondition:checker answer is consumed')
+    }
+    if (!ck) {
+      checkerUnprobed = true
+      log('check: checker returned null (skipped or died); every item goes to the ruler')
+    }
     const byId = new Map(((ck && ck.results) || []).map((x) => [x.id.replace(/^\[|\]$/g, '').trim(), x]))
     for (const it of toCheck) {
       const x = byId.get(it.id)
@@ -1140,6 +1153,7 @@ if (toRule.length) {
     return await finish(build('stopped', { stopped: 'ruler-review', escalated: ruled.escalated, open }))
   }
   for (const f of ruled.fixes) open.push(f)
+  if (ruled.probed) checkerUnprobed = false
 } else {
   log('rule: nothing for the ruler after review')
 }
@@ -1148,7 +1162,13 @@ if (toRule.length) {
 const naCount = {}
 let roundBase = state.head
 let gatePassed = false
-// A clean review plus a green gate-0 completes with no further gate (gate-0 red opens findings).
+// A clean review plus a green gate-0 completes with no further gate (gate-0 red opens findings),
+// unless a null checker left the tree unchecked and no ruler checked it since (fixers and gates
+// check it, so this only matters when nothing is open).
+if (!open.length && checkerUnprobed) {
+  log('check: checker returned null and no later agent checked HEAD and tree after gate-0; stopping')
+  return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:checker', problem: 'checker: returned no result, and no later agent checked HEAD and tree after gate-0; confirm HEAD is the gate-0 head and the tree is clean, then answer at precondition:checker to re-run the checker once' }))
+}
 if (!open.length) {
   gatePassed = true
   log('gate: review clean and gate-0 green; no further gate')

@@ -8,8 +8,9 @@
 // <workflow-output-file> holds the result: a bare result object, or any text that contains the
 // result JSON (a task output file, a fenced block, a JSON-escaped string). When several results
 // are present the last one wins. The ledger must already exist; lines are appended with the
-// ledger's own line ending and a trailing newline. Re-running with the same result is a no-op
-// when those lines are already the ledger's tail ("already appended"). Input written as UTF-16
+// ledger's own line ending and a trailing newline. A line already in the ledger is skipped, so
+// re-running with the same result, or appending a resumed run's result after its stop, writes only
+// new lines ("already appended" when none are new). Input written as UTF-16
 // (PowerShell 5.1 Out-File or >) is decoded by its BOM; a UTF-16 ledger is refused (exit 2).
 //
 // Exit codes: 0 appended (prints the count), 2 usage error or unreadable file, 3 no ledgerLines.
@@ -92,15 +93,30 @@ export function findLedgerLines(text) {
   return found.length ? found[found.length - 1] : null;
 }
 
-// Returns the text to append to a ledger whose current content is existing, or null when the
-// exact block of lines is already the ledger's tail (a re-run of the same result appends nothing).
+// Returns the lines not already in the ledger, each once. A resumed run after a stop returns the
+// rulings the stopped run already ledgered; those, and any re-run of the same result, are skipped.
+// Stop lines are events, not facts: the same stop twice (same stop point and head) is ledgered
+// twice, so they are deduped only within one block.
+const STOP_LINE = /: stopped at /;
+export function freshLines(existing, lines) {
+  const seen = new Set(existing.split(/\r?\n/).filter((l) => !STOP_LINE.test(l)));
+  const out = [];
+  for (const l of lines) {
+    if (seen.has(l)) continue;
+    seen.add(l);
+    out.push(l);
+  }
+  return out;
+}
+
+// Returns the text to append to a ledger whose current content is existing, or null when every
+// line is already there.
 export function appendText(existing, lines) {
+  const fresh = freshLines(existing, lines);
+  if (!fresh.length) return null;
   const eol = existing.includes("\r\n") ? "\r\n" : "\n";
-  const body = existing.replace(/(\r?\n)+$/, "").split(/\r?\n/);
-  const tail = body.slice(-lines.length);
-  if (tail.length === lines.length && tail.every((l, i) => l === lines[i])) return null;
   const lead = existing.length && !existing.endsWith("\n") ? eol : "";
-  return `${lead}${lines.join(eol)}${eol}`;
+  return `${lead}${fresh.join(eol)}${eol}`;
 }
 
 // Decodes a file's bytes: UTF-16LE or UTF-16BE with a BOM (PowerShell 5.1 Out-File and >
@@ -150,15 +166,20 @@ function main(argv) {
     );
     return 2;
   }
-  const add = appendText(decodeText(raw), lines);
+  const existing = decodeText(raw);
+  const fresh = freshLines(existing, lines);
+  const add = appendText(existing, lines);
   if (add === null) {
     console.log(
-      `append-ledger: already appended (the ${lines.length} line(s) are the tail of ${ledger}); nothing written`,
+      `append-ledger: already appended (all ${lines.length} line(s) are in ${ledger}); nothing written`,
     );
     return 0;
   }
   fs.appendFileSync(ledger, add, "utf8");
-  console.log(`append-ledger: appended ${lines.length} line(s) to ${ledger}`);
+  const skipped = lines.length - fresh.length;
+  console.log(
+    `append-ledger: appended ${fresh.length} line(s) to ${ledger}${skipped ? ` (${skipped} already present, skipped)` : ""}`,
+  );
   return 0;
 }
 
