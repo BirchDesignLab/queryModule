@@ -43,7 +43,7 @@ Developer direction 09-26-26 (ADR-0006): tasks land one PR per wave, on a branch
 |---|---|---|---|
 | W1 | 1 to 6 | 4, 5 | #31 (merged 09-26-26) |
 | W2 | 7 to 11, plus the W2F pre-freeze pass | none | #33 |
-| W3 | 12 to 16 | none | (W3 PR, to open on developer OK) |
+| W3 | 12 to 16 | none | #35 |
 | W4 | 17 to 22 | 17 to 22 | |
 | W5 | 23 to 25, then the phase Opus critic | 23 | |
 | W6 | 26 to 28 | 26, 28 | |

@@ -48,7 +48,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track A
 
 - Issue: #13 to #17 (W3, Tasks 12 to 16) done on feat/p0-wave-3; next #18 (Task 17, W4)
-- Branch / PR: feat/p0-wave-3 / W3 PR (to open on developer OK)
+- Branch / PR: feat/p0-wave-3 / #35
 - Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` (341 tests), `pnpm audit --prod` at 5d135e2 on feat/p0-wave-3
 - Next step: developer reviews and merges the W3 PR; then item 11 (sdd-wave workflow), then cut feat/p0-wave-4 (Tasks 17 to 22, all sensitive)
 - Blocked by: W3 PR merge
