@@ -44,7 +44,8 @@ Vocabulary: **role** (implementer, reviewer (the combined spec and quality revie
   carries: "<controller rulings and interfaces the brief cannot know>",
   trailer: "Co-Authored-By: ...",          // fallback commit trailer
   roles: { ... optional overrides ... },
-  maxAgents: 16,                           // agent budget per run; coerced like maxRounds (logged); at least 1
+  maxAgents: 14,                           // agent budget per run; default by tier (ordinary 14, gate 16,
+                                           // critical 20); coerced like maxRounds (logged); at least 1
   maxRounds: 5,                            // numeric strings and floats are coerced (logged); clamped to 1..8
   answers: [{ at, text?, decisions? }],   // only on a re-run after a stop: one entry per answered stop
   implemented: { head: "<full sha>" }      // optional: review stages only (see Fallbacks)
@@ -100,7 +101,8 @@ Every `sdd-task` agent can run shell commands, so every `sdd-task` prompt carrie
    - A planVsSpec or correctness concern goes to the ruler (`ruler-concerns`). A `fix` ruling gets one pre-review fixer and progress check; progress problems there are passed to the reviewers.
    - Observations become deferred minors.
 2. **Review and gate-0** (parallel, on the same head `reviewHead`): the combined reviewer (ordinary and gate) or the spec and quality reviewers (critical), the critic on gate, critical, UI or `critic: true` tasks, and `gate-0`. Each reviewer builds its own diff file in its scratch path, reads it once, writes its review file (`workDir/task-<n>-review.md` for the combined reviewer, `task-<n>-review-<spec|quality|critic>.md` otherwise) and returns `{ verdict: pass|fail, findings:[{id, severity, file, line, summary, fix, planMandated, contestsRuling, kind?}], cannotVerify:[{item, check, kind?}] }` (`kind` from the combined reviewer only).
-   - **Diff scope.** Reviewer, critic and re-reviewer prompts say: after the diff, read only the files that call or are called by the changed code, and the spec lines in `specRefs`; do not read unrelated files. Each names every file it read outside the diff and why.
+   - **Diff scope.** Reviewer and critic prompts say: after the diff, read outside the diff only files that call or are called by the changed code, and only for a concrete risk you can name, one focused check per risk; the spec lines in `specRefs` and the rulings in force still apply; do not read unrelated files. The re-reviewer has its own scope: the fix diff, and a caller or callee of the changed code only for a named risk, under the same limits. Each names every file it read outside the diff and the risk that sent it there.
+   - Rulers and fixers find the review files as `task-<n>-review*.md`, which matches the combined `task-<n>-review.md` and the split `task-<n>-review-<spec|quality|critic>.md`.
    - Reviewers see the rulings in force. A finding that contradicts one sets `contestsRuling` to its id.
    - The spec reviewer (or the combined reviewer) cites requirement IDs verbatim, checks fixtures against the fixture policy, and treats missing or implausible RED evidence as important.
    - Reviewers are told the gate runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` on the same head, so they never list lint, typecheck, tests, coverage or the report's test counts as cannot-verify.
@@ -136,9 +138,9 @@ Agent counts at the default maxRounds 5 (no budget stop):
 
 ### Agent budget
 
-`maxAgents` (default 16; numeric strings and floats coerced and logged like `maxRounds`; at least 1) caps the agent calls in one run. Every `agent()` call counts, a cached replay on resume included. When the next call would exceed the cap, it is not made and the run stops with `stopped: "budget"`, `stopPoint: "budget"` and a `problem` naming the count, the cap and the stage (for example `agent 17 would exceed maxAgents 16 at fixer-r3 (Fix)`). The parallel review block reserves all its calls first, so a budget stop never splits it. The default stops every worst case above before it ends; a typical task stays well under it.
+`maxAgents` caps the agent calls in one run. Its default follows the tier: ordinary 14, gate 16, critical 20; an explicit `maxAgents` wins (numeric strings and floats coerced and logged like `maxRounds`; at least 1). Every `agent()` call counts, a cached replay on resume included. When the next call would exceed the cap, it is not made and the run stops with `stopped: "budget"`, `stopPoint: "budget"` and a `problem` naming the count, the cap and the stage (for example `agent 17 would exceed maxAgents 16 at fixer-r3 (Fix)`). The parallel review block reserves all its calls first, so a budget stop never splits it. Findings still open at the stop are returned as `parked` too (for visibility; a resume recomputes them from cache). The defaults stop every worst case above before it ends; a typical task stays well under them.
 
-Answer at `budget` (`{ at: "budget", text, decisions? }`) and re-run with `resumeFromRunId` and the full args. Each budget entry raises the cap by 16 (the default), once. The text goes to no agent (it is logged), so every earlier call replays from cache and the run resumes at the stage it stopped. Decisions apply like decisions at a later stop (after the checker). If it stops at `budget` again, append another entry.
+Answer at `budget` (`{ at: "budget", text, decisions? }`) and re-run with `resumeFromRunId` and the full args. Each budget entry raises the cap by the tier default (14, 16 or 20), once. The text goes to no agent (it is logged), so every earlier call replays from cache and the run resumes at the stage it stopped. Decisions apply like decisions at a later stop (after the checker). So a decision given at `budget` on a cannot-verify item still sends that item to the checker (one agent against the cap) before the decision overrides its result. If it stops at `budget` again, append another entry.
 
 The result carries `agents` (the calls in this run), and the ledger `complete` line ends with `; <n> agents`.
 
@@ -171,7 +173,7 @@ Stop points and the agent that consumes the answers there:
 | `ruler-review` | `ruler-review` |
 | `fixer-r<r>` | `fixer-r<r>` |
 | `gate-0`, `gate-r<r>` | `fixer-r1`, `fixer-r<r+1>` |
-| `budget` | none: the cap rises by 16 per entry and the run resumes where it stopped |
+| `budget` | none: the cap rises by the tier default per entry and the run resumes where it stopped |
 
 Each entry's text is delivered to exactly one agent: the first consumer at or after its stop point that runs (normally the consumer in this table). So an agent's prompt holds only the entries for its own stop point, and a later entry never changes an earlier agent's prompt. For a precondition entry, use the returned `stopPoint` as `at`; a plain `precondition` goes to the first precondition failure and may carry text only (decisions there throw). An `at` that is not in this table throws at start. Answers that no agent consumed in the run are logged and returned as `answersUnconsumed: true`. Editing an earlier entry (for example adding a decision on an item escalated at an earlier stop) changes that stop's consumer prompt, so the run replays from cache only up to that stop and re-runs everything after it.
 
@@ -203,7 +205,7 @@ Runs every task of one wave in order, each as a nested `sdd-task` run (`workflow
   wave: "w4", repoDir, branch: "feat/p0-wave-4", base: "<full sha, HEAD before the first task>",
   workDir, scratchRoot, ledgerPath?, globalConstraints, trailer, requirementsDoc?, maxRounds?,
   tier?: "ordinary" | "gate" | "critical",  // wave default; a task's tier or sensitive: true wins
-  maxAgents?: 16,                   // wave default agent budget per task; a task's maxAgents wins
+  maxAgents?: 20,                   // wave default agent budget per task; a task's maxAgents wins; unset: the tier default
   roles?: { ... },                  // wave defaults; a task's roles override them per role
   sddTaskPath?: ".claude/workflows/sdd-task.js",
   tasks: [{ task: 17, title, issue?, ids?, specRefs, briefPath, carries?, reportPath?, runLabel?,
@@ -213,7 +215,7 @@ Runs every task of one wave in order, each as a nested `sdd-task` run (`workflow
 }
 ```
 
-Required: `wave`, `repoDir`, `branch`, `base`, `workDir`, `scratchRoot`, `globalConstraints`, `trailer`, and a non-empty `tasks` list whose entries each have `task`, `title`, `specRefs` and `briefPath`. Task numbers are unique. A task entry never carries `base` or `answers` (the wave sets them), and `answers` keys must be task numbers in `tasks`. Defaults: `reportPath` is `<workDir>/task-<n>-report.md`, `runLabel` is `<wave>-t<n>`. Options a task does not set are not passed, so each nested run sees exactly what `sdd-task` would get by hand. `tier` and `maxAgents` are the exceptions: a wave-level value is passed to every task that does not set its own (a task with `sensitive: true` gets no wave `tier`; the alias makes it critical, and a different wave tier would conflict). `globalConstraints` follows the `sdd-task` rule: product and code constraints only.
+Required: `wave`, `repoDir`, `branch`, `base`, `workDir`, `scratchRoot`, `globalConstraints`, `trailer`, and a non-empty `tasks` list whose entries each have `task`, `title`, `specRefs` and `briefPath`. Task numbers are unique. A task entry never carries `base` or `answers` (the wave sets them), and `answers` keys must be task numbers in `tasks`. Defaults: `reportPath` is `<workDir>/task-<n>-report.md`, `runLabel` is `<wave>-t<n>`. Options a task does not set are not passed, so each nested run sees exactly what `sdd-task` would get by hand. `tier` and `maxAgents` are the exceptions: a wave-level value is passed to every task that does not set its own (a task that sets `sensitive`, true or false, gets no wave `tier`: `sensitive: true` makes it critical, `sensitive: false` ordinary, and a wave tier could conflict with either; so under a wave `tier: "critical"`, a task with `sensitive: false` runs as ordinary). `globalConstraints` follows the `sdd-task` rule: product and code constraints only.
 
 ### Flow
 
@@ -264,7 +266,7 @@ Required: `pr`, `base`, `head`, `repoDir`, `planPath`, `workDir`, `scratchRoot`,
 | progressChecker | sonnet / low | sonnet / low |
 | reReviewer | opus / xhigh | opus / high |
 
-Review tier (ADR-0007): pass the PR's highest tier in `.github/sensitive-paths`. `tier: "gate"` is for a PR whose highest tier is `[gate]`; the artifact front matter then reads `effort: "high"` (it follows the writing role), and `scripts/ci/sensitive-review.ts` accepts high for gate paths only, so a gate artifact on a PR that touches a critical path fails closed. `tier: "ordinary"` throws: a PR with only `[deps]` or `[exempt]` changes, or no sensitive path, needs no `wave-review`. An unknown tier throws. A `roles` override still wins over the tier. The reviewer prompt is diff-scoped: the branch diff, then only the files that call or are called by the changed code, the listed sensitive files and the plan, spec and requirement lines the tasks cite; the controller questions and the sensitive-file list still steer it. Never touch the repository tree while a run is active: the fixer's clean-tree precondition stops the run (PR #76, 09-26-26).
+Review tier (ADR-0007): pass the PR's highest tier in `.github/sensitive-paths`. `tier: "gate"` is for a PR whose highest tier is `[gate]`; the artifact front matter then reads `effort: "high"` (it follows the writing role), and `scripts/ci/sensitive-review.ts` accepts high for gate paths only, so a gate artifact on a PR that touches a critical path fails closed. `tier: "ordinary"` throws: a PR with only `[deps]` or `[exempt]` changes, or no sensitive path, needs no `wave-review`. An unknown tier throws. A `roles` override still wins over the tier. The reviewer prompt is diff-scoped: the branch diff and the listed sensitive files, then callers or callees of the changed code only for a concrete risk it can name, one focused check per risk; the plan, spec and requirement lines the tasks cite and the ledger Rulings still apply, and the controller questions and the sensitive-file list still steer it. Never touch the repository tree while a run is active: the fixer's clean-tree precondition stops the run (PR #76, 09-26-26).
 
 ### Flow
 
@@ -353,7 +355,7 @@ Whether the Workflow runtime caches an agent that returned nothing is runtime be
 | `ruler-review` | append `{ at: "ruler-review", text, decisions }` | Review stages only, with the decisions carried in `answers`. |
 | `fixer-r<r>` | append `{ at: "fixer-r<r>", text }` | Review stages only; the fixes already committed are reviewed with the rest. |
 | `gate-0`, `gate-r<r>` | append `{ at: "gate-...", text }` (it reaches the next fixer round) | Review stages only; the gate runs again at the end. |
-| `budget` | append `{ at: "budget", text }`; the cap rises by 16 and every earlier call replays from cache | Review stages only with a higher `maxAgents`, if the work already committed is worth keeping. |
+| `budget` | append `{ at: "budget", text }`; the cap rises by the tier default and every earlier call replays from cache | Review stages only with a higher `maxAgents`, if the work already committed is worth keeping. |
 
 | `stopped` (wave-review) | How to answer (resume) | If the resumed run replays a null or failed agent |
 |---|---|---|
