@@ -39,6 +39,10 @@ export const TYPE_PICKLIST_CODE_PATTERN = /^[A-Za-z0-9]{1,32}$/;
 export const TypePicklistCodeSchema = z.string().regex(TYPE_PICKLIST_CODE_PATTERN);
 export type TypePicklistCode = z.infer<typeof TypePicklistCodeSchema>;
 
+/** role:"type" field values: field key to picklist code (audit typeValues, mock file types). */
+export const TypeValuesSchema = z.record(FieldKeySchema, TypePicklistCodeSchema);
+export type TypeValues = z.infer<typeof TypeValuesSchema>;
+
 /** Epoch milliseconds UTC (spec 5.5). */
 export const EpochMsSchema = z.int().min(0);
 export type EpochMs = z.infer<typeof EpochMsSchema>;

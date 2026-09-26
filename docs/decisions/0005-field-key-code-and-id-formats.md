@@ -39,3 +39,4 @@ Option 3. `packages/core/src/contracts/primitives.ts`, exported from the contrac
 - Loosening a pattern later is additive (old rows stay valid); tightening is not.
 - No spec section is overridden, so no `Overridden by ADR-0005.` line is added.
 - Amended 09-26-26 (W2 pre-freeze pass, developer decision): `BoundedIdSchema` also bounds `Source.id`, `CommandDef.queryType` and `SiteConfig.extends`; `CommandDef.presets` keys use `FieldKeySchema`. Command codes get their own config-side pattern, `CommandCodeSchema` in `packages/core/src/config/schema.ts` (printable ASCII without space or `=`, 1 to 32 characters), because radio-style codes such as `10-28` are common; a code that contains the site delimiter is rejected by config validation (plan Task 13), not by the pattern.
+- Amended 09-26-26 (W4): `TypeValuesSchema` in primitives is shared by audit `typeValues` and the mock file `types`; `AuditActor.email` is an email of at most 254 characters.

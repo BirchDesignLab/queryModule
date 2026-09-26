@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   AUDIT_DETAILS_SCHEMAS,
   AUDIT_EVENT_TYPES,
+  AuditActorSchema,
   AuditEventSchema,
   type AuditEventType,
   parseAuditDetails,
@@ -199,6 +200,22 @@ const alsoRunSubmitted = {
   origin: "alsoRun",
   fieldMapApplied: { last: "last" },
 } as const;
+
+describe("AuditActor email is a bounded email or null (ADR-0005 amended 09-26-26)", () => {
+  const actor = (email: string | null) => AuditActorSchema.safeParse({ ...USER_ACTOR, email });
+  /** Synthetic address of exactly n characters on example.test (spec 5.4 fixture policy). */
+  const addressOf = (n: number) => `${"a".repeat(n - "@example.test".length)}@example.test`;
+  it("accepts a synthetic address, null and a 254-character address", () => {
+    expect(actor("officer@example.test").success).toBe(true);
+    expect(actor(null).success).toBe(true);
+    expect(addressOf(254)).toHaveLength(254);
+    expect(actor(addressOf(254)).success).toBe(true);
+  });
+  it("rejects a non-email string and a 255-character address", () => {
+    expect(actor("not an email").success).toBe(false);
+    expect(actor(addressOf(255)).success).toBe(false);
+  });
+});
 
 describe("SEC-011 T4-C actor and identity source agree (spec 4.7)", () => {
   const base = {
