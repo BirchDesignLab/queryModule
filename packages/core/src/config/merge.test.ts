@@ -114,6 +114,19 @@ describe("BR-001 FR-008 FR-031 overlays (spec 4.1)", () => {
   });
 });
 
+describe("mergeSiteOverlay input guard", () => {
+  it.each([
+    ["base", null, {}],
+    ["overlay", {}, []],
+    ["overlay", {}, "x"],
+  ])("fails with config.notAnObject when %s is not an object", (_which, b, o) => {
+    expect(mergeSiteOverlay(b, o)).toEqual({
+      config: {},
+      errors: [{ level: "error", path: "", key: "config.notAnObject", params: {} }],
+    });
+  });
+});
+
 describe("pointer (RFC 6901)", () => {
   it("escapes ~ and /", () => {
     expect(pointer("theme", "tokens", "a/b~c", 0)).toBe("/theme/tokens/a~1b~0c/0");

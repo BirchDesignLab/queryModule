@@ -60,6 +60,43 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     });
   });
 
+  it("keeps a purpose's maxDurationMinutes, shortcuts and theme, and drops auth subtrees (SEC-006)", () => {
+    const raw = minimalSiteConfigInput();
+    raw.auth = {
+      mfaRequired: { roles: ["admin"] },
+      embedded: { roleClaims: { claim: "sentinelClaim", map: { "sentinel-group": "admin" } } },
+    };
+    raw.delegation = {
+      purposes: [
+        {
+          key: "ride",
+          labelKey: "delegation.ride",
+          delegatorRoles: ["trainingOfficer"],
+          maxDurationMinutes: 60,
+        },
+      ],
+      maxDurationMinutes: 480,
+    };
+    raw.shortcuts = { submit: { keys: "Ctrl+Enter", context: "panel" } };
+    raw.theme = { defaultMode: "night", auto: "os", tokens: {} };
+    const client = toClientSiteConfig(SiteConfigSchema.parse(raw), HASH);
+    const text = JSON.stringify(client);
+    expect(client.delegation.purposes).toEqual([
+      { key: "ride", labelKey: "delegation.ride", maxDurationMinutes: 60 },
+    ]);
+    expect(client.shortcuts).toEqual({ submit: { keys: "Ctrl+Enter", context: "panel" } });
+    expect(client.theme?.defaultMode).toBe("night");
+    expect(text).not.toContain("sentinel");
+    expect(text).not.toContain("mfaRequired");
+    expect(text).not.toContain("trainingOfficer");
+  });
+
+  it("omits shortcuts and theme when the server config has none", () => {
+    const client = toClientSiteConfig(serverConfig(), HASH);
+    expect(client).not.toHaveProperty("shortcuts");
+    expect(client).not.toHaveProperty("theme");
+  });
+
   it("parses forward-tolerantly: unknown keys stripped, unknown optional enums caught", () => {
     const client = toClientSiteConfig(serverConfig(), HASH) as Record<string, unknown>;
     const future = {
