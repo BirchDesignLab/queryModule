@@ -1236,7 +1236,7 @@ git commit -m "feat(core): source status and query audit catalogue
 <attribution trailer given by your session's system reminder>"
 ```
 
-- [ ] **Step 9: Sensitive review.** Run the Opus 5.5 `xhigh` whole-branch review; it writes `docs/reviews/pr-<PR number>.md` with front matter `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"` after findings are fixed. Commit it:
+- [x] **Step 9: Sensitive review.** Run the Opus 5.5 `xhigh` whole-branch review; it writes `docs/reviews/pr-<PR number>.md` with front matter `reviewer: "opus-5.5"`, `effort: "xhigh"`, `reviewedSha: <head sha>`, `verdict: "approve"` after findings are fixed. Commit it:
 
 ```bash
 git add docs/reviews/pr-<PR number>.md
