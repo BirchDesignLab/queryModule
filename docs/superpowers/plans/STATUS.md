@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 08:16 |
+| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 11:25 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: #8 to #12 (W2, Tasks 7 to 11) done on feat/p0-wave-2; next #13 (Task 12, W3)
-- Branch / PR: feat/p0-wave-2 / W2 PR (to open on developer OK)
-- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` (197 tests) at 0aab44d on feat/p0-wave-2
-- Next step: developer reviews and merges the W2 PR; then cut feat/p0-wave-3 and run "Task 12: validateSiteConfig: keys, references, labels (#13)" through sdd-task
-- Blocked by: W2 PR merge
+- Issue: #13 to #17 (W3, Tasks 12 to 16) done on feat/p0-wave-3; next #18 (Task 17, W4)
+- Branch / PR: feat/p0-wave-3 / #35
+- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` (341 tests), `pnpm audit --prod` at 5d135e2 on feat/p0-wave-3
+- Next step: developer reviews and merges the W3 PR; then item 11 (sdd-wave workflow), then cut feat/p0-wave-4 (Tasks 17 to 22, all sensitive)
+- Blocked by: W3 PR merge
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: W2 was the sdd-task pilot (metrics in the SDD ledger); W3 carries for Tasks 12 and 13 are in the ledger (validateSiteConfig referential checks)
+- Notes: W3 carries (validateSiteConfig referential checks, command code vs delimiter, shipped fixtures vs W2 schemas) are in the SDD ledger
 
 ### Track B
 

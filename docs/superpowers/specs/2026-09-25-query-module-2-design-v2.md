@@ -509,7 +509,7 @@ Segment { text, severity?, keyword? }
 
 - Case-insensitive, longest keyword first, with payload text and keywords normalised to NFC.
 - Word boundaries are Unicode-aware: a match must not be preceded or followed by a letter or digit, implemented as `(?<![\p{L}\p{N}])` and `(?![\p{L}\p{N}])` lookarounds with the `u` flag, never `\b`.
-- `except` phrases suppress a match that lies inside an occurrence of the phrase, for example `STOLEN` with `except: ["NOT STOLEN", "RECOVERED STOLEN"]`, and `WANTED` with `except: ["NO WANTS OR WARRANTS"]`. Applies to both `highlight` and `assessResult`.
+- `except` phrases suppress a match that lies inside an occurrence of the phrase, for example `STOLEN` with `except: ["NOT STOLEN", "RECOVERED STOLEN"]`, and `WANTED` with `except: ["NOT WANTED"]`. Applies to both `highlight` and `assessResult`.
 - The renderer styles a segment from `keywordSeverityStyles[severity]`. The severity `marker` (text) and `icon` are always rendered next to highlighted text, so severity never relies on colour (6.3).
 - An element with `highlight: false` (for echoed input, such as the plate the user typed) renders unsegmented; `assessResult` still scans it.
 - `validateSiteConfig` checks that each severity style meets 4.5:1 contrast between colour and background, and each theme mode's token pairs per 6.5 (4.1).

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "extends": "default",
+  "site": { "id": "example-ok", "labelKey": "site.exampleOk" },
+  "defaults": { "state": "OK" },
+  "terminal": { "delimiter": "/" },
+  "shortcuts": { "focusTerminal": { "keys": "Ctrl+Slash", "context": "global" } },
+  "picklists": [{ "id": "propertyType", "values": [{ "code": "BOAT", "$remove": true }] }],
+  "queryTypes": [
+    {
+      "code": "VEH",
+      "fields": [
+        {
+          "key": "tagSticker",
+          "labelKey": "field.tagSticker",
+          "dataType": "string",
+          "section": "expanded",
+          "custom": true
+        }
+      ]
+    }
+  ]
+}

@@ -189,6 +189,18 @@ const US_SHIFTED: Readonly<Record<string, string>> = {
   Slash: "?",
 };
 
+/** Numpad character keys, W1 xhigh M9 / Task 13 amendment (09-26-26): the digits plus the numpad
+ *  operator and punctuation keys. NumpadEnter types no character and is not in this table. */
+const NUMPAD_CHARS: Readonly<Record<string, string>> = {
+  NumpadAdd: "+",
+  NumpadSubtract: "-",
+  NumpadMultiply: "*",
+  NumpadDivide: "/",
+  NumpadDecimal: ".",
+  NumpadEqual: "=",
+  NumpadComma: ",",
+};
+
 /** Character a single-key stroke (no Ctrl or Alt) types on a US layout; null otherwise (spec 6.4). */
 export function usLayoutChar(keys: string): string | null {
   if (keys.includes(" ")) return null;
@@ -199,6 +211,9 @@ export function usLayoutChar(keys: string): string | null {
   if (letter?.[1]) return shift ? letter[1] : letter[1].toLowerCase();
   const digit = /^Digit(\d)$/.exec(code);
   if (digit?.[1] && !shift) return digit[1];
+  const numpadDigit = /^Numpad(\d)$/.exec(code);
+  if (numpadDigit?.[1] && !shift) return numpadDigit[1];
+  if (!shift && Object.hasOwn(NUMPAD_CHARS, code)) return NUMPAD_CHARS[code] ?? null;
   const table = shift ? US_SHIFTED : US_UNSHIFTED;
-  return table[code] ?? null;
+  return Object.hasOwn(table, code) ? (table[code] ?? null) : null;
 }

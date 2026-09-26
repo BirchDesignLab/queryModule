@@ -43,7 +43,7 @@ Developer direction 09-26-26 (ADR-0006): tasks land one PR per wave, on a branch
 |---|---|---|---|
 | W1 | 1 to 6 | 4, 5 | #31 (merged 09-26-26) |
 | W2 | 7 to 11, plus the W2F pre-freeze pass | none | #33 |
-| W3 | 12 to 16 | none | |
+| W3 | 12 to 16 | none | #35 |
 | W4 | 17 to 22 | 17 to 22 | |
 | W5 | 23 to 25, then the phase Opus critic | 23 | |
 | W6 | 26 to 28 | 26, 28 | |
@@ -2982,7 +2982,7 @@ git commit -m "feat(core): migrateConfig with empty v1 chain
 
 **IDs:** BR-001, FR-004, FR-007, FR-012, NFR-001, UX-011
 
-- [ ] **Step 1: Write the failing test `packages/core/src/config/validate.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/config/validate.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3064,7 +3064,7 @@ describe("BR-001 validateSiteConfig referential pass (spec 4.1 Validation)", () 
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/validate.test.ts
@@ -3072,7 +3072,7 @@ pnpm vitest run packages/core/src/config/validate.test.ts
 
 Expected: FAIL, `Failed to resolve import "./validate"`.
 
-- [ ] **Step 3: Implement `packages/core/src/config/defaults.ts`.**
+- [x] **Step 3: Implement `packages/core/src/config/defaults.ts`.**
 
 ```ts
 import type { Literal } from "./schema-fields";
@@ -3088,7 +3088,7 @@ export function configuredDefault(
 }
 ```
 
-- [ ] **Step 4: Implement `packages/core/src/config/conditions.ts`.**
+- [x] **Step 4: Implement `packages/core/src/config/conditions.ts`.**
 
 ```ts
 import type { Condition, DefaultRef, LeafCondition } from "./schema-fields";
@@ -3106,7 +3106,7 @@ export function walkCondition(cond: Condition, path: string, visit: (leaf: LeafC
 }
 ```
 
-- [ ] **Step 5: Implement `packages/core/src/config/validate.ts`.**
+- [x] **Step 5: Implement `packages/core/src/config/validate.ts`.**
 
 ```ts
 import { walkCondition, isDefaultRef } from "./conditions";
@@ -3320,7 +3320,7 @@ function checkLabels(config: SiteConfig, locales: LocaleBundles, out: Diagnostic
 
 The fieldMap pointer is built with `pointer(...)` so a target key containing `/` or `~` is escaped; `p.slice(1).split("/")` re-splits the already-escaped `queryTypes/<q>/alsoRun/<i>` prefix, which holds only safe segments.
 
-- [ ] **Step 6: Barrel.** Add to `packages/core/src/config/index.ts`:
+- [x] **Step 6: Barrel.** Add to `packages/core/src/config/index.ts`:
 
 ```ts
 export * from "./conditions";
@@ -3328,7 +3328,7 @@ export * from "./defaults";
 export * from "./validate";
 ```
 
-- [ ] **Step 7: Run.**
+- [x] **Step 7: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -3337,7 +3337,7 @@ pnpm typecheck
 
 Expected: all pass (validate file: 25 tests); `tsc -b` exits 0.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 git add -A
@@ -3362,7 +3362,7 @@ git commit -m "feat(core): validateSiteConfig keys, references and labels
 
 **IDs:** BR-001, FR-012, FR-031, FR-032, FR-042, FR-051, FR-052, FR-053, FR-055, UX-011
 
-- [ ] **Step 1: Append the failing cases to `packages/core/src/config/validate.test.ts`.**
+- [x] **Step 1: Append the failing cases to `packages/core/src/config/validate.test.ts`.**
 
 ```ts
 const PART2_CASES: Case[] = [
@@ -3485,7 +3485,7 @@ describe("FR-051 FR-052 validateSiteConfig field, command and terminal rules (sp
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/validate.test.ts
@@ -3493,7 +3493,7 @@ pnpm vitest run packages/core/src/config/validate.test.ts
 
 Expected: FAIL; every PART2 case fails with `expected [] to contain equal`, the two warning tests fail, the example-ok and defaults tests pass.
 
-- [ ] **Step 3: Implement `packages/core/src/config/validate-rules.ts`.**
+- [x] **Step 3: Implement `packages/core/src/config/validate-rules.ts`.**
 
 ```ts
 import { configuredDefault } from "./defaults";
@@ -3688,7 +3688,7 @@ export function checkWarnings(config: SiteConfig, out: DiagnosticSink): void {
 
 `DELIMITER_PATTERN` covers `!` to `/`, `:` to `<`, `>` to `@`, `[` to `` ` `` and `{` to `~`: printable ASCII minus letters, digits, space and `=`.
 
-- [ ] **Step 4: Wire the rules into `validateSiteConfig`.** In `packages/core/src/config/validate.ts`, add the import and replace the function body:
+- [x] **Step 4: Wire the rules into `validateSiteConfig`.** In `packages/core/src/config/validate.ts`, add the import and replace the function body:
 
 ```ts
 import { checkCommands, checkFieldDefs, checkLimits, checkShortcuts, checkTerminal, checkWarnings } from "./validate-rules";
@@ -3710,9 +3710,9 @@ export function validateSiteConfig(config: SiteConfig, locales: LocaleBundles, c
 }
 ```
 
-- [ ] **Step 5: Barrel.** Add `export * from "./validate-rules";` to `packages/core/src/config/index.ts`.
+- [x] **Step 5: Barrel.** Add `export * from "./validate-rules";` to `packages/core/src/config/index.ts`.
 
-- [ ] **Step 6: Run with coverage.**
+- [x] **Step 6: Run with coverage.**
 
 ```bash
 pnpm vitest run --project core --coverage
@@ -3721,7 +3721,7 @@ pnpm typecheck
 
 Expected: all pass (validate file: 58 tests); coverage for `packages/core/src/**` at or above 95% lines and branches; `tsc -b` exits 0. If a branch in `validate-rules.ts` is uncovered, add a case to `PART2_CASES` for it before committing.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add -A
@@ -3743,7 +3743,7 @@ git commit -m "feat(core): validateSiteConfig field, command, terminal, shortcut
 
 **IDs:** FR-043, FR-044, SEC-002; stories B1, B2 (scenario shape)
 
-- [ ] **Step 1: Write the failing test `packages/core/src/contracts/mock-file.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/contracts/mock-file.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3793,7 +3793,7 @@ describe("FR-044 SEC-002 mock file (spec 5.4)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/contracts/mock-file.test.ts
@@ -3801,7 +3801,7 @@ pnpm vitest run packages/core/src/contracts/mock-file.test.ts
 
 Expected: FAIL, `Failed to resolve import "./mock-file"`.
 
-- [ ] **Step 3: Implement `packages/core/src/contracts/mock-file.ts`.**
+- [x] **Step 3: Implement `packages/core/src/contracts/mock-file.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -3845,9 +3845,9 @@ export const MockFileSchema = z.strictObject({
 export type MockFile = z.infer<typeof MockFileSchema>;
 ```
 
-- [ ] **Step 4: Barrel.** Add `export * from "./mock-file";` to `packages/core/src/contracts/index.ts` (sorted after `./identity`).
+- [x] **Step 4: Barrel.** Add `export * from "./mock-file";` to `packages/core/src/contracts/index.ts` (sorted after `./identity`).
 
-- [ ] **Step 5: Run.**
+- [x] **Step 5: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -3855,7 +3855,7 @@ pnpm vitest run --project core
 
 Expected: all pass (mock-file file: 3 tests).
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add -A
@@ -3878,7 +3878,7 @@ git commit -m "feat(core): mock file schema
 
 **IDs:** BR-007, NFR-001
 
-- [ ] **Step 1: Write the failing test `packages/core/src/contracts/routes.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/contracts/routes.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3930,7 +3930,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/contracts/routes.test.ts
@@ -3938,7 +3938,7 @@ pnpm vitest run packages/core/src/contracts/routes.test.ts
 
 Expected: FAIL, `Failed to resolve import "./routes"`.
 
-- [ ] **Step 3: Implement `packages/core/src/contracts/routes.ts`.**
+- [x] **Step 3: Implement `packages/core/src/contracts/routes.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -4061,7 +4061,7 @@ export function findRoute(id: string): RouteDef {
 }
 ```
 
-- [ ] **Step 4: Barrel.** `packages/core/src/contracts/index.ts`:
+- [x] **Step 4: Barrel.** `packages/core/src/contracts/index.ts`:
 
 ```ts
 export * from "./api-error";
@@ -4075,7 +4075,7 @@ export * from "./version";
 export * from "./ws";
 ```
 
-- [ ] **Step 5: Run.**
+- [x] **Step 5: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -4084,7 +4084,7 @@ pnpm typecheck
 
 Expected: all pass (routes file: 5 tests); `tsc -b` exits 0.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add -A
@@ -4107,7 +4107,7 @@ git commit -m "feat(core): route contracts skeleton with planned status
 
 **IDs:** BR-001, FR-004, FR-008, FR-010, FR-020, FR-030, FR-031, FR-051, NFR-001; stories A1, A2, A4, B1, B2, B7 (config and scenarios)
 
-- [ ] **Step 1: Write the package files.** `packages/config/package.json`:
+- [x] **Step 1: Write the package files.** `packages/config/package.json`:
 
 ```json
 {
@@ -4159,7 +4159,7 @@ export default defineProject({
 });
 ```
 
-- [ ] **Step 2: Write the failing test `packages/config/src/shipped.test.ts`.**
+- [x] **Step 2: Write the failing test `packages/config/src/shipped.test.ts`.**
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -4259,7 +4259,7 @@ function payloadPlates(value: unknown, out: string[] = [], underWhen = false): s
 
 The full fixture-policy checker (VIN check digit, DOB range, synthetic names and addresses, JSON paths in errors) ships with `scripts/mock-data/generate.ts` in Track A M1 P3 (spec 10.8).
 
-- [ ] **Step 3: Run it.**
+- [x] **Step 3: Run it.**
 
 ```bash
 pnpm vitest run --project config
@@ -4267,7 +4267,7 @@ pnpm vitest run --project config
 
 Expected: FAIL, `Failed to resolve import "./index"`.
 
-- [ ] **Step 4: Write `packages/config/src/index.ts`.**
+- [x] **Step 4: Write `packages/config/src/index.ts`.**
 
 ```ts
 import en from "../locales/en.json" with { type: "json" };
@@ -4276,7 +4276,7 @@ import en from "../locales/en.json" with { type: "json" };
 export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
 ```
 
-- [ ] **Step 5: Write `packages/config/locales/en.json`.**
+- [x] **Step 5: Write `packages/config/locales/en.json`.**
 
 ```json
 {
@@ -4331,7 +4331,7 @@ export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
 }
 ```
 
-- [ ] **Step 6: Write `packages/config/sites/default.json`.**
+- [x] **Step 6: Write `packages/config/sites/default.json`.**
 
 ```json
 {
@@ -4481,7 +4481,7 @@ export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
   ],
   "keywords": [
     { "keyword": "STOLEN", "severity": "critical", "except": ["NOT STOLEN", "RECOVERED STOLEN"] },
-    { "keyword": "WANTED", "severity": "critical", "except": ["NO WANTS OR WARRANTS"] },
+    { "keyword": "WANTED", "severity": "critical", "except": ["NOT WANTED"] },
     { "keyword": "EXPIRED", "severity": "warning" },
     { "keyword": "NO RECORD", "severity": "info" }
   ],
@@ -4505,7 +4505,7 @@ export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
 }
 ```
 
-- [ ] **Step 7: Write `packages/config/sites/example-ok.json` (spec 7 plus `schemaVersion`).**
+- [x] **Step 7: Write `packages/config/sites/example-ok.json` (spec 7 plus `schemaVersion`).**
 
 ```json
 {
@@ -4529,7 +4529,7 @@ export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
 }
 ```
 
-- [ ] **Step 8: Write the test overlays.** `packages/config/test/all-on.json`:
+- [x] **Step 8: Write the test overlays.** `packages/config/test/all-on.json`:
 
 ```json
 {
@@ -4549,7 +4549,7 @@ export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
 }
 ```
 
-- [ ] **Step 9: Write `packages/config/mock/default.json` (fixture policy, spec 5.4).**
+- [x] **Step 9: Write `packages/config/mock/default.json` (fixture policy, spec 5.4).**
 
 ```json
 {
@@ -4616,13 +4616,13 @@ export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
 
 `ZZZZZZZZZZZZZZZZ0` has 17 characters and `Z` in position 9, the check-digit position, where only `0` to `9` or `X` are valid, so it fails the ISO 3779 check digit by construction. `scripts/mock-data/generate.ts` (M1 P3) replaces this file with generated payloads.
 
-- [ ] **Step 10: Write `packages/config/mock/example-ok.json`.** Identical content to `mock/default.json` except the first line of the object: `"siteId": "example-ok"`.
+- [x] **Step 10: Write `packages/config/mock/example-ok.json`.** Identical content to `mock/default.json` except the first line of the object: `"siteId": "example-ok"`.
 
 ```bash
 node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('packages/config/mock/default.json','utf8'));m.siteId='example-ok';fs.writeFileSync('packages/config/mock/example-ok.json',JSON.stringify(m,null,2)+'\n')"
 ```
 
-- [ ] **Step 11: Add the project reference.** `tsconfig.json`:
+- [x] **Step 11: Add the project reference.** `tsconfig.json`:
 
 ```json
 {
@@ -4631,7 +4631,7 @@ node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('packages/con
 }
 ```
 
-- [ ] **Step 12: Run.**
+- [x] **Step 12: Run.**
 
 ```bash
 pnpm install
@@ -4642,7 +4642,7 @@ pnpm typecheck
 
 Expected: `9 passed`; biome clean (run `pnpm biome format --write packages/config` first if it reports JSON formatting); `tsc -b` exits 0. `site-config.schema.json` does not exist yet; the `$schema` pointer resolves after Task 17.
 
-- [ ] **Step 13: Commit.**
+- [x] **Step 13: Commit.**
 
 ```bash
 git add -A

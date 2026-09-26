@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import type { z } from "zod";
-import { ClientSiteConfigSchema, toClientSiteConfig } from "./client-config";
+import { type ClientSiteConfig, ClientSiteConfigSchema, toClientSiteConfig } from "./client-config";
+import type { FeatureKey } from "./features";
 import { SiteConfigSchema } from "./schema";
 import { minimalSiteConfigInput } from "./test-fixtures";
 
@@ -129,6 +130,18 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     });
   });
 
+  it("types features by the closed catalogue and strips unknown feature keys", () => {
+    expectTypeOf<ClientSiteConfig["features"]>().toEqualTypeOf<Record<FeatureKey, boolean>>();
+    const client = toClientSiteConfig(serverConfig(), HASH);
+    const parsed = ClientSiteConfigSchema.parse({
+      ...client,
+      features: { ...client.features, futureFeature: true },
+    });
+    expect(parsed.features).toEqual(client.features);
+    const { adminAudit: _dropped, ...missing } = client.features;
+    expect(ClientSiteConfigSchema.safeParse({ ...client, features: missing }).success).toBe(false);
+  });
+
   it("keeps delegation purposes without delegatorRoles", () => {
     expect(toClientSiteConfig(serverConfig(), HASH).delegation).toEqual({
       purposes: [{ key: "training", labelKey: "delegation.training" }],
@@ -214,6 +227,10 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     "delegation.purposes.labelKey",
     "delegation.purposes.maxDurationMinutes",
     "features",
+    "features.adminAudit",
+    "features.credentials",
+    "features.delegation",
+    "features.resultHide",
     "keywordSeverityStyles",
     "keywordSeverityStyles.critical",
     "keywordSeverityStyles.critical.audibleCue",

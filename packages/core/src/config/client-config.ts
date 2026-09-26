@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Sha256HexSchema } from "../contracts/primitives";
 import { CONFIG_SCHEMA_VERSION } from "../contracts/version";
-import { FEATURES } from "./features";
+import { FEATURES, type FeatureKey } from "./features";
 import { makeSiteConfigSchemas, type SiteConfig, SOURCE_SCOPES } from "./schema";
 
 const C = makeSiteConfigSchemas("client");
@@ -12,7 +12,10 @@ export const ClientSiteConfigSchema = z.object({
   configHash: Sha256HexSchema,
   site: z.object({ id: z.string().min(1), labelKey: z.string().min(1) }),
   locales: z.array(z.string().min(1)).min(1),
-  features: z.record(z.string(), z.boolean()),
+  // One key per catalogue entry, typed by FeatureKey; z.object strips feature keys a newer server adds.
+  features: z.object(
+    Object.fromEntries(FEATURES.map((k) => [k, z.boolean()])) as Record<FeatureKey, z.ZodBoolean>,
+  ),
   personas: z.array(C.PersonaDef),
   delegation: z.object({
     purposes: z.array(

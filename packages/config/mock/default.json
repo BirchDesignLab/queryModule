@@ -1,0 +1,68 @@
+{
+  "siteId": "default",
+  "sources": {
+    "stateSource": {
+      "latencyMs": [50, 400],
+      "responses": [
+        {
+          "queryType": "VEH",
+          "default": { "status": "NO RECORD" },
+          "scenarios": [
+            {
+              "when": { "plate": "ZZ-0001" },
+              "respond": {
+                "status": "STOLEN",
+                "plate": "ZZ-0001",
+                "state": "TX",
+                "vehicle": {
+                  "make": "TESTMAKE",
+                  "model": "SAMPLEMODEL",
+                  "year": 1901,
+                  "vin": "ZZZZZZZZZZZZZZZZ0"
+                },
+                "owner": { "last": "TESTERSON", "first": "SAMPLE", "address": "1 Example Ave" },
+                "remarks": "STOLEN VEHICLE"
+              }
+            },
+            { "when": { "plate": "ABC123" }, "respond": { "status": "NO RECORD" } },
+            { "when": { "plate": "FAIL1" }, "behavior": "error" }
+          ]
+        },
+        { "queryType": "PER", "default": { "status": "NO RECORD" }, "scenarios": [] },
+        { "queryType": "PRO", "default": { "status": "NO RECORD" }, "scenarios": [] }
+      ]
+    },
+    "nationalSource": {
+      "latencyMs": [100, 800],
+      "responses": [
+        {
+          "queryType": "VEH",
+          "default": { "status": "NO RECORD" },
+          "scenarios": [
+            {
+              "when": { "plate": "ZZ-0001" },
+              "respond": { "status": "STOLEN", "plate": "ZZ-0001", "remarks": "STOLEN VEHICLE" }
+            },
+            { "when": { "plate": "TIMEOUT" }, "behavior": "timeout" }
+          ]
+        },
+        { "queryType": "PER", "default": { "status": "NO RECORD" }, "scenarios": [] },
+        { "queryType": "PRO", "default": { "status": "NO RECORD" }, "scenarios": [] },
+        {
+          "queryType": "WNT",
+          "default": { "status": "NO WANTS OR WARRANTS" },
+          "scenarios": [
+            {
+              "when": { "last": "WANTED" },
+              "respond": {
+                "status": "WANTED",
+                "subject": { "last": "SAMPLEWORTH", "first": "TEST", "dob": "1901-01-01" },
+                "warrants": [{ "offense": "FAILURE TO APPEAR", "issued": "1901-01-02" }]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
