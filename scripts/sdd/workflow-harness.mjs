@@ -1193,6 +1193,127 @@ await test("sdd R2: implemented { head } skips the implementer and reviews base.
   );
 });
 
+// ---------- post-pilot (09-26-26): items 1 to 10 of the post-pilot brief ----------
+const NO_REMOTE =
+  "Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.";
+const neverAddressed = (p) => ({
+  verdicts: ids(p).map((id) => ({ id, verdict: "NOT ADDRESSED", evidence: "a.ts:1" })),
+  newFindings: [],
+  outOfScope: [],
+});
+// Runs that between them reach every sdd-task agent that can run shell commands.
+async function shellRuns() {
+  const loop = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "re-review*": neverAddressed,
+    }),
+  );
+  let gates = 0;
+  const gate = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "gate*": () =>
+        ++gates === 1 ? { ok: false, head: "h", problems: ["lint red"] } : GATE_OK("h2"),
+    }),
+  );
+  const cont = await run(
+    sdd,
+    { ...BASE, answers: { at: "implementer", text: "A" } },
+    sddResponder({
+      implementer: work("h0", { status: "NEEDS_CONTEXT", commits: [], questions: ["q"] }),
+    }),
+  );
+  const retry = await run(
+    sdd,
+    { ...BASE, answers: { at: "precondition", text: "fixed" } },
+    sddResponder({
+      implementer: work("h", { status: "BLOCKED", commits: [], preconditionFailed: "dirty" }),
+      "implementer-retry": work("h-retry"),
+    }),
+  );
+  const calls = [loop, gate, cont, retry].flatMap((r) => r.calls);
+  return { loop, gate, cont, retry, calls };
+}
+
+await test("sdd P1: every gate runs pnpm lint, pnpm typecheck and pnpm coverage, never pnpm test", async () => {
+  const { calls } = await shellRuns();
+  const gates = calls.filter((c) => c.label.startsWith("gate"));
+  assert.ok(
+    gates.some((c) => c.label === "gate-r1"),
+    "no gate-r1 in the runs",
+  );
+  for (const g of gates) {
+    for (const cmd of ["pnpm lint", "pnpm typecheck", "pnpm coverage"])
+      assert.ok(g.prompt.includes(cmd), `${g.label} lacks ${cmd}`);
+    assert.ok(!/pnpm test\b/.test(g.prompt), `${g.label} still runs pnpm test`);
+  }
+});
+
+await test("sdd P2: reviewers are told the gate runs lint, typecheck and coverage; never cannot-verify", async () => {
+  const r = await run(sdd, { ...BASE, sensitive: true }, sddResponder());
+  for (const l of ["spec-review", "quality-review", "critic-review"]) {
+    const p = r.find(l).prompt;
+    assert.ok(
+      p.includes(
+        "never list lint, typecheck, tests, coverage or the report's test counts as cannotVerify",
+      ),
+      `${l} lacks the cannot-verify exclusion`,
+    );
+    assert.ok(
+      !/the check the ruler should run/.test(p),
+      `${l} still sends cannot-verify to the ruler`,
+    );
+  }
+});
+
+await test("sdd P5: every shell-running agent is told never to push, open a PR or merge; wave-review fixer too", async () => {
+  const { calls } = await shellRuns();
+  const want = [
+    "implementer",
+    "implementer-continue",
+    "implementer-retry",
+    "fixer-pre",
+    "fixer-r1",
+    "fixer-r4",
+    "gate-0",
+    "gate-r1",
+  ];
+  for (const l of want) {
+    const c = calls.find((x) => x.label === l);
+    assert.ok(c, `no ${l} call in the runs`);
+    assert.ok(c.prompt.includes(NO_REMOTE), `${l} lacks the no-remote rule`);
+  }
+  const w = await run(wr, WBASE, wrResponder({ reviewer: reviewWith([WF("I1", "important")]) }));
+  assert.ok(
+    w.find("fixer").prompt.includes(NO_REMOTE),
+    "wave-review fixer lacks the no-remote rule",
+  );
+});
+
+await test("sdd P8: implementer, continue, retry and every fixer self-check lint and coverage before each commit", async () => {
+  const { calls } = await shellRuns();
+  const want = [
+    "implementer",
+    "implementer-continue",
+    "implementer-retry",
+    "fixer-pre",
+    "fixer-r1",
+    "fixer-r4",
+  ];
+  for (const l of want) {
+    const p = calls.find((x) => x.label === l).prompt;
+    assert.ok(p.includes("Before each commit run pnpm lint"), `${l} lacks the lint self-check`);
+    assert.ok(p.includes("pnpm exec biome format --write <files>"), `${l} lacks the format fix`);
+    assert.ok(p.includes("pnpm coverage"), `${l} lacks pnpm coverage`);
+    assert.ok(/do not commit on red/i.test(p), `${l} lacks "do not commit on red"`);
+  }
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {

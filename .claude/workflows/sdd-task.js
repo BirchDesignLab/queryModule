@@ -387,6 +387,10 @@ const HOUSE = [
 ].join('\n')
 const READONLY = 'Your review is read-only on this checkout: do not change the working tree, the index, HEAD or any branch. Write only your review file and your scratch directory.'
 const TRAILER = `End every commit message with the attribution trailer your session's system reminder gives; if it gives none, use:\n${A.trailer}`
+// Every agent that can run shell commands carries NO_REMOTE (W2 incident: an implementer pushed
+// and opened a PR after reading project memory). Implementer and fixers carry SELF_CHECK.
+const NO_REMOTE = 'Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.'
+const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only) and pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
 const SENSITIVE_RULE = 'This task is sensitive. On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.'
 
 function diffStep(base, head, out) {
@@ -400,7 +404,7 @@ function diffStep(base, head, out) {
   ].join('\n')
 }
 
-const TESTS_RULE = 'The implementer already ran the tests and put the evidence in the report. Do not re-run the suite (an independent gate runs lint, typecheck and tests after review). Run a focused test only for a specific doubt no existing run answers. Warnings or noise in reported test output are findings. Missing or garbled evidence is a gap to report, not a reason to re-run.'
+const TESTS_RULE = 'The implementer already ran the tests and put the evidence in the report. Do not re-run the suite (an independent gate runs pnpm lint, pnpm typecheck and pnpm coverage on this same head). Run a focused test only for a specific doubt no existing run answers. Warnings or noise in reported test output are findings. Missing or garbled evidence is a gap to report, not a reason to re-run.'
 const CALIBRATION = [
   'Severity: critical = broken behaviour, security or data risk; important = the task cannot be trusted until fixed (incorrect or fragile behaviour, a missed requirement, swallowed errors, tests that assert nothing, verbatim duplication of a logic block); minor = polish, broader coverage, style.',
   'If the brief or plan explicitly mandates something this rubric calls a defect, it is still a finding: report it as important with planMandated: true. The plan does not grade its own work.',
@@ -626,10 +630,12 @@ async function runFixer(findings, label, roleName, roundTag, round) {
       'Findings to fix (all of them; a ruler fixInstruction is the change to make):',
       findingsText(findings),
       '',
-      'TDD: for each behavioural finding, first write or tighten a test that fails for the defect, run it and see it fail, then fix, then see it pass. Run the tests that cover the amended code, then the full suite once before committing. A gate finding (lint, typecheck, test, head, tree) is fixed at its cause.',
+      'TDD: for each behavioural finding, first write or tighten a test that fails for the defect, run it and see it fail, then fix, then see it pass. Run the tests that cover the amended code while iterating. A gate finding (lint, typecheck, coverage, head, tree) is fixed at its cause.',
+      SELF_CHECK,
       `Append a "## Fix ${roundTag}" section to ${A.reportPath}: per finding id, what you changed (file:line), the covering tests, the commands and their output (RED and GREEN).`,
       `Commit only the files these fixes touch (git add <paths>, never git add -A) with a message "fix(task-${N}): ${roundTag} review findings" and a body listing the finding ids. ${TRAILER}`,
       GIT,
+      NO_REMOTE,
       HOUSE,
       'If you cannot fix a finding, say which and why in concerns (kind correctness) and use DONE_WITH_CONCERNS; use BLOCKED or NEEDS_CONTEXT with questions only when you cannot proceed at all.',
     ].filter(Boolean).join('\n'),
@@ -689,10 +695,11 @@ async function runGate(label, expectedHead, answerText) {
       '2. git status --porcelain prints nothing.',
       '3. pnpm lint exits 0.',
       '4. pnpm typecheck exits 0.',
-      '5. pnpm test exits 0.',
+      '5. pnpm coverage exits 0 (it runs the full suite and enforces the coverage thresholds).',
       `Run each command once, in that order, saving its full output under ${scratch(label)}. For a failure, put the command and its first error lines in problems (file paths, rule names and messages only; never field values or payloads).`,
       'head: git rev-parse HEAD (full sha).',
       'You are read-only: change nothing, commit nothing.',
+      NO_REMOTE,
       HOUSE,
     ].filter(Boolean).join('\n'),
     { label, phase: 'Gate', schema: GATE, ...role('gate') },
@@ -713,16 +720,18 @@ const implPrompt = [
     `Global constraints from the plan (binding):\n${A.globalConstraints}`,
     '',
     `Precondition: git branch --show-current is ${A.branch}, git rev-parse HEAD is ${A.base}, and git status --porcelain prints nothing. If any is not so, change nothing, set preconditionFailed to what you found (for a dirty tree, name each untracked or modified file from git status --porcelain), and report BLOCKED.`,
-    'Your job: implement exactly what the brief specifies, nothing more. TDD: write the failing test, run it and see it fail for the expected reason, implement, see it pass. While iterating run the focused test; run the full suite once before committing.',
+    'Your job: implement exactly what the brief specifies, nothing more. TDD: write the failing test, run it and see it fail for the expected reason, implement, see it pass. While iterating run the focused test.',
+    SELF_CHECK,
     `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
     GIT,
+    NO_REMOTE,
     HOUSE,
     '',
     'Stop and report BLOCKED or NEEDS_CONTEXT (with specific questions) when the task needs an architectural decision the brief does not make, when you are unsure your approach is right, or when you keep reading files without progress. Bad work is worse than no work.',
     'Concerns: kind planVsSpec when the brief conflicts with the spec or requirements; kind correctness when you doubt your result is right; kind observation for anything else worth noting. A planVsSpec or correctness concern goes to a ruler before review.',
     '',
     'Before reporting, self-review your diff: completeness against the brief, names, YAGNI, existing patterns, tests that verify behaviour, pristine test output. Fix what you find.',
-    `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the full-suite result, self-review findings, concerns.`,
+    `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the pnpm lint and pnpm coverage results, self-review findings, concerns.`,
     'Return: status, commits (full sha + subject), head (git rev-parse HEAD), a one-line test summary, concerns, questions.',
   ].filter(Boolean).join('\n')
 // The implement stage: the implementer, its precondition retry and its continuation. Returns
@@ -762,10 +771,12 @@ async function implementStage() {
         impl.concerns.length ? `Its concerns:\n${impl.concerns.map((c) => `- ${c.kind}: ${c.text}`).join('\n')}` : '',
         contAnswers,
         '',
-        'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green). Run the full suite once before committing.',
+        'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green).',
+        SELF_CHECK,
         `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
-        `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the full-suite result.`,
+        `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the pnpm lint and pnpm coverage results.`,
         GIT,
+        NO_REMOTE,
         HOUSE,
         'Return: status, commits you created (full sha + subject), head, a one-line test summary, concerns, questions. BLOCKED or NEEDS_CONTEXT only when the answers still leave you unable to proceed.',
       ].filter(Boolean).join('\n'),
@@ -859,7 +870,7 @@ const common = (roleLabel) => [
   READONLY,
   TESTS_RULE,
   CALIBRATION,
-  'cannotVerify: requirements you cannot verify from the diff alone, each with the check the ruler should run. Do not broaden your search to settle them.',
+  `cannotVerify: requirements you cannot verify from the diff alone, each with the check to run. Do not broaden your search to settle them. The gate independently runs pnpm lint, pnpm typecheck and pnpm coverage on this same head: never list lint, typecheck, tests, coverage or the report's test counts as cannotVerify.`,
   HOUSE,
 ].filter(Boolean).join('\n')
 
