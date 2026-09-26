@@ -24,9 +24,9 @@ Option 3. `.github/sensitive-paths` gains sections; `scripts/ci/sensitive-review
 
 | Tier | Paths | Needs |
 |---|---|---|
-| `[critical]` | credentials, audit, dispatch, adapters, planner, delegation, terminal parser, write-back, delete-from-view, migrations, the audit, WS, primitives and identity contracts, and the sensitive-review gate itself (`.github/sensitive-paths`, `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`) | artifact from Opus 5.5 at effort xhigh or max |
+| `[critical]` | credentials, audit, dispatch, adapters, planner, delegation, terminal parser, write-back, delete-from-view, migrations, the audit, WS, primitives and identity contracts, and the sensitive-review gate itself (`.github/sensitive-paths`, `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`, and the reserved `scripts/ci/check-audit-migrations.ts`) | artifact from Opus 5.5 at effort xhigh or max |
 | `[gate]` | `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`, `.gitignore`, `**/vitest.config.ts`, `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `**/tsconfig.json` | artifact from Opus 5.5 at effort high or above |
-| `[deps]` | `pnpm-lock.yaml`, `.github/dependabot.yml`; a `package.json` change to dependency fields only; a workflow change to `uses:` lines only | no artifact; the `ci` job's licence check, `pnpm audit --prod`, dependency review, actionlint and zizmor |
+| `[deps]` | `pnpm-lock.yaml`; a version-only change of an existing action or package (`package.json` dependency fields: the same package names, every changed value old and new a plain semver version; workflow `uses:` refs: per diff hunk the same number of removed and added lines, paired in order, each pair byte-identical up to and including `@`, the new ref a tag or sha) | no artifact; the `ci` job's licence check, `pnpm audit --prod`, dependency review, the registry-only lockfile check, actionlint and zizmor |
 | `[exempt]` | `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md` | nothing |
 
 - Lines before any section header are `[critical]`, so an old untiered file is read at the strictest tier.
@@ -34,7 +34,9 @@ Option 3. `.github/sensitive-paths` gains sections; `scripts/ci/sensitive-review
 - A changed file takes the highest tier from the base and the head copy of the file, so a PR cannot lower the tier that judges it.
 - The PR's highest tier sets the effort the artifact needs. Files changed after `reviewedSha` fail the check only when they are gate or critical.
 - `wave-review` runs with its reviewer and re-reviewer at effort high for a gate-only PR (role overrides; the artifact front matter follows the role) and at xhigh when any critical path is touched.
-- The `ci` job adds `pnpm audit --prod`, `actions/dependency-review-action` (fail on moderate), actionlint and zizmor (`.github/zizmor.yml`, tag pins accepted per spec 9.4).
+- The `ci` job adds `pnpm audit --prod`, `actions/dependency-review-action` (fail on moderate), a check that every `pnpm-lock.yaml` resolution is a registry entry (integrity only; no tarball URL, git repo or directory), actionlint and zizmor (`.github/zizmor.yml`, tag pins accepted per spec 9.4). actionlint and zizmor are pinned by image digest and wheel hash.
+- `.github/dependabot.yml` stays `[gate]`: no automated check reads it.
+- Known gap: the checks catch known advisories and non-registry sources, not a malicious new version of an existing package. `.npmrc` (registry settings) is outside the tier file today.
 
 ## Consequences
 

@@ -1,16 +1,5 @@
 import picomatch from "picomatch";
 
-/** Flat glob list: every non-exempt glob, section headers skipped. */
-export function parseSensitiveGlobs(text: string): string[] {
-  const t = parseSensitiveTiers(text);
-  return [...t.critical, ...t.gate, ...t.deps];
-}
-
-export function sensitiveFiles(files: string[], globs: string[]): string[] {
-  const isMatch = picomatch(globs, { dot: true });
-  return files.filter((f) => isMatch(f));
-}
-
 /**
  * Review tiers (ADR-0007). critical: Opus 5.5 at effort xhigh or max. gate: Opus 5.5 at
  * effort high or above. deps: automated checks only, no artifact. exempt: never reviewed.
@@ -29,6 +18,10 @@ export function parseSensitiveTiers(text: string): TierGlobs {
     const line = raw.trim();
     if (line === "" || line.startsWith("#")) continue;
     const header = /^\[(\w+)\]$/.exec(line);
+    if (header?.[1] === undefined && line.startsWith("["))
+      throw new Error(`malformed section header ${line}`);
+    // picomatch matches an array when any pattern matches, so a "!" glob would match nearly everything.
+    if (line.startsWith("!")) throw new Error(`negated glob ${line} is not supported`);
     if (header?.[1] !== undefined) {
       if (!(SECTIONS as readonly string[]).includes(header[1]))
         throw new Error(`unknown section [${header[1]}]`);
@@ -60,29 +53,91 @@ export function tierOf(file: string, lists: TierGlobs[]): Tier | null {
 }
 
 const DEP_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
+/** A plain registry version or caret/tilde range; rejects npm:, workspace:, link:, file:, git, URLs, tags. */
+const VERSION_RE = /^[\^~]?\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 
-/** True when two package.json texts differ only in dependency fields (a Dependabot bump). */
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * True when two package.json texts differ only in the versions of existing packages
+ * (a Dependabot bump): every other field is equal, each dependency field has the same
+ * presence and package names, and every changed value, old and new, is a plain version.
+ */
 export function packageJsonDepsOnly(
   before: string | undefined,
   after: string | undefined,
 ): boolean {
   if (before === undefined || after === undefined) return false;
+  let a: unknown;
+  let b: unknown;
   try {
-    const strip = (text: string) => {
-      const o = JSON.parse(text) as Record<string, unknown>;
-      for (const k of DEP_FIELDS) delete o[k];
-      return JSON.stringify(o);
-    };
-    return strip(before) === strip(after);
+    a = JSON.parse(before);
+    b = JSON.parse(after);
   } catch {
     return false;
   }
+  if (!isRecord(a) || !isRecord(b)) return false;
+  const rest = (o: Record<string, unknown>) =>
+    JSON.stringify(Object.fromEntries(Object.entries(o).filter(([k]) => !DEP_FIELDS.includes(k))));
+  if (rest(a) !== rest(b)) return false;
+  for (const field of DEP_FIELDS) {
+    if (!(field in a) && !(field in b)) continue;
+    const x = a[field];
+    const y = b[field];
+    if (!isRecord(x) || !isRecord(y)) return false;
+    const names = Object.keys(x).sort();
+    if (names.join("\0") !== Object.keys(y).sort().join("\0")) return false;
+    for (const name of names) {
+      const v = x[name];
+      const w = y[name];
+      if (v === w) continue;
+      if (typeof v !== "string" || typeof w !== "string") return false;
+      if (!VERSION_RE.test(v) || !VERSION_RE.test(w)) return false;
+    }
+  }
+  return true;
 }
 
-/** True when every changed line of a `git diff -U0` of a workflow is a `uses:` line. */
+/** An existing `uses:` line up to and including "@" (indent, "- " marker, spacing, action path). */
+const USES_PREFIX_RE = /^\s*(?:-\s+)?uses:\s*[^\s@#]+@/;
+/** The new ref (a tag, branch-like name or sha), then at most an inert version comment. */
+const NEW_REF_RE = /^(?:[0-9a-f]{40}|[A-Za-z0-9._-]+)(?:\s+#[ A-Za-z0-9._-]*)?$/;
+
+/**
+ * True when a `git diff -U0` of a workflow only moves the ref of existing `uses:` lines.
+ * Structural, not textual: each hunk must remove and add the same number of lines, paired
+ * in order; each pair keeps its text up to and including "@" byte for byte, and only the
+ * ref after it changes, to a tag or sha charset. Pure additions or removals, a swapped
+ * action, and code in a run: or script: block shaped like a uses: line all fail.
+ */
 export function workflowDiffUsesOnly(diff: string): boolean {
-  const changed = diff.split(/\r?\n/).filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
-  return changed.length > 0 && changed.every((l) => /^[+-]\s*(-\s+)?uses:\s*\S+@\S+\s*$/.test(l));
+  const hunks: Array<{ minus: string[]; plus: string[] }> = [];
+  let current: { minus: string[]; plus: string[] } | undefined;
+  for (const line of diff.split(/\r?\n/)) {
+    if (line.startsWith("@@")) {
+      current = { minus: [], plus: [] };
+      hunks.push(current);
+    } else if (current === undefined) {
+      // File header: only these lines, and never a created or deleted file.
+      if (line === "") continue;
+      if (!/^(diff --git |index |--- |\+\+\+ )/.test(line)) return false;
+    } else if (line.startsWith("-")) current.minus.push(line.slice(1));
+    else if (line.startsWith("+")) current.plus.push(line.slice(1));
+    else if (line === "" || line.startsWith("\\")) continue;
+    else return false;
+  }
+  if (hunks.length === 0) return false;
+  for (const { minus, plus } of hunks) {
+    if (minus.length === 0 || minus.length !== plus.length) return false;
+    for (const [i, old] of minus.entries()) {
+      const next = plus[i] ?? "";
+      const prefix = USES_PREFIX_RE.exec(old)?.[0];
+      if (prefix === undefined || !next.startsWith(prefix)) return false;
+      if (!NEW_REF_RE.test(next.slice(prefix.length))) return false;
+    }
+  }
+  return true;
 }
 
 /**

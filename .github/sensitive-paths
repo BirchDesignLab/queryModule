@@ -5,8 +5,9 @@
 #             workflow lint cover it.
 # [exempt]:   never needs a review (lowers [gate] and [deps], never [critical]).
 # A file takes the highest tier from the base and the head copy of this file, so a PR
-# cannot lower the tier that judges it. A package.json change to dependency fields only,
-# and a workflow change to `uses:` lines only, count as [deps].
+# cannot lower the tier that judges it. A version-only change of an existing action or
+# package counts as [deps]: in package.json, the same package names with plain semver
+# versions; in a workflow, only the ref after "@" of existing `uses:` lines.
 
 [critical]
 # Credential handling
@@ -36,6 +37,8 @@ packages/api/drizzle/**
 .github/sensitive-paths
 scripts/ci/sensitive-review.ts
 scripts/ci/check-sensitive-review.ts
+# Reserved: the audit_event immutability guard (spec 9.2, SEC-010 to SEC-013)
+scripts/ci/check-audit-migrations.ts
 
 [gate]
 # Verify gate and merge path
@@ -51,8 +54,8 @@ tsconfig.base.json
 **/tsconfig.json
 
 [deps]
+# .github/dependabot.yml stays [gate] (.github/**): no automated check reads it.
 pnpm-lock.yaml
-.github/dependabot.yml
 
 [exempt]
 .github/ISSUE_TEMPLATE/**

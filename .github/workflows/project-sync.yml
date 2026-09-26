@@ -3,9 +3,10 @@ name: project-sync
 # Keeps the "Query Module 2.0" board (BirchDesignLab, project 1) in step with
 # branches, PRs and issues. See docs/project-board.md "Automation".
 #
-# The board job reconciles from current truth (issue state, open PRs, the wave
-# branch) on every run, so a run that is dropped or races another is healed by
-# the next event that touches the same items.
+# The board job reconciles every item of this repository from current truth
+# (issue state, this repository's open PRs, the wave branch) on every run,
+# whatever the event. GitHub keeps one pending run per concurrency group and
+# drops the others in a burst, so any run that survives heals the whole board.
 #
 # Security: PROJECT_TOKEN (a BirchDesignLab classic token with only the
 # `project` scope) is used only in the board job, which checks out nothing and
@@ -19,7 +20,8 @@ on:
   push:
     branches: ["feat/p0-wave-*"]
   pull_request:
-    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed]
+    # edited: a "Closes #n" line added to the PR body later.
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed, edited]
   issues:
     types: [closed, reopened]
 
@@ -72,7 +74,8 @@ jobs:
                   nodes{id content{... on Issue{number title state stateReason
                     repository{nameWithOwner} parent{number title}
                     subIssuesSummary{total completed}
-                    closedByPullRequestsReferences(first:20,includeClosedPrs:false){nodes{state isDraft}}}}
+                    closedByPullRequestsReferences(first:20,includeClosedPrs:false){nodes{state isDraft
+                      headRepository{nameWithOwner}}}}}
                   fieldValues(first:30){nodes{
                     ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2FieldCommon{name}}}
                     ... on ProjectV2ItemFieldDateValue{date field{... on ProjectV2FieldCommon{name}}}}}}}}}}`,
@@ -123,10 +126,11 @@ jobs:
               const { repository } = await github.graphql(
                 `query($o:String!,$r:String!,$b:String!,$q:String!){repository(owner:$o,name:$r){
                   ref(qualifiedName:$q){name}
-                  pullRequests(headRefName:$b,states:OPEN,first:1){nodes{isDraft}}}}`,
+                  pullRequests(headRefName:$b,states:OPEN,first:20){nodes{isDraft headRepository{nameWithOwner}}}}}`,
                 { o: context.repo.owner, r: context.repo.repo, b: `feat/p0-wave-${k}`, q: `refs/heads/feat/p0-wave-${k}` },
               );
-              const pr = repository.pullRequests.nodes[0];
+              // A fork PR from a branch of the same name does not count.
+              const pr = repository.pullRequests.nodes.find((p) => p.headRepository?.nameWithOwner === REPO);
               const s = pr ? (pr.isDraft ? "In Progress" : "In Review") : repository.ref ? "In Progress" : null;
               waveCache.set(k, s);
               return s;
@@ -134,10 +138,13 @@ jobs:
             const waveOf = (item) =>
               /^M0 P0 W(\d+):/.exec(item.title)?.[1] ?? /^M0 P0 W(\d+):/.exec(item.parent?.title ?? "")?.[1];
 
-            // Status from truth; null leaves the current value alone.
+            // Status from truth; null means no PR or wave speaks for the item.
             async function truth(item) {
               if (item.state === "CLOSED") return item.stateReason === "COMPLETED" ? "Done" : null;
-              const prs = item.closedByPullRequestsReferences.nodes.filter((p) => p.state === "OPEN");
+              // Only this repository's PRs: a fork PR saying "Closes #n" does not steer the board.
+              const prs = item.closedByPullRequestsReferences.nodes.filter(
+                (p) => p.state === "OPEN" && p.headRepository?.nameWithOwner === REPO,
+              );
               if (prs.some((p) => !p.isDraft)) return "In Review";
               if (prs.length > 0) return "In Progress";
               const k = waveOf(item);
@@ -157,7 +164,12 @@ jobs:
               }
               const s = await truth(item);
               if (item.state === "OPEN" && item.values.Finish) await set(item, "Finish", null);
-              if (!s) return;
+              if (!s) {
+                // Reopened, or its PR closed unmerged: Done and In Review no longer hold.
+                if (item.state === "OPEN" && (item.values.Status === "Done" || item.values.Status === "In Review"))
+                  await set(item, "Status", "Todo");
+                return;
+              }
               // Blocked is the developer's; only review or completion moves it.
               if (item.values.Status === "Blocked" && s === "In Progress") return;
               await set(item, "Status", s);
@@ -165,32 +177,9 @@ jobs:
               if (s === "Done" && !item.values.Finish) await set(item, "Finish", today);
             }
 
-            const affected = new Set();
-            const addWave = (k) => {
-              for (const i of items.values()) if (waveOf(i) === String(k)) affected.add(i.number);
-            };
-            if (context.eventName === "push") {
-              const k = /^refs\/heads\/feat\/p0-wave-(\d+)$/.exec(context.ref)?.[1];
-              if (k) addWave(k);
-            } else if (context.eventName === "pull_request") {
-              const pr = context.payload.pull_request;
-              const { repository } = await github.graphql(
-                `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-                  closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}}}}}}`,
-                { o: context.repo.owner, r: context.repo.repo, n: pr.number },
-              );
-              for (const n of repository.pullRequest.closingIssuesReferences.nodes) {
-                if (n.repository.nameWithOwner === REPO) affected.add(n.number);
-              }
-              const k = /^feat\/p0-wave-(\d+)$/.exec(pr.head.ref)?.[1];
-              if (k) addWave(k);
-            } else if (context.eventName === "issues") {
-              const n = context.payload.issue.number;
-              affected.add(n);
-              const parent = items.get(n)?.parent;
-              if (parent) affected.add(parent.number);
-            }
-            for (const n of affected) await reconcile(items.get(n));
+            // Every item, on every run: a dropped run (pending runs are replaced in a
+            // burst) or a closed issue that gets no later event is healed here.
+            for (const item of items.values()) await reconcile(item);
 
   sensitive-label:
     name: sensitive-label
@@ -198,6 +187,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       github.event.action != 'closed' &&
+      github.event.action != 'edited' &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read

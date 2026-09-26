@@ -43,20 +43,24 @@ Track (`platform`, `web`, `core`, `mobile`), phase (`p0` to `p3`), `contract`, `
 
 ## Automation
 
-`.github/workflows/project-sync.yml` keeps Status, Start and Finish in step. Its board job reconciles each affected item from current truth on every run (issue state, open PRs that close it, the wave branch and its PR), so a dropped or racing run is healed by the next event on the same items.
+`.github/workflows/project-sync.yml` keeps Status, Start and Finish in step. Its board job reconciles every item of this repository from current truth on every run, whatever the event (issue state, this repository's open PRs that close it, the wave branch and its PR). GitHub keeps only one pending run per concurrency group and drops the rest in a burst, so any run that survives heals the whole board. PRs from forks never count.
 
-| Event | Items reconciled | Status from truth |
-|---|---|---|
-| Push to `feat/p0-wave-<k>` | wave k's tasks and wave parent | open PR on the branch: In Review (draft: In Progress); branch only: In Progress |
-| PR opened, reopened, ready, drafted or closed | issues it closes, plus wave k's items for a wave branch | an open PR closing the issue: In Review (draft: In Progress) |
-| Issue closed or reopened | the issue and its parent | closed as completed: Done, Finish set; not planned or duplicate: unchanged; reopened: Finish cleared, Status from its PRs |
-| Every wave parent | | closed as completed once all of its tasks are closed |
+Triggering events: a push to `feat/p0-wave-<k>`; a PR opened, reopened, edited, marked ready, drafted or closed; an issue closed or reopened. Every run reconciles all items of this repository:
+
+| Item | Status from truth |
+|---|---|
+| Closed issue | closed as completed: Done, Finish set; not planned or duplicate: unchanged |
+| Open issue with an open PR (this repository) that closes it | In Review (draft PR: In Progress) |
+| Open task of wave k, no closing PR | open PR on `feat/p0-wave-<k>`: In Review (draft: In Progress); branch only: In Progress |
+| Open issue with none of the above | Done or In Review moves back to Todo (a reopen, or a PR closed unmerged); other values stay |
+| Any open issue | Finish cleared |
+| Wave parent | closed as completed once all of its tasks are closed |
 
 Start is set when an item first reaches In Progress or In Review. Blocked is yours: automation only moves a Blocked item to In Review or Done. The `sensitive-label` job labels a PR `sensitive` when it touches a gate or critical path (ADR-0007).
 
 Security: the board job uses the secret `PROJECT_TOKEN` (BirchDesignLab classic token, `project` scope only, with an expiry) and never checks out or runs repository code; without the secret, or on a fork PR, it skips with a notice. Anyone with push access can read the token by editing the workflow on a branch; that is accepted because repository writers are trusted. The label job uses only `GITHUB_TOKEN`.
 
-The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status and Priority when they are empty (a closed issue is forced to Done); after that, project-sync and the developer own them.
+The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status, Priority, Start and Finish when they are empty (a closed issue is forced to Done; Done comes from issue state only); after that, project-sync and the developer own them.
 
 ## Manual steps
 

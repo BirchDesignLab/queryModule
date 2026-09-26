@@ -78,14 +78,38 @@ jobs:
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
+      - name: Lockfile resolves from the registry only
+        if: steps.changes.outputs.docs_only != 'true'
+        # A [deps] lockfile change must not repoint a package at a tarball URL, git
+        # repo or directory; registry entries carry only an integrity hash.
+        run: |
+          set -euo pipefail
+          if grep -nE '^\s+resolution: \{' pnpm-lock.yaml | grep -vE 'resolution: \{integrity: [^,}]+\}$'; then
+            echo "pnpm-lock.yaml has a non-registry resolution (above)."
+            exit 1
+          fi
+      # The tools that decide [deps] PRs are pinned by image digest and wheel hash
+      # (actionlint 1.7.12, zizmor 1.30.1).
       - name: Workflow lint (actionlint)
         if: steps.changes.outputs.docs_only != 'true'
-        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
       - name: Workflow security (zizmor)
         if: steps.changes.outputs.docs_only != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pipx run zizmor==1.30.1 --config .github/zizmor.yml --min-severity medium .github/workflows
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          {
+            printf 'zizmor==1.30.1'
+            printf ' --hash=sha256:%s' \
+              eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e \
+              4a5ef2fa4fbd2984f794cfc2f95790bd03fa0bae801487ed550e044675874e60 \
+              92906f448365672ebb657fb50d36f997290a3aaba8cac723214741ea9054845d
+            printf '\n'
+          } > "$RUNNER_TEMP/zizmor-req.txt"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --quiet --no-deps --require-hashes -r "$RUNNER_TEMP/zizmor-req.txt"
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --config .github/zizmor.yml --min-severity medium .github/workflows
 
       # Step 5: tests with coverage thresholds
       - name: Vitest

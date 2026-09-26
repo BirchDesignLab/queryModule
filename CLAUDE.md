@@ -63,14 +63,15 @@ have no code yet):
   `packages/core/src/contracts/audit.ts`, `primitives.ts`, `identity.ts`; query
   dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`; the
   sensitive-review gate itself `.github/sensitive-paths`,
-  `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`.
+  `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`;
+  reserved: the audit-migration guard `scripts/ci/check-audit-migrations.ts`.
 - Gate (Opus 5.5 `high` artifact): the verify gate and merge path
   `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
   `.gitignore`, `**/vitest.config.ts`, `package.json`, `pnpm-workspace.yaml`,
   `tsconfig.base.json`, `**/tsconfig.json`.
-- Deps (automated checks only, no artifact): `pnpm-lock.yaml`,
-  `.github/dependabot.yml`, dependency-only `package.json` changes and
-  `uses:`-only workflow changes.
+- Deps (automated checks only, no artifact): `pnpm-lock.yaml`, and a
+  version-only change of an existing package (`package.json`) or action (the
+  ref of an existing workflow `uses:` line). `.github/dependabot.yml` is gate.
 - Exempt: `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`.
 
 This is CJIS and GDPR territory. There is no money path, but a mistake in

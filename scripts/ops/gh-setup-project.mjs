@@ -12,9 +12,11 @@
 //
 // Idempotent
 //   Every step reads first and writes only what differs. Existing issues are
-//   matched by exact title, fields and options by name. Status and Priority are
-//   only seeded when empty (a closed issue is forced to Done), so a rerun never
-//   undoes project-sync or the developer. A wave closes when all its tasks are
+//   matched by exact title, fields and options by name. Status, Priority, Start
+//   and Finish are only seeded when empty (a closed issue is forced to Done; Done
+//   comes from issue state only), so a rerun never undoes project-sync or the
+//   developer. Prerequisites (milestones, task issues) are checked before the
+//   first write. A wave closes when all its tasks are
 //   closed. Safe to run again after editing the data below (for example to add a
 //   follow-up).
 //
@@ -245,7 +247,7 @@ const FOLLOW_UPS = [
     priority: "High",
     reqIds: "SEC-020",
     body:
-      "Biome honours nested `biome.json` files (`root: false`) and `vcs.useIgnoreFile: true` skips files matched by `.gitignore`. A PR can add `packages/core/biome.json` or a `.gitignore` line and switch off lint, including the core purity rule, without a sensitive-review artifact.\n\nFix in W5 (Task 23 is sensitive, so its wave-review covers it): replace `biome.json` with `**/biome.json` and add `.gitignore` in `.github/sensitive-paths` (or set `useIgnoreFile: false` and rely on `files.includes`), mirror in CLAUDE.md, and extend the shipped-glob test in `scripts/ci/sensitive-review.test.ts`." +
+      "Biome honours nested `biome.json` files (`root: false`) and `vcs.useIgnoreFile: true` skips files matched by `.gitignore`. A PR can add `packages/core/biome.json` or a `.gitignore` line and switch off lint, including the core purity rule, without a sensitive-review artifact.\n\nFixed in PR #76 (ADR-0007 tiers): replace `biome.json` with `**/biome.json` and add `.gitignore` in `.github/sensitive-paths` (or set `useIgnoreFile: false` and rely on `files.includes`), mirror in CLAUDE.md, and extend the shipped-glob test in `scripts/ci/sensitive-review.test.ts`. PR #76 lists both in `[gate]` and closes this issue." +
       src("PR #38 wave-review residual RR-M1."),
   },
   {
@@ -441,7 +443,7 @@ const FOLLOW_UPS = [
     priority: "High",
     reqIds: "",
     assignee: "BirchDesignLab",
-    body: 'Views, built-in project workflows and repo settings have no API. Follow the checklist in `docs/project-board.md` (section "Manual steps") and tick it there or here.',
+    body: 'Views, built-in project workflows and repo settings have no API. Follow the checklist in `docs/project-board.md` (section "Manual steps"), tick it there (it is the one checklist), and close this issue when it is done.',
   },
 ];
 
@@ -518,6 +520,32 @@ console.log(
   `acting as ${AS} on ${REPO} and project ${OWNER}#${PROJECT_NUMBER} (${APPLY ? "apply" : "dry run"})`,
 );
 
+// Prerequisites, checked before the first write so a fresh repo or project stops cleanly.
+const milestones = new Map(
+  restAll(`repos/${REPO}/milestones?state=all&per_page=100`).map((m) => [m.title, m]),
+);
+for (const title of Object.keys(MILESTONES)) {
+  if (!milestones.has(title))
+    throw new Error(`milestone "${title}" missing; run scripts/ops/gh-setup-labels.sh first`);
+}
+const issues = new Map(
+  restAll(`repos/${REPO}/issues?state=all&per_page=100`)
+    .filter((i) => !i.pull_request)
+    .map((i) => [i.title, i]),
+);
+const byNumber = (n) => [...issues.values()].find((i) => i.number === n);
+{
+  const missing = [];
+  for (const w of WAVES)
+    for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1)
+      if (!byNumber(t + 1)) missing.push(`#${t + 1}`);
+  if (missing.length > 0) {
+    const m = `task issues missing: ${missing.join(", ")}; create the P0 task issues first`;
+    if (APPLY) throw new Error(m);
+    console.log(`warning: ${m}`);
+  }
+}
+
 // Labels
 const labels = new Map(restAll(`repos/${REPO}/labels?per_page=100`).map((l) => [l.name, l]));
 for (const name of REMOVE_LABELS) {
@@ -544,13 +572,9 @@ for (const l of LABELS) {
   );
 }
 
-// Milestones
-const milestones = new Map(
-  restAll(`repos/${REPO}/milestones?state=all&per_page=100`).map((m) => [m.title, m]),
-);
+// Milestones (existence checked above)
 for (const [title, description] of Object.entries(MILESTONES)) {
   const m = milestones.get(title);
-  if (!m) throw new Error(`milestone "${title}" missing; run scripts/ops/gh-setup-labels.sh first`);
   if (m.description !== description) {
     write(`describe milestone "${title}"`, () =>
       rest(`repos/${REPO}/milestones/${m.number}`, "PATCH", { description }),
@@ -639,14 +663,7 @@ for (const name of ["Start", "Finish"]) {
 }
 if (APPLY) project = loadProject();
 
-// Issues
-const issues = new Map(
-  restAll(`repos/${REPO}/issues?state=all&per_page=100`)
-    .filter((i) => !i.pull_request)
-    .map((i) => [i.title, i]),
-);
-const byNumber = (n) => [...issues.values()].find((i) => i.number === n);
-
+// Issues (loaded with the prerequisites above)
 function ensureIssue(spec) {
   let issue = issues.get(spec.title);
   if (!issue) {
@@ -783,8 +800,9 @@ function desired(issue) {
     v.Wave = `W${w.k}`;
     v.Size = sizeOf(taskLines.get(task) ?? 0);
     v["Req IDs"] = /\(([^)]*)\)\s*$/.exec(issue.title)?.[1] ?? "";
+    // Done only from issue state; an open task in a finished wave is project-sync's.
     if (issue.state === "closed") v.Status = "Done";
-    else v.Status = { review: "In Review", ready: "Ready", todo: "Todo", done: "Done" }[w.state];
+    else v.Status = { review: "In Review", ready: "Ready", todo: "Todo" }[w.state];
     if (issue.state === "open") v.Priority = "High";
     if (issue.state === "closed" || w.state === "review") {
       v.Start = WAVE_DATE;
@@ -803,9 +821,10 @@ function desired(issue) {
   if (wave) {
     v.Phase = "P0";
     v.Wave = `W${wave.k}`;
-    v.Status = waveDone(wave)
-      ? "Done"
-      : { done: "Done", review: "In Review", ready: "Ready", todo: "Todo" }[wave.state];
+    v.Status =
+      issue.state === "closed" || waveDone(wave)
+        ? "Done"
+        : { review: "In Review", ready: "Ready", todo: "Todo" }[wave.state];
     if (waveDone(wave) || wave.state === "review") {
       v.Start = WAVE_DATE;
       v.Finish = WAVE_DATE;
@@ -867,9 +886,14 @@ for (const issue of all) {
   for (const [name, value] of Object.entries(want)) {
     if (value === undefined || value === null || value === "") continue;
     if (item.values[name] === value) continue;
-    // Status and Priority are seeded once; project-sync and the developer own them after
-    // that. Only a closed issue is forced to Done.
-    const seedOnly = name === "Priority" || (name === "Status" && value !== "Done");
+    // Status, Priority, Start and Finish are seeded once; project-sync and the developer
+    // own them after that. Only a closed issue (or a wave whose tasks are all closed) is
+    // forced to Done.
+    const seedOnly =
+      name === "Priority" ||
+      name === "Start" ||
+      name === "Finish" ||
+      (name === "Status" && value !== "Done");
     if (seedOnly && item.values[name]) continue;
     const field = fieldByName(name);
     let v;
