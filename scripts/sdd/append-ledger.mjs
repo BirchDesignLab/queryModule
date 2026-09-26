@@ -95,8 +95,11 @@ export function findLedgerLines(text) {
 
 // Returns the lines not already in the ledger, each once. A resumed run after a stop returns the
 // rulings the stopped run already ledgered; those, and any re-run of the same result, are skipped.
+// Stop lines are events, not facts: the same stop twice (same stop point and head) is ledgered
+// twice, so they are deduped only within one block.
+const STOP_LINE = /: stopped at /;
 export function freshLines(existing, lines) {
-  const seen = new Set(existing.split(/\r?\n/));
+  const seen = new Set(existing.split(/\r?\n/).filter((l) => !STOP_LINE.test(l)));
   const out = [];
   for (const l of lines) {
     if (seen.has(l)) continue;

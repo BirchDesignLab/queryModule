@@ -1606,6 +1606,39 @@ await test("sdd N1: a null checker with no later tree check stops at preconditio
   );
   assert.ok(again.labels.includes("checker-retry"), again.labels.join(","));
   assert.equal(again.res.status, "complete", again.logs.join(" | "));
+  // checker-retry null again: a second N1 stop; a second answer changes the retry prompt and completes.
+  const pc1 = { at: "precondition:checker", text: "tree verified clean" };
+  const pc2 = { at: "precondition:checker", text: "verified again" };
+  const flaky = {
+    ...over,
+    "checker-retry": (p) => (p.includes("verified again") ? checkAll("verified")(p) : null),
+  };
+  const twice = await run(sdd, { ...BASE, answers: [late, pc1] }, sddResponder(flaky));
+  assert.equal(twice.res.stopPoint, "precondition:checker", twice.logs.join(" | "));
+  const third = await run(sdd, { ...BASE, answers: [late, pc1, pc2] }, sddResponder(flaky));
+  assert.equal(third.res.status, "complete", third.logs.join(" | "));
+  // A null ruler after a null checker checked nothing either: N1 stop.
+  const deadRuler = await run(
+    sdd,
+    BASE,
+    sddResponder({ "spec-review": specCV(), checker: null, "ruler-review": null }),
+  );
+  assert.equal(deadRuler.res.stopPoint, "precondition:checker", deadRuler.logs.join(" | "));
+  // A plain precondition answer meant for a later stop is not taken by a null checker.
+  const plain = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition", text: "for a later stop" }] },
+    sddResponder({ "spec-review": specCV(), checker: null }),
+  );
+  assert.ok(!plain.labels.includes("checker-retry"), plain.labels.join(","));
+  // A checker that returns a clean result consumes a pending precondition:checker answer.
+  const fresh = await run(
+    sdd,
+    { ...BASE, answers: [pc1] },
+    sddResponder({ "spec-review": specCV() }),
+  );
+  assert.equal(fresh.res.status, "complete", fresh.logs.join(" | "));
+  assert.ok(!fresh.res.answersUnconsumed, fresh.logs.join(" | "));
   // A null checker whose items reach a running ruler needs no stop: the ruler checks the tree.
   const ruled = await run(sdd, BASE, sddResponder({ "spec-review": specCV(), checker: null }));
   assert.ok(ruled.labels.includes("ruler-review"));
@@ -2058,6 +2091,9 @@ await test("append-ledger FP-M7: an already-appended block is skipped; UTF-16 an
     "b\n",
     "a line repeated in one block is written once",
   );
+  // A stop line is an event: the same stop twice at the same head is ledgered twice.
+  const stop = "- Task 9: stopped at precondition (head abc1234); controller action needed";
+  assert.equal(al.appendText(`${stop}\n`, [stop]), `${stop}\n`, "a repeated stop is kept");
   const res = {
     task: 7,
     ledgerLines: ["- Task 7: complete (commits a..b, review clean, gate green)"],

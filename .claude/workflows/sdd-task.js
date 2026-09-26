@@ -446,7 +446,7 @@ const HOUSE = [
 const READONLY = 'Your review is read-only on this checkout: do not change the working tree, the index, HEAD or any branch. Write only your review file and your scratch directory.'
 const TRAILER = `End every commit message with the attribution trailer your session's system reminder gives; if it gives none, use:\n${A.trailer}`
 // Implementer and fixers carry SELF_CHECK.
-const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only) pnpm typecheck (tsc -b; vitest does not typecheck test files) and pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
+const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only), then pnpm typecheck (tsc -b; vitest does not typecheck test files), then pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
 // The repository-state check for agents that run after gate-0 (checker, ruler-review).
 const postGateCheck = (expected) => `Before you reply, run git rev-parse HEAD and git status --porcelain in ${REPO}. git rev-parse HEAD must equal ${expected}. Report head (full sha), treeClean (true only when git status --porcelain prints nothing) and dirtyFiles (each path it prints). You must leave both exactly as you found them.`
 // Returns '' when res left the repository as gate-0 saw it, else what changed.
@@ -1100,7 +1100,10 @@ if (cannotVerify.length) {
     log(`check: ${toCheck.length} cannot-verify item(s) to the checker (${tier('checker')})`)
     let ck = await runChecker(toCheck, reviewHead, gateHead, '', 'checker')
     let bad = postGateProblem(ck, gateHead)
-    const ans = bad || !ck ? preconditionAnswers('checker') : ''
+    // A null checker takes only answers addressed to it (precondition:checker); a plain
+    // precondition answer is left for the stop it was meant for.
+    const forChecker = ANSWERS ? ANSWERS.entries.some((e) => e.preLabel === 'checker' && !e.usedPre) : false
+    const ans = bad || (!ck && forChecker) ? preconditionAnswers('checker') : ''
     if (ans) {
       log(`check: cached checker ${bad ? `left the repository changed (${bad})` : 'returned null'}; retrying with the controller answer`)
       ck = await runChecker(toCheck, reviewHead, gateHead, ans, 'checker-retry')
@@ -1109,6 +1112,11 @@ if (cannotVerify.length) {
     if (bad) {
       log(`check: precondition failed after gate-0: ${bad}; stopping, no check result applied`)
       return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:checker', problem: `checker: ${bad}` }))
+    }
+    if (ck && forChecker && ANSWERS) {
+      // the checker ran fresh and clean: a pending precondition:checker answer is no longer needed
+      for (const e of ANSWERS.entries) if (e.preLabel === 'checker' && !e.usedPre) { e.usedPre = true; e.delivered = true }
+      log('check: checker returned a clean result; the pending precondition:checker answer is consumed')
     }
     if (!ck) {
       checkerUnprobed = true
