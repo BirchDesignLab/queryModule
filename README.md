@@ -132,7 +132,7 @@ Milestone (M0 to M4, plus Later)
 
 **Workflows.** `sdd-task` runs one task; `wave-review` runs the whole-branch review for a sensitive wave. See "Running tasks with workflows" below.
 
-**Project board.** The developer maintains a GitHub Projects board for the repository. <!-- BOARD-DETAILS: URL, views, fields and automation to be filled in --> Issues and PRs are the source of truth; the board is a view over them.
+**Project board.** The developer maintains a private GitHub Projects board, "Query Module 2.0", holding every issue. Its view "Kanban Label Sliced" is a board with Status columns Todo, In Progress and Done, sliced by label (`track-a`, `track-b`, `core`, `p0`, `contract`, `sensitive`), so one track, phase or the sensitive work is a click away. Cards show the milestone, labels and the linked wave PR. An issue reaches Done when its wave PR merges and closes it through `Closes #n`; nothing moves items to In Progress automatically, so the developer does. Issues a phase plan creates are added to the board then. Issues and PRs are the source of truth; the board is a view over them.
 
 ## Running tasks with workflows (ADR-0006)
 
