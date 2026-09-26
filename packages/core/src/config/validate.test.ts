@@ -862,6 +862,23 @@ describe("FR-051 FR-052 validateSiteConfig field, command and terminal rules (sp
     expect(errors).toEqual([]);
   });
 
+  it("purpose duration equal to the site cap passes", () => {
+    const { errors } = run((r) => {
+      r.delegation = {
+        maxDurationMinutes: 60,
+        purposes: [
+          {
+            key: "training",
+            labelKey: "delegation.training",
+            delegatorRoles: ["trainingOfficer"],
+            maxDurationMinutes: 60,
+          },
+        ],
+      };
+    });
+    expect(errors).toEqual([]);
+  });
+
   it("a configured default exempts a required field from needing a position", () => {
     const { errors } = run((r) => {
       const plate = veh(r).fields[0];
