@@ -716,6 +716,33 @@ async function runGate(label, expectedHead, answerText) {
   )
 }
 
+// Settles one gate result: a precondition retry when answered, then stop (null or precondition), green,
+// or red with problems as open findings. Returns { stop } | { ok: true } | { ok: false, findings }.
+async function gateOutcome(gl, g, expectedHead) {
+  const pre = g && g.preconditionFailed ? preconditionAnswers(gl) : ''
+  if (pre) {
+    log(`gate: cached precondition failure (${g.preconditionFailed}); retrying ${gl} with the controller answer`)
+    g = await runGate(`${gl}-retry`, expectedHead, pre)
+  }
+  if (!g) {
+    log(`gate: ${gl} returned null (skipped or died); stopping`)
+    return { stop: await finish(build('stopped', { stopped: gl, questions: state.questions.concat([`${gl} returned no result; re-run (answers at "${gl}" go to the next fixer round)`]) })) }
+  }
+  if (g.preconditionFailed) {
+    log(`gate: ${gl} precondition failed: ${g.preconditionFailed}; stopping, not a finding`)
+    return { stop: await finish(build('stopped', { stopped: 'precondition', stopPoint: `precondition:${gl}`, problem: `${gl}: ${g.preconditionFailed}` })) }
+  }
+  if (g.head) state.head = g.head
+  if (g.ok) {
+    log(`gate: ${gl} green at ${String(state.head).slice(0, 7)}`)
+    return { ok: true }
+  }
+  const problems = g.problems.length ? g.problems : ['gate reported not ok but listed no problem; re-check lint, typecheck and coverage']
+  log(`gate: ${gl} red: ${problems.join('; ')}`)
+  state.roundLog.push(`${gl} red (${problems.length} problem(s))`)
+  return { ok: false, findings: problems.map((p, k) => ({ id: `${gl}:${k + 1}`, severity: 'important', file: '', line: '', summary: `gate: ${p}`, fix: 'fix the cause so the gate check passes', planMandated: false, contestsRuling: '' })) }
+}
+
 // ================= 1. Implement =================
 phase('Implement')
 log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; ${SENSITIVE ? 'sensitive' : 'ordinary'}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}`)
@@ -935,12 +962,20 @@ if (CRITIC) {
   log('review: critic off (task is neither sensitive nor UI, and critic is not set)')
 }
 
-const reviews = await parallel(reviewers.map((r) => () => agent(r.prompt, { label: `${r.key}-review`, phase: 'Review', schema: REVIEW, ...role(r.roleName) })))
+// gate-0 runs in parallel with the reviewers on the same head (reviewHead).
+log(`review: ${reviewers.map((r) => r.key).join(', ')} and gate-0 in parallel on ${String(reviewHead).slice(0, 7)}`)
+const reviewAndGate = await parallel([
+  ...reviewers.map((r) => () => agent(r.prompt, { label: `${r.key}-review`, phase: 'Review', schema: REVIEW, ...role(r.roleName) })),
+  () => runGate('gate-0', reviewHead, ''),
+])
+const reviews = reviewAndGate.slice(0, reviewers.length)
 const dead = reviewers.filter((r, i) => !reviews[i]).map((r) => r.key)
 if (dead.length) {
   log(`review: ${dead.join(', ')} returned null (skipped or died); stopping, no clean verdict without every reviewer`)
   return await finish(build('stopped', { stopped: 'review', questions: state.questions.concat([`reviewer(s) returned no result: ${dead.join(', ')}; re-run to resume`]) }))
 }
+const gate0 = await gateOutcome('gate-0', reviewAndGate[reviewers.length], reviewHead)
+if (gate0.stop) return gate0.stop
 
 let open = []
 const toRule = []
@@ -960,6 +995,7 @@ reviewers.forEach((r, i) => {
   }
   rv.cannotVerify.forEach((c, k) => toRule.push({ id: `${r.key}:CV${k + 1}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` }))
 })
+for (const f of gate0.findings || []) open.push(f)
 
 // ================= 3. Ruler =================
 if (toRule.length) {
@@ -979,7 +1015,12 @@ if (toRule.length) {
 const naCount = {}
 let roundBase = state.head
 let gatePassed = false
-for (;;) {
+// A clean review plus a green gate-0 completes with no further gate (gate-0 red opens findings).
+if (!open.length) {
+  gatePassed = true
+  log('gate: review clean and gate-0 green; no further gate')
+}
+while (!gatePassed) {
   while (open.length && state.rounds < MAX_ROUNDS) {
     phase('Fix')
     state.rounds++
@@ -1013,9 +1054,17 @@ for (;;) {
       progressProblems.push('progress checker returned no result; round unchecked')
     }
 
-    const rr = await runReReview(open, `re-review-r${r}`, roundBase, state.head, r)
+    // Mechanical round: every open finding came from a gate or the progress checker. The progress
+    // checker and gate-r<r> decide; the re-reviewer is skipped.
+    const mechanical = open.every((f) => /^(gate-|progress-)/.test(f.id))
     const next = []
-    if (!rr) {
+    log(mechanical
+      ? `fix: round ${r} is mechanical (gate and progress findings only); re-reviewer skipped, progress checker and gate-r${r} decide`
+      : `fix: round ${r} has review findings; re-reviewer runs`)
+    const rr = mechanical ? null : await runReReview(open, `re-review-r${r}`, roundBase, state.head, r)
+    if (mechanical) {
+      // closed unless the progress checker reports a problem (below); gate-r<r> checks the rest
+    } else if (!rr) {
       log(`fix: round ${r} re-reviewer returned null; every finding stays open`)
       for (const f of open) { naCount[f.id] = (naCount[f.id] || 0) + 1; next.push(f) }
     } else {
@@ -1046,33 +1095,16 @@ for (;;) {
   }
   if (open.length) break
 
-  // Independent gate: after a clean review and after every fix loop that ends clean.
+  // Independent gate after every fix loop that ends clean.
   phase('Gate')
-  const gl = state.rounds === 0 ? 'gate-0' : `gate-r${state.rounds}`
-  let g = await runGate(gl, state.head, '')
-  const gatePre = g && g.preconditionFailed ? preconditionAnswers(gl) : ''
-  if (gatePre) {
-    log(`gate: cached precondition failure (${g.preconditionFailed}); retrying ${gl} with the controller answer`)
-    g = await runGate(`${gl}-retry`, state.head, gatePre)
-  }
-  if (!g) {
-    log(`gate: ${gl} returned null (skipped or died); stopping`)
-    return await finish(build('stopped', { stopped: gl, questions: state.questions.concat([`${gl} returned no result; re-run (answers at "${gl}" go to the next fixer round)`]) }))
-  }
-  if (g.preconditionFailed) {
-    log(`gate: ${gl} precondition failed: ${g.preconditionFailed}; stopping, not a finding`)
-    return await finish(build('stopped', { stopped: 'precondition', stopPoint: `precondition:${gl}`, problem: `${gl}: ${g.preconditionFailed}` }))
-  }
-  if (g.head) state.head = g.head
-  if (g.ok) {
+  const gl = `gate-r${state.rounds}`
+  const out = await gateOutcome(gl, await runGate(gl, state.head, ''), state.head)
+  if (out.stop) return out.stop
+  if (out.ok) {
     gatePassed = true
-    log(`gate: ${gl} green at ${String(state.head).slice(0, 7)}`)
     break
   }
-  const problems = g.problems.length ? g.problems : ['gate reported not ok but listed no problem; re-check lint, typecheck and test']
-  log(`gate: ${gl} red: ${problems.join('; ')}`)
-  state.roundLog.push(`${gl} red (${problems.length} problem(s))`)
-  open = problems.map((p, k) => ({ id: `${gl}:${k + 1}`, severity: 'important', file: '', line: '', summary: `gate: ${p}`, fix: 'fix the cause so the gate check passes', planMandated: false, contestsRuling: '' }))
+  open = out.findings
   roundBase = state.head
   if (state.rounds >= MAX_ROUNDS) break
 }

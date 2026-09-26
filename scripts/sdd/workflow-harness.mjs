@@ -224,7 +224,6 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
     "gate-0",
     "fixer-r1",
     "progress-r1",
-    "re-review-r1",
     "gate-r1",
     "ledger",
   ]);
@@ -233,13 +232,17 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
   assert.equal(r.res.rounds, 1);
 });
 
-await test("sdd: gate failing every round parks at the cap (worst case 30 agents at maxRounds 5)", async () => {
+// Worst case at maxRounds 5: implementer, ruler-concerns, fixer-pre, progress-pre, three reviewers
+// and gate-0 in parallel, ruler-review, then round 1 with a review finding (fixer, progress,
+// re-review, red gate-r1) and four mechanical rounds (fixer, progress, red gate).
+await test("sdd: gate failing every round parks at the cap (worst case 26 agents at maxRounds 5)", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true },
     sddResponder({
       implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
       "spec-review": { verdict: "pass", findings: [], cannotVerify: [{ item: "i", check: "c" }] },
+      "critic-review": { verdict: "fail", findings: [F("C1", "important")], cannotVerify: [] },
       "ruler-review": {
         rulings: [
           {
@@ -254,12 +257,14 @@ await test("sdd: gate failing every round parks at the cap (worst case 30 agents
       "gate*": { ok: false, head: "hg", problems: ["tests red"] },
     }),
   );
-  assert.equal(r.calls.length, 30, r.labels.join(","));
+  assert.equal(r.calls.length, 26, r.labels.join(","));
+  assert.equal(r.labels.filter((l) => l.startsWith("re-review")).join(","), "re-review-r1");
+  assert.equal(r.labels.filter((l) => l.startsWith("gate")).length, 6);
   assert.equal(r.res.status, "parked");
   assert.equal(r.res.rounds, 5);
 });
 
-await test("sdd: worst case with every finding NOT ADDRESSED is 24 agents; escalated fixer after a repeat", async () => {
+await test("sdd: worst case with every finding NOT ADDRESSED is 25 agents; escalated fixer after a repeat", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true },
@@ -279,7 +284,7 @@ await test("sdd: worst case with every finding NOT ADDRESSED is 24 agents; escal
       }),
     }),
   );
-  assert.equal(r.calls.length, 24, r.labels.join(","));
+  assert.equal(r.calls.length, 25, r.labels.join(","));
   assert.equal(r.res.status, "parked");
   assert.equal(r.find("fixer-r2").effort, "medium");
   assert.equal(r.find("fixer-r3").effort, "high");
@@ -1358,6 +1363,139 @@ await test("sdd P4: critic must be a boolean and criticFocus a non-empty string"
   await assert.rejects(run(sdd, { ...BASE, critic: "yes" }, sddResponder()), /critic/);
   await assert.rejects(run(sdd, { ...BASE, criticFocus: "  " }, sddResponder()), /criticFocus/);
   await assert.rejects(run(sdd, { ...BASE, criticFocus: 3 }, sddResponder()), /criticFocus/);
+});
+
+const specS1Mandated = {
+  verdict: "fail",
+  findings: [F("S1", "important", { planMandated: true })],
+  cannotVerify: [],
+};
+
+await test("sdd P7: gate-0 runs in parallel with the reviewers on the review head, before any ruler", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
+      "spec-review": specS1Mandated,
+    }),
+  );
+  const at = (l) => r.labels.indexOf(l);
+  assert.ok(
+    at("gate-0") > at("quality-review") && at("gate-0") < at("ruler-review"),
+    r.labels.join(","),
+  );
+  assert.ok(
+    r.find("gate-0").prompt.includes("equals h-progress-pre"),
+    "gate-0 not on the review head",
+  );
+  assert.ok(r.find("spec-review").prompt.includes("head h-progress-pre"));
+  assert.equal(r.labels.filter((l) => l.startsWith("gate")).join(","), "gate-0,gate-r1");
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P7: gate-0 problems join the reviewer findings in one fix round; the re-reviewer runs", async () => {
+  let gates = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "gate*": () =>
+        ++gates === 1
+          ? { ok: false, head: "h-impl", problems: ["pnpm coverage: branches 93% < 95%"] }
+          : GATE_OK("h-final"),
+    }),
+  );
+  const fx = r.find("fixer-r1").prompt;
+  assert.ok(fx.includes("[spec:S1]") && fx.includes("[gate-0:1]"), fx);
+  assert.ok(r.labels.includes("re-review-r1"), r.labels.join(","));
+  assert.ok(!r.labels.includes("fixer-r2"), r.labels.join(","));
+  assert.ok(
+    r.logs.some((l) => /round 1 .*re-reviewer runs/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P7: a clean review and a green gate-0 complete with no further gate", async () => {
+  const r = await run(sdd, BASE, sddResponder());
+  assert.equal(r.labels.filter((l) => l.startsWith("gate")).join(","), "gate-0");
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P7: a gate-0 precondition failure stops after the parallel reviewers; answers retry the gate", async () => {
+  const resp = sddResponder({
+    "spec-review": specS1Mandated,
+    "gate-0": {
+      ok: false,
+      head: "zzz",
+      problems: [],
+      preconditionFailed: "HEAD zzz, expected h-impl",
+    },
+    "gate-0-retry": GATE_OK("h-impl"),
+  });
+  const r = await run(sdd, BASE, resp);
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:gate-0");
+  assert.ok(r.labels.includes("spec-review") && r.labels.includes("quality-review"));
+  assert.ok(!r.labels.includes("ruler-review") && !r.labels.some((l) => l.startsWith("fixer")));
+  const again = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition:gate-0", text: "HEAD reset" }] },
+    resp,
+  );
+  assert.ok(again.find("gate-0-retry").prompt.includes("HEAD reset"));
+  assert.equal(again.find("spec-review").prompt, r.find("spec-review").prompt);
+  assert.equal(again.res.status, "complete");
+});
+
+await test("sdd P7: review stages only (implemented) runs gate-0 in parallel on implemented.head", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, implemented: { head: "cafe1234cafe1234" } },
+    sddResponder({ "spec-review": specS1Mandated }),
+  );
+  assert.equal(r.labels.slice(0, 3).join(","), "spec-review,quality-review,gate-0");
+  assert.ok(r.find("gate-0").prompt.includes("equals cafe1234cafe1234"));
+});
+
+await test("sdd P9: a gate-only fix round skips the re-reviewer; progress and gate-r<r> decide", async () => {
+  let gates = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "gate*": () =>
+        ++gates <= 2 ? { ok: false, head: "h", problems: ["lint red"] } : GATE_OK("h3"),
+    }),
+  );
+  assert.ok(!r.labels.some((l) => l.startsWith("re-review")), r.labels.join(","));
+  assert.ok(r.labels.includes("gate-r1") && r.labels.includes("gate-r2"), r.labels.join(","));
+  assert.ok(
+    r.logs.some((l) => /round 1 is mechanical .*re-reviewer skipped/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.equal(r.res.status, "complete");
+  const p = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "progress-r1": {
+        ok: false,
+        problems: ["tree dirty"],
+        head: "hp",
+        newCommits: [],
+        testCount: 10,
+      },
+    }),
+  );
+  assert.ok(
+    p.labels.includes("re-review-r1") && !p.labels.includes("re-review-r2"),
+    p.labels.join(","),
+  );
+  assert.ok(p.find("fixer-r2").prompt.includes("[progress-r1-1]"));
 });
 
 // ---------- report ----------
