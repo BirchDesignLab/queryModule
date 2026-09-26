@@ -186,7 +186,7 @@ The exit PR (`docs/release-m<k>`) is opened by whichever session reaches the exi
 
 | Label | Meaning |
 |---|---|
-| `track-a`, `track-b`, `core`, `mobile` | owning track (`mobile` = Track D) |
+| `platform`, `web`, `core`, `mobile` | owning track (`mobile` = Track D) |
 | `p0`, `p1`, `p2`, `p3` | phase |
 | `sensitive` | touches a CLAUDE.md sensitive path; PR needs the `sensitive-review` artifact |
 | `contract` | a contract-first PR (section 8) |
@@ -227,7 +227,7 @@ A Claude Code session follows this list verbatim. `<t>` is the track letter (`a`
 
 ### 6.2 Claim
 
-7. List open unassigned issues in your cell, for example `gh issue list --milestone "M1 Forms and terminal" --label track-a --label p2 --state open --search "no:assignee"`. Include `--label core` issues whose default claimant (section 4) is your track.
+7. List open unassigned issues in your cell, for example `gh issue list --milestone "M1 Forms and terminal" --label platform --label p2 --state open --search "no:assignee"`. Include `--label core` issues whose default claimant (section 4) is your track.
 8. Pick the lowest-numbered issue with no open `Blocked by`. If every issue is blocked, set your cell `blocked` naming the blocker and take work per 3.4 rule 3.
 9. `gh issue edit <n> --add-assignee @me`.
 10. `git switch -c feat/<t>-<n>` (for example `feat/a-42`, `feat/core-57`).

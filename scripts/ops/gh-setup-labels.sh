@@ -43,10 +43,15 @@ fi
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
 echo "repo: $repo"
 
+# platform and web were renamed from track-a and track-b on 09-26-26. On a repo that
+# still has the old labels, rename them first so existing issues keep them:
+#   gh label edit track-a --name platform
+#   gh label edit track-b --name web
+# Running this script before that would create platform and web beside the old labels.
 # name|colour (hex, no #)|description (max 100 chars)
 labels=(
-  "track-a|1f6feb|Track A platform (Linux): packages/api, deploy, .github, scripts/ops, mock data"
-  "track-b|8250df|Track B web (Windows): apps/web, host-simulator, web-ui, tokens, client, e2e"
+  "platform|1f6feb|Track A platform (Linux): packages/api, deploy, .github, scripts/ops, mock data"
+  "web|8250df|Track B web (Windows): apps/web, host-simulator, web-ui, tokens, client, e2e"
   "core|0e8a16|Core: packages/core, config sites and locales, contract files; either track"
   "mobile|bf3989|Track D mobile (from M4): apps/mobile (Expo), packages/rn-ui, Maestro"
   "p0|c5def5|Phase P0 contracts"
