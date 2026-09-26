@@ -82,12 +82,7 @@ jobs:
         if: steps.changes.outputs.docs_only != 'true'
         # A [deps] lockfile change must not repoint a package at a tarball URL, git
         # repo or directory; registry entries carry only an integrity hash.
-        run: |
-          set -euo pipefail
-          if grep -nE '^\s+resolution: \{' pnpm-lock.yaml | grep -vE 'resolution: \{integrity: [^,}]+\}$'; then
-            echo "pnpm-lock.yaml has a non-registry resolution (above)."
-            exit 1
-          fi
+        run: pnpm tsx scripts/ci/check-lockfile.ts
       # The tools that decide [deps] PRs are pinned by image digest and wheel hash
       # (actionlint 1.7.12, zizmor 1.30.1).
       - name: Workflow lint (actionlint)

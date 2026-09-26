@@ -9,7 +9,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: "v8",
-      include: ["packages/*/src/**", "scripts/ci/**"],
+      include: ["packages/*/src/**", "scripts/ci/**", "scripts/ops/board-model.mjs"],
       // index.ts files are excluded only as pure re-export barrels; scripts/ci/barrels.test.ts enforces it.
       exclude: ["**/*.test.ts", "**/*.test.tsx", "**/index.ts"],
       thresholds: {

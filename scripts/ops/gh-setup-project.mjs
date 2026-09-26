@@ -36,6 +36,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bodyUpdate, waveParentStatus } from "./board-model.mjs";
 
 const REPO = "BirchDesignLab/queryModule";
 const OWNER = "BirchDesignLab";
@@ -684,6 +685,15 @@ function ensureIssue(spec) {
         rest(`repos/${REPO}/issues/${issue.number}/labels`, "POST", { labels: missing }),
       );
     }
+    // Body edits to the data below (for example wording fixed after review) never
+    // reached GitHub before; sync them here, compared after normalising line
+    // endings so an unchanged rerun plans 0 writes (#79 item 3).
+    const nextBody = bodyUpdate(issue.body ?? "", spec.body ?? "");
+    if (nextBody !== null) {
+      write(`update body of #${issue.number} "${spec.title}"`, () =>
+        rest(`repos/${REPO}/issues/${issue.number}`, "PATCH", { body: nextBody }),
+      );
+    }
   }
   if (issue && spec.closed && issue.state === "open") {
     write(`close #${issue.number} "${spec.title}" as completed`, () =>
@@ -821,10 +831,9 @@ function desired(issue) {
   if (wave) {
     v.Phase = "P0";
     v.Wave = `W${wave.k}`;
-    v.Status =
-      issue.state === "closed" || waveDone(wave)
-        ? "Done"
-        : { review: "In Review", ready: "Ready", todo: "Todo" }[wave.state];
+    // Done comes only from the issue's own state; every task closed is not enough
+    // on its own (that transition is project-sync's, #79 item 1).
+    v.Status = waveParentStatus(issue, wave.state);
     if (waveDone(wave) || wave.state === "review") {
       v.Start = WAVE_DATE;
       v.Finish = WAVE_DATE;
