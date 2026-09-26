@@ -11,13 +11,11 @@ import {
   ParentPartIdSchema,
   PartIdSchema,
   Sha256HexSchema,
-  TypePicklistCodeSchema,
+  TypeValuesSchema,
   Uuid7Schema,
 } from "./primitives";
 import { AdapterErrorCodeSchema } from "./source-status";
 
-/** role:"type" field values only (spec 4.1 Type fields): field key to picklist code (ADR-0005). */
-const TypeValues = z.record(FieldKeySchema, TypePicklistCodeSchema);
 /** alsoRun fieldMap as applied: target field key to source field key (spec 4.6). */
 const FieldMapApplied = z.record(FieldKeySchema, FieldKeySchema);
 
@@ -69,7 +67,7 @@ export const AUDIT_DETAILS_SCHEMAS = {
       parentPartId: ParentPartIdSchema.nullable(),
       origin: z.enum(["primary", "alsoRun"]),
       queryType: BoundedIdSchema,
-      typeValues: TypeValues,
+      typeValues: TypeValuesSchema,
       selectedSourceIds: z.array(BoundedIdSchema),
       dispatchedSourceIds: z.array(BoundedIdSchema),
       droppedSourceIds: z.array(BoundedIdSchema),
@@ -174,7 +172,7 @@ export const AUDIT_DETAILS_SCHEMAS = {
     partId: NestedPartIdSchema,
     parentPartId: ParentPartIdSchema,
     queryType: BoundedIdSchema,
-    typeValues: TypeValues,
+    typeValues: TypeValuesSchema,
     reasons: z.array(AuditValidationErrorSchema).min(1),
   }),
 } as const;
@@ -190,7 +188,7 @@ export function parseAuditDetails<T extends AuditEventType>(
 
 export const AuditActorSchema = z.strictObject({
   id: BoundedIdSchema,
-  email: z.string().nullable(),
+  email: z.email().max(254).nullable(),
   role: z.union([RoleSchema, z.literal("system")]),
 });
 export type AuditActor = z.infer<typeof AuditActorSchema>;

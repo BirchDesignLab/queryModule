@@ -1,0 +1,35 @@
+# Globs for the CLAUDE.md sensitive areas (spec 9.1). One glob per line.
+# A PR touching any of these needs docs/reviews/pr-<n>.md from the Opus 5.5 xhigh review.
+
+# Credential handling
+packages/api/src/credentials/**
+# Audit logging
+packages/api/src/audit/**
+packages/core/src/contracts/audit.ts
+packages/core/src/contracts/primitives.ts
+packages/core/src/contracts/identity.ts
+# Query dispatch, source adapters, nested-query planner
+packages/api/src/dispatch/**
+packages/api/src/adapters/**
+packages/core/src/contracts/source-status.ts
+packages/core/src/contracts/ws.ts
+packages/core/src/planner/**
+# Delegation
+packages/api/src/delegation/**
+# Terminal command parser
+packages/core/src/terminal/**
+# Write-back
+packages/api/src/writeback/**
+# Delete-from-view and result hiding
+packages/api/src/results/**
+# Migrations (they create the tables of every area above)
+packages/api/drizzle/**
+# Verify gate and merge path
+.github/**
+scripts/ci/**
+scripts/ops/**
+biome.json
+**/vitest.config.ts
+package.json
+tsconfig.base.json
+**/tsconfig.json

@@ -1,0 +1,123 @@
+name: ci
+
+on:
+  pull_request:
+    # labeled/unlabeled re-run CI when api-breaking is added or removed (oasdiff step).
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Spec 9.3: concurrency is cancelled per ref (PR branches and main alike).
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Changed paths
+        id: changes
+        run: node scripts/ci/changed-paths.mjs >> "$GITHUB_OUTPUT"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+
+      - name: Docs-only change
+        if: steps.changes.outputs.docs_only == 'true'
+        run: echo "Only docs/ or Markdown changed; heavy steps skipped."
+
+      # Step 1: install
+      - uses: pnpm/action-setup@v6
+        if: steps.changes.outputs.docs_only != 'true'
+      - uses: actions/setup-node@v7
+        if: steps.changes.outputs.docs_only != 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Step 2: biome, tsc -b
+      - name: Biome
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm lint
+      - name: Typecheck
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm typecheck
+
+      # Step 3: config:validate
+      - name: Config validate
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm config:validate
+
+      # Step 4: licence check (BR-006)
+      - name: Licence check
+        if: steps.changes.outputs.docs_only != 'true'
+        run: |
+          pnpm licenses list --prod --json > licences.json
+          pnpm tsx scripts/ci/check-licences.ts licences.json
+
+      # Step 5: tests with coverage thresholds
+      - name: Vitest
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm coverage
+
+      # Step 6: story-tag gate
+      - name: Story tags
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm tsx scripts/ci/check-story-tags.ts
+
+      # Step 7: contract diff
+      - name: Generated files match
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm gen:check
+      - name: oasdiff breaking
+        if: steps.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'api-breaking')
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        # Fails closed: skip only when ls-tree of the base succeeds and lists no
+        # openapi.json; any git failure fails the step. Image pinned by digest (v1.32.1).
+        run: |
+          set -euo pipefail
+          listed="$(git ls-tree --name-only "origin/$BASE_REF" -- packages/api/openapi.json)"
+          if [ -z "$listed" ]; then
+            echo "No openapi.json on the base branch yet; nothing to diff."
+            exit 0
+          fi
+          git show "origin/$BASE_REF:packages/api/openapi.json" > base-openapi.json
+          docker run --rm -v "$PWD:/work" tufin/oasdiff@sha256:3b14fe0112e5d1bf862f91ab234a4bcd161a3f399e98f8b0b665ce70857694ac breaking /work/base-openapi.json /work/packages/api/openapi.json --fail-on ERR
+
+      # Step 8: web production build (added by Task 26)
+
+  sensitive-review:
+    name: sensitive-review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Sensitive review artifact
+        run: pnpm tsx scripts/ci/check-sensitive-review.ts
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
