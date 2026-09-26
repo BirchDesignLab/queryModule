@@ -52,6 +52,28 @@ describe("ApiError shape (spec 4.7)", () => {
     };
     expect(ApiErrorSchema.parse(body)).toEqual(body);
   });
+  it("parses a body with populated params and a correlationId (configHashMismatch, rateLimited)", () => {
+    const mismatch = {
+      error: {
+        code: "configHashMismatch",
+        params: { currentConfigHash: "0123456789abcdef".repeat(4) },
+        correlationId: "0199a0b0-0000-7000-8000-000000000001",
+        requestId: "req-2",
+      },
+    };
+    expect(ApiErrorSchema.parse(mismatch)).toEqual(mismatch);
+    const limited = {
+      error: { code: "rateLimited", params: { retryAfterSeconds: 30 }, requestId: "r" },
+    };
+    expect(ApiErrorSchema.parse(limited)).toEqual(limited);
+  });
+  it("rejects params that are not strings or numbers, and an empty correlationId", () => {
+    const base = { code: "internal", requestId: "r" } as const;
+    for (const params of [{ ok: true }, { nested: { a: 1 } }, { list: [1] }, { none: null }]) {
+      expect(ApiErrorSchema.safeParse({ error: { ...base, params } }).success).toBe(false);
+    }
+    expect(ApiErrorSchema.safeParse({ error: { ...base, correlationId: "" } }).success).toBe(false);
+  });
   it("rejects an unknown code, a missing requestId and extra keys", () => {
     expect(ApiErrorSchema.safeParse({ error: { code: "teapot", requestId: "r" } }).success).toBe(
       false,
