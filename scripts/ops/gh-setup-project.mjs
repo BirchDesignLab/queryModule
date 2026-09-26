@@ -12,13 +12,16 @@
 //
 // Idempotent
 //   Every step reads first and writes only what differs. Existing issues are
-//   matched by exact title, fields and options by name. Safe to run again after
-//   editing the data below (for example to add a follow-up or close a wave).
+//   matched by exact title, fields and options by name. Status and Priority are
+//   only seeded when empty (a closed issue is forced to Done), so a rerun never
+//   undoes project-sync or the developer. A wave closes when all its tasks are
+//   closed. Safe to run again after editing the data below (for example to add a
+//   follow-up).
 //
 // Usage (PowerShell or bash, repo root)
-//   node scripts/pm/gh-setup-project.mjs                 # dry run: reads only, prints the plan
-//   node scripts/pm/gh-setup-project.mjs --apply         # writes
-//   node scripts/pm/gh-setup-project.mjs --as <login>    # gh account to act as (default BirchDesignLab)
+//   node scripts/ops/gh-setup-project.mjs                 # dry run: reads only, prints the plan
+//   node scripts/ops/gh-setup-project.mjs --apply         # writes
+//   node scripts/ops/gh-setup-project.mjs --as <login>    # gh account to act as (default BirchDesignLab)
 //
 // Requires
 //   gh CLI with the acting account in its keyring (`gh auth status` lists it) and
@@ -373,7 +376,7 @@ const FOLLOW_UPS = [
   },
   {
     title: "Embedded login: validate the host email claim before it reaches audit",
-    labels: ["follow-up", "platform", "sensitive"],
+    labels: ["follow-up", "platform", "p1", "sensitive"],
     milestone: "M4 Mobile and host integration",
     parent: "M4 P1: Layouts and host",
     track: "Platform (A)",
@@ -424,12 +427,12 @@ const FOLLOW_UPS = [
     priority: "Low",
     reqIds: "",
     body:
-      "The README Mermaid block is regenerated when `scripts/pm/gh-setup-project.mjs` runs. For a live view: a workflow rebuilds an SVG dashboard (milestone progress rings, phase bars from sub-issue progress, the wave timeline, open decisions and follow-ups) on issue and PR events and publishes it to GitHub Pages; the README embeds it.\n\nNeeds: Pages enabled (repo admin), a workflow under `.github/workflows/` (sensitive, needs the review artifact), no repository code run next to any token, and a fallback when Pages is down (the Mermaid block stays)." +
+      "The README Mermaid block is regenerated when `scripts/ops/gh-setup-project.mjs` runs. For a live view: a workflow rebuilds an SVG dashboard (milestone progress rings, phase bars from sub-issue progress, the wave timeline, open decisions and follow-ups) on issue and PR events and publishes it to GitHub Pages; the README embeds it.\n\nNeeds: Pages enabled (repo admin), a workflow under `.github/workflows/` (sensitive, needs the review artifact), no repository code run next to any token, and a fallback when Pages is down (the Mermaid block stays)." +
       src("Developer request 09-26-26 (README visuals, option both)."),
   },
   {
     title: "Board and repo settings: the manual steps",
-    labels: ["documentation", "p0"],
+    labels: ["documentation", "platform", "p0"],
     milestone: "M0 Skeleton",
     parent: "M0 P0: Contracts",
     track: null,
@@ -448,12 +451,15 @@ const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
 const asAt = argv.indexOf("--as");
 const AS = asAt >= 0 ? argv[asAt + 1] : "BirchDesignLab";
+const USAGE = "usage: node scripts/ops/gh-setup-project.mjs [--apply] [--as <login>]";
+if (!AS || AS.startsWith("--")) {
+  console.error(`--as needs a login; ${USAGE}`);
+  process.exit(2);
+}
 const known = new Set(["--apply", "--as", AS]);
 for (const a of argv) {
   if (!known.has(a)) {
-    console.error(
-      `unknown argument ${a}; usage: node scripts/pm/gh-setup-project.mjs [--apply] [--as <login>]`,
-    );
+    console.error(`unknown argument ${a}; ${USAGE}`);
     process.exit(2);
   }
 }
@@ -618,6 +624,19 @@ for (const f of FIELDS) {
     );
   }
 }
+for (const name of ["Start", "Finish"]) {
+  const cur = project.fields.nodes.find((x) => x.name === name);
+  if (cur && cur.dataType !== "DATE")
+    throw new Error(`field ${name} exists with type ${cur.dataType}`);
+  if (!cur) {
+    write(`create date field ${name}`, () =>
+      gql(
+        `mutation($p:ID!,$n:String!){createProjectV2Field(input:{projectId:$p,dataType:DATE,name:$n}){projectV2Field{... on ProjectV2FieldCommon{id}}}}`,
+        { p: project.id, n: name },
+      ),
+    );
+  }
+}
 if (APPLY) project = loadProject();
 
 // Issues
@@ -640,6 +659,14 @@ function ensureIssue(spec) {
     };
     issue = write(`create issue "${spec.title}"`, () => rest(`repos/${REPO}/issues`, "POST", body));
     if (issue) issues.set(issue.title, issue);
+  } else {
+    const have = new Set(issue.labels.map((l) => l.name));
+    const missing = spec.labels.filter((l) => !have.has(l));
+    if (missing.length > 0) {
+      write(`add labels ${missing.join(", ")} to #${issue.number}`, () =>
+        rest(`repos/${REPO}/issues/${issue.number}/labels`, "POST", { labels: missing }),
+      );
+    }
   }
   if (issue && spec.closed && issue.state === "open") {
     write(`close #${issue.number} "${spec.title}" as completed`, () =>
@@ -655,6 +682,7 @@ function ensureIssue(spec) {
 const subCache = new Map();
 function ensureChild(parent, child, childLabel) {
   if (!parent || !child) {
+    if (APPLY) throw new Error(`cannot link ${childLabel}: parent or child issue not found`);
     write(`link ${childLabel} under its parent`, () => {});
     return;
   }
@@ -690,6 +718,13 @@ for (const p of PHASES) {
   phaseIssue.set(p.title, issue);
 }
 
+// A wave is done when every task issue in it is closed (issue state is the truth).
+const waveDone = (w) => {
+  for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
+    if (byNumber(t + 1)?.state !== "closed") return false;
+  }
+  return true;
+};
 const waveIssue = new Map();
 for (const w of WAVES) {
   const tasks = `Tasks ${w.tasks[0]} to ${w.tasks[1]} (issues #${w.tasks[0] + 1} to #${w.tasks[1] + 1})`;
@@ -697,7 +732,7 @@ for (const w of WAVES) {
     title: waveTitle(w),
     labels: ["epic", "p0"],
     milestone: "M0 Skeleton",
-    closed: w.state === "done",
+    closed: waveDone(w),
     body: `P0 wave ${w.k}: ${tasks}, one PR per wave (ADR-0006).${w.pr ? ` PR #${w.pr}.` : ""}\n\nWave map: \`${PLAN}\` section "Waves".`,
   });
   waveIssue.set(w.k, issue);
@@ -768,8 +803,10 @@ function desired(issue) {
   if (wave) {
     v.Phase = "P0";
     v.Wave = `W${wave.k}`;
-    v.Status = { done: "Done", review: "In Review", ready: "Ready", todo: "Todo" }[wave.state];
-    if (wave.state === "done" || wave.state === "review") {
+    v.Status = waveDone(wave)
+      ? "Done"
+      : { done: "Done", review: "In Review", ready: "Ready", todo: "Todo" }[wave.state];
+    if (waveDone(wave) || wave.state === "review") {
       v.Start = WAVE_DATE;
       v.Finish = WAVE_DATE;
     }
@@ -830,6 +867,10 @@ for (const issue of all) {
   for (const [name, value] of Object.entries(want)) {
     if (value === undefined || value === null || value === "") continue;
     if (item.values[name] === value) continue;
+    // Status and Priority are seeded once; project-sync and the developer own them after
+    // that. Only a closed issue is forced to Done.
+    const seedOnly = name === "Priority" || (name === "Status" && value !== "Done");
+    if (seedOnly && item.values[name]) continue;
     const field = fieldByName(name);
     let v;
     if (field?.options) {
@@ -849,7 +890,8 @@ for (const issue of all) {
 
 // README progress block (Mermaid), regenerated from live data between markers.
 const README_PATH = resolve(ROOT, "README.md");
-const START = "<!-- progress:start (generated by scripts/pm/gh-setup-project.mjs; do not edit) -->";
+const START =
+  "<!-- progress:start (generated by scripts/ops/gh-setup-project.mjs; do not edit) -->";
 const END = "<!-- progress:end -->";
 
 function progressBlock() {

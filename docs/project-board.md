@@ -1,6 +1,6 @@
 # Project board: Query Module 2.0
 
-The backlog is GitHub Issues on `BirchDesignLab/queryModule`, shown on the user-owned Project "Query Module 2.0" (BirchDesignLab, project 1). `scripts/pm/gh-setup-project.mjs` keeps the labels, milestones, parent issues, sub-issue links, fields and field values in the shape below; run it after changing its data. The part above "Manual steps" is also the project readme.
+The backlog is GitHub Issues on `BirchDesignLab/queryModule`, shown on the user-owned Project "Query Module 2.0" (BirchDesignLab, project 1). `scripts/ops/gh-setup-project.mjs` keeps the labels, milestones, parent issues, sub-issue links, fields and field values in the shape below; run it after changing its data. The part above "Manual steps" is also the project readme.
 
 ## Accounts
 
@@ -43,35 +43,34 @@ Track (`platform`, `web`, `core`, `mobile`), phase (`p0` to `p3`), `contract`, `
 
 ## Automation
 
-`.github/workflows/project-sync.yml` moves items; the built-in project workflows cover the rest.
+`.github/workflows/project-sync.yml` keeps Status, Start and Finish in step. Its board job reconciles each affected item from current truth on every run (issue state, open PRs that close it, the wave branch and its PR), so a dropped or racing run is healed by the next event on the same items.
 
-| Event | Board change |
-|---|---|
-| Push to `feat/p0-wave-<k>` | That wave's open Todo or Ready tasks: In Progress, Start set |
-| PR opened, reopened or ready for review | Issues it closes (`Closes #n`) and its wave parent: In Review, Start set if empty |
-| PR converted to draft | Same issues: In Progress |
-| Issue closed as completed | Done, Finish set |
-| Issue reopened | Todo |
-| PR from this repository touching a sensitive path | Label `sensitive` (job `sensitive-label`, from `.github/sensitive-paths`) |
+| Event | Items reconciled | Status from truth |
+|---|---|---|
+| Push to `feat/p0-wave-<k>` | wave k's tasks and wave parent | open PR on the branch: In Review (draft: In Progress); branch only: In Progress |
+| PR opened, reopened, ready, drafted or closed | issues it closes, plus wave k's items for a wave branch | an open PR closing the issue: In Review (draft: In Progress) |
+| Issue closed or reopened | the issue and its parent | closed as completed: Done, Finish set; not planned or duplicate: unchanged; reopened: Finish cleared, Status from its PRs |
+| Every wave parent | | closed as completed once all of its tasks are closed |
 
-The board job uses the secret `PROJECT_TOKEN` and never checks out or runs repository code; without the secret, or on a fork PR, it skips with a notice. The label job uses only `GITHUB_TOKEN`.
+Start is set when an item first reaches In Progress or In Review. Blocked is yours: automation only moves a Blocked item to In Review or Done. The `sensitive-label` job labels a PR `sensitive` when it touches a gate or critical path (ADR-0007).
+
+Security: the board job uses the secret `PROJECT_TOKEN` (BirchDesignLab classic token, `project` scope only, with an expiry) and never checks out or runs repository code; without the secret, or on a fork PR, it skips with a notice. Anyone with push access can read the token by editing the workflow on a branch; that is accepted because repository writers are trusted. The label job uses only `GITHUB_TOKEN`.
+
+The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status and Priority when they are empty (a closed issue is forced to Done); after that, project-sync and the developer own them.
 
 ## Manual steps
 
-Views, built-in project workflows and repo settings have no API. BirchDesignLab does these in the web UI; tick them here.
+Views, built-in project workflows and repo settings have no API. BirchDesignLab does these in the web UI. This list is the one checklist: tick it here, and close issue #75 when it is done.
 
 Automation token (for `project-sync`):
 - [ ] As BirchDesignLab, create a classic personal access token with only the `project` scope (Settings, Developer settings, Personal access tokens, Tokens (classic)); set an expiry and a calendar reminder.
 - [ ] Repo Settings, Secrets and variables, Actions: new repository secret `PROJECT_TOKEN` with that token.
 
-Built-in workflows (Project, menu, Workflows):
+Built-in workflows (Project, menu, Workflows); project-sync owns Status moves, so keep the built-ins to adding items:
 - [ ] "Item added to project": set Status to Todo.
-- [ ] "Item closed": set Status to Done.
-- [ ] "Pull request merged": set Status to Done (re-check the target after the Status options change).
-- [ ] "Pull request linked to issue": set Status to In Review.
-- [ ] "Auto-close issue": on when Status is Done.
 - [ ] "Auto-add sub-issues to project": on.
 - [ ] "Auto-add to project" (if offered): repository `queryModule`, filter `is:issue`.
+- [ ] "Item closed", "Pull request merged", "Pull request linked to issue", "Auto-close issue": off (project-sync handles them; the built-ins would mark not-planned closes Done).
 
 Views:
 - [ ] Rename "M - aybe Later" to "Later"; give it the filter `no:milestone` (or the later label once used).

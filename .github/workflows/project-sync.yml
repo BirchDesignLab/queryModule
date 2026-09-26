@@ -3,34 +3,42 @@ name: project-sync
 # Keeps the "Query Module 2.0" board (BirchDesignLab, project 1) in step with
 # branches, PRs and issues. See docs/project-board.md "Automation".
 #
-# Security: the project token (secret PROJECT_TOKEN, a BirchDesignLab classic
-# token with only the `project` scope) is used only in the `board` job, which
-# checks out nothing and runs no repository code. Fork PRs get no secrets, so
-# that job skips with a notice. The `sensitive-label` job runs PR code but holds
-# only GITHUB_TOKEN with pull-requests: write, and runs for same-repository PRs.
+# The board job reconciles from current truth (issue state, open PRs, the wave
+# branch) on every run, so a run that is dropped or races another is healed by
+# the next event that touches the same items.
+#
+# Security: PROJECT_TOKEN (a BirchDesignLab classic token with only the
+# `project` scope) is used only in the board job, which checks out nothing and
+# runs no repository code. Fork PRs get no secrets, so the job skips. Anyone
+# with push access can read the token by editing this file on a branch; that is
+# accepted (repository writers are trusted; the token is project-only and
+# expires), see docs/project-board.md. The sensitive-label job runs PR code but
+# holds only GITHUB_TOKEN, for same-repository PRs.
 
 on:
   push:
     branches: ["feat/p0-wave-*"]
   pull_request:
-    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize]
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed]
   issues:
     types: [closed, reopened]
 
 permissions:
   contents: read
 
-concurrency:
-  group: project-sync-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: false
-
 jobs:
   board:
     name: board
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.action != 'synchronize'
+    permissions:
+      issues: write
+      pull-requests: read
+    concurrency:
+      group: project-sync-board
+      cancel-in-progress: false
     steps:
-      - name: Sync project fields
+      - name: Reconcile project fields
         uses: actions/github-script@v9
         env:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
@@ -38,6 +46,7 @@ jobs:
           script: |
             const OWNER = "BirchDesignLab";
             const NUMBER = 1;
+            const REPO = `${context.repo.owner}/${context.repo.repo}`;
             if (!process.env.PROJECT_TOKEN) {
               core.notice("PROJECT_TOKEN is not set (or this is a fork PR); board sync skipped.");
               return;
@@ -54,106 +63,148 @@ jobs:
             const project = user.projectV2;
             const field = (name) => project.fields.nodes.find((f) => f.name === name);
 
-            async function items() {
-              const out = [];
-              for (let after = null; ; ) {
-                const { node } = await pm.graphql(
-                  `query($p:ID!,$a:String){node(id:$p){... on ProjectV2{items(first:100,after:$a){
-                    pageInfo{hasNextPage endCursor} nodes{id content{... on Issue{number title state}}
-                    fieldValues(first:30){nodes{
-                      ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2FieldCommon{name}}}
-                      ... on ProjectV2ItemFieldDateValue{date field{... on ProjectV2FieldCommon{name}}}}}}}}}}`,
-                  { p: project.id, a: after },
-                );
-                for (const it of node.items.nodes) {
-                  if (!it.content?.number) continue;
-                  const values = {};
-                  for (const v of it.fieldValues.nodes) if (v.field?.name) values[v.field.name] = v.name ?? v.date;
-                  out.push({ id: it.id, ...it.content, values });
-                }
-                if (!node.items.pageInfo.hasNextPage) return out;
-                after = node.items.pageInfo.endCursor;
+            // Items of this repository only, keyed by issue number.
+            const items = new Map();
+            for (let after = null; ; ) {
+              const { node } = await pm.graphql(
+                `query($p:ID!,$a:String){node(id:$p){... on ProjectV2{items(first:100,after:$a){
+                  pageInfo{hasNextPage endCursor}
+                  nodes{id content{... on Issue{number title state stateReason
+                    repository{nameWithOwner} parent{number title}
+                    subIssuesSummary{total completed}
+                    closedByPullRequestsReferences(first:20,includeClosedPrs:false){nodes{state isDraft}}}}
+                  fieldValues(first:30){nodes{
+                    ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2FieldCommon{name}}}
+                    ... on ProjectV2ItemFieldDateValue{date field{... on ProjectV2FieldCommon{name}}}}}}}}}}`,
+                { p: project.id, a: after },
+              );
+              for (const it of node.items.nodes) {
+                const c = it.content;
+                if (!c?.number || c.repository?.nameWithOwner !== REPO) continue;
+                const values = {};
+                for (const v of it.fieldValues.nodes) if (v.field?.name) values[v.field.name] = v.name ?? v.date;
+                items.set(c.number, { id: it.id, ...c, values });
               }
+              if (!node.items.pageInfo.hasNextPage) break;
+              after = node.items.pageInfo.endCursor;
             }
 
             async function set(item, name, value) {
               if (item.values[name] === value) return;
               const f = field(name);
               if (!f) throw new Error(`project has no field ${name}`);
-              let v;
-              if (f.options) {
-                const opt = f.options.find((o) => o.name === value);
-                if (!opt) throw new Error(`field ${name} has no option ${value}`);
-                v = { singleSelectOptionId: opt.id };
-              } else v = { date: value };
-              await pm.graphql(
-                `mutation($p:ID!,$i:ID!,$f:ID!,$v:ProjectV2FieldValue!){updateProjectV2ItemFieldValue(
-                  input:{projectId:$p,itemId:$i,fieldId:$f,value:$v}){projectV2Item{id}}}`,
-                { p: project.id, i: item.id, f: f.id, v },
-              );
+              if (value === null) {
+                await pm.graphql(
+                  `mutation($p:ID!,$i:ID!,$f:ID!){clearProjectV2ItemFieldValue(
+                    input:{projectId:$p,itemId:$i,fieldId:$f}){projectV2Item{id}}}`,
+                  { p: project.id, i: item.id, f: f.id },
+                );
+              } else {
+                let v;
+                if (f.options) {
+                  const opt = f.options.find((o) => o.name === value);
+                  if (!opt) throw new Error(`field ${name} has no option ${value}`);
+                  v = { singleSelectOptionId: opt.id };
+                } else v = { date: value };
+                await pm.graphql(
+                  `mutation($p:ID!,$i:ID!,$f:ID!,$v:ProjectV2FieldValue!){updateProjectV2ItemFieldValue(
+                    input:{projectId:$p,itemId:$i,fieldId:$f,value:$v}){projectV2Item{id}}}`,
+                  { p: project.id, i: item.id, f: f.id, v },
+                );
+              }
               item.values[name] = value;
               core.info(`#${item.number} ${name} = ${value}`);
             }
 
-            const all = await items();
-            const byNumber = new Map(all.map((i) => [i.number, i]));
-            const waveParent = (k) => all.find((i) => i.title.startsWith(`M0 P0 W${k}:`));
+            // Wave state from the branch and its open PR.
+            const waveCache = new Map();
+            async function waveStatus(k) {
+              if (waveCache.has(k)) return waveCache.get(k);
+              const { repository } = await github.graphql(
+                `query($o:String!,$r:String!,$b:String!,$q:String!){repository(owner:$o,name:$r){
+                  ref(qualifiedName:$q){name}
+                  pullRequests(headRefName:$b,states:OPEN,first:1){nodes{isDraft}}}}`,
+                { o: context.repo.owner, r: context.repo.repo, b: `feat/p0-wave-${k}`, q: `refs/heads/feat/p0-wave-${k}` },
+              );
+              const pr = repository.pullRequests.nodes[0];
+              const s = pr ? (pr.isDraft ? "In Progress" : "In Review") : repository.ref ? "In Progress" : null;
+              waveCache.set(k, s);
+              return s;
+            }
+            const waveOf = (item) =>
+              /^M0 P0 W(\d+):/.exec(item.title)?.[1] ?? /^M0 P0 W(\d+):/.exec(item.parent?.title ?? "")?.[1];
 
-            if (context.eventName === "push") {
-              // feat/p0-wave-<k>: the wave starts; its open tasks and its wave parent go In Progress.
-              const k = /^refs\/heads\/feat\/p0-wave-(\d+)$/.exec(context.ref)?.[1];
-              if (!k) return;
-              const targets = all.filter((i) => i.values.Wave === `W${k}` && i.values.Phase === "P0");
-              for (const item of targets) {
-                if (item.state !== "OPEN" || !["Todo", "Ready"].includes(item.values.Status)) continue;
-                await set(item, "Status", "In Progress");
-                if (!item.values.Start) await set(item, "Start", today);
-              }
-              return;
+            // Status from truth; null leaves the current value alone.
+            async function truth(item) {
+              if (item.state === "CLOSED") return item.stateReason === "COMPLETED" ? "Done" : null;
+              const prs = item.closedByPullRequestsReferences.nodes.filter((p) => p.state === "OPEN");
+              if (prs.some((p) => !p.isDraft)) return "In Review";
+              if (prs.length > 0) return "In Progress";
+              const k = waveOf(item);
+              return k ? await waveStatus(k) : null;
             }
 
-            if (context.eventName === "pull_request") {
+            async function reconcile(item) {
+              if (!item) return;
+              // A wave parent closes when all of its tasks are closed.
+              const isWaveParent = /^M0 P0 W\d+:/.test(item.title);
+              const sum = item.subIssuesSummary;
+              if (isWaveParent && item.state === "OPEN" && sum.total > 0 && sum.completed === sum.total) {
+                await github.rest.issues.update({ ...context.repo, issue_number: item.number, state: "closed", state_reason: "completed" });
+                item.state = "CLOSED";
+                item.stateReason = "COMPLETED";
+                core.info(`#${item.number} closed (all sub-issues closed)`);
+              }
+              const s = await truth(item);
+              if (item.state === "OPEN" && item.values.Finish) await set(item, "Finish", null);
+              if (!s) return;
+              // Blocked is the developer's; only review or completion moves it.
+              if (item.values.Status === "Blocked" && s === "In Progress") return;
+              await set(item, "Status", s);
+              if ((s === "In Progress" || s === "In Review") && !item.values.Start) await set(item, "Start", today);
+              if (s === "Done" && !item.values.Finish) await set(item, "Finish", today);
+            }
+
+            const affected = new Set();
+            const addWave = (k) => {
+              for (const i of items.values()) if (waveOf(i) === String(k)) affected.add(i.number);
+            };
+            if (context.eventName === "push") {
+              const k = /^refs\/heads\/feat\/p0-wave-(\d+)$/.exec(context.ref)?.[1];
+              if (k) addWave(k);
+            } else if (context.eventName === "pull_request") {
               const pr = context.payload.pull_request;
               const { repository } = await github.graphql(
                 `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-                  closingIssuesReferences(first:50){nodes{number}}}}}`,
+                  closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}}}}}}`,
                 { o: context.repo.owner, r: context.repo.repo, n: pr.number },
               );
-              const numbers = repository.pullRequest.closingIssuesReferences.nodes.map((n) => n.number);
+              for (const n of repository.pullRequest.closingIssuesReferences.nodes) {
+                if (n.repository.nameWithOwner === REPO) affected.add(n.number);
+              }
               const k = /^feat\/p0-wave-(\d+)$/.exec(pr.head.ref)?.[1];
-              const parent = k ? waveParent(k) : undefined;
-              if (parent) numbers.push(parent.number);
-              const status = pr.draft ? "In Progress" : "In Review";
-              for (const n of numbers) {
-                const item = byNumber.get(n);
-                if (!item || item.state !== "OPEN") continue;
-                await set(item, "Status", status);
-                if (!item.values.Start) await set(item, "Start", today);
-              }
-              return;
+              if (k) addWave(k);
+            } else if (context.eventName === "issues") {
+              const n = context.payload.issue.number;
+              affected.add(n);
+              const parent = items.get(n)?.parent;
+              if (parent) affected.add(parent.number);
             }
-
-            if (context.eventName === "issues") {
-              const issue = context.payload.issue;
-              const item = byNumber.get(issue.number);
-              if (!item) return;
-              if (context.payload.action === "closed" && issue.state_reason !== "not_planned") {
-                await set(item, "Status", "Done");
-                if (!item.values.Finish) await set(item, "Finish", today);
-              } else if (context.payload.action === "reopened") {
-                await set(item, "Status", "Todo");
-              }
-            }
+            for (const n of affected) await reconcile(items.get(n));
 
   sensitive-label:
     name: sensitive-label
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       pull-requests: write
+    concurrency:
+      group: sensitive-label-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
         with:
@@ -165,7 +216,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Label sensitive PRs
+      - name: Label PRs that need a sensitive review
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -175,9 +226,9 @@ jobs:
           set -euo pipefail
           files="$(pnpm --silent tsx scripts/ci/list-sensitive.ts)"
           if [ -n "$files" ]; then
-            echo "Sensitive paths touched:"
+            echo "Paths that need a sensitive review:"
             echo "$files"
             gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label sensitive
           else
-            echo "No sensitive paths touched."
+            echo "No path needs a sensitive review."
           fi

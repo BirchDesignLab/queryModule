@@ -229,6 +229,8 @@ Required: `pr`, `base`, `head`, `repoDir`, `planPath`, `workDir`, `scratchRoot`,
 | progressChecker | sonnet / low |
 | reReviewer | opus / xhigh |
 
+Review tier (ADR-0007): the defaults are the critical tier. For a PR whose highest tier in `.github/sensitive-paths` is `[gate]`, pass `roles: { reviewer: { model: "opus", effort: "high" }, reReviewer: { model: "opus", effort: "high" } }`; the artifact front matter then reads `effort: "high"`, which the check accepts for gate paths only. A PR with only `[deps]` or `[exempt]` changes needs no `wave-review`. Never touch the repository tree while a run is active: the fixer's clean-tree precondition stops the run (PR #76, 09-26-26).
+
 ### Flow
 
 1. **Review.** Whole-branch review of `base..head` against the plan, the spec (binding) and the requirements, with the sensitive-file list, the ledger's `Ruling` and `minor (deferred)` lines, the controller's questions and a "declined to judge" list. It checks a precondition first (`head` resolves, `base` is its ancestor, clean tree); a failure stops the run (`stopped: "precondition"`) before any ruler or fixer. Writes `workDir/<runLabel>-review.md`, and the artifact only on approve with no open critical or important finding. Returns `{ verdict: approve|fixes, reviewedSha, preconditionFailed, findings:[... contests], answers, declined, artifactWritten }`. Its prompt never carries answers, so a re-run with answers replays it from cache.

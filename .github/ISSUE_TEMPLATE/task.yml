@@ -23,6 +23,26 @@ body:
       placeholder: "SEC-010, FR-040"
     validations:
       required: true
+  - type: input
+    id: blocked
+    attributes:
+      label: Blocked by
+      description: Issues that must land first (master plan 5.2 rule 5), or "none".
+      placeholder: "#18, #19"
+    validations:
+      required: true
+  - type: dropdown
+    id: sensitive
+    attributes:
+      label: Sensitive tier (ADR-0007)
+      description: Highest tier in .github/sensitive-paths the task touches.
+      options:
+        - none
+        - deps (automated checks only)
+        - gate (Opus high review artifact)
+        - critical (Opus xhigh review artifact)
+    validations:
+      required: true
   - type: textarea
     id: scope
     attributes:
@@ -37,5 +57,5 @@ body:
       description: Tests (TDD), gates and any sensitive-review artifact.
       value: |
         - [ ] Failing test first, then green
-        - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm coverage` green
-        - [ ] Sensitive-review artifact if a sensitive path is touched
+        - [ ] `pnpm verify` green (lint, typecheck, coverage, config:validate, gen:check)
+        - [ ] Review artifact for the task's tier (gate or critical)

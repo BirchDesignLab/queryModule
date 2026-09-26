@@ -1419,6 +1419,8 @@ A GitHub ruleset on `main` requires a PR and the status checks `ci` and `sensiti
 
 `sensitive-review` is a job in `ci.yml`. `.github/sensitive-paths` lists globs for the sensitive areas in `CLAUDE.md` (credentials, delegation, audit, dispatch and adapters, terminal parser, write-back, delete-from-view, the migrations for their tables, `.github/`, `scripts/ci/`, `scripts/ops/`). If the PR diff touches none of them, the job passes. If it touches any, the PR must contain `docs/reviews/pr-<number>.md` with front matter `{ reviewer: "opus-5.5", effort, reviewedSha, verdict: "approve" }`, and no sensitive-path file may change in commits after `reviewedSha`. The Opus review seat writes the artifact (that front matter plus a findings body) and the developer commits it. The check proves a review was recorded, not that it was independent; section 14 covers that.
 
+Amended by ADR-0007 (tiered review: critical, gate, deps and exempt paths replace the one-tier artifact rule).
+
 ### 9.2 Dark merges and migrations
 
 Unfinished capabilities merge dark behind their feature flag (5.8).

@@ -12,16 +12,22 @@ Closes #
 
 <!-- Rulings made (plan versus spec), follow-ups created, carries for later tasks or tracks. -->
 
-## Sensitive paths
+## Sensitive tier (ADR-0007)
 
-- [ ] No path in `.github/sensitive-paths` is touched, or
-- [ ] `docs/reviews/pr-<n>.md` (Opus 5.5, effort xhigh, verdict approve) is committed and no sensitive file changed after its `reviewedSha`
+- [ ] none or exempt: no review artifact
+- [ ] deps (dependency fields, lockfile, `uses:` bumps): the ci job's automated checks only
+- [ ] gate: `docs/reviews/pr-<n>.md` from Opus 5.5 at effort high or above
+- [ ] critical: `docs/reviews/pr-<n>.md` from Opus 5.5 at effort xhigh or max
+
+With an artifact, no gate or critical file changes after its `reviewedSha`.
+
+## Dependencies
+
+<!-- Packages added or bumped, and why; "none" otherwise. -->
 
 ## Test plan
 
-- [ ] Failing test first, then green (TDD)
-- [ ] `pnpm lint`
-- [ ] `pnpm typecheck`
-- [ ] `pnpm coverage`
+- [ ] Failing test first, then green (TDD); the failing test: <!-- name it -->
+- [ ] `pnpm verify` (lint, typecheck, coverage, config:validate, gen:check)
 - [ ] `pnpm audit --prod`
 - [ ] Mock data only; no real person, vehicle or property records

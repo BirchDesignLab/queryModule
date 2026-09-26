@@ -68,6 +68,25 @@ jobs:
           pnpm licenses list --prod --json > licences.json
           pnpm tsx scripts/ci/check-licences.ts licences.json
 
+      # Step 4b: dependency and workflow checks (ADR-0007: they stand in for a
+      # review on [deps]-tier changes such as Dependabot bumps)
+      - name: Audit runtime dependencies
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm audit --prod
+      - name: Dependency review
+        if: steps.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: moderate
+      - name: Workflow lint (actionlint)
+        if: steps.changes.outputs.docs_only != 'true'
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+      - name: Workflow security (zizmor)
+        if: steps.changes.outputs.docs_only != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pipx run zizmor==1.30.1 --config .github/zizmor.yml --min-severity medium .github/workflows
+
       # Step 5: tests with coverage thresholds
       - name: Vitest
         if: steps.changes.outputs.docs_only != 'true'

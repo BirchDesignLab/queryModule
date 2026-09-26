@@ -55,15 +55,23 @@ its first commit:
   deletion is audited (FR-062, FR-063, SEC-013).
 - The verify gate (lint, typecheck, tests) and the merge-to-`main` path.
 
-Paths landed so far (kept in step with `.github/sensitive-paths`, which also
-lists the globs reserved for areas that have no code yet):
+Paths landed so far, by review tier (ADR-0007; kept in step with
+`.github/sensitive-paths`, which also lists the globs reserved for areas that
+have no code yet):
 
-- Audit logging: `packages/core/src/contracts/audit.ts`,
-  `packages/core/src/contracts/primitives.ts`, `packages/core/src/contracts/identity.ts`
-- Query dispatch: `packages/core/src/contracts/source-status.ts`, `packages/core/src/contracts/ws.ts`
-- The verify gate: `.github/**`, `scripts/ci/**`, `scripts/ops/**`,
-  `biome.json`, `**/vitest.config.ts`, `package.json`, `tsconfig.base.json`,
-  `**/tsconfig.json`
+- Critical (Opus 5.5 `xhigh` artifact): audit logging
+  `packages/core/src/contracts/audit.ts`, `primitives.ts`, `identity.ts`; query
+  dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`; the
+  sensitive-review gate itself `.github/sensitive-paths`,
+  `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`.
+- Gate (Opus 5.5 `high` artifact): the verify gate and merge path
+  `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
+  `.gitignore`, `**/vitest.config.ts`, `package.json`, `pnpm-workspace.yaml`,
+  `tsconfig.base.json`, `**/tsconfig.json`.
+- Deps (automated checks only, no artifact): `pnpm-lock.yaml`,
+  `.github/dependabot.yml`, dependency-only `package.json` changes and
+  `uses:`-only workflow changes.
+- Exempt: `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`.
 
 This is CJIS and GDPR territory. There is no money path, but a mistake in
 credential handling or audit logging is a compliance failure, not a bug.
@@ -86,8 +94,8 @@ credential handling or audit logging is a compliance failure, not a bug.
 | Model | Effort | Use it for |
 |---|---|---|
 | Opus 5.5 | `max` | Only when the developer asks, or `xhigh` fell short on a correctness-critical question. One agent, never a fleet. |
-| Opus 5.5 | `xhigh` | Whole-branch review of a PR that touches sensitive code. Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. |
-| Opus 5.5 | `high` | Hard finders, design and judge panels, whole-branch review of an ordinary PR. Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
+| Opus 5.5 | `xhigh` | Whole-branch review of a PR that touches a critical-tier path (ADR-0007). Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. |
+| Opus 5.5 | `high` | Hard finders, design and judge panels, whole-branch review of an ordinary PR or of a gate-tier PR (ADR-0007: CI, scripts, workflows, config; no critical path). Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
 | Opus 5.5 | `medium` | Implementing a sensitive-code task from a plan. Synthesizing several agents' reports into one answer. The critic role on a UI-building workflow. |
 | Opus 5.5 | `low` | A narrow judgment call that needs Opus-grade reasoning but no exploration ("is this credential-storage change CJIS-safe, given these three lines"). |
 | Sonnet 5 | `max` | Not used. Work that hard goes to Opus. |

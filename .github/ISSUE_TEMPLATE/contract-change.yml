@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Master plan 8.1: add the requesting track's label, the phase label and the milestone. The PR touches contract files only (8.2), with tests; audit `details` stay additive-only. Audit, credential, dispatch or parser schemas also get `sensitive` and the review artifact.
+        Master plan 8.1: add the requesting track's label, the phase label and the milestone. The PR touches contract files only (8.2), with tests; audit `details` stay additive-only. Audit, credential, dispatch or parser schemas are critical-tier paths: `sensitive` label and the Opus xhigh review artifact (ADR-0007).
   - type: textarea
     id: change
     attributes:
@@ -28,6 +28,13 @@ body:
     attributes:
       label: Consumers on each track
       description: Which Track A, B, Core and D code reads it.
+    validations:
+      required: true
+  - type: textarea
+    id: types
+    attributes:
+      label: Affected audit, event and message types
+      description: Audit event types, WS messages or routes the change touches (master plan 8.1 step 1).
     validations:
       required: true
   - type: input
