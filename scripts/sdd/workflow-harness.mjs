@@ -165,6 +165,7 @@ function postFill(label, prompt, r) {
       treeClean: true,
       dirtyFiles: [],
     };
+  if (label.startsWith("progress") && !("guardHits" in r)) return { ...r, guardHits: [] };
   return r;
 }
 function sddResponder(over = {}) {
@@ -1804,6 +1805,70 @@ await test("sdd FP-I3: a ruler-review answer on a checked item keeps the checker
   );
   assert.ok(!failed.labels.some((l) => l.startsWith("fixer")), failed.labels.join(","));
   assert.equal(failed.res.rulings.find((x) => x.item === "spec:CV1").source, "controller");
+});
+
+await test("sdd FP-I2: the progress checker flags gate-weakening moves; a hit makes the next round reviewed", async () => {
+  let gates = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "gate*": () =>
+        ++gates === 1
+          ? { ok: false, head: "h", problems: ["pnpm coverage: branches 93% < 95%"] }
+          : GATE_OK("h2"),
+      "progress-r1": {
+        ...progress("progress-r1"),
+        guardHits: ["vitest.config.ts: coverage threshold lowered from 95 to 90"],
+      },
+    }),
+  );
+  const pp = r.find("progress-r1").prompt;
+  for (const t of [
+    "vitest",
+    "biome.json",
+    "tsconfig",
+    "package.json",
+    "coverage thresholds",
+    "biome-ignore",
+    "@ts-ignore",
+    "@ts-expect-error",
+    "istanbul ignore",
+    "v8 ignore",
+    "c8 ignore",
+    "eslint-disable",
+    "guardHits",
+  ])
+    assert.ok(pp.includes(t), `progress prompt lacks ${t}`);
+  assert.ok(!r.labels.includes("re-review-r1"), "round 1 is gate-only, so mechanical");
+  assert.ok(
+    r.find("fixer-r2").prompt.includes("[progress-r1-guard-1] IMPORTANT"),
+    r.labels.join(","),
+  );
+  assert.ok(
+    r.labels.includes("re-review-r2"),
+    `a guard hit must bring the re-reviewer: ${r.labels.join(",")}`,
+  );
+  assert.ok(ids(r.find("re-review-r2").prompt).includes("progress-r1-guard-1"));
+  for (const l of ["fixer-r1", "fixer-r2"]) {
+    const fp = r.find(l).prompt;
+    assert.ok(
+      fp.includes("unless the brief or a ruling in force asks for it") &&
+        fp.includes("biome-ignore"),
+      `${l} does not forbid gate-weakening moves`,
+    );
+  }
+  const esc = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "re-review*": neverAddressed,
+    }),
+  );
+  assert.ok(
+    esc.find("fixer-r4").prompt.includes("unless the brief or a ruling in force asks for it"),
+  );
 });
 
 // ---------- report ----------

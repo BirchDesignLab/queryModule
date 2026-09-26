@@ -398,8 +398,9 @@ const PROGRESS = {
     head: { type: 'string', description: 'full sha from git rev-parse HEAD' },
     newCommits: COMMITS,
     testCount: { type: 'integer', description: 'passing tests in the full run; -1 if the run failed' },
+    guardHits: { type: 'array', items: { type: 'string' }, description: 'check 6: each gate-weakening change, "file:line: what"; [] when none' },
   },
-  required: ['ok', 'problems', 'head', 'newCommits', 'testCount'],
+  required: ['ok', 'problems', 'head', 'newCommits', 'testCount', 'guardHits'],
 }
 const REREVIEW = {
   type: 'object',
@@ -457,6 +458,9 @@ function postGateProblem(res, expected) {
   if (dirty) parts.push(`tree dirty: ${(res.dirtyFiles || []).join(', ') || '(files not reported)'}`)
   return parts.join('; ')
 }
+// Moves that make a gate green without fixing the cause (critic I2). Fixers are told not to make
+// them; the progress checker flags them, and a flag brings the re-reviewer into the next round.
+const GATE_GUARD = 'Never change vitest config files (vitest*.config.*), biome.json, tsconfig*.json, package.json scripts or coverage thresholds or excludes, and never add suppression comments (biome-ignore, @ts-ignore, @ts-expect-error, istanbul ignore, v8 ignore, c8 ignore, eslint-disable) or delete the code a gate complains about, unless the brief or a ruling in force asks for it.'
 const SENSITIVE_RULE = 'This task is sensitive. On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.'
 
 function diffStep(base, head, out) {
@@ -697,6 +701,7 @@ async function runFixer(findings, label, roleName, roundTag, round) {
       '',
       'TDD: for each behavioural finding, first write or tighten a test that fails for the defect, run it and see it fail, then fix, then see it pass. Run the tests that cover the amended code while iterating. A gate finding (lint, typecheck, coverage, head, tree) is fixed at its cause.',
       SELF_CHECK,
+      GATE_GUARD,
       `Append a "## Fix ${roundTag}" section to ${A.reportPath}: per finding id, what you changed (file:line), the covering tests, the commands and their output (RED and GREEN).`,
       `Commit only the files these fixes touch (git add <paths>, never git add -A) with a message "fix(task-${N}): ${roundTag} review findings" and a body listing the finding ids. ${TRAILER}`,
       GIT,
@@ -743,6 +748,7 @@ async function runProgress(label, roundBase, priorTests) {
       `3. No test was skipped or focused: git diff ${roundBase}..HEAD adds no .skip( / .only( / it.skip / describe.only / test.todo (grep the + lines).`,
       `4. No test file deleted or emptied: git diff --diff-filter=D --name-only ${roundBase}..HEAD and git diff --numstat ${roundBase}..HEAD show no *.test.* or *.spec.* file deleted or left with no content.`,
       `5. Test count not lower: run pnpm test once (full suite). Report the passing count as testCount (-1 if the run failed). Prior evidence: ${priorTests}. Lower than that, or any failure, is a problem.`,
+      `6. No gate weakening (report each hit in guardHits as "file:line: what", not in problems): git diff ${roundBase}..HEAD must not touch vitest config files (vitest*.config.*), biome.json, tsconfig*.json, package.json scripts, or coverage thresholds or excludes, and its + lines must not add biome-ignore, @ts-ignore, @ts-expect-error, istanbul ignore, v8 ignore, c8 ignore or eslint-disable. Flag a hit even when the brief may allow it; a reviewer decides.`,
       'head: git rev-parse HEAD (full sha).',
       'You are read-only: change nothing, commit nothing. Scratch, if needed: ' + scratch(label),
       HOUSE,
@@ -959,6 +965,7 @@ if (implConcerns.length) {
       state.head = pc.head
       state.commits.push(...pc.newCommits)
       if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
+      if (pc.guardHits.length) state.preReviewProblems.push(...pc.guardHits.map((g) => `gate weakening: ${g}`))
       if (!pc.ok) {
         state.preReviewProblems.push(...pc.problems)
         log(`fix: pre-review progress problems (passed to the reviewers): ${pc.problems.join('; ')}`)
@@ -1168,11 +1175,13 @@ while (!gatePassed) {
 
     const pc = await runProgress(`progress-r${r}`, roundBase, lastTests)
     const progressProblems = []
+    const guardHits = []
     if (pc) {
       state.head = pc.head
       state.commits.push(...pc.newCommits)
       if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
       if (!pc.ok) progressProblems.push(...pc.problems)
+      guardHits.push(...pc.guardHits)
     } else {
       state.head = fx.head
       state.commits.push(...fx.commits)
@@ -1181,7 +1190,7 @@ while (!gatePassed) {
 
     // Mechanical round: every open finding came from a gate or the progress checker. The progress
     // checker and gate-r<r> decide; the re-reviewer is skipped.
-    const mechanical = open.every((f) => /^(gate-|progress-)/.test(f.id))
+    const mechanical = open.every((f) => /^(gate-|progress-)/.test(f.id) && !f.guard)
     const next = []
     log(mechanical
       ? `fix: round ${r} is mechanical (gate and progress findings only); re-reviewer skipped, progress checker and gate-r${r} decide`
@@ -1210,6 +1219,9 @@ while (!gatePassed) {
       })
       for (const o of rr.outOfScope) state.deferredMinors.push(`r${r} out of scope: ${o}`)
     }
+    // A gate-weakening hit is a review matter: it makes the next round non-mechanical.
+    guardHits.forEach((g, k) => next.push({ id: `progress-r${r}-guard-${k + 1}`, severity: 'important', file: '', line: '', summary: `gate weakening: ${g}`, fix: 'revert the change, or show that the brief or a ruling in force asks for it', planMandated: false, contestsRuling: '', guard: true }))
+    if (guardHits.length) log(`fix: round ${r} progress check flagged ${guardHits.length} gate-weakening change(s); the next round gets the re-reviewer`)
     progressProblems.forEach((p, k) => next.push({ id: `progress-r${r}-${k + 1}`, severity: 'important', file: '', line: '', summary: `progress check: ${p}`, fix: 'restore the invariant the progress check names', planMandated: false, contestsRuling: '' }))
 
     const closed = open.length - open.filter((f) => next.some((n) => n.id === f.id)).length
