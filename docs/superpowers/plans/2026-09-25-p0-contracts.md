@@ -35,6 +35,19 @@
 - Subagent seats: ordinary task Sonnet 5 `medium`; S task Opus 5.5 `medium`; spec-compliance review Sonnet 5 `medium`; code-quality review Sonnet 5 `high`; Opus 5.5 `medium` critic on this phase (it builds UI and touches sensitive code); Opus 5.5 `xhigh` whole-branch review per S PR; Opus 5.5 `xhigh` whole-phase review at the gate. State the seat plan before dispatching.
 - Commit trailer used in this plan: the literal placeholder `<attribution trailer given by your session's system reminder>` (the one permitted placeholder, per lead ruling R5). Every commit step ends with this line in place of any hardcoded Co-Authored-By model name.
 
+## Waves
+
+Developer direction 09-26-26 (ADR-0006): tasks land one PR per wave, on a branch `feat/p0-wave-<k>` cut from `main` after the previous wave PR merges. Each task runs through the `sdd-task` workflow; a wave that touches sensitive paths gets one `wave-review` run and its artifact `docs/reviews/pr-<n>.md`. The developer reviews and merges every wave PR. Wave boundaries may be re-cut to fit workflow runs; record any change in this table.
+
+| Wave | Tasks | Sensitive tasks | PR |
+|---|---|---|---|
+| W1 | 1 to 6 | 4, 5 | #31 (merged 09-26-26) |
+| W2 | 7 to 11 | none | |
+| W3 | 12 to 16 | none | |
+| W4 | 17 to 22 | 17 to 22 | |
+| W5 | 23 to 25, then the phase Opus critic | 23 | |
+| W6 | 26 to 28 | 26, 28 | |
+
 ## File Structure
 
 | Path | Responsibility |
