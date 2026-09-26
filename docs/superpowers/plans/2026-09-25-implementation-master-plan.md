@@ -249,6 +249,7 @@ A Claude Code session follows this list verbatim. `<t>` is the track letter (`a`
 | Whole-phase review at the gate, ordinary phase | Opus 5.5 `high` |
 
 12. TDD per task: write the failing test, run it and see the expected failure, implement, run green, refactor. Story tests carry `[A1]`-style tags in the title; core tests keep one `describe` per requirement ID where one maps (10.1).
+12a. Subagents share one session scratchpad. Every agent in a fan-out gets its own scratch path in its prompt (`<scratchpad>/<runId>/<label>/`) and writes scratch only there; an agent producing one file writes it straight to its final repo path. Agents that edit repo files in parallel run in `isolation: 'worktree'` or own disjoint paths named in the prompt. A worktree is cheap for git but costs a `pnpm install` each, so use it for large parallel edits, not two-file changes.
 13. Stay inside your track's paths (section 2). A needed contract change stops the task: open a `contract` issue (section 8) and mark this one `Blocked by` it.
 14. Run `pnpm verify` (biome, `tsc -b`, vitest with coverage, `config:validate`, contract regeneration check). Track B and D also run `pnpm e2e` for touched flows.
 15. In the same branch: tick the task's checkbox in the phase plan; update your `STATUS.md` cell only if its status changed.
