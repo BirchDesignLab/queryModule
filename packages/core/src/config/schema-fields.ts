@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { objectFor, optionalEnum, type SchemaMode } from "./schema-mode";
 import { BoundedIdSchema, FieldKeySchema } from "../contracts/primitives";
+import { objectFor, optionalEnum, type SchemaMode } from "./schema-mode";
 
 export type Literal = string | number | boolean;
 export type DefaultRef = { $default: string };
@@ -9,13 +9,22 @@ export type LeafCondition =
   | { field: string; op: "in" | "notIn"; value: Literal[] }
   | { field: string; op: "gt" | "gte" | "lt" | "lte"; value: Literal | DefaultRef }
   | { field: string; op: "empty" | "notEmpty" };
-export type Condition = LeafCondition | { all: Condition[] } | { any: Condition[] } | { not: Condition };
+export type Condition =
+  | LeafCondition
+  | { all: Condition[] }
+  | { any: Condition[] }
+  | { not: Condition };
 
 export const DATA_TYPES = ["string", "number", "year", "date", "boolean", "picklist"] as const;
 export type DataType = (typeof DATA_TYPES)[number];
 export const ORDERING_OPS: ReadonlySet<string> = new Set(["gt", "gte", "lt", "lte"]);
 export const ORDERED_DATA_TYPES: ReadonlySet<DataType> = new Set(["number", "year", "date"]);
-export const DEFAULT_INPUT_FORMATS = ["MMDDYYYY", "MM/DD/YYYY", "MM-DD-YYYY", "YYYY-MM-DD"] as const;
+export const DEFAULT_INPUT_FORMATS = [
+  "MMDDYYYY",
+  "MM/DD/YYYY",
+  "MM-DD-YYYY",
+  "YYYY-MM-DD",
+] as const;
 /** Tokens MM, DD, YY, YYYY and literal non-alphanumeric separators. */
 export const DATE_FORMAT_PATTERN = /^(?:MM|DD|YYYY|YY|[^A-Za-z0-9])+$/;
 export const MAX_VALUE_LENGTH = 4096;
@@ -32,7 +41,11 @@ export function makeFieldSchemas(mode: SchemaMode) {
     z.union([
       obj({ field: FieldKeySchema, op: z.enum(["eq", "neq"]), value: LiteralOrDefault }),
       obj({ field: FieldKeySchema, op: z.enum(["in", "notIn"]), value: z.array(Literal) }),
-      obj({ field: FieldKeySchema, op: z.enum(["gt", "gte", "lt", "lte"]), value: LiteralOrDefault }),
+      obj({
+        field: FieldKeySchema,
+        op: z.enum(["gt", "gte", "lt", "lte"]),
+        value: LiteralOrDefault,
+      }),
       obj({ field: FieldKeySchema, op: z.enum(["empty", "notEmpty"]) }),
       obj({ all: z.array(Condition) }),
       obj({ any: z.array(Condition) }),
@@ -63,7 +76,10 @@ export function makeFieldSchemas(mode: SchemaMode) {
     transform: z.enum(["upper", "none"]).default("none"),
     numberKind: z.enum(["integer", "decimal"]).default("integer"),
     century: z.enum(["2000", "past"]).default("2000"),
-    inputFormats: z.array(DateFormat).min(1).default([...DEFAULT_INPUT_FORMATS]),
+    inputFormats: z
+      .array(DateFormat)
+      .min(1)
+      .default([...DEFAULT_INPUT_FORMATS]),
     outputFormat: DateFormat.default("MMDDYYYY"),
   });
 
@@ -99,5 +115,17 @@ export function makeFieldSchemas(mode: SchemaMode) {
     alsoRun: z.array(NestedQuery).optional(),
   });
 
-  return { Key, Literal, DefaultRef, Condition, DateFormat, SectionDef, FieldDef, FieldRule, QueryTypeSource, NestedQuery, QueryType };
+  return {
+    Key,
+    Literal,
+    DefaultRef,
+    Condition,
+    DateFormat,
+    SectionDef,
+    FieldDef,
+    FieldRule,
+    QueryTypeSource,
+    NestedQuery,
+    QueryType,
+  };
 }

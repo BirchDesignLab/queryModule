@@ -9,7 +9,10 @@ export function objectFor(mode: SchemaMode) {
 }
 
 /** Optional enum; in client mode an unknown value becomes undefined instead of failing. */
-export function optionalEnum<const T extends readonly [string, ...string[]]>(mode: SchemaMode, values: T) {
+export function optionalEnum<const T extends readonly [string, ...string[]]>(
+  mode: SchemaMode,
+  values: T,
+) {
   const base = z.enum(values).optional();
   return mode === "client" ? (base.catch(undefined) as unknown as typeof base) : base;
 }
