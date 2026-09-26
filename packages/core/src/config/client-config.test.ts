@@ -4,7 +4,7 @@ import { ClientSiteConfigSchema, toClientSiteConfig } from "./client-config";
 import { SiteConfigSchema } from "./schema";
 import { minimalSiteConfigInput } from "./test-fixtures";
 
-// Task W2F (SEC-006, critic M1 on Task 9): walks every zod object key path reachable from
+// Task W2F (spec 4.1 Client view, critic M1 on Task 9): walks every zod object key path reachable from
 // ClientSiteConfigSchema (through arrays, optionals, defaults, records, unions and
 // discriminated unions) so a server-only key added to a shared shape later fails this test
 // instead of silently reaching GET /api/v1/config. Kept small and in this file on purpose.
@@ -136,7 +136,7 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     });
   });
 
-  it("keeps a purpose's maxDurationMinutes, shortcuts and theme, and drops auth subtrees (SEC-006)", () => {
+  it("keeps a purpose's maxDurationMinutes, shortcuts and theme, and drops auth subtrees (spec 4.1 Client view)", () => {
     const raw = minimalSiteConfigInput();
     raw.auth = {
       mfaRequired: { roles: ["admin"] },
@@ -194,7 +194,7 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     expect(parsed.queryTypes[0]?.fields[0]?.role).toBeUndefined();
   });
 
-  // Task W2F (SEC-006, critic M1 on Task 9): every key path reachable from
+  // Task W2F (spec 4.1 Client view, critic M1 on Task 9): every key path reachable from
   // ClientSiteConfigSchema, reviewed for whether it is safe to send to a client. A new key here
   // must go through that same review before this list is updated.
   const EXPECTED_CLIENT_KEY_PATHS = [
@@ -382,7 +382,7 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     "theme.tokens.redShift",
   ];
 
-  it("never gains a key beyond this reviewed allowlist (SEC-006)", () => {
+  it("never gains a key beyond this reviewed allowlist (spec 4.1 Client view)", () => {
     const paths = new Set<string>();
     collectKeyPaths(ClientSiteConfigSchema, "", paths, new Set());
     expect([...paths].sort()).toEqual(EXPECTED_CLIENT_KEY_PATHS);

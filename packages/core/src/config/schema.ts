@@ -12,11 +12,11 @@ export const PERSONA_LAYOUTS = ["dispatch", "mobileUnit", "mobile"] as const;
 export const THEME_MODES = ["day", "night", "redShift"] as const;
 export const LOCALE_PATTERN = /^[a-z]{2,3}(-[A-Z]{2})?$/;
 
-// Task W2F (BR-001, FR-050, FR-051): CommandDef.code bounds. Printable ASCII "!" to "~",
+// Task W2F (BR-001, FR-051): CommandDef.code bounds. Printable ASCII "!" to "~",
 // excluding space and "=" (the site terminal delimiter is any printable non-alphanumeric ASCII
 // except those two, spec 4.1, 4.4). Radio-style codes such as "10-28" must stay valid.
 export const COMMAND_CODE_MAX_LENGTH = 32;
-export const COMMAND_CODE_PATTERN = /^[!-<>-~]{1,32}$/;
+export const COMMAND_CODE_PATTERN = new RegExp(`^[!-<>-~]{1,${COMMAND_CODE_MAX_LENGTH}}$`);
 export const CommandCodeSchema = z.string().regex(COMMAND_CODE_PATTERN);
 export const DEFAULT_DELEGATION_PURPOSE = {
   key: "training",
@@ -53,7 +53,7 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
   // ADR-0005: positional field references (both the bare-string and the rest-object forms) are
   // FieldKeySchema, same as CommandDef/CommandPosition field refs elsewhere in config (Task 7).
   const Position = z.union([FieldKeySchema, obj({ field: FieldKeySchema, rest: z.literal(true) })]);
-  // Task W2F (BR-001, FR-050, FR-051): the first terminal token is split on the site
+  // Task W2F (BR-001, FR-051): the first terminal token is split on the site
   // delimiter, any printable non-alphanumeric ASCII except "=" and space (spec 4.1, 4.4).
   // Radio-style codes like "10-28" must stay possible when the delimiter is ".". checkCommands
   // (Task 13) rejects a code containing the site's own delimiter; this schema does not.

@@ -228,7 +228,7 @@ describe("BR-001 SiteConfig v1 (spec 4.1)", () => {
     });
   });
 
-  // Task W2F: BR-001, BR-004, SEC-006, FR-050, FR-051 - ADR-0005 bounds Task 8 left as Key.
+  // Task W2F: BR-001, BR-004, FR-051 - ADR-0005 bounds Task 8 left as Key.
   describe("Task W2F ADR-0005 bounds: Source.id, CommandDef.queryType, SiteConfig.extends", () => {
     it("accepts a 64-character Source.id and rejects 65 characters", () => {
       const ok = minimalSiteConfigInput();
