@@ -104,6 +104,7 @@ if (A.criticFocus !== undefined && A.criticFocus !== null && (typeof A.criticFoc
 }
 const CRITIC_FOCUS = A.criticFocus ? A.criticFocus.trim() : ''
 const CRITIC = SENSITIVE || UI || A.critic === true
+if (CRITIC_FOCUS && !CRITIC) log('review: criticFocus ignored (critic off: set critic: true, sensitive or ui to run it)')
 const DEFAULT_CRITIC_FOCUS = 'correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 
@@ -431,18 +432,19 @@ const GATE = {
 
 // ---------- shared prompt pieces ----------
 const GIT = `Shell: Git Bash. Run every git and shell command in ${REPO} (cd there, or use git -C "${REPO}"). Branch: ${A.branch}.`
+// Every agent in this script can run shell commands, so every prompt carries NO_REMOTE through
+// HOUSE (W2 incident: an implementer pushed and opened a PR after reading project memory).
+const NO_REMOTE = 'Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.'
 const HOUSE = [
   'Rules:',
   '- Never dispatch subagents. Do all of this work yourself.',
   '- Finish every command before you reply; leave nothing running in the background.',
   '- No filesystem-wide searches: read the files named here and the files they lead you to.',
-  '- Do not push, open a PR or merge.',
+  `- ${NO_REMOTE}`,
 ].join('\n')
 const READONLY = 'Your review is read-only on this checkout: do not change the working tree, the index, HEAD or any branch. Write only your review file and your scratch directory.'
 const TRAILER = `End every commit message with the attribution trailer your session's system reminder gives; if it gives none, use:\n${A.trailer}`
-// Every agent that can run shell commands carries NO_REMOTE (W2 incident: an implementer pushed
-// and opened a PR after reading project memory). Implementer and fixers carry SELF_CHECK.
-const NO_REMOTE = 'Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.'
+// Implementer and fixers carry SELF_CHECK.
 const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only) and pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
 // The repository-state check for agents that run after gate-0 (checker, ruler-review).
 const postGateCheck = (expected) => `Before you reply, run git rev-parse HEAD and git status --porcelain in ${REPO}. git rev-parse HEAD must equal ${expected}. Report head (full sha), treeClean (true only when git status --porcelain prints nothing) and dirtyFiles (each path it prints). You must leave both exactly as you found them.`
@@ -705,7 +707,6 @@ async function runFixer(findings, label, roleName, roundTag, round) {
       `Append a "## Fix ${roundTag}" section to ${A.reportPath}: per finding id, what you changed (file:line), the covering tests, the commands and their output (RED and GREEN).`,
       `Commit only the files these fixes touch (git add <paths>, never git add -A) with a message "fix(task-${N}): ${roundTag} review findings" and a body listing the finding ids. ${TRAILER}`,
       GIT,
-      NO_REMOTE,
       HOUSE,
       'If you cannot fix a finding, say which and why in concerns (kind correctness) and use DONE_WITH_CONCERNS; use BLOCKED or NEEDS_CONTEXT with questions only when you cannot proceed at all.',
     ].filter(Boolean).join('\n'),
@@ -729,7 +730,6 @@ async function runChecker(items, headNow, expectedHead, answerText, label) {
       '- needsJudgment: the check cannot settle the item (it needs a reading of the spec or a design decision). evidence: why.',
       `You are read-only: you may run commands (tests, grep, git log, git diff, git show), but never edit a file, stage, commit or change any git state. Scratch, if needed: ${scratch('checker')}`,
       postGateCheck(expectedHead),
-      NO_REMOTE,
       HOUSE,
       'Return one result per item, with id set to the id exactly as given.',
       ...(answerText ? ['', answerText] : []),
@@ -798,7 +798,6 @@ async function runGate(label, expectedHead, answerText) {
       `Run each command once, in that order, saving its full output under ${scratch(label)}. For a failure, put the command and its first error lines in problems (file paths, rule names and messages only; never field values or payloads).`,
       'head: git rev-parse HEAD (full sha).',
       'You are read-only: change nothing, commit nothing.',
-      NO_REMOTE,
       HOUSE,
     ].filter(Boolean).join('\n'),
     { label, phase: 'Gate', schema: GATE, ...role('gate') },
@@ -850,7 +849,6 @@ const implPrompt = [
     SELF_CHECK,
     `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
     GIT,
-    NO_REMOTE,
     HOUSE,
     '',
     'Stop and report BLOCKED or NEEDS_CONTEXT (with specific questions) when the task needs an architectural decision the brief does not make, when you are unsure your approach is right, or when you keep reading files without progress. Bad work is worse than no work.',
@@ -902,7 +900,6 @@ async function implementStage() {
         `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
         `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the pnpm lint and pnpm coverage results.`,
         GIT,
-        NO_REMOTE,
         HOUSE,
         'Return: status, commits you created (full sha + subject), head, a one-line test summary, concerns, questions. BLOCKED or NEEDS_CONTEXT only when the answers still leave you unable to proceed.',
       ].filter(Boolean).join('\n'),
@@ -919,7 +916,7 @@ async function implementStage() {
 let impl
 if (IMPLEMENTED) {
   log(`implement: skipped (implemented.head ${IMPLEMENTED.head}); reviewing ${A.base}..${IMPLEMENTED.head}, review stages only`)
-  impl = { status: 'DONE', commits: [], head: IMPLEMENTED.head, testSummary: 'review-only re-run: no implementer evidence in this run; the gate re-runs lint, typecheck and test', concerns: [], questions: [] }
+  impl = { status: 'DONE', commits: [], head: IMPLEMENTED.head, testSummary: 'review-only re-run: no implementer evidence in this run; the gate re-runs lint, typecheck and coverage', concerns: [], questions: [] }
 } else {
   const stage = await implementStage()
   if (stage.stop) return stage.stop

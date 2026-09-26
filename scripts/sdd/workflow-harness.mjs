@@ -1929,6 +1929,51 @@ await test("sdd FP-M2: gate findings open at the round cap are parked, never dro
   );
 });
 
+await test("sdd FP-M3: every sdd-task agent that can run shell commands carries the no-remote rule", async () => {
+  const { calls } = await shellRuns();
+  const crit = await run(
+    sdd,
+    { ...BASE, sensitive: true },
+    sddResponder({ "spec-review": specCV(), checker: checkAll("needsJudgment") }),
+  );
+  const all = calls.concat(crit.calls);
+  const want = [
+    "spec-review",
+    "quality-review",
+    "critic-review",
+    "checker",
+    "ruler-concerns",
+    "ruler-review",
+    "progress-pre",
+    "progress-r1",
+    "re-review-r1",
+  ];
+  for (const l of want) {
+    const c = all.find((x) => x.label === l);
+    assert.ok(c, `no ${l} call`);
+    assert.ok(c.prompt.includes(NO_REMOTE), `${l} lacks the no-remote rule`);
+  }
+  for (const c of all)
+    assert.ok(c.prompt.includes(NO_REMOTE), `${c.label} lacks the no-remote rule`);
+});
+
+await test("sdd FP-M4: review-stages-only text names coverage, not test", async () => {
+  const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
+  assert.ok(!r.logs.some((l) => /lint, typecheck and test\b/.test(l)), r.logs.join(" | "));
+  assert.ok(r.logs.some((l) => /re-runs lint, typecheck and coverage/.test(l)));
+});
+
+await test("sdd FP-M5: criticFocus with the critic off logs a warning and runs no critic", async () => {
+  const r = await run(sdd, { ...BASE, criticFocus: "ZZ" }, sddResponder());
+  assert.ok(!r.labels.includes("critic-review"));
+  assert.ok(
+    r.logs.some((l) => /criticFocus ignored/.test(l)),
+    r.logs.join(" | "),
+  );
+  const on = await run(sdd, { ...BASE, critic: true, criticFocus: "ZZ" }, sddResponder());
+  assert.ok(!on.logs.some((l) => /criticFocus ignored/.test(l)));
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {
