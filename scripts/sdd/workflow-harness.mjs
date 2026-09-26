@@ -454,7 +454,7 @@ await test("sdd: answers at a later stop leave earlier prompts unchanged and rea
 await test("sdd: answers with an unknown stop point throw", async () => {
   await assert.rejects(
     run(sdd, { ...BASE, answers: { at: "nowhere", text: "x" } }, sddResponder()),
-    /answers\.at/,
+    /answers(\[\d+\])?\.at "nowhere"/,
   );
 });
 
@@ -1031,6 +1031,149 @@ await test("wr N5: a wrong artifactPath throws at start", async () => {
     run(wr, { ...WBASE, artifactPath: "docs/reviews/pr-31.md" }, wrResponder()),
     /artifactPath/,
   );
+});
+
+// ---------- fix pass 3: answers history (R1), clean-tree message (R3) ----------
+await test("sdd R1: two stops (implementer NEEDS_CONTEXT, then a ruler escalation) complete without a stale replay", async () => {
+  const resp = sddResponder({
+    implementer: work("h0", { status: "NEEDS_CONTEXT", commits: [], questions: ["Which key?"] }),
+    "spec-review": {
+      verdict: "fail",
+      findings: [F("S1", "important", { planMandated: true })],
+      cannotVerify: [],
+    },
+    "ruler-review": (p) =>
+      p.includes("ANS-2")
+        ? {
+            rulings: [
+              {
+                item: "spec:S1",
+                decision: "fix",
+                reason: "answered",
+                costIfWrong: "c",
+                fixInstruction: "fi",
+              },
+            ],
+          }
+        : {
+            rulings: [{ item: "spec:S1", decision: "escalate", reason: "guess", costIfWrong: "c" }],
+          },
+  });
+  const run1 = await run(sdd, BASE, resp);
+  assert.equal(run1.res.stopped, "implementer");
+  const e1 = { at: "implementer", text: "ANS-1" };
+  const run2 = await run(sdd, { ...BASE, answers: [e1] }, resp);
+  assert.equal(run2.res.stopped, "ruler-review");
+  const run3 = await run(
+    sdd,
+    { ...BASE, answers: [e1, { at: "ruler-review", text: "ANS-2" }] },
+    resp,
+  );
+  for (const l of ["implementer", "implementer-continue", "spec-review", "quality-review"]) {
+    assert.equal(
+      run3.find(l).prompt,
+      run2.find(l).prompt,
+      `${l} prompt changed between run 2 and run 3`,
+    );
+  }
+  assert.ok(run3.find("implementer-continue").prompt.includes("ANS-1"));
+  assert.ok(!run3.find("implementer-continue").prompt.includes("ANS-2"));
+  assert.ok(run3.find("ruler-review").prompt.includes("ANS-2"));
+  assert.ok(!run3.find("ruler-review").prompt.includes("ANS-1"));
+  assert.equal(run3.res.status, "complete");
+  assert.ok(!run3.res.answersUnconsumed);
+});
+
+await test("sdd R1: a single answers object is a one-entry list; every entry's at is validated", async () => {
+  const resp = sddResponder({
+    implementer: work("h0", { status: "NEEDS_CONTEXT", commits: [], questions: ["q"] }),
+  });
+  const obj = await run(sdd, { ...BASE, answers: { at: "implementer", text: "X" } }, resp);
+  const list = await run(sdd, { ...BASE, answers: [{ at: "implementer", text: "X" }] }, resp);
+  assert.equal(obj.find("implementer-continue").prompt, list.find("implementer-continue").prompt);
+  await assert.rejects(
+    run(
+      sdd,
+      {
+        ...BASE,
+        answers: [
+          { at: "implementer", text: "X" },
+          { at: "nowhere", text: "Y" },
+        ],
+      },
+      resp,
+    ),
+    /answers\[1\]\.at "nowhere"/,
+  );
+});
+
+await test("sdd R1: decisions from all entries apply, later over earlier", async () => {
+  const answers = [
+    { at: "ruler-review", decisions: [{ item: "critic:C1", decision: "stands", reason: "first" }] },
+    {
+      at: "fixer-r1",
+      decisions: [
+        { item: "critic:C1", decision: "fix", reason: "second", fixInstruction: "later wins" },
+      ],
+    },
+  ];
+  const r = await run(
+    sdd,
+    { ...BASE, sensitive: true, answers },
+    sddResponder({ "critic-review": criticC1 }),
+  );
+  assert.ok(r.find("fixer-r1").prompt.includes("later wins"));
+  assert.equal(r.res.rulings.find((x) => x.item === "critic:C1").reason, "second");
+});
+
+await test("sdd R3: the clean-tree precondition asks for the untracked and modified files by name", async () => {
+  const r = await run(sdd, BASE, sddResponder());
+  assert.ok(/name each untracked or modified file/i.test(r.find("implementer").prompt));
+});
+
+await test("wr R1: two stops (precondition, then a ruler escalation) complete without a stale replay", async () => {
+  const resp = wrResponder({
+    reviewer: { ...reviewWith([]), preconditionFailed: "dirty tree: ?? docs/reviews/pr-32.md" },
+    "reviewer-retry": reviewWith([WF("C1", "critical", { planMandated: true })]),
+    ruler: { rulings: [{ item: "C1", decision: "stands", reason: "plan", costIfWrong: "c" }] },
+  });
+  const run1 = await run(wr, WBASE, resp);
+  assert.equal(run1.res.stopped, "precondition");
+  assert.equal(run1.res.stopPoint, "precondition:reviewer");
+  const e1 = { at: "precondition", text: "PRE-1" };
+  const run2 = await run(wr, { ...WBASE, answers: [e1] }, resp);
+  assert.equal(run2.res.stopped, "ruler");
+  const e2 = {
+    at: "ruler",
+    text: "RUL-2",
+    decisions: [{ item: "C1", decision: "fix", reason: "real", fixInstruction: "fix C1" }],
+  };
+  const run3 = await run(wr, { ...WBASE, answers: [e1, e2] }, resp);
+  for (const l of ["reviewer", "reviewer-retry"]) {
+    assert.equal(
+      run3.find(l).prompt,
+      run2.find(l).prompt,
+      `${l} prompt changed between run 2 and run 3`,
+    );
+  }
+  assert.ok(run3.find("reviewer-retry").prompt.includes("PRE-1"));
+  assert.ok(!run3.find("reviewer-retry").prompt.includes("RUL-2"));
+  assert.ok(
+    run3.find("fixer").prompt.includes("RUL-2") && run3.find("fixer").prompt.includes("fix C1"),
+  );
+  assert.ok(!run3.find("fixer").prompt.includes("PRE-1"));
+  assert.equal(run3.res.verdict, "approve");
+});
+
+await test("wr R3: the reviewer precondition names files and calls out a stray artifact", async () => {
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+  );
+  const p = r.find("reviewer").prompt;
+  assert.ok(/name each untracked or modified file/i.test(p));
+  assert.ok(p.includes("stray artifact") && p.includes("docs/reviews/pr-32.md"));
 });
 
 // ---------- report ----------

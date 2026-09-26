@@ -15,7 +15,7 @@
  *   date: "09-27-26",                         // optional MM-DD-YY for the artifact body
  *   trailer: "Co-Authored-By: ...",           // fallback commit trailer for the fixer
  *   roles: { reviewer: { model: "opus", effort: "xhigh" }, ... },  // optional overrides
- *   answers: { at, text?, decisions? }        // only on a re-run after a stop (below)
+ *   answers: [{ at, text?, decisions? }]      // only on a re-run after a stop (below)
  * } })
  * Required: pr, base, head, repoDir, planPath, workDir, scratchRoot, runLabel, trailer.
  * Roles and defaults: reviewer opus/xhigh, ruler opus/high, fixer opus/medium,
@@ -32,20 +32,25 @@
  *   stopped set: a controller decision is needed. Each value is a stop point for answers, with
  *   the agent that consumes them:
  *     "reviewer"     the reviewer returned nothing; text goes to the ruler, fixer, re-reviewer.
- *     "precondition" (problem says what) HEAD, base ancestry or a dirty tree; fix the repo, then
- *                    answer: the failing agent (reviewer or fixer) re-runs once as <label>-retry.
+ *     "precondition" (problem says what) HEAD, base ancestry or a dirty tree, with the files
+ *                    named (a stray artifact is called out); stopPoint is precondition:<label>.
+ *                    Fix the repo, then answer: the failing agent (reviewer or fixer) re-runs
+ *                    once as <label>-retry.
  *     "ruler"        escalated lists the rulings to decide (a critical ruled stands is always
  *                    escalated); decisions settle them, text goes to the fixer and re-reviewer.
  *     "fixer"        questions from a BLOCKED or NEEDS_CONTEXT fixer; text goes to the fixer.
  *     "re-review"    the re-reviewer returned nothing; text goes to the re-reviewer.
  *   strayArtifact set: an artifact file was written without a final approve; delete it.
  * Answering a stop: re-run with resumeFromRunId and the SAME args plus
- *   answers: { at: <the stopped value>, text: "...", decisions: [{ item, decision: "fix" |
- *   "stands" | "verified", reason, fixInstruction? }] }
- * The reviewer prompt never carries answers, so the review replays from cache. Decisions become
- * controller rulings (final; never re-escalated; a controller stands on a critical is final for
- * the run). Never answer by editing questions: that re-runs the whole review. On a later stop,
- * append to answers.text and add to decisions; never replace them.
+ *   answers: a list, one entry per answered stop, appended across re-runs, never replaced:
+ *   [{ at: <the stopped value, or stopPoint for a precondition>, text: "...", decisions: [{ item,
+ *   decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }] (one object = one entry)
+ * The reviewer prompt never carries answers, so the review replays from cache. Each entry's text
+ * goes to exactly one agent (the first consumer at or after its stop point that runs), so an
+ * earlier stop's retry replays from cache too. Decisions from all entries become controller
+ * rulings (a later entry wins; final; never re-escalated; a controller stands on a critical is
+ * final for the run). Never answer by editing questions: that re-runs the whole review.
+ * A fresh run (no resumeFromRunId) is always safe: nothing changes before the fixer.
  * Constraints: wave-review takes no globalConstraints, but the sdd-task rule holds here too:
  * binding text (questions, answers) carries product and code constraints only (runtime, TDD,
  * purity, fixtures, logging, docs style), never process bullets (model and effort plan, PR and
@@ -91,38 +96,57 @@ if (SENSITIVE_FILES.length > MAX_LISTED_FILES) {
   log(`cap: sensitiveFiles has ${SENSITIVE_FILES.length} entries; the prompt lists the first ${MAX_LISTED_FILES} and tells the reviewer to derive the rest from the sensitive-path globs`)
 }
 
-// ---------- answers to a stopped run ----------
-// Positions: reviewer 0 (never gets answers), ruler 2, fixer 3, re-reviewer 5. A stop point's
-// text reaches every consumer at or after it; "precondition" re-runs the failing agent once.
+// ---------- answers to stopped runs: a history, one entry per answered stop ----------
+// answers: [{ at, text?, decisions? }], appended across re-runs, never replaced; a single object
+// is a one-entry list. Positions: reviewer 0 (never gets answers), ruler 2, fixer 3, re-reviewer 5.
+// Each entry's text is delivered to exactly one agent: the first consumer at or after its stop
+// point that runs, so a later entry never changes an earlier agent's prompt. precondition[:<label>]
+// re-runs the failing agent (reviewer or fixer) once. Decisions from all entries apply; a later
+// entry wins for the same item.
 const STOP_POS = { reviewer: 1, ruler: 2, fixer: 3, 're-review': 5 }
-const STOP_POINTS = 'reviewer, precondition, ruler, fixer, re-review'
+const STOP_POINTS = 'reviewer, precondition (or precondition:<label> from stopPoint), ruler, fixer, re-review'
+const PRECONDITION_AT = /^precondition(?::(reviewer|fixer))?$/
 let ANSWERS = null
 const CONTROLLER = new Map()
 if (A.answers !== undefined && A.answers !== null) {
-  const at = String((A.answers && A.answers.at) || '')
-  if (at !== 'precondition' && !(at in STOP_POS)) {
-    throw new Error(`wave-review: answers.at "${at}" is not a stop point; use the returned stopped value: ${STOP_POINTS}`)
-  }
-  const text = typeof A.answers.text === 'string' ? A.answers.text.trim() : ''
-  const decisions = Array.isArray(A.answers.decisions) ? A.answers.decisions : []
-  if (!text && !decisions.length) throw new Error('wave-review: answers needs text or decisions (or both)')
-  for (const d of decisions) {
-    if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
-      throw new Error(`wave-review: answers.decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
+  const list = Array.isArray(A.answers) ? A.answers : [A.answers]
+  if (!list.length) throw new Error('wave-review: answers is an empty list')
+  const entries = list.map((e, i) => {
+    const at = String((e && e.at) || '')
+    const pre = PRECONDITION_AT.exec(at)
+    if (!pre && !(at in STOP_POS)) {
+      throw new Error(`wave-review: answers[${i}].at "${at}" is not a stop point; use the returned stopped value: ${STOP_POINTS}`)
     }
-    CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' })
-  }
-  ANSWERS = { at, pos: at === 'precondition' ? -1 : STOP_POS[at], text, consumed: false, decisionsUsed: new Set() }
-  log(`answers: stop point "${at}"${text ? ', text' : ''}${decisions.length ? `, ${decisions.length} controller decision(s)` : ''}; the review replays from cache`)
+    const text = typeof e.text === 'string' ? e.text.trim() : ''
+    const decisions = Array.isArray(e.decisions) ? e.decisions : []
+    if (!text && !decisions.length) throw new Error(`wave-review: answers[${i}] needs text or decisions (or both)`)
+    for (const d of decisions) {
+      if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
+        throw new Error(`wave-review: answers[${i}].decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
+      }
+      CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' })
+    }
+    return { index: i, at, pos: pre ? -1 : STOP_POS[at], preLabel: pre ? pre[1] || '' : null, text, delivered: !text }
+  })
+  ANSWERS = { entries, decisionsUsed: new Set() }
+  log(`answers: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (${entries.map((e) => e.at).join(', ')}), ${CONTROLLER.size} controller decision(s); the review replays from cache`)
 }
+const answerBlock = (es, what) => `Controller answers to ${what} (binding):\n${es.map((e) => `* (stop point ${e.at}) ${e.text}`).join('\n')}`
 function answersFor(consumerPos) {
-  if (!ANSWERS || !ANSWERS.text || ANSWERS.pos < 0 || consumerPos < ANSWERS.pos) return ''
-  ANSWERS.consumed = true
-  return `Controller answers to the questions of the stopped run (binding):\n${ANSWERS.text}`
+  if (!ANSWERS) return ''
+  const es = ANSWERS.entries.filter((e) => !e.delivered && e.pos >= 0 && e.pos <= consumerPos)
+  if (!es.length) return ''
+  for (const e of es) e.delivered = true
+  return answerBlock(es, 'the questions of the stopped run')
 }
-function preconditionAnswers() {
-  ANSWERS.consumed = true
-  return ANSWERS.text ? `Controller answer to the precondition failure (binding):\n${ANSWERS.text}` : 'The controller reports the precondition failure resolved; check again.'
+function preconditionAnswers(label) {
+  if (!ANSWERS) return ''
+  let es = ANSWERS.entries.filter((e) => e.preLabel === label && !e.usedPre)
+  if (!es.length) es = ANSWERS.entries.filter((e) => e.preLabel === '' && !e.usedPre).slice(0, 1)
+  if (!es.length) return ''
+  for (const e of es) { e.usedPre = true; e.delivered = true }
+  const withText = es.filter((e) => e.text)
+  return withText.length ? answerBlock(withText, 'the precondition failure') : 'The controller reports the precondition failure resolved; check again.'
 }
 
 // ---------- roles ----------
@@ -312,8 +336,9 @@ function done(extra) {
   if (ANSWERS) {
     const unused = [...CONTROLLER.keys()].filter((k) => !ANSWERS.decisionsUsed.has(k))
     if (unused.length) log(`answers: decision(s) matched no finding and were not applied: ${unused.join(', ')}`)
-    if (!ANSWERS.consumed) {
-      log(`answers: stop point "${ANSWERS.at}" answers were not consumed (no consumer ran in this run)`)
+    const pending = ANSWERS.entries.filter((e) => !e.delivered)
+    if (pending.length) {
+      log(`answers not consumed: ${pending.map((e) => `answers[${e.index}] (${e.at})`).join(', ')} (no consumer ran in this run)`)
       out.answersUnconsumed = true
     }
   }
@@ -332,7 +357,7 @@ const reviewPrompt = [
   SENSITIVE_FILES.length ? `Sensitive files in this range (read each in full, not only its hunks):\n${listedFiles.map((f) => `* ${f}`).join('\n')}` : 'No sensitive-file list given; derive it from the sensitive-path globs in the repo if present.',
   QUESTIONS.length ? `Controller questions (answer each in answers, with file:line evidence):\n${QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : 'No controller questions.',
   '',
-  `Precondition, checked first: git rev-parse ${A.head} resolves, ${A.base} is its ancestor (git merge-base --is-ancestor ${A.base} ${A.head}), and git status --porcelain prints nothing. If any fails, set preconditionFailed to what you found, write nothing, report no findings, and stop. It is never a finding.`,
+  `Precondition, checked first: git rev-parse ${A.head} resolves, ${A.base} is its ancestor (git merge-base --is-ancestor ${A.base} ${A.head}), and git status --porcelain prints nothing. If any fails, set preconditionFailed to what you found, write nothing, report no findings, and stop. It is never a finding. For a dirty tree, name each untracked or modified file from git status --porcelain; an untracked ${ARTIFACT} is a stray artifact from an earlier run, so say "stray artifact ${ARTIFACT}: delete it before re-running".`,
   `Build your view first: mkdir -p "${scratch('reviewer')}" && cd "${REPO}" && { git log --oneline ${A.base}..${A.head}; echo; git diff --stat ${A.base}..${A.head}; echo; git diff -U10 ${A.base}..${A.head}; } > "${scratch('reviewer')}/branch.diff"; then read it. Resolve reviewedSha with git rev-parse ${A.head}.`,
   READONLY,
   'Tests: each task already ran its suite and an independent gate. Run pnpm lint, pnpm typecheck or pnpm test at the head only for a named doubt; record the result.',
@@ -347,9 +372,10 @@ const reviewPrompt = [
 ].join('\n')
 let review = await agent(reviewPrompt, { label: 'reviewer', phase: 'Review', schema: REVIEW, ...role('reviewer') })
 
-if (review && review.preconditionFailed && ANSWERS && ANSWERS.at === 'precondition') {
+const reviewPre = review && review.preconditionFailed ? preconditionAnswers('reviewer') : ''
+if (reviewPre) {
   log(`review: cached precondition failure (${review.preconditionFailed}); retrying the reviewer with the controller answer`)
-  review = await agent(`${reviewPrompt}\n\n${preconditionAnswers()}`, { label: 'reviewer-retry', phase: 'Review', schema: REVIEW, ...role('reviewer') })
+  review = await agent(`${reviewPrompt}\n\n${reviewPre}`, { label: 'reviewer-retry', phase: 'Review', schema: REVIEW, ...role('reviewer') })
 }
 if (!review) {
   log('review: reviewer returned null (skipped or died); stopping')
@@ -357,7 +383,7 @@ if (!review) {
 }
 if (review.preconditionFailed) {
   log(`review: precondition failed: ${review.preconditionFailed}; stopping before any ruler or fixer`)
-  return done({ verdict: 'fixes', stopped: 'precondition', problem: `reviewer: ${review.preconditionFailed}`, reviewedSha: review.reviewedSha || null, artifactWritten: false, findings: [], residual: [] })
+  return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `reviewer: ${review.preconditionFailed}`, reviewedSha: review.reviewedSha || null, artifactWritten: false, findings: [], residual: [] })
 }
 state.answers = review.answers
 state.declined = review.declined
@@ -379,7 +405,6 @@ for (const f of review.findings) {
   const d = CONTROLLER.get(f.id)
   if (!d) continue
   ANSWERS.decisionsUsed.add(f.id)
-  ANSWERS.consumed = true
   setRuling({ item: f.id, what: f.summary.slice(0, 160), decision: d.decision, reason: d.reason, costIfWrong: 'controller decision', fixInstruction: d.fixInstruction, command: '', source: 'controller' })
   log(`rule: ${f.id} settled by controller decision: ${d.decision}`)
   if (d.decision === 'fix') toFix = toFix.map((x) => (x.id === f.id ? Object.assign({}, x, { fix: d.fixInstruction || d.reason }) : x))
@@ -438,7 +463,7 @@ if (mustFix.length || minors.length) {
   log(`fix: one pass, ${mustFix.length} critical/important and ${minors.length} minor finding(s)`)
   const fixPrompt = [
     `You are fixing the whole-branch review findings of wave PR #${A.pr} at ${review.reviewedSha}. Read the review ${REVIEW_FILE} and the plan ${A.planPath} and spec ${SPEC} sections the findings cite.`,
-    `Precondition: git rev-parse HEAD is ${review.reviewedSha} and git status --porcelain prints nothing (an untracked ${ARTIFACT} is allowed). If not, change nothing, set preconditionFailed to what you found, and report BLOCKED.`,
+    `Precondition: git rev-parse HEAD is ${review.reviewedSha} and git status --porcelain prints nothing (an untracked ${ARTIFACT} is allowed). If not, change nothing, set preconditionFailed to what you found (for a dirty tree, name each untracked or modified file from git status --porcelain), and report BLOCKED.`,
     rulingsText(),
     'Never reverse a ruling in force. If a finding cannot be fixed without reversing one, leave it and say so in concerns (kind planVsSpec).',
     answersFor(3),
@@ -457,13 +482,14 @@ if (mustFix.length || minors.length) {
     'Use BLOCKED or NEEDS_CONTEXT with questions only when you cannot proceed at all.',
   ].filter(Boolean).join('\n')
   let fx = await agent(fixPrompt, { label: 'fixer', phase: 'Fix', schema: WORK, ...role('fixer') })
-  if (fx && fx.preconditionFailed && ANSWERS && ANSWERS.at === 'precondition') {
+  const fixPre = fx && fx.preconditionFailed ? preconditionAnswers('fixer') : ''
+  if (fixPre) {
     log(`fix: cached precondition failure (${fx.preconditionFailed}); retrying the fixer with the controller answer`)
-    fx = await agent(`${fixPrompt}\n\n${preconditionAnswers()}`, { label: 'fixer-retry', phase: 'Fix', schema: WORK, ...role('fixer') })
+    fx = await agent(`${fixPrompt}\n\n${fixPre}`, { label: 'fixer-retry', phase: 'Fix', schema: WORK, ...role('fixer') })
   }
   if (fx && fx.preconditionFailed) {
     log(`fix: precondition failed: ${fx.preconditionFailed}; stopping, never a finding`)
-    return done({ verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'precondition', problem: `fixer: ${fx.preconditionFailed}`, findings: review.findings, residual: toFix, strayArtifact: stray ? ARTIFACT : undefined })
+    return done({ verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'precondition', stopPoint: 'precondition:fixer', problem: `fixer: ${fx.preconditionFailed}`, findings: review.findings, residual: toFix, strayArtifact: stray ? ARTIFACT : undefined })
   }
   if (!fx || fx.status === 'BLOCKED' || fx.status === 'NEEDS_CONTEXT') {
     log(`fix: fixer ${fx ? fx.status : 'returned null'}; stopping`)

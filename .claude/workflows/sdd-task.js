@@ -18,7 +18,7 @@
  *   roles: { implementer: { model: "opus", effort: "medium" }, ... },   // optional overrides
  *   maxRounds: 5,                            // fix-round cap; numeric strings and floats are
  *                                            // coerced (logged), then clamped to 1..8
- *   answers: { at, text?, decisions? }       // only on a re-run after a stop (below)
+ *   answers: [{ at, text?, decisions? }]     // only on a re-run after a stop (below)
  * } })
  * Required: task, title, repoDir, branch, base, briefPath, reportPath, workDir, scratchRoot,
  * runLabel, specRefs, globalConstraints, trailer. A missing one throws before any agent runs.
@@ -33,8 +33,9 @@
  * questions, concerns, answersUnconsumed?, ledgerLines? } and, when status is "stopped", also
  * stopped (a stop point, with the agent that consumes answers there):
  *   "implementer"     -> implementer-continue finishes on top of the existing commits
- *   "precondition"    -> (problem says what: branch, HEAD, dirty tree) fix the repo; the failing
- *                        agent re-runs once as implementer-retry or gate-...-retry
+ *   "precondition"    -> (problem says what: branch, HEAD, dirty tree with the files named; stopPoint
+ *                        is precondition:<label>) fix the repo; the failing agent re-runs once as
+ *                        implementer-retry or gate-...-retry
  *   "ruler-concerns"  -> ruler-concerns        "fixer-pre" -> fixer-pre
  *   "review"          -> ruler-review, then the fixers (a reviewer returned nothing)
  *   "ruler-review"    -> ruler-review          "fixer-r<r>" -> fixer-r<r>
@@ -48,12 +49,15 @@
  * Controller before: wave branch checked out in repoDir, clean tree, base = git rev-parse HEAD,
  * brief written with `bash scripts/sdd/task-brief.sh PLAN N <briefPath>`.
  * Answering a stop (never re-implements): re-run with resumeFromRunId, the SAME args (carries
- * unchanged) plus answers: { at: <the returned stopped value>, text: "...", decisions: [{ item,
- * decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }. An unknown at throws.
- * text reaches only the consumer and the rulers and fixers after it, so every earlier call
- * replays from cache. decisions become controller rulings for their items: final for the run,
- * never re-escalated (a controller stands on a Critical stands), fix goes to the fixer with its
- * fixInstruction. On a second stop, append to answers.text and add to decisions; never replace.
+ * unchanged) plus answers: a list with one entry per answered stop, appended across re-runs and
+ * never replaced: [{ at: <the returned stopped value, or stopPoint for a precondition>, text: "...",
+ * decisions: [{ item, decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }].
+ * A single object is a one-entry list. Every entry's at is validated; an unknown one throws.
+ * Each entry's text goes to exactly one agent (the first consumer at or after its stop point that
+ * runs), so earlier calls, including an earlier stop's continue or retry agent, replay from cache.
+ * decisions from all entries become controller rulings (a later entry wins for the same item):
+ * final for the run, never re-escalated (a controller stands on a Critical stands); fix goes to
+ * the fixer with its fixInstruction. Null or failed replays: .claude/workflows/README.md fallbacks.
  *   Workflow({ scriptPath: ".claude/workflows/sdd-task.js", args: <same args + answers>,
  *              resumeFromRunId: "<runId>" })
  * Resume after a pause, kill or script edit: the same call without new answers.
@@ -105,14 +109,17 @@ if (MAX_ROUNDS < 1 || MAX_ROUNDS > 8) {
   MAX_ROUNDS = clamped
 }
 
-// Answers to a stopped run. Every stopped value is a stop point with a named consumer:
-//   implementer   -> implementer-continue          precondition -> the agent that failed it, re-run once as <label>-retry
+// Answers to stopped runs: a history, one entry per answered stop, appended across re-runs and
+// never replaced. Every stopped value is a stop point with a named consumer:
+//   implementer   -> implementer-continue          precondition[:<label>] -> <label>-retry, once
 //   ruler-concerns -> ruler-concerns               fixer-pre    -> fixer-pre
-//   review        -> ruler-review (then fixers)    ruler-review -> ruler-review
+//   review        -> ruler-review (else a fixer)   ruler-review -> ruler-review
 //   fixer-r<r>    -> fixer-r<r>                    gate-0 / gate-r<r> -> fixer-r1 / fixer-r<r+1>
-// text reaches the consumer and the rulers and fixers after it, never an earlier agent (so earlier
-// calls replay from cache); decisions become controller rulings wherever their item appears.
-const STOP_POINTS = 'implementer, precondition, ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
+// Each entry's text is delivered to exactly one agent: the first consumer at or after its stop
+// point that runs. So an agent's prompt holds only the entries for its own stop point, and a
+// later entry never changes an earlier agent's prompt (earlier calls replay from cache).
+// Decisions from all entries become controller rulings; a later entry wins for the same item.
+const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
 function stopPos(at) {
   const fixed = { implementer: 0, 'ruler-concerns': 1, 'fixer-pre': 2, review: 3, 'ruler-review': 4 }
   if (at in fixed) return fixed[at]
@@ -123,35 +130,52 @@ function stopPos(at) {
   if (m) return 11 + 2 * Number(m[1])
   return -1
 }
+const PRECONDITION_AT = /^precondition(?::(implementer|gate-0|gate-r[1-9]\d*))?$/
 let ANSWERS = null
 const CONTROLLER = new Map()
 if (A.answers !== undefined && A.answers !== null) {
-  const at = String((A.answers && A.answers.at) || '')
-  if (at !== 'precondition' && stopPos(at) < 0) {
-    throw new Error(`sdd-task: answers.at "${at}" is not a stop point; use the returned stopped value: ${STOP_POINTS}`)
-  }
-  const text = typeof A.answers.text === 'string' ? A.answers.text.trim() : ''
-  const decisions = Array.isArray(A.answers.decisions) ? A.answers.decisions : []
-  if (!text && !decisions.length) throw new Error('sdd-task: answers needs text or decisions (or both)')
-  for (const d of decisions) {
-    if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
-      throw new Error(`sdd-task: answers.decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
+  const list = Array.isArray(A.answers) ? A.answers : [A.answers] // a single object is a one-entry list
+  if (!list.length) throw new Error('sdd-task: answers is an empty list')
+  const entries = list.map((e, i) => {
+    const at = String((e && e.at) || '')
+    const pre = PRECONDITION_AT.exec(at)
+    if (!pre && stopPos(at) < 0) {
+      throw new Error(`sdd-task: answers[${i}].at "${at}" is not a stop point; use the returned stopped value: ${STOP_POINTS}`)
     }
-    CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' })
-  }
-  ANSWERS = { at, pos: at === 'precondition' ? -1 : stopPos(at), text, consumed: false, decisionsUsed: new Set() }
-  log(`answers: stop point "${at}"${text ? ', text' : ''}${decisions.length ? `, ${decisions.length} controller decision(s)` : ''}; earlier agent calls replay from cache`)
+    const text = typeof e.text === 'string' ? e.text.trim() : ''
+    const decisions = Array.isArray(e.decisions) ? e.decisions : []
+    if (!text && !decisions.length) throw new Error(`sdd-task: answers[${i}] needs text or decisions (or both)`)
+    for (const d of decisions) {
+      if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
+        throw new Error(`sdd-task: answers[${i}].decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
+      }
+      CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' }) // later entry wins
+    }
+    return { index: i, at, pos: pre ? -1 : stopPos(at), preLabel: pre ? pre[1] || '' : null, text, delivered: !text }
+  })
+  ANSWERS = { entries, decisionsUsed: new Set() }
+  log(`answers: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (${entries.map((e) => e.at).join(', ')}), ${CONTROLLER.size} controller decision(s); earlier agent calls replay from cache`)
 }
-// consumerPos: the position of the agent asking (see stopPos). Returns the text block or ''.
+const answerBlock = (es, what) => `Controller answers to ${what} (binding):\n${es.map((e) => `* (stop point ${e.at}) ${e.text}`).join('\n')}`
+// consumerPos: the position of the agent asking (see stopPos). Delivers every undelivered text
+// entry whose stop point is at or before it, and returns the text block or ''.
 function answersFor(consumerPos) {
-  if (!ANSWERS || !ANSWERS.text || ANSWERS.pos < 0 || consumerPos < ANSWERS.pos) return ''
-  ANSWERS.consumed = true
-  return `Controller answers to the questions of the stopped run (binding):\n${ANSWERS.text}`
+  if (!ANSWERS) return ''
+  const es = ANSWERS.entries.filter((e) => !e.delivered && e.pos >= 0 && e.pos <= consumerPos)
+  if (!es.length) return ''
+  for (const e of es) e.delivered = true
+  return answerBlock(es, 'the questions of the stopped run')
 }
-function preconditionAnswers() {
-  if (!ANSWERS || ANSWERS.at !== 'precondition') return ''
-  ANSWERS.consumed = true
-  return ANSWERS.text ? `Controller answer to the precondition failure (binding):\n${ANSWERS.text}` : 'The controller reports the precondition failure resolved; check again.'
+// For an agent that failed its precondition: the entries for precondition:<label>, else the first
+// undelivered plain "precondition" entry. Returns the text block, or '' when there is none.
+function preconditionAnswers(label) {
+  if (!ANSWERS) return ''
+  let es = ANSWERS.entries.filter((e) => e.preLabel === label && !e.usedPre)
+  if (!es.length) es = ANSWERS.entries.filter((e) => e.preLabel === '' && !e.usedPre).slice(0, 1)
+  if (!es.length) return ''
+  for (const e of es) { e.usedPre = true; e.delivered = true }
+  const withText = es.filter((e) => e.text)
+  return withText.length ? answerBlock(withText, 'the precondition failure') : 'The controller reports the precondition failure resolved; check again.'
 }
 
 // ---------- roles ----------
@@ -423,7 +447,6 @@ function applyController(items) {
     const d = CONTROLLER.get(it.id)
     if (!d) { rest.push(it); continue }
     ANSWERS.decisionsUsed.add(it.id)
-    ANSWERS.consumed = true
     const rec = { item: it.id, what: it.text.slice(0, 160), decision: d.decision, reason: d.reason, costIfWrong: 'controller decision', fixInstruction: d.fixInstruction, command: '', source: 'controller' }
     setRuling(rec, it.contests)
     log(`rule: ${it.id} settled by controller decision: ${d.decision}`)
@@ -467,8 +490,9 @@ async function finish(result) {
   if (ANSWERS) {
     const unused = [...CONTROLLER.keys()].filter((k) => !ANSWERS.decisionsUsed.has(k))
     if (unused.length) log(`answers: decision(s) matched no item and were not applied: ${unused.join(', ')}`)
-    if (!ANSWERS.consumed) {
-      log(`answers: stop point "${ANSWERS.at}" answers were not consumed (no consumer ran in this run)`)
+    const pending = ANSWERS.entries.filter((e) => !e.delivered)
+    if (pending.length) {
+      log(`answers not consumed: ${pending.map((e) => `answers[${e.index}] (${e.at})`).join(', ')} (no consumer ran in this run)`)
       result.answersUnconsumed = true
     }
   }
@@ -674,7 +698,7 @@ const implPrompt = [
     A.carries ? `Controller rulings and interfaces the brief cannot know (binding):\n${A.carries}` : '',
     `Global constraints from the plan (binding):\n${A.globalConstraints}`,
     '',
-    `Precondition: git branch --show-current is ${A.branch}, git rev-parse HEAD is ${A.base}, and git status --porcelain prints nothing. If any is not so, change nothing, set preconditionFailed to what you found, and report BLOCKED.`,
+    `Precondition: git branch --show-current is ${A.branch}, git rev-parse HEAD is ${A.base}, and git status --porcelain prints nothing. If any is not so, change nothing, set preconditionFailed to what you found (for a dirty tree, name each untracked or modified file from git status --porcelain), and report BLOCKED.`,
     'Your job: implement exactly what the brief specifies, nothing more. TDD: write the failing test, run it and see it fail for the expected reason, implement, see it pass. While iterating run the focused test; run the full suite once before committing.',
     `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
     GIT,
@@ -694,18 +718,19 @@ if (!impl) {
   return await finish(build('stopped', { stopped: 'implementer', questions: ['implementer returned no result'] }))
 }
 
-if (impl.preconditionFailed && ANSWERS && ANSWERS.at === 'precondition') {
+const implPre = impl.preconditionFailed ? preconditionAnswers('implementer') : ''
+if (implPre) {
   log(`implement: cached precondition failure (${impl.preconditionFailed}); retrying the implementer with the controller answer`)
-  impl = await agent(`${implPrompt}\n\n${preconditionAnswers()}`, { label: 'implementer-retry', phase: 'Implement', schema: WORK, ...role('implementer') })
+  impl = await agent(`${implPrompt}\n\n${implPre}`, { label: 'implementer-retry', phase: 'Implement', schema: WORK, ...role('implementer') })
   if (!impl) return await finish(build('stopped', { stopped: 'implementer', questions: ['implementer retry returned no result'] }))
 }
 if (impl.preconditionFailed) {
   log(`implement: precondition failed: ${impl.preconditionFailed}; stopping before any change`)
-  return await finish(build('stopped', { stopped: 'precondition', problem: `implementer: ${impl.preconditionFailed}` }))
+  return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:implementer', problem: `implementer: ${impl.preconditionFailed}` }))
 }
 
-if ((impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') && ANSWERS && ANSWERS.at === 'implementer') {
-  ANSWERS.consumed = true
+const contAnswers = impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT' ? answersFor(0) : ''
+if (contAnswers) {
   log(`implement: cached implementer stopped (${impl.status}); running the continue implementer with the controller answers`)
   const cont = await agent(
     [
@@ -717,7 +742,7 @@ if ((impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') && ANSWERS &&
       'The questions the earlier implementer asked:',
       ...(impl.questions.length ? impl.questions.map((q) => `- ${q}`) : ['- (none recorded; see the report)']),
       impl.concerns.length ? `Its concerns:\n${impl.concerns.map((c) => `- ${c.kind}: ${c.text}`).join('\n')}` : '',
-      answersFor(0),
+      contAnswers,
       '',
       'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green). Run the full suite once before committing.',
       `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
@@ -970,9 +995,10 @@ for (;;) {
   phase('Gate')
   const gl = state.rounds === 0 ? 'gate-0' : `gate-r${state.rounds}`
   let g = await runGate(gl, state.head, '')
-  if (g && g.preconditionFailed && ANSWERS && ANSWERS.at === 'precondition' && !ANSWERS.consumed) {
+  const gatePre = g && g.preconditionFailed ? preconditionAnswers(gl) : ''
+  if (gatePre) {
     log(`gate: cached precondition failure (${g.preconditionFailed}); retrying ${gl} with the controller answer`)
-    g = await runGate(`${gl}-retry`, state.head, preconditionAnswers())
+    g = await runGate(`${gl}-retry`, state.head, gatePre)
   }
   if (!g) {
     log(`gate: ${gl} returned null (skipped or died); stopping`)
@@ -980,7 +1006,7 @@ for (;;) {
   }
   if (g.preconditionFailed) {
     log(`gate: ${gl} precondition failed: ${g.preconditionFailed}; stopping, not a finding`)
-    return await finish(build('stopped', { stopped: 'precondition', problem: `${gl}: ${g.preconditionFailed}` }))
+    return await finish(build('stopped', { stopped: 'precondition', stopPoint: `precondition:${gl}`, problem: `${gl}: ${g.preconditionFailed}` }))
   }
   if (g.head) state.head = g.head
   if (g.ok) {
