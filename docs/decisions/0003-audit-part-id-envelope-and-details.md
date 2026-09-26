@@ -2,8 +2,8 @@
 date: 09-26-26
 status: accepted
 track: core
-phase: P0
-supersedes: []
+phase: m0-p0
+supersedes: ["spec 4.7"]
 ---
 
 # 0003 Audit partId in envelope and details
