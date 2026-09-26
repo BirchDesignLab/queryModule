@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ClientSiteConfigSchema } from "../config/client-config";
 import { findRoute, LocaleParamsSchema, MetaResponseSchema, ROUTES } from "./routes";
 
 describe("BR-007 route contracts (spec 5.1)", () => {
@@ -30,6 +31,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["getConfig", "get", "/api/v1/config", "session", "m1", "planned"],
     ]);
     expect(findRoute("getConfig").responses[401]).toBeDefined();
+    expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
     expect(() => findRoute("nope")).toThrow("unknown route nope");
   });
 
