@@ -189,7 +189,7 @@
 
 ## Before Task 1: labels, milestones, issues
 
-- [ ] **Step 1: Run the labels script (developer approves: it writes to GitHub).**
+- [x] **Step 1: Run the labels script (developer approves: it writes to GitHub).** Result 09-26-26: 11 labels, 5 milestones.
 
 ```bash
 bash scripts/ops/gh-setup-labels.sh BirchDesignLab/queryModule
@@ -197,7 +197,7 @@ bash scripts/ops/gh-setup-labels.sh BirchDesignLab/queryModule
 
 Expected: `repo: BirchDesignLab/queryModule`, eleven `label:` lines, five `milestone:` lines, `done`. Record the result here by editing this step to read "Result MM-DD-YY: 11 labels, 5 milestones" in the Task 1 PR.
 
-- [ ] **Step 2: Create one issue per task (developer approves).** Labels per row; every issue gets `p0` and milestone `M0 Skeleton`.
+- [x] **Step 2: Create one issue per task (developer approves).** Labels per row; every issue gets `p0` and milestone `M0 Skeleton`. Result 09-26-26: issues #2 to #29 (Task N is #N+1), created by `scripts/ops/gh-create-p0-issues.sh`.
 
 | Task | Title | Labels |
 |---|---|---|
@@ -239,7 +239,7 @@ Repeat the command per row with that row's title, labels, task number, IDs and `
 Seat plan for this phase: 28 implementer seats (Tasks 4, 5, 17 to 22, 26 and 28 on Opus 5.5 `medium`; the rest on Sonnet 5 `medium`), 28 spec-compliance seats (Sonnet 5 `medium`), 28 code-quality seats (Sonnet 5 `high`), one Opus 5.5 `medium` critic after Task 25, 11 Opus 5.5 `xhigh` whole-branch reviews (S PRs: Tasks 4, 5, 17 to 23, 26, 28), one Opus 5.5 `xhigh` whole-phase review at the gate.
 
 
-### Task 1: Workspace root skeleton
+### Task 1: Workspace root skeleton (#2)
 
 **Files:**
 - Create: `package.json`, `pnpm-workspace.yaml`, `.npmrc`, `.nvmrc`, `.gitattributes`, `.gitignore`, `tsconfig.base.json`, `tsconfig.json`, `biome.json`, `vitest.config.ts`, `README.md`, `deploy/README.md`, `scripts/mock-data/README.md`, `apps/host-simulator/package.json`, `apps/host-simulator/README.md`
@@ -522,7 +522,7 @@ git commit -m "chore(a): workspace root skeleton
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 2: Core package and version constants
+### Task 2: Core package and version constants (#3)
 
 **Files:**
 - Create: `packages/core/package.json`, `packages/core/tsconfig.json`, `packages/core/vitest.config.ts`, `packages/core/src/contracts/version.ts`, `packages/core/src/contracts/index.ts`, `packages/core/src/config/index.ts`
@@ -677,7 +677,7 @@ git commit -m "feat(core): core package with version constants
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 3: ValidationError and ApiError contracts
+### Task 3: ValidationError and ApiError contracts (#4)
 
 **Files:**
 - Create: `packages/core/src/contracts/validation-error.ts`, `packages/core/src/contracts/api-error.ts`
@@ -858,7 +858,7 @@ git commit -m "feat(core): ValidationError and ApiError contracts
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 4: Source status and query audit catalogue (S)
+### Task 4: Source status and query audit catalogue (S) (#5)
 
 **Files:**
 - Create: `packages/core/src/contracts/identity.ts`, `packages/core/src/contracts/source-status.ts`, `packages/core/src/contracts/audit.ts`
@@ -1245,7 +1245,7 @@ git commit -m "docs(core): sensitive review for audit catalogue
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 5: WebSocket message schemas (S)
+### Task 5: WebSocket message schemas (S) (#6)
 
 **Files:**
 - Create: `packages/core/src/contracts/ws.ts`
@@ -1414,7 +1414,7 @@ git commit -m "feat(core): WebSocket message schemas v1
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 6: Feature and shortcut catalogues
+### Task 6: Feature and shortcut catalogues (#7)
 
 **Files:**
 - Create: `packages/core/src/config/features.ts`, `packages/core/src/config/shortcuts.ts`
@@ -1689,7 +1689,7 @@ git commit -m "feat(core): feature and shortcut catalogues
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 7: SiteConfig schema v1: fields, conditions, query types
+### Task 7: SiteConfig schema v1: fields, conditions, query types (#8)
 
 **Files:**
 - Create: `packages/core/src/config/schema-mode.ts`, `packages/core/src/config/schema-fields.ts`
@@ -1931,7 +1931,7 @@ git commit -m "feat(core): config schema v1 fields, conditions and query types
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 8: SiteConfig schema v1: site level
+### Task 8: SiteConfig schema v1: site level (#9)
 
 **Files:**
 - Create: `packages/core/src/config/schema.ts`, `packages/core/src/config/test-fixtures.ts`
@@ -2364,7 +2364,7 @@ git commit -m "feat(core): SiteConfig schema v1
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 9: ClientSiteConfig allowlist
+### Task 9: ClientSiteConfig allowlist (#10)
 
 **Files:**
 - Create: `packages/core/src/config/client-config.ts`
@@ -2559,7 +2559,7 @@ git commit -m "feat(core): ClientSiteConfig allowlist
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 10: Diagnostics and overlay merge
+### Task 10: Diagnostics and overlay merge (#11)
 
 **Files:**
 - Create: `packages/core/src/config/diagnostic.ts`, `packages/core/src/config/merge.ts`
@@ -2810,7 +2810,7 @@ git commit -m "feat(core): config overlay merge and diagnostics
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 11: migrateConfig
+### Task 11: migrateConfig (#12)
 
 **Files:**
 - Create: `packages/core/src/config/migrate.ts`
@@ -2947,7 +2947,7 @@ git commit -m "feat(core): migrateConfig with empty v1 chain
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 12: validateSiteConfig: keys, references, labels
+### Task 12: validateSiteConfig: keys, references, labels (#13)
 
 **Files:**
 - Create: `packages/core/src/config/defaults.ts`, `packages/core/src/config/conditions.ts`, `packages/core/src/config/validate.ts`
@@ -3325,7 +3325,7 @@ git commit -m "feat(core): validateSiteConfig keys, references and labels
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 13: validateSiteConfig: fields, commands, terminal, shortcuts, limits
+### Task 13: validateSiteConfig: fields, commands, terminal, shortcuts, limits (#14)
 
 **Files:**
 - Create: `packages/core/src/config/validate-rules.ts`
@@ -3707,7 +3707,7 @@ git commit -m "feat(core): validateSiteConfig field, command, terminal, shortcut
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 14: Mock file schema
+### Task 14: Mock file schema (#15)
 
 **Files:**
 - Create: `packages/core/src/contracts/mock-file.ts`
@@ -3841,7 +3841,7 @@ git commit -m "feat(core): mock file schema
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 15: Route contracts skeleton
+### Task 15: Route contracts skeleton (#16)
 
 **Files:**
 - Create: `packages/core/src/contracts/routes.ts`
@@ -4070,7 +4070,7 @@ git commit -m "feat(core): route contracts skeleton with planned status
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 16: Shipped sites, locales and mocks
+### Task 16: Shipped sites, locales and mocks (#17)
 
 **Files:**
 - Create: `packages/config/package.json`, `packages/config/tsconfig.json`, `packages/config/vitest.config.ts`, `packages/config/src/index.ts`, `packages/config/locales/en.json`, `packages/config/sites/default.json`, `packages/config/sites/example-ok.json`, `packages/config/test/all-on.json`, `packages/config/test/flags-off.json`, `packages/config/mock/default.json`, `packages/config/mock/example-ok.json`
@@ -4628,7 +4628,7 @@ git commit -m "feat(core): shipped default and example-ok sites, en locale, mock
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 17: Contract generators and drift check (S)
+### Task 17: Contract generators and drift check (S) (#18)
 
 **Files:**
 - Create: `scripts/tsconfig.json`, `scripts/vitest.config.ts`, `scripts/ci/openapi.ts`, `scripts/ci/contracts-gen.ts`, `scripts/ci/check-generated.ts`, `packages/api/package.json`, `packages/api/tsconfig.json`, `packages/api/vitest.config.ts`
@@ -5048,7 +5048,7 @@ git commit -m "docs(a): sensitive review for contract generators
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 18: config:validate and config:migrate (S)
+### Task 18: config:validate and config:migrate (S) (#19)
 
 **Files:**
 - Create: `scripts/ci/config-files.ts`, `scripts/ci/config-validate.ts`, `scripts/ci/config-migrate.ts`
@@ -5368,7 +5368,7 @@ git commit -m "docs(a): sensitive review for config CLIs
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 19: Licence check (S)
+### Task 19: Licence check (S) (#20)
 
 **Files:**
 - Create: `scripts/ci/licences.ts`, `scripts/ci/check-licences.ts`, `.github/licence-exceptions.json`
@@ -5510,7 +5510,7 @@ git commit -m "docs(a): sensitive review for licence check
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 20: Story-tag gate and stories.json (S)
+### Task 20: Story-tag gate and stories.json (S) (#21)
 
 **Files:**
 - Create: `scripts/ci/story-tags.ts`, `scripts/ci/check-story-tags.ts`, `docs/testing/stories.json`
@@ -5719,7 +5719,7 @@ git commit -m "docs(a): sensitive review for story-tag gate
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 21: Sensitive paths and sensitive-review check (S)
+### Task 21: Sensitive paths and sensitive-review check (S) (#22)
 
 **Files:**
 - Create: `.github/sensitive-paths`, `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`
@@ -5993,7 +5993,7 @@ git commit -m "docs(a): sensitive review for sensitive-review check
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 22: ci.yml and Dependabot (S)
+### Task 22: ci.yml and Dependabot (S) (#23)
 
 **Files:**
 - Create: `.github/workflows/ci.yml`, `.github/dependabot.yml`, `scripts/ci/changed-paths.mjs`
@@ -6230,7 +6230,7 @@ gh pr checks <PR number> --watch
 
 Expected: `ci` and `sensitive-review` both pass on the PR (this is the first PR where they run).
 
-### Task 23: Tokens skeleton (S: touches scripts/ci)
+### Task 23: Tokens skeleton (S: touches scripts/ci) (#24)
 
 **Files:**
 - Create: `packages/tokens/package.json`, `packages/tokens/tsconfig.json`, `packages/tokens/vitest.config.ts`, `packages/tokens/src/index.ts`, `packages/tokens/src/tokens.ts`, `packages/tokens/src/contrast.ts`, `packages/tokens/src/css.ts`, `packages/tokens/src/theme.ts`, `packages/tokens/scripts/gen-css.ts`
@@ -6632,7 +6632,7 @@ git commit -m "docs(b): sensitive review for tokens wiring in scripts/ci
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 24: Client platform and web-ui skeleton
+### Task 24: Client platform and web-ui skeleton (#25)
 
 **Files:**
 - Create: `packages/client/package.json`, `packages/client/tsconfig.json`, `packages/client/vitest.config.ts`, `packages/client/src/index.ts`, `packages/client/src/platform.ts`, `packages/client/src/testing/fake-platform.ts`, `packages/web-ui/package.json`, `packages/web-ui/tsconfig.json`, `packages/web-ui/vitest.config.ts`, `packages/web-ui/src/index.ts`, `packages/web-ui/src/visually-hidden.tsx`
@@ -6965,7 +6965,7 @@ git commit -m "feat(b): ClientPlatform contract with fake, web-ui VisuallyHidden
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 25: Web shell scaffold
+### Task 25: Web shell scaffold (#26)
 
 **Files:**
 - Create: `apps/web/package.json`, `apps/web/tsconfig.json`, `apps/web/vite.config.ts`, `apps/web/vitest.config.ts`, `apps/web/index.html`, `apps/web/src/main.tsx`, `apps/web/src/shell.tsx`, `apps/web/src/theme.ts`, `apps/web/src/shell.css`
@@ -7232,7 +7232,7 @@ git commit -m "feat(b): Vite + React web shell reading tokens
 
 - [ ] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic seat over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
 
-### Task 26: Mobile placeholder and CI steps 8 and 9 (S)
+### Task 26: Mobile placeholder and CI steps 8 and 9 (S) (#27)
 
 **Files:**
 - Create: `apps/mobile/package.json`, `apps/mobile/app.json`, `apps/mobile/tsconfig.json`, `apps/mobile/index.ts`, `apps/mobile/App.tsx`
@@ -7378,7 +7378,7 @@ gh pr checks <PR number> --watch
 
 Expected: `ci` green with the `Web build` and `Expo export` steps passing on `ubuntu-latest`; `sensitive-review` green.
 
-### Task 27: Node 24 compatibility check
+### Task 27: Node 24 compatibility check (#28)
 
 **Files:**
 - Modify: `packages/api/package.json` (runtime dependency `@libsql/client`)
@@ -7463,7 +7463,7 @@ git commit -m "test(a): Node 24 compatibility check for @libsql/client
 <attribution trailer given by your session's system reminder>"
 ```
 
-### Task 28: Ruleset on main and security updates (S)
+### Task 28: Ruleset on main and security updates (S) (#29)
 
 **Files:**
 - Create: `scripts/ops/gh-setup-repo.sh`
