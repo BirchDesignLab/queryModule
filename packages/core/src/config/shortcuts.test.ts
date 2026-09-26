@@ -73,3 +73,88 @@ describe("FR-006 FR-007 FR-053 shortcut catalogue (spec 6.4)", () => {
     }
   });
 });
+
+describe("fix round 1: I1 stroke allowlist (spec 4.1, 6.4)", () => {
+  it("rejects non-code strokes and modifier misuse", () => {
+    expect(isValidShortcutKeys("A")).toBe(false);
+    expect(isValidShortcutKeys("ShiftKeyA")).toBe(false);
+    expect(isValidShortcutKeys("Ctrlx")).toBe(false);
+    expect(isValidShortcutKeys("Shift+ShiftLeft")).toBe(false);
+    expect(isValidShortcutKeys("Meta+KeyA")).toBe(false);
+    expect(isValidShortcutKeys("Shift+Ctrl+KeyA")).toBe(false);
+    expect(isValidShortcutKeys("KeyG  KeyR")).toBe(false);
+    expect(isValidShortcutKeys("KeyG ")).toBe(false);
+  });
+
+  it("accepts representative codes from every allowlisted family and multi-stroke chords", () => {
+    expect(isValidShortcutKeys("KeyA")).toBe(true);
+    expect(isValidShortcutKeys("Digit5")).toBe(true);
+    expect(isValidShortcutKeys("IntlBackslash")).toBe(true);
+    expect(isValidShortcutKeys("IntlRo")).toBe(true);
+    expect(isValidShortcutKeys("IntlYen")).toBe(true);
+    expect(isValidShortcutKeys("Space")).toBe(true);
+    expect(isValidShortcutKeys("ContextMenu")).toBe(true);
+    expect(isValidShortcutKeys("PageUp")).toBe(true);
+    expect(isValidShortcutKeys("ArrowLeft")).toBe(true);
+    expect(isValidShortcutKeys("Escape")).toBe(true);
+    expect(isValidShortcutKeys("F1")).toBe(true);
+    expect(isValidShortcutKeys("F24")).toBe(true);
+    expect(isValidShortcutKeys("Numpad5")).toBe(true);
+    expect(isValidShortcutKeys("NumpadEnter")).toBe(true);
+    expect(isValidShortcutKeys("KeyG KeyQ")).toBe(true);
+  });
+
+  it("every DEFAULT_SHORTCUTS entry still validates", () => {
+    for (const binding of Object.values(DEFAULT_SHORTCUTS)) {
+      expect(isValidShortcutKeys(binding.keys)).toBe(true);
+    }
+  });
+});
+
+describe("fix round 1: I2 immutable defaults", () => {
+  it("freezes DEFAULT_SHORTCUTS and its bindings", () => {
+    expect(Object.isFrozen(DEFAULT_SHORTCUTS)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_SHORTCUTS.focusTerminal)).toBe(true);
+    expect(() => {
+      (DEFAULT_SHORTCUTS.focusTerminal as { keys: string }).keys = "MUTATED";
+    }).toThrow();
+  });
+
+  it("returns fresh binding objects, isolated from DEFAULT_SHORTCUTS and other calls", () => {
+    const originalKeys = DEFAULT_SHORTCUTS.focusTerminal.keys;
+    const first = resolveShortcuts();
+    const binding = first.focusTerminal?.[0];
+    expect(binding).toBeDefined();
+    if (binding) binding.keys = "MUTATED";
+    expect(DEFAULT_SHORTCUTS.focusTerminal.keys).toBe(originalKeys);
+    const second = resolveShortcuts();
+    expect(second.focusTerminal?.[0]?.keys).toBe(originalKeys);
+  });
+
+  it("does not let a mutated caller override object change the returned result", () => {
+    const override = { focusTerminal: { keys: "Ctrl+Slash", context: "global" as const } };
+    const resolved = resolveShortcuts(override);
+    override.focusTerminal.keys = "MUTATED";
+    expect(resolved.focusTerminal?.[0]?.keys).toBe("Ctrl+Slash");
+  });
+});
+
+describe("fix round 1: I3 override branch coverage", () => {
+  it("keeps a single-binding override as one binding", () => {
+    const resolved = resolveShortcuts({ submit: { keys: "Ctrl+KeyS", context: "panel" } });
+    expect(resolved.submit).toEqual([{ keys: "Ctrl+KeyS", context: "panel" }]);
+  });
+
+  it("keeps an array override's bindings in order", () => {
+    const resolved = resolveShortcuts({
+      goPanel: [
+        { keys: "KeyG KeyQ", context: "global" },
+        { keys: "F2", context: "global" },
+      ],
+    });
+    expect(resolved.goPanel).toEqual([
+      { keys: "KeyG KeyQ", context: "global" },
+      { keys: "F2", context: "global" },
+    ]);
+  });
+});

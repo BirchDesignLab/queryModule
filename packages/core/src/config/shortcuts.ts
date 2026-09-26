@@ -31,8 +31,7 @@ export interface ShortcutBinding {
 }
 export type ShortcutMap = Record<string, ShortcutBinding | ShortcutBinding[]>;
 
-/** Default map, spec 6.4. Enter in a form field and Enter in the terminal are native, not bindings. */
-export const DEFAULT_SHORTCUTS: Readonly<Record<ShortcutAction, ShortcutBinding>> = {
+const RAW_DEFAULT_SHORTCUTS: Record<ShortcutAction, ShortcutBinding> = {
   focusTerminal: { keys: "Slash", context: "global" },
   toggleMode: { keys: "Ctrl+Backquote", context: "global" },
   quickType1: { keys: "Alt+Digit1", context: "global" },
@@ -55,8 +54,78 @@ export const DEFAULT_SHORTCUTS: Readonly<Record<ShortcutAction, ShortcutBinding>
   goResults: { keys: "KeyG KeyR", context: "global" },
 };
 
-/** One stroke: [Ctrl+][Alt+][Shift+]<KeyboardEvent.code>, modifiers in that order. */
-export const STROKE_PATTERN = /^(Ctrl\+)?(Alt\+)?(Shift\+)?[A-Z][A-Za-z0-9]*$/;
+/** Default map, spec 6.4. Enter in a form field and Enter in the terminal are native, not bindings.
+ *  Frozen (top level and per binding) so callers cannot mutate the shared defaults; resolveShortcuts
+ *  always hands out fresh copies (I2). */
+export const DEFAULT_SHORTCUTS: Readonly<Record<ShortcutAction, ShortcutBinding>> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(RAW_DEFAULT_SHORTCUTS).map(([action, binding]) => [
+      action,
+      Object.freeze({ ...binding }),
+    ]),
+  ),
+) as Readonly<Record<ShortcutAction, ShortcutBinding>>;
+
+/**
+ * Allowlisted W3C UI Events `KeyboardEvent.code` values a stroke's code part may be (spec 4.1, 6.4).
+ * https://www.w3.org/TR/uievents-code/
+ * Modifier-key codes (ShiftLeft, ControlLeft, AltLeft, MetaLeft, ...) are excluded: modifiers are
+ * expressed only by the `Ctrl+`/`Alt+`/`Shift+` prefixes, never as the code itself.
+ */
+const KEYBOARD_CODES = [
+  // Writing-system keys (literal codes; Key[A-Z] and Digit[0-9] are handled by pattern fragments below)
+  "Backquote",
+  "Minus",
+  "Equal",
+  "BracketLeft",
+  "BracketRight",
+  "Backslash",
+  "Semicolon",
+  "Quote",
+  "Comma",
+  "Period",
+  "Slash",
+  "IntlBackslash",
+  "IntlRo",
+  "IntlYen",
+  // Functional keys
+  "Space",
+  "Enter",
+  "Tab",
+  "Backspace",
+  "ContextMenu",
+  // Control pad
+  "Delete",
+  "Insert",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  // Arrows
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  // Escape
+  "Escape",
+  // Numpad (Numpad0-9 handled by a pattern fragment below)
+  "NumpadAdd",
+  "NumpadSubtract",
+  "NumpadMultiply",
+  "NumpadDivide",
+  "NumpadDecimal",
+  "NumpadEnter",
+  "NumpadEqual",
+  "NumpadComma",
+] as const;
+
+/** Alternation of the allowlisted `KeyboardEvent.code` values: literal codes, Key[A-Z], Digit[0-9],
+ *  Numpad[0-9] and F1-F24. */
+const CODE_PATTERN = `(?:${KEYBOARD_CODES.join("|")}|Key[A-Z]|Digit[0-9]|Numpad[0-9]|F(?:1[0-9]|2[0-4]|[1-9]))`;
+
+/** One stroke: [Ctrl+][Alt+][Shift+]<KeyboardEvent.code>, modifiers in that order, code from the
+ *  W3C UI Events allowlist above (spec 4.1, 6.4). */
+export const STROKE_PATTERN = new RegExp(`^(?:Ctrl\\+)?(?:Alt\\+)?(?:Shift\\+)?${CODE_PATTERN}$`);
 
 export function isValidShortcutKeys(keys: string): boolean {
   if (keys.length === 0) return false;
@@ -65,9 +134,9 @@ export function isValidShortcutKeys(keys: string): boolean {
 
 export function resolveShortcuts(overrides: ShortcutMap = {}): Record<string, ShortcutBinding[]> {
   const out: Record<string, ShortcutBinding[]> = {};
-  for (const action of SHORTCUT_ACTIONS) out[action] = [DEFAULT_SHORTCUTS[action]];
+  for (const action of SHORTCUT_ACTIONS) out[action] = [{ ...DEFAULT_SHORTCUTS[action] }];
   for (const [action, binding] of Object.entries(overrides)) {
-    out[action] = Array.isArray(binding) ? binding : [binding];
+    out[action] = Array.isArray(binding) ? binding.map((b) => ({ ...b })) : [{ ...binding }];
   }
   return out;
 }
