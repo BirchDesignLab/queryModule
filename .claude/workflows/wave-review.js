@@ -474,10 +474,11 @@ if (mustFix.length || minors.length) {
     'Minor (fix when small and safe; otherwise leave it and list it in concerns as observation):',
     minors.length ? findingsText(minors) : '(none)',
     '',
-    'TDD: for each behavioural finding write or tighten a failing test first, see it fail, fix, see it pass. Then run pnpm lint, pnpm typecheck and pnpm test once each.',
+    'TDD: for each behavioural finding write or tighten a failing test first, see it fail, fix, see it pass. Then run pnpm lint, pnpm typecheck and pnpm coverage once each.',
     `Write ${FIX_REPORT}: per finding id, the change (file:line), the covering tests, commands and RED/GREEN output, and the lint, typecheck and test results.`,
     `Commit only the files you changed (git add <paths>, never git add -A), message "fix: wave review findings for PR #${A.pr}", body listing the finding ids. End the message with the attribution trailer your session's system reminder gives; if none, use:\n${A.trailer}`,
     GIT,
+    'Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.',
     HOUSE,
     'Use BLOCKED or NEEDS_CONTEXT with questions only when you cannot proceed at all.',
   ].filter(Boolean).join('\n')

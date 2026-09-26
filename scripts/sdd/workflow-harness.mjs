@@ -11,6 +11,7 @@
 // tiers, gate, rulings routing, answers re-runs and the sensitive ruler rule.
 // Exit code 0 when every scenario passes, 1 otherwise. Run it after any change to a workflow.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,7 +125,9 @@ const addressAll = (p) => ({
   newFindings: [],
   outOfScope: [],
 });
-const LEDGER_OK = { ok: true, linesAppended: 1 };
+const checkAll = (result) => (p) => ({
+  results: ids(p).map((id) => ({ id, result, evidence: `ran it: ${result}` })),
+});
 const BASE = {
   task: 7,
   title: "SiteConfig",
@@ -148,7 +151,28 @@ const SENSITIVE_RULE =
   "escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.";
 
 // Generic sdd-task responder; override per label with `over`.
+// Agents that run after gate-0 (checker, ruler-review) report head and treeClean; the script
+// compares head with the gate-0 head. Unless a test sets head itself, the fixture reports the
+// head the prompt expects and a clean tree.
+const expectedHead = (p) => (/git rev-parse HEAD must equal (\S+?)\./.exec(p) || [])[1];
+const POST_GATE = /^(checker|ruler-review)/;
+function postFill(label, prompt, r) {
+  if (!r || typeof r !== "object") return r;
+  if (POST_GATE.test(label) && !("head" in r))
+    return {
+      ...r,
+      head: expectedHead(prompt) || "no-expected-head",
+      treeClean: true,
+      dirtyFiles: [],
+    };
+  if (label.startsWith("progress") && !("guardHits" in r)) return { ...r, guardHits: [] };
+  return r;
+}
 function sddResponder(over = {}) {
+  const base = sddBase(over);
+  return (label, prompt, calls) => postFill(label, prompt, base(label, prompt, calls));
+}
+function sddBase(over) {
   return (label, prompt, calls) => {
     for (const [k, v] of Object.entries(over)) {
       if (label === k || (k.endsWith("*") && label.startsWith(k.slice(0, -1)))) {
@@ -169,11 +193,11 @@ function sddResponder(over = {}) {
       };
     }
     if (label.endsWith("-review")) return PASS;
+    if (label === "checker") return checkAll("verified")(prompt);
     if (label.startsWith("fixer")) return work(`h-${label}`);
     if (label.startsWith("progress")) return progress(label);
     if (label.startsWith("re-review")) return addressAll(prompt);
     if (label.startsWith("gate")) return GATE_OK(`h-${label}`);
-    if (label === "ledger") return LEDGER_OK;
     return null;
   };
 }
@@ -193,9 +217,9 @@ const sdd = await load("sdd-task.js");
 const wr = await load("wave-review.js");
 
 // ================= sdd-task =================
-await test("sdd: happy path runs implementer, spec, quality, gate, ledger and completes", async () => {
+await test("sdd: happy path runs implementer, spec, quality and gate-0, and completes", async () => {
   const r = await run(sdd, BASE, sddResponder());
-  assert.deepEqual(r.labels, ["implementer", "spec-review", "quality-review", "gate-0", "ledger"]);
+  assert.deepEqual(r.labels, ["implementer", "spec-review", "quality-review", "gate-0"]);
   assert.equal(r.res.status, "complete");
   assert.equal(r.find("gate-0").model, "sonnet");
   assert.equal(r.find("gate-0").effort, "low");
@@ -224,22 +248,25 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
     "gate-0",
     "fixer-r1",
     "progress-r1",
-    "re-review-r1",
     "gate-r1",
-    "ledger",
   ]);
   assert.ok(r.find("fixer-r1").prompt.includes("pnpm lint: 2 errors"));
   assert.equal(r.res.status, "complete");
   assert.equal(r.res.rounds, 1);
 });
 
-await test("sdd: gate failing every round parks at the cap (worst case 30 agents at maxRounds 5)", async () => {
+// Worst case at maxRounds 5: implementer, ruler-concerns, fixer-pre, progress-pre, three reviewers
+// and gate-0 in parallel, checker (needsJudgment), ruler-review, then round 1 with a review finding (fixer, progress,
+// re-review, red gate-r1) and four mechanical rounds (fixer, progress, red gate).
+await test("sdd: gate failing every round parks at the cap (worst case 26 agents at maxRounds 5)", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true },
     sddResponder({
       implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
       "spec-review": { verdict: "pass", findings: [], cannotVerify: [{ item: "i", check: "c" }] },
+      "critic-review": { verdict: "fail", findings: [F("C1", "important")], cannotVerify: [] },
+      checker: checkAll("needsJudgment"),
       "ruler-review": {
         rulings: [
           {
@@ -254,7 +281,9 @@ await test("sdd: gate failing every round parks at the cap (worst case 30 agents
       "gate*": { ok: false, head: "hg", problems: ["tests red"] },
     }),
   );
-  assert.equal(r.calls.length, 30, r.labels.join(","));
+  assert.equal(r.calls.length, 26, r.labels.join(","));
+  assert.equal(r.labels.filter((l) => l.startsWith("re-review")).join(","), "re-review-r1");
+  assert.equal(r.labels.filter((l) => l.startsWith("gate")).length, 6);
   assert.equal(r.res.status, "parked");
   assert.equal(r.res.rounds, 5);
 });
@@ -488,6 +517,7 @@ await test("sdd: carryForward from rulings is returned", async () => {
         findings: [],
         cannotVerify: [{ item: "tsc -b", check: "run it" }],
       },
+      checker: checkAll("needsJudgment"),
       "ruler-review": {
         rulings: [
           {
@@ -530,7 +560,7 @@ await test("sdd: implementer BLOCKED stops with questions", async () => {
   );
   assert.equal(r.res.status, "stopped");
   assert.deepEqual(r.res.questions, ["q?"]);
-  assert.deepEqual(r.labels, ["implementer", "ledger"]);
+  assert.deepEqual(r.labels, ["implementer"]);
 });
 
 // ---------- fix pass 2: N1 to N6 (sdd-task) ----------
@@ -680,7 +710,7 @@ await test("sdd N5: an implementer precondition failure stops the run; answers a
   const r = await run(sdd, BASE, resp);
   assert.equal(r.res.stopped, "precondition");
   assert.ok(r.res.problem.includes("HEAD is abc"));
-  assert.deepEqual(r.labels, ["implementer", "ledger"]);
+  assert.deepEqual(r.labels, ["implementer"]);
   const again = await run(
     sdd,
     { ...BASE, answers: { at: "precondition", text: "Reset to base; retry." } },
@@ -1179,7 +1209,7 @@ await test("wr R3: the reviewer precondition names files and calls out a stray a
 await test("sdd R2: implemented { head } skips the implementer and reviews base..head (review stages only)", async () => {
   const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
   assert.ok(!r.labels.includes("implementer"), r.labels.join(","));
-  assert.deepEqual(r.labels, ["spec-review", "quality-review", "gate-0", "ledger"]);
+  assert.deepEqual(r.labels, ["spec-review", "quality-review", "gate-0"]);
   assert.ok(r.find("spec-review").prompt.includes("aaaaaaa1111..cafe1234cafe1234"));
   assert.equal(r.res.status, "complete");
   await assert.rejects(run(sdd, { ...BASE, implemented: {} }, sddResponder()), /implemented\.head/);
@@ -1191,6 +1221,812 @@ await test("sdd R2: implemented { head } skips the implementer and reviews base.
     ),
     /implemented/,
   );
+});
+
+// ---------- post-pilot (09-26-26): items 1 to 10 of the post-pilot brief ----------
+const NO_REMOTE =
+  "Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.";
+const neverAddressed = (p) => ({
+  verdicts: ids(p).map((id) => ({ id, verdict: "NOT ADDRESSED", evidence: "a.ts:1" })),
+  newFindings: [],
+  outOfScope: [],
+});
+// Runs that between them reach every sdd-task agent that can run shell commands.
+async function shellRuns() {
+  const loop = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "re-review*": neverAddressed,
+    }),
+  );
+  let gates = 0;
+  const gate = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "gate*": () =>
+        ++gates === 1 ? { ok: false, head: "h", problems: ["lint red"] } : GATE_OK("h2"),
+    }),
+  );
+  const cont = await run(
+    sdd,
+    { ...BASE, answers: { at: "implementer", text: "A" } },
+    sddResponder({
+      implementer: work("h0", { status: "NEEDS_CONTEXT", commits: [], questions: ["q"] }),
+    }),
+  );
+  const retry = await run(
+    sdd,
+    { ...BASE, answers: { at: "precondition", text: "fixed" } },
+    sddResponder({
+      implementer: work("h", { status: "BLOCKED", commits: [], preconditionFailed: "dirty" }),
+      "implementer-retry": work("h-retry"),
+    }),
+  );
+  const calls = [loop, gate, cont, retry].flatMap((r) => r.calls);
+  return { loop, gate, cont, retry, calls };
+}
+
+await test("sdd P1: every gate runs pnpm lint, pnpm typecheck and pnpm coverage, never pnpm test", async () => {
+  const { calls } = await shellRuns();
+  const gates = calls.filter((c) => c.label.startsWith("gate"));
+  assert.ok(
+    gates.some((c) => c.label === "gate-r1"),
+    "no gate-r1 in the runs",
+  );
+  for (const g of gates) {
+    for (const cmd of ["pnpm lint", "pnpm typecheck", "pnpm coverage"])
+      assert.ok(g.prompt.includes(cmd), `${g.label} lacks ${cmd}`);
+    assert.ok(!/pnpm test\b/.test(g.prompt), `${g.label} still runs pnpm test`);
+  }
+});
+
+await test("sdd P2: reviewers are told the gate runs lint, typecheck and coverage; never cannot-verify", async () => {
+  const r = await run(sdd, { ...BASE, sensitive: true }, sddResponder());
+  for (const l of ["spec-review", "quality-review", "critic-review"]) {
+    const p = r.find(l).prompt;
+    assert.ok(
+      p.includes(
+        "never list lint, typecheck, tests, coverage or the report's test counts as cannotVerify",
+      ),
+      `${l} lacks the cannot-verify exclusion`,
+    );
+    assert.ok(
+      !/the check the ruler should run/.test(p),
+      `${l} still sends cannot-verify to the ruler`,
+    );
+  }
+});
+
+await test("sdd P5: every shell-running agent is told never to push, open a PR or merge; wave-review fixer too", async () => {
+  const { calls } = await shellRuns();
+  const want = [
+    "implementer",
+    "implementer-continue",
+    "implementer-retry",
+    "fixer-pre",
+    "fixer-r1",
+    "fixer-r4",
+    "gate-0",
+    "gate-r1",
+  ];
+  for (const l of want) {
+    const c = calls.find((x) => x.label === l);
+    assert.ok(c, `no ${l} call in the runs`);
+    assert.ok(c.prompt.includes(NO_REMOTE), `${l} lacks the no-remote rule`);
+  }
+  const w = await run(wr, WBASE, wrResponder({ reviewer: reviewWith([WF("I1", "important")]) }));
+  assert.ok(
+    w.find("fixer").prompt.includes(NO_REMOTE),
+    "wave-review fixer lacks the no-remote rule",
+  );
+});
+
+await test("sdd P8: implementer, continue, retry and every fixer self-check lint and coverage before each commit", async () => {
+  const { calls } = await shellRuns();
+  const want = [
+    "implementer",
+    "implementer-continue",
+    "implementer-retry",
+    "fixer-pre",
+    "fixer-r1",
+    "fixer-r4",
+  ];
+  for (const l of want) {
+    const p = calls.find((x) => x.label === l).prompt;
+    assert.ok(p.includes("Before each commit run pnpm lint"), `${l} lacks the lint self-check`);
+    assert.ok(p.includes("pnpm exec biome format --write <files>"), `${l} lacks the format fix`);
+    assert.ok(p.includes("pnpm coverage"), `${l} lacks pnpm coverage`);
+    assert.ok(/do not commit on red/i.test(p), `${l} lacks "do not commit on red"`);
+  }
+});
+
+await test("sdd P4: critic: true turns the critic on for an ordinary task with the default focus, tiers unchanged", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, critic: true },
+    sddResponder({
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "important", { planMandated: true })],
+        cannotVerify: [],
+      },
+    }),
+  );
+  const c = r.find("critic-review");
+  assert.ok(c, r.labels.join(","));
+  assert.equal(`${c.model}/${c.effort}`, "opus/medium");
+  assert.ok(
+    c.prompt.includes(
+      "Focus: correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail.",
+    ),
+    c.prompt,
+  );
+  assert.equal(`${r.find("implementer").model}/${r.find("implementer").effort}`, "sonnet/medium");
+  assert.equal(`${r.find("ruler-review").model}/${r.find("ruler-review").effort}`, "opus/low");
+  assert.ok(!r.find("ruler-review").prompt.includes(SENSITIVE_RULE));
+  const off = await run(sdd, BASE, sddResponder());
+  assert.ok(!off.labels.includes("critic-review"));
+});
+
+await test("sdd P4: criticFocus replaces the default focus, and is appended on sensitive or UI tasks", async () => {
+  const o = await run(sdd, { ...BASE, critic: true, criticFocus: "ZZ-FOCUS" }, sddResponder());
+  const op = o.find("critic-review").prompt;
+  assert.ok(op.includes("Focus: ZZ-FOCUS."), op);
+  assert.ok(!op.includes("fail-open paths, data that crosses"));
+  const s = await run(sdd, { ...BASE, sensitive: true, criticFocus: "ZZ-FOCUS" }, sddResponder());
+  const sp = s.find("critic-review").prompt;
+  assert.ok(sp.includes("sensitive-code risk") && sp.includes("; ZZ-FOCUS."), sp);
+  const u = await run(sdd, { ...BASE, ui: true }, sddResponder());
+  assert.ok(u.find("critic-review").prompt.includes("Focus: UI risk"));
+});
+
+await test("sdd P4: critic must be a boolean and criticFocus a non-empty string", async () => {
+  await assert.rejects(run(sdd, { ...BASE, critic: "yes" }, sddResponder()), /critic/);
+  await assert.rejects(run(sdd, { ...BASE, criticFocus: "  " }, sddResponder()), /criticFocus/);
+  await assert.rejects(run(sdd, { ...BASE, criticFocus: 3 }, sddResponder()), /criticFocus/);
+});
+
+const specS1Mandated = {
+  verdict: "fail",
+  findings: [F("S1", "important", { planMandated: true })],
+  cannotVerify: [],
+};
+
+await test("sdd P7: gate-0 runs in parallel with the reviewers on the review head, before any ruler", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
+      "spec-review": specS1Mandated,
+    }),
+  );
+  const at = (l) => r.labels.indexOf(l);
+  assert.ok(
+    at("gate-0") > at("quality-review") && at("gate-0") < at("ruler-review"),
+    r.labels.join(","),
+  );
+  assert.ok(
+    r.find("gate-0").prompt.includes("equals h-progress-pre"),
+    "gate-0 not on the review head",
+  );
+  assert.ok(r.find("spec-review").prompt.includes("head h-progress-pre"));
+  assert.equal(r.labels.filter((l) => l.startsWith("gate")).join(","), "gate-0,gate-r1");
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P7: gate-0 problems join the reviewer findings in one fix round; the re-reviewer runs", async () => {
+  let gates = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "gate*": () =>
+        ++gates === 1
+          ? { ok: false, head: "h-impl", problems: ["pnpm coverage: branches 93% < 95%"] }
+          : GATE_OK("h-final"),
+    }),
+  );
+  const fx = r.find("fixer-r1").prompt;
+  assert.ok(fx.includes("[spec:S1]") && fx.includes("[gate-0:1]"), fx);
+  assert.ok(r.labels.includes("re-review-r1"), r.labels.join(","));
+  assert.ok(!r.labels.includes("fixer-r2"), r.labels.join(","));
+  assert.ok(
+    r.logs.some((l) => /round 1 .*re-reviewer runs/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P7: a clean review and a green gate-0 complete with no further gate", async () => {
+  const r = await run(sdd, BASE, sddResponder());
+  assert.equal(r.labels.filter((l) => l.startsWith("gate")).join(","), "gate-0");
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P7: a gate-0 precondition failure stops after the parallel reviewers; answers retry the gate", async () => {
+  const resp = sddResponder({
+    "spec-review": specS1Mandated,
+    "gate-0": {
+      ok: false,
+      head: "zzz",
+      problems: [],
+      preconditionFailed: "HEAD zzz, expected h-impl",
+    },
+    "gate-0-retry": GATE_OK("h-impl"),
+  });
+  const r = await run(sdd, BASE, resp);
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:gate-0");
+  assert.ok(r.labels.includes("spec-review") && r.labels.includes("quality-review"));
+  assert.ok(!r.labels.includes("ruler-review") && !r.labels.some((l) => l.startsWith("fixer")));
+  const again = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition:gate-0", text: "HEAD reset" }] },
+    resp,
+  );
+  assert.ok(again.find("gate-0-retry").prompt.includes("HEAD reset"));
+  assert.equal(again.find("spec-review").prompt, r.find("spec-review").prompt);
+  assert.equal(again.res.status, "complete");
+});
+
+await test("sdd P7: review stages only (implemented) runs gate-0 in parallel on implemented.head", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, implemented: { head: "cafe1234cafe1234" } },
+    sddResponder({ "spec-review": specS1Mandated }),
+  );
+  assert.equal(r.labels.slice(0, 3).join(","), "spec-review,quality-review,gate-0");
+  assert.ok(r.find("gate-0").prompt.includes("equals cafe1234cafe1234"));
+});
+
+await test("sdd P9: a gate-only fix round skips the re-reviewer; progress and gate-r<r> decide", async () => {
+  let gates = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "gate*": () =>
+        ++gates <= 2 ? { ok: false, head: "h", problems: ["lint red"] } : GATE_OK("h3"),
+    }),
+  );
+  assert.ok(!r.labels.some((l) => l.startsWith("re-review")), r.labels.join(","));
+  assert.ok(r.labels.includes("gate-r1") && r.labels.includes("gate-r2"), r.labels.join(","));
+  assert.ok(
+    r.logs.some((l) => /round 1 is mechanical .*re-reviewer skipped/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.equal(r.res.status, "complete");
+  const p = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "progress-r1": {
+        ok: false,
+        problems: ["tree dirty"],
+        head: "hp",
+        newCommits: [],
+        testCount: 10,
+      },
+    }),
+  );
+  assert.ok(
+    p.labels.includes("re-review-r1") && !p.labels.includes("re-review-r2"),
+    p.labels.join(","),
+  );
+  assert.ok(p.find("fixer-r2").prompt.includes("[progress-r1-1]"));
+});
+
+const specCV = (n = 1) => ({
+  verdict: "pass",
+  findings: [],
+  cannotVerify: Array.from({ length: n }, (_, k) => ({
+    item: `item ${k + 1}`,
+    check: `check ${k + 1}`,
+  })),
+});
+
+await test("sdd P6: a cannot-verify item goes to the checker (sonnet/low), not the ruler; verified is a checker ruling", async () => {
+  for (const sensitive of [false, true]) {
+    const r = await run(sdd, { ...BASE, sensitive }, sddResponder({ "spec-review": specCV() }));
+    const c = r.find("checker");
+    assert.ok(c, r.labels.join(","));
+    assert.equal(`${c.model}/${c.effort}`, "sonnet/low");
+    assert.deepEqual(ids(c.prompt), ["spec:CV1"]);
+    assert.ok(c.prompt.includes("check 1"));
+    assert.ok(
+      /read-only/i.test(c.prompt) && /never edit/i.test(c.prompt) && /commit/.test(c.prompt),
+    );
+    assert.ok(!r.labels.some((l) => l.startsWith("ruler")), r.labels.join(","));
+    const ruling = r.res.rulings.find((x) => x.item === "spec:CV1");
+    assert.equal(ruling.source, "checker");
+    assert.equal(ruling.decision, "verified");
+    assert.ok(r.res.ledgerLines.some((l) => l.includes("Ruling (checker): ")));
+    assert.equal(r.res.status, "complete");
+  }
+});
+
+await test("sdd P6: a failed check is an open important finding; the fix round gets a re-reviewer", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({ "spec-review": specCV(), checker: checkAll("failed") }),
+  );
+  assert.ok(!r.labels.some((l) => l.startsWith("ruler")), r.labels.join(","));
+  assert.ok(r.find("fixer-r1").prompt.includes("[spec:CV1] IMPORTANT"), r.find("fixer-r1").prompt);
+  assert.ok(r.labels.includes("re-review-r1"));
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P6: needsJudgment and unanswered items go to the ruler; the ruler runs only then", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": specCV(3),
+      checker: () => ({
+        results: [
+          { id: "spec:CV1", result: "verified", evidence: "ok" },
+          { id: "spec:CV2", result: "needsJudgment", evidence: "ambiguous" },
+        ],
+      }),
+    }),
+  );
+  assert.deepEqual(ids(r.find("ruler-review").prompt).sort(), ["spec:CV2", "spec:CV3"]);
+  assert.ok(r.find("ruler-review").prompt.includes("ambiguous"));
+  const dead = await run(sdd, BASE, sddResponder({ "spec-review": specCV(), checker: null }));
+  assert.deepEqual(ids(dead.find("ruler-review").prompt), ["spec:CV1"]);
+});
+
+await test("sdd P6: a controller-decided cannot-verify item never reaches the checker", async () => {
+  const answers = {
+    at: "review",
+    decisions: [{ item: "spec:CV1", decision: "verified", reason: "controller ran it" }],
+  };
+  const r = await run(sdd, { ...BASE, answers }, sddResponder({ "spec-review": specCV() }));
+  assert.ok(
+    !r.labels.includes("checker") && !r.labels.some((l) => l.startsWith("ruler")),
+    r.labels.join(","),
+  );
+  assert.equal(r.res.rulings.find((x) => x.item === "spec:CV1").source, "controller");
+  const two = await run(sdd, { ...BASE, answers }, sddResponder({ "spec-review": specCV(2) }));
+  assert.deepEqual(ids(two.find("checker").prompt), ["spec:CV2"]);
+});
+
+await test("sdd P10: no ledger agent; ledgerLines are returned and the controller appends them", async () => {
+  const r = await run(sdd, BASE, sddResponder());
+  assert.ok(!r.labels.includes("ledger"), r.labels.join(","));
+  assert.ok(r.res.ledgerLines.length > 0);
+  assert.ok(
+    r.logs.includes(
+      `ledger: controller appends ${r.res.ledgerLines.length} lines to C:/w/progress.md`,
+    ),
+    r.logs.join(" | "),
+  );
+  const none = await run(sdd, { ...BASE, ledgerPath: undefined }, sddResponder());
+  assert.ok(none.res.ledgerLines.length > 0);
+  assert.ok(!none.labels.includes("ledger"));
+});
+
+await test("sdd P10: a roles.ledger override is logged as ignored, never thrown", async () => {
+  const r = await run(sdd, { ...BASE, roles: { ledger: { model: "haiku" } } }, sddResponder());
+  assert.ok(
+    r.logs.some((l) => /roles\.ledger .*ignored/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.ok(!r.logs.some((l) => /ledger haiku/.test(l)), "roles log still lists a ledger role");
+  assert.equal(r.res.status, "complete");
+});
+
+const AL_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "append-ledger.mjs");
+await test("append-ledger: finds ledgerLines in a bare result, wrapped text and escaped JSON", async () => {
+  const al = await import(new URL("./append-ledger.mjs", import.meta.url).href);
+  const res = (await run(sdd, BASE, sddResponder())).res;
+  const lines = res.ledgerLines;
+  assert.deepEqual(al.findLedgerLines(JSON.stringify(res, null, 2)), lines);
+  assert.deepEqual(
+    al.findLedgerLines(`Workflow finished.\n\`\`\`json\n${JSON.stringify(res)}\n\`\`\`\ndone`),
+    lines,
+  );
+  assert.deepEqual(
+    al.findLedgerLines(JSON.stringify({ status: "completed", output: JSON.stringify(res) })),
+    lines,
+  );
+  assert.deepEqual(
+    al.findLedgerLines(`${JSON.stringify({ ledgerLines: ["old"] })}\n${JSON.stringify(res)}`),
+    lines,
+    "the last result wins",
+  );
+  assert.equal(al.findLedgerLines('{"task": 7}'), null);
+  assert.equal(al.findLedgerLines("no json here"), null);
+  assert.equal(al.appendText("a\n", ["x", "y"]), "x\ny\n");
+  assert.equal(al.appendText("a", ["x"]), "\nx\n");
+  assert.equal(al.appendText("", ["x"]), "x\n");
+  assert.equal(al.appendText("a\r\n", ["x", "y"]), "x\r\ny\r\n");
+});
+
+await test("append-ledger: exits 2 on a usage error and 3 when no ledgerLines are found", async () => {
+  const usage = spawnSync(process.execPath, [AL_PATH], { encoding: "utf8" });
+  assert.equal(usage.status, 2, usage.stderr);
+  assert.ok(/usage/i.test(usage.stderr));
+  const missing = spawnSync(process.execPath, [AL_PATH, "no-such-output.json", "l.md"], {
+    encoding: "utf8",
+  });
+  assert.equal(missing.status, 2, missing.stderr);
+  const pkg = path.resolve(path.dirname(AL_PATH), "../../package.json");
+  const none = spawnSync(process.execPath, [AL_PATH, pkg, "no-such-ledger.md"], {
+    encoding: "utf8",
+  });
+  assert.equal(none.status, 3, none.stderr);
+});
+
+await test("README P3: a resume re-passes the full args; stopping mid-review loses the reviewers' work", async () => {
+  const readme = fs.readFileSync(path.join(WF_DIR, "README.md"), "utf8");
+  assert.ok(readme.includes("{ scriptPath, resumeFromRunId, args }"), "resume call shape missing");
+  assert.ok(/without `args` throws at the first required-arg check/.test(readme));
+  assert.ok(/partial work/.test(readme) && /cheap place to intervene is at a stop/.test(readme));
+  assert.ok(readme.includes("node scripts/sdd/append-ledger.mjs"), "append-ledger not documented");
+  assert.ok(!/\| ledger \|/.test(readme), "README still lists a ledger role");
+});
+
+// ---------- fix pass (critic review post-pilot-critic.md; controller rulings) ----------
+await test("sdd FP-I1: a checker that reports another head or a dirty tree stops at precondition:checker", async () => {
+  const resp = sddResponder({
+    "spec-review": specCV(),
+    checker: (p) => ({
+      ...checkAll("verified")(p),
+      head: "moved000",
+      treeClean: false,
+      dirtyFiles: ["packages/core/src/x.ts"],
+    }),
+    "checker-retry": checkAll("verified"),
+  });
+  const r = await run(sdd, BASE, resp);
+  const c = r.find("checker").prompt;
+  assert.ok(c.includes("git rev-parse HEAD must equal h-gate-0."), c);
+  assert.ok(c.includes("git status --porcelain") && /never edit/i.test(c));
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:checker");
+  assert.ok(r.res.problem.includes("packages/core/src/x.ts") && r.res.problem.includes("moved000"));
+  assert.ok(
+    !r.labels.some((l) => l.startsWith("ruler") || l.startsWith("fixer")),
+    r.labels.join(","),
+  );
+  const again = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition:checker", text: "tree restored" }] },
+    resp,
+  );
+  assert.equal(again.find("checker").prompt, r.find("checker").prompt);
+  assert.ok(again.find("checker-retry").prompt.includes("tree restored"));
+  assert.equal(again.res.status, "complete");
+});
+
+await test("sdd N2: a checker head shorter than 7 characters counts as moved (full-sha gate head)", async () => {
+  const resp = sddResponder({
+    "spec-review": specCV(),
+    checker: (p) => ({ ...checkAll("verified")(p), head: "h", treeClean: true, dirtyFiles: [] }),
+  });
+  const r = await run(sdd, BASE, resp);
+  assert.equal(r.res.stopPoint, "precondition:checker");
+  assert.ok(r.res.problem.includes("HEAD is h,"), r.res.problem);
+});
+
+await test("sdd N3: decisions in a plain precondition answer throw; use the returned stopPoint", async () => {
+  await assert.rejects(
+    run(
+      sdd,
+      {
+        ...BASE,
+        answers: [
+          {
+            at: "precondition",
+            text: "x",
+            decisions: [{ item: "spec:CV1", decision: "verified", reason: "r" }],
+          },
+        ],
+      },
+      sddResponder({}),
+    ),
+    /stopPoint/,
+  );
+});
+
+await test("sdd FP-I1: a ruler-review that reports another head stops at precondition:ruler-review", async () => {
+  const resp = sddResponder({
+    "spec-review": specS1Mandated,
+    "ruler-review": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: "stands",
+        reason: "r",
+        costIfWrong: "c",
+      })),
+      head: "moved111",
+      treeClean: true,
+      dirtyFiles: [],
+    }),
+    "ruler-review-retry": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: "stands",
+        reason: "r",
+        costIfWrong: "c",
+      })),
+    }),
+  });
+  const r = await run(sdd, BASE, resp);
+  assert.ok(r.find("ruler-review").prompt.includes("git rev-parse HEAD must equal h-gate-0."));
+  assert.equal(r.res.stopPoint, "precondition:ruler-review");
+  assert.ok(r.res.problem.includes("moved111"));
+  assert.equal(r.res.rulings.length, 0, "rulings from a moved head must not be applied");
+  const again = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition:ruler-review", text: "HEAD reset" }] },
+    resp,
+  );
+  assert.ok(again.find("ruler-review-retry").prompt.includes("HEAD reset"));
+  assert.equal(again.res.status, "complete");
+  // ruler-concerns runs before gate-0 and carries no head check
+  const pre = await run(
+    sdd,
+    BASE,
+    sddResponder({ implementer: work("h0", { concerns: [{ kind: "correctness", text: "u" }] }) }),
+  );
+  assert.ok(!pre.find("ruler-concerns").prompt.includes("must equal"));
+});
+
+await test("sdd FP-I3: a ruler-review answer on a checked item keeps the checker prompt cache-stable", async () => {
+  const resp = sddResponder({
+    "spec-review": specCV(2),
+    checker: () => ({
+      results: [
+        { id: "spec:CV1", result: "verified", evidence: "ok" },
+        { id: "spec:CV2", result: "needsJudgment", evidence: "ambiguous" },
+      ],
+    }),
+    "ruler-review": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: "escalate",
+        reason: "guess",
+        costIfWrong: "c",
+      })),
+    }),
+  });
+  const first = await run(sdd, BASE, resp);
+  assert.equal(first.res.stopped, "ruler-review");
+  const answers = [
+    {
+      at: "ruler-review",
+      decisions: [{ item: "spec:CV2", decision: "verified", reason: "ran it" }],
+    },
+  ];
+  const second = await run(sdd, { ...BASE, answers }, resp);
+  assert.equal(
+    second.find("checker").prompt,
+    first.find("checker").prompt,
+    "checker cache would miss",
+  );
+  assert.ok(!second.labels.includes("ruler-review"), second.labels.join(","));
+  assert.equal(second.res.rulings.find((x) => x.item === "spec:CV2").source, "controller");
+  assert.equal(second.res.rulings.find((x) => x.item === "spec:CV1").source, "checker");
+  assert.equal(second.res.status, "complete");
+  // a later decision overrides the checker's own result
+  const failed = await run(
+    sdd,
+    {
+      ...BASE,
+      answers: [
+        {
+          at: "ruler-review",
+          decisions: [{ item: "spec:CV1", decision: "stands", reason: "known" }],
+        },
+      ],
+    },
+    sddResponder({ "spec-review": specCV(), checker: checkAll("failed") }),
+  );
+  assert.ok(!failed.labels.some((l) => l.startsWith("fixer")), failed.labels.join(","));
+  assert.equal(failed.res.rulings.find((x) => x.item === "spec:CV1").source, "controller");
+});
+
+await test("sdd FP-I2: the progress checker flags gate-weakening moves; a hit makes the next round reviewed", async () => {
+  let gates = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "gate*": () =>
+        ++gates === 1
+          ? { ok: false, head: "h", problems: ["pnpm coverage: branches 93% < 95%"] }
+          : GATE_OK("h2"),
+      "progress-r1": {
+        ...progress("progress-r1"),
+        guardHits: ["vitest.config.ts: coverage threshold lowered from 95 to 90"],
+      },
+    }),
+  );
+  const pp = r.find("progress-r1").prompt;
+  for (const t of [
+    "vitest",
+    "biome.json",
+    "tsconfig",
+    "package.json",
+    "coverage thresholds",
+    "biome-ignore",
+    "@ts-ignore",
+    "@ts-expect-error",
+    "istanbul ignore",
+    "v8 ignore",
+    "c8 ignore",
+    "eslint-disable",
+    "guardHits",
+  ])
+    assert.ok(pp.includes(t), `progress prompt lacks ${t}`);
+  assert.ok(!r.labels.includes("re-review-r1"), "round 1 is gate-only, so mechanical");
+  assert.ok(
+    r.find("fixer-r2").prompt.includes("[progress-r1-guard-1] IMPORTANT"),
+    r.labels.join(","),
+  );
+  assert.ok(
+    r.labels.includes("re-review-r2"),
+    `a guard hit must bring the re-reviewer: ${r.labels.join(",")}`,
+  );
+  assert.ok(ids(r.find("re-review-r2").prompt).includes("progress-r1-guard-1"));
+  for (const l of ["fixer-r1", "fixer-r2"]) {
+    const fp = r.find(l).prompt;
+    assert.ok(
+      fp.includes("unless the brief or a ruling in force asks for it") &&
+        fp.includes("biome-ignore"),
+      `${l} does not forbid gate-weakening moves`,
+    );
+  }
+  const esc = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "re-review*": neverAddressed,
+    }),
+  );
+  assert.ok(
+    esc.find("fixer-r4").prompt.includes("unless the brief or a ruling in force asks for it"),
+  );
+});
+
+const gate0Red = () => {
+  let gates = 0;
+  return () =>
+    ++gates === 1
+      ? { ok: false, head: "h-impl", problems: ["pnpm coverage red"] }
+      : GATE_OK("h-final");
+};
+
+await test("sdd FP-M1: in a mixed round the re-reviewer does not verdict gate findings; gate-r decides them", async () => {
+  let rr = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "gate*": gate0Red(),
+      "re-review*": (p) => (++rr === 1 ? neverAddressed(p) : addressAll(p)),
+    }),
+  );
+  const p1 = r.find("re-review-r1").prompt;
+  assert.deepEqual(ids(p1), ["spec:S1"], "gate findings must not be up for a verdict");
+  assert.ok(p1.includes("[gate-0:1]") && p1.includes("verified by gate-r1"), p1);
+  // S1 still open after round 1, so the gate finding stays open and reaches the round-2 fixer
+  assert.ok(r.find("fixer-r2").prompt.includes("[gate-0:1]"), "gate finding dropped after round 1");
+  assert.ok(!r.labels.includes("gate-r1"), "no gate while a review finding is open");
+  assert.ok(r.find("re-review-r2").prompt.includes("verified by gate-r2"));
+  assert.ok(r.labels.includes("gate-r2"));
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd FP-M2: gate findings open at the round cap are parked, never dropped", async () => {
+  const prog = await run(
+    sdd,
+    { ...BASE, maxRounds: 1 },
+    sddResponder({
+      "gate*": gate0Red(),
+      "progress-r1": { ...progress("progress-r1"), ok: false, problems: ["tree dirty"] },
+    }),
+  );
+  const parkedIds = (x) => x.res.parked.map((f) => f.id);
+  assert.equal(prog.res.status, "parked");
+  assert.ok(parkedIds(prog).includes("gate-0:1"), parkedIds(prog).join(","));
+  assert.ok(parkedIds(prog).includes("progress-r1-1"));
+  const mixed = await run(
+    sdd,
+    { ...BASE, maxRounds: 1 },
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "gate*": gate0Red(),
+      "re-review*": neverAddressed,
+    }),
+  );
+  assert.ok(
+    parkedIds(mixed).includes("gate-0:1") && parkedIds(mixed).includes("spec:S1"),
+    parkedIds(mixed).join(","),
+  );
+});
+
+await test("sdd FP-M3: every sdd-task agent that can run shell commands carries the no-remote rule", async () => {
+  const { calls } = await shellRuns();
+  const crit = await run(
+    sdd,
+    { ...BASE, sensitive: true },
+    sddResponder({ "spec-review": specCV(), checker: checkAll("needsJudgment") }),
+  );
+  const all = calls.concat(crit.calls);
+  const want = [
+    "spec-review",
+    "quality-review",
+    "critic-review",
+    "checker",
+    "ruler-concerns",
+    "ruler-review",
+    "progress-pre",
+    "progress-r1",
+    "re-review-r1",
+  ];
+  for (const l of want) {
+    const c = all.find((x) => x.label === l);
+    assert.ok(c, `no ${l} call`);
+    assert.ok(c.prompt.includes(NO_REMOTE), `${l} lacks the no-remote rule`);
+  }
+  for (const c of all)
+    assert.ok(c.prompt.includes(NO_REMOTE), `${c.label} lacks the no-remote rule`);
+});
+
+await test("sdd FP-M4: review-stages-only text names coverage, not test", async () => {
+  const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
+  assert.ok(!r.logs.some((l) => /lint, typecheck and test\b/.test(l)), r.logs.join(" | "));
+  assert.ok(r.logs.some((l) => /re-runs lint, typecheck and coverage/.test(l)));
+});
+
+await test("sdd FP-M5: criticFocus with the critic off logs a warning and runs no critic", async () => {
+  const r = await run(sdd, { ...BASE, criticFocus: "ZZ" }, sddResponder());
+  assert.ok(!r.labels.includes("critic-review"));
+  assert.ok(
+    r.logs.some((l) => /criticFocus ignored/.test(l)),
+    r.logs.join(" | "),
+  );
+  const on = await run(sdd, { ...BASE, critic: true, criticFocus: "ZZ" }, sddResponder());
+  assert.ok(!on.logs.some((l) => /criticFocus ignored/.test(l)));
+});
+
+await test("append-ledger FP-M7: an already-appended block is skipped; UTF-16 and UTF-8 BOM input decode", async () => {
+  const al = await import(new URL("./append-ledger.mjs", import.meta.url).href);
+  assert.equal(al.appendText("head\nx\ny\n", ["x", "y"]), null, "tail already holds the block");
+  assert.equal(al.appendText("x\ny", ["x", "y"]), null);
+  assert.equal(al.appendText("head\r\nx\r\ny\r\n", ["x", "y"]), null);
+  assert.equal(al.appendText("ax\ny\n", ["x", "y"]), "x\ny\n", "a partial line is not the block");
+  assert.equal(al.appendText("x\ny\nz\n", ["x", "y"]), "x\ny\n", "only the tail counts");
+  const res = {
+    task: 7,
+    ledgerLines: ["- Task 7: complete (commits a..b, review clean, gate green)"],
+  };
+  const json = JSON.stringify(res);
+  const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, "utf16le")]);
+  assert.deepEqual(al.findLedgerLines(al.decodeText(le)), res.ledgerLines, "UTF-16LE");
+  const be = Buffer.from(json, "utf16le").swap16();
+  assert.deepEqual(
+    al.findLedgerLines(al.decodeText(Buffer.concat([Buffer.from([0xfe, 0xff]), be]))),
+    res.ledgerLines,
+    "UTF-16BE",
+  );
+  const u8 = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(json, "utf8")]);
+  assert.equal(al.decodeText(u8), json, "UTF-8 BOM stripped");
+  assert.equal(al.decodeText(Buffer.from(json, "utf8")), json);
 });
 
 // ---------- report ----------

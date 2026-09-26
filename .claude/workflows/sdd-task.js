@@ -8,8 +8,10 @@
  *   repoDir: "C:\\git\\queryModule", branch: "feat/p0-wave-2", base: "<full sha, HEAD before the task>",
  *   briefPath, reportPath, workDir,          // workDir: SDD workspace for review files
  *   scratchRoot, runLabel: "w2-t7",          // agent scratch: <scratchRoot>/<runLabel>/<agent>/
- *   ledgerPath,                              // optional; ledger lines are appended at the end
+ *   ledgerPath,                              // optional; only named in the log: the controller
+ *                                            // appends ledgerLines (scripts/sdd/append-ledger.mjs)
  *   sensitive: false, ui: false,
+ *   critic: false, criticFocus: "...",       // optional: critic on without sensitive or ui; focus text
  *   ids: "BR-001, FR-032", specRefs: "spec 4.1 lines 140-260; ...",
  *   requirementsDoc,                         // optional; default the repo-root Requirements Definition
  *   globalConstraints: "<product and code constraints>",   // required, non-empty; see below
@@ -27,17 +29,19 @@
  * globalConstraints carries product and code constraints only (runtime, TDD, purity, fixtures,
  * logging, docs style). Never process bullets (model and effort plan, PR and push steps, commit
  * trailers, branch naming): every agent treats globalConstraints as binding.
- * Roles: implementer, specReviewer, qualityReviewer, critic, ruler, fixer, escalatedFixer,
- * progressChecker, reReviewer, gate, ledger (Haiku, model only).
+ * Roles: implementer, specReviewer, qualityReviewer, critic, checker, ruler, fixer, escalatedFixer,
+ * progressChecker, reReviewer, gate. There is no ledger role (roles.ledger is logged and ignored).
+ * gate-0 runs in parallel with the reviewers; cannot-verify items go to the checker; a fix round
+ * with only gate or progress findings skips the re-reviewer.
  *
  * Returns { task, status, base, head, commits, rounds, rulings (in force, one per item, each
- * with source "ruler" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
- * questions, concerns, answersUnconsumed?, ledgerLines? } and, when status is "stopped", also
+ * with source "ruler" | "checker" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
+ * questions, concerns, answersUnconsumed?, ledgerLines } and, when status is "stopped", also
  * stopped (a stop point, with the agent that consumes answers there):
  *   "implementer"     -> implementer-continue finishes on top of the existing commits
  *   "precondition"    -> (problem says what: branch, HEAD, dirty tree with the files named; stopPoint
- *                        is precondition:<label>) fix the repo; the failing agent re-runs once as
- *                        implementer-retry or gate-...-retry
+ *                        is precondition:<label>: implementer, gate-0, checker, ruler-review or
+ *                        gate-r<r>) fix the repo; the failing agent re-runs once as <label>-retry
  *   "ruler-concerns"  -> ruler-concerns        "fixer-pre" -> fixer-pre
  *   "review"          -> ruler-review, then the fixers (a reviewer returned nothing)
  *   "ruler-review"    -> ruler-review          "fixer-r<r>" -> fixer-r<r>
@@ -60,10 +64,11 @@
  * decisions from all entries become controller rulings (a later entry wins for the same item):
  * final for the run, never re-escalated (a controller stands on a Critical stands); fix goes to
  * the fixer with its fixInstruction. Null or failed replays: .claude/workflows/README.md fallbacks.
- *   Workflow({ scriptPath: ".claude/workflows/sdd-task.js", args: <same args + answers>,
- *              resumeFromRunId: "<runId>" })
- * Resume after a pause, kill or script edit: the same call without new answers.
- * This script never pushes or merges.
+ *   Workflow({ scriptPath: ".claude/workflows/sdd-task.js", resumeFromRunId: "<runId>",
+ *              args: <same args + answers> })
+ * Resume after a pause, kill or script edit: the same call without new answers. Always pass
+ * args: a resume without them throws at the first required-arg check.
+ * This script never pushes or merges; every shell-running agent is told the same.
  */
 export const meta = {
   name: 'sdd-task',
@@ -71,11 +76,11 @@ export const meta = {
   whenToUse: 'Running one task of an implementation plan on a wave branch in place of hand-dispatched subagent-driven development',
   phases: [
     { title: 'Implement', detail: 'implementer builds the task from its brief with TDD and commits' },
-    { title: 'Rule', detail: 'ruler decides implementer concerns, plan-mandated or contested findings and cannot-verify items' },
-    { title: 'Review', detail: 'spec reviewer, quality reviewer and (sensitive or UI) critic in parallel' },
+    { title: 'Rule', detail: 'ruler decides implementer concerns, plan-mandated or contested findings and cannot-verify items the checker could not settle' },
+    { title: 'Review', detail: 'spec reviewer, quality reviewer, critic (sensitive, UI or critic: true) and gate-0 in parallel' },
+    { title: 'Check', detail: 'checker runs the suggested check for each cannot-verify item' },
     { title: 'Fix', detail: 'fixer, progress checker and re-reviewer per round, up to maxRounds' },
-    { title: 'Gate', detail: 'independent lint, typecheck, test, head and clean-tree check' },
-    { title: 'Ledger', detail: 'append the task lines to the SDD ledger' },
+    { title: 'Gate', detail: 'independent lint, typecheck, coverage, head and clean-tree check' },
   ],
 }
 
@@ -90,6 +95,17 @@ for (const k of ['task', 'title', 'repoDir', 'branch', 'base', 'briefPath', 'rep
 const N = A.task
 const SENSITIVE = !!A.sensitive
 const UI = !!A.ui
+// critic: true turns the critic on without sensitive or ui; no tier or ruler rule changes with it.
+if (A.critic !== undefined && A.critic !== null && typeof A.critic !== 'boolean') {
+  throw new Error(`sdd-task: critic must be a boolean (true or false), got ${JSON.stringify(A.critic)}`)
+}
+if (A.criticFocus !== undefined && A.criticFocus !== null && (typeof A.criticFocus !== 'string' || A.criticFocus.trim() === '')) {
+  throw new Error('sdd-task: criticFocus must be a non-empty string when given')
+}
+const CRITIC_FOCUS = A.criticFocus ? A.criticFocus.trim() : ''
+const CRITIC = SENSITIVE || UI || A.critic === true
+if (CRITIC_FOCUS && !CRITIC) log('review: criticFocus ignored (critic off: set critic: true, sensitive or ui to run it)')
+const DEFAULT_CRITIC_FOCUS = 'correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 
 let MAX_ROUNDS = 5
@@ -121,7 +137,7 @@ if (MAX_ROUNDS < 1 || MAX_ROUNDS > 8) {
 // point that runs. So an agent's prompt holds only the entries for its own stop point, and a
 // later entry never changes an earlier agent's prompt (earlier calls replay from cache).
 // Decisions from all entries become controller rulings; a later entry wins for the same item.
-const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
+const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>'
 function stopPos(at) {
   const fixed = { implementer: 0, 'ruler-concerns': 1, 'fixer-pre': 2, review: 3, 'ruler-review': 4 }
   if (at in fixed) return fixed[at]
@@ -132,9 +148,14 @@ function stopPos(at) {
   if (m) return 11 + 2 * Number(m[1])
   return -1
 }
-const PRECONDITION_AT = /^precondition(?::(implementer|gate-0|gate-r[1-9]\d*))?$/
+const PRECONDITION_AT = /^precondition(?::(implementer|gate-0|checker|ruler-review|gate-r[1-9]\d*))?$/
 let ANSWERS = null
 const CONTROLLER = new Map()
+// Items decided in entries at or before the review stop (implementer .. review, and the
+// implementer and gate-0 precondition stops). Only these keep an item away from the checker;
+// later decisions apply after the checker and override its result, so the checker prompt stays
+// cache-stable when a ruler-review stop is answered.
+const EARLY_DECIDED = new Set()
 if (A.answers !== undefined && A.answers !== null) {
   const list = Array.isArray(A.answers) ? A.answers : [A.answers] // a single object is a one-entry list
   if (!list.length) throw new Error('sdd-task: answers is an empty list')
@@ -147,11 +168,13 @@ if (A.answers !== undefined && A.answers !== null) {
     const text = typeof e.text === 'string' ? e.text.trim() : ''
     const decisions = Array.isArray(e.decisions) ? e.decisions : []
     if (!text && !decisions.length) throw new Error(`sdd-task: answers[${i}] needs text or decisions (or both)`)
+    if (at === 'precondition' && decisions.length) throw new Error(`sdd-task: answers[${i}] carries decisions at a plain precondition stop; use the returned stopPoint (for example precondition:checker) as at`)
     for (const d of decisions) {
       if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
         throw new Error(`sdd-task: answers[${i}].decisions entry ${JSON.stringify(d)} needs item, decision (fix | stands | verified) and reason`)
       }
       CONTROLLER.set(d.item, { decision: d.decision, reason: d.reason, fixInstruction: d.fixInstruction || '' }) // later entry wins
+      if (pre ? ['', 'implementer', 'gate-0'].includes(pre[1] || '') : stopPos(at) <= 3) EARLY_DECIDED.add(d.item)
     }
     return { index: i, at, pos: pre ? -1 : stopPos(at), preLabel: pre ? pre[1] || '' : null, text, delivered: !text }
   })
@@ -202,10 +225,10 @@ const DEFAULTS = SENSITIVE
       qualityReviewer: { model: 'sonnet', effort: 'high' },
       critic: { model: 'opus', effort: 'medium' },
       ruler: { model: 'opus', effort: 'medium' },
+      checker: { model: 'sonnet', effort: 'low' },
       progressChecker: { model: 'sonnet', effort: 'low' },
       reReviewer: { model: 'opus', effort: 'medium' },
       gate: { model: 'sonnet', effort: 'low' },
-      ledger: { model: 'haiku' },
     }
   : {
       implementer: { model: 'sonnet', effort: 'medium' },
@@ -213,12 +236,18 @@ const DEFAULTS = SENSITIVE
       qualityReviewer: { model: 'sonnet', effort: 'high' },
       critic: { model: 'opus', effort: 'medium' },
       ruler: { model: 'opus', effort: 'low' },
+      checker: { model: 'sonnet', effort: 'low' },
       progressChecker: { model: 'sonnet', effort: 'low' },
       reReviewer: { model: 'sonnet', effort: 'medium' },
       gate: { model: 'sonnet', effort: 'low' },
-      ledger: { model: 'haiku' },
     }
-const OVR = A.roles || {}
+const OVR = Object.assign({}, A.roles || {})
+// The ledger agent was removed (post-pilot): the controller appends ledgerLines with
+// scripts/sdd/append-ledger.mjs. An old roles.ledger override is ignored, not an error.
+if (OVR.ledger !== undefined) {
+  log('roles: roles.ledger ignored (no ledger agent; the controller appends ledgerLines)')
+  delete OVR.ledger
+}
 
 function stepUp(r) {
   const key = `${r.model}/${r.effort || ''}`
@@ -311,6 +340,31 @@ const REVIEW = {
   },
   required: ['verdict', 'findings', 'cannotVerify'],
 }
+// Agents that run after gate-0 (checker, ruler-review) report the repository state they leave.
+const POST_GATE_PROPS = {
+  head: { type: 'string', description: 'full sha from git rev-parse HEAD, run just before you reply' },
+  treeClean: { type: 'boolean', description: 'true only when git status --porcelain prints nothing' },
+  dirtyFiles: { type: 'array', items: { type: 'string' }, description: 'each path git status --porcelain prints; [] when clean' },
+}
+const CHECK = {
+  type: 'object',
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'the item id exactly as given' },
+          result: { type: 'string', enum: ['verified', 'failed', 'needsJudgment'] },
+          evidence: { type: 'string', description: 'the command you ran and the lines of its output that decide the result' },
+        },
+        required: ['id', 'result', 'evidence'],
+      },
+    },
+    ...POST_GATE_PROPS,
+  },
+  required: ['results', 'head', 'treeClean', 'dirtyFiles'],
+}
 const RULINGS = {
   type: 'object',
   properties: {
@@ -333,6 +387,11 @@ const RULINGS = {
   },
   required: ['rulings'],
 }
+const RULINGS_POST = {
+  type: 'object',
+  properties: Object.assign({}, RULINGS.properties, POST_GATE_PROPS),
+  required: RULINGS.required.concat(['head', 'treeClean', 'dirtyFiles']),
+}
 const PROGRESS = {
   type: 'object',
   properties: {
@@ -341,8 +400,9 @@ const PROGRESS = {
     head: { type: 'string', description: 'full sha from git rev-parse HEAD' },
     newCommits: COMMITS,
     testCount: { type: 'integer', description: 'passing tests in the full run; -1 if the run failed' },
+    guardHits: { type: 'array', items: { type: 'string' }, description: 'check 6: each gate-weakening change, "file:line: what"; [] when none' },
   },
-  required: ['ok', 'problems', 'head', 'newCommits', 'testCount'],
+  required: ['ok', 'problems', 'head', 'newCommits', 'testCount', 'guardHits'],
 }
 const REREVIEW = {
   type: 'object',
@@ -370,23 +430,40 @@ const GATE = {
   },
   required: ['ok', 'head', 'problems'],
 }
-const LEDGER = {
-  type: 'object',
-  properties: { ok: { type: 'boolean' }, linesAppended: { type: 'integer' } },
-  required: ['ok', 'linesAppended'],
-}
 
 // ---------- shared prompt pieces ----------
 const GIT = `Shell: Git Bash. Run every git and shell command in ${REPO} (cd there, or use git -C "${REPO}"). Branch: ${A.branch}.`
+// Every agent in this script can run shell commands, so every prompt carries NO_REMOTE through
+// HOUSE (W2 incident: an implementer pushed and opened a PR after reading project memory).
+const NO_REMOTE = 'Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.'
 const HOUSE = [
   'Rules:',
   '- Never dispatch subagents. Do all of this work yourself.',
   '- Finish every command before you reply; leave nothing running in the background.',
   '- No filesystem-wide searches: read the files named here and the files they lead you to.',
-  '- Do not push, open a PR or merge.',
+  `- ${NO_REMOTE}`,
 ].join('\n')
 const READONLY = 'Your review is read-only on this checkout: do not change the working tree, the index, HEAD or any branch. Write only your review file and your scratch directory.'
 const TRAILER = `End every commit message with the attribution trailer your session's system reminder gives; if it gives none, use:\n${A.trailer}`
+// Implementer and fixers carry SELF_CHECK.
+const SELF_CHECK = 'Before each commit run pnpm lint (fix formatting with pnpm exec biome format --write <files> or pnpm exec biome check --write <files> on the changed files only) and pnpm coverage (the full suite with coverage thresholds). Do not commit on red. Report the commands and their results.'
+// The repository-state check for agents that run after gate-0 (checker, ruler-review).
+const postGateCheck = (expected) => `Before you reply, run git rev-parse HEAD and git status --porcelain in ${REPO}. git rev-parse HEAD must equal ${expected}. Report head (full sha), treeClean (true only when git status --porcelain prints nothing) and dirtyFiles (each path it prints). You must leave both exactly as you found them.`
+// Returns '' when res left the repository as gate-0 saw it, else what changed.
+function postGateProblem(res, expected) {
+  if (!res) return ''
+  const h = String(res.head || ''), e = String(expected)
+  const moved = h.length < Math.min(7, e.length) || !(h.startsWith(e) || e.startsWith(h))
+  const dirty = res.treeClean !== true
+  if (!moved && !dirty) return ''
+  const parts = []
+  if (moved) parts.push(`HEAD is ${h || '(not reported)'}, expected ${e} (the head gate-0 checked)`)
+  if (dirty) parts.push(`tree dirty: ${(res.dirtyFiles || []).join(', ') || '(files not reported)'}`)
+  return parts.join('; ')
+}
+// Moves that make a gate green without fixing the cause (critic I2). Fixers are told not to make
+// them; the progress checker flags them, and a flag brings the re-reviewer into the next round.
+const GATE_GUARD = 'Never change vitest config files (vitest*.config.*), biome.json, tsconfig*.json, package.json scripts or coverage thresholds or excludes, and never add suppression comments (biome-ignore, @ts-ignore, @ts-expect-error, istanbul ignore, v8 ignore, c8 ignore, eslint-disable) or delete the code a gate complains about, unless the brief or a ruling in force asks for it.'
 const SENSITIVE_RULE = 'This task is sensitive. On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.'
 
 function diffStep(base, head, out) {
@@ -400,7 +477,7 @@ function diffStep(base, head, out) {
   ].join('\n')
 }
 
-const TESTS_RULE = 'The implementer already ran the tests and put the evidence in the report. Do not re-run the suite (an independent gate runs lint, typecheck and tests after review). Run a focused test only for a specific doubt no existing run answers. Warnings or noise in reported test output are findings. Missing or garbled evidence is a gap to report, not a reason to re-run.'
+const TESTS_RULE = 'The implementer already ran the tests and put the evidence in the report. Do not re-run the suite (an independent gate runs pnpm lint, pnpm typecheck and pnpm coverage on this same head). Run a focused test only for a specific doubt no existing run answers. Warnings or noise in reported test output are findings. Missing or garbled evidence is a gap to report, not a reason to re-run.'
 const CALIBRATION = [
   'Severity: critical = broken behaviour, security or data risk; important = the task cannot be trusted until fixed (incorrect or fragile behaviour, a missed requirement, swallowed errors, tests that assert nothing, verbatim duplication of a logic block); minor = polish, broader coverage, style.',
   'If the brief or plan explicitly mandates something this rubric calls a defect, it is still a finding: report it as important with planMandated: true. The plan does not grade its own work.',
@@ -479,7 +556,7 @@ function rulingsText() {
   if (!list.length) return ''
   return [
     'Rulings in force (binding; never reverse one; a finding that contradicts one sets contestsRuling to its id):',
-    ...list.map((r) => `* [${r.item}] ${r.decision}${r.source === 'controller' ? ' (controller)' : ''}: ${r.reason}`),
+    ...list.map((r) => `* [${r.item}] ${r.decision}${r.source === 'ruler' ? '' : ` (${r.source})`}: ${r.reason}`),
   ].join('\n')
 }
 
@@ -489,7 +566,7 @@ function ledgerLines(result) {
   const out = []
   const b7 = String(A.base).slice(0, 7)
   const h7 = String(result.head || A.base).slice(0, 7)
-  for (const r of inForce()) out.push(`- Task ${N}: Ruling${r.source === 'controller' ? ' (controller)' : ''}: ${r.what} \u2014 ${r.decision}: ${r.reason} \u2014 ${r.costIfWrong}`)
+  for (const r of inForce()) out.push(`- Task ${N}: Ruling${r.source === 'ruler' ? '' : ` (${r.source})`}: ${r.what} \u2014 ${r.decision}: ${r.reason} \u2014 ${r.costIfWrong}`)
   for (const s of state.superseded) out.push(`- Task ${N}: Ruling superseded: ${s.item} (${s.old.decision}) by ${s.new.item} (${s.new.decision}${s.new.source === 'controller' ? ', controller' : ''}): ${s.new.reason}`)
   for (const c of state.carryForward) out.push(`- Task ${N}: carry forward: ${c}`)
   for (const l of state.roundLog) out.push(`- Task ${N}: ${l}`)
@@ -510,27 +587,11 @@ async function finish(result) {
       result.answersUnconsumed = true
     }
   }
-  if (A.ledgerPath) {
-    phase('Ledger')
-    const lines = ledgerLines(result)
-    const res = await agent(
-      [
-        `Append these ${lines.length} lines, exactly as written, after the last line of ${A.ledgerPath}.`,
-        'Use the Edit tool to append only. Never use Write on this file, never rewrite or reorder existing lines, and keep the final newline. Do not run git.',
-        '',
-        '<lines>',
-        ...lines,
-        '</lines>',
-        '',
-        'Return ok: true and the number of lines appended.',
-      ].join('\n'),
-      { label: 'ledger', phase: 'Ledger', schema: LEDGER, ...role('ledger') },
-    )
-    if (!res || !res.ok) log(`ledger: append to ${A.ledgerPath} failed; the lines are in the return value (ledgerLines)`)
-    result.ledgerLines = lines
-  } else {
-    log('ledger: no ledgerPath, skipped')
-  }
+  // No ledger agent: the lines come back as ledgerLines and the controller appends them with
+  // node scripts/sdd/append-ledger.mjs <workflow-output-file> <ledgerPath>.
+  const lines = ledgerLines(result)
+  result.ledgerLines = lines
+  log(A.ledgerPath ? `ledger: controller appends ${lines.length} lines to ${A.ledgerPath}` : `ledger: ${lines.length} lines returned as ledgerLines (no ledgerPath)`)
   return result
 }
 
@@ -558,7 +619,9 @@ function build(status, extra) {
 // ---------- ruler ----------
 // items: [{ id, kind, text, severity?, finding?, contests? }]. Controller decisions settle their items
 // first; the rest go to the ruler. Returns { fixes:[finding], escalated:[ruling], unruled:[item] }.
-async function runRuler(allItems, label, headNow, pos) {
+// postGateHead: set for ruler-review (it runs after gate-0); the ruler then reports head and tree,
+// and a moved head or dirty tree returns { precondition } without applying any ruling.
+async function runRuler(allItems, label, headNow, pos, postGateHead) {
   const pre = applyController(allItems)
   const items = pre.rest
   if (!items.length) {
@@ -566,31 +629,44 @@ async function runRuler(allItems, label, headNow, pos) {
     return { fixes: pre.fixes, escalated: [], unruled: [] }
   }
   log(`rule: ${items.length} item(s) to the ruler (${tier('ruler')})`)
-  const res = await agent(
-    [
-      `You are the ruler for Task ${N}: ${A.title}. Rule on each item below. The spec is binding; the plan is not when it conflicts with the spec.`,
-      `Read only what you need: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the spec sections ${A.specRefs}, the requirements doc "${REQ_DOC}" for IDs ${A.ids || '(none given)'}, and the specific files an item names. Review files for this task are in ${A.workDir} (task-${N}-review-*.md).`,
-      A.carries ? `Controller rulings and interfaces already in force:\n${A.carries}` : '',
-      rulingsText(),
-      answersFor(pos),
-      `Code under judgment: ${A.base}..${headNow}. ${GIT}`,
-      '',
-      'Items:',
-      ...items.map((it) => `- [${it.id}] (${it.kind}${it.severity ? `, ${it.severity}` : ''}) ${it.text}`),
-      '',
-      'Decide each item:',
-      '- fix: the code must change. Give fixInstruction: the smallest change that satisfies the spec.',
-      '- stands: the code stays. Give the reason (spec or plan citation).',
-      '- verified: a cannot-verify item you checked yourself and that passed. Put the command you ran and its result in command. A check that fails is fix, not verified.',
-      '- escalate: only when every path is a guess, or the action is irreversible or security-sensitive.',
-      SENSITIVE ? SENSITIVE_RULE : '',
-      'costIfWrong: one line, what it costs if your ruling is wrong. carryForward: obligations a later task must meet because of your ruling (e.g. "Task 8 must show tsc -b exit 0"); omit when none.',
-      'You are read-only: do not edit, commit or change any git state. Scratch, if needed: ' + scratch(label),
-      HOUSE,
-      'Return one ruling per item, with item set to the id exactly as given.',
-    ].filter(Boolean).join('\n'),
-    { label, phase: 'Rule', schema: RULINGS, ...role('ruler') },
-  )
+  const rulerPrompt = [
+    `You are the ruler for Task ${N}: ${A.title}. Rule on each item below. The spec is binding; the plan is not when it conflicts with the spec.`,
+    `Read only what you need: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the spec sections ${A.specRefs}, the requirements doc "${REQ_DOC}" for IDs ${A.ids || '(none given)'}, and the specific files an item names. Review files for this task are in ${A.workDir} (task-${N}-review-*.md).`,
+    A.carries ? `Controller rulings and interfaces already in force:\n${A.carries}` : '',
+    rulingsText(),
+    answersFor(pos),
+    `Code under judgment: ${A.base}..${headNow}. ${GIT}`,
+    '',
+    'Items:',
+    ...items.map((it) => `- [${it.id}] (${it.kind}${it.severity ? `, ${it.severity}` : ''}) ${it.text}`),
+    '',
+    'Decide each item:',
+    '- fix: the code must change. Give fixInstruction: the smallest change that satisfies the spec.',
+    '- stands: the code stays. Give the reason (spec or plan citation).',
+    '- verified: a cannot-verify item you checked yourself and that passed. Put the command you ran and its result in command. A check that fails is fix, not verified.',
+    '- escalate: only when every path is a guess, or the action is irreversible or security-sensitive.',
+    SENSITIVE ? SENSITIVE_RULE : '',
+    'costIfWrong: one line, what it costs if your ruling is wrong. carryForward: obligations a later task must meet because of your ruling (e.g. "Task 8 must show tsc -b exit 0"); omit when none.',
+    'You are read-only: do not edit, commit or change any git state. Scratch, if needed: ' + scratch(label),
+    postGateHead ? postGateCheck(postGateHead) : '',
+    HOUSE,
+    'Return one ruling per item, with item set to the id exactly as given.',
+  ].filter(Boolean).join('\n')
+  const schema = postGateHead ? RULINGS_POST : RULINGS
+  let res = await agent(rulerPrompt, { label, phase: 'Rule', schema, ...role('ruler') })
+  if (postGateHead) {
+    let bad = postGateProblem(res, postGateHead)
+    const ans = bad ? preconditionAnswers(label) : ''
+    if (ans) {
+      log(`rule: cached ${label} left the repository changed (${bad}); retrying with the controller answer`)
+      res = await agent(`${rulerPrompt}\n\n${ans}`, { label: `${label}-retry`, phase: 'Rule', schema, ...role('ruler') })
+      bad = postGateProblem(res, postGateHead)
+    }
+    if (bad) {
+      log(`rule: ${label} precondition failed after gate-0: ${bad}; stopping, no ruling applied`)
+      return { fixes: [], escalated: [], unruled: [], precondition: `${label}: ${bad}` }
+    }
+  }
   const byId = new Map()
   for (const r of (res && res.rulings) || []) byId.set(r.item.replace(/^\[|\]$/g, '').trim(), r)
   const fixes = pre.fixes.slice(), escalated = [], unruled = []
@@ -626,7 +702,9 @@ async function runFixer(findings, label, roleName, roundTag, round) {
       'Findings to fix (all of them; a ruler fixInstruction is the change to make):',
       findingsText(findings),
       '',
-      'TDD: for each behavioural finding, first write or tighten a test that fails for the defect, run it and see it fail, then fix, then see it pass. Run the tests that cover the amended code, then the full suite once before committing. A gate finding (lint, typecheck, test, head, tree) is fixed at its cause.',
+      'TDD: for each behavioural finding, first write or tighten a test that fails for the defect, run it and see it fail, then fix, then see it pass. Run the tests that cover the amended code while iterating. A gate finding (lint, typecheck, coverage, head, tree) is fixed at its cause.',
+      SELF_CHECK,
+      GATE_GUARD,
       `Append a "## Fix ${roundTag}" section to ${A.reportPath}: per finding id, what you changed (file:line), the covering tests, the commands and their output (RED and GREEN).`,
       `Commit only the files these fixes touch (git add <paths>, never git add -A) with a message "fix(task-${N}): ${roundTag} review findings" and a body listing the finding ids. ${TRAILER}`,
       GIT,
@@ -634,6 +712,30 @@ async function runFixer(findings, label, roleName, roundTag, round) {
       'If you cannot fix a finding, say which and why in concerns (kind correctness) and use DONE_WITH_CONCERNS; use BLOCKED or NEEDS_CONTEXT with questions only when you cannot proceed at all.',
     ].filter(Boolean).join('\n'),
     { label, phase: 'Fix', schema: WORK, ...role(roleName) },
+  )
+}
+
+// Cannot-verify items: one read-only checker runs each item's suggested check.
+async function runChecker(items, headNow, expectedHead, answerText, label) {
+  return agent(
+    [
+      `You are the checker for Task ${N}: ${A.title}. Reviewers could not verify the items below from the diff alone. Run each item's suggested check (or the closest equivalent) and report what you found.`,
+      `Context as you need it: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the requirements doc "${REQ_DOC}". Code under check: ${A.base}..${headNow}. ${GIT}`,
+      '',
+      'Items:',
+      ...items.map((it) => `- [${it.id}] ${it.text}`),
+      '',
+      'Per item, result:',
+      '- verified: the check ran and passed. evidence: the command and the output lines that show it.',
+      '- failed: the check ran and failed. evidence: the command and the failing lines.',
+      '- needsJudgment: the check cannot settle the item (it needs a reading of the spec or a design decision). evidence: why.',
+      `You are read-only: you may run commands (tests, grep, git log, git diff, git show), but never edit a file, stage, commit or change any git state. Scratch, if needed: ${scratch('checker')}`,
+      postGateCheck(expectedHead),
+      HOUSE,
+      'Return one result per item, with id set to the id exactly as given.',
+      ...(answerText ? ['', answerText] : []),
+    ].join('\n'),
+    { label, phase: 'Check', schema: CHECK, ...role('checker') },
   )
 }
 
@@ -647,6 +749,7 @@ async function runProgress(label, roundBase, priorTests) {
       `3. No test was skipped or focused: git diff ${roundBase}..HEAD adds no .skip( / .only( / it.skip / describe.only / test.todo (grep the + lines).`,
       `4. No test file deleted or emptied: git diff --diff-filter=D --name-only ${roundBase}..HEAD and git diff --numstat ${roundBase}..HEAD show no *.test.* or *.spec.* file deleted or left with no content.`,
       `5. Test count not lower: run pnpm test once (full suite). Report the passing count as testCount (-1 if the run failed). Prior evidence: ${priorTests}. Lower than that, or any failure, is a problem.`,
+      `6. No gate weakening (report each hit in guardHits as "file:line: what", not in problems): git diff ${roundBase}..HEAD must not touch vitest config files (vitest*.config.*), biome.json, tsconfig*.json, package.json scripts, or coverage thresholds or excludes, and its + lines must not add biome-ignore, @ts-ignore, @ts-expect-error, istanbul ignore, v8 ignore, c8 ignore or eslint-disable. Flag a hit even when the brief may allow it; a reviewer decides.`,
       'head: git rev-parse HEAD (full sha).',
       'You are read-only: change nothing, commit nothing. Scratch, if needed: ' + scratch(label),
       HOUSE,
@@ -655,7 +758,9 @@ async function runProgress(label, roundBase, priorTests) {
   )
 }
 
-async function runReReview(findings, label, roundBase, headNow, r) {
+// gateFindings: gate-* findings still open in a mixed round. The re-reviewer sees them but does not
+// verdict them (it does not re-run the suite); gate-r<r> decides them.
+async function runReReview(findings, gateFindings, label, roundBase, headNow, r) {
   const out = wjoin(`task-${N}-re-review-${r}.md`)
   return agent(
     [
@@ -665,6 +770,7 @@ async function runReReview(findings, label, roundBase, headNow, r) {
       '',
       'Findings under verification:',
       findingsText(findings),
+      gateFindings.length ? `\nGate findings, not yours to verdict (each is verified by gate-r${r}, which re-runs lint, typecheck and coverage); leave them out of verdicts:\n${findingsText(gateFindings).replace(/^- /gm, '* ')}` : '',
       '',
       diffStep(roundBase, headNow, join(scratch(label), 'fix.diff')),
       READONLY,
@@ -689,7 +795,7 @@ async function runGate(label, expectedHead, answerText) {
       '2. git status --porcelain prints nothing.',
       '3. pnpm lint exits 0.',
       '4. pnpm typecheck exits 0.',
-      '5. pnpm test exits 0.',
+      '5. pnpm coverage exits 0 (it runs the full suite and enforces the coverage thresholds).',
       `Run each command once, in that order, saving its full output under ${scratch(label)}. For a failure, put the command and its first error lines in problems (file paths, rule names and messages only; never field values or payloads).`,
       'head: git rev-parse HEAD (full sha).',
       'You are read-only: change nothing, commit nothing.',
@@ -699,10 +805,37 @@ async function runGate(label, expectedHead, answerText) {
   )
 }
 
+// Settles one gate result: a precondition retry when answered, then stop (null or precondition), green,
+// or red with problems as open findings. Returns { stop } | { ok: true } | { ok: false, findings }.
+async function gateOutcome(gl, g, expectedHead) {
+  const pre = g && g.preconditionFailed ? preconditionAnswers(gl) : ''
+  if (pre) {
+    log(`gate: cached precondition failure (${g.preconditionFailed}); retrying ${gl} with the controller answer`)
+    g = await runGate(`${gl}-retry`, expectedHead, pre)
+  }
+  if (!g) {
+    log(`gate: ${gl} returned null (skipped or died); stopping`)
+    return { stop: await finish(build('stopped', { stopped: gl, questions: state.questions.concat([`${gl} returned no result; re-run (answers at "${gl}" go to the next fixer round)`]) })) }
+  }
+  if (g.preconditionFailed) {
+    log(`gate: ${gl} precondition failed: ${g.preconditionFailed}; stopping, not a finding`)
+    return { stop: await finish(build('stopped', { stopped: 'precondition', stopPoint: `precondition:${gl}`, problem: `${gl}: ${g.preconditionFailed}` })) }
+  }
+  if (g.head) state.head = g.head
+  if (g.ok) {
+    log(`gate: ${gl} green at ${String(state.head).slice(0, 7)}`)
+    return { ok: true }
+  }
+  const problems = g.problems.length ? g.problems : ['gate reported not ok but listed no problem; re-check lint, typecheck and coverage']
+  log(`gate: ${gl} red: ${problems.join('; ')}`)
+  state.roundLog.push(`${gl} red (${problems.length} problem(s))`)
+  return { ok: false, findings: problems.map((p, k) => ({ id: `${gl}:${k + 1}`, severity: 'important', file: '', line: '', summary: `gate: ${p}`, fix: 'fix the cause so the gate check passes', planMandated: false, contestsRuling: '' })) }
+}
+
 // ================= 1. Implement =================
 phase('Implement')
 log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; ${SENSITIVE ? 'sensitive' : 'ordinary'}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}`)
-log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${SENSITIVE || UI ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}, ledger ${tier('ledger')}`)
+log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}`)
 
 // The implementer prompt never carries answers, so a re-run with answers replays it from cache.
 const implPrompt = [
@@ -713,7 +846,8 @@ const implPrompt = [
     `Global constraints from the plan (binding):\n${A.globalConstraints}`,
     '',
     `Precondition: git branch --show-current is ${A.branch}, git rev-parse HEAD is ${A.base}, and git status --porcelain prints nothing. If any is not so, change nothing, set preconditionFailed to what you found (for a dirty tree, name each untracked or modified file from git status --porcelain), and report BLOCKED.`,
-    'Your job: implement exactly what the brief specifies, nothing more. TDD: write the failing test, run it and see it fail for the expected reason, implement, see it pass. While iterating run the focused test; run the full suite once before committing.',
+    'Your job: implement exactly what the brief specifies, nothing more. TDD: write the failing test, run it and see it fail for the expected reason, implement, see it pass. While iterating run the focused test.',
+    SELF_CHECK,
     `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
     GIT,
     HOUSE,
@@ -722,7 +856,7 @@ const implPrompt = [
     'Concerns: kind planVsSpec when the brief conflicts with the spec or requirements; kind correctness when you doubt your result is right; kind observation for anything else worth noting. A planVsSpec or correctness concern goes to a ruler before review.',
     '',
     'Before reporting, self-review your diff: completeness against the brief, names, YAGNI, existing patterns, tests that verify behaviour, pristine test output. Fix what you find.',
-    `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the full-suite result, self-review findings, concerns.`,
+    `Write your full report to ${A.reportPath}: what you implemented, files changed, TDD evidence (RED: command, failing output, why expected; GREEN: command, passing output), the pnpm lint and pnpm coverage results, self-review findings, concerns.`,
     'Return: status, commits (full sha + subject), head (git rev-parse HEAD), a one-line test summary, concerns, questions.',
   ].filter(Boolean).join('\n')
 // The implement stage: the implementer, its precondition retry and its continuation. Returns
@@ -762,9 +896,10 @@ async function implementStage() {
         impl.concerns.length ? `Its concerns:\n${impl.concerns.map((c) => `- ${c.kind}: ${c.text}`).join('\n')}` : '',
         contAnswers,
         '',
-        'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green). Run the full suite once before committing.',
+        'Finish the task exactly as the brief specifies, with TDD (failing test first, seen failing, then green).',
+        SELF_CHECK,
         `Commit only this task's files (git add <paths>, never git add -A) with the brief's commit message. ${TRAILER}`,
-        `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the full-suite result.`,
+        `Append a "## Continuation" section to ${A.reportPath} with what you did, TDD evidence and the pnpm lint and pnpm coverage results.`,
         GIT,
         HOUSE,
         'Return: status, commits you created (full sha + subject), head, a one-line test summary, concerns, questions. BLOCKED or NEEDS_CONTEXT only when the answers still leave you unable to proceed.',
@@ -782,7 +917,7 @@ async function implementStage() {
 let impl
 if (IMPLEMENTED) {
   log(`implement: skipped (implemented.head ${IMPLEMENTED.head}); reviewing ${A.base}..${IMPLEMENTED.head}, review stages only`)
-  impl = { status: 'DONE', commits: [], head: IMPLEMENTED.head, testSummary: 'review-only re-run: no implementer evidence in this run; the gate re-runs lint, typecheck and test', concerns: [], questions: [] }
+  impl = { status: 'DONE', commits: [], head: IMPLEMENTED.head, testSummary: 'review-only re-run: no implementer evidence in this run; the gate re-runs lint, typecheck and coverage', concerns: [], questions: [] }
 } else {
   const stage = await implementStage()
   if (stage.stop) return stage.stop
@@ -831,6 +966,7 @@ if (implConcerns.length) {
       state.head = pc.head
       state.commits.push(...pc.newCommits)
       if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
+      if (pc.guardHits.length) state.preReviewProblems.push(...pc.guardHits.map((g) => `gate weakening: ${g}`))
       if (!pc.ok) {
         state.preReviewProblems.push(...pc.problems)
         log(`fix: pre-review progress problems (passed to the reviewers): ${pc.problems.join('; ')}`)
@@ -859,7 +995,7 @@ const common = (roleLabel) => [
   READONLY,
   TESTS_RULE,
   CALIBRATION,
-  'cannotVerify: requirements you cannot verify from the diff alone, each with the check the ruler should run. Do not broaden your search to settle them.',
+  `cannotVerify: requirements you cannot verify from the diff alone, each with the check to run. Do not broaden your search to settle them. The gate independently runs pnpm lint, pnpm typecheck and pnpm coverage on this same head: never list lint, typecheck, tests, coverage or the report's test counts as cannotVerify.`,
   HOUSE,
 ].filter(Boolean).join('\n')
 
@@ -892,12 +1028,17 @@ const reviewers = [
     ].join('\n'),
   },
 ]
-if (SENSITIVE || UI) {
+if (CRITIC) {
+  const focusParts = []
+  if (SENSITIVE) focusParts.push('sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)')
+  if (UI) focusParts.push('UI risk (accessibility, keyboard paths, focus, states the brief names, regressions to existing components, tokens instead of literals)')
+  if (CRITIC_FOCUS) focusParts.push(CRITIC_FOCUS)
+  if (!focusParts.length) focusParts.push(DEFAULT_CRITIC_FOCUS)
   reviewers.push({
     key: 'critic',
     roleName: 'critic',
     prompt: [
-      `You are the critic for Task ${N}: ${A.title}. Read the whole diff adversarially: assume something is wrong and try to find it. Focus: ${SENSITIVE ? 'sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)' : ''}${SENSITIVE && UI ? '; ' : ''}${UI ? 'UI risk (accessibility, keyboard paths, focus, states the brief names, regressions to existing components, tokens instead of literals)' : ''}.`,
+      `You are the critic for Task ${N}: ${A.title}. Read the whole diff adversarially: assume something is wrong and try to find it. Focus: ${focusParts.join('; ')}.`,
       common('critic'),
       '',
       'Report only real defects with a concrete failure path; say how it fails. Spec gaps you notice go in too, with the spec citation.',
@@ -906,18 +1047,27 @@ if (SENSITIVE || UI) {
     ].join('\n'),
   })
 } else {
-  log('review: critic off (task is neither sensitive nor UI)')
+  log('review: critic off (task is neither sensitive nor UI, and critic is not set)')
 }
 
-const reviews = await parallel(reviewers.map((r) => () => agent(r.prompt, { label: `${r.key}-review`, phase: 'Review', schema: REVIEW, ...role(r.roleName) })))
+// gate-0 runs in parallel with the reviewers on the same head (reviewHead).
+log(`review: ${reviewers.map((r) => r.key).join(', ')} and gate-0 in parallel on ${String(reviewHead).slice(0, 7)}`)
+const reviewAndGate = await parallel([
+  ...reviewers.map((r) => () => agent(r.prompt, { label: `${r.key}-review`, phase: 'Review', schema: REVIEW, ...role(r.roleName) })),
+  () => runGate('gate-0', reviewHead, ''),
+])
+const reviews = reviewAndGate.slice(0, reviewers.length)
 const dead = reviewers.filter((r, i) => !reviews[i]).map((r) => r.key)
 if (dead.length) {
   log(`review: ${dead.join(', ')} returned null (skipped or died); stopping, no clean verdict without every reviewer`)
   return await finish(build('stopped', { stopped: 'review', questions: state.questions.concat([`reviewer(s) returned no result: ${dead.join(', ')}; re-run to resume`]) }))
 }
+const gate0 = await gateOutcome('gate-0', reviewAndGate[reviewers.length], reviewHead)
+if (gate0.stop) return gate0.stop
 
 let open = []
 const toRule = []
+const cannotVerify = []
 const where = (f) => `${f.file}${f.line ? ':' + f.line : ''}`
 reviewers.forEach((r, i) => {
   const rv = reviews[i]
@@ -932,13 +1082,58 @@ reviewers.forEach((r, i) => {
     else if (g.planMandated) toRule.push({ id: g.id, kind: 'plan-mandated finding', severity: g.severity, text, finding: g })
     else open.push(g)
   }
-  rv.cannotVerify.forEach((c, k) => toRule.push({ id: `${r.key}:CV${k + 1}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` }))
+  rv.cannotVerify.forEach((c, k) => cannotVerify.push({ id: `${r.key}:CV${k + 1}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` }))
 })
+for (const f of gate0.findings || []) open.push(f)
+
+// Cannot-verify items: controller decisions settle theirs first; the checker runs the rest.
+// verified -> a checker ruling; failed -> an open important finding; needsJudgment or no result -> the ruler.
+const gateHead = state.head
+if (cannotVerify.length) {
+  const pre = applyController(cannotVerify.filter((it) => EARLY_DECIDED.has(it.id)))
+  for (const f of pre.fixes) open.push(f)
+  const toCheck = cannotVerify.filter((it) => !EARLY_DECIDED.has(it.id))
+  if (toCheck.length) {
+    phase('Check')
+    log(`check: ${toCheck.length} cannot-verify item(s) to the checker (${tier('checker')})`)
+    let ck = await runChecker(toCheck, reviewHead, gateHead, '', 'checker')
+    let bad = postGateProblem(ck, gateHead)
+    const ans = bad ? preconditionAnswers('checker') : ''
+    if (ans) {
+      log(`check: cached checker left the repository changed (${bad}); retrying with the controller answer`)
+      ck = await runChecker(toCheck, reviewHead, gateHead, ans, 'checker-retry')
+      bad = postGateProblem(ck, gateHead)
+    }
+    if (bad) {
+      log(`check: precondition failed after gate-0: ${bad}; stopping, no check result applied`)
+      return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:checker', problem: `checker: ${bad}` }))
+    }
+    if (!ck) log('check: checker returned null (skipped or died); every item goes to the ruler')
+    const byId = new Map(((ck && ck.results) || []).map((x) => [x.id.replace(/^\[|\]$/g, '').trim(), x]))
+    for (const it of toCheck) {
+      const x = byId.get(it.id)
+      if (CONTROLLER.has(it.id)) {
+        // a decision given after the check (e.g. at ruler-review) overrides the checker's result
+        toRule.push(Object.assign({}, it, { text: `${it.text} (checker: ${x ? x.result : 'no result'})` }))
+      } else if (x && x.result === 'verified') {
+        setRuling({ item: it.id, what: it.text.slice(0, 160), decision: 'verified', reason: x.evidence, costIfWrong: 'checker verified; a wrong check hides an unmet requirement', fixInstruction: '', command: x.evidence, source: 'checker' })
+      } else if (x && x.result === 'failed') {
+        open.push({ id: it.id, severity: 'important', file: '', line: '', summary: `check failed: ${it.text}: ${x.evidence}`, fix: 'make the failed check pass', planMandated: false, contestsRuling: '' })
+      } else {
+        toRule.push(Object.assign({}, it, { text: `${it.text} (checker: ${x ? `needs judgment: ${x.evidence}` : 'no result'})` }))
+      }
+    }
+    log(`check: ${toCheck.map((it) => `${it.id} ${byId.has(it.id) ? byId.get(it.id).result : 'no result'}`).join(', ')}`)
+  }
+}
 
 // ================= 3. Ruler =================
 if (toRule.length) {
   phase('Rule')
-  const ruled = await runRuler(toRule, 'ruler-review', reviewHead, 4)
+  const ruled = await runRuler(toRule, 'ruler-review', reviewHead, 4, gateHead)
+  if (ruled.precondition) {
+    return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:ruler-review', problem: ruled.precondition }))
+  }
   state.parked.push(...ruled.unruled)
   if (ruled.escalated.length) {
     log(`rule: ${ruled.escalated.length} escalation(s); stopping`)
@@ -953,7 +1148,12 @@ if (toRule.length) {
 const naCount = {}
 let roundBase = state.head
 let gatePassed = false
-for (;;) {
+// A clean review plus a green gate-0 completes with no further gate (gate-0 red opens findings).
+if (!open.length) {
+  gatePassed = true
+  log('gate: review clean and gate-0 green; no further gate')
+}
+while (!gatePassed) {
   while (open.length && state.rounds < MAX_ROUNDS) {
     phase('Fix')
     state.rounds++
@@ -976,25 +1176,38 @@ for (;;) {
 
     const pc = await runProgress(`progress-r${r}`, roundBase, lastTests)
     const progressProblems = []
+    const guardHits = []
     if (pc) {
       state.head = pc.head
       state.commits.push(...pc.newCommits)
       if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
       if (!pc.ok) progressProblems.push(...pc.problems)
+      guardHits.push(...pc.guardHits)
     } else {
       state.head = fx.head
       state.commits.push(...fx.commits)
       progressProblems.push('progress checker returned no result; round unchecked')
     }
 
-    const rr = await runReReview(open, `re-review-r${r}`, roundBase, state.head, r)
+    // Mechanical round: every open finding came from a gate or the progress checker. The progress
+    // checker and gate-r<r> decide; the re-reviewer is skipped.
+    const mechanical = open.every((f) => /^(gate-|progress-)/.test(f.id) && !f.guard)
     const next = []
-    if (!rr) {
+    log(mechanical
+      ? `fix: round ${r} is mechanical (gate and progress findings only); re-reviewer skipped, progress checker and gate-r${r} decide`
+      : `fix: round ${r} has review findings; re-reviewer runs`)
+    // Gate findings are never verdicted by a re-reviewer; they stay open until a gate runs.
+    const gateOpen = open.filter((f) => /^gate-/.test(f.id))
+    const reviewed = open.filter((f) => !/^gate-/.test(f.id))
+    const rr = mechanical ? null : await runReReview(reviewed, gateOpen, `re-review-r${r}`, roundBase, state.head, r)
+    if (mechanical) {
+      // closed unless the progress checker reports a problem (below); gate-r<r> checks the rest
+    } else if (!rr) {
       log(`fix: round ${r} re-reviewer returned null; every finding stays open`)
-      for (const f of open) { naCount[f.id] = (naCount[f.id] || 0) + 1; next.push(f) }
+      for (const f of reviewed) { naCount[f.id] = (naCount[f.id] || 0) + 1; next.push(f) }
     } else {
       const v = new Map(rr.verdicts.map((x) => [x.id.replace(/^\[|\]$/g, '').trim(), x]))
-      for (const f of open) {
+      for (const f of reviewed) {
         const x = v.get(f.id)
         if (x && x.verdict === 'ADDRESSED') continue
         naCount[f.id] = (naCount[f.id] || 0) + 1
@@ -1010,7 +1223,13 @@ for (;;) {
       })
       for (const o of rr.outOfScope) state.deferredMinors.push(`r${r} out of scope: ${o}`)
     }
+    // A gate-weakening hit is a review matter: it makes the next round non-mechanical.
+    guardHits.forEach((g, k) => next.push({ id: `progress-r${r}-guard-${k + 1}`, severity: 'important', file: '', line: '', summary: `gate weakening: ${g}`, fix: 'revert the change, or show that the brief or a ruling in force asks for it', planMandated: false, contestsRuling: '', guard: true }))
+    if (guardHits.length) log(`fix: round ${r} progress check flagged ${guardHits.length} gate-weakening change(s); the next round gets the re-reviewer`)
     progressProblems.forEach((p, k) => next.push({ id: `progress-r${r}-${k + 1}`, severity: 'important', file: '', line: '', summary: `progress check: ${p}`, fix: 'restore the invariant the progress check names', planMandated: false, contestsRuling: '' }))
+    // While anything else is open, the gate findings stay open too (no gate runs yet; never dropped
+    // at the cap). When only they would remain, the round closes them and gate-r<r> decides.
+    if (next.length && gateOpen.length) next.push(...gateOpen)
 
     const closed = open.length - open.filter((f) => next.some((n) => n.id === f.id)).length
     state.roundLog.push(`fix round ${r}/${MAX_ROUNDS} (${closed} addressed, ${next.length} open; head ${String(state.head).slice(0, 7)})`)
@@ -1020,38 +1239,21 @@ for (;;) {
   }
   if (open.length) break
 
-  // Independent gate: after a clean review and after every fix loop that ends clean.
+  // Independent gate after every fix loop that ends clean.
   phase('Gate')
-  const gl = state.rounds === 0 ? 'gate-0' : `gate-r${state.rounds}`
-  let g = await runGate(gl, state.head, '')
-  const gatePre = g && g.preconditionFailed ? preconditionAnswers(gl) : ''
-  if (gatePre) {
-    log(`gate: cached precondition failure (${g.preconditionFailed}); retrying ${gl} with the controller answer`)
-    g = await runGate(`${gl}-retry`, state.head, gatePre)
-  }
-  if (!g) {
-    log(`gate: ${gl} returned null (skipped or died); stopping`)
-    return await finish(build('stopped', { stopped: gl, questions: state.questions.concat([`${gl} returned no result; re-run (answers at "${gl}" go to the next fixer round)`]) }))
-  }
-  if (g.preconditionFailed) {
-    log(`gate: ${gl} precondition failed: ${g.preconditionFailed}; stopping, not a finding`)
-    return await finish(build('stopped', { stopped: 'precondition', stopPoint: `precondition:${gl}`, problem: `${gl}: ${g.preconditionFailed}` }))
-  }
-  if (g.head) state.head = g.head
-  if (g.ok) {
+  const gl = `gate-r${state.rounds}`
+  const out = await gateOutcome(gl, await runGate(gl, state.head, ''), state.head)
+  if (out.stop) return out.stop
+  if (out.ok) {
     gatePassed = true
-    log(`gate: ${gl} green at ${String(state.head).slice(0, 7)}`)
     break
   }
-  const problems = g.problems.length ? g.problems : ['gate reported not ok but listed no problem; re-check lint, typecheck and test']
-  log(`gate: ${gl} red: ${problems.join('; ')}`)
-  state.roundLog.push(`${gl} red (${problems.length} problem(s))`)
-  open = problems.map((p, k) => ({ id: `${gl}:${k + 1}`, severity: 'important', file: '', line: '', summary: `gate: ${p}`, fix: 'fix the cause so the gate check passes', planMandated: false, contestsRuling: '' }))
+  open = out.findings
   roundBase = state.head
   if (state.rounds >= MAX_ROUNDS) break
 }
 
-// ================= 5/6. Ledger and return =================
+// ================= 5. Return (ledgerLines for the controller) =================
 if (open.length) {
   log(`cap: maxRounds ${MAX_ROUNDS} reached with ${open.length} open finding(s); parked for the controller: ${open.map((f) => f.id).join(', ')}`)
   state.parked.push(...open)
