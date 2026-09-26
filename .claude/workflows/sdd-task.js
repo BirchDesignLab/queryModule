@@ -8,8 +8,10 @@
  *   repoDir: "C:\\git\\queryModule", branch: "feat/p0-wave-2", base: "<full sha, HEAD before the task>",
  *   briefPath, reportPath, workDir,          // workDir: SDD workspace for review files
  *   scratchRoot, runLabel: "w2-t7",          // agent scratch: <scratchRoot>/<runLabel>/<agent>/
- *   ledgerPath,                              // optional; ledger lines are appended at the end
+ *   ledgerPath,                              // optional; only named in the log: the controller
+ *                                            // appends ledgerLines (scripts/sdd/append-ledger.mjs)
  *   sensitive: false, ui: false,
+ *   critic: false, criticFocus: "...",       // optional: critic on without sensitive or ui; focus text
  *   ids: "BR-001, FR-032", specRefs: "spec 4.1 lines 140-260; ...",
  *   requirementsDoc,                         // optional; default the repo-root Requirements Definition
  *   globalConstraints: "<product and code constraints>",   // required, non-empty; see below
@@ -27,12 +29,14 @@
  * globalConstraints carries product and code constraints only (runtime, TDD, purity, fixtures,
  * logging, docs style). Never process bullets (model and effort plan, PR and push steps, commit
  * trailers, branch naming): every agent treats globalConstraints as binding.
- * Roles: implementer, specReviewer, qualityReviewer, critic, ruler, fixer, escalatedFixer,
- * progressChecker, reReviewer, gate, ledger (Haiku, model only).
+ * Roles: implementer, specReviewer, qualityReviewer, critic, checker, ruler, fixer, escalatedFixer,
+ * progressChecker, reReviewer, gate. There is no ledger role (roles.ledger is logged and ignored).
+ * gate-0 runs in parallel with the reviewers; cannot-verify items go to the checker; a fix round
+ * with only gate or progress findings skips the re-reviewer.
  *
  * Returns { task, status, base, head, commits, rounds, rulings (in force, one per item, each
- * with source "ruler" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
- * questions, concerns, answersUnconsumed?, ledgerLines? } and, when status is "stopped", also
+ * with source "ruler" | "checker" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
+ * questions, concerns, answersUnconsumed?, ledgerLines } and, when status is "stopped", also
  * stopped (a stop point, with the agent that consumes answers there):
  *   "implementer"     -> implementer-continue finishes on top of the existing commits
  *   "precondition"    -> (problem says what: branch, HEAD, dirty tree with the files named; stopPoint
@@ -60,10 +64,11 @@
  * decisions from all entries become controller rulings (a later entry wins for the same item):
  * final for the run, never re-escalated (a controller stands on a Critical stands); fix goes to
  * the fixer with its fixInstruction. Null or failed replays: .claude/workflows/README.md fallbacks.
- *   Workflow({ scriptPath: ".claude/workflows/sdd-task.js", args: <same args + answers>,
- *              resumeFromRunId: "<runId>" })
- * Resume after a pause, kill or script edit: the same call without new answers.
- * This script never pushes or merges.
+ *   Workflow({ scriptPath: ".claude/workflows/sdd-task.js", resumeFromRunId: "<runId>",
+ *              args: <same args + answers> })
+ * Resume after a pause, kill or script edit: the same call without new answers. Always pass
+ * args: a resume without them throws at the first required-arg check.
+ * This script never pushes or merges; every shell-running agent is told the same.
  */
 export const meta = {
   name: 'sdd-task',
@@ -75,8 +80,7 @@ export const meta = {
     { title: 'Review', detail: 'spec reviewer, quality reviewer, critic (sensitive, UI or critic: true) and gate-0 in parallel' },
     { title: 'Check', detail: 'checker runs the suggested check for each cannot-verify item' },
     { title: 'Fix', detail: 'fixer, progress checker and re-reviewer per round, up to maxRounds' },
-    { title: 'Gate', detail: 'independent lint, typecheck, test, head and clean-tree check' },
-    { title: 'Ledger', detail: 'append the task lines to the SDD ledger' },
+    { title: 'Gate', detail: 'independent lint, typecheck, coverage, head and clean-tree check' },
   ],
 }
 
@@ -217,7 +221,6 @@ const DEFAULTS = SENSITIVE
       progressChecker: { model: 'sonnet', effort: 'low' },
       reReviewer: { model: 'opus', effort: 'medium' },
       gate: { model: 'sonnet', effort: 'low' },
-      ledger: { model: 'haiku' },
     }
   : {
       implementer: { model: 'sonnet', effort: 'medium' },
@@ -229,9 +232,14 @@ const DEFAULTS = SENSITIVE
       progressChecker: { model: 'sonnet', effort: 'low' },
       reReviewer: { model: 'sonnet', effort: 'medium' },
       gate: { model: 'sonnet', effort: 'low' },
-      ledger: { model: 'haiku' },
     }
-const OVR = A.roles || {}
+const OVR = Object.assign({}, A.roles || {})
+// The ledger agent was removed (post-pilot): the controller appends ledgerLines with
+// scripts/sdd/append-ledger.mjs. An old roles.ledger override is ignored, not an error.
+if (OVR.ledger !== undefined) {
+  log('roles: roles.ledger ignored (no ledger agent; the controller appends ledgerLines)')
+  delete OVR.ledger
+}
 
 function stepUp(r) {
   const key = `${r.model}/${r.effort || ''}`
@@ -401,11 +409,6 @@ const GATE = {
   },
   required: ['ok', 'head', 'problems'],
 }
-const LEDGER = {
-  type: 'object',
-  properties: { ok: { type: 'boolean' }, linesAppended: { type: 'integer' } },
-  required: ['ok', 'linesAppended'],
-}
 
 // ---------- shared prompt pieces ----------
 const GIT = `Shell: Git Bash. Run every git and shell command in ${REPO} (cd there, or use git -C "${REPO}"). Branch: ${A.branch}.`
@@ -545,27 +548,11 @@ async function finish(result) {
       result.answersUnconsumed = true
     }
   }
-  if (A.ledgerPath) {
-    phase('Ledger')
-    const lines = ledgerLines(result)
-    const res = await agent(
-      [
-        `Append these ${lines.length} lines, exactly as written, after the last line of ${A.ledgerPath}.`,
-        'Use the Edit tool to append only. Never use Write on this file, never rewrite or reorder existing lines, and keep the final newline. Do not run git.',
-        '',
-        '<lines>',
-        ...lines,
-        '</lines>',
-        '',
-        'Return ok: true and the number of lines appended.',
-      ].join('\n'),
-      { label: 'ledger', phase: 'Ledger', schema: LEDGER, ...role('ledger') },
-    )
-    if (!res || !res.ok) log(`ledger: append to ${A.ledgerPath} failed; the lines are in the return value (ledgerLines)`)
-    result.ledgerLines = lines
-  } else {
-    log('ledger: no ledgerPath, skipped')
-  }
+  // No ledger agent: the lines come back as ledgerLines and the controller appends them with
+  // node scripts/sdd/append-ledger.mjs <workflow-output-file> <ledgerPath>.
+  const lines = ledgerLines(result)
+  result.ledgerLines = lines
+  log(A.ledgerPath ? `ledger: controller appends ${lines.length} lines to ${A.ledgerPath}` : `ledger: ${lines.length} lines returned as ledgerLines (no ledgerPath)`)
   return result
 }
 
@@ -790,7 +777,7 @@ async function gateOutcome(gl, g, expectedHead) {
 // ================= 1. Implement =================
 phase('Implement')
 log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; ${SENSITIVE ? 'sensitive' : 'ordinary'}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}`)
-log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}, ledger ${tier('ledger')}`)
+log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}`)
 
 // The implementer prompt never carries answers, so a re-run with answers replays it from cache.
 const implPrompt = [
@@ -1179,7 +1166,7 @@ while (!gatePassed) {
   if (state.rounds >= MAX_ROUNDS) break
 }
 
-// ================= 5/6. Ledger and return =================
+// ================= 5. Return (ledgerLines for the controller) =================
 if (open.length) {
   log(`cap: maxRounds ${MAX_ROUNDS} reached with ${open.length} open finding(s); parked for the controller: ${open.map((f) => f.id).join(', ')}`)
   state.parked.push(...open)

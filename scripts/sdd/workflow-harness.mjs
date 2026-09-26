@@ -11,6 +11,7 @@
 // tiers, gate, rulings routing, answers re-runs and the sensitive ruler rule.
 // Exit code 0 when every scenario passes, 1 otherwise. Run it after any change to a workflow.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,7 +125,6 @@ const addressAll = (p) => ({
   newFindings: [],
   outOfScope: [],
 });
-const LEDGER_OK = { ok: true, linesAppended: 1 };
 const checkAll = (result) => (p) => ({
   results: ids(p).map((id) => ({ id, result, evidence: `ran it: ${result}` })),
 });
@@ -177,7 +177,6 @@ function sddResponder(over = {}) {
     if (label.startsWith("progress")) return progress(label);
     if (label.startsWith("re-review")) return addressAll(prompt);
     if (label.startsWith("gate")) return GATE_OK(`h-${label}`);
-    if (label === "ledger") return LEDGER_OK;
     return null;
   };
 }
@@ -197,9 +196,9 @@ const sdd = await load("sdd-task.js");
 const wr = await load("wave-review.js");
 
 // ================= sdd-task =================
-await test("sdd: happy path runs implementer, spec, quality, gate, ledger and completes", async () => {
+await test("sdd: happy path runs implementer, spec, quality and gate-0, and completes", async () => {
   const r = await run(sdd, BASE, sddResponder());
-  assert.deepEqual(r.labels, ["implementer", "spec-review", "quality-review", "gate-0", "ledger"]);
+  assert.deepEqual(r.labels, ["implementer", "spec-review", "quality-review", "gate-0"]);
   assert.equal(r.res.status, "complete");
   assert.equal(r.find("gate-0").model, "sonnet");
   assert.equal(r.find("gate-0").effort, "low");
@@ -229,7 +228,6 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
     "fixer-r1",
     "progress-r1",
     "gate-r1",
-    "ledger",
   ]);
   assert.ok(r.find("fixer-r1").prompt.includes("pnpm lint: 2 errors"));
   assert.equal(r.res.status, "complete");
@@ -239,7 +237,7 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
 // Worst case at maxRounds 5: implementer, ruler-concerns, fixer-pre, progress-pre, three reviewers
 // and gate-0 in parallel, checker (needsJudgment), ruler-review, then round 1 with a review finding (fixer, progress,
 // re-review, red gate-r1) and four mechanical rounds (fixer, progress, red gate).
-await test("sdd: gate failing every round parks at the cap (worst case 27 agents at maxRounds 5)", async () => {
+await test("sdd: gate failing every round parks at the cap (worst case 26 agents at maxRounds 5)", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true },
@@ -262,14 +260,14 @@ await test("sdd: gate failing every round parks at the cap (worst case 27 agents
       "gate*": { ok: false, head: "hg", problems: ["tests red"] },
     }),
   );
-  assert.equal(r.calls.length, 27, r.labels.join(","));
+  assert.equal(r.calls.length, 26, r.labels.join(","));
   assert.equal(r.labels.filter((l) => l.startsWith("re-review")).join(","), "re-review-r1");
   assert.equal(r.labels.filter((l) => l.startsWith("gate")).length, 6);
   assert.equal(r.res.status, "parked");
   assert.equal(r.res.rounds, 5);
 });
 
-await test("sdd: worst case with every finding NOT ADDRESSED is 25 agents; escalated fixer after a repeat", async () => {
+await test("sdd: worst case with every finding NOT ADDRESSED is 24 agents; escalated fixer after a repeat", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true },
@@ -289,7 +287,7 @@ await test("sdd: worst case with every finding NOT ADDRESSED is 25 agents; escal
       }),
     }),
   );
-  assert.equal(r.calls.length, 25, r.labels.join(","));
+  assert.equal(r.calls.length, 24, r.labels.join(","));
   assert.equal(r.res.status, "parked");
   assert.equal(r.find("fixer-r2").effort, "medium");
   assert.equal(r.find("fixer-r3").effort, "high");
@@ -541,7 +539,7 @@ await test("sdd: implementer BLOCKED stops with questions", async () => {
   );
   assert.equal(r.res.status, "stopped");
   assert.deepEqual(r.res.questions, ["q?"]);
-  assert.deepEqual(r.labels, ["implementer", "ledger"]);
+  assert.deepEqual(r.labels, ["implementer"]);
 });
 
 // ---------- fix pass 2: N1 to N6 (sdd-task) ----------
@@ -691,7 +689,7 @@ await test("sdd N5: an implementer precondition failure stops the run; answers a
   const r = await run(sdd, BASE, resp);
   assert.equal(r.res.stopped, "precondition");
   assert.ok(r.res.problem.includes("HEAD is abc"));
-  assert.deepEqual(r.labels, ["implementer", "ledger"]);
+  assert.deepEqual(r.labels, ["implementer"]);
   const again = await run(
     sdd,
     { ...BASE, answers: { at: "precondition", text: "Reset to base; retry." } },
@@ -1190,7 +1188,7 @@ await test("wr R3: the reviewer precondition names files and calls out a stray a
 await test("sdd R2: implemented { head } skips the implementer and reviews base..head (review stages only)", async () => {
   const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
   assert.ok(!r.labels.includes("implementer"), r.labels.join(","));
-  assert.deepEqual(r.labels, ["spec-review", "quality-review", "gate-0", "ledger"]);
+  assert.deepEqual(r.labels, ["spec-review", "quality-review", "gate-0"]);
   assert.ok(r.find("spec-review").prompt.includes("aaaaaaa1111..cafe1234cafe1234"));
   assert.equal(r.res.status, "complete");
   await assert.rejects(run(sdd, { ...BASE, implemented: {} }, sddResponder()), /implemented\.head/);
@@ -1578,6 +1576,73 @@ await test("sdd P6: a controller-decided cannot-verify item never reaches the ch
   assert.equal(r.res.rulings.find((x) => x.item === "spec:CV1").source, "controller");
   const two = await run(sdd, { ...BASE, answers }, sddResponder({ "spec-review": specCV(2) }));
   assert.deepEqual(ids(two.find("checker").prompt), ["spec:CV2"]);
+});
+
+await test("sdd P10: no ledger agent; ledgerLines are returned and the controller appends them", async () => {
+  const r = await run(sdd, BASE, sddResponder());
+  assert.ok(!r.labels.includes("ledger"), r.labels.join(","));
+  assert.ok(r.res.ledgerLines.length > 0);
+  assert.ok(
+    r.logs.includes(
+      `ledger: controller appends ${r.res.ledgerLines.length} lines to C:/w/progress.md`,
+    ),
+    r.logs.join(" | "),
+  );
+  const none = await run(sdd, { ...BASE, ledgerPath: undefined }, sddResponder());
+  assert.ok(none.res.ledgerLines.length > 0);
+  assert.ok(!none.labels.includes("ledger"));
+});
+
+await test("sdd P10: a roles.ledger override is logged as ignored, never thrown", async () => {
+  const r = await run(sdd, { ...BASE, roles: { ledger: { model: "haiku" } } }, sddResponder());
+  assert.ok(
+    r.logs.some((l) => /roles\.ledger .*ignored/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.ok(!r.logs.some((l) => /ledger haiku/.test(l)), "roles log still lists a ledger role");
+  assert.equal(r.res.status, "complete");
+});
+
+const AL_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "append-ledger.mjs");
+await test("append-ledger: finds ledgerLines in a bare result, wrapped text and escaped JSON", async () => {
+  const al = await import(new URL("./append-ledger.mjs", import.meta.url).href);
+  const res = (await run(sdd, BASE, sddResponder())).res;
+  const lines = res.ledgerLines;
+  assert.deepEqual(al.findLedgerLines(JSON.stringify(res, null, 2)), lines);
+  assert.deepEqual(
+    al.findLedgerLines(`Workflow finished.\n\`\`\`json\n${JSON.stringify(res)}\n\`\`\`\ndone`),
+    lines,
+  );
+  assert.deepEqual(
+    al.findLedgerLines(JSON.stringify({ status: "completed", output: JSON.stringify(res) })),
+    lines,
+  );
+  assert.deepEqual(
+    al.findLedgerLines(`${JSON.stringify({ ledgerLines: ["old"] })}\n${JSON.stringify(res)}`),
+    lines,
+    "the last result wins",
+  );
+  assert.equal(al.findLedgerLines('{"task": 7}'), null);
+  assert.equal(al.findLedgerLines("no json here"), null);
+  assert.equal(al.appendText("a\n", ["x", "y"]), "x\ny\n");
+  assert.equal(al.appendText("a", ["x"]), "\nx\n");
+  assert.equal(al.appendText("", ["x"]), "x\n");
+  assert.equal(al.appendText("a\r\n", ["x", "y"]), "x\r\ny\r\n");
+});
+
+await test("append-ledger: exits 2 on a usage error and 3 when no ledgerLines are found", async () => {
+  const usage = spawnSync(process.execPath, [AL_PATH], { encoding: "utf8" });
+  assert.equal(usage.status, 2, usage.stderr);
+  assert.ok(/usage/i.test(usage.stderr));
+  const missing = spawnSync(process.execPath, [AL_PATH, "no-such-output.json", "l.md"], {
+    encoding: "utf8",
+  });
+  assert.equal(missing.status, 2, missing.stderr);
+  const pkg = path.resolve(path.dirname(AL_PATH), "../../package.json");
+  const none = spawnSync(process.execPath, [AL_PATH, pkg, "no-such-ledger.md"], {
+    encoding: "utf8",
+  });
+  assert.equal(none.status, 3, none.stderr);
 });
 
 // ---------- report ----------
