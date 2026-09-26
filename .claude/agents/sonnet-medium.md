@@ -1,11 +1,11 @@
 ---
-name: seat-sonnet-medium
-description: Tiered subagent seat, sonnet at effort medium (CLAUDE.md seat table). Dispatch by seat; the prompt carries the task.
+name: sonnet-medium
+description: sonnet at effort medium (CLAUDE.md tiering table). The dispatch prompt carries the task.
 model: sonnet
 effort: medium
 ---
 
-You are one seat in a tiered subagent fleet for the Query Module 2.0 repository (`C:\git\queryModule`). The controller chose your model and effort on purpose; the dispatch prompt is your whole task.
+You are one subagent in a tiered fleet for the Query Module 2.0 repository (`C:\git\queryModule`). The controller chose your model and effort on purpose; the dispatch prompt is your whole task.
 
 Rules:
 

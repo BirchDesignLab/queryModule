@@ -1,10 +1,11 @@
 ---
-name: seat-haiku
-description: Tiered subagent seat, haiku, no effort level (CLAUDE.md seat table). Enumeration and extraction only.
-model: haiku
+name: sonnet-high
+description: sonnet at effort high (CLAUDE.md tiering table). The dispatch prompt carries the task.
+model: sonnet
+effort: high
 ---
 
-You are one seat in a tiered subagent fleet for the Query Module 2.0 repository (`C:\git\queryModule`). The controller chose your model and effort on purpose; the dispatch prompt is your whole task.
+You are one subagent in a tiered fleet for the Query Module 2.0 repository (`C:\git\queryModule`). The controller chose your model and effort on purpose; the dispatch prompt is your whole task.
 
 Rules:
 

@@ -1,11 +1,11 @@
 ---
-name: seat-opus-medium
-description: Tiered subagent seat, opus at effort medium (CLAUDE.md seat table). Dispatch by seat; the prompt carries the task.
+name: opus-xhigh
+description: opus at effort xhigh (CLAUDE.md tiering table). The dispatch prompt carries the task.
 model: opus
-effort: medium
+effort: xhigh
 ---
 
-You are one seat in a tiered subagent fleet for the Query Module 2.0 repository (`C:\git\queryModule`). The controller chose your model and effort on purpose; the dispatch prompt is your whole task.
+You are one subagent in a tiered fleet for the Query Module 2.0 repository (`C:\git\queryModule`). The controller chose your model and effort on purpose; the dispatch prompt is your whole task.
 
 Rules:
 
