@@ -6,12 +6,25 @@ The prototype uses mock data sources with canned, fictitious responses. It never
 
 ## Status
 
-Milestone M0, phase P0 (contracts), in progress.
+[![ci](https://img.shields.io/github/actions/workflow/status/BirchDesignLab/queryModule/ci.yml?branch=main&label=ci)](https://github.com/BirchDesignLab/queryModule/actions/workflows/ci.yml)
+[![Project board](https://img.shields.io/badge/board-Query_Module_2.0-3E4B9E?logo=github)](https://github.com/users/BirchDesignLab/projects/1)
+[![Open PRs](https://img.shields.io/github/issues-pr/BirchDesignLab/queryModule?label=open%20PRs)](https://github.com/BirchDesignLab/queryModule/pulls)
+[![Follow-ups](https://img.shields.io/github/issues/BirchDesignLab/queryModule/follow-up?label=follow-ups&color=C5DEF5)](https://github.com/BirchDesignLab/queryModule/issues?q=is%3Aissue+is%3Aopen+label%3Afollow-up)
+[![Decisions pending](https://img.shields.io/github/issues/BirchDesignLab/queryModule/decision?label=decisions%20pending&color=D93F0B)](https://github.com/BirchDesignLab/queryModule/issues?q=is%3Aissue+is%3Aopen+label%3Adecision)
 
-- Wave 1 merged (PR #31): the workspace root and the first `packages/core` contracts.
-- Workflow execution adopted (ADR-0006); W2 is next.
+The badges read GitHub live each time this page loads. Progress is closed issues over all issues in the milestone; each phase parent issue shows its own sub-issue progress bar. The board is [Query Module 2.0](https://github.com/users/BirchDesignLab/projects/1) (guide: `docs/project-board.md`).
 
-See `docs/superpowers/plans/STATUS.md` for the live grid; it is not duplicated here.
+| Milestone | Done | Open | Phase parents |
+|---|---|---|---|
+| [M0 Skeleton](https://github.com/BirchDesignLab/queryModule/milestone/1) | [![M0 Skeleton progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/1?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/1) | [![M0 Skeleton issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/1?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/1) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/39), [P1 Foundation](https://github.com/BirchDesignLab/queryModule/issues/40) |
+| [M1 Forms and terminal](https://github.com/BirchDesignLab/queryModule/milestone/2) | [![M1 Forms and terminal progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/2?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/2) | [![M1 Forms and terminal issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/2?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/2) | [P2 Engine](https://github.com/BirchDesignLab/queryModule/issues/41), [P3 Flow](https://github.com/BirchDesignLab/queryModule/issues/42) |
+| [M2 Results and audit](https://github.com/BirchDesignLab/queryModule/milestone/3) | [![M2 Results and audit progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/3?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/3) | [![M2 Results and audit issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/3?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/3) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/43), [P1 Feed](https://github.com/BirchDesignLab/queryModule/issues/44), [P2 Audit](https://github.com/BirchDesignLab/queryModule/issues/45), [P3 Hardening](https://github.com/BirchDesignLab/queryModule/issues/46) |
+| [M3 Workflow and compliance](https://github.com/BirchDesignLab/queryModule/milestone/4) | [![M3 Workflow and compliance progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/4?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/4) | [![M3 Workflow and compliance issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/4?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/4) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/47), [P1 Credentials and MFA](https://github.com/BirchDesignLab/queryModule/issues/48), [P2 Multi-source, nested, hide](https://github.com/BirchDesignLab/queryModule/issues/49), [P3 Delegation](https://github.com/BirchDesignLab/queryModule/issues/50) |
+| [M4 Mobile and host integration](https://github.com/BirchDesignLab/queryModule/milestone/5) | [![M4 Mobile and host integration progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/5?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/5) | [![M4 Mobile and host integration issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/5?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/5) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/51), [P1 Layouts and host](https://github.com/BirchDesignLab/queryModule/issues/52), [P2 Native](https://github.com/BirchDesignLab/queryModule/issues/53), [P3 Exit](https://github.com/BirchDesignLab/queryModule/issues/54) |
+
+P0 waves (one PR each): [W1](https://github.com/BirchDesignLab/queryModule/issues/55), [W2](https://github.com/BirchDesignLab/queryModule/issues/56), [W3](https://github.com/BirchDesignLab/queryModule/issues/57), [W4](https://github.com/BirchDesignLab/queryModule/issues/58), [W5](https://github.com/BirchDesignLab/queryModule/issues/59), [W6](https://github.com/BirchDesignLab/queryModule/issues/60).
+
+`docs/superpowers/plans/STATUS.md` holds the session grid and the handoff notes.
 
 ## Repository map
 
