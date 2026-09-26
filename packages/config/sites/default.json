@@ -257,7 +257,7 @@
   ],
   "keywords": [
     { "keyword": "STOLEN", "severity": "critical", "except": ["NOT STOLEN", "RECOVERED STOLEN"] },
-    { "keyword": "WANTED", "severity": "critical" },
+    { "keyword": "WANTED", "severity": "critical", "except": ["NOT WANTED"] },
     { "keyword": "EXPIRED", "severity": "warning" },
     { "keyword": "NO RECORD", "severity": "info" }
   ],

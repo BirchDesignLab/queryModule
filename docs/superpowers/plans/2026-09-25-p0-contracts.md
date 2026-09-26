@@ -4481,7 +4481,7 @@ export const BUNDLED_LOCALES: { en: Record<string, string> } = { en };
   ],
   "keywords": [
     { "keyword": "STOLEN", "severity": "critical", "except": ["NOT STOLEN", "RECOVERED STOLEN"] },
-    { "keyword": "WANTED", "severity": "critical", "except": ["NO WANTS OR WARRANTS"] },
+    { "keyword": "WANTED", "severity": "critical", "except": ["NOT WANTED"] },
     { "keyword": "EXPIRED", "severity": "warning" },
     { "keyword": "NO RECORD", "severity": "info" }
   ],
