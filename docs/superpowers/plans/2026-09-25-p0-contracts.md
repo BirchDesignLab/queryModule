@@ -1254,7 +1254,7 @@ git commit -m "docs(core): sensitive review for audit catalogue
 
 **Interfaces:**
 - Consumes: `WS_PROTOCOL_VERSION` (Task 2), `SourceStatusSchema` (Task 4).
-- Produces: `HelloMessageSchema`, `PingMessageSchema`, `AckReceiptMessageSchema`, `WelcomeMessageSchema`, `PongMessageSchema`, `SourceStatusEventSchema`; `WsClientMessageSchema` (union of hello, ping, ackReceipt), `type WsClientMessage`; `WsServerMessageSchema` (union of welcome, pong, sourceStatus), `type WsServerMessage`; `WsEventSchema` (state-changing server events carrying `seq`; M0 P0: `sourceStatus` only), `type WsEvent`; `WS_CLOSE_CODES = { sessionEnded: 4001, sessionRevoked: 4003 }`; `WS_PING_INTERVAL_MS = 20000`. `resultHidden` and `resync` join in M2 P0, `delegationChanged` in M3 P0 (additive, master plan 8). Per lead ruling R3, the Origin check (spec 5.3, 10.3) is an HTTP 403 rejection before the WebSocket upgrade completes, never a WS close: no session gives HTTP 401 pre-upgrade, a foreign or missing Origin without a bearer header gives HTTP 403 pre-upgrade, and close code 4003 is reserved for mid-session session revocation or expiry (`sessionRevoked`), not for Origin rejection.
+- Produces: `HelloMessageSchema`, `PingMessageSchema`, `AckReceiptMessageSchema`, `WelcomeMessageSchema`, `PongMessageSchema`, `SourceStatusEventSchema`; `WsClientMessageSchema` (union of hello, ping, ackReceipt), `type WsClientMessage`; `WsServerMessageSchema` (union of welcome, pong, sourceStatus), `type WsServerMessage`; `WsEventSchema` (state-changing server events carrying `seq`; M0 P0: `sourceStatus` only), `type WsEvent`; `WS_CLOSE_CODES = { sessionEnded: 4001 }`; `WS_PING_INTERVAL_MS = 20000`. `resultHidden` and `resync` join in M2 P0, `delegationChanged` in M3 P0 (additive, master plan 8). Per ADR-0004 (which replaces lead ruling R3), 4001 closes the socket on every session end (logout, session expiry, session revocation, user disable; spec 4.7, 5.2, 5.3). Origin and session checks reject the upgrade with HTTP before any socket exists (401 without a live session; 403 for a foreign Origin, or a missing Origin without `Authorization: Bearer`; spec 5.3, 10.3), so they are never close codes. There is no `sessionRevoked` and no `originRejected`; 4003 stays unassigned, and a later code is additive (master plan 8).
 
 **IDs:** FR-043, FR-065, NFR-003, NFR-004, SEC-014
 
@@ -1313,8 +1313,8 @@ describe("SEC-014 FR-043 WebSocket messages (spec 4.7)", () => {
     expect(WsEventSchema.safeParse({ ...sourceStatus, seq: 0 }).success).toBe(false);
   });
 
-  it("close codes match spec 4.7 as narrowed by lead ruling R3 (4003 is mid-session revocation/expiry, not Origin rejection)", () => {
-    expect(WS_CLOSE_CODES).toEqual({ sessionEnded: 4001, sessionRevoked: 4003 });
+  it("close codes match spec 4.7/5.3: 4001 on every session end, Origin is an HTTP rejection (ADR-0004)", () => {
+    expect(WS_CLOSE_CODES).toEqual({ sessionEnded: 4001 });
   });
 });
 ```
@@ -1340,8 +1340,8 @@ const EpochMs = z.int().min(0);
 const Seq = z.int().min(1);
 
 export const WS_PING_INTERVAL_MS = 20_000;
-/** sessionRevoked (4003) is mid-session only: session revocation or expiry after the upgrade. Origin rejection is an HTTP 403 before the upgrade completes (spec 5.3, 10.3; lead ruling R3), never a WS close code. */
-export const WS_CLOSE_CODES = { sessionEnded: 4001, sessionRevoked: 4003 } as const;
+/** 4001 closes the socket on every session end: logout, session expiry, session revocation, user disable (spec 4.7, 5.2, 5.3). Origin and session checks reject the upgrade with HTTP before any socket exists (401 without a live session; 403 for a foreign Origin, or a missing Origin without `Authorization: Bearer`; spec 5.3, 10.3), so they are never close codes. 4003 is unassigned; a later code is additive (master plan 8). ADR-0004. */
+export const WS_CLOSE_CODES = { sessionEnded: 4001 } as const;
 
 export const HelloMessageSchema = z.strictObject({ v, type: z.literal("hello"), lastSeq: Seq.nullable() });
 export const PingMessageSchema = z.strictObject({ v, type: z.literal("ping"), nonce: Id });

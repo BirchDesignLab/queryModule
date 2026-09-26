@@ -551,6 +551,7 @@ Covers FR-012, FR-040 to FR-042.
 ### 4.7 Contracts exported by core
 
 Overridden by ADR-0003.
+Overridden by ADR-0004.
 
 Everything the API, `packages/client` and the host-integration layer must agree on is a Zod schema in `packages/core/src/contracts/`, with the TypeScript type inferred from it. The API validates on write and on send; the client validates on receipt; each schema has tests (10).
 

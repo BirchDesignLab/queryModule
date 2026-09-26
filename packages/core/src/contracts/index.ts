@@ -4,3 +4,4 @@ export * from "./identity";
 export * from "./source-status";
 export * from "./validation-error";
 export * from "./version";
+export * from "./ws";
