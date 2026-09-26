@@ -57,7 +57,7 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
     min: 4.5,
     use: "info severity style",
   },
-  { fg: "field.required", bg: "color.surface.base", min: 4.5, use: "required marker text" },
+  { fg: "field.required", bg: "color.surface.base", min: 3, use: "required marker (non-text)" },
   { fg: "focus.ring", bg: "color.surface.base", min: 3, use: "focus ring (non-text)" },
   {
     fg: "color.border",

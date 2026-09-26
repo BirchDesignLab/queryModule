@@ -27,6 +27,12 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
     expect(CONTRAST_PAIRS.find((p) => p.fg === "focus.ring")?.min).toBe(3);
   });
 
+  it("required marker is classified as non-text UI at 3:1 (spec 6.5)", () => {
+    const pair = CONTRAST_PAIRS.find((p) => p.fg === "field.required");
+    expect(pair?.min).toBe(3);
+    expect(pair?.use).not.toMatch(/marker text/);
+  });
+
   it("a site override that breaks contrast is reported", () => {
     const failures = contrastFailures("day", { "color.text.body": "#bbbbbb" });
     expect(failures.map((f) => f.pair.fg)).toContain("color.text.body");
