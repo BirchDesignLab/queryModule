@@ -25,7 +25,7 @@ function isObject(v: unknown): v is JsonObject {
 }
 
 function isRemoveMarker(v: unknown): boolean {
-  return isObject(v) && v.$remove === true && Object.keys(v).length === 1;
+  return isObject(v) && v.$remove === true;
 }
 
 function mergeValue(base: Json | undefined, over: Json, path: string): Json {

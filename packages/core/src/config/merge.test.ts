@@ -69,6 +69,11 @@ describe("BR-001 FR-008 FR-031 overlays (spec 4.1)", () => {
     expect(config).not.toHaveProperty("theme");
   });
 
+  it("$remove with sibling keys still deletes the key (quality:I1)", () => {
+    const { config } = mergeSiteOverlay(base, { theme: { $remove: true, note: "x" } });
+    expect(config).not.toHaveProperty("theme");
+  });
+
   it("merges QueryType.sources by sourceId", () => {
     const { config } = mergeSiteOverlay(base, {
       queryTypes: [
