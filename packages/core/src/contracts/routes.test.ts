@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { ClientSiteConfigSchema } from "../config/client-config";
 import { ApiErrorSchema } from "./api-error";
-import { findRoute, LocaleParamsSchema, MetaResponseSchema, ROUTES } from "./routes";
+import { findRoute, LocaleParamsSchema, MetaResponseSchema, ROUTES, type RouteId } from "./routes";
 import { CORE_VERSION } from "./version";
 
 describe("BR-007 route contracts (spec 5.1)", () => {
@@ -34,7 +34,23 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
-    expect(() => findRoute("nope")).toThrow("unknown route nope");
+    expect(() => findRoute("nope" as RouteId)).toThrow("unknown route nope");
+  });
+
+  it("route ids are a closed type and ROUTES cannot be changed at runtime", () => {
+    expectTypeOf<RouteId>().toEqualTypeOf<"getHealth" | "getMeta" | "getLocale" | "getConfig">();
+    expectTypeOf(findRoute).parameter(0).toEqualTypeOf<RouteId>();
+    expect(Object.isFrozen(ROUTES)).toBe(true);
+    for (const r of ROUTES) {
+      expect(Object.isFrozen(r), r.id).toBe(true);
+      expect(Object.isFrozen(r.responses), r.id).toBe(true);
+      if (r.request) expect(Object.isFrozen(r.request), r.id).toBe(true);
+    }
+    const health = findRoute("getHealth") as { status: string };
+    expect(() => {
+      health.status = "live";
+    }).toThrow(TypeError);
+    expect(findRoute("getHealth").status).toBe("planned");
   });
 
   it("meta body per spec 5.1", () => {

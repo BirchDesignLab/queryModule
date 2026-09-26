@@ -63,7 +63,7 @@ export type LocaleBundle = z.infer<typeof LocaleBundleSchema>;
 
 const error = (description: string): RouteResponse => ({ description, schema: ApiErrorSchema });
 
-export const ROUTES: readonly RouteDef[] = [
+const ROUTE_DEFS = [
   {
     id: "getHealth",
     method: "get",
@@ -116,9 +116,20 @@ export const ROUTES: readonly RouteDef[] = [
       401: error("No session"),
     },
   },
-];
+] as const satisfies readonly RouteDef[];
 
-export function findRoute(id: string): RouteDef {
+export type RouteId = (typeof ROUTE_DEFS)[number]["id"];
+
+function freezeRoute(r: RouteDef): RouteDef {
+  if (r.request) Object.freeze(r.request);
+  Object.freeze(r.responses);
+  return Object.freeze(r);
+}
+
+/** Frozen, so no caller can flip a route status or swap a schema on the shared module. */
+export const ROUTES: readonly RouteDef[] = Object.freeze(ROUTE_DEFS.map(freezeRoute));
+
+export function findRoute(id: RouteId): RouteDef {
   const route = ROUTES.find((r) => r.id === id);
   if (!route) throw new Error(`unknown route ${id}`);
   return route;
