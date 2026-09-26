@@ -110,7 +110,7 @@ credential handling or audit logging is a compliance failure, not a bug.
 
 ## Execution: workflows first, skills recommended
 
-Plans run task by task through the saved workflow `.claude/workflows/sdd-task.js`, and each wave PR that touches sensitive paths through `.claude/workflows/wave-review.js` (ADR-0006). One PR per wave; the developer approves pushes and merges. Workflow `agent()` calls take `model` and `effort` directly, so every call sets both (Haiku: model only). The `.claude/agents/<model>-<effort>.md` definitions stay available through `agentType` and for the Agent tool.
+Plans run task by task through the saved workflow `.claude/workflows/sdd-task.js`, or a whole wave at once through `.claude/workflows/sdd-wave.js` (it nests `sdd-task` per task, carries flow forward, and it stops at the first task that does not complete), and each wave PR that touches sensitive paths through `.claude/workflows/wave-review.js` (ADR-0006). One PR per wave; the developer approves pushes and merges. Workflow `agent()` calls take `model` and `effort` directly, so every call sets both (Haiku: model only). The `.claude/agents/<model>-<effort>.md` definitions stay available through `agentType` and for the Agent tool.
 
 The superpowers skills (brainstorming, writing specs and plans, subagent-driven development, executing plans) are recommended, not required. The plugin's rule that a skill must be invoked before any response does not apply in this repo. TDD is required for every task with behaviour, whichever way the task runs.
 
