@@ -220,6 +220,15 @@ export const PART1_CASES: Case[] = [
     key: "config.unknownField",
   },
   {
+    name: "fieldMap source not in parent",
+    mutate: (r) => {
+      wnt(r);
+      veh(r).alsoRun = [{ queryType: "WNT", fieldMap: { last: "sate" } }];
+    },
+    path: "/queryTypes/0/alsoRun/0/fieldMap/last",
+    key: "config.unknownField",
+  },
+  {
     name: "unknown severity token",
     mutate: (r) => {
       r.keywordSeverityStyles.critical.color = "color.nope";
