@@ -2,7 +2,7 @@
 
 Date: 09-25-26
 Status: v2, ready for implementation planning
-Open decisions: 1
+Open decisions: 0
 Supersedes: `docs/superpowers/specs/2026-09-25-query-module-2-design.md` (v1)
 Review: `docs/superpowers/specs/2026-09-25-query-module-2-design-review.md`
 Decisions: `docs/superpowers/specs/2026-09-25-review-decisions.md`
@@ -1233,7 +1233,7 @@ Protocol v1. Envelope `{ protocol: "qm", version: 1, type, payload }`. Both side
 
 Native hosts embed `packages/rn-ui` instead: the same inputs as props (identity token provider, persona, context), the same outputs as callbacks. The Expo app (6.10) is a demo shell over that library.
 
-**Host simulator.** `apps/host-simulator`, a static page served on its own port (own origin) in dev and CI (9.3), never in the production image. [decision needed: host simulator on the live demo: (a) dev and CI only, or (b) also a static page on a second demo origin; critic recommends (b) with the `roleClaims` guard below] It signs test JWTs with a demo key whose JWKS only demo and CI deploy configs trust. Any deploy config that trusts the simulator's key has a `roleClaims` map that grants no `admin` and no `trainingOfficer`. It lets the viewer pick a demo subject, role claims, persona and context; embeds `/embed`; and logs every message both ways. Playwright uses it for embedded tests: foreign origin ignored, token refresh, `resultSelected` carries no query values.
+**Host simulator.** `apps/host-simulator`, a static page served on its own origin: a local port in dev and CI (9.3), and a second demo origin (`host.querymodule.birchdesignlab.com`) on the live deployment, served as a separate static container, never inside the API image. It signs test JWTs with a demo key whose JWKS only demo and CI deploy configs trust. Any deploy config that trusts the simulator's key has a `roleClaims` map that grants no `admin` and no `trainingOfficer`. It lets the viewer pick a demo subject, role claims, persona and context; embeds `/embed`; and logs every message both ways. Playwright uses it for embedded tests: foreign origin ignored, token refresh, `resultSelected` carries no query values.
 
 Covers BR-002, PLT-006, FR-061 (reserved channel).
 
