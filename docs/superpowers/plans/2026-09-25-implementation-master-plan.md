@@ -409,7 +409,7 @@ sudo chmod 400 /opt/querymodule/secrets/*
 
 1. Copy `DB_ENCRYPTION_KEY`, `CREDENTIAL_KEY` and `DATA_KEY` to offline storage off the laptop, never beside backups (8.2). They are the only recovery path.
 2. Cloudflare tunnel token (developer, in the Cloudflare dashboard: Zero Trust, Networks, Tunnels, create tunnel, public hostname `querymodule.birchdesignlab.com` to `http://app:3000`). Save the token without echoing it: `sudo sh -c 'umask 077; cat > /opt/querymodule/secrets/TUNNEL_TOKEN'`, paste, Ctrl+D. Then give it to the cloudflared image user: `sudo chown 65532:65532 /opt/querymodule/secrets/TUNNEL_TOKEN` (verify the uid with `docker image inspect cloudflare/cloudflared --format '{{.Config.User}}'`).
-3. GHCR read token for Watchtower (developer creates a fine-grained PAT with read packages only): `sudo install -d -m 700 /opt/querymodule/ghcr` then `sudo DOCKER_CONFIG=/opt/querymodule/ghcr docker login ghcr.io -u <github-user> --password-stdin` and paste the token.
+3. GHCR read token for the deploy-pull timer (ADR-0002; developer creates a fine-grained PAT with read packages only): `sudo install -d -m 700 /opt/querymodule/ghcr` then `sudo DOCKER_CONFIG=/opt/querymodule/ghcr docker login ghcr.io -u <github-user> --password-stdin` and paste the token.
 4. Backups: `rclone config` (remote for the R2 bucket), and put only the `age` recipient public key on the laptop; `age-keygen` runs on another machine.
 
 Deploy (from M0 P1, when `deploy/` exists):
@@ -425,7 +425,7 @@ sudo cp systemd/querymodule-backup.service systemd/querymodule-backup.timer /etc
 sudo systemctl daemon-reload && sudo systemctl enable --now querymodule-backup.timer
 ```
 
-Promote and roll back (8.4): `gh workflow run promote.yml -f sha=<full sha> [-f milestone=m<k>]`, `gh run watch`, wait for Watchtower (at most five minutes), then `bash scripts/ops/smoke.sh https://querymodule.birchdesignlab.com`. Rollback is the same command with an older sha.
+Promote and roll back (8.4): `gh workflow run promote.yml -f sha=<full sha> [-f milestone=m<k>]`, `gh run watch`, wait for the deploy-pull timer (at most five minutes), then `bash scripts/ops/smoke.sh https://querymodule.birchdesignlab.com`. Rollback is the same command with an older sha.
 
 ### 9.2 Windows 11 (Track B, Track D from M4)
 
