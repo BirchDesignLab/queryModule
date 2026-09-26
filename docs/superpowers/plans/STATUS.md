@@ -48,10 +48,10 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track A
 
 - Issue: #8 SiteConfig schema v1: fields, conditions, query types (P0 owner session, Windows)
-- Branch / PR: none; W2 branch feat/p0-wave-2 is cut from main after the prep PR merges
+- Branch / PR: chore/p0-workflow-prep / prep PR (open); feat/p0-wave-2 is cut after it merges
 - Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` at 0204bb7 on main (`pnpm verify` stops at config:validate until Task 18)
 - Next step: "Task 7: SiteConfig schema v1: fields, conditions, query types (#8)" Step 1, run through `.claude/workflows/sdd-task.js` (ADR-0006)
-- Blocked by: none
+- Blocked by: prep PR merge
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
 - Notes: W2 is the workflow pilot (Tasks 7 to 11, one PR); ADR-0005 carries are in the Task 7, 8 and 13 amendments
 

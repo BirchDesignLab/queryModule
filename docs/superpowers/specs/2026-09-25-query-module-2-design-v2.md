@@ -1474,7 +1474,7 @@ Covers BR-004, BR-005, BR-006, BR-007.
 
 ### 10.1 Layers and conventions
 
-Overridden by ADR-0006.
+Overridden by ADR-0006 (only the phrase "per the superpowers workflow"; TDD for every task stands).
 
 | Layer | Tool | Location | Runs in |
 |---|---|---|---|

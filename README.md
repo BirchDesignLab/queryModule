@@ -116,7 +116,7 @@ Milestone (M0 to M4, plus Later)
 
 **Tracks.** A platform (Linux laptop, also the deploy host), B web (Windows), Core (either machine), D mobile (Windows, from M4). Section 2 lists what each owns and never edits; 3.4 caps Track A at half a milestone ahead of Track B (the backend lead).
 
-**Waves.** A wave is a run of consecutive tasks from one phase plan that lands as one PR. The developer reviews and merges every wave PR; the session only pushes (developer direction 09-26-26, ADR-0006). A wave touching sensitive paths gets one `wave-review` run and its artifact at `docs/reviews/pr-<n>.md`. The current P0 wave map lives in `docs/superpowers/plans/2026-09-25-p0-contracts.md`; it is not copied here.
+**Waves.** A wave is a run of consecutive tasks from one phase plan that lands as one PR. The developer reviews and merges every wave PR; the session only pushes (developer direction 09-26-26, ADR-0006). A wave touching sensitive paths gets one `wave-review` run and its artifact at `docs/reviews/pr-<n>.md`. The current P0 wave map is the `## Waves` section of `docs/superpowers/plans/2026-09-25-p0-contracts.md`; it is not copied here.
 
 **Tasks.** One plan section with checkbox steps; one GitHub issue; TDD; run through `sdd-task`. The checkbox is ticked in the wave PR, and the issue closes through `Closes #n` in that PR (10.1 definition of done).
 
@@ -136,13 +136,16 @@ Milestone (M0 to M4, plus Later)
 
 ## Running tasks with workflows (ADR-0006)
 
-- `.claude/workflows/sdd-task.js` runs one plan task: implementer, spec and quality reviewers (plus an Opus critic on sensitive or UI tasks), a ruler for conflicts, and a capped fix loop with escalation.
-- `.claude/workflows/wave-review.js` runs the Opus xhigh whole-branch review for a wave PR that touches sensitive paths, and writes `docs/reviews/pr-<n>.md`.
-- `bash scripts/sdd/task-brief.sh PLAN N OUT` extracts one task's brief from a plan.
+- `.claude/workflows/sdd-task.js` runs one plan task: implementer, spec and quality reviewers (plus an Opus critic on sensitive or UI tasks), a ruler, a capped fix loop with escalation, and an independent gate role (`pnpm lint`, `pnpm typecheck`, `pnpm test`, head and clean tree) before a task counts as complete. A red gate sends its problems back through the fix loop.
+- Rulings bind the rest of the run: reviewers, fixers and re-reviewers see every ruling in force, a finding that contradicts one goes back to the ruler, and fixers never reverse one.
+- On sensitive tasks, and always in `wave-review`, the ruler must escalate any ruling that would weaken a security, audit, credential, delegation or dispatch invariant, change a shape frozen at a phase gate or listed as a contract file (master plan 8.2), or keep a Critical finding with stands.
+- A stopped run is answered, not redone: re-run with the same args (`carries` unchanged), `resumeFromRunId`, and `answers: { at: <the returned stopped value>, text }`. Earlier agent calls replay from cache; after an implementer stop, a continue implementer finishes on top of the existing commits.
+- `.claude/workflows/wave-review.js` runs the Opus xhigh whole-branch review for a wave PR that touches sensitive paths, one ruled fix pass and one re-review, and writes `docs/reviews/pr-<n>.md` on approve.
+- `bash scripts/sdd/task-brief.sh PLAN N OUT` extracts one task's brief from a plan; `node scripts/sdd/workflow-harness.mjs` tests both scripts against mocked agents.
 - Every agent call sets model and effort explicitly, per the `CLAUDE.md` tiering; any model and effort suited to a role may be chosen.
 - The superpowers skills (brainstorming, specs, plans, subagent-driven development) are recommended, not required.
 - TDD is required for every task.
-- For the argument list of either script, read the usage comment at the top of the file, and see `.claude/workflows/README.md` (added by the fix round; not present yet).
+- Arguments, roles and defaults, return shapes and the controller procedure: `.claude/workflows/README.md`.
 
 ## Quality gates
 
