@@ -169,6 +169,12 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.14
         version: 2.5.14
+      '@querymodule/config':
+        specifier: workspace:*
+        version: link:packages/config
+      '@querymodule/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.2
@@ -195,6 +201,12 @@ importers:
         version: 4.6.5
 
   apps/host-simulator: {}
+
+  packages/api:
+    devDependencies:
+      '@querymodule/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/config:
     devDependencies:
