@@ -2726,6 +2726,45 @@ await test("tiers: sdd-wave passes tier and maxAgents through (task wins) and to
   assert.ok(!("tier" in none.childArgs[0].args) && !("maxAgents" in none.childArgs[0].args));
 });
 
+await test("tiers: wave-review gate tier runs Opus high; the artifact records high; ordinary throws", async () => {
+  const worst = {
+    reviewer: reviewWith([WF("C1", "critical"), WF("I1", "important", { planMandated: true })]),
+  };
+  const g = await run(wr, { ...WBASE, tier: "gate" }, wrResponder(worst));
+  assert.equal(tierOf(g.find("reviewer")), "opus/high");
+  assert.equal(tierOf(g.find("re-reviewer")), "opus/high");
+  assert.ok(g.find("reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
+  assert.ok(g.find("re-reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
+  assert.equal(tierOf(g.find("ruler")), "opus/high");
+  const c = await run(wr, WBASE, wrResponder(worst));
+  assert.equal(tierOf(c.find("reviewer")), "opus/xhigh");
+  assert.equal(tierOf(c.find("re-reviewer")), "opus/xhigh");
+  const cx = await run(wr, { ...WBASE, tier: "critical" }, wrResponder(worst));
+  assert.equal(tierOf(cx.find("reviewer")), "opus/xhigh");
+  await assert.rejects(
+    run(wr, { ...WBASE, tier: "ordinary" }, wrResponder()),
+    /no wave-review needed/,
+  );
+  await assert.rejects(run(wr, { ...WBASE, tier: "low" }, wrResponder()), /tier/);
+  const ov = await run(
+    wr,
+    { ...WBASE, tier: "gate", roles: { reviewer: { model: "opus", effort: "max" } } },
+    wrResponder(worst),
+  );
+  assert.equal(tierOf(ov.find("reviewer")), "opus/max", "a roles override still wins");
+});
+
+await test("tiers: the wave-review reviewer prompt is diff-scoped", async () => {
+  const r = await run(wr, WBASE, wrResponder({ reviewer: reviewWith([WF("I1", "important")]) }));
+  const p = r.find("reviewer").prompt;
+  assert.ok(p.includes(DIFF_SCOPE), p);
+  assert.ok(p.includes("do not read unrelated files"));
+  assert.ok(
+    p.includes("* a.ts") && p.includes("1. q1"),
+    "sensitive files and questions still steer it",
+  );
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {
