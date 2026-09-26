@@ -357,7 +357,7 @@ function rulingsText() {
 }
 
 // ---------- ledger + return ----------
-// Ledger Ruling line format: "- Task N: Ruling: <what> — <decision>: <why> — <cost if wrong>".
+// Ledger Ruling line format: "- Task N: Ruling: <what> {U+2014} <decision>: <why> {U+2014} <cost if wrong>".
 function ledgerLines(result) {
   const out = []
   const b7 = String(A.base).slice(0, 7)
