@@ -40,8 +40,8 @@
  * stopped (a stop point, with the agent that consumes answers there):
  *   "implementer"     -> implementer-continue finishes on top of the existing commits
  *   "precondition"    -> (problem says what: branch, HEAD, dirty tree with the files named; stopPoint
- *                        is precondition:<label>) fix the repo; the failing agent re-runs once as
- *                        implementer-retry or gate-...-retry
+ *                        is precondition:<label>: implementer, gate-0, checker, ruler-review or
+ *                        gate-r<r>) fix the repo; the failing agent re-runs once as <label>-retry
  *   "ruler-concerns"  -> ruler-concerns        "fixer-pre" -> fixer-pre
  *   "review"          -> ruler-review, then the fixers (a reviewer returned nothing)
  *   "ruler-review"    -> ruler-review          "fixer-r<r>" -> fixer-r<r>
