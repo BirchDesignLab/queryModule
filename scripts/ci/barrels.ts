@@ -1,5 +1,5 @@
 const REEXPORT =
-  /\s*export\s+(?:type\s+)?(?:\*(?:\s+as\s+[\w$]+)?|\{[^}]*\})\s*from\s*(?:"[^"\n]*"|'[^'\n]*')\s*;?/y;
+  /\s*export(?:\s+type\b)?\s*(?:\*(?:\s*as\s+[\w$]+)?|\{[^}]*\})\s*from\s*(?:"[^"\n]*"|'[^'\n]*')\s*;?/y;
 
 /** True when the source holds only `export ... from` statements (and comments). */
 export function isPureBarrel(source: string): boolean {

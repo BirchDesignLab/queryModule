@@ -19,6 +19,20 @@ describe("coverage-excluded index.ts files are pure re-export barrels (plan amen
     expect(isPureBarrel('export {\n  a,\n  b,\n} from "./ab";\n')).toBe(true);
     expect(isPureBarrel('// comment\n/** doc */\nexport * from "./a";\n')).toBe(true);
     expect(isPureBarrel("")).toBe(true);
+  });
+
+  it("accepts compact and comment-split re-exports (review spec:CV2)", () => {
+    expect(isPureBarrel('export { a } from "./a";export{b}from"./b";\n')).toBe(true);
+    expect(isPureBarrel('export*from"./a";export*as ns from"./ns";export type{T}from"./t";')).toBe(
+      true,
+    );
+    expect(isPureBarrel('export { a /* x */, b // y\n} from "./ab";\n')).toBe(true);
+    expect(isPureBarrel('export /* x */ * /* y */ from /* z */ "./a";\n')).toBe(true);
+    expect(isPureBarrel("exportconst X = 1;\n")).toBe(false);
+    expect(isPureBarrel('export{a};export*from"./b";\n')).toBe(false);
+  });
+
+  it("rejects anything that is not export ... from", () => {
     expect(isPureBarrel('import en from "./en.json";\nexport const X = { en };\n')).toBe(false);
     expect(isPureBarrel('export * from "./a";\nexport const X = 1;\n')).toBe(false);
     expect(isPureBarrel("export { a };\n")).toBe(false);
