@@ -214,7 +214,7 @@ Expected: `repo: BirchDesignLab/queryModule`, eleven `label:` lines, five `miles
 
 | Task | Title | Labels |
 |---|---|---|
-| 1 | Workspace root skeleton (none) | `track-a` |
+| 1 | Workspace root skeleton (none) | `platform` |
 | 2 | Core package and version constants (spec 4.7) | `core`, `contract` |
 | 3 | ValidationError and ApiError contracts (NFR-001) | `core`, `contract` |
 | 4 | Source status and query audit catalogue (SEC-010, SEC-011, SEC-012, SEC-013) | `core`, `contract`, `sensitive` |
@@ -230,21 +230,21 @@ Expected: `repo: BirchDesignLab/queryModule`, eleven `label:` lines, five `miles
 | 14 | Mock file schema (FR-044, SEC-002) | `core`, `contract` |
 | 15 | Route contracts skeleton (BR-007) | `core`, `contract` |
 | 16 | Shipped default and example-ok sites, locales, mocks (FR-008, FR-020, FR-030) | `core` |
-| 17 | Contract generators and drift check (BR-007) | `track-a`, `sensitive` |
-| 18 | config:validate and config:migrate (BR-001, BR-004) | `track-a`, `sensitive` |
-| 19 | Licence check (BR-006) | `track-a`, `sensitive` |
-| 20 | Story-tag gate and stories.json (A1 to A5) | `track-a`, `sensitive` |
-| 21 | Sensitive paths and sensitive-review check (SEC-020) | `track-a`, `sensitive` |
-| 22 | ci.yml and Dependabot (BR-006, BR-007) | `track-a`, `sensitive` |
-| 23 | Tokens skeleton (UX-002, UX-011) | `track-b`, `sensitive` |
-| 24 | Client platform and web-ui skeleton (FR-005) | `track-b` |
-| 25 | Web shell scaffold (UX-001) | `track-b` |
-| 26 | Mobile placeholder and CI steps 8 and 9 (none) | `track-a`, `sensitive` |
-| 27 | Node 24 compatibility check (ADR-0001) | `track-a` |
-| 28 | Ruleset on main and security updates (SEC-020) | `track-a`, `sensitive` |
+| 17 | Contract generators and drift check (BR-007) | `platform`, `sensitive` |
+| 18 | config:validate and config:migrate (BR-001, BR-004) | `platform`, `sensitive` |
+| 19 | Licence check (BR-006) | `platform`, `sensitive` |
+| 20 | Story-tag gate and stories.json (A1 to A5) | `platform`, `sensitive` |
+| 21 | Sensitive paths and sensitive-review check (SEC-020) | `platform`, `sensitive` |
+| 22 | ci.yml and Dependabot (BR-006, BR-007) | `platform`, `sensitive` |
+| 23 | Tokens skeleton (UX-002, UX-011) | `web`, `sensitive` |
+| 24 | Client platform and web-ui skeleton (FR-005) | `web` |
+| 25 | Web shell scaffold (UX-001) | `web` |
+| 26 | Mobile placeholder and CI steps 8 and 9 (none) | `platform`, `sensitive` |
+| 27 | Node 24 compatibility check (ADR-0001) | `platform` |
+| 28 | Ruleset on main and security updates (SEC-020) | `platform`, `sensitive` |
 
 ```bash
-gh issue create --title "Workspace root skeleton (none)" --label track-a --label p0 --milestone "M0 Skeleton" --body "Plan: docs/superpowers/plans/2026-09-25-p0-contracts.md Task 1. IDs: none (scaffolding). Tests first: see plan. Sensitive: no."
+gh issue create --title "Workspace root skeleton (none)" --label platform --label p0 --milestone "M0 Skeleton" --body "Plan: docs/superpowers/plans/2026-09-25-p0-contracts.md Task 1. IDs: none (scaffolding). Tests first: see plan. Sensitive: no."
 ```
 
 Repeat the command per row with that row's title, labels, task number, IDs and `Sensitive: yes` for rows labelled `sensitive`. Write each issue number after the task heading below (`### Task N: ... (#n)`) in the Task 1 PR.
@@ -7683,7 +7683,7 @@ gh label list --limit 50 --json name --jq '[.[].name] | sort | join(" ")'
 gh issue list --milestone "M0 Skeleton" --label p0 --state open
 ```
 
-Expected: `A1:m1 A2:m1 A3:m1 A4:m1 A5:m1` (M0 has no stories, 12.7); labels include `api-breaking contract core mobile p0 p1 p2 p3 sensitive track-a track-b`; no open P0 issues (each closed by its PR's `Closes #n`).
+Expected: `A1:m1 A2:m1 A3:m1 A4:m1 A5:m1` (M0 has no stories, 12.7); labels include `api-breaking contract core mobile p0 p1 p2 p3 platform sensitive web`; no open P0 issues (each closed by its PR's `Closes #n`).
 
 - [ ] **Step 8: Whole-phase review.** Run the Opus 5.5 `xhigh` whole-phase review (the phase has sensitive work, master plan 10.2 item 3) over the P0 range on `main`. Fix findings in a follow-up PR or file them as P1 issues on the owning track.
 

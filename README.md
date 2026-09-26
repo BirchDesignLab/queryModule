@@ -120,7 +120,7 @@ Milestone (M0 to M4, plus Later)
 
 **Tasks.** One plan section with checkbox steps; one GitHub issue; TDD; run through `sdd-task`. The checkbox is ticked in the wave PR, and the issue closes through `Closes #n` in that PR (10.1 definition of done).
 
-**Issues.** Labels `track-a`, `track-b`, `core`, `mobile`, `p0` to `p3`, `sensitive`, `contract`, `api-breaking`, created by `scripts/ops/gh-setup-labels.sh`. Every issue carries exactly one track label, one phase label and one milestone. Title format `<what> (<IDs>)`; body format, claim and close rules are in 5.2.
+**Issues.** Labels `platform`, `web`, `core`, `mobile`, `p0` to `p3`, `sensitive`, `contract`, `api-breaking`, created by `scripts/ops/gh-setup-labels.sh`. Every issue carries exactly one track label, one phase label and one milestone. Title format `<what> (<IDs>)`; body format, claim and close rules are in 5.2.
 
 **Status and decisions.**
 
@@ -132,7 +132,7 @@ Milestone (M0 to M4, plus Later)
 
 **Workflows.** `sdd-task` runs one task; `wave-review` runs the whole-branch review for a sensitive wave. See "Running tasks with workflows" below.
 
-**Project board.** The developer maintains a private GitHub Projects board, "Query Module 2.0", holding every issue. Its view "Kanban Label Sliced" is a board with Status columns Todo, In Progress and Done, sliced by label (`track-a`, `track-b`, `core`, `p0`, `contract`, `sensitive`), so one track, phase or the sensitive work is a click away. Cards show the milestone, labels and the linked wave PR. An issue reaches Done when its wave PR merges and closes it through `Closes #n`; nothing moves items to In Progress automatically, so the developer does. Issues a phase plan creates are added to the board then. Issues and PRs are the source of truth; the board is a view over them.
+**Project board.** The developer maintains a private GitHub Projects board, "Query Module 2.0", holding every issue. Its view "Kanban Label Sliced" is a board with Status columns Todo, In Progress and Done, sliced by label (`platform`, `web`, `core`, `p0`, `contract`, `sensitive`), so one track, phase or the sensitive work is a click away. Cards show the milestone, labels and the linked wave PR. An issue reaches Done when its wave PR merges and closes it through `Closes #n`; nothing moves items to In Progress automatically, so the developer does. Issues a phase plan creates are added to the board then. Issues and PRs are the source of truth; the board is a view over them.
 
 ## Running tasks with workflows (ADR-0006)
 
