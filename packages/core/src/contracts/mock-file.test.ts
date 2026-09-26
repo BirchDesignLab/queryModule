@@ -107,4 +107,12 @@ describe("FR-044 SEC-002 mock file (spec 5.4)", () => {
     ok.sources.stateSource.latencyMs = [50, 50];
     expect(MockFileSchema.safeParse(ok).success).toBe(true);
   });
+  it("rejects a negative latencyMs bound and an empty responses list", () => {
+    const negative = structuredClone(file);
+    negative.sources.stateSource.latencyMs = [-1, 50];
+    expect(MockFileSchema.safeParse(negative).success).toBe(false);
+    const empty = structuredClone(file);
+    empty.sources.stateSource.responses = [];
+    expect(MockFileSchema.safeParse(empty).success).toBe(false);
+  });
 });
