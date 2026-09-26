@@ -1,13 +1,14 @@
 /*
- * wave-review: whole-branch review of one wave PR that touches sensitive paths,
- * one fix pass, one re-review, and the docs/reviews/pr-<n>.md artifact (ADR-0006;
- * design: .superpowers/sdd/2026-09-25-p0-contracts/workflow-design.md).
+ * wave-review: whole-branch review of one wave PR that touches sensitive paths, one ruled fix
+ * pass, one re-review, and the docs/reviews/pr-<n>.md artifact (ADR-0006).
+ * Full reference: .claude/workflows/README.md. Test the control flow after any edit:
+ * node scripts/sdd/workflow-harness.mjs
  *
  * Invoke: Workflow({ name: "wave-review", args: {
  *   pr: 32, base: "<merge-base sha with main>", head: "<wave branch head sha>",
  *   repoDir: "C:\\git\\queryModule", planPath: "docs/superpowers/plans/2026-09-25-p0-contracts.md",
  *   ledgerPath, workDir,                      // SDD workspace: review, fix report, re-review files
- *   scratchRoot, runLabel: "w2-xhigh",        // agent scratch: <scratchRoot>/<runLabel>/<agent>/
+ *   scratchRoot, runLabel: "w4-xhigh",        // agent scratch: <scratchRoot>/<runLabel>/<agent>/
  *   sensitiveFiles: ["packages/core/src/audit/..."], questions: ["..."],
  *   artifactPath: "docs/reviews/pr-32.md",    // default docs/reviews/pr-<pr>.md, relative to repoDir
  *   specPath, requirementsDoc,                // optional; defaults below
@@ -15,16 +16,29 @@
  *   trailer: "Co-Authored-By: ...",           // fallback commit trailer for the fixer
  *   roles: { reviewer: { model: "opus", effort: "xhigh" }, ... }   // optional overrides
  * } })
- * Roles and defaults: reviewer opus/xhigh, ruler opus/medium, fixer opus/medium,
+ * Required: pr, base, head, repoDir, planPath, workDir, scratchRoot, runLabel, trailer.
+ * Roles and defaults: reviewer opus/xhigh, ruler opus/high, fixer opus/medium,
  * progressChecker sonnet/low, reReviewer opus/xhigh.
  *
- * Controller before: wave branch pushed or at least committed, clean tree in repoDir,
- * head = the sha to review; ledger current. The script checks nothing out.
- * Controller after: if artifactWritten, commit the artifact (it records reviewedSha =
- * the reviewed head, so the artifact commit sits on top) and push; otherwise read
- * residual and adjudicate. There is no second fix pass. The script never pushes or merges.
+ * Returns { verdict: "approve" | "fixes", reviewedSha, artifactWritten, findings, residual,
+ * answers, declined, rulings, fixCommits?, strayArtifact?, stopped?, escalated?, questions? }.
+ *   verdict "approve" with artifactWritten: commit the artifact (it records reviewedSha, the
+ *     reviewed head, so the artifact commit sits on top) and push.
+ *   verdict "approve" without artifactWritten: re-run the review; never hand-write the artifact.
+ *   verdict "fixes" without stopped: the single fix pass left residual findings. Adjudicate
+ *     them; there is no second fix pass.
+ *   stopped set: a controller decision is needed, not routine adjudication.
+ *     stopped "reviewer": the reviewer returned nothing; re-run.
+ *     stopped "ruler": escalated lists the rulings to decide (a critical ruled stands is always
+ *       escalated); answer them, then re-run.
+ *     stopped "fixer": questions from a BLOCKED or NEEDS_CONTEXT fixer, or a dead fixer.
+ *     stopped "re-review": the re-reviewer returned nothing; the fix is unreviewed.
+ *   strayArtifact set: an artifact file was written without a final approve; delete it.
+ * Controller before: wave branch committed, clean tree in repoDir, head = the sha to review,
+ * ledger current. The script checks nothing out.
  * Resume after a pause, kill or script edit: Workflow({ scriptPath:
  * ".claude/workflows/wave-review.js", args: <the same args>, resumeFromRunId: "<runId>" }).
+ * This script never pushes or merges.
  */
 export const meta = {
   name: 'wave-review',
@@ -41,7 +55,10 @@ export const meta = {
 // ---------- arguments ----------
 const A = args || {}
 for (const k of ['pr', 'base', 'head', 'repoDir', 'planPath', 'workDir', 'scratchRoot', 'runLabel', 'trailer']) {
-  if (A[k] === undefined || A[k] === null || A[k] === '') throw new Error(`wave-review: missing required arg "${k}"`)
+  const v = A[k]
+  if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) {
+    throw new Error(`wave-review: required arg "${k}" is missing or empty (see .claude/workflows/README.md)`)
+  }
 }
 const SENSITIVE_FILES = Array.isArray(A.sensitiveFiles) ? A.sensitiveFiles : []
 const QUESTIONS = Array.isArray(A.questions) ? A.questions : []
@@ -52,7 +69,7 @@ const MAX_LISTED_FILES = 200
 let listedFiles = SENSITIVE_FILES
 if (SENSITIVE_FILES.length > MAX_LISTED_FILES) {
   listedFiles = SENSITIVE_FILES.slice(0, MAX_LISTED_FILES)
-  log(`cap: sensitiveFiles has ${SENSITIVE_FILES.length} entries; the prompt lists the first ${MAX_LISTED_FILES} and tells the reviewer to derive the rest from scripts/ci sensitive paths`)
+  log(`cap: sensitiveFiles has ${SENSITIVE_FILES.length} entries; the prompt lists the first ${MAX_LISTED_FILES} and tells the reviewer to derive the rest from the sensitive-path globs`)
 }
 
 // ---------- roles ----------
@@ -60,7 +77,7 @@ const MODELS = ['haiku', 'sonnet', 'opus']
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 const DEFAULTS = {
   reviewer: { model: 'opus', effort: 'xhigh' },
-  ruler: { model: 'opus', effort: 'medium' },
+  ruler: { model: 'opus', effort: 'high' },
   fixer: { model: 'opus', effort: 'medium' },
   progressChecker: { model: 'sonnet', effort: 'low' },
   reReviewer: { model: 'opus', effort: 'xhigh' },
@@ -93,7 +110,7 @@ const REPO = fwd(A.repoDir)
 const scratch = (label) => join(A.scratchRoot, A.runLabel, label)
 const REVIEW_FILE = join(A.workDir, `${A.runLabel}-review.md`)
 const FIX_REPORT = join(A.workDir, `${A.runLabel}-fix-report.md`)
-const REREVIEW_FILE = join(A.workDir, `${A.runLabel}-rereview.md`)
+const REREVIEW_FILE = join(A.workDir, `${A.runLabel}-re-review.md`)
 const ARTIFACT_ABS = join(REPO, ARTIFACT)
 
 // ---------- schemas ----------
@@ -182,10 +199,15 @@ const REREVIEW = {
         required: ['id', 'verdict', 'evidence'],
       },
     },
+    acceptedStands: {
+      type: 'array',
+      description: 'every important finding you accept as STANDS, with the id of the ruling that keeps it',
+      items: { type: 'object', properties: { id: { type: 'string' }, rulingId: { type: 'string' } }, required: ['id', 'rulingId'] },
+    },
     newFindings: { type: 'array', items: FINDING },
     artifactWritten: { type: 'boolean' },
   },
-  required: ['verdict', 'reviewedSha', 'verdicts', 'newFindings', 'artifactWritten'],
+  required: ['verdict', 'reviewedSha', 'verdicts', 'acceptedStands', 'newFindings', 'artifactWritten'],
 }
 
 // ---------- shared prompt pieces ----------
@@ -197,7 +219,8 @@ const HOUSE = [
   '- No filesystem-wide searches: read the files named here and the files they lead you to.',
   '- Do not push, open a PR, merge or commit unless this prompt says to commit.',
 ].join('\n')
-const READONLY = `Read-only on this checkout: never change the working tree, the index, HEAD or any branch. For another revision use a separate worktree under your scratch directory. You write only your report file, your scratch directory, and (when this prompt allows it) the artifact.`
+const READONLY = 'Read-only on this checkout: never change the working tree, the index, HEAD or any branch. For another revision use a separate worktree under your scratch directory. You write only your report file, your scratch directory, and (when this prompt allows it) the artifact.'
+const RULER_RULE = 'In wave-review the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules. A Critical finding may be ruled fix or escalate, never stands.'
 const findingsText = (fs) => fs.map((f) => `- [${f.id}] ${f.severity.toUpperCase()} ${f.file}${f.line ? ':' + f.line : ''}: ${f.summary}${f.fix ? ' Fix: ' + f.fix : ''}`).join('\n')
 const DATE_RULE = A.date ? `Date: ${A.date}.` : 'Date: today in MM-DD-YY (run date +%m-%d-%y).'
 function artifactRule(roleName, shaWord) {
@@ -206,12 +229,20 @@ function artifactRule(roleName, shaWord) {
     '```',
     frontMatter(roleName, '<sha>'),
     '```',
-    `Then a short body: Scope (PR #${A.pr}, range, what the wave delivers), Findings summary (counts by severity, how each critical or important was resolved), Answers to the controller's questions, Remaining Minors. No em dashes. ${DATE_RULE}`,
+    `Then a short body: Scope (PR #${A.pr}, range, what the wave delivers), Findings summary (counts by severity, how each critical or important was resolved, each ruling id kept as stands), Answers to the controller's questions, Remaining Minors. No em dashes. ${DATE_RULE}`,
     'Otherwise do not create or touch the artifact. Set artifactWritten accordingly.',
   ].join('\n')
 }
 
 const state = { rulings: [], fixCommits: [], answers: [], declined: [] }
+const blocking = (f) => f.severity === 'critical' || f.severity === 'important'
+function rulingsText() {
+  if (!state.rulings.length) return ''
+  return ['Rulings in force (binding; never reverse one):', ...state.rulings.map((r) => `* ruling ${r.item}: ${r.decision}: ${r.reason}`)].join('\n')
+}
+function done(extra) {
+  return Object.assign({ answers: state.answers, declined: state.declined, rulings: state.rulings }, extra)
+}
 
 // ================= 1. Whole-branch review =================
 phase('Review')
@@ -222,12 +253,13 @@ const review = await agent(
     `Plan: ${A.planPath} (the tasks this range delivers). Spec: ${SPEC}. Requirements: "${REQ_DOC}".`,
     'The spec is binding authority: where the plan and the spec disagree, the spec wins unless a ledger Ruling or an ADR in docs/decisions/ says otherwise; say which governs each such finding. For behaviour the spec is silent on, a reasonable user\'s expectation is a requirement, and a spec\'s silence is not permission.',
     A.ledgerPath ? `Ledger: ${A.ledgerPath}. Read every "Ruling:" and "minor (deferred):" line for these tasks. A deferred minor is known, not new; re-raise it only if it is worse than recorded. A finding that disputes a Ruling sets contests to that Ruling line.` : 'No ledger given.',
-    SENSITIVE_FILES.length ? `Sensitive files in this range (read each in full, not only its hunks):\n${listedFiles.map((f) => `- ${f}`).join('\n')}` : 'No sensitive-file list given; derive it from the sensitive-path globs in the repo if present.',
+    SENSITIVE_FILES.length ? `Sensitive files in this range (read each in full, not only its hunks):\n${listedFiles.map((f) => `* ${f}`).join('\n')}` : 'No sensitive-file list given; derive it from the sensitive-path globs in the repo if present.',
     QUESTIONS.length ? `Controller questions (answer each in answers, with file:line evidence):\n${QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : 'No controller questions.',
     '',
+    `Precondition: git rev-parse ${A.head} resolves and ${A.base} is its ancestor (git merge-base --is-ancestor). If not, write nothing, return verdict fixes with one critical finding saying so.`,
     `Build your view first: mkdir -p "${scratch('reviewer')}" && cd "${REPO}" && { git log --oneline ${A.base}..${A.head}; echo; git diff --stat ${A.base}..${A.head}; echo; git diff -U10 ${A.base}..${A.head}; } > "${scratch('reviewer')}/branch.diff"; then read it. Resolve reviewedSha with git rev-parse ${A.head}.`,
     READONLY,
-    'Tests: each task already ran its suite. Run pnpm verify once at the head only if you have a named doubt it answers; record the result.',
+    'Tests: each task already ran its suite and an independent gate. Run pnpm lint, pnpm typecheck or pnpm test at the head only for a named doubt; record the result.',
     '',
     'Check: plan alignment (all planned functionality present, deviations justified); correctness and edge cases; error handling; type safety; security, CJIS and GDPR exposure in the sensitive files (credentials, audit rows never deleted or rewritten, fail-open paths, real-looking records in fixtures); architecture and integration; tests verify real behaviour; production readiness (migrations, backward compatibility, docs).',
     'Severity: critical = broken behaviour, security or data risk; important = must fix before merge; minor = polish. A defect the plan explicitly mandates is still a finding: important, planMandated true. Every finding cites file:line and says why it matters and how to fix.',
@@ -241,32 +273,29 @@ const review = await agent(
 )
 
 if (!review) {
-  log('review: reviewer returned null (skipped or died); nothing to return')
-  return { verdict: 'none', reviewedSha: null, artifactWritten: false, findings: [], residual: [], answers: [], declined: [], rulings: [] }
+  log('review: reviewer returned null (skipped or died); stopping');
+  return done({ verdict: 'fixes', stopped: 'reviewer', reviewedSha: null, artifactWritten: false, findings: [], residual: [] })
 }
 state.answers = review.answers
 state.declined = review.declined
-const blocking = (f) => f.severity === 'critical' || f.severity === 'important'
 const firstBlocking = review.findings.filter(blocking)
 log(`review: ${review.verdict}, ${review.findings.length} finding(s) (${firstBlocking.length} critical/important), ${review.answers.length} answer(s), ${review.declined.length} declined, artifact ${review.artifactWritten ? 'written' : 'not written'}`)
 if (review.declined.length) log(`review: ${review.declined.length} declined-to-judge item(s) returned for the controller to rule on`)
 
 if (review.verdict === 'approve' && firstBlocking.length === 0) {
-  if (!review.artifactWritten) log('review: approve but the artifact was not written; the controller writes it')
-  return {
-    verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten,
-    findings: review.findings, residual: review.findings.filter((f) => !blocking(f)), answers: state.answers, declined: state.declined, rulings: [],
-  }
+  if (!review.artifactWritten) log('review: approve but the artifact was not written; re-run the review, never hand-write it')
+  return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)) })
 }
 if (review.verdict === 'approve') log(`review: verdict approve but ${firstBlocking.length} critical/important finding(s); treating as fixes`)
-if (review.artifactWritten) log(`review: artifact written despite blocking findings; the re-review overwrites or the controller deletes ${ARTIFACT}`)
+let stray = review.artifactWritten
+if (stray) log(`review: artifact written despite blocking findings; the re-review overwrites it on approve, otherwise it is returned as strayArtifact`)
 
 // ================= 2. Rule =================
 let toFix = review.findings.map((f) => Object.assign({}, f))
 const contested = toFix.filter((f) => blocking(f) && (f.planMandated || (f.contests && f.contests.trim())))
 if (contested.length) {
   phase('Rule')
-  log(`rule: ${contested.length} plan-mandated or contested finding(s) to the ruler`)
+  log(`rule: ${contested.length} plan-mandated or contested finding(s) to the ruler (${tier('ruler')})`)
   const res = await agent(
     [
       `You are the ruler for wave PR #${A.pr} (${A.base}..${review.reviewedSha}). The spec (${SPEC}) is binding; the plan is not when it conflicts. ADRs in docs/decisions/ and ledger Rulings${A.ledgerPath ? ` (${A.ledgerPath})` : ''} are in force unless the spec contradicts them.`,
@@ -275,7 +304,8 @@ if (contested.length) {
       'Items:',
       ...contested.map((f) => `- [${f.id}] ${f.severity} ${f.file}${f.line ? ':' + f.line : ''}: ${f.summary}${f.planMandated ? ' (plan-mandated)' : ''}${f.contests ? ` (contests: ${f.contests})` : ''} Reviewer fix: ${f.fix}`),
       '',
-      'Decide each: fix (give fixInstruction, the smallest change), stands (code stays; cite why), verified (you checked it; put the command and result in command), or escalate (only when every path is a guess, or the action is irreversible or security-sensitive).',
+      'Decide each: fix (give fixInstruction, the smallest change), stands (code stays; cite why), verified (you checked it and it passed; put the command and result in command; a failed check is fix), or escalate (only when every path is a guess, or the action is irreversible or security-sensitive).',
+      RULER_RULE,
       'costIfWrong: one line. You are read-only: edit and commit nothing. Scratch: ' + scratch('ruler'),
       HOUSE,
       'Return one ruling per item, item = the id exactly as given.',
@@ -285,19 +315,21 @@ if (contested.length) {
   const byId = new Map(((res && res.rulings) || []).map((r) => [r.item.replace(/^\[|\]$/g, '').trim(), r]))
   const escalated = []
   for (const f of contested) {
-    const r = byId.get(f.id)
+    let r = byId.get(f.id)
     if (!r) { log(`rule: no ruling for ${f.id}; it stays in the fix list`); continue }
+    if (f.severity === 'critical' && (r.decision === 'stands' || r.decision === 'verified')) {
+      log(`rule: ${f.id} is critical and was ruled ${r.decision}; escalated (a critical is never kept as stands)`)
+      r = Object.assign({}, r, { decision: 'escalate', reason: `ruled ${r.decision} on a critical finding: ${r.reason}` })
+    }
     state.rulings.push({ item: f.id, what: f.summary.slice(0, 160), decision: r.decision, reason: r.reason, costIfWrong: r.costIfWrong, fixInstruction: r.fixInstruction || '', command: r.command || '' })
     if (r.decision === 'escalate') escalated.push(Object.assign({ finding: f }, r))
     else if (r.decision === 'stands' || r.decision === 'verified') toFix = toFix.filter((x) => x.id !== f.id)
     else if (r.decision === 'fix' && r.fixInstruction) toFix = toFix.map((x) => (x.id === f.id ? Object.assign({}, x, { fix: r.fixInstruction }) : x))
   }
+  if (!res) log('rule: ruler returned null; every contested finding stays in the fix list')
   if (escalated.length) {
     log(`rule: ${escalated.length} escalation(s); stopping before any fix`)
-    return {
-      verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'ruler', escalated,
-      findings: review.findings, residual: toFix, answers: state.answers, declined: state.declined, rulings: state.rulings,
-    }
+    return done({ verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'ruler', escalated, findings: review.findings, residual: toFix, strayArtifact: stray ? ARTIFACT : undefined })
   }
 }
 
@@ -305,13 +337,16 @@ if (contested.length) {
 const mustFix = toFix.filter(blocking)
 const minors = toFix.filter((f) => !blocking(f))
 let fixHead = review.reviewedSha
-let progressProblems = []
+const progressFindings = []
 if (mustFix.length || minors.length) {
   phase('Fix')
   log(`fix: one pass, ${mustFix.length} critical/important and ${minors.length} minor finding(s)`)
   const fx = await agent(
     [
       `You are fixing the whole-branch review findings of wave PR #${A.pr} at ${review.reviewedSha}. Read the review ${REVIEW_FILE} and the plan ${A.planPath} and spec ${SPEC} sections the findings cite.`,
+      `Precondition: git rev-parse HEAD is ${review.reviewedSha}. If not, change nothing and report BLOCKED with what you found.`,
+      rulingsText(),
+      'Never reverse a ruling. If a finding cannot be fixed without reversing one, leave it and say so in concerns (kind planVsSpec).',
       '',
       'Must fix (all of them; a given Fix is the ruled change):',
       mustFix.length ? findingsText(mustFix) : '(none)',
@@ -319,21 +354,18 @@ if (mustFix.length || minors.length) {
       'Minor (fix when small and safe; otherwise leave it and list it in concerns as observation):',
       minors.length ? findingsText(minors) : '(none)',
       '',
-      'TDD: for each behavioural finding write or tighten a failing test first, see it fail, fix, see it pass. Then run pnpm verify once.',
-      `Write ${FIX_REPORT}: per finding id, the change (file:line), the covering tests, commands and RED/GREEN output, and the pnpm verify result.`,
+      'TDD: for each behavioural finding write or tighten a failing test first, see it fail, fix, see it pass. Then run pnpm lint, pnpm typecheck and pnpm test once each.',
+      `Write ${FIX_REPORT}: per finding id, the change (file:line), the covering tests, commands and RED/GREEN output, and the lint, typecheck and test results.`,
       `Commit only the files you changed (git add <paths>, never git add -A), message "fix: wave review findings for PR #${A.pr}", body listing the finding ids. End the message with the attribution trailer your session's system reminder gives; if none, use:\n${A.trailer}`,
       GIT,
       HOUSE,
       'Use BLOCKED or NEEDS_CONTEXT with questions only when you cannot proceed at all.',
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
     { label: 'fixer', phase: 'Fix', schema: WORK, ...role('fixer') },
   )
   if (!fx || fx.status === 'BLOCKED' || fx.status === 'NEEDS_CONTEXT') {
     log(`fix: fixer ${fx ? fx.status : 'returned null'}; stopping`)
-    return {
-      verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'fixer', questions: fx ? fx.questions : [],
-      findings: review.findings, residual: toFix, answers: state.answers, declined: state.declined, rulings: state.rulings,
-    }
+    return done({ verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'fixer', questions: fx ? fx.questions : ['fixer returned no result'], findings: review.findings, residual: toFix, strayArtifact: stray ? ARTIFACT : undefined })
   }
   const pc = await agent(
     [
@@ -349,16 +381,18 @@ if (mustFix.length || minors.length) {
     ].join('\n'),
     { label: 'progress', phase: 'Fix', schema: PROGRESS, ...role('progressChecker') },
   )
+  let problems = []
   if (pc) {
     fixHead = pc.head
     state.fixCommits = pc.newCommits
-    if (!pc.ok) progressProblems = pc.problems
+    if (!pc.ok) problems = pc.problems
   } else {
     fixHead = fx.head
     state.fixCommits = fx.commits
-    progressProblems = ['progress checker returned no result; fix pass unchecked']
+    problems = ['progress checker returned no result; fix pass unchecked']
   }
-  log(`fix: head ${String(fixHead).slice(0, 7)}, ${state.fixCommits.length} commit(s)${progressProblems.length ? `; progress problems: ${progressProblems.join('; ')}` : ''}`)
+  problems.forEach((p, k) => progressFindings.push({ id: `progress-${k + 1}`, severity: 'important', file: '', line: '', summary: `progress check: ${p}`, fix: 'restore the invariant the progress check names', planMandated: false, contests: '' }))
+  log(`fix: head ${String(fixHead).slice(0, 7)}, ${state.fixCommits.length} commit(s)${problems.length ? `; ${problems.length} progress problem(s) sent to the re-reviewer as findings` : ''}`)
 } else {
   log('fix: every finding was ruled stands or verified; no fix pass, the re-review confirms and writes the artifact')
 }
@@ -368,43 +402,48 @@ phase('Re-review')
 const underVerification = review.findings.map((f) => {
   const r = state.rulings.find((x) => x.item === f.id)
   return Object.assign({}, f, { ruled: r ? r.decision : '' })
-})
+}).concat(progressFindings)
 const rr = await agent(
   [
-    `You are the fresh re-reviewer for wave PR #${A.pr}. The first review is ${REVIEW_FILE}; its findings are below with any ruling. ${fixHead === review.reviewedSha ? 'There was no fix diff: confirm each ruled item and the head.' : `A single fix pass produced ${review.reviewedSha}..${fixHead}; the fix report is ${FIX_REPORT}.`}`,
+    `You are the fresh re-reviewer for wave PR #${A.pr}. The first review is ${REVIEW_FILE}; its findings are below with any ruling, followed by progress-check findings. ${fixHead === review.reviewedSha ? 'There was no fix diff: confirm each ruled item and the head.' : `A single fix pass produced ${review.reviewedSha}..${fixHead}; the fix report is ${FIX_REPORT}.`}`,
     '',
-    'Findings:',
+    'Findings (verdict every one, including progress-*):',
     underVerification.map((f) => `- [${f.id}] ${f.severity.toUpperCase()} ${f.file}${f.line ? ':' + f.line : ''}: ${f.summary}${f.ruled ? ` (ruled ${f.ruled})` : ''}`).join('\n'),
-    progressProblems.length ? `Progress-check problems to weigh:\n${progressProblems.map((p) => `- ${p}`).join('\n')}` : '',
-    state.rulings.length ? `Rulings: ${state.rulings.map((r) => `[${r.item}] ${r.decision}: ${r.reason}`).join(' | ')}` : '',
+    rulingsText(),
     '',
     fixHead === review.reviewedSha
       ? ''
-      : `Build the fix diff: mkdir -p "${scratch('rereviewer')}" && cd "${REPO}" && { git log --oneline ${review.reviewedSha}..${fixHead}; echo; git diff --stat ${review.reviewedSha}..${fixHead}; echo; git diff -U10 ${review.reviewedSha}..${fixHead}; } > "${scratch('rereviewer')}/fix.diff"; read it once.`,
+      : `Build the fix diff: mkdir -p "${scratch('re-reviewer')}" && cd "${REPO}" && { git log --oneline ${review.reviewedSha}..${fixHead}; echo; git diff --stat ${review.reviewedSha}..${fixHead}; echo; git diff -U10 ${review.reviewedSha}..${fixHead}; } > "${scratch('re-reviewer')}/fix.diff"; read it once.`,
     READONLY,
-    'Verdict every finding: ADDRESSED (the defect no longer exists; "attempted" is NOT ADDRESSED), NOT ADDRESSED, or STANDS (ruled stands or verified, and the ruling holds). file:line evidence each. List anything the fix broke as newFindings (contests "" unless it disputes a Ruling). Do not re-review code the fix did not touch.',
-    'Tests: confirm the fix report shows RED/GREEN and pnpm verify output; do not re-run the suite without a named doubt.',
-    `Write ${REREVIEW_FILE}: Finding Verdicts, New Breakage, Verdict.`,
+    'Verdicts: ADDRESSED (the defect no longer exists; "attempted" is NOT ADDRESSED), NOT ADDRESSED, or STANDS (ruled stands or verified, and you accept the ruling). You may reject a ruling: give NOT ADDRESSED with your reason. A Critical finding is never STANDS, and you may not approve while any Critical is open. List every Important you accept as STANDS in acceptedStands with the id of the ruling that keeps it (the finding id the ruling names). file:line evidence each. List anything the fix broke as newFindings (contests "" unless it disputes a Ruling). Do not re-review code the fix did not touch.',
+    'Tests: confirm the fix report shows RED/GREEN and lint, typecheck and test output; do not re-run the suite without a named doubt.',
+    `Write ${REREVIEW_FILE}: Finding Verdicts, Accepted stands, New Breakage, Verdict.`,
     `reviewedSha: git rev-parse ${fixHead} (full).`,
     artifactRule('reReviewer', 'reviewed head (the fix head)'),
     HOUSE,
-    'verdict: approve only when every critical and important finding is ADDRESSED or STANDS, the progress problems are harmless, and newFindings has no critical or important item.',
+    'verdict: approve only when every critical finding is ADDRESSED, every important one is ADDRESSED or listed in acceptedStands, every progress-* finding is ADDRESSED, and newFindings has no critical or important item.',
   ].filter(Boolean).join('\n'),
   { label: 're-reviewer', phase: 'Re-review', schema: REREVIEW, ...role('reReviewer') },
 )
 
 if (!rr) {
   log('re-review: re-reviewer returned null; returning the fixed-but-unreviewed state')
-  return {
-    verdict: 'fixes', reviewedSha: fixHead, artifactWritten: false, stopped: 're-review',
-    findings: review.findings, residual: toFix, answers: state.answers, declined: state.declined, rulings: state.rulings, fixCommits: state.fixCommits,
-  }
+  return done({ verdict: 'fixes', reviewedSha: fixHead, artifactWritten: false, stopped: 're-review', findings: review.findings, residual: toFix.concat(progressFindings), fixCommits: state.fixCommits, strayArtifact: stray ? ARTIFACT : undefined })
 }
 const vmap = new Map(rr.verdicts.map((v) => [v.id.replace(/^\[|\]$/g, '').trim(), v]))
+const accepted = new Map(rr.acceptedStands.map((a) => [a.id.replace(/^\[|\]$/g, '').trim(), a.rulingId]))
+const standsRuled = new Set(state.rulings.filter((r) => r.decision === 'stands' || r.decision === 'verified').map((r) => r.item))
 const residual = []
-for (const f of review.findings) {
+for (const f of underVerification) {
   const v = vmap.get(f.id)
-  if (v && (v.verdict === 'ADDRESSED' || v.verdict === 'STANDS')) continue
+  if (v && v.verdict === 'ADDRESSED') continue
+  if (v && v.verdict === 'STANDS') {
+    if (f.severity === 'minor') continue
+    const rid = accepted.get(f.id)
+    if (f.severity === 'important' && rid && standsRuled.has(rid.replace(/^ruling\s+/i, '').trim())) continue
+    residual.push(Object.assign({}, f, { reReview: f.severity === 'critical' ? 'STANDS on a critical is not accepted' : 'STANDS without an acceptedStands entry naming a stands ruling' }))
+    continue
+  }
   residual.push(Object.assign({}, f, { reReview: v ? `${v.verdict}: ${v.evidence}` : 'no verdict' }))
 }
 for (const f of rr.newFindings) residual.push(Object.assign({}, f, { id: `rr:${f.id}`, reReview: 'new in fix diff' }))
@@ -414,17 +453,16 @@ if (verdict === 'approve' && residualBlocking.length) {
   log(`re-review: verdict approve but ${residualBlocking.length} critical/important residual; reporting fixes`)
   verdict = 'fixes'
 }
-if (verdict !== 'approve' && rr.artifactWritten) log(`re-review: artifact written without an approve; the controller deletes ${ARTIFACT}`)
-log(`re-review: ${verdict}, ${residual.length} residual (${residualBlocking.length} critical/important), artifact ${rr.artifactWritten ? 'written' : 'not written'}; no second fix pass`)
+if (rr.artifactWritten) stray = verdict !== 'approve'
+if (stray) log(`re-review: an artifact was written without a final approve; returned as strayArtifact for the controller to delete`)
+log(`re-review: ${verdict}, ${residual.length} residual (${residualBlocking.length} critical/important), artifact ${rr.artifactWritten && verdict === 'approve' ? 'written' : 'not written'}; no second fix pass`)
 
-return {
+return done({
   verdict,
   reviewedSha: rr.reviewedSha,
   artifactWritten: rr.artifactWritten && verdict === 'approve',
   findings: review.findings,
   residual,
-  answers: state.answers,
-  declined: state.declined,
-  rulings: state.rulings,
   fixCommits: state.fixCommits,
-}
+  strayArtifact: stray ? ARTIFACT : undefined,
+})
