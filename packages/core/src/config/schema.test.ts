@@ -227,4 +227,20 @@ describe("BR-001 SiteConfig v1 (spec 4.1)", () => {
       expect(SiteConfigSchema.safeParse(raw).success).toBe(false);
     });
   });
+
+  // quality:S1: DEFAULT_DELEGATION_PURPOSE must not be shared by reference across parses.
+  describe("quality:S1 delegation.purposes default is not a shared reference", () => {
+    it("two parses omitting purposes return non-identical purpose objects and delegatorRoles arrays", () => {
+      const a = SiteConfigSchema.parse(minimalSiteConfigInput());
+      const b = SiteConfigSchema.parse(minimalSiteConfigInput());
+      expect(a.delegation.purposes).not.toBe(b.delegation.purposes);
+      expect(a.delegation.purposes[0]).not.toBe(b.delegation.purposes[0]);
+      expect(a.delegation.purposes[0].delegatorRoles).not.toBe(
+        b.delegation.purposes[0].delegatorRoles,
+      );
+      // mutating one parse's result must never leak into another parse's result
+      a.delegation.purposes[0].delegatorRoles.push("admin" as never);
+      expect(b.delegation.purposes[0].delegatorRoles).toEqual(["trainingOfficer"]);
+    });
+  });
 });

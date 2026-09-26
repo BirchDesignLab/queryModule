@@ -151,7 +151,12 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
           maxDurationMinutes: z.int().positive().optional(),
         }),
       )
-      .default([DEFAULT_DELEGATION_PURPOSE]),
+      .default(() => [
+        {
+          ...DEFAULT_DELEGATION_PURPOSE,
+          delegatorRoles: [...DEFAULT_DELEGATION_PURPOSE.delegatorRoles],
+        },
+      ]),
   });
 
   const SiteConfig = obj({
