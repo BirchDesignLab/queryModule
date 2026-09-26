@@ -1720,7 +1720,7 @@ git commit -m "feat(core): feature and shortcut catalogues
 
 **IDs:** BR-001, FR-002, FR-003, FR-004, FR-008, FR-011, FR-032; stories A1, A2, B7
 
-- [ ] **Step 1: Write the failing test `packages/core/src/config/schema-fields.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/config/schema-fields.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1797,7 +1797,7 @@ describe("FR-032 query type (spec 4.1)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/schema-fields.test.ts
@@ -1805,7 +1805,7 @@ pnpm vitest run packages/core/src/config/schema-fields.test.ts
 
 Expected: FAIL, `Failed to resolve import "./schema-fields"`.
 
-- [ ] **Step 3: Implement `packages/core/src/config/schema-mode.ts`.**
+- [x] **Step 3: Implement `packages/core/src/config/schema-mode.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -1825,7 +1825,7 @@ export function optionalEnum<const T extends readonly [string, ...string[]]>(mod
 }
 ```
 
-- [ ] **Step 4: Implement `packages/core/src/config/schema-fields.ts`.**
+- [x] **Step 4: Implement `packages/core/src/config/schema-fields.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -1932,7 +1932,7 @@ export function makeFieldSchemas(mode: SchemaMode) {
 }
 ```
 
-- [ ] **Step 5: Run.**
+- [x] **Step 5: Run.**
 
 ```bash
 pnpm vitest run packages/core/src/config/schema-fields.test.ts
@@ -1941,7 +1941,7 @@ pnpm typecheck
 
 Expected: `6 passed`; `tsc -b` exits 0.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add -A
@@ -1965,7 +1965,7 @@ git commit -m "feat(core): config schema v1 fields, conditions and query types
 
 **IDs:** BR-001, FR-007, FR-031, FR-051, FR-052, FR-060, NFR-001, UX-011, SEC-005 (auth block shape), SEC-004 (delegation block shape)
 
-- [ ] **Step 1: Write the test fixture `packages/core/src/config/test-fixtures.ts`.**
+- [x] **Step 1: Write the test fixture `packages/core/src/config/test-fixtures.ts`.**
 
 ```ts
 import type { SiteConfigInput } from "./schema";
@@ -2044,7 +2044,7 @@ export const TEST_TOKEN_NAMES: readonly string[] = [
 ];
 ```
 
-- [ ] **Step 2: Write the failing test `packages/core/src/config/schema.test.ts`.**
+- [x] **Step 2: Write the failing test `packages/core/src/config/schema.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -2137,7 +2137,7 @@ describe("BR-001 SiteConfig v1 (spec 4.1)", () => {
 });
 ```
 
-- [ ] **Step 3: Run it.**
+- [x] **Step 3: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/schema.test.ts
@@ -2145,11 +2145,12 @@ pnpm vitest run packages/core/src/config/schema.test.ts
 
 Expected: FAIL, `Failed to resolve import "./schema"`.
 
-- [ ] **Step 4: Implement `packages/core/src/config/schema.ts`.**
+- [x] **Step 4: Implement `packages/core/src/config/schema.ts`.**
 
 ```ts
 import { z } from "zod";
 import { RoleSchema } from "../contracts/identity";
+import { BoundedIdSchema, FieldKeySchema } from "../contracts/primitives";
 import { CONFIG_SCHEMA_VERSION } from "../contracts/version";
 import { makeFieldSchemas } from "./schema-fields";
 import { objectFor, type SchemaMode } from "./schema-mode";
@@ -2183,14 +2184,14 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
     id: Key,
     labelKey: Key,
     scope: z.enum(SOURCE_SCOPES),
-    kind: Key,
+    kind: BoundedIdSchema,
     timeoutMs: z.int().positive().default(10000),
     maxConcurrent: z.int().positive().default(4),
     requiresCredentials: z.boolean(),
     server: z.record(z.string(), z.unknown()).optional(),
   });
 
-  const Position = z.union([Key, obj({ field: Key, rest: z.literal(true) })]);
+  const Position = z.union([FieldKeySchema, obj({ field: FieldKeySchema, rest: z.literal(true) })]);
   const CommandDef = obj({
     code: Key,
     queryType: Key,
@@ -2283,7 +2284,7 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
     $schema: z.string().optional(),
     schemaVersion: z.literal(CONFIG_SCHEMA_VERSION),
     extends: Key.optional(),
-    site: obj({ id: Key, labelKey: Key }),
+    site: obj({ id: BoundedIdSchema, labelKey: Key }),
     locales: z.array(z.string().regex(LOCALE_PATTERN)).min(1).default(["en"]),
     features: z.record(z.string(), z.boolean()).default({}),
     personas: z.array(PersonaDef).min(1),
@@ -2355,7 +2356,7 @@ export type AuthConfig = z.infer<typeof S.AuthConfig>;
 export type DelegationConfig = z.infer<typeof S.DelegationConfig>;
 ```
 
-- [ ] **Step 5: Barrel.** `packages/core/src/config/index.ts`:
+- [x] **Step 5: Barrel.** `packages/core/src/config/index.ts`:
 
 ```ts
 export { CONFIG_SCHEMA_VERSION } from "../contracts/version";
@@ -2366,7 +2367,7 @@ export * from "./schema-mode";
 export * from "./shortcuts";
 ```
 
-- [ ] **Step 6: Run.**
+- [x] **Step 6: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -2375,7 +2376,7 @@ pnpm typecheck
 
 Expected: all pass (schema file: 8 tests); `tsc -b` exits 0.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add -A
@@ -2397,7 +2398,7 @@ git commit -m "feat(core): SiteConfig schema v1
 
 **IDs:** BR-001, SEC-006
 
-- [ ] **Step 1: Write the failing test `packages/core/src/config/client-config.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/config/client-config.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -2465,7 +2466,7 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/client-config.test.ts
@@ -2473,7 +2474,7 @@ pnpm vitest run packages/core/src/config/client-config.test.ts
 
 Expected: FAIL, `Failed to resolve import "./client-config"`.
 
-- [ ] **Step 3: Implement `packages/core/src/config/client-config.ts`.**
+- [x] **Step 3: Implement `packages/core/src/config/client-config.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -2559,9 +2560,9 @@ export function toClientSiteConfig(config: SiteConfig, configHash: string): Clie
 }
 ```
 
-- [ ] **Step 4: Barrel.** Add `export * from "./client-config";` to `packages/core/src/config/index.ts` (sorted first after the version line).
+- [x] **Step 4: Barrel.** Add `export * from "./client-config";` to `packages/core/src/config/index.ts` (sorted first after the version line).
 
-- [ ] **Step 5: Run.**
+- [x] **Step 5: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -2570,7 +2571,7 @@ pnpm typecheck
 
 Expected: all pass (client-config file: 4 tests); `tsc -b` exits 0.
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add -A
@@ -2592,7 +2593,7 @@ git commit -m "feat(core): ClientSiteConfig allowlist
 
 **IDs:** BR-001, FR-008, FR-031
 
-- [ ] **Step 1: Write the failing test `packages/core/src/config/merge.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/config/merge.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -2682,7 +2683,7 @@ describe("pointer (RFC 6901)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/merge.test.ts
@@ -2690,7 +2691,7 @@ pnpm vitest run packages/core/src/config/merge.test.ts
 
 Expected: FAIL, `Failed to resolve import "./diagnostic"`.
 
-- [ ] **Step 3: Implement `packages/core/src/config/diagnostic.ts`.**
+- [x] **Step 3: Implement `packages/core/src/config/diagnostic.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -2726,7 +2727,7 @@ export class DiagnosticSink {
 }
 ```
 
-- [ ] **Step 4: Implement `packages/core/src/config/merge.ts`.**
+- [x] **Step 4: Implement `packages/core/src/config/merge.ts`.**
 
 ```ts
 import type { Diagnostic } from "./diagnostic";
@@ -2811,9 +2812,9 @@ export function mergeSiteOverlay(
 }
 ```
 
-- [ ] **Step 5: Barrel.** Add `export * from "./diagnostic";` and `export * from "./merge";` to `packages/core/src/config/index.ts`.
+- [x] **Step 5: Barrel.** Add `export * from "./diagnostic";` and `export * from "./merge";` to `packages/core/src/config/index.ts`.
 
-- [ ] **Step 6: Run.**
+- [x] **Step 6: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -2821,7 +2822,7 @@ pnpm vitest run --project core
 
 Expected: all pass (merge file: 8 tests). If biome flags `_ignored` as unused, replace the destructuring with `const rest = { ...overlay }; delete rest.extends;`.
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add -A
@@ -2843,7 +2844,7 @@ git commit -m "feat(core): config overlay merge and diagnostics
 
 **IDs:** BR-001, BR-004
 
-- [ ] **Step 1: Write the failing test `packages/core/src/config/migrate.test.ts`.**
+- [x] **Step 1: Write the failing test `packages/core/src/config/migrate.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -2891,7 +2892,7 @@ describe("BR-004 migrateConfig (spec 5.8)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run packages/core/src/config/migrate.test.ts
@@ -2899,7 +2900,7 @@ pnpm vitest run packages/core/src/config/migrate.test.ts
 
 Expected: FAIL, `Failed to resolve import "./migrate"`.
 
-- [ ] **Step 3: Implement `packages/core/src/config/migrate.ts`.**
+- [x] **Step 3: Implement `packages/core/src/config/migrate.ts`.**
 
 ```ts
 import { CONFIG_SCHEMA_VERSION } from "../contracts/version";
@@ -2948,9 +2949,9 @@ export function migrateConfig(
 }
 ```
 
-- [ ] **Step 4: Barrel.** Add `export * from "./migrate";` to `packages/core/src/config/index.ts`.
+- [x] **Step 4: Barrel.** Add `export * from "./migrate";` to `packages/core/src/config/index.ts`.
 
-- [ ] **Step 5: Run.**
+- [x] **Step 5: Run.**
 
 ```bash
 pnpm vitest run --project core
@@ -2958,7 +2959,7 @@ pnpm vitest run --project core
 
 Expected: all pass (migrate file: 6 tests).
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add -A
