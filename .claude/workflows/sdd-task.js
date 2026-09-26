@@ -90,6 +90,16 @@ for (const k of ['task', 'title', 'repoDir', 'branch', 'base', 'briefPath', 'rep
 const N = A.task
 const SENSITIVE = !!A.sensitive
 const UI = !!A.ui
+// critic: true turns the critic on without sensitive or ui; no tier or ruler rule changes with it.
+if (A.critic !== undefined && A.critic !== null && typeof A.critic !== 'boolean') {
+  throw new Error(`sdd-task: critic must be a boolean (true or false), got ${JSON.stringify(A.critic)}`)
+}
+if (A.criticFocus !== undefined && A.criticFocus !== null && (typeof A.criticFocus !== 'string' || A.criticFocus.trim() === '')) {
+  throw new Error('sdd-task: criticFocus must be a non-empty string when given')
+}
+const CRITIC_FOCUS = A.criticFocus ? A.criticFocus.trim() : ''
+const CRITIC = SENSITIVE || UI || A.critic === true
+const DEFAULT_CRITIC_FOCUS = 'correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 
 let MAX_ROUNDS = 5
@@ -709,7 +719,7 @@ async function runGate(label, expectedHead, answerText) {
 // ================= 1. Implement =================
 phase('Implement')
 log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; ${SENSITIVE ? 'sensitive' : 'ordinary'}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}`)
-log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${SENSITIVE || UI ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}, ledger ${tier('ledger')}`)
+log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}, ledger ${tier('ledger')}`)
 
 // The implementer prompt never carries answers, so a re-run with answers replays it from cache.
 const implPrompt = [
@@ -903,12 +913,17 @@ const reviewers = [
     ].join('\n'),
   },
 ]
-if (SENSITIVE || UI) {
+if (CRITIC) {
+  const focusParts = []
+  if (SENSITIVE) focusParts.push('sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)')
+  if (UI) focusParts.push('UI risk (accessibility, keyboard paths, focus, states the brief names, regressions to existing components, tokens instead of literals)')
+  if (CRITIC_FOCUS) focusParts.push(CRITIC_FOCUS)
+  if (!focusParts.length) focusParts.push(DEFAULT_CRITIC_FOCUS)
   reviewers.push({
     key: 'critic',
     roleName: 'critic',
     prompt: [
-      `You are the critic for Task ${N}: ${A.title}. Read the whole diff adversarially: assume something is wrong and try to find it. Focus: ${SENSITIVE ? 'sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)' : ''}${SENSITIVE && UI ? '; ' : ''}${UI ? 'UI risk (accessibility, keyboard paths, focus, states the brief names, regressions to existing components, tokens instead of literals)' : ''}.`,
+      `You are the critic for Task ${N}: ${A.title}. Read the whole diff adversarially: assume something is wrong and try to find it. Focus: ${focusParts.join('; ')}.`,
       common('critic'),
       '',
       'Report only real defects with a concrete failure path; say how it fails. Spec gaps you notice go in too, with the spec citation.',
@@ -917,7 +932,7 @@ if (SENSITIVE || UI) {
     ].join('\n'),
   })
 } else {
-  log('review: critic off (task is neither sensitive nor UI)')
+  log('review: critic off (task is neither sensitive nor UI, and critic is not set)')
 }
 
 const reviews = await parallel(reviewers.map((r) => () => agent(r.prompt, { label: `${r.key}-review`, phase: 'Review', schema: REVIEW, ...role(r.roleName) })))

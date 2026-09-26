@@ -1314,6 +1314,52 @@ await test("sdd P8: implementer, continue, retry and every fixer self-check lint
   }
 });
 
+await test("sdd P4: critic: true turns the critic on for an ordinary task with the default focus, tiers unchanged", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, critic: true },
+    sddResponder({
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "important", { planMandated: true })],
+        cannotVerify: [],
+      },
+    }),
+  );
+  const c = r.find("critic-review");
+  assert.ok(c, r.labels.join(","));
+  assert.equal(`${c.model}/${c.effort}`, "opus/medium");
+  assert.ok(
+    c.prompt.includes(
+      "Focus: correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail.",
+    ),
+    c.prompt,
+  );
+  assert.equal(`${r.find("implementer").model}/${r.find("implementer").effort}`, "sonnet/medium");
+  assert.equal(`${r.find("ruler-review").model}/${r.find("ruler-review").effort}`, "opus/low");
+  assert.ok(!r.find("ruler-review").prompt.includes(SENSITIVE_RULE));
+  const off = await run(sdd, BASE, sddResponder());
+  assert.ok(!off.labels.includes("critic-review"));
+});
+
+await test("sdd P4: criticFocus replaces the default focus, and is appended on sensitive or UI tasks", async () => {
+  const o = await run(sdd, { ...BASE, critic: true, criticFocus: "ZZ-FOCUS" }, sddResponder());
+  const op = o.find("critic-review").prompt;
+  assert.ok(op.includes("Focus: ZZ-FOCUS."), op);
+  assert.ok(!op.includes("fail-open paths, data that crosses"));
+  const s = await run(sdd, { ...BASE, sensitive: true, criticFocus: "ZZ-FOCUS" }, sddResponder());
+  const sp = s.find("critic-review").prompt;
+  assert.ok(sp.includes("sensitive-code risk") && sp.includes("; ZZ-FOCUS."), sp);
+  const u = await run(sdd, { ...BASE, ui: true }, sddResponder());
+  assert.ok(u.find("critic-review").prompt.includes("Focus: UI risk"));
+});
+
+await test("sdd P4: critic must be a boolean and criticFocus a non-empty string", async () => {
+  await assert.rejects(run(sdd, { ...BASE, critic: "yes" }, sddResponder()), /critic/);
+  await assert.rejects(run(sdd, { ...BASE, criticFocus: "  " }, sddResponder()), /criticFocus/);
+  await assert.rejects(run(sdd, { ...BASE, criticFocus: 3 }, sddResponder()), /criticFocus/);
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {
