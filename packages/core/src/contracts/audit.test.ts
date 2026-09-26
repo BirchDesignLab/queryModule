@@ -8,6 +8,7 @@ import {
   parseAuditDetails,
   SYSTEM_ACTOR,
 } from "./audit";
+import { MAX_ALSO_RUN } from "./primitives";
 import { isTerminalSourceStatus, SOURCE_STATUSES } from "./source-status";
 
 /** Synthetic UUIDv7 and SHA-256 fixtures (spec 5.4 fixture policy; ADR-0005). */
@@ -161,6 +162,7 @@ describe("SEC-011 SEC-012 audit envelope", () => {
     expect(
       AuditEventSchema.safeParse({
         type: "acknowledged",
+        correlationId: CID,
         actor: SYSTEM_ACTOR,
         identitySource: "system",
         details: samples.interrupted,
@@ -172,6 +174,7 @@ describe("SEC-011 SEC-012 audit envelope", () => {
       AuditEventSchema.safeParse({
         type: "interrupted",
         id: 5,
+        correlationId: CID,
         partId: 0,
         actor: SYSTEM_ACTOR,
         identitySource: "system",
@@ -198,7 +201,12 @@ const alsoRunSubmitted = {
 } as const;
 
 describe("SEC-011 T4-C actor and identity source agree (spec 4.7)", () => {
-  const base = { type: "interrupted", partId: 0, details: samples.interrupted } as const;
+  const base = {
+    type: "interrupted",
+    correlationId: CID,
+    partId: 0,
+    details: samples.interrupted,
+  } as const;
   it("rejects the system actor with a non-system identity source", () => {
     expect(
       AuditEventSchema.safeParse({ ...base, actor: SYSTEM_ACTOR, identitySource: "local" }).success,
@@ -247,9 +255,17 @@ describe("SEC-010 T4-D submitted origin invariants (spec 4.7)", () => {
     "primary with fieldMapApplied": { ...primarySubmitted, fieldMapApplied: { last: "last" } },
     "alsoRun with a null parentPartId": { ...alsoRunSubmitted, parentPartId: null },
     "alsoRun without fieldMapApplied": alsoRunNoMap,
+    "primary with a partId other than 0 (spec 5.2 line 747)": { ...primarySubmitted, partId: 2 },
+    "alsoRun with partId 0 (spec 5.2 line 747)": { ...alsoRunSubmitted, partId: 0 },
+    "alsoRun with a parent other than part 0 (spec 4.6 PlanPart)": {
+      ...alsoRunSubmitted,
+      parentPartId: 3,
+    },
+    "alsoRun with a partId over MAX_ALSO_RUN": { ...alsoRunSubmitted, partId: 5 },
   };
   const asEvent = (details: { partId: number }) => ({
     type: "submitted",
+    correlationId: CID,
     partId: details.partId,
     actor: USER_ACTOR,
     identitySource: "local",
@@ -280,12 +296,12 @@ describe("SEC-012 T4-E envelope partId matches details partId (ADR-0003)", () =>
   ] as const;
   for (const type of partScoped) {
     const details = samples[type];
-    const event = { type, actor: USER_ACTOR, identitySource: "local", details };
+    const event = { type, correlationId: CID, actor: USER_ACTOR, identitySource: "local", details };
     it(`${type}: rejects a missing envelope partId`, () => {
       expect(AuditEventSchema.safeParse(event).success).toBe(false);
     });
     it(`${type}: rejects a mismatched envelope partId`, () => {
-      expect(AuditEventSchema.safeParse({ ...event, partId: details.partId + 5 }).success).toBe(
+      expect(AuditEventSchema.safeParse({ ...event, partId: details.partId + 1 }).success).toBe(
         false,
       );
     });
@@ -296,6 +312,7 @@ describe("SEC-012 T4-E envelope partId matches details partId (ADR-0003)", () =>
   it("acknowledged: envelope partId stays optional", () => {
     const event = {
       type: "acknowledged",
+      correlationId: CID,
       actor: USER_ACTOR,
       identitySource: "local",
       details: samples.acknowledged,
@@ -393,5 +410,150 @@ describe("SEC-010 P2 to P4 audit id, key and code formats (ADR-0005, spec 5.5 li
       false,
     );
     expect(AuditEventSchema.safeParse({ ...host, hostSubject: "a\nb" }).success).toBe(false);
+  });
+});
+
+/** One valid event per query type, with every envelope field the type requires. */
+const events = {
+  submitted: { partId: 0, details: samples.submitted },
+  acknowledged: { details: samples.acknowledged },
+  sourceDispatched: { partId: 0, details: samples.sourceDispatched },
+  sourceResponded: { partId: 0, details: samples.sourceResponded },
+  interrupted: { partId: 0, details: samples.interrupted },
+  partSkipped: { partId: 1, details: samples.partSkipped },
+} as const;
+const eventOf = (type: AuditEventType, extra: object = {}) => ({
+  type,
+  correlationId: CID,
+  actor: USER_ACTOR,
+  identitySource: "local",
+  ...events[type],
+  ...extra,
+});
+const parses = (event: unknown) => AuditEventSchema.safeParse(event).success;
+
+describe("SEC-014 I1 every query audit row carries the correlation id (spec 5.2 step 1)", () => {
+  for (const type of AUDIT_EVENT_TYPES) {
+    it(`${type}: accepts the event with a correlationId`, () => {
+      expect(parses(eventOf(type))).toBe(true);
+    });
+    it(`${type}: rejects a missing correlationId`, () => {
+      const { correlationId: _omit, ...event } = eventOf(type);
+      expect(parses(event)).toBe(false);
+    });
+    it(`${type}: rejects a null correlationId`, () => {
+      expect(parses(eventOf(type, { correlationId: null }))).toBe(false);
+    });
+  }
+});
+
+describe("SEC-011 I2 delegated credentials name the credential owner (spec 5.2 step 3)", () => {
+  for (const type of ["sourceDispatched", "sourceResponded"] as const) {
+    const base = samples[type];
+    it(`${type}: rejects a delegationId without a credentialOwnerUserId`, () => {
+      const bad = { ...base, credentialOwnerUserId: null, delegationId: DID };
+      expect(() => parseAuditDetails(type, bad)).toThrow();
+      expect(parses(eventOf(type, { details: bad }))).toBe(false);
+    });
+    it(`${type}: accepts a delegated credential with its owner`, () => {
+      const ok = { ...base, credentialOwnerUserId: "u2", delegationId: DID };
+      expect(parseAuditDetails(type, ok)).toEqual(ok);
+    });
+    it(`${type}: accepts the caller's own credential (owner set, no delegation)`, () => {
+      const ok = { ...base, credentialOwnerUserId: "u1", delegationId: null };
+      expect(parseAuditDetails(type, ok)).toEqual(ok);
+    });
+    it(`${type}: accepts no credential (both null)`, () => {
+      expect(parseAuditDetails(type, base)).toEqual(base);
+    });
+  }
+});
+
+describe("SEC-010 I3 part topology (spec 5.2 line 747, spec 4.6)", () => {
+  it("partSkipped is for nested parts only: partId 1 to MAX_ALSO_RUN, parent 0", () => {
+    for (const partId of [1, MAX_ALSO_RUN]) {
+      const ok = { ...samples.partSkipped, partId };
+      expect(parseAuditDetails("partSkipped", ok)).toEqual(ok);
+    }
+    for (const bad of [
+      { partId: 0 },
+      { partId: MAX_ALSO_RUN + 1 },
+      { parentPartId: null },
+      { parentPartId: 2 },
+    ]) {
+      expect(() => parseAuditDetails("partSkipped", { ...samples.partSkipped, ...bad })).toThrow();
+    }
+  });
+  it("acknowledged.partCount is 1 to MAX_ALSO_RUN + 1", () => {
+    for (const partCount of [1, MAX_ALSO_RUN + 1]) {
+      const ok = { ...samples.acknowledged, partCount };
+      expect(parseAuditDetails("acknowledged", ok)).toEqual(ok);
+    }
+    for (const partCount of [0, MAX_ALSO_RUN + 2, 40]) {
+      expect(() =>
+        parseAuditDetails("acknowledged", { ...samples.acknowledged, partCount }),
+      ).toThrow();
+    }
+  });
+  it("part ids above MAX_ALSO_RUN are rejected on every part-scoped type", () => {
+    for (const type of ["sourceDispatched", "sourceResponded", "interrupted"] as const) {
+      expect(() => parseAuditDetails(type, { ...samples[type], partId: 999 })).toThrow();
+      expect(() =>
+        parseAuditDetails(type, { ...samples[type], partId: MAX_ALSO_RUN + 1 }),
+      ).toThrow();
+      const ok = { ...samples[type], partId: MAX_ALSO_RUN };
+      expect(parseAuditDetails(type, ok)).toEqual(ok);
+    }
+  });
+  it("acknowledged: an optional envelope partId follows the same range", () => {
+    expect(parses(eventOf("acknowledged", { partId: 0 }))).toBe(true);
+    expect(parses(eventOf("acknowledged", { partId: MAX_ALSO_RUN + 1 }))).toBe(false);
+  });
+});
+
+describe("SEC-010 M7 further details invariants stated by the spec", () => {
+  const responded = samples.sourceResponded;
+  it("errorCode only with the status of the same name (spec 5.4 line 809, 5.7 line 958)", () => {
+    for (const code of ["failed", "credentialsRejected"] as const) {
+      const ok = { ...responded, status: code, errorCode: code };
+      expect(parseAuditDetails("sourceResponded", ok)).toEqual(ok);
+    }
+    const noCode = { ...responded, status: "failed" };
+    expect(parseAuditDetails("sourceResponded", noCode)).toEqual(noCode);
+    for (const [status, errorCode] of [
+      ["returned", "failed"],
+      ["timedOut", "failed"],
+      ["credentialsMissing", "credentialsRejected"],
+      ["failed", "credentialsRejected"],
+      ["credentialsRejected", "failed"],
+    ]) {
+      expect(() =>
+        parseAuditDetails("sourceResponded", { ...responded, status, errorCode }),
+      ).toThrow();
+    }
+  });
+  it("droppedSourceIds only under plate-only narrowing (spec 4.6 step 3, line 539)", () => {
+    const narrowed = samples.submitted;
+    expect(parseAuditDetails("submitted", narrowed)).toEqual(narrowed);
+    const normal = { ...narrowed, plateOnly: false, droppedSourceIds: [] };
+    expect(parseAuditDetails("submitted", normal)).toEqual(normal);
+    const plateNoDrops = { ...narrowed, droppedSourceIds: [] };
+    expect(parseAuditDetails("submitted", plateNoDrops)).toEqual(plateNoDrops);
+    expect(() => parseAuditDetails("submitted", { ...narrowed, plateOnly: false })).toThrow();
+  });
+  it("hostSubject only with identitySource host (spec 4.7 line 613, 5.6 line 911)", () => {
+    expect(parses(eventOf("submitted", { identitySource: "host", hostSubject: "host|0001" }))).toBe(
+      true,
+    );
+    expect(parses(eventOf("submitted", { hostSubject: "host|0001" }))).toBe(false);
+    expect(
+      parses(
+        eventOf("interrupted", {
+          actor: SYSTEM_ACTOR,
+          identitySource: "system",
+          hostSubject: "host|0001",
+        }),
+      ),
+    ).toBe(false);
   });
 });
