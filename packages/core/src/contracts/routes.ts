@@ -43,12 +43,17 @@ export interface RouteDef {
 
 export const HealthResponseSchema = z.strictObject({ status: z.literal("ok") });
 
+/** SemVer 2.0.0 (semver.org), capped at 64 characters; the client's version gate compares these. */
+const SEMVER_PATTERN =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const SemverSchema = z.string().max(64).regex(SEMVER_PATTERN);
+
 export const MetaResponseSchema = z.strictObject({
   apiVersion: z.literal(API_VERSION),
-  coreVersion: z.string().min(1),
+  coreVersion: SemverSchema,
   configSchemaVersion: z.int().min(1),
   configHash: Sha256HexSchema,
-  minClientVersion: z.string().min(1).nullable(),
+  minClientVersion: SemverSchema.nullable(),
 });
 export type MetaResponse = z.infer<typeof MetaResponseSchema>;
 
