@@ -1,0 +1,8 @@
+# zizmor configuration (workflow security lint, ADR-0007).
+# Spec 9.4 pins actions by major version tag and lets Dependabot keep them current,
+# so tag pins are accepted; everything else keeps zizmor's defaults.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": ref-pin

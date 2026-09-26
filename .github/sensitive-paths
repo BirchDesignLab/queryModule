@@ -1,6 +1,15 @@
-# Globs for the CLAUDE.md sensitive areas (spec 9.1). One glob per line.
-# A PR touching any of these needs docs/reviews/pr-<n>.md from the Opus 5.5 xhigh review.
+# Tiered globs for the CLAUDE.md sensitive areas (spec 9.1, ADR-0007). One glob per line.
+# [critical]: docs/reviews/pr-<n>.md from an Opus 5.5 review at effort xhigh or max.
+# [gate]:     docs/reviews/pr-<n>.md from an Opus 5.5 review at effort high or above.
+# [deps]:     no artifact; the ci job's licence check, pnpm audit, dependency review and
+#             workflow lint cover it.
+# [exempt]:   never needs a review (lowers [gate] and [deps], never [critical]).
+# A file takes the highest tier from the base and the head copy of this file, so a PR
+# cannot lower the tier that judges it. A version-only change of an existing action or
+# package counts as [deps]: in package.json, the same package names with plain semver
+# versions; in a workflow, only the ref after "@" of existing `uses:` lines.
 
+[critical]
 # Credential handling
 packages/api/src/credentials/**
 # Audit logging
@@ -24,12 +33,30 @@ packages/api/src/writeback/**
 packages/api/src/results/**
 # Migrations (they create the tables of every area above)
 packages/api/drizzle/**
+# The sensitive-review gate itself
+.github/sensitive-paths
+scripts/ci/sensitive-review.ts
+scripts/ci/check-sensitive-review.ts
+# Reserved: the audit_event immutability guard (spec 9.2, SEC-010 to SEC-013)
+scripts/ci/check-audit-migrations.ts
+
+[gate]
 # Verify gate and merge path
 .github/**
 scripts/ci/**
 scripts/ops/**
-biome.json
+**/biome.json
+.gitignore
 **/vitest.config.ts
 package.json
+pnpm-workspace.yaml
 tsconfig.base.json
 **/tsconfig.json
+
+[deps]
+# .github/dependabot.yml stays [gate] (.github/**): no automated check reads it.
+pnpm-lock.yaml
+
+[exempt]
+.github/ISSUE_TEMPLATE/**
+.github/pull_request_template.md

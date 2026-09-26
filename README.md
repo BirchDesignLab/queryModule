@@ -6,12 +6,101 @@ The prototype uses mock data sources with canned, fictitious responses. It never
 
 ## Status
 
-Milestone M0, phase P0 (contracts), in progress.
+[![ci](https://img.shields.io/github/actions/workflow/status/BirchDesignLab/queryModule/ci.yml?branch=main&label=ci)](https://github.com/BirchDesignLab/queryModule/actions/workflows/ci.yml)
+[![Project board](https://img.shields.io/badge/board-Query_Module_2.0-3E4B9E?logo=github)](https://github.com/users/BirchDesignLab/projects/1)
+[![Open PRs](https://img.shields.io/github/issues-pr/BirchDesignLab/queryModule?label=open%20PRs)](https://github.com/BirchDesignLab/queryModule/pulls)
+[![Follow-ups](https://img.shields.io/github/issues/BirchDesignLab/queryModule/follow-up?label=follow-ups&color=C5DEF5)](https://github.com/BirchDesignLab/queryModule/issues?q=is%3Aissue+is%3Aopen+label%3Afollow-up)
+[![Decisions pending](https://img.shields.io/github/issues/BirchDesignLab/queryModule/decision?label=decisions%20pending&color=D93F0B)](https://github.com/BirchDesignLab/queryModule/issues?q=is%3Aissue+is%3Aopen+label%3Adecision)
 
-- Wave 1 merged (PR #31): the workspace root and the first `packages/core` contracts.
-- Workflow execution adopted (ADR-0006); W2 is next.
+The badges read GitHub live each time this page loads. Progress is closed issues over all issues in the milestone; each phase parent issue shows its own sub-issue progress bar. The board is [Query Module 2.0](https://github.com/users/BirchDesignLab/projects/1) (guide: `docs/project-board.md`).
 
-See `docs/superpowers/plans/STATUS.md` for the live grid; it is not duplicated here.
+| Milestone | Done | Open | Phase parents |
+|---|---|---|---|
+| [M0 Skeleton](https://github.com/BirchDesignLab/queryModule/milestone/1) | [![M0 Skeleton progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/1?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/1) | [![M0 Skeleton issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/1?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/1) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/39), [P1 Foundation](https://github.com/BirchDesignLab/queryModule/issues/40) |
+| [M1 Forms and terminal](https://github.com/BirchDesignLab/queryModule/milestone/2) | [![M1 Forms and terminal progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/2?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/2) | [![M1 Forms and terminal issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/2?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/2) | [P2 Engine](https://github.com/BirchDesignLab/queryModule/issues/41), [P3 Flow](https://github.com/BirchDesignLab/queryModule/issues/42) |
+| [M2 Results and audit](https://github.com/BirchDesignLab/queryModule/milestone/3) | [![M2 Results and audit progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/3?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/3) | [![M2 Results and audit issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/3?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/3) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/43), [P1 Feed](https://github.com/BirchDesignLab/queryModule/issues/44), [P2 Audit](https://github.com/BirchDesignLab/queryModule/issues/45), [P3 Hardening](https://github.com/BirchDesignLab/queryModule/issues/46) |
+| [M3 Workflow and compliance](https://github.com/BirchDesignLab/queryModule/milestone/4) | [![M3 Workflow and compliance progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/4?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/4) | [![M3 Workflow and compliance issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/4?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/4) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/47), [P1 Credentials and MFA](https://github.com/BirchDesignLab/queryModule/issues/48), [P2 Multi-source, nested, hide](https://github.com/BirchDesignLab/queryModule/issues/49), [P3 Delegation](https://github.com/BirchDesignLab/queryModule/issues/50) |
+| [M4 Mobile and host integration](https://github.com/BirchDesignLab/queryModule/milestone/5) | [![M4 Mobile and host integration progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/5?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/5) | [![M4 Mobile and host integration issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/5?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/5) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/51), [P1 Layouts and host](https://github.com/BirchDesignLab/queryModule/issues/52), [P2 Native](https://github.com/BirchDesignLab/queryModule/issues/53), [P3 Exit](https://github.com/BirchDesignLab/queryModule/issues/54) |
+
+P0 waves (one PR each): [W1](https://github.com/BirchDesignLab/queryModule/issues/55), [W2](https://github.com/BirchDesignLab/queryModule/issues/56), [W3](https://github.com/BirchDesignLab/queryModule/issues/57), [W4](https://github.com/BirchDesignLab/queryModule/issues/58), [W5](https://github.com/BirchDesignLab/queryModule/issues/59), [W6](https://github.com/BirchDesignLab/queryModule/issues/60).
+
+<!-- progress:start (generated by scripts/ops/gh-setup-project.mjs; do not edit) -->
+
+```mermaid
+flowchart LR
+  subgraph M0["M0 Skeleton<br/>52% of 50 issues closed"]
+    direction TB
+    ph0["P0 Contracts<br/>4/9 done"]
+    ph1["P1 Foundation<br/>0/10 done"]
+    ph0 --> ph1
+  end
+  subgraph M1["M1 Forms and terminal<br/>0% of 3 issues closed"]
+    direction TB
+    ph2["P2 Engine<br/>0/1 done"]
+    ph3["P3 Flow"]
+    ph2 --> ph3
+  end
+  subgraph M2["M2 Results and audit<br/>0% of 4 issues closed"]
+    direction TB
+    ph4["P0 Contracts"]
+    ph5["P1 Feed"]
+    ph6["P2 Audit"]
+    ph7["P3 Hardening"]
+    ph4 --> ph5
+    ph5 --> ph6
+    ph6 --> ph7
+  end
+  subgraph M3["M3 Workflow and compliance<br/>0% of 4 issues closed"]
+    direction TB
+    ph8["P0 Contracts"]
+    ph9["P1 Credentials and MFA"]
+    ph10["P2 Multi-source, nested, hide"]
+    ph11["P3 Delegation"]
+    ph8 --> ph9
+    ph9 --> ph10
+    ph10 --> ph11
+  end
+  subgraph M4["M4 Mobile and host integration<br/>0% of 5 issues closed"]
+    direction TB
+    ph12["P0 Contracts"]
+    ph13["P1 Layouts and host<br/>0/1 done"]
+    ph14["P2 Native"]
+    ph15["P3 Exit"]
+    ph12 --> ph13
+    ph13 --> ph14
+    ph14 --> ph15
+  end
+  M0 --> M1 --> M2 --> M3 --> M4
+  classDef done fill:#2da44e,stroke:#1a7f37,color:#ffffff
+  classDef active fill:#d29922,stroke:#9a6700,color:#ffffff
+  classDef todo fill:#eaeef2,stroke:#8c959f,color:#24292f
+  class ph0 active
+  class ph1,ph2,ph3,ph4,ph5,ph6,ph7,ph8,ph9,ph10,ph11,ph12,ph13,ph14,ph15 todo
+```
+
+```mermaid
+gantt
+  title P0 waves: first commit to merge (UTC)
+  dateFormat YYYY-MM-DD HH:mm
+  axisFormat %m-%d %H:%M
+  section M0 P0 Contracts
+  W1 Tasks 1 to 6 (PR 31) :done, w1, 2026-09-26 06:04, 2026-09-26 08:13
+  W2 Tasks 7 to 11 (PR 33) :done, w2, 2026-09-26 11:57, 2026-09-26 14:16
+  W3 Tasks 12 to 16 (PR 35) :done, w3, 2026-09-26 14:59, 2026-09-26 16:31
+  W4 Tasks 17 to 22 (PR 38) :done, w4, 2026-09-26 17:07, 2026-09-26 19:55
+```
+
+```mermaid
+pie showData
+  title Tasks and follow-ups by board status
+  "Todo" : 19
+  "Ready" : 3
+  "Done" : 22
+```
+
+<!-- progress:end -->
+
+`docs/superpowers/plans/STATUS.md` holds the session grid and the handoff notes.
 
 ## Repository map
 
@@ -132,7 +221,7 @@ Milestone (M0 to M4, plus Later)
 
 **Workflows.** `sdd-task` runs one task; `wave-review` runs the whole-branch review for a sensitive wave. See "Running tasks with workflows" below.
 
-**Project board.** The developer maintains a private GitHub Projects board, "Query Module 2.0", holding every issue. Its view "Kanban Label Sliced" is a board with Status columns Todo, In Progress and Done, sliced by label (`platform`, `web`, `core`, `p0`, `contract`, `sensitive`), so one track, phase or the sensitive work is a click away. Cards show the milestone, labels and the linked wave PR. An issue reaches Done when its wave PR merges and closes it through `Closes #n`; nothing moves items to In Progress automatically, so the developer does. Issues a phase plan creates are added to the board then. Issues and PRs are the source of truth; the board is a view over them.
+**Project board.** The public GitHub Project "Query Module 2.0" (BirchDesignLab, project 1) holds every issue. One parent issue per phase (label `epic`), with P0 waves and tasks as sub-issues, so each parent shows a progress bar. Fields: Status (Todo, Ready, In Progress, In Review, Blocked, Done), Track, Phase, Wave, Size, Priority, Req IDs, Start and Finish. Carries found in review become `follow-up` issues (`decision` when the developer must choose). `scripts/ops/gh-setup-project.mjs` keeps labels, milestones, parents, links and field values in shape; `docs/project-board.md` describes the board and lists the manual steps (views, built-in workflows, repo settings). Issues and PRs are the source of truth; the board is a view over them.
 
 ## Running tasks with workflows (ADR-0006)
 
