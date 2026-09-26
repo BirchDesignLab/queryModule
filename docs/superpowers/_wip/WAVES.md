@@ -11,7 +11,7 @@ Inputs: `docs/superpowers/specs/2026-09-25-query-module-2-design.md` (v1),
 ## Spec v2
 
 - [x] Wave 0: decisions log into repo, this checklist. No agents.
-- [ ] Wave A: 7 Opus/medium section writers -> `_wip/spec-v2/0N-*.md`.
+- [x] Wave A: 7 Opus/medium section writers -> `_wip/spec-v2/0N-*.md`.
 - [ ] Wave B: 1 Sonnet/low assembler -> `specs/2026-09-25-query-module-2-design-v2.md` draft; 2 Sonnet/high checkers (decision coverage, cross-ref + traceability) -> `_wip/spec-v2/check-*.md`.
 - [ ] Wave C: 1 Opus/high critic -> `_wip/spec-v2/critic.md`; 1 Opus/medium reviser -> spec v2 final. Push.
 
