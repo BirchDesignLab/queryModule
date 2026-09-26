@@ -101,6 +101,13 @@ describe("parseLicenceExceptions", () => {
     expect(parseLicenceExceptions(e)).toEqual(e);
   });
 
+  it("throws when reviewed is not an MM-DD-YY date", () => {
+    for (const reviewed of ["2026-09-25", "9-25-26", "09/25/26", "13-01-26", "x"]) {
+      const e = [{ package: "p", licence: "GPL-3.0", reason: "build-time only", reviewed }];
+      expect(() => parseLicenceExceptions(e), reviewed).toThrow();
+    }
+  });
+
   it("throws on malformed entries", () => {
     for (const bad of [{}, [{ package: "p" }], [{ package: "p", licence: "x", reason: "r" }]]) {
       expect(() => parseLicenceExceptions(bad), JSON.stringify(bad)).toThrow();

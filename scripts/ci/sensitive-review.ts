@@ -109,11 +109,14 @@ export function runSensitiveReview(
       ],
     };
   const base = env.BASE_SHA ?? "";
-  const head = env.HEAD_SHA ?? "HEAD";
+  const head = env.HEAD_SHA ?? "";
   const prNumber = Number(env.PR_NUMBER);
   const bad = (m: string): RunResult => ({ code: 2, messages: [`sensitive-review: ${m}`] });
   if (base === "") return bad("BASE_SHA is empty");
   if (head === "") return bad("HEAD_SHA is empty");
+  // Hex only, so a value can never reach git as an option (a leading "-") or a moving ref.
+  if (!SHA_RE.test(base)) return bad("BASE_SHA is not a commit sha");
+  if (!SHA_RE.test(head)) return bad("HEAD_SHA is not a commit sha");
   if (!env.PR_NUMBER || !Number.isInteger(prNumber) || prNumber <= 0)
     return bad("PR_NUMBER must be a positive integer");
   try {

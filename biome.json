@@ -31,7 +31,14 @@
                   "child_process": "packages/core is pure: no IO (plan amendment M4).",
                   "http": "packages/core is pure: no IO (plan amendment M4).",
                   "https": "packages/core is pure: no IO (plan amendment M4).",
-                  "net": "packages/core is pure: no IO (plan amendment M4)."
+                  "net": "packages/core is pure: no IO (plan amendment M4).",
+                  "os": "packages/core is pure: no IO (plan amendment M4).",
+                  "dns": "packages/core is pure: no IO (plan amendment M4).",
+                  "tls": "packages/core is pure: no IO (plan amendment M4).",
+                  "dgram": "packages/core is pure: no IO (plan amendment M4).",
+                  "worker_threads": "packages/core is pure: no IO (plan amendment M4).",
+                  "readline": "packages/core is pure: no IO (plan amendment M4).",
+                  "crypto": "packages/core is pure: no IO (plan amendment M4)."
                 },
                 "patterns": [
                   {

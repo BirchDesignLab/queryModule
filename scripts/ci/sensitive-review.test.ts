@@ -146,10 +146,26 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
     }
   });
 
-  it("exits 2 when HEAD_SHA is empty", () => {
-    expect(
-      runSensitiveReview({ ...env, HEAD_SHA: "" }, { runGit: gitWith({}), readFile }).code,
-    ).toBe(2);
+  it("exits 2 when HEAD_SHA is empty or unset", () => {
+    for (const HEAD_SHA of ["", undefined]) {
+      const r = runSensitiveReview({ ...env, HEAD_SHA }, { runGit: gitWith({}), readFile });
+      expect(r.code, String(HEAD_SHA)).toBe(2);
+    }
+  });
+
+  it("exits 2 without calling git when BASE_SHA or HEAD_SHA is not a hex sha", () => {
+    for (const bad of ["--output=f", "HEAD", "main", "abc123", "ABC1234"]) {
+      for (const key of ["BASE_SHA", "HEAD_SHA"]) {
+        const calls: string[][] = [];
+        const runGit = (args: string[]) => {
+          calls.push(args);
+          return { status: 0, stdout: "", stderr: "" };
+        };
+        const r = runSensitiveReview({ ...env, [key]: bad }, { runGit, readFile });
+        expect(r.code, `${key}=${bad}`).toBe(2);
+        expect(calls, `${key}=${bad}`).toEqual([]);
+      }
+    }
   });
 
   it("exits 2 when PR_NUMBER is unset, NaN, zero or fractional", () => {

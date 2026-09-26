@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findDrift, GENERATED_FILES, type GitResult } from "./check-generated";
+import { findDrift, GENERATED_FILES, type GitResult } from "./generated";
 
 const stub =
   (by: Record<string, GitResult>) =>
