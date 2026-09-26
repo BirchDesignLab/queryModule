@@ -100,6 +100,13 @@ credential handling or audit logging is a compliance failure, not a bug.
   that only the Opus critic caught, twice in a row on the same component.
 - Spec-compliance seats cite requirement IDs (FR-, UX-, SEC-) from the
   requirements doc, not paraphrases.
+- Parallel subagents share one session scratchpad. Every agent in a fan-out
+  gets its own scratch path in its prompt (`<scratchpad>/<runId>/<label>/`)
+  and writes scratch only there. An agent that produces one file writes it
+  straight to its final path. Agents that edit repo files in parallel get
+  `isolation: 'worktree'` or explicitly disjoint file ownership; worktrees
+  are cheap for git but cost a dependency install each, so reserve them for
+  big parallel edits.
 
 ## Scripts stay in the repo, not in temp
 
