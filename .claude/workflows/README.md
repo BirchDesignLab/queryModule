@@ -4,12 +4,13 @@ Saved Workflow scripts that run implementation plans in place of hand-dispatched
 
 | File | Purpose |
 |---|---|
-| `sdd-task.js` | One plan task: implement, review, rule, fix, gate, ledger |
+| `sdd-task.js` | One plan task: implement, review with gate-0, check, rule, fix, gate; returns the ledger lines |
 | `wave-review.js` | Whole-branch review of a sensitive wave PR, one fix pass, one re-review, the `docs/reviews/pr-<n>.md` artifact |
 | `../../scripts/sdd/task-brief.sh` | Extracts one `### Task N:` section of a plan into a brief file |
 | `../../scripts/sdd/workflow-harness.mjs` | Mock harness: runs both scripts against stubbed agents |
+| `../../scripts/sdd/append-ledger.mjs` | Appends an `sdd-task` result's `ledgerLines` to the SDD ledger (controller step) |
 
-Vocabulary: **role** (implementer, spec reviewer, quality reviewer, critic, ruler, fixer, escalated fixer, progress checker, re-reviewer, gate, ledger; in `wave-review`, reviewer and the rest). Not "seat".
+Vocabulary: **role** (implementer, spec reviewer, quality reviewer, critic, checker, ruler, fixer, escalated fixer, progress checker, re-reviewer, gate; in `wave-review`, reviewer and the rest). Not "seat".
 
 ## Script facts
 
@@ -29,8 +30,10 @@ Vocabulary: **role** (implementer, spec reviewer, quality reviewer, critic, rule
   repoDir: "C:\\git\\queryModule", branch: "feat/p0-wave-2", base: "<full sha, HEAD before the task>",
   briefPath, reportPath, workDir,          // workDir: per-task review files (SDD workspace)
   scratchRoot, runLabel: "w2-t7",          // agent scratch: <scratchRoot>/<runLabel>/<agent label>/
-  ledgerPath,                              // optional; the ledger step appends lines
+  ledgerPath,                              // optional; only named in the log (the controller appends)
   sensitive: false, ui: false,
+  critic: false,                           // optional boolean: critic on without sensitive or ui
+  criticFocus: "<focus sentence>",         // optional non-empty string (see Roles)
   ids: "BR-001, FR-032",
   specRefs: "spec 4.1 lines 140-260; ...", // what the spec reviewer and the ruler read
   requirementsDoc,                         // optional; default the repo-root Requirements Definition
@@ -55,52 +58,66 @@ Required: `task`, `title`, `repoDir`, `branch`, `base`, `briefPath`, `reportPath
 | implementer (also `implementer-continue`, `implementer-retry`) | sonnet / medium | opus / medium |
 | specReviewer | sonnet / medium | sonnet / medium |
 | qualityReviewer | sonnet / high | sonnet / high |
-| critic (only when `sensitive` or `ui`) | opus / medium | opus / medium |
+| critic (only when `sensitive`, `ui` or `critic: true`) | opus / medium | opus / medium |
+| checker (only when cannot-verify items remain after controller decisions) | sonnet / low | sonnet / low |
 | ruler | opus / low | opus / medium |
 | fixer (rounds 1 to 3) | same as implementer | same as implementer |
 | escalatedFixer (round 4 on, or a finding NOT ADDRESSED twice) | one step up from fixer | opus / high |
 | progressChecker | sonnet / low | sonnet / low |
 | reReviewer | sonnet / medium | opus / medium |
 | gate | sonnet / low | sonnet / low |
-| ledger | haiku (no effort) | haiku |
+
+There is no ledger role: the script returns `ledgerLines` and the controller appends them. An old `roles.ledger` override is logged as ignored, not an error.
+
+`critic: true` turns the critic on for an ordinary task without changing any tier or ruler rule (the sensitive ruler rule still follows `sensitive` only). Its focus, when neither `sensitive` nor `ui` is set: "correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail". `criticFocus` replaces that sentence; on a sensitive or UI task the usual focus stays and `criticFocus` is appended. A non-boolean `critic` or an empty `criticFocus` throws at start.
 
 Step-up ladder: haiku to sonnet/medium; sonnet/low to sonnet/medium; sonnet/medium to sonnet/high; sonnet/high or xhigh to opus/medium; opus/low to opus/medium; opus/medium to opus/high; opus/high to opus/xhigh.
 
 ### Flow
 
-1. **Implement.** The implementer reads the brief, checks the precondition (branch is `branch`, HEAD is `base`, clean tree), works TDD, commits only its files with the brief's message and the trailer, and writes `reportPath`. Returns `{ status, commits, head, testSummary, concerns:[{kind: planVsSpec|correctness|observation, text}], questions }`.
+Every agent that can run shell commands (implementer, `implementer-continue`, `implementer-retry`, fixers, escalated fixer, checker, gate; the `wave-review` fixer) carries: "Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote." (W2 incident: an implementer pushed and opened a PR after reading project memory.)
+
+1. **Implement.** The implementer reads the brief, checks the precondition (branch is `branch`, HEAD is `base`, clean tree), works TDD, commits only its files with the brief's message and the trailer, and writes `reportPath`. Before each commit it runs `pnpm lint` (fixing formatting with `pnpm exec biome format --write <files>` or `pnpm exec biome check --write <files>` on the changed files only) and `pnpm coverage`, never commits on red, and reports both. Returns `{ status, commits, head, testSummary, concerns:[{kind: planVsSpec|correctness|observation, text}], questions }`.
    - A failed precondition stops the run (`stopped: "precondition"`, `stopPoint: "precondition:implementer"`, `problem`, which names each untracked or modified file for a dirty tree); it never becomes a finding.
    - With `implemented: { head }` the implementer is skipped and the run reviews `base..head` (review stages only).
    - BLOCKED or NEEDS_CONTEXT: stop (`stopped: "implementer"`), unless `answers` is given (below).
    - A planVsSpec or correctness concern goes to the ruler (`ruler-concerns`). A `fix` ruling gets one pre-review fixer and progress check; progress problems there are passed to the reviewers.
    - Observations become deferred minors.
-2. **Review** (parallel): spec reviewer, quality reviewer, and the critic on sensitive or UI tasks. Each builds its own diff file in its scratch path, reads it once, writes `workDir/task-<n>-review-<spec|quality|critic>.md` and returns `{ verdict: pass|fail, findings:[{id, severity, file, line, summary, fix, planMandated, contestsRuling}], cannotVerify:[{item, check}] }`.
+2. **Review and gate-0** (parallel, on the same head `reviewHead`): spec reviewer, quality reviewer, the critic on sensitive, UI or `critic: true` tasks, and `gate-0`. Each reviewer builds its own diff file in its scratch path, reads it once, writes `workDir/task-<n>-review-<spec|quality|critic>.md` and returns `{ verdict: pass|fail, findings:[{id, severity, file, line, summary, fix, planMandated, contestsRuling}], cannotVerify:[{item, check}] }`.
    - Reviewers see the rulings in force. A finding that contradicts one sets `contestsRuling` to its id.
    - The spec reviewer cites requirement IDs verbatim, checks fixtures against the fixture policy, and treats missing or implausible RED evidence as important.
+   - Reviewers are told the gate runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` on the same head, so they never list lint, typecheck, tests, coverage or the report's test counts as cannot-verify.
    - A null reviewer stops the run (`stopped: "review"`).
+   - `gate-0` problems become open findings (`gate-0:<k>`) next to the reviewer findings. A `gate-0` precondition failure (branch or HEAD mismatch) stops the run after the reviewers return (`stopped: "precondition"`, `stopPoint: "precondition:gate-0"`); a null `gate-0` stops it (`stopped: "gate-0"`).
    - A finding with a controller decision (`answers.decisions`) is settled by it and skips the ruler.
-3. **Rule** (`ruler-review`) on plan-mandated critical or important findings, findings that contest a ruling, and cannot-verify items. Decisions: `fix` (with fixInstruction), `stands`, `verified` (the check passed; a failed check is `fix`), `escalate`. Optional `carryForward` lists obligations for later tasks. The spec is binding.
+3. **Check** (`checker`, read-only, one agent). Controller decisions settle their cannot-verify items first; a decided item never reaches the checker. The checker runs each remaining item's suggested check (it may run tests, grep and git reads; it never edits or commits) and returns per item `{ id, result: verified | failed | needsJudgment, evidence }`. `verified` becomes a ruling with source `checker`; `failed` becomes an open important finding; `needsJudgment`, or no result, goes to the ruler. Re-reviews return no cannot-verify items, so the checker runs at most once.
+4. **Rule** (`ruler-review`) on plan-mandated critical or important findings, findings that contest a ruling, and cannot-verify items the checker marked `needsJudgment`. It runs only if one of those remains. Decisions: `fix` (with fixInstruction), `stands`, `verified` (the check passed; a failed check is `fix`), `escalate`. Optional `carryForward` lists obligations for later tasks. The spec is binding.
    - On sensitive tasks the ruler prompt carries this rule verbatim: "On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules." The script also escalates a critical ruled `stands` or `verified` on a sensitive task.
    - Any escalation stops the run (`stopped: "ruler-review"`, or `"ruler-concerns"` before review). An item with no ruling is parked.
    - Controller decisions settle their items before the ruler is called; if every item is decided, the ruler does not run. Rule (c) and the other escalation rules never re-escalate a controller decision.
-   - One ruling per item is in force. A later ruling supersedes an earlier one on the same item, and a `fix` ruling on a finding that contests a ruling supersedes the contested ruling. Precedence: controller over ruler, later over earlier. Prompts show only rulings in force; superseded ones come back as `supersededRulings`.
-4. **Fix loop**, round r = 1..maxRounds, while critical or important findings are open: fixer (escalated fixer from round 4 or on a repeat), progress checker (new commits, clean tree, no `.skip`/`.only`, no test file deleted or emptied, test count not lower), re-reviewer (ADDRESSED or NOT ADDRESSED per finding over the fix diff only; new breakage; out-of-scope minors). Fixers see the rulings in force and never reverse one. Progress problems become open findings. A new finding that contests a ruling is parked for the controller.
-5. **Gate** (`gate-0` after a clean review, `gate-r<r>` after a fix loop that ends clean): runs `pnpm lint`, `pnpm typecheck` and `pnpm test` once each in `repoDir`, confirms the branch and that HEAD equals the reported head, and that the tree is clean. Returns `{ ok, head, problems, preconditionFailed? }`. A branch or HEAD mismatch is a precondition failure and stops the run. A red gate with no problem listed counts as one problem. Problems become open findings and go back through the fix loop within `maxRounds`. `complete` needs a green gate.
-6. **Ledger** (optional; Haiku, Edit append only). The script computes the lines; they also come back as `ledgerLines`.
-7. **Return** (below).
+   - One ruling per item is in force. A later ruling supersedes an earlier one on the same item, and a `fix` ruling on a finding that contests a ruling supersedes the contested ruling. Precedence: controller over ruler or checker, later over earlier. Prompts show only rulings in force; superseded ones come back as `supersededRulings`.
+5. **Fix loop**, round r = 1..maxRounds, while critical or important findings are open: fixer (escalated fixer from round 4 or on a repeat), progress checker (new commits, clean tree, no `.skip`/`.only`, no test file deleted or emptied, test count not lower), re-reviewer (ADDRESSED or NOT ADDRESSED per finding over the fix diff only; new breakage; out-of-scope minors). Fixers run the same `pnpm lint` and `pnpm coverage` self-check before each commit. Fixers see the rulings in force and never reverse one. Progress problems become open findings (`progress-r<r>-<k>`). A new finding that contests a ruling is parked for the controller.
+   - **Mechanical round:** when every open finding going into the round came from a gate (`gate-*`) or the progress checker (`progress-*`), the re-reviewer is skipped; the progress checker and `gate-r<r>` decide. Findings from reviewers, the critic, the checker or the ruler still get the re-reviewer. The log names the path taken.
+6. **Gate.** `gate-0` ran in step 2; a clean review plus a green `gate-0` completes the task with no further gate. After a fix loop that ends clean, `gate-r<r>` runs. Each gate runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` (the full suite with the coverage thresholds) once each in `repoDir`, confirms the branch and that HEAD equals the expected head, and that the tree is clean. Returns `{ ok, head, problems, preconditionFailed? }`. A branch or HEAD mismatch is a precondition failure and stops the run. A red gate with no problem listed counts as one problem. Problems become open findings and go back through the fix loop within `maxRounds`. `complete` needs a green gate.
+7. **Return** (below). The script computes the ledger lines and returns them as `ledgerLines`; no agent writes the ledger. With `ledgerPath` it logs "ledger: controller appends N lines to <ledgerPath>".
 
-Worst case at the default maxRounds 5: 30 agents (implementer, concern ruler, pre-review fixer and progress check, three reviewers, review ruler, a red gate after review, five rounds of fixer, progress, re-review and red gate, ledger). A run whose findings are never addressed stops at 24. An answered implementer or precondition stop adds one `implementer-continue` or retry (31). Controller decisions can remove a ruler call. Typical ordinary task: 5 agents clean (6 with a ruler), 8 or 9 with one fix round.
+Agent counts at the default maxRounds 5:
+- Typical ordinary task, clean: 4 (implementer, spec, quality, gate-0). With cannot-verify items only: 5 (plus the checker; a `needsJudgment` item adds the ruler). With a plan-mandated finding: plus the ruler.
+- One fix round on reviewer findings: 8 (plus fixer, progress, re-review, gate-r1). One mechanical round after a red `gate-0`: 7 (plus fixer, progress, gate-r1).
+- Worst case: 26 (implementer, concern ruler, pre-review fixer and progress check, three reviewers and `gate-0`, checker, review ruler, round 1 on a reviewer finding with fixer, progress, re-review and a red gate-r1, then four mechanical rounds of fixer, progress and a red gate). A run whose findings are never addressed parks at 24 (25 with a checker). An answered implementer or precondition stop adds one `implementer-continue` or retry agent. Controller decisions can remove the checker or a ruler call.
 
 ### Return
 
 ```
 { task, status: "complete" | "parked" | "stopped", base, head, commits, rounds,
   rulings, supersededRulings, carryForward, deferredMinors, parked, questions, concerns,
-  answersUnconsumed?, ledgerLines?, stopPoint?,
+  answersUnconsumed?, ledgerLines, stopPoint?,
   stopped?: "implementer" | "precondition" | "ruler-concerns" | "fixer-pre" | "review" |
             "ruler-review" | "fixer-r<r>" | "gate-0" | "gate-r<r>",
   problem?, escalated?: [ruling] }
 ```
+
+Each ruling carries `source`: `ruler`, `checker` (a cannot-verify item the checker verified) or `controller`. `ledgerLines` is always returned; append it with `append-ledger.mjs` (Controller procedure).
 
 - `complete`: review clean and gate green. Tick the plan checkboxes, move `carryForward` into the next task's `carries`, and read `rulings` (every planVsSpec ruling goes into the wave PR body).
 - `parked`: the round cap was reached, or an item got no ruling, or a new finding contests a ruling. Adjudicate `parked`.
@@ -126,6 +143,7 @@ Each entry's text is delivered to exactly one agent: the first consumer at or af
 ```
 - Task <N>: Ruling: <what> {EM DASH} <decision>: <why> {EM DASH} <cost if wrong>
 - Task <N>: Ruling (controller): <what> {EM DASH} <decision>: <why> {EM DASH} controller decision
+- Task <N>: Ruling (checker): <what> {EM DASH} verified: <evidence> {EM DASH} checker verified; ...
 - Task <N>: Ruling superseded: <item> (<old decision>) by <item> (<new decision>): <why>
 - Task <N>: carry forward: <obligation>
 - Task <N>: fix round <r>/<max> (<k> addressed, <m> open; head <h7>)
@@ -164,7 +182,7 @@ Required: `pr`, `base`, `head`, `repoDir`, `planPath`, `workDir`, `scratchRoot`,
 
 1. **Review.** Whole-branch review of `base..head` against the plan, the spec (binding) and the requirements, with the sensitive-file list, the ledger's `Ruling` and `minor (deferred)` lines, the controller's questions and a "declined to judge" list. It checks a precondition first (`head` resolves, `base` is its ancestor, clean tree); a failure stops the run (`stopped: "precondition"`) before any ruler or fixer. Writes `workDir/<runLabel>-review.md`, and the artifact only on approve with no open critical or important finding. Returns `{ verdict: approve|fixes, reviewedSha, preconditionFailed, findings:[... contests], answers, declined, artifactWritten }`. Its prompt never carries answers, so a re-run with answers replays it from cache.
 2. **Controller decisions, then Rule.** Findings with a controller decision are settled by it (final for the run; a controller `stands` on a critical stands). The ruler runs on the other critical or important findings that are plan-mandated or contest a ledger Ruling. The ruler prompt carries the escalation rule above verbatim, always, plus "A Critical finding may be ruled fix or escalate, never stands." The script escalates a critical ruled `stands` or `verified`. Any escalation stops the run.
-3. **One fix pass** with the complete list (critical and important must be fixed; minors when small). Rulings in force are passed; the fixer never reverses one. A fixer precondition failure (HEAD moved, dirty tree) stops the run. Then the progress checker. Its problems become findings `progress-<k>`.
+3. **One fix pass** with the complete list (critical and important must be fixed; minors when small). The fixer runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` once each and carries the no-push, no-PR, no-merge rule. Rulings in force are passed; the fixer never reverses one. A fixer precondition failure (HEAD moved, dirty tree) stops the run. Then the progress checker. Its problems become findings `progress-<k>`.
 4. **One re-review** of the fix diff against the first review file. It verdicts every finding including `progress-*`: ADDRESSED, NOT ADDRESSED (also to reject a ruler ruling), or STANDS. A controller ruling is final. Otherwise a critical is never STANDS. Every important accepted as STANDS must be listed in `acceptedStands` with the id of the stands ruling. No approve while any critical is open. It writes the artifact at the fix head on approve. There is no second fix pass.
 
 Worst case: 5 agents, plus one `reviewer-retry` and one `fixer-retry` on answered precondition stops (7).
@@ -206,17 +224,24 @@ Before an `sdd-task` run:
 3. Fill `specRefs` with real spec line ranges, `globalConstraints` with the plan's product and code constraint bullets only (no process bullets), `carries` with earlier rulings, `carryForward` items and interfaces.
 4. State the role plan (model and effort per role) before the run.
 
-After it: act on `status` (above). Every run leaves its review files in `workDir`.
+After it:
+1. Append the ledger lines: save the run's result (the task output file holds it) and run `node scripts/sdd/append-ledger.mjs <workflow-output-file> <ledgerPath>` (PowerShell or Git Bash). It accepts a bare result object or any text that contains the result JSON, appends `ledgerLines` with a trailing newline and prints the count; exit 2 is a usage error or an unreadable file, exit 3 means no `ledgerLines` were found.
+2. Act on `status` (above). Every run leaves its review files in `workDir`.
 
 Answering a stop, without re-implementing:
 1. Keep every arg identical, `carries` and `questions` included. `answers` is a list with one entry per answered stop: append `{ at: <the returned stopped value, or stopPoint for a precondition>, text: "<answers>", decisions: [{ item, decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }`. Use `decisions` to settle an escalated item; the item id is the one in `escalated`. A single object is accepted as a one-entry list.
-2. Re-run: `Workflow({ scriptPath: ".claude/workflows/<sdd-task | wave-review>.js", args: <same args + answers>, resumeFromRunId: "<runId>" })`.
+2. Re-run with the full args every time: `Workflow({ scriptPath: ".claude/workflows/<sdd-task | wave-review>.js", resumeFromRunId: "<runId>", args: <same args + answers> })` (see "Resuming a run" below).
 3. Each entry's text goes to exactly one agent, the consumer for its stop point, never into the implementer's or the reviewer's prompt, so every earlier call replays from cache. Never answer by editing `questions` or `carries`: that re-runs the review or the implementation.
 4. Decisions from all entries become controller rulings (`source: "controller"`, ledgered as `Ruling (controller)`); a later entry wins for the same item. They are final for the run and never re-escalated; a controller `stands` on a Critical stands, and a controller `fix` goes to the fixer with its `fixInstruction`.
 5. After an implementer stop, the cached implementer replays and `implementer-continue` gets the brief, the report, the questions and the answers, and finishes on top of the existing commits.
 6. Answers accumulate. On a second stop, keep every earlier entry exactly as it was and append a new entry for the new stop point. Never edit, replace or drop an earlier entry: its consumer's cache key depends on it, and the earlier stop's continue or retry agent then replays from cache. If the same stop point stops again, append another entry with the same `at`; its consumer re-runs with both.
 
 Resume after a pause, kill or script edit: the same call without new answers. Changing `roles` or any prompt input invalidates the cache from that call on.
+
+### Resuming a run
+
+- A resume always re-passes the full args. The call shape is `{ scriptPath, resumeFromRunId, args }`. `Workflow({ scriptPath, resumeFromRunId })` without `args` throws at the first required-arg check, because the script re-validates its args on every run.
+- Stopping a run mid-review (a pause or kill while reviewers or the checker are working) loses their partial work: an agent that had not returned is not cached and re-runs from the start on resume. The cheap place to intervene is at a stop, where every finished agent is cached and the answers go to one consumer.
 
 Before a `wave-review` run: every task of the wave is `complete`, the branch is committed and clean, the ledger is current, `head` is the sha to review. After it: see Return.
 
@@ -251,4 +276,4 @@ Whether the Workflow runtime caches an agent that returned nothing is runtime be
 
 ## Harness
 
-`node scripts/sdd/workflow-harness.mjs` (repo root, PowerShell or Git Bash). It imports each script from a data URL with the body wrapped in an async function, stubs `agent()` and `parallel()`, and asserts: every call has a model and an effort (none for Haiku); no prompt contains `undefined`; every schema has an object root with `required` inside `properties`; every mock return validates. A runaway-loop guard fails any scenario past 200 agent calls. Scenarios cover two answered stops in a row for both scripts, the review-stages-only run, the happy path, the gate, worst-case counts, rulings routing and supersession, the sensitive ruler rule, answers re-runs and controller decisions in both scripts, stop-point consumers, precondition stops, arg validation, `maxRounds` coercion, and the `wave-review` guards. Run it after any change to a workflow; it exits 1 on a failure.
+`node scripts/sdd/workflow-harness.mjs` (repo root, PowerShell or Git Bash). It imports each script from a data URL with the body wrapped in an async function, stubs `agent()` and `parallel()`, and asserts: every call has a model and an effort (none for Haiku); no prompt contains `undefined`; every schema has an object root with `required` inside `properties`; every mock return validates. A runaway-loop guard fails any scenario past 200 agent calls. Scenarios cover two answered stops in a row for both scripts, the post-pilot items (gate runs coverage, reviewers never list gate checks as cannot-verify, the no-remote rule and the pre-commit self-check in every shell-running prompt, `critic` and `criticFocus`, the checker, `gate-0` in parallel with the reviewers, mechanical rounds without a re-reviewer, no ledger agent, `append-ledger.mjs` parsing and exit codes, this README's resume shape), the review-stages-only run, the happy path, the gate, worst-case counts, rulings routing and supersession, the sensitive ruler rule, answers re-runs and controller decisions in both scripts, stop-point consumers, precondition stops, arg validation, `maxRounds` coercion, and the `wave-review` guards. Run it after any change to a workflow; it exits 1 on a failure.

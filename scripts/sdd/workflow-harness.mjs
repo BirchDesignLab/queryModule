@@ -1645,6 +1645,15 @@ await test("append-ledger: exits 2 on a usage error and 3 when no ledgerLines ar
   assert.equal(none.status, 3, none.stderr);
 });
 
+await test("README P3: a resume re-passes the full args; stopping mid-review loses the reviewers' work", async () => {
+  const readme = fs.readFileSync(path.join(WF_DIR, "README.md"), "utf8");
+  assert.ok(readme.includes("{ scriptPath, resumeFromRunId, args }"), "resume call shape missing");
+  assert.ok(/without `args` throws at the first required-arg check/.test(readme));
+  assert.ok(/partial work/.test(readme) && /cheap place to intervene is at a stop/.test(readme));
+  assert.ok(readme.includes("node scripts/sdd/append-ledger.mjs"), "append-ledger not documented");
+  assert.ok(!/\| ledger \|/.test(readme), "README still lists a ledger role");
+});
+
 // ---------- report ----------
 let failed = 0;
 for (const [ok, name, err] of results) {
