@@ -71,8 +71,9 @@ export const meta = {
   whenToUse: 'Running one task of an implementation plan on a wave branch in place of hand-dispatched subagent-driven development',
   phases: [
     { title: 'Implement', detail: 'implementer builds the task from its brief with TDD and commits' },
-    { title: 'Rule', detail: 'ruler decides implementer concerns, plan-mandated or contested findings and cannot-verify items' },
-    { title: 'Review', detail: 'spec reviewer, quality reviewer and (sensitive or UI) critic in parallel' },
+    { title: 'Rule', detail: 'ruler decides implementer concerns, plan-mandated or contested findings and cannot-verify items the checker could not settle' },
+    { title: 'Review', detail: 'spec reviewer, quality reviewer, critic (sensitive, UI or critic: true) and gate-0 in parallel' },
+    { title: 'Check', detail: 'checker runs the suggested check for each cannot-verify item' },
     { title: 'Fix', detail: 'fixer, progress checker and re-reviewer per round, up to maxRounds' },
     { title: 'Gate', detail: 'independent lint, typecheck, test, head and clean-tree check' },
     { title: 'Ledger', detail: 'append the task lines to the SDD ledger' },
@@ -212,6 +213,7 @@ const DEFAULTS = SENSITIVE
       qualityReviewer: { model: 'sonnet', effort: 'high' },
       critic: { model: 'opus', effort: 'medium' },
       ruler: { model: 'opus', effort: 'medium' },
+      checker: { model: 'sonnet', effort: 'low' },
       progressChecker: { model: 'sonnet', effort: 'low' },
       reReviewer: { model: 'opus', effort: 'medium' },
       gate: { model: 'sonnet', effort: 'low' },
@@ -223,6 +225,7 @@ const DEFAULTS = SENSITIVE
       qualityReviewer: { model: 'sonnet', effort: 'high' },
       critic: { model: 'opus', effort: 'medium' },
       ruler: { model: 'opus', effort: 'low' },
+      checker: { model: 'sonnet', effort: 'low' },
       progressChecker: { model: 'sonnet', effort: 'low' },
       reReviewer: { model: 'sonnet', effort: 'medium' },
       gate: { model: 'sonnet', effort: 'low' },
@@ -320,6 +323,24 @@ const REVIEW = {
     cannotVerify: { type: 'array', items: { type: 'object', properties: { item: { type: 'string' }, check: { type: 'string' } }, required: ['item', 'check'] } },
   },
   required: ['verdict', 'findings', 'cannotVerify'],
+}
+const CHECK = {
+  type: 'object',
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'the item id exactly as given' },
+          result: { type: 'string', enum: ['verified', 'failed', 'needsJudgment'] },
+          evidence: { type: 'string', description: 'the command you ran and the lines of its output that decide the result' },
+        },
+        required: ['id', 'result', 'evidence'],
+      },
+    },
+  },
+  required: ['results'],
 }
 const RULINGS = {
   type: 'object',
@@ -493,7 +514,7 @@ function rulingsText() {
   if (!list.length) return ''
   return [
     'Rulings in force (binding; never reverse one; a finding that contradicts one sets contestsRuling to its id):',
-    ...list.map((r) => `* [${r.item}] ${r.decision}${r.source === 'controller' ? ' (controller)' : ''}: ${r.reason}`),
+    ...list.map((r) => `* [${r.item}] ${r.decision}${r.source === 'ruler' ? '' : ` (${r.source})`}: ${r.reason}`),
   ].join('\n')
 }
 
@@ -503,7 +524,7 @@ function ledgerLines(result) {
   const out = []
   const b7 = String(A.base).slice(0, 7)
   const h7 = String(result.head || A.base).slice(0, 7)
-  for (const r of inForce()) out.push(`- Task ${N}: Ruling${r.source === 'controller' ? ' (controller)' : ''}: ${r.what} \u2014 ${r.decision}: ${r.reason} \u2014 ${r.costIfWrong}`)
+  for (const r of inForce()) out.push(`- Task ${N}: Ruling${r.source === 'ruler' ? '' : ` (${r.source})`}: ${r.what} \u2014 ${r.decision}: ${r.reason} \u2014 ${r.costIfWrong}`)
   for (const s of state.superseded) out.push(`- Task ${N}: Ruling superseded: ${s.item} (${s.old.decision}) by ${s.new.item} (${s.new.decision}${s.new.source === 'controller' ? ', controller' : ''}): ${s.new.reason}`)
   for (const c of state.carryForward) out.push(`- Task ${N}: carry forward: ${c}`)
   for (const l of state.roundLog) out.push(`- Task ${N}: ${l}`)
@@ -653,6 +674,29 @@ async function runFixer(findings, label, roleName, roundTag, round) {
   )
 }
 
+// Cannot-verify items: one read-only checker runs each item's suggested check.
+async function runChecker(items, headNow) {
+  return agent(
+    [
+      `You are the checker for Task ${N}: ${A.title}. Reviewers could not verify the items below from the diff alone. Run each item's suggested check (or the closest equivalent) and report what you found.`,
+      `Context as you need it: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the requirements doc "${REQ_DOC}". Code under check: ${A.base}..${headNow}. ${GIT}`,
+      '',
+      'Items:',
+      ...items.map((it) => `- [${it.id}] ${it.text}`),
+      '',
+      'Per item, result:',
+      '- verified: the check ran and passed. evidence: the command and the output lines that show it.',
+      '- failed: the check ran and failed. evidence: the command and the failing lines.',
+      '- needsJudgment: the check cannot settle the item (it needs a reading of the spec or a design decision). evidence: why.',
+      `You are read-only: you may run commands (tests, grep, git log, git diff, git show), but never edit a file, stage, commit or change any git state. Scratch, if needed: ${scratch('checker')}`,
+      NO_REMOTE,
+      HOUSE,
+      'Return one result per item, with id set to the id exactly as given.',
+    ].join('\n'),
+    { label: 'checker', phase: 'Check', schema: CHECK, ...role('checker') },
+  )
+}
+
 async function runProgress(label, roundBase, priorTests) {
   return agent(
     [
@@ -746,7 +790,7 @@ async function gateOutcome(gl, g, expectedHead) {
 // ================= 1. Implement =================
 phase('Implement')
 log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; ${SENSITIVE ? 'sensitive' : 'ordinary'}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}`)
-log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}, ledger ${tier('ledger')}`)
+log(`roles: implementer ${tier('implementer')}, spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}, ledger ${tier('ledger')}`)
 
 // The implementer prompt never carries answers, so a re-run with answers replays it from cache.
 const implPrompt = [
@@ -979,6 +1023,7 @@ if (gate0.stop) return gate0.stop
 
 let open = []
 const toRule = []
+const cannotVerify = []
 const where = (f) => `${f.file}${f.line ? ':' + f.line : ''}`
 reviewers.forEach((r, i) => {
   const rv = reviews[i]
@@ -993,9 +1038,34 @@ reviewers.forEach((r, i) => {
     else if (g.planMandated) toRule.push({ id: g.id, kind: 'plan-mandated finding', severity: g.severity, text, finding: g })
     else open.push(g)
   }
-  rv.cannotVerify.forEach((c, k) => toRule.push({ id: `${r.key}:CV${k + 1}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` }))
+  rv.cannotVerify.forEach((c, k) => cannotVerify.push({ id: `${r.key}:CV${k + 1}`, kind: 'cannot verify', text: `${c.item} (suggested check: ${c.check})` }))
 })
 for (const f of gate0.findings || []) open.push(f)
+
+// Cannot-verify items: controller decisions settle theirs first; the checker runs the rest.
+// verified -> a checker ruling; failed -> an open important finding; needsJudgment or no result -> the ruler.
+if (cannotVerify.length) {
+  const pre = applyController(cannotVerify)
+  for (const f of pre.fixes) open.push(f)
+  if (pre.rest.length) {
+    phase('Check')
+    log(`check: ${pre.rest.length} cannot-verify item(s) to the checker (${tier('checker')})`)
+    const ck = await runChecker(pre.rest, reviewHead)
+    if (!ck) log('check: checker returned null (skipped or died); every item goes to the ruler')
+    const byId = new Map(((ck && ck.results) || []).map((x) => [x.id.replace(/^\[|\]$/g, '').trim(), x]))
+    for (const it of pre.rest) {
+      const x = byId.get(it.id)
+      if (x && x.result === 'verified') {
+        setRuling({ item: it.id, what: it.text.slice(0, 160), decision: 'verified', reason: x.evidence, costIfWrong: 'checker verified; a wrong check hides an unmet requirement', fixInstruction: '', command: x.evidence, source: 'checker' })
+      } else if (x && x.result === 'failed') {
+        open.push({ id: it.id, severity: 'important', file: '', line: '', summary: `check failed: ${it.text}: ${x.evidence}`, fix: 'make the failed check pass', planMandated: false, contestsRuling: '' })
+      } else {
+        toRule.push(Object.assign({}, it, { text: `${it.text} (checker: ${x ? `needs judgment: ${x.evidence}` : 'no result'})` }))
+      }
+    }
+    log(`check: ${pre.rest.map((it) => `${it.id} ${byId.has(it.id) ? byId.get(it.id).result : 'no result'}`).join(', ')}`)
+  }
+}
 
 // ================= 3. Ruler =================
 if (toRule.length) {

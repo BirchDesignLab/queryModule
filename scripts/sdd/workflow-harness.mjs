@@ -125,6 +125,9 @@ const addressAll = (p) => ({
   outOfScope: [],
 });
 const LEDGER_OK = { ok: true, linesAppended: 1 };
+const checkAll = (result) => (p) => ({
+  results: ids(p).map((id) => ({ id, result, evidence: `ran it: ${result}` })),
+});
 const BASE = {
   task: 7,
   title: "SiteConfig",
@@ -169,6 +172,7 @@ function sddResponder(over = {}) {
       };
     }
     if (label.endsWith("-review")) return PASS;
+    if (label === "checker") return checkAll("verified")(prompt);
     if (label.startsWith("fixer")) return work(`h-${label}`);
     if (label.startsWith("progress")) return progress(label);
     if (label.startsWith("re-review")) return addressAll(prompt);
@@ -233,9 +237,9 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
 });
 
 // Worst case at maxRounds 5: implementer, ruler-concerns, fixer-pre, progress-pre, three reviewers
-// and gate-0 in parallel, ruler-review, then round 1 with a review finding (fixer, progress,
+// and gate-0 in parallel, checker (needsJudgment), ruler-review, then round 1 with a review finding (fixer, progress,
 // re-review, red gate-r1) and four mechanical rounds (fixer, progress, red gate).
-await test("sdd: gate failing every round parks at the cap (worst case 26 agents at maxRounds 5)", async () => {
+await test("sdd: gate failing every round parks at the cap (worst case 27 agents at maxRounds 5)", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true },
@@ -243,6 +247,7 @@ await test("sdd: gate failing every round parks at the cap (worst case 26 agents
       implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
       "spec-review": { verdict: "pass", findings: [], cannotVerify: [{ item: "i", check: "c" }] },
       "critic-review": { verdict: "fail", findings: [F("C1", "important")], cannotVerify: [] },
+      checker: checkAll("needsJudgment"),
       "ruler-review": {
         rulings: [
           {
@@ -257,7 +262,7 @@ await test("sdd: gate failing every round parks at the cap (worst case 26 agents
       "gate*": { ok: false, head: "hg", problems: ["tests red"] },
     }),
   );
-  assert.equal(r.calls.length, 26, r.labels.join(","));
+  assert.equal(r.calls.length, 27, r.labels.join(","));
   assert.equal(r.labels.filter((l) => l.startsWith("re-review")).join(","), "re-review-r1");
   assert.equal(r.labels.filter((l) => l.startsWith("gate")).length, 6);
   assert.equal(r.res.status, "parked");
@@ -493,6 +498,7 @@ await test("sdd: carryForward from rulings is returned", async () => {
         findings: [],
         cannotVerify: [{ item: "tsc -b", check: "run it" }],
       },
+      checker: checkAll("needsJudgment"),
       "ruler-review": {
         rulings: [
           {
@@ -1496,6 +1502,82 @@ await test("sdd P9: a gate-only fix round skips the re-reviewer; progress and ga
     p.labels.join(","),
   );
   assert.ok(p.find("fixer-r2").prompt.includes("[progress-r1-1]"));
+});
+
+const specCV = (n = 1) => ({
+  verdict: "pass",
+  findings: [],
+  cannotVerify: Array.from({ length: n }, (_, k) => ({
+    item: `item ${k + 1}`,
+    check: `check ${k + 1}`,
+  })),
+});
+
+await test("sdd P6: a cannot-verify item goes to the checker (sonnet/low), not the ruler; verified is a checker ruling", async () => {
+  for (const sensitive of [false, true]) {
+    const r = await run(sdd, { ...BASE, sensitive }, sddResponder({ "spec-review": specCV() }));
+    const c = r.find("checker");
+    assert.ok(c, r.labels.join(","));
+    assert.equal(`${c.model}/${c.effort}`, "sonnet/low");
+    assert.deepEqual(ids(c.prompt), ["spec:CV1"]);
+    assert.ok(c.prompt.includes("check 1"));
+    assert.ok(
+      /read-only/i.test(c.prompt) && /never edit/i.test(c.prompt) && /commit/.test(c.prompt),
+    );
+    assert.ok(!r.labels.some((l) => l.startsWith("ruler")), r.labels.join(","));
+    const ruling = r.res.rulings.find((x) => x.item === "spec:CV1");
+    assert.equal(ruling.source, "checker");
+    assert.equal(ruling.decision, "verified");
+    assert.ok(r.res.ledgerLines.some((l) => l.includes("Ruling (checker): ")));
+    assert.equal(r.res.status, "complete");
+  }
+});
+
+await test("sdd P6: a failed check is an open important finding; the fix round gets a re-reviewer", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({ "spec-review": specCV(), checker: checkAll("failed") }),
+  );
+  assert.ok(!r.labels.some((l) => l.startsWith("ruler")), r.labels.join(","));
+  assert.ok(r.find("fixer-r1").prompt.includes("[spec:CV1] IMPORTANT"), r.find("fixer-r1").prompt);
+  assert.ok(r.labels.includes("re-review-r1"));
+  assert.equal(r.res.status, "complete");
+});
+
+await test("sdd P6: needsJudgment and unanswered items go to the ruler; the ruler runs only then", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": specCV(3),
+      checker: () => ({
+        results: [
+          { id: "spec:CV1", result: "verified", evidence: "ok" },
+          { id: "spec:CV2", result: "needsJudgment", evidence: "ambiguous" },
+        ],
+      }),
+    }),
+  );
+  assert.deepEqual(ids(r.find("ruler-review").prompt).sort(), ["spec:CV2", "spec:CV3"]);
+  assert.ok(r.find("ruler-review").prompt.includes("ambiguous"));
+  const dead = await run(sdd, BASE, sddResponder({ "spec-review": specCV(), checker: null }));
+  assert.deepEqual(ids(dead.find("ruler-review").prompt), ["spec:CV1"]);
+});
+
+await test("sdd P6: a controller-decided cannot-verify item never reaches the checker", async () => {
+  const answers = {
+    at: "review",
+    decisions: [{ item: "spec:CV1", decision: "verified", reason: "controller ran it" }],
+  };
+  const r = await run(sdd, { ...BASE, answers }, sddResponder({ "spec-review": specCV() }));
+  assert.ok(
+    !r.labels.includes("checker") && !r.labels.some((l) => l.startsWith("ruler")),
+    r.labels.join(","),
+  );
+  assert.equal(r.res.rulings.find((x) => x.item === "spec:CV1").source, "controller");
+  const two = await run(sdd, { ...BASE, answers }, sddResponder({ "spec-review": specCV(2) }));
+  assert.deepEqual(ids(two.find("checker").prompt), ["spec:CV2"]);
 });
 
 // ---------- report ----------
