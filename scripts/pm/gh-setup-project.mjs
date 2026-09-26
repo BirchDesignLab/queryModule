@@ -209,7 +209,7 @@ const WAVES = [
   { k: 1, tasks: [1, 6], pr: 31, state: "done" },
   { k: 2, tasks: [7, 11], pr: 33, state: "done" },
   { k: 3, tasks: [12, 16], pr: 35, state: "done" },
-  { k: 4, tasks: [17, 22], pr: 38, state: "review" },
+  { k: 4, tasks: [17, 22], pr: 38, state: "done" },
   { k: 5, tasks: [23, 25], pr: null, state: "ready" },
   { k: 6, tasks: [26, 28], pr: null, state: "todo" },
 ];
