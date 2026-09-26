@@ -10,6 +10,12 @@ import {
 } from "./audit";
 import { isTerminalSourceStatus, SOURCE_STATUSES } from "./source-status";
 
+/** Synthetic UUIDv7 and SHA-256 fixtures (spec 5.4 fixture policy; ADR-0005). */
+const CID = "0199a0b0-0000-7000-8000-000000000001";
+const RID = "0199a0b0-0000-7000-8000-0000000000a1";
+const DID = "0199a0b0-0000-7000-8000-0000000000d1";
+const HASH = "0123456789abcdef".repeat(4);
+
 const samples = {
   submitted: {
     partId: 0,
@@ -21,13 +27,13 @@ const samples = {
     dispatchedSourceIds: ["stateSource"],
     droppedSourceIds: ["nationalSource"],
     plateOnly: true,
-    configHash: "abc123",
+    configHash: HASH,
   },
   acknowledged: { acknowledgedAt: 1790000000000, ackLatencyMs: 42, partCount: 2 },
   sourceDispatched: {
     partId: 0,
     sourceId: "stateSource",
-    resultId: "r1",
+    resultId: RID,
     credentialOwnerUserId: null,
     delegationId: null,
     adapterKind: "mock",
@@ -35,14 +41,14 @@ const samples = {
   sourceResponded: {
     partId: 0,
     sourceId: "stateSource",
-    resultId: "r1",
+    resultId: RID,
     status: "returned",
     latencyMs: 120,
     credentialOwnerUserId: null,
     delegationId: null,
     adapterKind: "mock",
   },
-  interrupted: { partId: 0, sourceId: "stateSource", resultId: "r1", reason: "processRestart" },
+  interrupted: { partId: 0, sourceId: "stateSource", resultId: RID, reason: "processRestart" },
   partSkipped: {
     partId: 1,
     parentPartId: 0,
@@ -124,7 +130,7 @@ describe("SEC-010 audit catalogue (spec 4.7 query events)", () => {
     expect(() =>
       parseAuditDetails("partSkipped", {
         ...samples.partSkipped,
-        reasons: [{ key: "validation.tooLong", params: { value: "SMITH" } }],
+        reasons: [{ key: "validation.tooLong", params: { value: "TESTERSON" } }],
       }),
     ).toThrow();
   });
@@ -134,7 +140,7 @@ describe("SEC-011 SEC-012 audit envelope", () => {
   it("parses an event with a user actor and one with the system actor", () => {
     const user = {
       type: "submitted",
-      correlationId: "0199a0b0-0000-7000-8000-000000000001",
+      correlationId: CID,
       partId: 0,
       actor: { id: "u1", email: "officer@example.test", role: "user" },
       identitySource: "local",
@@ -143,7 +149,7 @@ describe("SEC-011 SEC-012 audit envelope", () => {
     expect(AuditEventSchema.parse(user)).toEqual(user);
     const system = {
       type: "interrupted",
-      correlationId: "c1",
+      correlationId: CID,
       partId: 0,
       actor: SYSTEM_ACTOR,
       identitySource: "system",
@@ -295,5 +301,97 @@ describe("SEC-012 T4-E envelope partId matches details partId (ADR-0003)", () =>
       details: samples.acknowledged,
     };
     expect(AuditEventSchema.safeParse(event).success).toBe(true);
+  });
+});
+
+describe("SEC-010 P2 to P4 audit id, key and code formats (ADR-0005, spec 5.5 line 854)", () => {
+  const reject = (type: AuditEventType, details: unknown) =>
+    expect(() => parseAuditDetails(type, details)).toThrow();
+
+  it("resultId is a UUIDv7 on every result-scoped type", () => {
+    for (const type of ["sourceDispatched", "sourceResponded", "interrupted"] as const) {
+      reject(type, { ...samples[type], resultId: "r1" });
+      reject(type, { ...samples[type], resultId: RID.toUpperCase() });
+    }
+  });
+  it("delegationId is a UUIDv7 when present", () => {
+    for (const type of ["sourceDispatched", "sourceResponded"] as const) {
+      const delegated = { ...samples[type], credentialOwnerUserId: "u2", delegationId: DID };
+      expect(parseAuditDetails(type, delegated)).toEqual(delegated);
+      reject(type, { ...delegated, delegationId: "d1" });
+    }
+  });
+  it("configHash is SHA-256 hex (spec 5.8 line 988)", () => {
+    reject("submitted", { ...samples.submitted, configHash: "abc123" });
+    reject("submitted", { ...samples.submitted, configHash: HASH.toUpperCase() });
+  });
+  it("typeValues map FieldKey to TypePicklistCode", () => {
+    const ok = { ...samples.submitted, typeValues: { plateType: "PC", propertyType: "FIREARM" } };
+    expect(parseAuditDetails("submitted", ok)).toEqual(ok);
+    for (const typeValues of [
+      { plateType: "PC LIGHT" },
+      { plateType: "TESTERSON, T" },
+      { plateType: "" },
+      { "plate type": "PC" },
+      { plate_type: "PC" },
+    ]) {
+      reject("submitted", { ...samples.submitted, typeValues });
+      reject("partSkipped", { ...samples.partSkipped, typeValues });
+    }
+  });
+  it("fieldMapApplied maps FieldKey to FieldKey", () => {
+    const nested = {
+      ...samples.submitted,
+      partId: 1,
+      parentPartId: 0,
+      origin: "alsoRun",
+      fieldMapApplied: { last: "last" },
+    };
+    reject("submitted", { ...nested, fieldMapApplied: { last: "ZZ-0001" } });
+    reject("submitted", { ...nested, fieldMapApplied: { "last name": "last" } });
+  });
+  it("queryType, sourceId and adapterKind are bounded ids", () => {
+    reject("submitted", { ...samples.submitted, queryType: "VEH PLATE" });
+    reject("partSkipped", { ...samples.partSkipped, queryType: "x".repeat(65) });
+    reject("submitted", { ...samples.submitted, selectedSourceIds: ["state source"] });
+    reject("submitted", { ...samples.submitted, dispatchedSourceIds: [""] });
+    reject("submitted", { ...samples.submitted, droppedSourceIds: ["a/b"] });
+    for (const type of ["sourceDispatched", "sourceResponded", "interrupted"] as const) {
+      reject(type, { ...samples[type], sourceId: "state source" });
+    }
+    for (const type of ["sourceDispatched", "sourceResponded"] as const) {
+      reject(type, { ...samples[type], adapterKind: "x".repeat(65) });
+      reject(type, { ...samples[type], credentialOwnerUserId: "officer one" });
+    }
+  });
+  it("partSkipped reason params.field is a FieldKey", () => {
+    reject("partSkipped", {
+      ...samples.partSkipped,
+      reasons: [{ key: "validation.required", params: { field: "ZZ-0001" } }],
+    });
+  });
+  it("envelope correlationId, actor id, credentialUserId and hostSubject are bounded", () => {
+    const event = {
+      type: "interrupted",
+      correlationId: CID,
+      partId: 0,
+      actor: USER_ACTOR,
+      identitySource: "local",
+      details: samples.interrupted,
+    } as const;
+    expect(AuditEventSchema.safeParse(event).success).toBe(true);
+    for (const bad of [
+      { correlationId: "c1" },
+      { actor: { ...USER_ACTOR, id: "officer one" } },
+      { credentialUserId: "x".repeat(65) },
+    ]) {
+      expect(AuditEventSchema.safeParse({ ...event, ...bad }).success).toBe(false);
+    }
+    const host = { ...event, identitySource: "host", hostSubject: "host|0001" } as const;
+    expect(AuditEventSchema.safeParse(host).success).toBe(true);
+    expect(AuditEventSchema.safeParse({ ...host, hostSubject: "s".repeat(256) }).success).toBe(
+      false,
+    );
+    expect(AuditEventSchema.safeParse({ ...host, hostSubject: "a\nb" }).success).toBe(false);
   });
 });

@@ -1,20 +1,29 @@
 import { z } from "zod";
 import { IdentitySourceSchema, RoleSchema } from "./identity";
+import {
+  BoundedIdSchema as Id,
+  DurationMsSchema as DurationMs,
+  EpochMsSchema as EpochMs,
+  FieldKeySchema,
+  HostSubjectSchema,
+  PartIdSchema as PartId,
+  Sha256HexSchema,
+  TypePicklistCodeSchema,
+  Uuid7Schema,
+} from "./primitives";
 import { AdapterErrorCodeSchema } from "./source-status";
 
-const Id = z.string().min(1);
-const PartId = z.int().min(0);
-const EpochMs = z.int().min(0);
-const DurationMs = z.number().min(0);
-/** role:"type" field values only (spec 4.1 Type fields). */
-const TypeValues = z.record(z.string(), z.string());
+/** role:"type" field values only (spec 4.1 Type fields): field key to picklist code (ADR-0005). */
+const TypeValues = z.record(FieldKeySchema, TypePicklistCodeSchema);
+/** alsoRun fieldMap as applied: target field key to source field key (spec 4.6). */
+const FieldMapApplied = z.record(FieldKeySchema, FieldKeySchema);
 
 /** ValidationError restricted for audit: params limited to field keys, label keys and positions. */
 export const AuditValidationErrorSchema = z.strictObject({
   key: z.string().min(1),
   params: z
     .strictObject({
-      field: z.string().min(1).optional(),
+      field: FieldKeySchema.optional(),
       labelKey: z.string().min(1).optional(),
       position: z.int().min(0).optional(),
     })
@@ -48,8 +57,8 @@ export const AUDIT_DETAILS_SCHEMAS = {
       dispatchedSourceIds: z.array(Id),
       droppedSourceIds: z.array(Id),
       plateOnly: z.boolean(),
-      configHash: Id,
-      fieldMapApplied: z.record(z.string(), z.string()).optional(),
+      configHash: Sha256HexSchema,
+      fieldMapApplied: FieldMapApplied.optional(),
     })
     /** Spec 4.7: parentPartId is null for primary; alsoRun also carries fieldMapApplied. */
     .superRefine((d, ctx) => {
@@ -79,26 +88,26 @@ export const AUDIT_DETAILS_SCHEMAS = {
   sourceDispatched: z.strictObject({
     partId: PartId,
     sourceId: Id,
-    resultId: Id,
+    resultId: Uuid7Schema,
     credentialOwnerUserId: Id.nullable(),
-    delegationId: Id.nullable(),
+    delegationId: Uuid7Schema.nullable(),
     adapterKind: Id,
   }),
   sourceResponded: z.strictObject({
     partId: PartId,
     sourceId: Id,
-    resultId: Id,
+    resultId: Uuid7Schema,
     status: z.enum(["returned", "failed", "timedOut", "credentialsMissing", "credentialsRejected"]),
     latencyMs: DurationMs,
     credentialOwnerUserId: Id.nullable(),
-    delegationId: Id.nullable(),
+    delegationId: Uuid7Schema.nullable(),
     adapterKind: Id,
     errorCode: AdapterErrorCodeSchema.optional(),
   }),
   interrupted: z.strictObject({
     partId: PartId,
     sourceId: Id,
-    resultId: Id,
+    resultId: Uuid7Schema,
     reason: z.literal("processRestart"),
   }),
   partSkipped: z.strictObject({
@@ -129,12 +138,12 @@ export type AuditActor = z.infer<typeof AuditActorSchema>;
 export const SYSTEM_ACTOR: AuditActor = { id: "system", email: null, role: "system" };
 
 const envelope = {
-  correlationId: Id.optional(),
+  correlationId: Uuid7Schema.optional(),
   partId: PartId.optional(),
   actor: AuditActorSchema,
   credentialUserId: Id.optional(),
   identitySource: IdentitySourceSchema,
-  hostSubject: Id.optional(),
+  hostSubject: HostSubjectSchema.optional(),
 };
 /** Part-scoped types: envelope partId is required and equals details.partId (ADR-0003). */
 const partEnvelope = { ...envelope, partId: PartId };
