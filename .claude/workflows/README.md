@@ -119,7 +119,7 @@ Stop points and the agent that consumes the answers there:
 | `fixer-r<r>` | `fixer-r<r>` |
 | `gate-0`, `gate-r<r>` | `fixer-r1`, `fixer-r<r+1>` |
 
-Each entry's text is delivered to exactly one agent: the first consumer at or after its stop point that runs (normally the consumer in this table). So an agent's prompt holds only the entries for its own stop point, and a later entry never changes an earlier agent's prompt. For a precondition entry, use the returned `stopPoint` as `at`; a plain `precondition` goes to the first precondition failure. An `at` that is not in this table throws at start. Answers that no agent consumed in the run are logged and returned as `answersUnconsumed: true`.
+Each entry's text is delivered to exactly one agent: the first consumer at or after its stop point that runs (normally the consumer in this table). So an agent's prompt holds only the entries for its own stop point, and a later entry never changes an earlier agent's prompt. For a precondition entry, use the returned `stopPoint` as `at`; a plain `precondition` goes to the first precondition failure. An `at` that is not in this table throws at start. Answers that no agent consumed in the run are logged and returned as `answersUnconsumed: true`. Editing an earlier entry (for example adding a decision on an item escalated at an earlier stop) changes that stop's consumer prompt, so the run replays from cache only up to that stop and re-runs everything after it.
 
 ### Ledger lines
 
@@ -194,7 +194,7 @@ Front matter comes from the role that writes it; an override changes it, so the 
 - `approve` with `artifactWritten`: commit the artifact on top of the reviewed head and push.
 - `approve` without `artifactWritten`: re-run the review. Never hand-write the artifact.
 - `fixes` without `stopped`: adjudicate `residual`.
-- `stopped` set: a decision is needed. Stop points and consumers: `reviewer` (the reviewer returned nothing): the ruler, fixer and re-reviewer; `precondition` (`stopPoint` `precondition:reviewer` or `precondition:fixer`; the problem names each untracked or modified file and calls out a stray artifact): the failing agent re-runs once as `reviewer-retry` or `fixer-retry`; `ruler`: decisions settle the escalated items and text goes to the fixer and re-reviewer; `fixer`: the fixer; `re-review`: the re-reviewer. Another `at` throws.
+- `stopped` set: a decision is needed. Stop points and consumers: `reviewer` (the reviewer returned nothing): the ruler, fixer and re-reviewer; `precondition` (`stopPoint` `precondition:reviewer` or `precondition:fixer`; the problem names each untracked or modified file and calls out a stray artifact): the failing agent re-runs once as `reviewer-retry` or `fixer-retry`; `ruler`: decisions settle the escalated items and text goes to the fixer and re-reviewer; `fixer`: the fixer; `re-review`: the re-reviewer. Another `at` throws. Delivery is first consumer that runs, so `reviewer` or `ruler` text reaches the re-reviewer when no ruler or fixer runs.
 - `strayArtifact` set: delete that file.
 - `declined` lists behaviours the reviewer set aside; the controller rules on each.
 
