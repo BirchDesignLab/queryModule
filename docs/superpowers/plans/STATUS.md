@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 11:34 |
+| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 14:07 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: W3 (#13 to #17) merged in PR #35; post-W3 workflow pass merged in PR #36; sdd-wave (item 11) in PR #37; next #18 (Task 17, W4)
-- Branch / PR: docs/status-post-w3 / #37 (STATUS sync, vitest 5.0.2, sdd-wave)
-- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` (345 tests), workflow harness 88/88, sdd-wave smoke run at 8512ce1 on docs/status-post-w3
-- Next step: developer merges #37; then cut feat/p0-wave-4 and run Tasks 17 to 22 (all sensitive) through sdd-wave; wave-review after the PR opens
-- Blocked by: #37 merge
+- Issue: W4 (#18 to #23) done in PR #38 (review approved, CI green); next #24 (Task 23, W5)
+- Branch / PR: feat/p0-wave-4 / #38
+- Last green: `pnpm verify` (449 tests), `pnpm audit --prod` 0; CI `ci` and `sensitive-review` green on #38
+- Next step: developer merges #38; then cut feat/p0-wave-5 (Tasks 23 to 25, then the phase Opus critic)
+- Blocked by: #38 merge; developer decision on unbounded audit and config message keys before the P0 freeze (ADR-0005)
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: W4 carries: bound `AuditActor.email`; one shared `TypeValues` schema for audit and the mock file (both in the ledger and the #35 body)
+- Notes: W5 carry: list `**/biome.json` and `.gitignore` in sensitive-paths (wave-review RR-M1). Track A carry: host email vs `AuditActorSchema.shape.email` at embedded login
 
 ### Track B
 

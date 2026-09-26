@@ -44,7 +44,7 @@ Developer direction 09-26-26 (ADR-0006): tasks land one PR per wave, on a branch
 | W1 | 1 to 6 | 4, 5 | #31 (merged 09-26-26) |
 | W2 | 7 to 11, plus the W2F pre-freeze pass | none | #33 (merged 09-26-26) |
 | W3 | 12 to 16 | none | #35 (merged 09-26-26) |
-| W4 | 17 to 22 | 17 to 22 | |
+| W4 | 17 to 22 | 17 to 22 | #38 |
 | W5 | 23 to 25, then the phase Opus critic | 23 | |
 | W6 | 26 to 28 | 26, 28 | |
 
@@ -4665,13 +4665,13 @@ git commit -m "feat(core): shipped default and example-ok sites, en locale, mock
 
 **IDs:** BR-007
 
-- [ ] **Step 1: Link workspace packages into the root for scripts.**
+- [x] **Step 1: Link workspace packages into the root for scripts.**
 
 ```bash
 pnpm add -D -w @querymodule/core@workspace:* @querymodule/config@workspace:*
 ```
 
-- [ ] **Step 2: Write `scripts/tsconfig.json` and `scripts/vitest.config.ts`.**
+- [x] **Step 2: Write `scripts/tsconfig.json` and `scripts/vitest.config.ts`.**
 
 ```json
 {
@@ -4697,7 +4697,7 @@ export default defineProject({
 });
 ```
 
-- [ ] **Step 3: Write the failing test `scripts/ci/openapi.test.ts`.**
+- [x] **Step 3: Write the failing test `scripts/ci/openapi.test.ts`.**
 
 ```ts
 import { ROUTES, type RouteDef } from "@querymodule/core/contracts";
@@ -4772,7 +4772,7 @@ describe("BR-007 OpenAPI generated from route contracts (spec 5.1)", () => {
 });
 ```
 
-- [ ] **Step 4: Run it.**
+- [x] **Step 4: Run it.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -4780,7 +4780,7 @@ pnpm vitest run --project scripts
 
 Expected: FAIL, `Failed to resolve import "./openapi"`.
 
-- [ ] **Step 5: Implement `scripts/ci/openapi.ts`.**
+- [x] **Step 5: Implement `scripts/ci/openapi.ts`.**
 
 ```ts
 import { API_VERSION, ApiErrorSchema, type RouteDef } from "@querymodule/core/contracts";
@@ -4875,7 +4875,7 @@ export function buildOpenApiDocument(routes: readonly RouteDef[]): OpenApiDocume
 }
 ```
 
-- [ ] **Step 6: Run.**
+- [x] **Step 6: Run.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -4883,7 +4883,7 @@ pnpm vitest run --project scripts
 
 Expected: `5 passed`.
 
-- [ ] **Step 7: Write `scripts/ci/contracts-gen.ts`.**
+- [x] **Step 7: Write `scripts/ci/contracts-gen.ts`.**
 
 ```ts
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -4922,7 +4922,7 @@ write("packages/config/schema/site-config.schema.json", {
 
 The WS schema nests two generated schemas under `$defs`; neither contains recursive refs, so their internal refs stay valid. If `toJsonSchema` ever emits `#/$defs/` refs for them, switch this file to `registerSchema` with a `components`-style map under `$defs`.
 
-- [ ] **Step 8: Write `scripts/ci/check-generated.ts`.**
+- [x] **Step 8: Write `scripts/ci/check-generated.ts`.**
 
 ```ts
 import { spawnSync } from "node:child_process";
@@ -4952,7 +4952,7 @@ if (changed !== "" || untracked !== "") {
 console.log("generated files match");
 ```
 
-- [ ] **Step 9: Create the `@querymodule/api` package and its failing test.** `packages/api/package.json`:
+- [x] **Step 9: Create the `@querymodule/api` package and its failing test.** `packages/api/package.json`:
 
 ```json
 {
@@ -5014,7 +5014,7 @@ describe("BR-007 committed openapi.json", () => {
 });
 ```
 
-- [ ] **Step 10: Run it.**
+- [x] **Step 10: Run it.**
 
 ```bash
 pnpm install
@@ -5023,7 +5023,7 @@ pnpm vitest run --project api
 
 Expected: FAIL, `ENOENT: no such file or directory` for `openapi.json`.
 
-- [ ] **Step 11: Generate and add references.**
+- [x] **Step 11: Generate and add references.**
 
 ```bash
 pnpm contracts:gen
@@ -5043,7 +5043,7 @@ Expected: three `wrote ...` lines. `tsconfig.json`:
 }
 ```
 
-- [ ] **Step 12: Run everything touched.**
+- [x] **Step 12: Run everything touched.**
 
 ```bash
 pnpm vitest run --project api --project scripts
@@ -5054,7 +5054,7 @@ pnpm gen:check
 
 Expected: `6 passed`; `tsc -b` exits 0; `generated files match`.
 
-- [ ] **Step 13: Commit, then the sensitive review (`scripts/ci/` is a sensitive path).**
+- [x] **Step 13: Commit, then the sensitive review (`scripts/ci/` is a sensitive path).**
 
 ```bash
 git commit -m "feat(a): contract generators, openapi.json and drift check
@@ -5084,7 +5084,7 @@ git commit -m "docs(a): sensitive review for contract generators
 
 **IDs:** BR-001, BR-004, FR-044
 
-- [ ] **Step 1: Write the failing test `scripts/ci/config-files.test.ts`.**
+- [x] **Step 1: Write the failing test `scripts/ci/config-files.test.ts`.**
 
 ```ts
 import { existsSync, readFileSync } from "node:fs";
@@ -5178,7 +5178,7 @@ describe("config:validate failures carry JSON paths", () => {
 
 Biome flags `any` in `defaultSite`; add `// biome-ignore lint/suspicious/noExplicitAny: test mutates raw JSON` on the line above it.
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5186,7 +5186,7 @@ pnpm vitest run --project scripts
 
 Expected: FAIL, `Failed to resolve import "./config-files"`.
 
-- [ ] **Step 3: Implement `scripts/ci/config-files.ts`.**
+- [x] **Step 3: Implement `scripts/ci/config-files.ts`.**
 
 ```ts
 import { dirname, resolve } from "node:path";
@@ -5292,7 +5292,7 @@ export function checkMocks(file: string, config: SiteConfig, io: ConfigIo): Diag
 }
 ```
 
-- [ ] **Step 4: Run.**
+- [x] **Step 4: Run.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5300,7 +5300,7 @@ pnpm vitest run --project scripts
 
 Expected: all pass (config-files file: 13 tests).
 
-- [ ] **Step 5: Write `scripts/ci/config-validate.ts`.**
+- [x] **Step 5: Write `scripts/ci/config-validate.ts`.**
 
 ```ts
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -5336,7 +5336,7 @@ for (const file of targets) {
 process.exit(failed ? 1 : 0);
 ```
 
-- [ ] **Step 6: Write `scripts/ci/config-migrate.ts`.**
+- [x] **Step 6: Write `scripts/ci/config-migrate.ts`.**
 
 ```ts
 import { readFileSync, writeFileSync } from "node:fs";
@@ -5362,7 +5362,7 @@ for (const step of result.applied) console.warn(`migrated ${arg}: ${step.from} -
 writeFileSync(path, `${JSON.stringify(result.config, null, 2)}\n`);
 ```
 
-- [ ] **Step 7: Verify the CLIs.**
+- [x] **Step 7: Verify the CLIs.**
 
 ```bash
 pnpm config:validate
@@ -5372,7 +5372,7 @@ pnpm config:migrate packages/config/sites/default.json
 
 Expected: four `ok packages/config/... (0 warnings)` lines, exit 0; then `ok packages/config/sites/example-ok.json (0 warnings)` followed by the merged JSON with `"delimiter": "/"`; then `packages/config/sites/default.json: already at schema version 1`.
 
-- [ ] **Step 8: Typecheck, commit, sensitive review.**
+- [x] **Step 8: Typecheck, commit, sensitive review.**
 
 ```bash
 pnpm typecheck
@@ -5403,7 +5403,7 @@ git commit -m "docs(a): sensitive review for config CLIs
 
 **IDs:** BR-006
 
-- [ ] **Step 1: Write the failing test `scripts/ci/licences.test.ts`.**
+- [x] **Step 1: Write the failing test `scripts/ci/licences.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -5430,7 +5430,7 @@ describe("BR-006 licence allowlist (spec 9.3 step 4)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5438,7 +5438,7 @@ pnpm vitest run --project scripts
 
 Expected: FAIL, `Failed to resolve import "./licences"`.
 
-- [ ] **Step 3: Implement `scripts/ci/licences.ts`.**
+- [x] **Step 3: Implement `scripts/ci/licences.ts`.**
 
 ```ts
 export const LICENCE_ALLOWLIST = ["MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "ISC"] as const;
@@ -5473,7 +5473,7 @@ export function checkLicences(report: LicenceReport, exceptions: readonly Licenc
 }
 ```
 
-- [ ] **Step 4: Write `scripts/ci/check-licences.ts` and `.github/licence-exceptions.json`.**
+- [x] **Step 4: Write `scripts/ci/check-licences.ts` and `.github/licence-exceptions.json`.**
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -5505,7 +5505,7 @@ console.log(`licences ok (${count} runtime packages)`);
 []
 ```
 
-- [ ] **Step 5: Run the test and the real check.**
+- [x] **Step 5: Run the test and the real check.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5515,7 +5515,7 @@ pnpm tsx scripts/ci/check-licences.ts licences.json
 
 Expected: tests pass (licences file: 2 tests); `licences ok (N runtime packages)` with `N >= 1`. Open `licences.json` and confirm `zod` appears under `"MIT"`; that proves workspace package runtime dependencies are included. `licences.json` is gitignored.
 
-- [ ] **Step 6: Commit, sensitive review.**
+- [x] **Step 6: Commit, sensitive review.**
 
 ```bash
 git add -A
@@ -5545,7 +5545,7 @@ git commit -m "docs(a): sensitive review for licence check
 
 **IDs:** stories A1, A2, A3, A4, A5 (rows only; tests land in M1)
 
-- [ ] **Step 1: Write the failing test `scripts/ci/story-tags.test.ts`.**
+- [x] **Step 1: Write the failing test `scripts/ci/story-tags.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -5587,7 +5587,7 @@ describe("story-tag gate (spec 10.2)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5595,7 +5595,7 @@ pnpm vitest run --project scripts
 
 Expected: FAIL, `Failed to resolve import "./story-tags"`.
 
-- [ ] **Step 3: Implement `scripts/ci/story-tags.ts`.**
+- [x] **Step 3: Implement `scripts/ci/story-tags.ts`.**
 
 ```ts
 import { z } from "zod";
@@ -5651,7 +5651,7 @@ export function checkStoryTags(
 }
 ```
 
-- [ ] **Step 4: Write `scripts/ci/check-story-tags.ts`.**
+- [x] **Step 4: Write `scripts/ci/check-story-tags.ts`.**
 
 ```ts
 import { spawnSync } from "node:child_process";
@@ -5682,7 +5682,7 @@ if (failures.length > 0) {
 console.log(`story tags ok (highest tag: ${opts.highestTag ?? "none"}${milestoneArg ? `, milestone ${milestoneArg}` : ""})`);
 ```
 
-- [ ] **Step 5: Write `docs/testing/stories.json` (M0 has no stories; M1 is A1 to A5, spec 10.2).**
+- [x] **Step 5: Write `docs/testing/stories.json` (M0 has no stories; M1 is A1 to A5, spec 10.2).**
 
 ```json
 [
@@ -5714,7 +5714,7 @@ console.log(`story tags ok (highest tag: ${opts.highestTag ?? "none"}${milestone
 ]
 ```
 
-- [ ] **Step 6: Run.**
+- [x] **Step 6: Run.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5724,7 +5724,7 @@ pnpm tsx scripts/ci/check-story-tags.ts --milestone m1
 
 Expected: tests pass (story-tags file: 4 tests); `story tags ok (highest tag: none)`; the `--milestone m1` run fails with five lines `A1 (m1): no test titled with [A1] in ...` to `A5`, exit 1 (correct until M1 exits).
 
-- [ ] **Step 7: Commit, sensitive review.**
+- [x] **Step 7: Commit, sensitive review.**
 
 ```bash
 git add -A
@@ -5755,7 +5755,7 @@ git commit -m "docs(a): sensitive review for story-tag gate
 
 **IDs:** SEC-020 (configuration management control area)
 
-- [ ] **Step 1: Write the failing test `scripts/ci/sensitive-review.test.ts`.**
+- [x] **Step 1: Write the failing test `scripts/ci/sensitive-review.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -5831,7 +5831,7 @@ describe("sensitive-review (spec 9.1)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5839,7 +5839,7 @@ pnpm vitest run --project scripts
 
 Expected: FAIL, `Failed to resolve import "./sensitive-review"`.
 
-- [ ] **Step 3: Implement `scripts/ci/sensitive-review.ts`.**
+- [x] **Step 3: Implement `scripts/ci/sensitive-review.ts`.**
 
 ```ts
 import picomatch from "picomatch";
@@ -5903,7 +5903,7 @@ export function evaluateSensitiveReview(input: ReviewInput): { ok: boolean; mess
 }
 ```
 
-- [ ] **Step 4: Write `scripts/ci/check-sensitive-review.ts`.**
+- [x] **Step 4: Write `scripts/ci/check-sensitive-review.ts`.**
 
 ```ts
 import { spawnSync } from "node:child_process";
@@ -5941,7 +5941,7 @@ for (const m of result.messages) (result.ok ? console.log : console.error)(m);
 process.exit(result.ok ? 0 : 1);
 ```
 
-- [ ] **Step 5: Write `.github/sensitive-paths`.**
+- [x] **Step 5: Write `.github/sensitive-paths`.**
 
 ```
 # Globs for the CLAUDE.md sensitive areas (spec 9.1). One glob per line.
@@ -5976,7 +5976,7 @@ biome.json
 vitest.config.ts
 ```
 
-- [ ] **Step 6: Update `CLAUDE.md`.** Insert this block directly after the bullet `- The verify gate (lint, typecheck, tests) and the merge-to-`main` path.` and before the paragraph starting `This is CJIS and GDPR territory.`:
+- [x] **Step 6: Update `CLAUDE.md`.** Insert this block directly after the bullet `- The verify gate (lint, typecheck, tests) and the merge-to-`main` path.` and before the paragraph starting `This is CJIS and GDPR territory.`:
 
 ```markdown
 
@@ -5989,7 +5989,7 @@ lists the globs reserved for areas that have no code yet):
   `biome.json`, `vitest.config.ts`
 ```
 
-- [ ] **Step 7: Run.**
+- [x] **Step 7: Run.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -5998,7 +5998,7 @@ EVENT_NAME=push pnpm tsx scripts/ci/check-sensitive-review.ts
 
 Expected: tests pass (sensitive-review file: 8 tests); `sensitive-review: push event, enforced on pull requests only`. PowerShell form of the second command: `$env:EVENT_NAME="push"; pnpm tsx scripts/ci/check-sensitive-review.ts`.
 
-- [ ] **Step 8: Commit, sensitive review.**
+- [x] **Step 8: Commit, sensitive review.**
 
 ```bash
 git add -A
@@ -6029,7 +6029,7 @@ git commit -m "docs(a): sensitive review for sensitive-review check
 
 **IDs:** BR-006, BR-007, SEC-020
 
-- [ ] **Step 1: Write the failing test `scripts/ci/changed-paths.test.ts`.**
+- [x] **Step 1: Write the failing test `scripts/ci/changed-paths.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -6045,7 +6045,7 @@ describe("docs-only fast path (master plan 11)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it.**
+- [x] **Step 2: Run it.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -6053,7 +6053,7 @@ pnpm vitest run --project scripts
 
 Expected: FAIL, `Failed to resolve import "./changed-paths.mjs"`.
 
-- [ ] **Step 3: Implement `scripts/ci/changed-paths.mjs` (plain ESM so it runs before `pnpm install`).**
+- [x] **Step 3: Implement `scripts/ci/changed-paths.mjs` (plain ESM so it runs before `pnpm install`).**
 
 ```js
 import { execFileSync } from "node:child_process";
@@ -6079,7 +6079,7 @@ function main() {
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();
 ```
 
-- [ ] **Step 4: Run.**
+- [x] **Step 4: Run.**
 
 ```bash
 pnpm vitest run --project scripts
@@ -6087,7 +6087,7 @@ pnpm vitest run --project scripts
 
 Expected: pass (changed-paths file: 1 test).
 
-- [ ] **Step 5: Write `.github/workflows/ci.yml`.**
+- [x] **Step 5: Write `.github/workflows/ci.yml`.**
 
 ```yaml
 name: ci
@@ -6206,7 +6206,7 @@ jobs:
 
 Action major versions: take the newest major of `actions/checkout`, `actions/setup-node` and `pnpm/action-setup` at write time; Dependabot keeps them current.
 
-- [ ] **Step 6: Write `.github/dependabot.yml`.**
+- [x] **Step 6: Write `.github/dependabot.yml`.**
 
 ```yaml
 version: 2
@@ -6225,7 +6225,7 @@ updates:
       interval: weekly
 ```
 
-- [ ] **Step 7: Run the full local gate.**
+- [x] **Step 7: Run the full local gate.**
 
 ```bash
 pnpm verify
@@ -6233,7 +6233,7 @@ pnpm verify
 
 Expected: biome clean, `tsc -b` exits 0, all Vitest projects pass with coverage thresholds met, four `ok` lines from `config:validate`, `generated files match`.
 
-- [ ] **Step 8: Commit, sensitive review, open the PR and watch CI.**
+- [x] **Step 8: Commit, sensitive review, open the PR and watch CI.**
 
 ```bash
 git add -A

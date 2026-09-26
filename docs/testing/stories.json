@@ -1,0 +1,33 @@
+[
+  {
+    "story": "A1",
+    "milestone": "m1",
+    "files": [
+      "packages/core/src/rules/evaluate-form.a1.test.ts",
+      "apps/web/e2e/a1-plate-form.spec.ts"
+    ]
+  },
+  {
+    "story": "A2",
+    "milestone": "m1",
+    "files": [
+      "packages/core/src/rules/evaluate-form.a2.test.ts",
+      "apps/web/e2e/a2-conditional-fields.spec.ts"
+    ]
+  },
+  {
+    "story": "A3",
+    "milestone": "m1",
+    "files": ["packages/core/src/rules/validation.a3.test.ts", "apps/web/e2e/a3-required.spec.ts"]
+  },
+  {
+    "story": "A4",
+    "milestone": "m1",
+    "files": ["packages/core/src/terminal/parse.a4.test.ts", "apps/web/e2e/a4-terminal.spec.ts"]
+  },
+  {
+    "story": "A5",
+    "milestone": "m1",
+    "files": ["packages/core/src/terminal/roundtrip.a5.test.ts", "apps/web/e2e/a5-toggle.spec.ts"]
+  }
+]

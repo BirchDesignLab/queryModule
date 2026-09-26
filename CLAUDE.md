@@ -55,6 +55,16 @@ its first commit:
   deletion is audited (FR-062, FR-063, SEC-013).
 - The verify gate (lint, typecheck, tests) and the merge-to-`main` path.
 
+Paths landed so far (kept in step with `.github/sensitive-paths`, which also
+lists the globs reserved for areas that have no code yet):
+
+- Audit logging: `packages/core/src/contracts/audit.ts`,
+  `packages/core/src/contracts/primitives.ts`, `packages/core/src/contracts/identity.ts`
+- Query dispatch: `packages/core/src/contracts/source-status.ts`, `packages/core/src/contracts/ws.ts`
+- The verify gate: `.github/**`, `scripts/ci/**`, `scripts/ops/**`,
+  `biome.json`, `**/vitest.config.ts`, `package.json`, `tsconfig.base.json`,
+  `**/tsconfig.json`
+
 This is CJIS and GDPR territory. There is no money path, but a mistake in
 credential handling or audit logging is a compliance failure, not a bug.
 

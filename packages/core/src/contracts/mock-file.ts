@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BoundedIdSchema, FieldKeySchema, TypePicklistCodeSchema } from "./primitives";
+import { BoundedIdSchema, FieldKeySchema, TypeValuesSchema } from "./primitives";
 
 /**
  * Mock file schema (spec 5.4): the prototype's mock data source, never real CJIS data.
@@ -25,7 +25,7 @@ export type MockScenario = z.infer<typeof MockScenarioSchema>;
 
 export const MockResponseSchema = z.strictObject({
   queryType: BoundedIdSchema,
-  types: z.record(FieldKeySchema, TypePicklistCodeSchema).optional(),
+  types: TypeValuesSchema.optional(),
   default: SourcePayloadSchema,
   scenarios: z.array(MockScenarioSchema).default([]),
 });

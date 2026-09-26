@@ -15,5 +15,42 @@
   },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
   "linter": { "enabled": true, "rules": { "preset": "recommended" } },
-  "javascript": { "formatter": { "quoteStyle": "double" } }
+  "javascript": { "formatter": { "quoteStyle": "double" } },
+  "overrides": [
+    {
+      "includes": ["packages/core/src/**", "!**/*.test.ts", "!**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "fs": "packages/core is pure: no IO (plan amendment M4).",
+                  "path": "packages/core is pure: no IO (plan amendment M4).",
+                  "child_process": "packages/core is pure: no IO (plan amendment M4).",
+                  "http": "packages/core is pure: no IO (plan amendment M4).",
+                  "https": "packages/core is pure: no IO (plan amendment M4).",
+                  "net": "packages/core is pure: no IO (plan amendment M4).",
+                  "os": "packages/core is pure: no IO (plan amendment M4).",
+                  "dns": "packages/core is pure: no IO (plan amendment M4).",
+                  "tls": "packages/core is pure: no IO (plan amendment M4).",
+                  "dgram": "packages/core is pure: no IO (plan amendment M4).",
+                  "worker_threads": "packages/core is pure: no IO (plan amendment M4).",
+                  "readline": "packages/core is pure: no IO (plan amendment M4).",
+                  "crypto": "packages/core is pure: no IO (plan amendment M4)."
+                },
+                "patterns": [
+                  {
+                    "group": ["node:*", "node:*/**", "fs/**", "path/**"],
+                    "message": "packages/core is pure: no IO (plan amendment M4)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

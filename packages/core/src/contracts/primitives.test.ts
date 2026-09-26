@@ -15,6 +15,7 @@ import {
   Sha256HexSchema,
   TYPE_PICKLIST_CODE_PATTERN,
   TypePicklistCodeSchema,
+  TypeValuesSchema,
   Uuid7Schema,
 } from "./primitives";
 
@@ -120,5 +121,12 @@ describe("ADR-0005 shared contract primitives", () => {
     for (const id of [0, 5]) expect(ok(NestedPartIdSchema, id)).toBe(false);
     expect(ok(ParentPartIdSchema, 0)).toBe(true);
     for (const id of [1, 3, null]) expect(ok(ParentPartIdSchema, id)).toBe(false);
+  });
+
+  it("TypeValues maps field keys to type picklist codes (audit typeValues, mock types)", () => {
+    expect(ok(TypeValuesSchema, { plateType: "PC", state: "ZZ" })).toBe(true);
+    expect(ok(TypeValuesSchema, {})).toBe(true);
+    expect(ok(TypeValuesSchema, { "plate-type": "PC" })).toBe(false);
+    expect(ok(TypeValuesSchema, { plateType: "P C" })).toBe(false);
   });
 });

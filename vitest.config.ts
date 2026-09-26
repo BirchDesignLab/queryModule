@@ -5,11 +5,12 @@ export default defineConfig({
     projects: [
       "packages/*/vitest.config.ts",
       "apps/*/vitest.config.ts",
-      "scripts/vitest.config.{ts,mts}",
+      "scripts/vitest.config.ts",
     ],
     coverage: {
       provider: "v8",
       include: ["packages/*/src/**", "scripts/ci/**"],
+      // index.ts files are excluded only as pure re-export barrels; scripts/ci/barrels.test.ts enforces it.
       exclude: ["**/*.test.ts", "**/*.test.tsx", "**/index.ts"],
       thresholds: {
         "packages/core/src/**": { lines: 95, branches: 95 },
