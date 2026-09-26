@@ -19,7 +19,8 @@
  *   carries: "<rulings, interfaces>",        // never edit between re-runs of one task
  *   trailer: "Co-Authored-By: ...",          // fallback commit trailer
  *   roles: { implementer: { model: "opus", effort: "medium" }, ... },   // optional overrides
- *   maxAgents: 16,                           // agent budget (every agent() call); coerced like maxRounds;
+ *   maxAgents: 14,                           // agent budget (every agent() call); default by tier: ordinary 14,
+ *                                            // gate 16, critical 20; coerced like maxRounds;
  *                                            // past it the run stops at "budget"
  *   maxRounds: 5,                            // fix-round cap; numeric strings and floats are
  *                                            // coerced (logged), then clamped to 1..8
@@ -53,7 +54,7 @@
  *   "review"          -> ruler-review, then the fixers (a reviewer returned nothing)
  *   "ruler-review"    -> ruler-review          "fixer-r<r>" -> fixer-r<r>
  *   "gate-0" | "gate-r<r>" -> fixer-r1 | fixer-r<r+1> (the gate returned nothing)
- *   "budget"          -> no agent: each answer raises maxAgents by 16; the run resumes from cache where it stopped
+ *   "budget"          -> no agent: each answer raises maxAgents by the tier default; the run resumes from cache where it stopped
  * plus escalated: [ruling] when a ruler escalated, and problem on a precondition or budget stop.
  *   status "complete": review clean and the gate passed. Tick the plan checkboxes, move
  *     carryForward into the next task's carries, read rulings.
@@ -151,8 +152,8 @@ if (MAX_ROUNDS < 1 || MAX_ROUNDS > 8) {
 
 // Agent budget: every agent() call in the run counts, cached replays included. The call that would
 // exceed MAX_AGENTS is not made; the run stops at "budget". Each answer at "budget" raises the cap
-// by DEFAULT_MAX_AGENTS once (below, with the answers).
-const DEFAULT_MAX_AGENTS = 16
+// by DEFAULT_MAX_AGENTS once (below, with the answers). The default follows the tier.
+const DEFAULT_MAX_AGENTS = { ordinary: 14, gate: 16, critical: 20 }[TIER]
 let MAX_AGENTS = DEFAULT_MAX_AGENTS
 if (A.maxAgents !== undefined && A.maxAgents !== null) {
   const raw = A.maxAgents
@@ -554,18 +555,22 @@ function postGateProblem(res, expected) {
 const GATE_GUARD = 'Never change vitest config files (vitest*.config.*), biome.json, tsconfig*.json, package.json scripts or coverage thresholds or excludes, and never add suppression comments (biome-ignore, @ts-ignore, @ts-expect-error, istanbul ignore, v8 ignore, c8 ignore, eslint-disable) or delete the code a gate complains about, unless the brief or a ruling in force asks for it.'
 const SENSITIVE_RULE = `This task is ${SENSITIVE ? 'sensitive' : 'gate-tier, so the sensitive rule applies'}. On sensitive tasks the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.`
 
-function diffStep(base, head, out) {
+// scope: the text that bounds reading outside the diff (DIFF_SCOPE for reviewers and the critic,
+// REREVIEW_SCOPE for re-reviewers).
+function diffStep(base, head, out, scope = DIFF_SCOPE) {
   return [
     `First build your diff file (Git Bash), then read it once. It is your view of the change:`,
     '```bash',
     `mkdir -p "${out.replace(/\/[^/]+$/, '')}"`,
     `cd "${REPO}" && { echo "## Commits"; git log --oneline ${base}..${head}; echo; echo "## Files changed"; git diff --stat ${base}..${head}; echo; echo "## Diff"; git diff -U10 ${base}..${head}; } > "${out}"`,
     '```',
-    DIFF_SCOPE,
+    scope,
   ].join('\n')
 }
 // Reviewers, the critic and re-reviewers are diff-scoped (issue #78).
-const DIFF_SCOPE = `Diff scope: after the diff, read only the files that call or are called by the changed code, and the spec lines in ${A.specRefs}; do not read unrelated files. Read a changed file separately only when a hunk you must judge is cut off; say so. Name each file you read outside the diff and why.`
+const COST_LIMIT = 'only for a concrete risk you can name, one focused check per risk'
+const DIFF_SCOPE = `Diff scope: after the diff, read outside the diff only files that call or are called by the changed code, and ${COST_LIMIT}; the spec lines in ${A.specRefs} and the rulings in force still apply; do not read unrelated files. Read a changed file separately only when a hunk you must judge is cut off; say so. Name each file you read outside the diff and the risk that sent you there.`
+const REREVIEW_SCOPE = `Re-review scope: the fix diff. Read a caller or callee of the changed code ${COST_LIMIT}; the spec lines in ${A.specRefs} and the rulings in force still apply; do not read unrelated files. Name each file you read outside the fix diff and the risk that sent you there.`
 
 const TESTS_RULE = 'The implementer already ran the tests and put the evidence in the report. Do not re-run the suite (an independent gate runs pnpm lint, pnpm typecheck and pnpm coverage on this same head). Run a focused test only for a specific doubt no existing run answers. Warnings or noise in reported test output are findings. Missing or garbled evidence is a gap to report, not a reason to re-run.'
 const CALIBRATION = [
@@ -723,7 +728,7 @@ async function runRuler(allItems, label, headNow, pos, postGateHead) {
   log(`rule: ${items.length} item(s) to the ruler (${tier('ruler')})`)
   const rulerPrompt = [
     `You are the ruler for Task ${N}: ${A.title}. Rule on each item below. The spec is binding; the plan is not when it conflicts with the spec.`,
-    `Read only what you need: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the spec sections ${A.specRefs}, the requirements doc "${REQ_DOC}" for IDs ${A.ids || '(none given)'}, and the specific files an item names. Review files for this task are in ${A.workDir} (task-${N}-review-*.md).`,
+    `Read only what you need: the brief ${A.briefPath}, the implementer report ${A.reportPath}, the spec sections ${A.specRefs}, the requirements doc "${REQ_DOC}" for IDs ${A.ids || '(none given)'}, and the specific files an item names. Review files for this task are in ${A.workDir} (task-${N}-review*.md).`,
     A.carries ? `Controller rulings and interfaces already in force:\n${A.carries}` : '',
     rulingsText(),
     answersFor(pos),
@@ -784,7 +789,7 @@ async function runRuler(allItems, label, headNow, pos, postGateHead) {
 async function runFixer(findings, label, roleName, roundTag, round) {
   return call(
     [
-      `You are fixing review findings on Task ${N}: ${A.title} (${roundTag}). You are a fresh agent: read the brief ${A.briefPath} (your requirements, exact values), the implementer report ${A.reportPath}, and the review files in ${A.workDir} (task-${N}-review-*.md, task-${N}-re-review-*.md) as you need them.`,
+      `You are fixing review findings on Task ${N}: ${A.title} (${roundTag}). You are a fresh agent: read the brief ${A.briefPath} (your requirements, exact values), the implementer report ${A.reportPath}, and the review files in ${A.workDir} (task-${N}-review*.md, task-${N}-re-review-*.md) as you need them.`,
       A.carries ? `Controller rulings and interfaces in force:\n${A.carries}` : '',
       `Global constraints (binding):\n${A.globalConstraints}`,
       rulingsText(),
@@ -856,7 +861,7 @@ async function runReReview(findings, gateFindings, label, roundBase, headNow, r)
   const out = wjoin(`task-${N}-re-review-${r}.md`)
   return call(
     [
-      `You are re-reviewing fix round ${r} of Task ${N}: ${A.title}. A review produced the findings below; a fixer attempted them. Verdict each finding and inspect the fix diff, nothing else.`,
+      `You are re-reviewing fix round ${r} of Task ${N}: ${A.title}. A review produced the findings below; a fixer attempted them. Verdict each finding against the fix diff (scope below).`,
       `Brief: ${A.briefPath}. Fix report: the "Fix" sections at the end of ${A.reportPath}.`,
       rulingsText(),
       '',
@@ -864,7 +869,7 @@ async function runReReview(findings, gateFindings, label, roundBase, headNow, r)
       findingsText(findings),
       gateFindings.length ? `\nGate findings, not yours to verdict (each is verified by gate-r${r}, which re-runs lint, typecheck and coverage); leave them out of verdicts:\n${findingsText(gateFindings).replace(/^- /gm, '* ')}` : '',
       '',
-      diffStep(roundBase, headNow, join(scratch(label), 'fix.diff')),
+      diffStep(roundBase, headNow, join(scratch(label), 'fix.diff'), REREVIEW_SCOPE),
       READONLY,
       'Tests: the fixer appended RED/GREEN evidence. Confirm it names the covering tests and shows output; do not re-run the suite; a focused test only for a named doubt.',
       'Scope: verdict every finding (ADDRESSED only when the specific defect no longer exists; "attempted" is NOT ADDRESSED), with file:line evidence. List anything the fix itself broke as newFindings (severity by the usual rubric; planMandated false; contestsRuling set when it contradicts a ruling in force). Issues entirely outside the fix diff go in outOfScope; they do not block.',
@@ -926,6 +931,8 @@ async function gateOutcome(gl, g, expectedHead) {
 
 // The flow runs inside one try so a budget stop anywhere returns a stopped result (the flow below
 // is deliberately not re-indented).
+// open: findings still to fix; declared here so a budget stop can return them as parked.
+let open = []
 try {
 // ================= 1. Implement =================
 phase('Implement')
@@ -1187,7 +1194,7 @@ if (dead.length) {
 const gate0 = await gateOutcome('gate-0', reviewAndGate[reviewers.length], reviewHead)
 if (gate0.stop) return gate0.stop
 
-let open = []
+open = []
 const toRule = []
 const cannotVerify = []
 const where = (f) => `${f.file}${f.line ? ':' + f.line : ''}`
@@ -1412,6 +1419,8 @@ if (state.parked.length || !gatePassed) return await finish(build('parked'))
 return await finish(build('complete'))
 } catch (e) {
   if (!e || !e.budgetStop) throw e
+  // open findings come back as parked for visibility; a resume recomputes them from cache
+  if (open.length) state.parked.push(...open)
   log(`${e.message}; stopping. Answer at "budget" to raise the cap by ${DEFAULT_MAX_AGENTS} and resume from cache`)
   return await finish(build('stopped', { stopped: 'budget', stopPoint: 'budget', problem: `${e.message}; ${agentsUsed} agent(s) ran. Answer { at: "budget", text } to raise the cap by ${DEFAULT_MAX_AGENTS} and resume where it stopped` }))
 }

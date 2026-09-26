@@ -12,7 +12,7 @@ export const meta = {
  * Invoke: Workflow({ scriptPath: ".claude/workflows/sdd-wave.js", args: {
  *   wave: "w4", repoDir, branch: "feat/p0-wave-4", base: "<full sha, HEAD before the first task>",
  *   workDir, scratchRoot, ledgerPath?, globalConstraints, trailer, requirementsDoc?, maxRounds?,
- *   tier?: "ordinary" | "gate" | "critical", // wave default; a task's tier (or sensitive: true) wins
+ *   tier?: "ordinary" | "gate" | "critical", // wave default; a task that sets tier or sensitive wins
  *   maxAgents?: 16,                          // wave default agent budget per task; a task's maxAgents wins
  *   roles?: { ... },                         // wave defaults; a task's roles override per role
  *   sddTaskPath?: ".claude/workflows/sdd-task.js",
@@ -88,9 +88,10 @@ function childArgs(t, base, flow) {
   const put = (k, v) => { if (v !== undefined && v !== null) out[k] = v }
   for (const k of ['repoDir', 'branch', 'workDir', 'scratchRoot', 'ledgerPath', 'globalConstraints', 'trailer', 'requirementsDoc', 'maxRounds']) put(k, A[k])
   for (const k of ['task', 'title', 'issue', 'ids', 'specRefs', 'briefPath', 'tier', 'sensitive', 'ui', 'critic', 'criticFocus', 'maxAgents', 'implemented']) put(k, t[k])
-  // Wave defaults: the task's own value wins. A task with sensitive: true gets no wave tier (the
-  // alias sets critical; a different wave tier would conflict in sdd-task).
-  if (!('tier' in out) && t.sensitive !== true) put('tier', A.tier)
+  // Wave defaults: the task's own value wins. A task that sets sensitive (true or false) gets no
+  // wave tier: sensitive: true is critical, sensitive: false is ordinary, and a wave tier could
+  // conflict with either in sdd-task.
+  if (!('tier' in out) && !('sensitive' in out)) put('tier', A.tier)
   if (!('maxAgents' in out)) put('maxAgents', A.maxAgents)
   put('reportPath', t.reportPath || `${A.workDir}/task-${t.task}-report.md`)
   put('runLabel', t.runLabel || `${W}-t${t.task}`)

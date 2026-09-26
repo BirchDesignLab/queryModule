@@ -1280,7 +1280,7 @@ const neverAddressed = (p) => ({
 async function shellRuns() {
   const loop = await run(
     sdd,
-    BASE,
+    { ...BASE, maxAgents: 40 },
     sddResponder({
       implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
       "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
@@ -2446,7 +2446,8 @@ await test("sdd-wave: argument validation", async () => {
 
 // ---------- review tiers (issue #78, ADR-0007, P0 review-roles retro) ----------
 const tierOf = (c) => (c.effort ? `${c.model}/${c.effort}` : c.model);
-const DIFF_SCOPE = "read only the files that call or are called by the changed code";
+const DIFF_SCOPE = "read outside the diff only files that call or are called by the changed code";
+const COST_LIMIT = "only for a concrete risk you can name, one focused check per risk";
 const specQ = (extra = {}) => ({
   "spec-review": { verdict: "fail", findings: [F("S1", "important", extra)], cannotVerify: [] },
 });
@@ -2627,9 +2628,36 @@ await test("tiers: reviewer, critic and re-reviewer prompts are diff-scoped", as
   ])
     assert.ok(seen.has(l), `no ${l} call`);
   for (const x of calls) {
-    assert.ok(x.prompt.includes(DIFF_SCOPE), `${x.label} is not diff-scoped`);
+    const rr = x.label.startsWith("re-review");
+    if (rr) {
+      assert.ok(x.prompt.includes("Re-review scope: the fix diff"), `${x.label} lacks its scope`);
+      assert.ok(!x.prompt.includes(DIFF_SCOPE), `${x.label} carries the reviewer scope`);
+      assert.ok(!/nothing else/.test(x.prompt), `${x.label} still says nothing else`);
+    } else assert.ok(x.prompt.includes(DIFF_SCOPE), `${x.label} is not diff-scoped`);
+    assert.ok(x.prompt.includes(COST_LIMIT), `${x.label} lacks the cost limit`);
     assert.ok(x.prompt.includes("do not read unrelated files"), `${x.label} lacks the limit`);
     assert.ok(x.prompt.includes("spec 4.1"), `${x.label} lacks the specRefs lines`);
+  }
+});
+
+await test("fix pass C1: ruler and fixer prompts point at a review-file pattern that matches every tier", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "important", { planMandated: true }), F("S2", "important")],
+        cannotVerify: [],
+      },
+    }),
+  );
+  for (const l of ["ruler-review", "fixer-r1"]) {
+    const globs = [...r.find(l).prompt.matchAll(/task-7-review[^\s,)]*\.md/g)].map((m) => m[0]);
+    assert.ok(globs.length, `${l} names no review file pattern`);
+    const re = new RegExp(`^${globs[0].replace(/\./g, "\\.").replace(/\*/g, ".*")}$`);
+    for (const f of ["task-7-review.md", "task-7-review-spec.md", "task-7-review-critic.md"])
+      assert.ok(re.test(f), `${l} pattern ${globs[0]} misses ${f}`);
   }
 });
 
@@ -2645,6 +2673,10 @@ await test("tiers: the agent budget stops the run at the next call past maxAgent
     r.res.problem,
   );
   assert.equal(r.res.agents, 6);
+  assert.ok(
+    r.res.parked.some((f) => f.id === "spec:S1"),
+    "open findings return as parked at a budget stop",
+  );
   assert.ok(r.res.ledgerLines.at(-1).includes("stopped at budget"), r.res.ledgerLines.at(-1));
   // parallel reviewers are reserved up front: a cap of 2 stops before the review block
   const p = await run(sdd, { ...BASE, maxAgents: 2 }, sddResponder());
@@ -2671,7 +2703,7 @@ await test("tiers: a budget answer raises the cap by the default once and replay
   assert.equal(again.res.status, "complete", again.logs.join(" | "));
   assert.equal(again.res.agents, again.calls.length);
   assert.ok(
-    again.logs.some((l) => /maxAgents 6 raised to 22/.test(l)),
+    again.logs.some((l) => /maxAgents 6 raised to 20/.test(l)),
     again.logs.join(" | "),
   );
   assert.ok(
@@ -2687,7 +2719,7 @@ await test("tiers: a budget answer raises the cap by the default once and replay
       "gate*": { ok: false, head: "hg", problems: ["red"] },
     }),
   );
-  assert.equal(w.calls.length, 16);
+  assert.equal(w.calls.length, 20, "critical default is 20");
   assert.equal(w.res.stopped, "budget");
 });
 
@@ -2699,7 +2731,7 @@ await test("tiers: maxAgents is coerced like maxRounds", async () => {
     s.logs.join(" | "),
   );
   const j = await run(sdd, { ...BASE, maxAgents: "lots" }, sddResponder());
-  assert.ok(j.logs.some((l) => /maxAgents "lots" is not a number; using 16/.test(l)));
+  assert.ok(j.logs.some((l) => /maxAgents "lots" is not a number; using 14/.test(l)));
   assert.equal(j.res.status, "complete");
   const f = await run(sdd, { ...BASE, maxAgents: 2.9 }, sddResponder());
   assert.equal(f.res.stopped, "budget");
@@ -2762,6 +2794,35 @@ await test("tiers: the wave-review reviewer prompt is diff-scoped", async () => 
   assert.ok(
     p.includes("* a.ts") && p.includes("1. q1"),
     "sensitive files and questions still steer it",
+  );
+});
+
+await test("fix pass: maxAgents defaults per tier (ordinary 14, gate 16, critical 20); explicit wins", async () => {
+  for (const [tier, n] of [
+    ["ordinary", 14],
+    ["gate", 16],
+    ["critical", 20],
+  ]) {
+    const r = await run(sdd, { ...BASE, tier }, sddResponder());
+    assert.ok(
+      r.logs.some((l) => l.includes(`maxAgents ${n}`)),
+      `${tier}: ${r.logs.join(" | ")}`,
+    );
+  }
+  const e = await run(sdd, { ...BASE, tier: "critical", maxAgents: 9 }, sddResponder());
+  assert.ok(e.logs.some((l) => l.includes("maxAgents 9")));
+});
+
+await test("fix pass C4: a task that sets sensitive gets no wave tier (sensitive: false under a critical wave)", async () => {
+  const tasks = WAVE.tasks.map((t, i) => (i === 0 ? { ...t, sensitive: false } : t));
+  const r = await run(wave, { ...WAVE, tasks, tier: "critical" }, waveResponder(), sdd);
+  assert.equal(r.res.status, "complete", r.logs.join(" | "));
+  const a17 = r.childArgs[0].args;
+  assert.ok(!("tier" in a17) && a17.sensitive === false, JSON.stringify(a17));
+  assert.equal(r.childArgs[1].args.tier, "critical");
+  assert.ok(
+    r.logs.some((l) => /task 17 .*tier ordinary/.test(l)),
+    r.logs.join(" | "),
   );
 });
 
