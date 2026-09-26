@@ -15,7 +15,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Milestone | Phase | Track A (Linux) | Track B (Windows) | Track D (mobile) | Core | Gate |
 |---|---|---|---|---|---|---|
-| M0 | P0 contracts | planned, next · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | planned, next · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | n/a | planned, next · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | planned, next · Typecheck and CI green; contracts frozen · [all][m0-p0] |
+| M0 | P0 contracts | active · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | active · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | n/a | active · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | active · Typecheck and CI green; contracts frozen · [all][m0-p0] |
 | M0 | P1 foundation | planned · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | planned · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | planned · in B plan · [issues][m0-p1-c] | planned · M0 exit · [all][m0-p1] |
 | M1 | P2 engine | planned · `<date>-track-a-p2.md` · [issues][m1-p2-a] | planned · `<date>-track-b-p2.md` · [issues][m1-p2-b] | n/a | planned · in A and B plans · [issues][m1-p2-c] | planned · Form on `GET config`; parser property tests · [all][m1-p2] |
 | M1 | P3 flow | planned · `<date>-track-a-p3.md` · [issues][m1-p3-a] | planned · `<date>-track-b-p3.md` · [issues][m1-p3-b] | n/a | n/a | planned · M1 exit · [all][m1-p3] |
@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | B | none | idle | 09-25-26 |
+| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 00:20 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
