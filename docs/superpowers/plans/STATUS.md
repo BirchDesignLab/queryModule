@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 05:12 |
+| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 08:16 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: #8 SiteConfig schema v1: fields, conditions, query types (P0 owner session, Windows)
-- Branch / PR: chore/p0-workflow-prep / prep PR (open); feat/p0-wave-2 is cut after it merges
-- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` at 0204bb7 on main (`pnpm verify` stops at config:validate until Task 18)
-- Next step: "Task 7: SiteConfig schema v1: fields, conditions, query types (#8)" Step 1, run through `.claude/workflows/sdd-task.js` (ADR-0006)
-- Blocked by: prep PR merge
+- Issue: #8 to #12 (W2, Tasks 7 to 11) done on feat/p0-wave-2; next #13 (Task 12, W3)
+- Branch / PR: feat/p0-wave-2 / W2 PR (to open on developer OK)
+- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` (197 tests) at 0aab44d on feat/p0-wave-2
+- Next step: developer reviews and merges the W2 PR; then cut feat/p0-wave-3 and run "Task 12: validateSiteConfig: keys, references, labels (#13)" through sdd-task
+- Blocked by: W2 PR merge
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: W2 is the workflow pilot (Tasks 7 to 11, one PR); ADR-0005 carries are in the Task 7, 8 and 13 amendments
+- Notes: W2 was the sdd-task pilot (metrics in the SDD ledger); W3 carries for Tasks 12 and 13 are in the ledger (validateSiteConfig referential checks)
 
 ### Track B
 
