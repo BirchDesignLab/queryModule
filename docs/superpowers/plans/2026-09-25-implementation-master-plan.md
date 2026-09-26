@@ -357,7 +357,7 @@ sudo apt-get update
 sudo apt-get install -y git curl wget ca-certificates gnupg openssl age rclone unzip
 curl -fsSL https://fnm.vercel.app/install | bash
 exec "$SHELL"
-fnm install 22 && fnm default 22
+fnm install 24 && fnm default 24
 corepack enable
 git config --global core.autocrlf input
 ```
@@ -439,7 +439,7 @@ winget install --id GitHub.cli -e
 if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force | Out-Null }
 Add-Content $PROFILE 'fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression'
 . $PROFILE
-fnm install 22; fnm default 22
+fnm install 24; fnm default 24
 corepack enable
 git config --global core.autocrlf false
 gh auth login
