@@ -8,4 +8,5 @@ apps/mobile/.expo/
 apps/mobile/dist/
 apps/web/test-results/
 apps/web/playwright-report/
+apps/web/dist-types/
 licences.json
