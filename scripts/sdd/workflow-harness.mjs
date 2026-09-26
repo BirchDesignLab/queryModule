@@ -25,7 +25,7 @@ async function load(file) {
   const src = fs.readFileSync(path.join(WF_DIR, file), "utf8");
   const metaAt = src.indexOf("export const meta");
   const bodyAt = src.indexOf("\n}\n", metaAt) + 3;
-  const wrapped = `${src.slice(0, bodyAt)}export default async function __wf__(agent, parallel, pipeline, phase, log, args, budget) {\n${src.slice(bodyAt)}\n}\n`;
+  const wrapped = `${src.slice(0, bodyAt)}export default async function __wf__(agent, parallel, pipeline, phase, log, args, budget, workflow) {\n${src.slice(bodyAt)}\n}\n`;
   return import(`data:text/javascript;base64,${Buffer.from(wrapped).toString("base64")}`);
 }
 
@@ -54,9 +54,12 @@ function validate(schema, v, p = "$") {
   else if (schema.type === "boolean") assert.equal(typeof v, "boolean", `${p} not a boolean`);
 }
 
-async function run(mod, args, responder) {
+// sub: the module a nested workflow({ scriptPath }) call runs (sdd-wave nests sdd-task); its
+// agents go through the same stub, and childArgs records every nested call's args.
+async function run(mod, args, responder, sub = null) {
   const calls = [];
   const logs = [];
+  const childArgs = [];
   const agent = async (prompt, opts) => {
     assert.ok(opts.model, `agent ${opts.label} has no model`);
     if (opts.model === "haiku")
@@ -75,6 +78,24 @@ async function run(mod, args, responder) {
     return r ?? null;
   };
   const parallel = async (thunks) => Promise.all(thunks.map((t) => t().catch(() => null)));
+  const nested = async () => {
+    throw new Error("workflow(): nesting is one level only");
+  };
+  const workflow = async (ref, a) => {
+    assert.ok(sub, "workflow() called with no sub-workflow module");
+    assert.ok(ref && typeof ref.scriptPath === "string", "workflow() needs { scriptPath }");
+    childArgs.push({ scriptPath: ref.scriptPath, args: a });
+    return sub.default(
+      agent,
+      parallel,
+      null,
+      () => {},
+      (m) => logs.push(m),
+      a,
+      {},
+      nested,
+    );
+  };
   const res = await mod.default(
     agent,
     parallel,
@@ -83,10 +104,11 @@ async function run(mod, args, responder) {
     (m) => logs.push(m),
     args,
     {},
+    workflow,
   );
   const labels = calls.map((c) => c.label);
   const find = (l) => calls.find((c) => c.label === l);
-  return { res, calls, logs, labels, find };
+  return { res, calls, logs, labels, find, childArgs };
 }
 
 // ---------- fixtures ----------
@@ -215,6 +237,7 @@ async function test(name, fn) {
 
 const sdd = await load("sdd-task.js");
 const wr = await load("wave-review.js");
+const wave = await load("sdd-wave.js");
 
 // ================= sdd-task =================
 await test("sdd: happy path runs implementer, spec, quality and gate-0, and completes", async () => {
@@ -2110,6 +2133,193 @@ await test("append-ledger FP-M7: an already-appended block is skipped; UTF-16 an
   const u8 = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(json, "utf8")]);
   assert.equal(al.decodeText(u8), json, "UTF-8 BOM stripped");
   assert.equal(al.decodeText(Buffer.from(json, "utf8")), json);
+});
+
+// ---------- sdd-wave ----------
+const WAVE = {
+  wave: "w4",
+  repoDir: "C:\\git\\queryModule",
+  branch: "feat/p0-wave-4",
+  base: "base0000",
+  workDir: "C:\\w",
+  scratchRoot: "C:\\scratch",
+  ledgerPath: "C:/w/progress.md",
+  globalConstraints: "- TDD for every task",
+  trailer: "Co-Authored-By: X",
+  tasks: [17, 18, 19].map((n) => ({
+    task: n,
+    title: `T${n}`,
+    issue: n + 1,
+    ids: "SEC-010",
+    specRefs: "spec 4.7",
+    briefPath: `C:/w/task-${n}-brief.md`,
+    carries: `carry-${n}`,
+  })),
+};
+// Per-task overrides use "<label>@<task>"; the task is read from a brief, report or review path
+// in the prompt.
+function waveResponder(over = {}) {
+  const base = sddResponder();
+  return (label, prompt, calls) => {
+    const n = (/task-(\d+)-(?:brief|report|review)/.exec(prompt) || [])[1];
+    const k = `${label}@${n}`;
+    if (k in over) {
+      const v = over[k];
+      return postFill(label, prompt, typeof v === "function" ? v(prompt, calls, label) : v);
+    }
+    if (label === "implementer") return work(`h-impl-${n}`);
+    return base(label, prompt, calls);
+  };
+}
+const planMandated = {
+  verdict: "fail",
+  findings: [F("I1", "important", { planMandated: true })],
+  cannotVerify: [],
+};
+
+await test("sdd-wave: every task runs through sdd-task in order; base and carries flow; one ledger block", async () => {
+  const r = await run(
+    wave,
+    WAVE,
+    waveResponder({
+      "spec-review@17": planMandated,
+      "ruler-review@17": (p) => ({
+        rulings: ids(p).map((id) => ({
+          item: id,
+          decision: "fix",
+          reason: "spec 4.7 says so",
+          costIfWrong: "c",
+          fixInstruction: "fi",
+          carryForward: ["Task 18 must bound the email"],
+        })),
+      }),
+    }),
+    sdd,
+  );
+  assert.equal(r.res.status, "complete", r.logs.join(" | "));
+  assert.deepEqual(
+    r.childArgs.map((c) => c.args.task),
+    [17, 18, 19],
+  );
+  assert.ok(r.childArgs.every((c) => c.scriptPath === ".claude/workflows/sdd-task.js"));
+  const [a17, a18, a19] = r.childArgs.map((c) => c.args);
+  assert.equal(a17.base, "base0000");
+  assert.equal(a18.base, r.res.tasks[0].head);
+  assert.equal(a19.base, r.res.tasks[1].head);
+  assert.equal(a18.runLabel, "w4-t18");
+  assert.equal(a18.reportPath, "C:\\w/task-18-report.md");
+  assert.equal(a17.carries, "carry-17");
+  assert.ok(a18.carries.startsWith("carry-18"), a18.carries);
+  assert.ok(a18.carries.includes("Earlier in this wave"), a18.carries);
+  assert.ok(
+    a18.carries.includes("Task 17 carry forward: Task 18 must bound the email"),
+    a18.carries,
+  );
+  assert.ok(
+    a18.carries.includes("Task 17 ruling spec:I1 (ruler): fix: spec 4.7 says so"),
+    a18.carries,
+  );
+  assert.ok(a19.carries.includes("Task 17 carry forward"), "flow accumulates");
+  assert.equal(r.res.head, r.res.tasks[2].head);
+  assert.ok(r.res.tasks.every((t) => !("ledgerLines" in t)));
+  for (const n of [17, 18, 19])
+    assert.ok(
+      r.res.ledgerLines.some((l) => l.startsWith(`- Task ${n}: complete`)),
+      `${n}`,
+    );
+  assert.ok(r.res.ledgerLines.at(-1).startsWith("- Wave w4: complete (Tasks 17, 18, 19"));
+  assert.equal(r.res.totals.completed, 3);
+  assert.equal(r.res.totals.rounds, 1);
+  const al = await import(new URL("./append-ledger.mjs", import.meta.url).href);
+  assert.deepEqual(al.findLedgerLines(JSON.stringify(r.res)), r.res.ledgerLines);
+});
+
+await test("sdd-wave: stops at the first task that does not complete; answers[task] resumes, earlier args unchanged", async () => {
+  const blocked = {
+    "implementer@18": {
+      status: "BLOCKED",
+      commits: [],
+      head: "h-impl-17",
+      testSummary: "",
+      concerns: [],
+      questions: ["which bound?"],
+    },
+  };
+  const r = await run(wave, WAVE, waveResponder(blocked), sdd);
+  assert.equal(r.res.status, "stopped", r.logs.join(" | "));
+  assert.equal(r.res.stoppedTask, 18);
+  assert.equal(r.res.stop.stopped, "implementer");
+  assert.deepEqual(r.res.stop.questions, ["which bound?"]);
+  assert.equal(r.childArgs.length, 2, "task 19 never starts");
+  assert.ok(r.res.ledgerLines.at(-1).startsWith("- Wave w4: stopped at Task 18"));
+  const answers = { 18: [{ at: "implementer", text: "use 254" }] };
+  const again = await run(wave, { ...WAVE, answers }, waveResponder(blocked), sdd);
+  assert.equal(again.res.status, "complete", again.logs.join(" | "));
+  assert.deepEqual(
+    again.childArgs[0].args,
+    r.childArgs[0].args,
+    "task 17 args identical: replays from cache",
+  );
+  assert.ok(!("answers" in again.childArgs[0].args));
+  assert.deepEqual(again.childArgs[1].args.answers, answers[18]);
+  assert.ok(again.labels.includes("implementer-continue"));
+});
+
+await test("sdd-wave: a parked task stops the wave", async () => {
+  const r = await run(
+    wave,
+    WAVE,
+    waveResponder({ "spec-review@17": planMandated, "ruler-review@17": { rulings: [] } }),
+    sdd,
+  );
+  assert.equal(r.res.status, "parked", r.logs.join(" | "));
+  assert.equal(r.res.stoppedTask, 17);
+  assert.equal(r.res.stop.parked.length, 1);
+  assert.equal(r.childArgs.length, 1);
+});
+
+await test("sdd-wave: per-task options pass through; wave roles merge under task roles", async () => {
+  const tasks = WAVE.tasks.map((t, i) =>
+    i === 1
+      ? {
+          ...t,
+          sensitive: true,
+          criticFocus: "audit rows",
+          roles: { implementer: { model: "opus", effort: "high" } },
+        }
+      : t,
+  );
+  const r = await run(
+    wave,
+    { ...WAVE, tasks, roles: { fixer: { model: "sonnet", effort: "high" } }, maxRounds: 3 },
+    waveResponder(),
+    sdd,
+  );
+  const a18 = r.childArgs[1].args;
+  assert.equal(a18.sensitive, true);
+  assert.equal(a18.criticFocus, "audit rows");
+  assert.deepEqual(a18.roles, {
+    fixer: { model: "sonnet", effort: "high" },
+    implementer: { model: "opus", effort: "high" },
+  });
+  assert.equal(a18.maxRounds, 3);
+  assert.ok(!("sensitive" in r.childArgs[0].args), "unset options are not passed");
+  assert.ok(r.labels.includes("critic-review"), r.labels.join(","));
+});
+
+await test("sdd-wave: argument validation", async () => {
+  const bad = async (args, re) => assert.rejects(() => run(wave, args, waveResponder(), sdd), re);
+  const { tasks: _t, ...noTasks } = WAVE;
+  await bad(noTasks, /tasks/);
+  await bad({ ...WAVE, tasks: [] }, /tasks/);
+  await bad({ ...WAVE, trailer: " " }, /trailer/);
+  await bad({ ...WAVE, tasks: [WAVE.tasks[0], WAVE.tasks[0]] }, /duplicate task 17/);
+  await bad({ ...WAVE, tasks: [{ ...WAVE.tasks[0], briefPath: "" }] }, /briefPath/);
+  await bad(
+    { ...WAVE, answers: { 99: [{ at: "implementer", text: "x" }] } },
+    /answers for task 99/,
+  );
+  await bad({ ...WAVE, tasks: [{ ...WAVE.tasks[0], base: "x" }] }, /base/);
 });
 
 // ---------- report ----------

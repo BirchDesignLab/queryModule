@@ -1,10 +1,11 @@
-# Workflows: `sdd-task` and `wave-review`
+# Workflows: `sdd-task`, `sdd-wave` and `wave-review`
 
 Saved Workflow scripts that run implementation plans in place of hand-dispatched subagents (ADR-0006, developer direction 09-26-26). One PR per wave: each task of a wave runs through `sdd-task` in turn on one wave branch `feat/<phase>-wave-<k>`, and `wave-review` runs once per wave PR that touches sensitive paths.
 
 | File | Purpose |
 |---|---|
 | `sdd-task.js` | One plan task: implement, review with gate-0, check, rule, fix, gate; returns the ledger lines |
+| `sdd-wave.js` | A whole wave: each task as a nested `sdd-task` run, in order, with carries flowing forward; stops at the first task that does not complete |
 | `wave-review.js` | Whole-branch review of a sensitive wave PR, one fix pass, one re-review, the `docs/reviews/pr-<n>.md` artifact |
 | `../../scripts/sdd/task-brief.sh` | Extracts one `### Task N:` section of a plan into a brief file |
 | `../../scripts/sdd/workflow-harness.mjs` | Mock harness: runs both scripts against stubbed agents |
@@ -160,6 +161,45 @@ Each entry's text is delivered to exactly one agent: the first consumer at or af
 
 `{EM DASH}` stands for the U+2014 separator the SDD ledger (git-ignored scratch) already uses; committed docs do not contain the character itself.
 
+## `sdd-wave`
+
+Runs every task of one wave in order, each as a nested `sdd-task` run (`workflow({ scriptPath })`, one level of nesting). It adds no agent of its own and writes nothing to GitHub. The controller's work moves to the two ends of the wave: at the start it extracts every brief and writes every task's carries; at the end it does inline fixes, the checks, bookkeeping, push and PR, then `wave-review` for a sensitive wave (it needs the PR number, so it stays a separate run).
+
+### Arguments
+
+```
+{
+  wave: "w4", repoDir, branch: "feat/p0-wave-4", base: "<full sha, HEAD before the first task>",
+  workDir, scratchRoot, ledgerPath?, globalConstraints, trailer, requirementsDoc?, maxRounds?,
+  roles?: { ... },                  // wave defaults; a task's roles override them per role
+  sddTaskPath?: ".claude/workflows/sdd-task.js",
+  tasks: [{ task: 17, title, issue?, ids?, specRefs, briefPath, carries?, reportPath?, runLabel?,
+            sensitive?, ui?, critic?, criticFocus?, roles?, implemented? }, ...],
+  answers?: { "18": [{ at, text?, decisions? }] }   // per task, only on a re-run after a stop
+}
+```
+
+Required: `wave`, `repoDir`, `branch`, `base`, `workDir`, `scratchRoot`, `globalConstraints`, `trailer`, and a non-empty `tasks` list whose entries each have `task`, `title`, `specRefs` and `briefPath`. Task numbers are unique. A task entry never carries `base` or `answers` (the wave sets them), and `answers` keys must be task numbers in `tasks`. Defaults: `reportPath` is `<workDir>/task-<n>-report.md`, `runLabel` is `<wave>-t<n>`. Options a task does not set are not passed, so each nested run sees exactly what `sdd-task` would get by hand. `globalConstraints` follows the `sdd-task` rule: product and code constraints only.
+
+### Flow
+
+For each task: build its `sdd-task` args (shared fields, the task's own fields, `base`, `carries`, merged `roles`, its `answers` entry), run it, and record the result without its `ledgerLines`. On `complete`, the next task's `base` is this task's `head`, and its carries gain an "Earlier in this wave" block: every earlier task's `carryForward` items and its ruler and controller rulings (item, decision, a one-line reason). Checker rulings (verified checks) carry no obligation and are left out; deferred minors are not forwarded. Any other status stops the wave; later tasks never start, because each builds on the one before.
+
+### Return
+
+```
+{ wave, status: "complete" | "stopped" | "parked", stoppedTask?, stop?: { task, status, stopped,
+  stopPoint, problem, questions, escalated, parked }, base, head, tasks: [sdd-task results
+  without ledgerLines], totals: { tasks, run, completed, rounds, escalations, parked,
+  deferredMinors }, ledgerLines }
+```
+
+`ledgerLines` is every task's lines in order plus one `- Wave <w>: complete (...)` or `- Wave <w>: stopped at Task <n> (...)` line, all at the top level, so `append-ledger.mjs` appends the whole wave in one call; a resumed wave repeats the earlier tasks' lines and `append-ledger.mjs` skips them. Wall clock and token use are not visible to a script: take them from the run's usage notice and `git log`.
+
+### Answering a stop
+
+Keep every arg identical and add `answers["<stoppedTask>"]`: the same list of `{ at, text?, decisions? }` entries `sdd-task` takes, built from `stop` exactly as for a single task (stop points and consumers in the `sdd-task` section). Re-run with `resumeFromRunId` and the full args. Earlier tasks' nested args are unchanged, so they replay from cache; the stopped task resumes at its stop point. The fallbacks for a replayed null agent (below) apply per task: for "review stages only", add `implemented: { head }` to that task's entry.
+
 ## `wave-review`
 
 ### Arguments
@@ -282,4 +322,4 @@ Whether the Workflow runtime caches an agent that returned nothing is runtime be
 
 ## Harness
 
-`node scripts/sdd/workflow-harness.mjs` (repo root, PowerShell or Git Bash). It imports each script from a data URL with the body wrapped in an async function, stubs `agent()` and `parallel()`, and asserts: every call has a model and an effort (none for Haiku); no prompt contains `undefined`; every schema has an object root with `required` inside `properties`; every mock return validates. A runaway-loop guard fails any scenario past 200 agent calls. Scenarios cover two answered stops in a row for both scripts, the post-pilot items (gate runs coverage, reviewers never list gate checks as cannot-verify, the no-remote rule and the pre-commit self-check in every shell-running prompt, `critic` and `criticFocus`, the checker, `gate-0` in parallel with the reviewers, mechanical rounds without a re-reviewer, no ledger agent, `append-ledger.mjs` parsing, exit codes, idempotence and UTF-16 input, this README's resume shape; and the fix pass: post-gate head and tree checks for the checker and `ruler-review`, a cache-stable checker on a `ruler-review` answer, gate-weakening flags, gate findings in mixed rounds and at the cap, the no-remote rule in every prompt, the `criticFocus` warning; and the post-W3 pass: `pnpm typecheck` in the pre-commit self-check, a null checker with no later tree check stops at `precondition:checker`, `append-ledger.mjs` skips lines already in the ledger), the review-stages-only run, the happy path, the gate, worst-case counts, rulings routing and supersession, the sensitive ruler rule, answers re-runs and controller decisions in both scripts, stop-point consumers, precondition stops, arg validation, `maxRounds` coercion, and the `wave-review` guards. Run it after any change to a workflow; it exits 1 on a failure.
+`node scripts/sdd/workflow-harness.mjs` (repo root, PowerShell or Git Bash). It imports each script from a data URL with the body wrapped in an async function, stubs `agent()` and `parallel()`, and asserts: every call has a model and an effort (none for Haiku); no prompt contains `undefined`; every schema has an object root with `required` inside `properties`; every mock return validates. A runaway-loop guard fails any scenario past 200 agent calls. Scenarios cover `sdd-wave` (tasks in order through the real `sdd-task`, base and carries flow, one ledger block, stop and resume with per-task answers, a parked task, option pass-through and role merge, argument validation), two answered stops in a row for both scripts, the post-pilot items (gate runs coverage, reviewers never list gate checks as cannot-verify, the no-remote rule and the pre-commit self-check in every shell-running prompt, `critic` and `criticFocus`, the checker, `gate-0` in parallel with the reviewers, mechanical rounds without a re-reviewer, no ledger agent, `append-ledger.mjs` parsing, exit codes, idempotence and UTF-16 input, this README's resume shape; and the fix pass: post-gate head and tree checks for the checker and `ruler-review`, a cache-stable checker on a `ruler-review` answer, gate-weakening flags, gate findings in mixed rounds and at the cap, the no-remote rule in every prompt, the `criticFocus` warning; and the post-W3 pass: `pnpm typecheck` in the pre-commit self-check, a null checker with no later tree check stops at `precondition:checker`, `append-ledger.mjs` skips lines already in the ledger), the review-stages-only run, the happy path, the gate, worst-case counts, rulings routing and supersession, the sensitive ruler rule, answers re-runs and controller decisions in both scripts, stop-point consumers, precondition stops, arg validation, `maxRounds` coercion, and the `wave-review` guards. Run it after any change to a workflow; it exits 1 on a failure.
