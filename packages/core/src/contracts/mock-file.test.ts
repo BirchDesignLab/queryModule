@@ -41,12 +41,13 @@ describe("FR-044 SEC-002 mock file (spec 5.4)", () => {
     expect(MockFileSchema.safeParse(neither).success).toBe(false);
   });
   it("rejects an unknown behavior and a missing default", () => {
-    const bad = structuredClone(file) as typeof file & {
-      sources: { stateSource: { responses: Array<Record<string, unknown>> } };
+    const bad = structuredClone(file) as unknown as {
+      siteId: string;
+      sources: { stateSource: { latencyMs: number[]; responses: Array<Record<string, unknown>> } };
     };
     bad.sources.stateSource.responses[0] = { queryType: "VEH", scenarios: [] };
     expect(MockFileSchema.safeParse(bad).success).toBe(false);
-    const beh = structuredClone(file) as typeof bad;
+    const beh = structuredClone(file) as unknown as typeof bad;
     beh.sources.stateSource.responses[0] = {
       queryType: "VEH",
       default: {},
@@ -70,7 +71,9 @@ describe("FR-044 SEC-002 mock file (spec 5.4)", () => {
   });
   it("rejects a bad types key", () => {
     const bad = structuredClone(file);
-    bad.sources.stateSource.responses[1].types = { "bad key!": "FIREARM" };
+    bad.sources.stateSource.responses[1].types = { "bad key!": "FIREARM" } as unknown as {
+      propertyType: string;
+    };
     expect(MockFileSchema.safeParse(bad).success).toBe(false);
   });
   it("rejects a bad types value", () => {
@@ -79,7 +82,15 @@ describe("FR-044 SEC-002 mock file (spec 5.4)", () => {
     expect(MockFileSchema.safeParse(bad).success).toBe(false);
   });
   it("rejects a bad when key", () => {
-    const bad = structuredClone(file);
+    const bad = structuredClone(file) as unknown as {
+      siteId: string;
+      sources: {
+        stateSource: {
+          latencyMs: number[];
+          responses: Array<{ scenarios: Array<Record<string, unknown>> }>;
+        };
+      };
+    };
     bad.sources.stateSource.responses[0].scenarios[0] = {
       when: { "bad key!": "ZZ-0001" },
       respond: { status: "STOLEN" },
