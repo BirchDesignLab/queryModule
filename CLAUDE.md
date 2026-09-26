@@ -14,7 +14,7 @@ Do not add fixtures that look like real person, vehicle or property records.
 # Subagents and workflows: set model and effort on every dispatch
 
 Every subagent dispatch (the Agent tool, Workflow `agent()` calls, the
-implementer and reviewer seats in subagent-driven development) sets `model`
+implementer and reviewer roles in subagent-driven development) sets `model`
 **and** `effort` on purpose. Never leave either unset: an unset agent inherits
 the session's model at the session's effort, and an untiered fleet of those
 has burned a month of usage in about ten minutes.
@@ -33,7 +33,7 @@ effort means more thinking and more tool calls per task.
 
 **Fable is never a subagent model.** It costs more than twice Opus.
 
-**Sensitive code in this repo** (the seats below name it). No code exists yet;
+**Sensitive code in this repo** (the roles below name it). No code exists yet;
 update the paths here as each area lands, and treat the area as sensitive from
 its first commit:
 
@@ -71,14 +71,14 @@ credential handling or audit logging is a compliance failure, not a bug.
 - `max`: no ceiling on thinking. Only when correctness matters more than cost
   **and** `xhigh` measurably fell short. Never in a fleet.
 
-## Every seat, from Opus down
+## Every role, from Opus down
 
 | Model | Effort | Use it for |
 |---|---|---|
 | Opus 5.5 | `max` | Only when the developer asks, or `xhigh` fell short on a correctness-critical question. One agent, never a fleet. |
 | Opus 5.5 | `xhigh` | Whole-branch review of a PR that touches sensitive code. Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. |
 | Opus 5.5 | `high` | Hard finders, design and judge panels, whole-branch review of an ordinary PR. Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
-| Opus 5.5 | `medium` | Implementing a sensitive-code task from a plan. Synthesizing several agents' reports into one answer. The critic seat on a UI-building workflow. |
+| Opus 5.5 | `medium` | Implementing a sensitive-code task from a plan. Synthesizing several agents' reports into one answer. The critic role on a UI-building workflow. |
 | Opus 5.5 | `low` | A narrow judgment call that needs Opus-grade reasoning but no exploration ("is this credential-storage change CJIS-safe, given these three lines"). |
 | Sonnet 5 | `max` | Not used. Work that hard goes to Opus. |
 | Sonnet 5 | `xhigh` | Rarely. A long unsupervised implementation that touches no sensitive code. If it is hard, use Opus instead. |
@@ -89,7 +89,7 @@ credential handling or audit logging is a compliance failure, not a bug.
 
 ## Rules
 
-- Start at the cheapest seat that can do the job. On a failure, step up one
+- Start at the cheapest model and effort that can do the job. On a failure, step up one
   notch at a time (the next row up the table), never straight to `max`.
 - Volume is fine; tiering is the mandate. Do not shrink a fleet to save cost,
   tier it.
@@ -98,7 +98,7 @@ credential handling or audit logging is a compliance failure, not a bug.
 - Keep an Opus critic on every workflow that builds UI or touches sensitive
   code. In a previous repo, Sonnet builders and verifiers passed regressions
   that only the Opus critic caught, twice in a row on the same component.
-- Spec-compliance seats cite requirement IDs (FR-, UX-, SEC-) from the
+- Spec-compliance reviewers cite requirement IDs (FR-, UX-, SEC-) from the
   requirements doc, not paraphrases.
 - Parallel subagents share one session scratchpad. Every agent in a fan-out
   gets its own scratch path in its prompt (`<scratchpad>/<runId>/<label>/`)
@@ -107,6 +107,12 @@ credential handling or audit logging is a compliance failure, not a bug.
   `isolation: 'worktree'` or explicitly disjoint file ownership; worktrees
   are cheap for git but cost a dependency install each, so reserve them for
   big parallel edits.
+
+## Execution: workflows first, skills recommended
+
+Plans run task by task through the saved workflow `.claude/workflows/sdd-task.js`, and each wave PR that touches sensitive paths through `.claude/workflows/wave-review.js` (ADR-0006). One PR per wave; the developer approves pushes and merges. Workflow `agent()` calls take `model` and `effort` directly, so every call sets both (Haiku: model only). The `.claude/agents/<model>-<effort>.md` definitions stay available through `agentType` and for the Agent tool.
+
+The superpowers skills (brainstorming, writing specs and plans, subagent-driven development, executing plans) are recommended, not required. The plugin's rule that a skill must be invoked before any response does not apply in this repo. TDD is required for every task with behaviour, whichever way the task runs.
 
 ## Scripts stay in the repo, not in temp
 

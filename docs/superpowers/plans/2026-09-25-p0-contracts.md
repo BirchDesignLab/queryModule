@@ -1,6 +1,6 @@
 # M0 P0 Contracts Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Recommended: run each task through the `sdd-task` workflow (`.claude/workflows/sdd-task.js`) and each sensitive wave PR through `wave-review` (ADR-0006). superpowers:subagent-driven-development or superpowers:executing-plans also work. TDD is required whichever way a task runs. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up the pnpm workspace, freeze the M0/M1 contracts in `packages/core`, and land the CI, tokens, web shell and mobile placeholder skeletons so both tracks can start P1 against one green `main`.
 
@@ -1698,6 +1698,7 @@ git commit -m "feat(core): feature and shortcut catalogues
 **Interfaces:**
 - Consumes: zod.
 - Produces: `type SchemaMode = "strict" | "client"`; `objectFor(mode)`; `optionalEnum(mode, values)`; `type Literal = string | number | boolean`; `type DefaultRef = { $default: string }`; `type Condition` (spec 4.2 union); `type LeafCondition`; `DATA_TYPES`, `type DataType`; `ORDERING_OPS`; `DEFAULT_INPUT_FORMATS`; `DATE_FORMAT_PATTERN`; `MAX_VALUE_LENGTH = 4096`; `MAX_ALSO_RUN = 4`; `makeFieldSchemas(mode)` returning `{ Key, Literal, DefaultRef, Condition, DateFormat, SectionDef, FieldDef, FieldRule, QueryTypeSource, NestedQuery, QueryType }`. Strict mode rejects unknown keys (server, spec 5.8 step 4); client mode strips them and catches unknown values on optional enums (spec 4.1 Client view).
+- Amended 09-26-26 (ADR-0005, PR #31 review): field keys and `fieldMap` keys use `FieldKeySchema`; query-type codes, source ids and the site id use `BoundedIdSchema`. Both come from `@querymodule/core/contracts` (`packages/core/src/contracts/primitives.ts`). `schema-fields.ts` does not define `MAX_ALSO_RUN`; it re-exports it from the contracts primitives, so Task 13's `import { MAX_ALSO_RUN, MAX_VALUE_LENGTH } from "./schema-fields"` keeps working.
 
 **IDs:** BR-001, FR-002, FR-003, FR-004, FR-008, FR-011, FR-032; stories A1, A2, B7
 
@@ -1829,7 +1830,7 @@ export const DEFAULT_INPUT_FORMATS = ["MMDDYYYY", "MM/DD/YYYY", "MM-DD-YYYY", "Y
 /** Tokens MM, DD, YY, YYYY and literal non-alphanumeric separators. */
 export const DATE_FORMAT_PATTERN = /^(?:MM|DD|YYYY|YY|[^A-Za-z0-9])+$/;
 export const MAX_VALUE_LENGTH = 4096;
-export const MAX_ALSO_RUN = 4;
+export { MAX_ALSO_RUN } from "../contracts/primitives";
 
 export function makeFieldSchemas(mode: SchemaMode) {
   const obj = objectFor(mode);
@@ -1942,6 +1943,7 @@ git commit -m "feat(core): config schema v1 fields, conditions and query types
 - Consumes: `makeFieldSchemas`, `objectFor` (Task 7); `RoleSchema` (Task 4); `CONFIG_SCHEMA_VERSION` (Task 2); `SHORTCUT_CONTEXTS`, `isValidShortcutKeys` (Task 6).
 - Produces: `makeSiteConfigSchemas(mode: SchemaMode)`; `SiteConfigSchema`; `type SiteConfig` (output), `type SiteConfigInput` (input); exported types `QueryType`, `FieldDef`, `FieldRule`, `SectionDef`, `QueryTypeSource`, `NestedQuery`, `Picklist`, `PicklistValue`, `Source`, `CommandDef`, `CommandPosition`, `KeywordStyle`, `SeverityStyle`, `Severity`, `Format`, `MappingElement`, `ResponseMapping`, `ThemeConfig`, `PersonaDef`, `AuthConfig`, `DelegationConfig`; constants `SEVERITIES`, `SOURCE_SCOPES`, `PERSONA_LAYOUTS`, `THEME_MODES = ["day", "night", "redShift"]`, `LOCALE_PATTERN`, `DEFAULT_DELEGATION_PURPOSE`. Test helpers `minimalSiteConfigInput(): SiteConfigInput`, `MINIMAL_LOCALES`, `TEST_TOKEN_NAMES`.
 - Resolution recorded: `$schema?: string` is accepted at the root so site files can point editors at `packages/config/schema/site-config.schema.json`; it never reaches `ClientSiteConfig`.
+- Amended 09-26-26 (ADR-0005, PR #31 review): `Source.kind` uses `BoundedIdSchema`.
 
 **IDs:** BR-001, FR-007, FR-031, FR-051, FR-052, FR-060, NFR-001, UX-011, SEC-005 (auth block shape), SEC-004 (delegation block shape)
 
@@ -3336,6 +3338,7 @@ git commit -m "feat(core): validateSiteConfig keys, references and labels
 - Consumes: Task 12 exports; `configuredDefault` (Task 12); `resolveShortcuts`, `strokesCollide`, `usLayoutChar` (Task 6); `MAX_VALUE_LENGTH`, `MAX_ALSO_RUN` (Task 7).
 - Produces: `MAX_SOURCES_PER_SUBMIT = 8`; `DELIMITER_PATTERN`; `checkFieldDefs`, `checkCommands`, `checkTerminal`, `checkShortcuts`, `checkLimits`, `checkWarnings` (each `(config: SiteConfig, out: DiagnosticSink) => void`); `validateSiteConfig` now runs all of them.
 - Rule split (resolution recorded in the summary): M0 P0 ships every spec 4.1 rule that needs neither canonicalisation nor token values. Track A M1 P2 adds, in `validate-rules.ts` through the contract procedure: literal canonicalisation of defaults, `setDefault` values, presets and condition values; `require`/`setDefault` on unreachable fields; `setDefault` dependency cycles and read-before-write order; the conditionally-required-without-position warning; the disabled-picklist-code-in-condition warning; contrast checks for `keywordSeverityStyles` and theme token pairs (context gains `tokenValues`). `config:validate` mapping-path resolution against mocks is M2 P2 (master plan 4.2); fixture-policy payload checks land with `scripts/mock-data/generate.ts` in M1 P3; `Source.kind` against the adapter registry is the API's startup check.
+- Amended 09-26-26 (ADR-0005, PR #31 review): picklists for `role: "type"` fields validate their codes with `TypePicklistCodeSchema`. Before using `usLayoutChar`, extend it in `packages/core/src/config/shortcuts.ts` to cover the numpad character keys: Numpad0 to Numpad9 give the digits; NumpadAdd `+`, NumpadSubtract `-`, NumpadMultiply `*`, NumpadDivide `/`, NumpadDecimal `.`, NumpadEqual `=`, NumpadComma `,`. Write the tests first.
 
 **IDs:** BR-001, FR-012, FR-031, FR-032, FR-042, FR-051, FR-052, FR-053, FR-055, UX-011
 
@@ -6002,6 +6005,7 @@ git commit -m "docs(a): sensitive review for sensitive-review check
 **Interfaces:**
 - Consumes: root scripts (Task 1); `scripts/ci/check-licences.ts` (Task 19); `scripts/ci/check-story-tags.ts` (Task 20); `scripts/ci/check-sensitive-review.ts` (Task 21); `pnpm gen:check` (Task 17); `pnpm config:validate` (Task 18).
 - Produces: workflow `ci` with jobs `ci` and `sensitive-review` (the two required status checks, spec 9.1); `isDocsOnly(files: string[]): boolean` and the step output `docs_only` from `scripts/ci/changed-paths.mjs` (master plan 11 docs-only fast path: heavy steps skip, both jobs still report); Dependabot for npm (weekly, minor and patch grouped, majors separate) and github-actions (weekly). Later plans append to `ci.yml`: step 9 `expo export` (Task 26, this plan), steps 10 to 12 image build, boot smoke, Playwright (Track A and B P1), step 13 publish (Track A P1), `scripts/ci/check-audit-migrations.ts` (Track A P1). The Dependabot `docker` ecosystem entry lands with `deploy/Dockerfile` in Track A P1, because an entry pointing at a directory with no Dockerfile errors.
+- Amended 09-26-26 (ADR-0005, PR #31 review): M3, `vitest.config.ts` coverage no longer excludes every `index.ts`. Either exclude only files that are pure re-export barrels, or keep the exclusion and add a check that every `index.ts` under `packages/*/src` holds only `export ... from` lines. M4, enforce core purity (no IO) by lint: configure a Biome restricted-imports rule for `packages/core/src/**` that forbids `node:*`, `fs`, `path`, `child_process`, `http`, `https` and `net`. Both land test-first, where a test applies.
 
 **IDs:** BR-006, BR-007, SEC-020
 
@@ -7387,6 +7391,7 @@ Expected: `ci` green with the `Web build` and `Expo export` steps passing on `ub
 **Interfaces:**
 - Consumes: `@querymodule/api` test setup (Task 17); Task 26 export result.
 - Produces: `@libsql/client` as a runtime dependency of `@querymodule/api` (Track A P1 builds the encrypted SQLite layer on it, spec 5.5); a recorded Node 24 result for ADR-0001's consequence "P0 contracts plan adds a check that `expo export` and `@libsql/client` load on Node 24; failure of either reopens this ADR".
+- Amended 09-26-26 (ADR-0005, PR #31 review): M5, pin `@types/node` to the Node 24 major (`@types/node@24`), matching `.nvmrc`.
 
 **IDs:** none (scaffolding); ADR-0001
 

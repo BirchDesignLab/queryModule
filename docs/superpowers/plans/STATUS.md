@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 00:20 |
+| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 05:12 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -46,6 +46,14 @@ From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time a
 Overwrite your track's note at pause using the seven-line format in the master plan 7.1; clear it on resume.
 
 ### Track A
+
+- Issue: #8 SiteConfig schema v1: fields, conditions, query types (P0 owner session, Windows)
+- Branch / PR: none; W2 branch feat/p0-wave-2 is cut from main after the prep PR merges
+- Last green: `pnpm lint`, `pnpm typecheck`, `pnpm coverage` at 0204bb7 on main (`pnpm verify` stops at config:validate until Task 18)
+- Next step: "Task 7: SiteConfig schema v1: fields, conditions, query types (#8)" Step 1, run through `.claude/workflows/sdd-task.js` (ADR-0006)
+- Blocked by: none
+- Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
+- Notes: W2 is the workflow pilot (Tasks 7 to 11, one PR); ADR-0005 carries are in the Task 7, 8 and 13 amendments
 
 ### Track B
 
