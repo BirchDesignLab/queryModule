@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   evaluateSensitiveReview,
@@ -56,9 +60,10 @@ describe("sensitive-review (spec 9.1)", () => {
     expect(r.messages[0]).toContain("docs/reviews/pr-7.md is missing");
   });
 
-  it("fails on a wrong reviewer, a non-approve verdict or a bad sha", () => {
+  it("fails on a wrong reviewer, a low effort, a non-approve verdict or a bad sha", () => {
     for (const text of [
       artifact.replace("opus-5.5", "sonnet-5"),
+      artifact.replace('"xhigh"', '"low"'),
       artifact.replace('"approve"', '"changes"'),
       artifact.replace(sha, "not-a-sha"),
     ]) {
@@ -67,6 +72,15 @@ describe("sensitive-review (spec 9.1)", () => {
           .ok,
       ).toBe(false);
     }
+  });
+
+  it("accepts effort xhigh or max and names a bad effort", () => {
+    const run = (text: string) =>
+      evaluateSensitiveReview({ ...base, changedFiles: ["scripts/ci/x.ts"], artifactText: text });
+    expect(run(artifact.replace('"xhigh"', '"max"')).ok).toBe(true);
+    expect(run(artifact.replace('"xhigh"', '"low"')).messages[0]).toContain(
+      "effort must be xhigh or max, got low",
+    );
   });
 
   it("fails when reviewedSha is not an ancestor or sensitive files changed after it", () => {
@@ -160,7 +174,7 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
   });
 
   it("passes with exit 0 when no sensitive path is touched", () => {
-    const runGit = gitWith({ "diff --name-only": ok("docs/a.md\n") });
+    const runGit = gitWith({ "diff --name-only": ok("docs/a.md\0") });
     expect(runSensitiveReview(env, { runGit, readFile })).toEqual({
       code: 0,
       messages: ["no sensitive paths touched"],
@@ -168,7 +182,7 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
   });
 
   it("exits 1 when a sensitive path is touched and the artifact is missing", () => {
-    const runGit = gitWith({ "diff --name-only": ok("scripts/ci/x.ts\n") });
+    const runGit = gitWith({ "diff --name-only": ok("scripts/ci/x.ts\0") });
     const r = runSensitiveReview(env, { runGit, readFile });
     expect(r.code).toBe(1);
     expect(r.messages[0]).toContain("docs/reviews/pr-7.md is missing");
@@ -180,18 +194,25 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
     calls.length = 0;
     const runGit = (args: string[]) => {
       calls.push(args);
-      if (args[0] === "diff" && args[2] === "abc1234...def5678") return ok("scripts/ci/x.ts\n");
+      if (args[0] === "diff" && args.at(-1) === "abc1234...def5678") return ok("scripts/ci/x.ts\0");
       return ok();
     };
     const r = runSensitiveReview(env, { runGit, readFile: withArtifact });
     expect(r.code).toBe(0);
     expect(calls).toContainEqual(["merge-base", "--is-ancestor", sha, "def5678"]);
-    expect(calls).toContainEqual(["diff", "--name-only", sha, "def5678"]);
+    expect(calls).toContainEqual([
+      "diff",
+      "--name-only",
+      "-z",
+      "--no-renames",
+      "abc1234...def5678",
+    ]);
+    expect(calls).toContainEqual(["diff", "--name-only", "-z", "--no-renames", sha, "def5678"]);
   });
 
   it("exits 1 when reviewedSha is not an ancestor (merge-base status 1)", () => {
     const runGit = gitWith({
-      "diff --name-only": ok("scripts/ci/x.ts\n"),
+      "diff --name-only": ok("scripts/ci/x.ts\0"),
       "merge-base --is-ancestor": { status: 1, stdout: "", stderr: "" },
     });
     const r = runSensitiveReview(env, { runGit, readFile: withArtifact });
@@ -201,7 +222,7 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
 
   it("exits 2 when merge-base fails (status other than 0 or 1)", () => {
     const runGit = gitWith({
-      "diff --name-only": ok("scripts/ci/x.ts\n"),
+      "diff --name-only": ok("scripts/ci/x.ts\0"),
       "merge-base --is-ancestor": { status: 128, stdout: "", stderr: "fatal: not a valid commit" },
     });
     expect(runSensitiveReview(env, { runGit, readFile: withArtifact }).code).toBe(2);
@@ -209,11 +230,133 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
 
   it("exits 2 when git diff reviewedSha head fails", () => {
     const runGit = (args: string[]) =>
-      args[0] === "diff" && args[2] === sha
+      args[0] === "diff" && args.includes(sha)
         ? { status: 128, stdout: "", stderr: "fatal: bad object" }
         : args[0] === "diff"
-          ? ok("scripts/ci/x.ts\n")
+          ? ok("scripts/ci/x.ts\0")
           : ok();
     expect(runSensitiveReview(env, { runGit, readFile: withArtifact }).code).toBe(2);
+  });
+
+  it("exits 1 on a malformed reviewedSha without calling merge-base", () => {
+    calls.length = 0;
+    const badSha = artifact.replace(sha, "not-a-sha");
+    const r = runSensitiveReview(env, {
+      runGit: gitWith({ "diff --name-only": ok("scripts/ci/x.ts\0") }),
+      readFile: (p) => (p === "docs/reviews/pr-7.md" ? badSha : readFile(p)),
+    });
+    expect(r).toEqual({
+      code: 1,
+      messages: ["docs/reviews/pr-7.md: reviewedSha is not a commit sha"],
+    });
+    expect(calls.some((c) => c[0] === "merge-base")).toBe(false);
+  });
+
+  it("exits 2 when .github/sensitive-paths is missing", () => {
+    const runGit = gitWith({ "diff --name-only": ok("scripts/ci/x.ts\0") });
+    const r = runSensitiveReview(env, { runGit, readFile: () => undefined });
+    expect(r.code).toBe(2);
+    expect(r.messages[0]).toContain(".github/sensitive-paths is missing");
+  });
+
+  it("exits 2 when .github/sensitive-paths lists no globs", () => {
+    const runGit = gitWith({ "diff --name-only": ok("docs/a.md\0") });
+    const r = runSensitiveReview(env, { runGit, readFile: () => "# only a comment\n\n" });
+    expect(r.code).toBe(2);
+    expect(r.messages[0]).toContain(".github/sensitive-paths lists no globs");
+  });
+
+  it("matches the base globs too, so a PR cannot drop the glob that judges it", () => {
+    calls.length = 0;
+    const runGit = gitWith({
+      "diff --name-only": ok(".github/sensitive-paths\0packages/api/src/audit/a.ts\0"),
+      "ls-tree --name-only": ok(".github/sensitive-paths\0"),
+      "show abc1234:.github/sensitive-paths": ok(".github/**\npackages/api/src/audit/**\n"),
+    });
+    const readHead = (p: string) => (p === ".github/sensitive-paths" ? "docs/**\n" : undefined);
+    const r = runSensitiveReview(env, { runGit, readFile: readHead });
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain("packages/api/src/audit/a.ts");
+    expect(calls).toContainEqual([
+      "ls-tree",
+      "--name-only",
+      "-z",
+      "abc1234",
+      "--",
+      ".github/sensitive-paths",
+    ]);
+  });
+
+  it("exits 2 when the base glob file cannot be read", () => {
+    for (const failing of ["ls-tree --name-only", "show abc1234:.github/sensitive-paths"]) {
+      const runGit = gitWith({
+        "diff --name-only": ok("docs/a.md\0"),
+        "ls-tree --name-only": ok(".github/sensitive-paths\0"),
+        [failing]: { status: 128, stdout: "", stderr: "fatal: bad object" },
+      });
+      expect(runSensitiveReview(env, { runGit, readFile }).code, failing).toBe(2);
+    }
+  });
+});
+
+describe("runSensitiveReview against a real git repo", () => {
+  const git = (cwd: string, args: string[]) => {
+    const r = spawnSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: join(cwd, ".gitcfg") },
+    });
+    return { status: r.status, stdout: r.stdout ?? null, stderr: r.stderr ?? null };
+  };
+  const inRepo = (change: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), "sensitive-review-"));
+    try {
+      const write = (p: string, t: string) => {
+        mkdirSync(dirname(join(dir, p)), { recursive: true });
+        writeFileSync(join(dir, p), t);
+      };
+      const commit = () => {
+        git(dir, ["add", "-A"]);
+        git(dir, [
+          "-c",
+          "user.name=Testerson",
+          "-c",
+          "user.email=t@example.test",
+          "commit",
+          "-qm",
+          "c",
+        ]);
+        return (git(dir, ["rev-parse", "HEAD"]).stdout ?? "").trim();
+      };
+      writeFileSync(join(dir, ".gitcfg"), "");
+      git(dir, ["init", "-q"]);
+      write(".gitignore", ".gitcfg\n");
+      write(".github/sensitive-paths", "scripts/ci/**\n");
+      write("scripts/ci/x.ts", "export const x = 1;\n".repeat(20));
+      const base = commit();
+      change(dir);
+      const head = commit();
+      return runSensitiveReview(
+        { EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head, PR_NUMBER: "7" },
+        {
+          runGit: (args) => git(dir, args),
+          readFile: (p) => (p === ".github/sensitive-paths" ? "scripts/ci/**\n" : undefined),
+        },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("catches a file renamed out of a sensitive path", () => {
+    const r = inRepo((dir) => git(dir, ["mv", "scripts/ci/x.ts", "moved-x.ts"]));
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain("scripts/ci/x.ts");
+  });
+
+  it("catches a sensitive path with non-ASCII characters", () => {
+    const r = inRepo((dir) => writeFileSync(join(dir, "scripts/ci/é.ts"), "export {};\n"));
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain("scripts/ci/é.ts");
   });
 });

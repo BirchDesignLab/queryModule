@@ -12,6 +12,9 @@ export function sensitiveFiles(files: string[], globs: string[]): string[] {
   return files.filter((f) => isMatch(f));
 }
 
+/** a commit sha, abbreviated or full; checked before reviewedSha reaches git argv */
+export const SHA_RE = /^[0-9a-f]{7,40}$/;
+
 export interface ReviewFrontMatter {
   reviewer: string;
   effort: string;
@@ -53,10 +56,11 @@ export function evaluateSensitiveReview(input: ReviewInput): { ok: boolean; mess
     return fail(`${artifactPath}: front matter needs reviewer, effort, reviewedSha, verdict`);
   if (fm.reviewer !== "opus-5.5")
     return fail(`${artifactPath}: reviewer must be opus-5.5, got ${fm.reviewer}`);
+  if (fm.effort !== "xhigh" && fm.effort !== "max")
+    return fail(`${artifactPath}: effort must be xhigh or max, got ${fm.effort}`);
   if (fm.verdict !== "approve")
     return fail(`${artifactPath}: verdict must be approve, got ${fm.verdict}`);
-  if (!/^[0-9a-f]{7,40}$/.test(fm.reviewedSha))
-    return fail(`${artifactPath}: reviewedSha is not a commit sha`);
+  if (!SHA_RE.test(fm.reviewedSha)) return fail(`${artifactPath}: reviewedSha is not a commit sha`);
   if (input.filesChangedAfterReviewedSha === undefined)
     return fail(`${artifactPath}: reviewedSha ${fm.reviewedSha} is not an ancestor of the PR head`);
   const late = sensitiveFiles(input.filesChangedAfterReviewedSha, input.globs);
@@ -76,21 +80,21 @@ export interface RunResult {
   messages: string[];
 }
 
-const lines = (s: string) =>
-  s
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+const GLOB_FILE = ".github/sensitive-paths";
+/** git -z output: NUL-terminated paths, never quoted or escaped (core.quotePath) */
+const nulList = (s: string) => s.split("\0").filter((p) => p !== "");
+/** --no-renames lists both sides of a rename, so a move out of a sensitive path is seen */
+const nameDiff = ["diff", "--name-only", "-z", "--no-renames"];
 
 class GitFailure extends Error {}
 
-function gitLines(runGit: RunDeps["runGit"], args: string[]): string[] {
+function gitOut(runGit: RunDeps["runGit"], args: string[]): string {
   const r = runGit(args);
   if (r.status !== 0 || r.stdout === null)
     throw new GitFailure(
       `git ${args.join(" ")} failed (status ${r.status}): ${r.stderr ?? ""}`.trim(),
     );
-  return lines(r.stdout);
+  return r.stdout;
 }
 
 export function runSensitiveReview(
@@ -113,20 +117,30 @@ export function runSensitiveReview(
   if (!env.PR_NUMBER || !Number.isInteger(prNumber) || prNumber <= 0)
     return bad("PR_NUMBER must be a positive integer");
   try {
-    const changedFiles = gitLines(deps.runGit, ["diff", "--name-only", `${base}...${head}`]);
-    const globs = parseSensitiveGlobs(deps.readFile(".github/sensitive-paths") ?? "");
+    const changedFiles = nulList(gitOut(deps.runGit, [...nameDiff, `${base}...${head}`]));
+    const headText = deps.readFile(GLOB_FILE);
+    if (headText === undefined) return bad(`${GLOB_FILE} is missing`);
+    const headGlobs = parseSensitiveGlobs(headText);
+    if (headGlobs.length === 0) return bad(`${GLOB_FILE} lists no globs`);
+    // The base list judges the PR too, so a PR cannot drop the glob that covers its change.
+    // A base without the file (before it first lands on main) contributes no globs.
+    const baseHasFile =
+      nulList(gitOut(deps.runGit, ["ls-tree", "--name-only", "-z", base, "--", GLOB_FILE])).length >
+      0;
+    const baseGlobs = baseHasFile
+      ? parseSensitiveGlobs(gitOut(deps.runGit, ["show", `${base}:${GLOB_FILE}`]))
+      : [];
+    const globs = [...new Set([...baseGlobs, ...headGlobs])];
     const artifactText = deps.readFile(`docs/reviews/pr-${prNumber}.md`);
     let filesChangedAfterReviewedSha: string[] | undefined = [];
     const fm = artifactText ? parseReviewFrontMatter(artifactText) : null;
-    if (fm) {
+    // A malformed reviewedSha never reaches git; evaluateSensitiveReview rejects it (code 1).
+    if (fm && SHA_RE.test(fm.reviewedSha)) {
       const anc = deps.runGit(["merge-base", "--is-ancestor", fm.reviewedSha, head]);
       if (anc.status === 0)
-        filesChangedAfterReviewedSha = gitLines(deps.runGit, [
-          "diff",
-          "--name-only",
-          fm.reviewedSha,
-          head,
-        ]);
+        filesChangedAfterReviewedSha = nulList(
+          gitOut(deps.runGit, [...nameDiff, fm.reviewedSha, head]),
+        );
       else if (anc.status === 1) filesChangedAfterReviewedSha = undefined;
       else
         return bad(
