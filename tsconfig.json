@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/config" },
+    { "path": "packages/tokens" },
     { "path": "packages/api" },
     { "path": "scripts" }
   ]

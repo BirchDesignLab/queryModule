@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { findDrift } from "./generated";
 
 // CLI entry for `pnpm gen:check`; runs unconditionally (no direct-execution guard to miss).
-const GENERATORS = ["contracts:gen"];
+const GENERATORS = ["contracts:gen", "tokens:gen"];
 
 // Windows resolves pnpm.cmd only through a shell; one command string avoids DEP0190.
 for (const script of GENERATORS) {

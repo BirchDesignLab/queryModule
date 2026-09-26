@@ -23,6 +23,7 @@
     "@biomejs/biome": "^2.5.14",
     "@querymodule/config": "workspace:*",
     "@querymodule/core": "workspace:*",
+    "@querymodule/tokens": "workspace:*",
     "@types/node": "^26.6.2",
     "@types/picomatch": "^4.0.3",
     "@vitest/coverage-v8": "^5.0.2",

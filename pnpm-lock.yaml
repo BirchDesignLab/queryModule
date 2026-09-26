@@ -175,6 +175,9 @@ importers:
       '@querymodule/core':
         specifier: workspace:*
         version: link:packages/core
+      '@querymodule/tokens':
+        specifier: workspace:*
+        version: link:packages/tokens
       '@types/node':
         specifier: ^26.6.2
         version: 26.6.2
@@ -219,6 +222,15 @@ importers:
       zod:
         specifier: ^4.6.5
         version: 4.6.5
+
+  packages/tokens:
+    devDependencies:
+      '@querymodule/core':
+        specifier: workspace:*
+        version: link:../core
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
 
 packages:
 
