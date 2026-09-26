@@ -1,0 +1,183 @@
+name: project-sync
+
+# Keeps the "Query Module 2.0" board (BirchDesignLab, project 1) in step with
+# branches, PRs and issues. See docs/project-board.md "Automation".
+#
+# Security: the project token (secret PROJECT_TOKEN, a BirchDesignLab classic
+# token with only the `project` scope) is used only in the `board` job, which
+# checks out nothing and runs no repository code. Fork PRs get no secrets, so
+# that job skips with a notice. The `sensitive-label` job runs PR code but holds
+# only GITHUB_TOKEN with pull-requests: write, and runs for same-repository PRs.
+
+on:
+  push:
+    branches: ["feat/p0-wave-*"]
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize]
+  issues:
+    types: [closed, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-sync-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  board:
+    name: board
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.action != 'synchronize'
+    steps:
+      - name: Sync project fields
+        uses: actions/github-script@v9
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        with:
+          script: |
+            const OWNER = "BirchDesignLab";
+            const NUMBER = 1;
+            if (!process.env.PROJECT_TOKEN) {
+              core.notice("PROJECT_TOKEN is not set (or this is a fork PR); board sync skipped.");
+              return;
+            }
+            const pm = getOctokit(process.env.PROJECT_TOKEN);
+            const today = new Date().toISOString().slice(0, 10);
+
+            const { user } = await pm.graphql(
+              `query($o:String!,$n:Int!){user(login:$o){projectV2(number:$n){id
+                fields(first:50){nodes{... on ProjectV2FieldCommon{id name}
+                ... on ProjectV2SingleSelectField{options{id name}}}}}}}`,
+              { o: OWNER, n: NUMBER },
+            );
+            const project = user.projectV2;
+            const field = (name) => project.fields.nodes.find((f) => f.name === name);
+
+            async function items() {
+              const out = [];
+              for (let after = null; ; ) {
+                const { node } = await pm.graphql(
+                  `query($p:ID!,$a:String){node(id:$p){... on ProjectV2{items(first:100,after:$a){
+                    pageInfo{hasNextPage endCursor} nodes{id content{... on Issue{number title state}}
+                    fieldValues(first:30){nodes{
+                      ... on ProjectV2ItemFieldSingleSelectValue{name field{... on ProjectV2FieldCommon{name}}}
+                      ... on ProjectV2ItemFieldDateValue{date field{... on ProjectV2FieldCommon{name}}}}}}}}}}`,
+                  { p: project.id, a: after },
+                );
+                for (const it of node.items.nodes) {
+                  if (!it.content?.number) continue;
+                  const values = {};
+                  for (const v of it.fieldValues.nodes) if (v.field?.name) values[v.field.name] = v.name ?? v.date;
+                  out.push({ id: it.id, ...it.content, values });
+                }
+                if (!node.items.pageInfo.hasNextPage) return out;
+                after = node.items.pageInfo.endCursor;
+              }
+            }
+
+            async function set(item, name, value) {
+              if (item.values[name] === value) return;
+              const f = field(name);
+              if (!f) throw new Error(`project has no field ${name}`);
+              let v;
+              if (f.options) {
+                const opt = f.options.find((o) => o.name === value);
+                if (!opt) throw new Error(`field ${name} has no option ${value}`);
+                v = { singleSelectOptionId: opt.id };
+              } else v = { date: value };
+              await pm.graphql(
+                `mutation($p:ID!,$i:ID!,$f:ID!,$v:ProjectV2FieldValue!){updateProjectV2ItemFieldValue(
+                  input:{projectId:$p,itemId:$i,fieldId:$f,value:$v}){projectV2Item{id}}}`,
+                { p: project.id, i: item.id, f: f.id, v },
+              );
+              item.values[name] = value;
+              core.info(`#${item.number} ${name} = ${value}`);
+            }
+
+            const all = await items();
+            const byNumber = new Map(all.map((i) => [i.number, i]));
+            const waveParent = (k) => all.find((i) => i.title.startsWith(`M0 P0 W${k}:`));
+
+            if (context.eventName === "push") {
+              // feat/p0-wave-<k>: the wave starts; its open tasks and its wave parent go In Progress.
+              const k = /^refs\/heads\/feat\/p0-wave-(\d+)$/.exec(context.ref)?.[1];
+              if (!k) return;
+              const targets = all.filter((i) => i.values.Wave === `W${k}` && i.values.Phase === "P0");
+              for (const item of targets) {
+                if (item.state !== "OPEN" || !["Todo", "Ready"].includes(item.values.Status)) continue;
+                await set(item, "Status", "In Progress");
+                if (!item.values.Start) await set(item, "Start", today);
+              }
+              return;
+            }
+
+            if (context.eventName === "pull_request") {
+              const pr = context.payload.pull_request;
+              const { repository } = await github.graphql(
+                `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
+                  closingIssuesReferences(first:50){nodes{number}}}}}`,
+                { o: context.repo.owner, r: context.repo.repo, n: pr.number },
+              );
+              const numbers = repository.pullRequest.closingIssuesReferences.nodes.map((n) => n.number);
+              const k = /^feat\/p0-wave-(\d+)$/.exec(pr.head.ref)?.[1];
+              const parent = k ? waveParent(k) : undefined;
+              if (parent) numbers.push(parent.number);
+              const status = pr.draft ? "In Progress" : "In Review";
+              for (const n of numbers) {
+                const item = byNumber.get(n);
+                if (!item || item.state !== "OPEN") continue;
+                await set(item, "Status", status);
+                if (!item.values.Start) await set(item, "Start", today);
+              }
+              return;
+            }
+
+            if (context.eventName === "issues") {
+              const issue = context.payload.issue;
+              const item = byNumber.get(issue.number);
+              if (!item) return;
+              if (context.payload.action === "closed" && issue.state_reason !== "not_planned") {
+                await set(item, "Status", "Done");
+                if (!item.values.Finish) await set(item, "Finish", today);
+              } else if (context.payload.action === "reopened") {
+                await set(item, "Status", "Todo");
+              }
+            }
+
+  sensitive-label:
+    name: sensitive-label
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Label sensitive PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          files="$(pnpm --silent tsx scripts/ci/list-sensitive.ts)"
+          if [ -n "$files" ]; then
+            echo "Sensitive paths touched:"
+            echo "$files"
+            gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label sensitive
+          else
+            echo "No sensitive paths touched."
+          fi

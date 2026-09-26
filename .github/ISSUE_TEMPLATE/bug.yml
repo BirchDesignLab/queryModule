@@ -1,0 +1,33 @@
+name: Bug
+description: Something does not behave as the spec or plan says.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Mock data only. Never paste real person, vehicle or property records, credentials or CJIS data. Use fixture-policy values (plates `ZZ-####`, names Testerson or Sampleworth, Example Ave).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Steps, expected, actual.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Package, route, screen or script; commit or PR.
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Spec or requirement it breaks
+      placeholder: "spec 5.2 step 4; SEC-010"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: Error lines only; no query payloads or field values (spec 5.9).
+      render: text

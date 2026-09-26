@@ -1,0 +1,23 @@
+name: Spec question or decision
+description: A gap, conflict or open question in the spec, plan or an ADR.
+labels: ["question", "decision"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Quote the spec or plan lines (section and line numbers).
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and a recommendation
+      description: Each option with its cost if wrong.
+    validations:
+      required: true
+  - type: input
+    id: blocks
+    attributes:
+      label: What it blocks
+      placeholder: "Task 13; P0 freeze"

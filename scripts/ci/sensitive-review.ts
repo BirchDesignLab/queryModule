@@ -101,6 +101,50 @@ function gitOut(runGit: RunDeps["runGit"], args: string[]): string {
   return r.stdout;
 }
 
+/**
+ * Changed files between base and head, and the union of the head and base glob
+ * lists (the base list judges the PR too, so a PR cannot drop the glob that
+ * covers its change; a base without the file contributes no globs).
+ */
+function diffAndGlobs(
+  deps: RunDeps,
+  base: string,
+  head: string,
+): { changedFiles: string[]; globs: string[] } | string {
+  const changedFiles = nulList(gitOut(deps.runGit, [...nameDiff, `${base}...${head}`]));
+  const headText = deps.readFile(GLOB_FILE);
+  if (headText === undefined) return `${GLOB_FILE} is missing`;
+  const headGlobs = parseSensitiveGlobs(headText);
+  if (headGlobs.length === 0) return `${GLOB_FILE} lists no globs`;
+  const baseHasFile =
+    nulList(gitOut(deps.runGit, ["ls-tree", "--name-only", "-z", base, "--", GLOB_FILE])).length >
+    0;
+  const baseGlobs = baseHasFile
+    ? parseSensitiveGlobs(gitOut(deps.runGit, ["show", `${base}:${GLOB_FILE}`]))
+    : [];
+  return { changedFiles, globs: [...new Set([...baseGlobs, ...headGlobs])] };
+}
+
+/** Sensitive files a PR touches (the `sensitive` label). Code 2 on bad input or git failure. */
+export function listSensitiveChanges(
+  env: Record<string, string | undefined>,
+  deps: RunDeps,
+): { code: 0 | 2; files: string[]; messages: string[] } {
+  const base = env.BASE_SHA ?? "";
+  const head = env.HEAD_SHA ?? "";
+  const bad = (m: string) => ({ code: 2 as const, files: [], messages: [`list-sensitive: ${m}`] });
+  if (!SHA_RE.test(base)) return bad("BASE_SHA is not a commit sha");
+  if (!SHA_RE.test(head)) return bad("HEAD_SHA is not a commit sha");
+  try {
+    const d = diffAndGlobs(deps, base, head);
+    if (typeof d === "string") return bad(d);
+    return { code: 0, files: sensitiveFiles(d.changedFiles, d.globs), messages: [] };
+  } catch (e) {
+    if (e instanceof GitFailure) return bad(e.message);
+    throw e;
+  }
+}
+
 export function runSensitiveReview(
   env: Record<string, string | undefined>,
   deps: RunDeps,
@@ -124,20 +168,9 @@ export function runSensitiveReview(
   if (!env.PR_NUMBER || !Number.isInteger(prNumber) || prNumber <= 0)
     return bad("PR_NUMBER must be a positive integer");
   try {
-    const changedFiles = nulList(gitOut(deps.runGit, [...nameDiff, `${base}...${head}`]));
-    const headText = deps.readFile(GLOB_FILE);
-    if (headText === undefined) return bad(`${GLOB_FILE} is missing`);
-    const headGlobs = parseSensitiveGlobs(headText);
-    if (headGlobs.length === 0) return bad(`${GLOB_FILE} lists no globs`);
-    // The base list judges the PR too, so a PR cannot drop the glob that covers its change.
-    // A base without the file (before it first lands on main) contributes no globs.
-    const baseHasFile =
-      nulList(gitOut(deps.runGit, ["ls-tree", "--name-only", "-z", base, "--", GLOB_FILE])).length >
-      0;
-    const baseGlobs = baseHasFile
-      ? parseSensitiveGlobs(gitOut(deps.runGit, ["show", `${base}:${GLOB_FILE}`]))
-      : [];
-    const globs = [...new Set([...baseGlobs, ...headGlobs])];
+    const d = diffAndGlobs(deps, base, head);
+    if (typeof d === "string") return bad(d);
+    const { changedFiles, globs } = d;
     const artifactText = deps.readFile(`docs/reviews/pr-${prNumber}.md`);
     let filesChangedAfterReviewedSha: string[] | undefined = [];
     const fm = artifactText ? parseReviewFrontMatter(artifactText) : null;

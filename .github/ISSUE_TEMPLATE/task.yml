@@ -1,0 +1,41 @@
+name: Plan task
+description: One task from a phase plan (created at phase start).
+title: "<task title> (<requirement IDs>)"
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One plan task. Add one track label (`platform`, `web`, `core`, `mobile`), one phase label (`p0` to `p3`), the milestone, and `sensitive` or `contract` when they apply. Link it under its phase parent (or wave parent in P0).
+  - type: input
+    id: plan
+    attributes:
+      label: Plan and task
+      description: Plan file and task heading.
+      placeholder: "docs/superpowers/plans/2026-09-25-track-a-p1.md, Task 3"
+    validations:
+      required: true
+  - type: input
+    id: ids
+    attributes:
+      label: Requirement IDs
+      description: BR-, FR-, UX-, SEC-, NFR- or story IDs, verbatim from the requirements doc.
+      placeholder: "SEC-010, FR-040"
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Files created or changed, and the interfaces consumed and produced.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Tests (TDD), gates and any sensitive-review artifact.
+      value: |
+        - [ ] Failing test first, then green
+        - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm coverage` green
+        - [ ] Sensitive-review artifact if a sensitive path is touched

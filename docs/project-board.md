@@ -41,9 +41,28 @@ Track (`platform`, `web`, `core`, `mobile`), phase (`p0` to `p3`), `contract`, `
 4. The developer merges: GitHub closes the tasks, Status becomes Done.
 5. Carries and findings from review become `follow-up` issues under the phase that will do them.
 
+## Automation
+
+`.github/workflows/project-sync.yml` moves items; the built-in project workflows cover the rest.
+
+| Event | Board change |
+|---|---|
+| Push to `feat/p0-wave-<k>` | That wave's open Todo or Ready tasks: In Progress, Start set |
+| PR opened, reopened or ready for review | Issues it closes (`Closes #n`) and its wave parent: In Review, Start set if empty |
+| PR converted to draft | Same issues: In Progress |
+| Issue closed as completed | Done, Finish set |
+| Issue reopened | Todo |
+| PR from this repository touching a sensitive path | Label `sensitive` (job `sensitive-label`, from `.github/sensitive-paths`) |
+
+The board job uses the secret `PROJECT_TOKEN` and never checks out or runs repository code; without the secret, or on a fork PR, it skips with a notice. The label job uses only `GITHUB_TOKEN`.
+
 ## Manual steps
 
 Views, built-in project workflows and repo settings have no API. BirchDesignLab does these in the web UI; tick them here.
+
+Automation token (for `project-sync`):
+- [ ] As BirchDesignLab, create a classic personal access token with only the `project` scope (Settings, Developer settings, Personal access tokens, Tokens (classic)); set an expiry and a calendar reminder.
+- [ ] Repo Settings, Secrets and variables, Actions: new repository secret `PROJECT_TOKEN` with that token.
 
 Built-in workflows (Project, menu, Workflows):
 - [ ] "Item added to project": set Status to Todo.

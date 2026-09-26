@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   evaluateSensitiveReview,
+  listSensitiveChanges,
   parseReviewFrontMatter,
   parseSensitiveGlobs,
   runSensitiveReview,
@@ -419,5 +420,53 @@ describe("runSensitiveReview against a real git repo", () => {
     const r = inRepo((dir) => writeFileSync(join(dir, "scripts/ci/é.ts"), "export {};\n"));
     expect(r.code).toBe(1);
     expect(r.messages[0]).toContain("scripts/ci/é.ts");
+  });
+});
+
+describe("listSensitiveChanges (sensitive label, project-sync)", () => {
+  const git =
+    (answers: Record<string, { status: number | null; stdout: string | null; stderr: string }>) =>
+    (args: string[]) =>
+      answers[args.slice(0, 2).join(" ")] ?? { status: 0, stdout: "", stderr: "" };
+  const env = { BASE_SHA: BASE, HEAD_SHA: HEAD };
+  const readFile = (p: string) => (p === ".github/sensitive-paths" ? "scripts/ci/**\n" : undefined);
+
+  it("lists changed files the head or base globs match", () => {
+    const runGit = git({
+      "diff --name-only": {
+        status: 0,
+        stdout: "scripts/ci/x.ts\0docs/a.md\0README.md\0",
+        stderr: "",
+      },
+      "ls-tree --name-only": { status: 0, stdout: ".github/sensitive-paths\0", stderr: "" },
+      [`show ${BASE}:.github/sensitive-paths`]: { status: 0, stdout: "docs/**\n", stderr: "" },
+    });
+    expect(listSensitiveChanges(env, { runGit, readFile })).toEqual({
+      code: 0,
+      files: ["scripts/ci/x.ts", "docs/a.md"],
+      messages: [],
+    });
+  });
+
+  it("returns no files when nothing sensitive changed", () => {
+    const runGit = git({ "diff --name-only": { status: 0, stdout: "README.md\0", stderr: "" } });
+    expect(listSensitiveChanges(env, { runGit, readFile }).files).toEqual([]);
+  });
+
+  it("exits 2 on a bad or missing sha before git runs, and on a git failure", () => {
+    const calls: string[][] = [];
+    const spy = (args: string[]) => {
+      calls.push(args);
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    expect(listSensitiveChanges({ ...env, BASE_SHA: "--x" }, { runGit: spy, readFile }).code).toBe(
+      2,
+    );
+    expect(
+      listSensitiveChanges({ ...env, HEAD_SHA: undefined }, { runGit: spy, readFile }).code,
+    ).toBe(2);
+    expect(calls).toEqual([]);
+    const failing = git({ "diff --name-only": { status: 128, stdout: "", stderr: "fatal" } });
+    expect(listSensitiveChanges(env, { runGit: failing, readFile }).code).toBe(2);
   });
 });

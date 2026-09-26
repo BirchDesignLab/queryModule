@@ -1,0 +1,38 @@
+name: Contract change
+description: Change a frozen contract file (master plan 8).
+title: "Contract: <what> (<IDs>)"
+labels: ["contract", "core"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Master plan 8.1: add the requesting track's label, the phase label and the milestone. The PR touches contract files only (8.2), with tests; audit `details` stay additive-only. Audit, credential, dispatch or parser schemas also get `sensitive` and the review artifact.
+  - type: textarea
+    id: change
+    attributes:
+      label: The change
+      description: Schema, route or message, before and after.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Compatibility
+      options:
+        - Additive (new optional field, new message type, looser bound)
+        - Breaking (needs the api-breaking label and a release-note line)
+    validations:
+      required: true
+  - type: textarea
+    id: consumers
+    attributes:
+      label: Consumers on each track
+      description: Which Track A, B, Core and D code reads it.
+    validations:
+      required: true
+  - type: input
+    id: ids
+    attributes:
+      label: Requirement IDs
+    validations:
+      required: true
