@@ -32,7 +32,7 @@
 - Every user-facing string is a message key (NFR-001).
 - Scripts live in the repo under `scripts/` and are committed (CLAUDE.md); root scripts are Node or pnpm, identical in PowerShell and bash (master plan 9).
 - Docs: no em dashes; dates MM-DD-YY in prose, ISO in code and data.
-- Subagent seats: ordinary task Sonnet 5 `medium`; S task Opus 5.5 `medium`; spec-compliance review Sonnet 5 `medium`; code-quality review Sonnet 5 `high`; Opus 5.5 `medium` critic on this phase (it builds UI and touches sensitive code); Opus 5.5 `xhigh` whole-branch review per S PR; Opus 5.5 `xhigh` whole-phase review at the gate. State the seat plan before dispatching.
+- Model and effort per role: ordinary task Sonnet 5 `medium`; S task Opus 5.5 `medium`; spec-compliance review Sonnet 5 `medium`; code-quality review Sonnet 5 `high`; Opus 5.5 `medium` critic on this phase (it builds UI and touches sensitive code); Opus 5.5 `xhigh` whole-branch review per S PR; Opus 5.5 `xhigh` whole-phase review at the gate. State the model and effort plan before dispatching.
 - Commit trailer used in this plan: the literal placeholder `<attribution trailer given by your session's system reminder>` (the one permitted placeholder, per lead ruling R5). Every commit step ends with this line in place of any hardcoded Co-Authored-By model name.
 
 ## Waves
@@ -249,7 +249,7 @@ gh issue create --title "Workspace root skeleton (none)" --label track-a --label
 
 Repeat the command per row with that row's title, labels, task number, IDs and `Sensitive: yes` for rows labelled `sensitive`. Write each issue number after the task heading below (`### Task N: ... (#n)`) in the Task 1 PR.
 
-Seat plan for this phase: 28 implementer seats (Tasks 4, 5, 17 to 22, 26 and 28 on Opus 5.5 `medium`; the rest on Sonnet 5 `medium`), 28 spec-compliance seats (Sonnet 5 `medium`), 28 code-quality seats (Sonnet 5 `high`), one Opus 5.5 `medium` critic after Task 25, 11 Opus 5.5 `xhigh` whole-branch reviews (S PRs: Tasks 4, 5, 17 to 23, 26, 28), one Opus 5.5 `xhigh` whole-phase review at the gate.
+Model and effort plan for this phase: 28 implementer agents (Tasks 4, 5, 17 to 22, 26 and 28 on Opus 5.5 `medium`; the rest on Sonnet 5 `medium`), 28 spec-compliance agents (Sonnet 5 `medium`), 28 code-quality agents (Sonnet 5 `high`), one Opus 5.5 `medium` critic after Task 25, 11 Opus 5.5 `xhigh` whole-branch reviews (S PRs: Tasks 4, 5, 17 to 23, 26, 28), one Opus 5.5 `xhigh` whole-phase review at the gate.
 
 
 ### Task 1: Workspace root skeleton (#2)
@@ -7252,7 +7252,7 @@ git commit -m "feat(b): Vite + React web shell reading tokens
 <attribution trailer given by your session's system reminder>"
 ```
 
-- [ ] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic seat over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
+- [ ] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
 
 ### Task 26: Mobile placeholder and CI steps 8 and 9 (S) (#27)
 
