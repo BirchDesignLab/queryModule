@@ -5054,7 +5054,7 @@ pnpm gen:check
 
 Expected: `6 passed`; `tsc -b` exits 0; `generated files match`.
 
-- [ ] **Step 13: Commit, then the sensitive review (`scripts/ci/` is a sensitive path).**
+- [x] **Step 13: Commit, then the sensitive review (`scripts/ci/` is a sensitive path).**
 
 ```bash
 git commit -m "feat(a): contract generators, openapi.json and drift check
@@ -5372,7 +5372,7 @@ pnpm config:migrate packages/config/sites/default.json
 
 Expected: four `ok packages/config/... (0 warnings)` lines, exit 0; then `ok packages/config/sites/example-ok.json (0 warnings)` followed by the merged JSON with `"delimiter": "/"`; then `packages/config/sites/default.json: already at schema version 1`.
 
-- [ ] **Step 8: Typecheck, commit, sensitive review.**
+- [x] **Step 8: Typecheck, commit, sensitive review.**
 
 ```bash
 pnpm typecheck
@@ -5515,7 +5515,7 @@ pnpm tsx scripts/ci/check-licences.ts licences.json
 
 Expected: tests pass (licences file: 2 tests); `licences ok (N runtime packages)` with `N >= 1`. Open `licences.json` and confirm `zod` appears under `"MIT"`; that proves workspace package runtime dependencies are included. `licences.json` is gitignored.
 
-- [ ] **Step 6: Commit, sensitive review.**
+- [x] **Step 6: Commit, sensitive review.**
 
 ```bash
 git add -A
@@ -5724,7 +5724,7 @@ pnpm tsx scripts/ci/check-story-tags.ts --milestone m1
 
 Expected: tests pass (story-tags file: 4 tests); `story tags ok (highest tag: none)`; the `--milestone m1` run fails with five lines `A1 (m1): no test titled with [A1] in ...` to `A5`, exit 1 (correct until M1 exits).
 
-- [ ] **Step 7: Commit, sensitive review.**
+- [x] **Step 7: Commit, sensitive review.**
 
 ```bash
 git add -A
@@ -5998,7 +5998,7 @@ EVENT_NAME=push pnpm tsx scripts/ci/check-sensitive-review.ts
 
 Expected: tests pass (sensitive-review file: 8 tests); `sensitive-review: push event, enforced on pull requests only`. PowerShell form of the second command: `$env:EVENT_NAME="push"; pnpm tsx scripts/ci/check-sensitive-review.ts`.
 
-- [ ] **Step 8: Commit, sensitive review.**
+- [x] **Step 8: Commit, sensitive review.**
 
 ```bash
 git add -A
@@ -6233,7 +6233,7 @@ pnpm verify
 
 Expected: biome clean, `tsc -b` exits 0, all Vitest projects pass with coverage thresholds met, four `ok` lines from `config:validate`, `generated files match`.
 
-- [ ] **Step 8: Commit, sensitive review, open the PR and watch CI.**
+- [x] **Step 8: Commit, sensitive review, open the PR and watch CI.**
 
 ```bash
 git add -A
