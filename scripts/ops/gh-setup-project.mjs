@@ -23,6 +23,9 @@
 // Usage (PowerShell or bash, repo root)
 //   node scripts/ops/gh-setup-project.mjs                 # dry run: reads only, prints the plan
 //   node scripts/ops/gh-setup-project.mjs --apply         # writes
+//   node scripts/ops/gh-setup-project.mjs --dashboard     # live reads only; writes the two SVGs and
+//                                                          # the README picture block, no GitHub writes
+//                                                          # (#80 requirement 8)
 //   node scripts/ops/gh-setup-project.mjs --as <login>    # gh account to act as (default BirchDesignLab)
 //
 // Requires
@@ -36,14 +39,21 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bodyUpdate, matchParent, titleUpdate, waveParentStatus } from "./board-model.mjs";
+import {
+  bodyUpdate,
+  leafDates,
+  matchParent,
+  rollUp,
+  titleUpdate,
+  waveParentStatus,
+} from "./board-model.mjs";
+import { renderDashboard } from "./progress-svg.mjs";
 
 const REPO = "BirchDesignLab/queryModule";
 const OWNER = "BirchDesignLab";
 const PROJECT_NUMBER = 1;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PLAN = "docs/superpowers/plans/2026-09-25-p0-contracts.md";
-const WAVE_DATE = "2026-09-26";
 
 // ---------------------------------------------------------------- data
 
@@ -618,14 +628,23 @@ const FOLLOW_UPS = [
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
+// --dashboard: live gh api reads only, writes the two committed SVGs and the
+// README picture block, no GitHub writes at all (task-W5B-carries W5B-2; #80
+// requirement 8). Mutually exclusive with --apply, so a single invocation is
+// never both "writes GitHub" and "read-only dashboard regen".
+const DASHBOARD = argv.includes("--dashboard");
 const asAt = argv.indexOf("--as");
 const AS = asAt >= 0 ? argv[asAt + 1] : "BirchDesignLab";
-const USAGE = "usage: node scripts/ops/gh-setup-project.mjs [--apply] [--as <login>]";
+const USAGE = "usage: node scripts/ops/gh-setup-project.mjs [--apply | --dashboard] [--as <login>]";
 if (!AS || AS.startsWith("--")) {
   console.error(`--as needs a login; ${USAGE}`);
   process.exit(2);
 }
-const known = new Set(["--apply", "--as", AS]);
+if (APPLY && DASHBOARD) {
+  console.error(`--apply and --dashboard are mutually exclusive; ${USAGE}`);
+  process.exit(2);
+}
+const known = new Set(["--apply", "--dashboard", "--as", AS]);
 for (const a of argv) {
   if (!known.has(a)) {
     console.error(`unknown argument ${a}; ${USAGE}`);
@@ -716,6 +735,52 @@ const byNumber = (n) => issues.get(n);
     if (APPLY) throw new Error(m);
     console.log(`warning: ${m}`);
   }
+}
+
+// Leaf and roll-up Start/Finish (developer decision, #80 requirements 4-7),
+// from live issue state, using the same board-model.mjs functions
+// project-sync's inline copy mirrors (scripts/ci/project-sync.test.ts parity
+// test). Task N is issue #N+1; wave parents roll up their tasks; the
+// Contracts (M0 P0) phase parent rolls up its P0 wave parents (the only
+// phase with wave children so far); milestone parents roll up their phase
+// parents. A parent with no dated child (no wave children yet) keeps no
+// dates, same as project-sync.
+const datesByNumber = new Map();
+for (const w of WAVES)
+  for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
+    const issue = byNumber(t + 1);
+    if (issue)
+      datesByNumber.set(issue.number, { ...leafDates(issue), closed: issue.state === "closed" });
+  }
+for (const f of FOLLOW_UPS) {
+  const issue = f.number ? byNumber(f.number) : undefined;
+  if (issue)
+    datesByNumber.set(issue.number, { ...leafDates(issue), closed: issue.state === "closed" });
+}
+for (const w of WAVES) {
+  const issue = byNumber(w.number);
+  if (!issue) continue;
+  const children = [];
+  for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
+    const c = byNumber(t + 1);
+    if (c) children.push(datesByNumber.get(c.number));
+  }
+  datesByNumber.set(issue.number, { ...rollUp(children), closed: issue.state === "closed" });
+}
+for (const phase of PHASES) {
+  const issue = byNumber(phase.number);
+  if (!issue) continue;
+  const children =
+    phase.number === CONTRACTS_M0P0 ? WAVES.map((w) => datesByNumber.get(w.number)) : [];
+  datesByNumber.set(issue.number, { ...rollUp(children), closed: issue.state === "closed" });
+}
+for (const mp of MILESTONE_PARENTS) {
+  const issue = mp.number ? byNumber(mp.number) : undefined;
+  if (!issue) continue;
+  const children = PHASES.filter((p) => p.milestone === mp.title).map((p) =>
+    datesByNumber.get(p.number),
+  );
+  datesByNumber.set(issue.number, { ...rollUp(children), closed: issue.state === "closed" });
 }
 
 // Labels
@@ -963,13 +1028,6 @@ for (const p of PHASES) {
   ensureChild(milestoneParentIssue.get(p.milestone), issue, p.title);
 }
 
-// A wave is done when every task issue in it is closed (issue state is the truth).
-const waveDone = (w) => {
-  for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
-    if (byNumber(t + 1)?.state !== "closed") return false;
-  }
-  return true;
-};
 const waveIssue = new Map();
 for (const w of WAVES) {
   const tasks = `Tasks ${w.tasks[0]} to ${w.tasks[1]} (issues #${w.tasks[0] + 1} to #${w.tasks[1] + 1})`;
@@ -1035,17 +1093,21 @@ function desired(issue) {
     if (issue.state === "closed") v.Status = "Done";
     else v.Status = { review: "In Review", ready: "Ready", todo: "Todo" }[w.state];
     if (issue.state === "open") v.Priority = "High";
-    if (issue.state === "closed" || w.state === "review") {
-      v.Start = WAVE_DATE;
-      v.Finish = WAVE_DATE;
-    }
+    // Leaf dates (#80 requirement 4): Start = created date, Finish = closed
+    // date only when closed as completed, both clamped to the 2026-09-25
+    // floor (board-model.mjs leafDates, datesByNumber above).
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
   const milestoneParent = MILESTONE_PARENTS.find((mp) => mp.number === issue.number);
   if (milestoneParent) {
     v.Level = "Milestone";
     v.Status = milestoneParent.title === "M0 Skeleton" ? "In Progress" : "Todo";
-    if (milestoneParent.title === "M0 Skeleton") v.Start = WAVE_DATE;
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
   const phase = PHASES.find((p) => p.number === issue.number);
@@ -1053,7 +1115,9 @@ function desired(issue) {
     v.Level = "Phase";
     v.Phase = phase.phase;
     v.Status = phase.number === CONTRACTS_M0P0 ? "In Progress" : "Todo";
-    if (phase.number === CONTRACTS_M0P0) v.Start = WAVE_DATE;
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
   const wave = WAVES.find((w) => w.number === issue.number);
@@ -1064,10 +1128,11 @@ function desired(issue) {
     // Done comes only from the issue's own state; every task closed is not enough
     // on its own (that transition is project-sync's, #79 item 1).
     v.Status = waveParentStatus(issue, wave.state);
-    if (waveDone(wave) || wave.state === "review") {
-      v.Start = WAVE_DATE;
-      v.Finish = WAVE_DATE;
-    }
+    // Parent roll-up (#80 requirement 5): earliest child Start, latest child
+    // Finish once every task is closed (else the latest date so far).
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
   const f = FOLLOW_UPS.find((x) => x.number === issue.number);
@@ -1079,6 +1144,9 @@ function desired(issue) {
     v.Priority = f.priority;
     v["Req IDs"] = f.reqIds;
     v.Status = issue.state === "closed" ? "Done" : "Todo";
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
   return null;
@@ -1153,118 +1221,117 @@ for (const issue of all) {
   }
 }
 
-// README progress block (Mermaid), regenerated from live data between markers.
+// README progress block: an SVG dashboard (README option B, #80 requirement
+// 8), regenerated from live data between markers. Superseded the earlier
+// Mermaid flowchart/gantt/pie block (#80: "replaces the Mermaid block ...
+// with a <picture>").
 const README_PATH = resolve(ROOT, "README.md");
+const ASSET_PATH = {
+  light: "docs/assets/progress-light.svg",
+  dark: "docs/assets/progress-dark.svg",
+};
 const START =
   "<!-- progress:start (generated by scripts/ops/gh-setup-project.mjs; do not edit) -->";
 const END = "<!-- progress:end -->";
 
-function progressBlock() {
-  const liveIssues = APPLY
-    ? restAll(`repos/${REPO}/issues?state=all&per_page=100`).filter((i) => !i.pull_request)
-    : [...issues.values()];
-  const liveItems = APPLY ? loadItems() : items;
-  const msLive = restAll(`repos/${REPO}/milestones?state=all&per_page=100`);
-  const lines = [];
-
-  // Roadmap: milestones left to right, phases coloured by status with sub-issue progress.
-  lines.push("```mermaid", "flowchart LR");
-  const classOf = new Map();
-  PHASES.forEach((p, idx) => {
-    const issue = liveIssues.find((i) => i.number === p.number);
-    const sum = issue ? rest(`repos/${REPO}/issues/${issue.number}`).sub_issues_summary : null;
-    const status = issue ? liveItems.get(issue.number)?.values.Status : undefined;
-    const done = issue?.state === "closed" || (sum && sum.total > 0 && sum.completed === sum.total);
-    const active =
-      !done && (status === "In Progress" || status === "In Review" || (sum?.completed ?? 0) > 0);
-    classOf.set(idx, done ? "done" : active ? "active" : "todo");
-    p.node = `ph${idx}`;
-    const name = p.title.replace(/ \([^)]*\)$/, "");
-    p.label = `${p.phase} ${name}${sum && sum.total > 0 ? `<br/>${sum.completed}/${sum.total} done` : ""}`;
+/**
+ * Build the progress-svg.mjs model from live data: milestone and phase
+ * sub-issue progress, the P0 wave timeline (the same roll-up as
+ * datesByNumber above), open decisions (label `decision`) and task/follow-up
+ * counts by board Status (#80 requirement 8).
+ */
+function dashboardModel() {
+  const allIssues = [...issues.values()];
+  const milestones = Object.keys(MILESTONES).map((title) => {
+    const msIssues = allIssues.filter((i) => i.milestone?.title === title);
+    const phases = PHASES.filter((p) => p.milestone === title).map((p) => {
+      const issue = byNumber(p.number);
+      const sum = issue ? rest(`repos/${REPO}/issues/${issue.number}`).sub_issues_summary : null;
+      return { title: p.title, closed: sum?.completed ?? 0, total: sum?.total ?? 0 };
+    });
+    return {
+      title,
+      closed: msIssues.filter((i) => i.state === "closed").length,
+      total: msIssues.length,
+      phases,
+    };
   });
-  const byMilestone = new Map();
-  for (const p of PHASES)
-    byMilestone.set(p.milestone, [...(byMilestone.get(p.milestone) ?? []), p]);
-  let mi = 0;
-  const firstNodes = [];
-  for (const [title, phases] of byMilestone) {
-    const m = msLive.find((x) => x.title === title);
-    const total = m ? m.open_issues + m.closed_issues : 0;
-    const pct = total > 0 ? Math.round((100 * m.closed_issues) / total) : 0;
-    lines.push(
-      `  subgraph M${mi}["${title}<br/>${pct}% of ${total} issues closed"]`,
-      "    direction TB",
-    );
-    for (const p of phases) lines.push(`    ${p.node}["${p.label}"]`);
-    for (let j = 1; j < phases.length; j += 1)
-      lines.push(`    ${phases[j - 1].node} --> ${phases[j].node}`);
-    lines.push("  end");
-    firstNodes.push(`M${mi}`);
-    mi += 1;
-  }
-  lines.push(`  ${firstNodes.join(" --> ")}`);
-  lines.push(
-    "  classDef done fill:#2da44e,stroke:#1a7f37,color:#ffffff",
-    "  classDef active fill:#d29922,stroke:#9a6700,color:#ffffff",
-    "  classDef todo fill:#eaeef2,stroke:#8c959f,color:#24292f",
-  );
-  for (const cls of ["done", "active", "todo"]) {
-    const ids = PHASES.filter((_, i) => classOf.get(i) === cls).map((p) => p.node);
-    if (ids.length > 0) lines.push(`  class ${ids.join(",")} ${cls}`);
-  }
-  lines.push("```", "");
-
-  // P0 wave timeline: first commit to merge of each merged wave PR (UTC).
-  const spans = [];
-  for (const w of WAVES) {
-    if (!w.pr) continue;
-    const pr = rest(`repos/${REPO}/pulls/${w.pr}`);
-    if (!pr.merged_at) continue;
-    const commits = restAll(`repos/${REPO}/pulls/${w.pr}/commits?per_page=100`);
-    const first = commits.map((c) => c.commit.author.date).sort()[0] ?? pr.created_at;
-    spans.push({ w, start: first, end: pr.merged_at });
-  }
-  if (spans.length > 0) {
-    const fmt = (iso) => iso.slice(0, 16).replace("T", " ");
-    lines.push(
-      "```mermaid",
-      "gantt",
-      "  title P0 waves: first commit to merge (UTC)",
-      "  dateFormat YYYY-MM-DD HH:mm",
-      "  axisFormat %m-%d %H:%M",
-    );
-    lines.push("  section M0 P0 Contracts");
-    for (const s of spans) {
-      lines.push(
-        `  W${s.w.k} Tasks ${s.w.tasks[0]} to ${s.w.tasks[1]} (PR ${s.w.pr}) :done, w${s.w.k}, ${fmt(s.start)}, ${fmt(s.end)}`,
-      );
-    }
-    lines.push("```", "");
-  }
-
-  // Board status of task and follow-up issues (parents excluded).
+  const waves = WAVES.map((w) => {
+    const d = datesByNumber.get(w.number) ?? {};
+    return {
+      k: w.k,
+      title: w.title.replace(/^Wave \d+: /, "").replace(/ \(Tasks[^)]*\)$/, ""),
+      start: d.start ?? null,
+      finish: d.finish ?? null,
+    };
+  });
+  const decisions = allIssues
+    .filter((i) => i.state === "open" && i.labels.some((l) => (l.name ?? l) === "decision"))
+    .map((i) => ({ number: i.number, title: i.title }))
+    .sort((a, b) => a.number - b.number);
   const counts = new Map(STATUS_OPTIONS.map((o) => [o.name, 0]));
-  for (const i of liveIssues) {
+  for (const i of allIssues) {
     if (i.labels.some((l) => (l.name ?? l) === "epic")) continue;
-    const st = liveItems.get(i.number)?.values.Status;
+    const st = items.get(i.number)?.values.Status;
     if (st && counts.has(st)) counts.set(st, counts.get(st) + 1);
   }
-  lines.push("```mermaid", "pie showData", "  title Tasks and follow-ups by board status");
-  for (const [name, n] of counts) if (n > 0) lines.push(`  "${name}" : ${n}`);
-  lines.push("```");
-  return lines.join("\n");
+  const statusCounts = [...counts]
+    .filter(([, n]) => n > 0)
+    .map(([status, count]) => ({ status, count }));
+  return {
+    asOf: new Date().toISOString().slice(0, 10),
+    milestones,
+    waves,
+    decisions,
+    statusCounts,
+  };
+}
+
+// Local file writes (the two SVGs and README) run under --apply or
+// --dashboard; --dashboard makes no GitHub writes (`write()` above stays
+// gated on APPLY alone), so this is the only write path it takes
+// (task-W5B-carries W5B-2, #80 requirement 8).
+function writeLocalFile(what, fn) {
+  writes += 1;
+  if (!(APPLY || DASHBOARD)) {
+    console.log(`would ${what}`);
+    return undefined;
+  }
+  console.log(what);
+  return fn();
 }
 
 {
+  const model = dashboardModel();
+  for (const theme of ["light", "dark"]) {
+    const svg = renderDashboard(model, theme);
+    writeLocalFile(`write ${ASSET_PATH[theme]}`, () =>
+      writeFileSync(resolve(ROOT, ASSET_PATH[theme]), `${svg}\n`),
+    );
+  }
+  const totalIssues = model.milestones.reduce((n, m) => n + m.total, 0);
+  const closedIssues = model.milestones.reduce((n, m) => n + m.closed, 0);
+  const summary = `As of ${model.asOf}: ${closedIssues}/${totalIssues} issues closed across ${model.milestones.length} milestones. Full dashboard: the image above (or docs/project-board.md).`;
+  const alt = summary.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const picture = [
+    "<picture>",
+    `  <source media="(prefers-color-scheme: dark)" srcset="${ASSET_PATH.dark}">`,
+    `  <img src="${ASSET_PATH.light}" alt="${alt}">`,
+    "</picture>",
+    "",
+    summary,
+  ].join("\n");
   const readme = readFileSync(README_PATH, "utf8");
   const a = readme.indexOf(START);
   const b = readme.indexOf(END);
   if (a < 0 || b < a) throw new Error("README.md has no progress markers");
-  const next = `${readme.slice(0, a + START.length)}\n\n${progressBlock()}\n\n${readme.slice(b)}`;
+  const next = `${readme.slice(0, a + START.length)}\n\n${picture}\n\n${readme.slice(b)}`;
   if (next !== readme) {
-    write("update the README progress block", () => writeFileSync(README_PATH, next));
-    if (APPLY) console.log("README.md changed locally; commit it");
+    writeLocalFile("update the README progress block", () => writeFileSync(README_PATH, next));
+    if (APPLY || DASHBOARD) console.log("README.md changed locally; commit it");
   }
 }
 
-console.log(`${APPLY ? "applied" : "planned"} ${writes} change(s)`);
+console.log(
+  `${APPLY ? "applied" : DASHBOARD ? "regenerated dashboard," : "planned"} ${writes} change(s)`,
+);

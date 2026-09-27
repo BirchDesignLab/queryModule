@@ -69,6 +69,70 @@ export function matchParent(item, byNumber) {
   return item.number ? byNumber(item.number) : undefined;
 }
 
+// The project started 2026-09-25 (developer decision, #80): no Start or
+// Finish before this date. Anything earlier is clamped up to it.
+export const FLOOR = "2026-09-25";
+
+/**
+ * Clamp an ISO date (YYYY-MM-DD, or a longer ISO timestamp) up to the floor.
+ *
+ * @param {string} date
+ * @param {string} [floor]
+ * @returns {string}
+ */
+export function clampToFloor(date, floor = FLOOR) {
+  const d = date.slice(0, 10);
+  return d < floor ? floor : d;
+}
+
+/**
+ * Dates for a leaf item (Task or Follow-up), #80 requirement 4: Start is the
+ * issue's created date; Finish is its closed date only when it closed as
+ * completed (not_planned/duplicate, or still open, leaves Finish empty).
+ * Both are clamped to `FLOOR`.
+ *
+ * @param {{created_at: string, closed_at?: string|null, state: "open"|"closed", state_reason?: string|null}} issue
+ * @param {string} [floor]
+ * @returns {{start: string, finish: string|null}}
+ */
+export function leafDates(issue, floor = FLOOR) {
+  const start = clampToFloor(issue.created_at, floor);
+  const completed =
+    issue.state === "closed" && (issue.state_reason === "completed" || issue.state_reason == null);
+  const finish = completed && issue.closed_at ? clampToFloor(issue.closed_at, floor) : null;
+  return { start, finish };
+}
+
+/**
+ * Roll a parent's (Wave, Phase, Milestone) dates up from its children,
+ * bottom up (#80 requirement 5): Start is the earliest child Start. Finish is
+ * the latest child Finish once every child is closed; while any child is
+ * still open, Finish is the latest child date so far (each child's Finish,
+ * or its Start when it has none yet). A parent with no dated child keeps no
+ * dates. Undated children (no Start) are ignored for Start/Finish but still
+ * count for the "every child closed" check.
+ *
+ * @param {Array<{start: string|null, finish: string|null, closed: boolean}>} children
+ * @returns {{start: string|null, finish: string|null}}
+ */
+export function rollUp(children) {
+  const dated = children.filter((c) => c.start);
+  if (dated.length === 0) return { start: null, finish: null };
+  const start = dated.map((c) => c.start).sort()[0];
+  const allClosed = children.every((c) => c.closed);
+  const finish = allClosed
+    ? (dated
+        .map((c) => c.finish)
+        .filter(Boolean)
+        .sort()
+        .at(-1) ?? null)
+    : (dated
+        .map((c) => c.finish ?? c.start)
+        .sort()
+        .at(-1) ?? null);
+  return { start, finish };
+}
+
 export function bodyUpdate(existing, desired) {
   const normalise = (s) =>
     s

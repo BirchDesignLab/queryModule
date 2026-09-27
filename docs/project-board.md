@@ -10,17 +10,21 @@ The backlog is GitHub Issues on `BirchDesignLab/queryModule`, shown on the user-
 
 ## Hierarchy
 
+- **Milestone parent** issue, label `epic`, milestone set: one per milestone (for example "M0 Skeleton"). Its phase parents are its sub-issues; "No Parent issue" on the board holds only the five milestone parents.
 - **Milestone** (M0 to M4): a release-sized goal with exit criteria (spec 12.7).
-- **Phase parent** issue, label `epic`: one per row of the STATUS grid (for example "M0 P0: Contracts"). Its progress bar comes from its sub-issues.
-- **Wave parent** (P0 only), label `epic`: "M0 P0 W4: Tasks 17 to 22". One PR per wave (ADR-0006).
+- **Phase parent** issue, label `epic`: one per row of the STATUS grid (for example "Contracts (M0 P0)"). Its progress bar comes from its sub-issues. Codes (the milestone and phase) live in the `Phase` field and the title's `(M... P...)` suffix, not the title's leading words (developer decision, #80).
+- **Wave parent** (P0 only), label `epic`: "Wave 4: Verify gate (Tasks 17 to 22)". One PR per wave (ADR-0006).
 - **Task** issue: one plan task, created from the phase plan at phase start. Title ends with its requirement IDs.
 - **Follow-up** issue, label `follow-up`: an obligation found in review or a ruling and carried to a later task, phase or track. `decision` marks one that waits on the developer.
+
+Every level above is matched by issue number, never by title (`scripts/ops/board-model.mjs` `matchParent`): the setup script's data records each parent's live number, and a title in the data that differs from GitHub is a planned rename, not a new issue.
 
 ## Fields
 
 | Field | Values | Meaning |
 |---|---|---|
 | Status | Todo, Ready, In Progress, In Review, Blocked, Done | Todo: not started. Ready: briefed and unblocked. In Progress: a session is on it. In Review: PR open. Blocked: waits on a decision, issue or admin step. Done: merged or closed. |
+| Level | Milestone, Phase, Wave, Task, Follow-up | What kind of item this is (developer decision, #80); the setup script sets it on every item it owns. Used instead of a title regex to identify parents and drive Start/Finish roll-up. |
 | Track | Platform (A), Web (B), Core, Mobile (D) | Owning track (master plan 3). Same as the track label. |
 | Phase | P0 to P3 | Phase within the milestone. |
 | Wave | W1 to W6 | P0 wave (plan "Waves"). |
@@ -56,11 +60,17 @@ Triggering events: a push to `feat/p0-wave-<k>`; a PR opened, reopened, edited, 
 | Any open issue | Finish cleared |
 | Wave parent | closed as completed once all of its tasks are closed |
 
-Start is set when an item first reaches In Progress or In Review. Blocked is yours: automation only moves a Blocked item to In Review or Done. The `sensitive-label` job labels a PR `sensitive` when it touches a gate or critical path (ADR-0007).
+Start and Finish roll up on every run, bottom up (developer decision, #80 requirements 4-6), from the `Level` field, never a title regex: a Task or Follow-up (a leaf) gets Start from its issue's created date and Finish from its closed date only when it closed as completed, both clamped to the project's 2026-09-25 floor. A Wave, Phase or Milestone parent gets Start from the earliest of its children's Start, and Finish from the latest of its children's Finish once every child is closed (else the latest child date so far). A parent with no dated child keeps no dates. `scripts/ops/board-model.mjs` (`leafDates`, `rollUp`) and the board job's inline copy (it cannot import the script; see below) compute this identically, checked by `scripts/ci/project-sync.test.ts`'s parity test. Blocked is yours: automation only moves a Blocked item to In Review or Done. The `sensitive-label` job labels a PR `sensitive` when it touches a gate or critical path (ADR-0007).
 
 Security: the board job uses the secret `PROJECT_TOKEN` (BirchDesignLab classic token, `project` scope only, with an expiry) and never checks out or runs repository code; without the secret, or on a fork PR, it skips with a notice. Anyone with push access can read the token by editing the workflow on a branch; that is accepted because repository writers are trusted. The label job uses only `GITHUB_TOKEN`.
 
-The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status, Priority, Start and Finish when they are empty (a closed issue is forced to Done; Done comes from issue state only); after that, project-sync and the developer own them.
+The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status and Priority when they are empty (a closed issue is forced to Done; Done comes from issue state only); Start and Finish are recomputed from the roll-up above on every run (setup-script backfill and project-sync agree); after that, project-sync and the developer own Status and Priority.
+
+## SVG dashboard
+
+`scripts/ops/progress-svg.mjs` (`renderDashboard(model, theme)`) is a pure renderer for the README progress image: milestone progress (closed over total issues), phase sub-issue bars, the P0 wave timeline (from the Start/Finish roll-up above), open decisions (label `decision`) and task/follow-up counts by Status. It emits static, accessible SVG only: no `<script>`, no event attributes, no `<foreignObject>`, no external `href` or font URL, every text node escaped, `role="img"` with a `<title>` and `<desc>`, and 4.5:1 text / 3:1 bar contrast in both themes (checked with `@querymodule/tokens`'s `contrastRatio`).
+
+`node scripts/ops/gh-setup-project.mjs --dashboard` reads GitHub live (no writes at all, GitHub or otherwise gated behind `--apply`) and regenerates `docs/assets/progress-light.svg`, `docs/assets/progress-dark.svg` and the README `<picture>` block between the `progress:start`/`progress:end` markers. The controller runs it after a wave merges; the two SVGs in the repo right now are rendered from a fixture model (`scripts/mock-data/render-fixture-dashboard.mjs`) so the README image resolves before the first live regen.
 
 ## Manual steps
 
@@ -77,6 +87,8 @@ Built-in workflows (Project, menu, Workflows); project-sync owns Status moves, s
 - [ ] "Item closed", "Pull request merged", "Pull request linked to issue", "Auto-close issue": off (project-sync handles them; the built-ins would mark not-planned closes Done).
 
 Views:
+- [ ] "Plan": group by Level, showing Milestone and Phase rows only (filter `level:Milestone,Phase` or equivalent), for the release-level view.
+- [ ] "P0 detail": group by parent, showing Level Wave and Task rows only (filter `level:Wave,Task`), for the current-wave view.
 - [ ] Rename "M - aybe Later" to "Later"; give it the filter `no:milestone` (or the later label once used).
 - [ ] M1 to M4 boards: add filters `milestone:"M1 Forms and terminal"` and so on (they currently show everything).
 - [ ] New board "Current wave": filter `wave:W5`, columns Status (update the wave number each wave).

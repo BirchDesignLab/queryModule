@@ -44,6 +44,55 @@ describe("gh-setup-project: issue index keyed by number, not title (#80, critic:
   });
 });
 
+describe("gh-setup-project: date backfill reuses board-model.mjs (#80 requirement 7, critic:C2)", () => {
+  it("imports leafDates and rollUp from board-model.mjs instead of a hardcoded WAVE_DATE", () => {
+    expect(source).toMatch(
+      /import \{[^}]*leafDates[^}]*rollUp[^}]*\} from "\.\/board-model\.mjs";/s,
+    );
+    expect(source).not.toMatch(/WAVE_DATE/);
+  });
+
+  it("rolls wave, phase and milestone dates up from their children before desired() reads them", () => {
+    const start = source.indexOf("const datesByNumber = new Map();");
+    const end = source.indexOf("// Labels");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = source.slice(start, end);
+    expect(block).toMatch(/leafDates\(issue\)/);
+    expect(block).toMatch(/rollUp\(children\)/);
+  });
+});
+
+describe("gh-setup-project: SVG dashboard, --dashboard flag (#80 requirement 8)", () => {
+  it("recognises --dashboard, rejects it combined with --apply, and never sets APPLY from it", () => {
+    expect(source).toMatch(/const DASHBOARD = argv\.includes\("--dashboard"\);/);
+    expect(source).toMatch(/if \(APPLY && DASHBOARD\)/);
+    expect(source).toMatch(/known = new Set\(\["--apply", "--dashboard", "--as", AS\]\);/);
+  });
+
+  it("gates local file writes (SVGs, README) on APPLY or DASHBOARD, never GitHub writes on DASHBOARD alone", () => {
+    const start = source.indexOf("function writeLocalFile(what, fn) {");
+    const end = source.indexOf("{\n  const model = dashboardModel();");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = source.slice(start, end);
+    expect(block).toMatch(/if \(!\(APPLY \|\| DASHBOARD\)\)/);
+    // The GitHub-write helper stays gated on APPLY alone (unchanged by this task).
+    const writeFn = source.slice(
+      source.indexOf("function write(what, fn) {"),
+      source.indexOf("function writeLocalFile"),
+    );
+    expect(writeFn).toMatch(/if \(!APPLY\)/);
+  });
+
+  it("replaces the Mermaid README block with an SVG <picture> built from renderDashboard", () => {
+    expect(source).toMatch(/import \{ renderDashboard \} from "\.\/progress-svg\.mjs";/);
+    expect(source).toMatch(/<picture>/);
+    expect(source).toMatch(/prefers-color-scheme: dark/);
+    expect(source).not.toMatch(/```mermaid/);
+  });
+});
+
 describe("gh-setup-project: number:null duplicate guard (#80, critic:C4)", () => {
   it("looks up an existing issue by title before POSTing a spec with number: null", () => {
     const start = source.indexOf("function ensureIssue(spec) {");
