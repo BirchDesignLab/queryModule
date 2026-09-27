@@ -38,6 +38,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 |---|---|---|---|---|
 | Linux laptop | A | M0 P1 | running | 09-27-26 11:29 |
 | Windows 11 | B | M0 P1 | running | 09-27-26 05:22 |
+| Windows 11 | A offload | M0 P1 | running | 09-27-26 12:45 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 

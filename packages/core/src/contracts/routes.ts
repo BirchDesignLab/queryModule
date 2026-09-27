@@ -61,6 +61,19 @@ export const LocaleParamsSchema = z.strictObject({ locale: z.string().regex(LOCA
 export const LocaleBundleSchema = z.record(z.string(), z.string());
 export type LocaleBundle = z.infer<typeof LocaleBundleSchema>;
 
+/** UX-014, spec 5.5 user_preference: the caller's own row; null means unset. */
+export const PreferenceLayoutSchema = z.strictObject({
+  orientation: z.enum(["horizontal", "vertical"]),
+  terminal: z.enum(["toggle", "pane"]),
+});
+export const UserPreferenceSchema = z.strictObject({
+  themeMode: z.enum(["day", "night", "redShift", "auto"]).nullable(),
+  /** A site persona key (PersonaDef.key); bounded because it is stored user input. */
+  personaOverride: z.string().min(1).max(64).nullable(),
+  layout: PreferenceLayoutSchema.nullable(),
+});
+export type UserPreference = z.infer<typeof UserPreferenceSchema>;
+
 const error = (description: string): RouteResponse => ({ description, schema: ApiErrorSchema });
 
 const ROUTE_DEFS = [
@@ -113,6 +126,36 @@ const ROUTE_DEFS = [
     requiresRequestedWith: false,
     responses: {
       200: { description: "Client config", schema: ClientSiteConfigSchema },
+      401: error("No session"),
+    },
+  },
+  {
+    id: "getMePreferences",
+    method: "get",
+    path: `${API_BASE_PATH}/me/preferences`,
+    summary: "The caller's own preference row; nulls when unset",
+    access: "sessionOwn",
+    since: "m1",
+    status: "planned",
+    requiresRequestedWith: false,
+    responses: {
+      200: { description: "Preferences", schema: UserPreferenceSchema },
+      401: error("No session"),
+    },
+  },
+  {
+    id: "putMePreferences",
+    method: "put",
+    path: `${API_BASE_PATH}/me/preferences`,
+    summary: "Replace the caller's own preference row",
+    access: "sessionOwn",
+    since: "m1",
+    status: "planned",
+    requiresRequestedWith: true,
+    request: { body: UserPreferenceSchema },
+    responses: {
+      200: { description: "Preferences", schema: UserPreferenceSchema },
+      400: error("Malformed preferences body (validationFailed)"),
       401: error("No session"),
     },
   },
