@@ -22,6 +22,21 @@
       "linter": {
         "rules": {
           "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "fetch": "packages/core is pure: no IO (plan amendment M4).",
+                  "process": "packages/core is pure: no IO (plan amendment M4).",
+                  "WebSocket": "packages/core is pure: no IO (plan amendment M4).",
+                  "XMLHttpRequest": "packages/core is pure: no IO (plan amendment M4).",
+                  "localStorage": "packages/core is pure: no IO (plan amendment M4).",
+                  "sessionStorage": "packages/core is pure: no IO (plan amendment M4).",
+                  "indexedDB": "packages/core is pure: no IO (plan amendment M4).",
+                  "navigator": "packages/core is pure: no IO (plan amendment M4)."
+                }
+              }
+            },
             "noRestrictedImports": {
               "level": "error",
               "options": {

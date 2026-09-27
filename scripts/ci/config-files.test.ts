@@ -1,12 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { TOKEN_NAMES } from "@querymodule/tokens";
 import { describe, expect, it } from "vitest";
 import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
 
 type Json = Record<string, unknown>;
 /** Raw site JSON, typed only as far as these tests mutate it (ruling S12: no `any`). */
-type RawSite = Json & { site: Json; sources: Json[]; quickAccess?: unknown };
+type RawSite = Json & {
+  site: Json;
+  sources: Json[];
+  quickAccess?: unknown;
+  keywordSeverityStyles: { critical: Json; warning: Json; info: Json };
+};
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const cfg = (rel: string) => resolve(root, "packages/config", rel);
@@ -26,7 +32,7 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
     "test/flags-off.json",
   ]) {
     it(`${rel} is clean`, () => {
-      const r = checkConfigFile(cfg(rel), fsIo);
+      const r = checkConfigFile(cfg(rel), fsIo, { tokenNames: TOKEN_NAMES });
       expect(r.errors).toEqual([]);
       expect(r.warnings).toEqual([]);
     });
@@ -146,6 +152,18 @@ describe("config:validate failures carry JSON paths", () => {
     const r = checkConfigFile(broken, layered({ [broken]: site }));
     expect(r.errors).toContainEqual(
       expect.objectContaining({ path: "/quickAccess/1", key: "config.unknownQueryType" }),
+    );
+  });
+
+  it("unknown severity token with tokenNames supplied", () => {
+    const site = defaultSite();
+    site.keywordSeverityStyles.info.color = "color.nope";
+    const r = checkConfigFile(broken, layered({ [broken]: site }), { tokenNames: TOKEN_NAMES });
+    expect(r.errors).toContainEqual(
+      expect.objectContaining({
+        path: "/keywordSeverityStyles/info/color",
+        key: "config.unknownToken",
+      }),
     );
   });
 });

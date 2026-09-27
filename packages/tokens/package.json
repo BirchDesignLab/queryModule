@@ -1,0 +1,19 @@
+{
+  "name": "@querymodule/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./generated/tokens.css"
+  },
+  "scripts": {
+    "gen": "tsx scripts/gen-css.ts",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@querymodule/core": "workspace:*",
+    "tsx": "^4.23.15"
+  }
+}

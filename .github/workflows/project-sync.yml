@@ -24,6 +24,9 @@ on:
     types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed, edited]
   issues:
     types: [closed, reopened]
+  # Run once by hand after gh-setup-project.mjs --apply creates the Level field
+  # (its writes trigger no event), so the roll-up and wave-parent close catch up.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -54,7 +57,6 @@ jobs:
               return;
             }
             const pm = getOctokit(process.env.PROJECT_TOKEN);
-            const today = new Date().toISOString().slice(0, 10);
 
             const { user } = await pm.graphql(
               `query($o:String!,$n:Int!){user(login:$o){projectV2(number:$n){id
@@ -64,6 +66,12 @@ jobs:
             );
             const project = user.projectV2;
             const field = (name) => project.fields.nodes.find((f) => f.name === name);
+            // Parent identity (wave-parent close, date roll-up) comes from the
+            // Level field. Until gh-setup-project.mjs --apply creates it, every
+            // item would look like a leaf, so both wait (PR #83 review M1).
+            const hasLevel = Boolean(field("Level"));
+            if (!hasLevel)
+              core.notice("Level field missing; roll-up and wave-parent close wait for gh-setup-project --apply");
 
             // Items of this repository only, keyed by issue number.
             const items = new Map();
@@ -72,6 +80,7 @@ jobs:
                 `query($p:ID!,$a:String){node(id:$p){... on ProjectV2{items(first:100,after:$a){
                   pageInfo{hasNextPage endCursor}
                   nodes{id content{... on Issue{number title state stateReason
+                    createdAt closedAt
                     repository{nameWithOwner} parent{number title}
                     subIssuesSummary{total completed}
                     closedByPullRequestsReferences(first:20,includeClosedPrs:false){nodes{state isDraft
@@ -135,8 +144,18 @@ jobs:
               waveCache.set(k, s);
               return s;
             }
-            const waveOf = (item) =>
-              /^M0 P0 W(\d+):/.exec(item.title)?.[1] ?? /^M0 P0 W(\d+):/.exec(item.parent?.title ?? "")?.[1];
+            // Wave identity comes from the Wave field (developer decision, #80),
+            // never a title regex: a renamed wave parent (old or new title style)
+            // still maps to its branch, and a task inherits its wave parent's Wave
+            // field through the sub-issue `parent` link when the task carries none
+            // of its own.
+            const waveNumber = (v) => /^W(\d+)$/.exec(v ?? "")?.[1];
+            const waveOf = (item) => {
+              const own = waveNumber(item.values.Wave);
+              if (own) return own;
+              const parent = item.parent ? items.get(item.parent.number) : null;
+              return parent ? waveNumber(parent.values.Wave) : undefined;
+            };
 
             // Status from truth; null means no PR or wave speaks for the item.
             async function truth(item) {
@@ -153,8 +172,10 @@ jobs:
 
             async function reconcile(item) {
               if (!item) return;
-              // A wave parent closes when all of its tasks are closed.
-              const isWaveParent = /^M0 P0 W\d+:/.test(item.title);
+              // A wave parent closes when all of its tasks are closed. Identity
+              // comes from the Level field (developer decision, #80), never a
+              // title regex.
+              const isWaveParent = hasLevel && item.values.Level === "Wave";
               const sum = item.subIssuesSummary;
               if (isWaveParent && item.state === "OPEN" && sum.total > 0 && sum.completed === sum.total) {
                 await github.rest.issues.update({ ...context.repo, issue_number: item.number, state: "closed", state_reason: "completed" });
@@ -163,7 +184,6 @@ jobs:
                 core.info(`#${item.number} closed (all sub-issues closed)`);
               }
               const s = await truth(item);
-              if (item.state === "OPEN" && item.values.Finish) await set(item, "Finish", null);
               if (!s) {
                 // Reopened, or its PR closed unmerged: Done and In Review no longer hold.
                 if (item.state === "OPEN" && (item.values.Status === "Done" || item.values.Status === "In Review"))
@@ -173,13 +193,78 @@ jobs:
               // Blocked is the developer's; only review or completion moves it.
               if (item.values.Status === "Blocked" && s === "In Progress") return;
               await set(item, "Status", s);
-              if ((s === "In Progress" || s === "In Review") && !item.values.Start) await set(item, "Start", today);
-              if (s === "Done" && !item.values.Finish) await set(item, "Finish", today);
             }
 
             // Every item, on every run: a dropped run (pending runs are replaced in a
             // burst) or a closed issue that gets no later event is healed here.
             for (const item of items.values()) await reconcile(item);
+
+            // Start/Finish roll-up (developer decision, #80 requirements 4-6).
+            // The project started 2026-09-25: no date before it, clamp up to it.
+            // Leaves (Task, Follow-up): Start = created date, Finish = closed
+            // date only when closed as completed, both clamped. Parents (Wave,
+            // Phase, Milestone), identified by the Level field, roll their dates
+            // up from their children (found via each child's own `parent` link,
+            // already on every item from the query above, to any depth) bottom
+            // up: Start = earliest child Start; Finish = latest child Finish
+            // once every child is closed, else the latest child date so far
+            // (each child's Finish, or its Start when it has none). This
+            // replaces the old "Start set on first In Progress/In Review,
+            // Finish cleared on any open issue" rule for leaves; that rule no
+            // longer applies to parents, which keep their rolled-up dates while
+            // open. board-model.mjs (scripts/ops/) carries the identical rules
+            // in JS for the setup-script backfill; this copy exists because the
+            // board job runs no repository code (docs/project-board.md
+            // "Automation"), so the YAML cannot import it.
+            if (!hasLevel) return;
+            const FLOOR = "2026-09-25";
+            const clampToFloor = (date) => {
+              const d = date.slice(0, 10);
+              return d < FLOOR ? FLOOR : d;
+            };
+            function leafDates(item) {
+              const start = clampToFloor(item.createdAt);
+              const completed =
+                item.state === "CLOSED" && (item.stateReason === "COMPLETED" || item.stateReason == null);
+              const finish = completed && item.closedAt ? clampToFloor(item.closedAt) : null;
+              return { start, finish };
+            }
+            function rollUp(children) {
+              const dated = children.filter((c) => c.start);
+              if (dated.length === 0) return { start: null, finish: null };
+              const start = dated.map((c) => c.start).sort()[0];
+              const allClosed = children.every((c) => c.closed);
+              const finish = allClosed
+                ? dated.map((c) => c.finish).filter(Boolean).sort().at(-1) ?? null
+                : dated.map((c) => c.finish ?? c.start).sort().at(-1) ?? null;
+              return { start, finish };
+            }
+            const childrenOf = new Map();
+            for (const it of items.values()) {
+              if (!it.parent) continue;
+              const list = childrenOf.get(it.parent.number) ?? [];
+              list.push(it);
+              childrenOf.set(it.parent.number, list);
+            }
+            const dateInfo = new Map();
+            function dateInfoOf(it) {
+              if (dateInfo.has(it.number)) return dateInfo.get(it.number);
+              const level = it.values.Level;
+              let info;
+              if (level === "Wave" || level === "Phase" || level === "Milestone") {
+                const children = (childrenOf.get(it.number) ?? []).map(dateInfoOf);
+                info = { ...rollUp(children), closed: it.state === "CLOSED" };
+              } else {
+                info = { ...leafDates(it), closed: it.state === "CLOSED" };
+              }
+              dateInfo.set(it.number, info);
+              return info;
+            }
+            for (const item of items.values()) {
+              const info = dateInfoOf(item);
+              if ((item.values.Start ?? null) !== info.start) await set(item, "Start", info.start);
+              if ((item.values.Finish ?? null) !== info.finish) await set(item, "Finish", info.finish);
+            }
 
   sensitive-label:
     name: sensitive-label

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { leafDates, rollUp } from "../ops/board-model.mjs";
 
 /**
  * Runs the board job's github-script body (.github/workflows/project-sync.yml) against
@@ -29,7 +30,15 @@ interface FakeItem {
   state: "OPEN" | "CLOSED";
   stateReason?: string | null;
   status?: string;
+  level?: string;
+  wave?: string;
+  parentNumber?: number;
+  sub?: { total: number; completed: number };
   prs?: Array<{ state: string; isDraft: boolean; repo: string | null }>;
+  createdAt?: string;
+  closedAt?: string | null;
+  start?: string;
+  finish?: string;
 }
 interface WaveBranch {
   ref: boolean;
@@ -40,6 +49,7 @@ async function runBoard(
   items: FakeItem[],
   event: { eventName: string; payload: unknown; ref?: string },
   waves: Record<string, WaveBranch> = {},
+  opts: { noLevelField?: boolean; notices?: string[]; closed?: number[] } = {},
 ) {
   const writes: Array<{ item: number; field: string; value: string | null }> = [];
   const itemId = (n: number) => `item-${n}`;
@@ -50,6 +60,15 @@ async function runBoard(
       name: "Status",
       options: ["Todo", "In Progress", "In Review", "Blocked", "Done"],
     },
+    ...(opts.noLevelField
+      ? []
+      : [
+          {
+            id: "f-level",
+            name: "Level",
+            options: ["Milestone", "Phase", "Wave", "Task", "Follow-up"],
+          },
+        ]),
     { id: "f-start", name: "Start" },
     { id: "f-finish", name: "Finish" },
   ].map((f) => ({ ...f, options: f.options?.map((o) => ({ id: `o-${o}`, name: o })) }));
@@ -70,9 +89,11 @@ async function runBoard(
                   title: i.title,
                   state: i.state,
                   stateReason: i.stateReason ?? null,
+                  createdAt: i.createdAt ?? "2026-09-25T00:00:00Z",
+                  closedAt: i.closedAt ?? (i.state === "CLOSED" ? "2026-09-26T00:00:00Z" : null),
                   repository: { nameWithOwner: REPO },
-                  parent: null,
-                  subIssuesSummary: { total: 0, completed: 0 },
+                  parent: i.parentNumber ? { number: i.parentNumber, title: "" } : null,
+                  subIssuesSummary: i.sub ?? { total: 0, completed: 0 },
                   closedByPullRequestsReferences: {
                     nodes: (i.prs ?? []).map((p) => ({
                       state: p.state,
@@ -82,7 +103,13 @@ async function runBoard(
                   },
                 },
                 fieldValues: {
-                  nodes: i.status ? [{ name: i.status, field: { name: "Status" } }] : [],
+                  nodes: [
+                    ...(i.status ? [{ name: i.status, field: { name: "Status" } }] : []),
+                    ...(i.level ? [{ name: i.level, field: { name: "Level" } }] : []),
+                    ...(i.wave ? [{ name: i.wave, field: { name: "Wave" } }] : []),
+                    ...(i.start ? [{ date: i.start, field: { name: "Start" } }] : []),
+                    ...(i.finish ? [{ date: i.finish, field: { name: "Finish" } }] : []),
+                  ],
                 },
               })),
             },
@@ -117,13 +144,20 @@ async function runBoard(
       // The pre-I2 script's closingIssuesReferences query.
       return { repository: { pullRequest: { closingIssuesReferences: { nodes: [] } } } };
     },
-    rest: { issues: { update: async () => ({}) } },
+    rest: {
+      issues: {
+        update: async (a: { issue_number: number }) => {
+          opts.closed?.push(a.issue_number);
+          return {};
+        },
+      },
+    },
   };
   const context = {
     ...event,
     repo: { owner: "BirchDesignLab", repo: "queryModule" },
   };
-  const core = { info: () => {}, notice: () => {} };
+  const core = { info: () => {}, notice: (m: string) => opts.notices?.push(m) };
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
     ...args: string[]
   ) => (...a: unknown[]) => Promise<void>;
@@ -186,7 +220,7 @@ describe("project-sync board job", () => {
           status: "Todo",
           prs: [{ state: "OPEN", isDraft: false, repo: fork }],
         },
-        { number: 2, title: "M0 P0 W9: wave task", state: "OPEN", status: "Todo" },
+        { number: 2, title: "wave task", state: "OPEN", status: "Todo", wave: "W9" },
         {
           number: 3,
           title: "own PR",
@@ -204,5 +238,348 @@ describe("project-sync board job", () => {
 
   it("triggers on pull_request edited, for a Closes line added later (M2)", () => {
     expect(readFileSync(workflowPath, "utf8")).toMatch(/types: \[[^\]]*\bedited\b[^\]]*\]/);
+  });
+
+  it("closes a wave parent identified by the Level field, not a title regex (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1: Workspace and first contracts (Tasks 1 to 6)",
+          state: "OPEN",
+          level: "Wave",
+          sub: { total: 2, completed: 2 },
+        },
+      ],
+      issueEvent,
+    );
+    expect(writes).toContainEqual({ item: 55, field: "Status", value: "Done" });
+  });
+
+  it("does not close an open item with Level Wave whose title no longer matches the retired regex, when its sub-issues are incomplete (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1: Workspace and first contracts (Tasks 1 to 6)",
+          state: "OPEN",
+          status: "Todo",
+          level: "Wave",
+          sub: { total: 2, completed: 1 },
+        },
+      ],
+      issueEvent,
+    );
+    expect(writes.find((w) => w.item === 55 && w.field === "Status")).toBeUndefined();
+  });
+
+  it("derives a task's wave from its parent's Wave field, not from a title regex, even when the parent has been renamed (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 9: Renamed wave parent (Tasks 90 to 91)",
+          state: "OPEN",
+          level: "Wave",
+          wave: "W9",
+        },
+        { number: 2, title: "child task", state: "OPEN", status: "Todo", parentNumber: 55 },
+      ],
+      issueEvent,
+      { "9": { ref: true, prs: [] } },
+    );
+    expect(writes).toContainEqual({ item: 2, field: "Status", value: "In Progress" });
+  });
+});
+
+describe("project-sync board job: Start/Finish roll-up (#80 requirements 4-6)", () => {
+  const issueEvent = { eventName: "issues", payload: { issue: { number: 1 } } };
+
+  it("skips the wave-parent close and the date roll-up, with a notice, while the Level field is missing (PR #83 review M1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const notices: string[] = [];
+    const closed: number[] = [];
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1",
+          state: "OPEN",
+          level: "Wave",
+          sub: { total: 1, completed: 1 },
+        },
+        {
+          number: 1,
+          title: "task",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          status: "Done",
+          createdAt: "2026-09-26T00:00:00Z",
+          closedAt: "2026-09-27T00:00:00Z",
+          parentNumber: 55,
+        },
+      ],
+      issueEvent,
+      {},
+      { noLevelField: true, notices, closed },
+    );
+    expect(closed).toEqual([]);
+    expect(writes.filter((w) => w.field === "Start" || w.field === "Finish")).toEqual([]);
+    expect(notices.some((n) => /Level field missing/.test(n))).toBe(true);
+  });
+
+  it("closes the same wave parent and rolls up once the Level field exists (PR #83 review M1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const closed: number[] = [];
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1",
+          state: "OPEN",
+          level: "Wave",
+          sub: { total: 1, completed: 1 },
+        },
+        {
+          number: 1,
+          title: "task",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          status: "Done",
+          createdAt: "2026-09-26T00:00:00Z",
+          closedAt: "2026-09-27T00:00:00Z",
+          parentNumber: 55,
+        },
+      ],
+      issueEvent,
+      {},
+      { closed },
+    );
+    expect(closed).toEqual([55]);
+    expect(writes).toContainEqual({ item: 55, field: "Finish", value: "2026-09-27" });
+  });
+
+  it("can be run by hand (workflow_dispatch), once after gh-setup-project --apply (PR #83 review M1)", () => {
+    const text = readFileSync(workflowPath, "utf8");
+    const on = text.slice(text.indexOf("\non:"), text.indexOf("\npermissions:"));
+    expect(on).toMatch(/^ {2}workflow_dispatch:/m);
+  });
+
+  it("sets a leaf's Start from its created date, clamped to the 2026-09-25 floor", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 1,
+          title: "task",
+          state: "OPEN",
+          status: "Todo",
+          createdAt: "2026-09-01T00:00:00Z",
+        },
+      ],
+      issueEvent,
+    );
+    expect(writes).toContainEqual({ item: 1, field: "Start", value: "2026-09-25" });
+  });
+
+  it("sets a leaf's Finish from its closed date only when closed as completed", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 1,
+          title: "done task",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          status: "Done",
+          createdAt: "2026-09-25T00:00:00Z",
+          closedAt: "2026-09-28T00:00:00Z",
+        },
+        {
+          number: 2,
+          title: "not planned",
+          state: "CLOSED",
+          stateReason: "NOT_PLANNED",
+          createdAt: "2026-09-25T00:00:00Z",
+          closedAt: "2026-09-28T00:00:00Z",
+        },
+      ],
+      issueEvent,
+    );
+    expect(writes).toContainEqual({ item: 1, field: "Finish", value: "2026-09-28" });
+    expect(writes.find((w) => w.item === 2 && w.field === "Finish")).toBeUndefined();
+  });
+
+  it("rolls up a wave parent's Start/Finish from its child tasks, identified by the Level field", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1",
+          state: "OPEN",
+          level: "Wave",
+          sub: { total: 2, completed: 1 },
+        },
+        {
+          number: 1,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          status: "Done",
+          createdAt: "2026-09-25T00:00:00Z",
+          closedAt: "2026-09-27T00:00:00Z",
+          parentNumber: 55,
+        },
+        {
+          number: 2,
+          title: "task b",
+          state: "OPEN",
+          status: "In Progress",
+          createdAt: "2026-09-26T00:00:00Z",
+          parentNumber: 55,
+        },
+      ],
+      issueEvent,
+    );
+    // Wave still has an open child: Start is the earliest child Start, Finish
+    // is the latest child date so far (not yet "every child closed").
+    expect(writes).toContainEqual({ item: 55, field: "Start", value: "2026-09-25" });
+    expect(writes).toContainEqual({ item: 55, field: "Finish", value: "2026-09-27" });
+  });
+});
+
+/**
+ * Parity (PR #83 review M2): the board job's inline leafDates/rollUp and
+ * board-model.mjs's must give every item the same Start and Finish. The
+ * reference walks the same child sets as the job (each child's live `parent`
+ * link, any depth). gh-setup-project.mjs derives its child sets from its data
+ * instead (tasks by number range, phase over waves only), and only seeds empty
+ * Start/Finish, so project-sync's values win after the first run.
+ */
+function referenceDates(items: FakeItem[]) {
+  const byNumber = new Map(items.map((i) => [i.number, i]));
+  const memo = new Map<number, { start: string | null; finish: string | null; closed: boolean }>();
+  const infoOf = (n: number): { start: string | null; finish: string | null; closed: boolean } => {
+    const cached = memo.get(n);
+    if (cached) return cached;
+    const i = byNumber.get(n) as FakeItem;
+    const closed = i.state === "CLOSED";
+    const info =
+      i.level === "Wave" || i.level === "Phase" || i.level === "Milestone"
+        ? {
+            ...rollUp(items.filter((c) => c.parentNumber === n).map((c) => infoOf(c.number))),
+            closed,
+          }
+        : {
+            ...leafDates({
+              created_at: i.createdAt ?? "2026-09-25T00:00:00Z",
+              closed_at: i.closedAt ?? (closed ? "2026-09-26T00:00:00Z" : null),
+              state: closed ? "closed" : "open",
+              state_reason: i.stateReason?.toLowerCase() ?? null,
+            }),
+            closed,
+          };
+    memo.set(n, info);
+    return info;
+  };
+  return new Map(items.map((i) => [i.number, infoOf(i.number)]));
+}
+
+const task = (
+  number: number,
+  parentNumber: number,
+  createdAt: string,
+  closed?: { at: string; reason?: string },
+): FakeItem => ({
+  number,
+  title: `task ${number}`,
+  state: closed ? "CLOSED" : "OPEN",
+  stateReason: closed ? (closed.reason ?? "COMPLETED") : null,
+  status: closed ? "Done" : "Todo",
+  level: "Task",
+  createdAt,
+  closedAt: closed?.at ?? null,
+  parentNumber,
+});
+const parent = (
+  number: number,
+  level: string,
+  parentNumber?: number,
+  closed = false,
+): FakeItem => ({
+  number,
+  title: `${level} ${number}`,
+  state: closed ? "CLOSED" : "OPEN",
+  stateReason: closed ? "COMPLETED" : null,
+  level,
+  parentNumber,
+  // Incomplete, so the job never closes a parent mid-test.
+  sub: { total: 2, completed: 0 },
+});
+
+describe("project-sync board job: parity with board-model.mjs (PR #83 review M2)", () => {
+  const issueEvent = { eventName: "issues", payload: { issue: { number: 1 } } };
+  const cases: Array<[string, FakeItem[]]> = [
+    [
+      "a wave with an open child (latest child date so far)",
+      [
+        parent(55, "Wave"),
+        task(1, 55, "2026-09-20T00:00:00Z", { at: "2026-09-27T00:00:00Z" }),
+        task(2, 55, "2026-09-26T00:00:00Z"),
+      ],
+    ],
+    [
+      "a wave whose children are all closed (latest child Finish)",
+      [
+        parent(55, "Wave", undefined, true),
+        task(1, 55, "2026-09-25T00:00:00Z", { at: "2026-09-28T00:00:00Z" }),
+        task(2, 55, "2026-09-26T00:00:00Z", { at: "2026-09-30T00:00:00Z" }),
+      ],
+    ],
+    [
+      "a not-planned leaf (no Finish of its own, still closed for the roll-up)",
+      [
+        parent(55, "Wave"),
+        task(1, 55, "2026-09-25T00:00:00Z", { at: "2026-09-28T00:00:00Z" }),
+        task(2, 55, "2026-09-29T00:00:00Z", { at: "2026-10-02T00:00:00Z", reason: "NOT_PLANNED" }),
+      ],
+    ],
+    [
+      "a multi-level milestone > phase > wave > task tree, with a follow-up under the phase",
+      [
+        parent(90, "Milestone"),
+        parent(39, "Phase", 90),
+        parent(55, "Wave", 39),
+        parent(56, "Wave", 39),
+        task(1, 55, "2026-09-25T00:00:00Z", { at: "2026-09-26T00:00:00Z" }),
+        task(2, 56, "2026-09-27T00:00:00Z", { at: "2026-09-29T00:00:00Z" }),
+        task(3, 56, "2026-09-28T00:00:00Z"),
+        { ...task(4, 39, "2026-10-01T00:00:00Z"), level: "Follow-up" },
+      ],
+    ],
+    [
+      "a parent with no children (no dates) beside a pre-floor leaf (clamped)",
+      [parent(55, "Wave"), task(1, 60, "2026-09-01T00:00:00Z", { at: "2026-09-10T00:00:00Z" })],
+    ],
+  ];
+
+  it.each(cases)("%s: every item's Start and Finish match", async (_name, items) => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(items, issueEvent);
+    const last = (n: number, f: string) =>
+      writes.filter((w) => w.item === n && w.field === f).at(-1)?.value ?? null;
+    const expected = referenceDates(items);
+    for (const i of items) {
+      const want = expected.get(i.number);
+      expect({
+        item: i.number,
+        start: last(i.number, "Start"),
+        finish: last(i.number, "Finish"),
+      }).toEqual({ item: i.number, start: want?.start ?? null, finish: want?.finish ?? null });
+    }
   });
 });

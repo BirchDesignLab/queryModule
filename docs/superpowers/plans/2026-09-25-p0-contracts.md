@@ -45,7 +45,7 @@ Developer direction 09-26-26 (ADR-0006): tasks land one PR per wave, on a branch
 | W2 | 7 to 11, plus the W2F pre-freeze pass | none | #33 (merged 09-26-26) |
 | W3 | 12 to 16 | none | #35 (merged 09-26-26) |
 | W4 | 17 to 22 | 17 to 22 | #38 (merged 09-26-26) |
-| W5 | 23 to 25, then the phase Opus critic | 23 | |
+| W5 | 23 to 25, W5A (#79, #71), W5B (#80), then the phase Opus critic | gate tier (ADR-0007): all five | #83 |
 | W6 | 26 to 28 | 26, 28 | |
 
 ## File Structure
@@ -6268,7 +6268,7 @@ Expected: `ci` and `sensitive-review` both pass on the PR (this is the first PR 
 
 **IDs:** UX-002, UX-011, BR-001
 
-- [ ] **Step 1: Write the package files.** `packages/tokens/package.json`:
+- [x] **Step 1: Write the package files.** `packages/tokens/package.json`:
 
 ```json
 {
@@ -6314,7 +6314,7 @@ export default defineProject({
 });
 ```
 
-- [ ] **Step 2: Write the failing test `packages/tokens/src/tokens.test.ts`.**
+- [x] **Step 2: Write the failing test `packages/tokens/src/tokens.test.ts`.**
 
 ```ts
 import { THEME_MODES as CORE_THEME_MODES } from "@querymodule/core/config";
@@ -6383,7 +6383,7 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
 });
 ```
 
-- [ ] **Step 3: Run it.**
+- [x] **Step 3: Run it.**
 
 ```bash
 pnpm install
@@ -6392,7 +6392,7 @@ pnpm vitest run --project tokens
 
 Expected: FAIL, `Failed to resolve import "./contrast"`.
 
-- [ ] **Step 4: Implement `packages/tokens/src/tokens.ts`.**
+- [x] **Step 4: Implement `packages/tokens/src/tokens.ts`.**
 
 ```ts
 export const THEME_MODES = ["day", "night", "redShift"] as const;
@@ -6450,7 +6450,7 @@ export function tokenValue(name: TokenName, mode: ThemeMode): string {
 }
 ```
 
-- [ ] **Step 5: Implement `packages/tokens/src/contrast.ts`.**
+- [x] **Step 5: Implement `packages/tokens/src/contrast.ts`.**
 
 ```ts
 import { COLOR_TOKENS, type ColorTokenName, type ThemeMode } from "./tokens";
@@ -6497,7 +6497,7 @@ export function contrastFailures(mode: ThemeMode, overrides: Record<string, stri
 }
 ```
 
-- [ ] **Step 6: Implement `packages/tokens/src/css.ts`, `packages/tokens/src/theme.ts`, `packages/tokens/src/index.ts`.**
+- [x] **Step 6: Implement `packages/tokens/src/css.ts`, `packages/tokens/src/theme.ts`, `packages/tokens/src/index.ts`.**
 
 ```ts
 import { COLOR_TOKENS, MOTION_TOKENS, SCALE_TOKENS } from "./tokens";
@@ -6550,7 +6550,7 @@ export * from "./theme";
 export * from "./tokens";
 ```
 
-- [ ] **Step 7: Write `packages/tokens/scripts/gen-css.ts` and generate.**
+- [x] **Step 7: Write `packages/tokens/scripts/gen-css.ts` and generate.**
 
 ```ts
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -6570,7 +6570,7 @@ pnpm tokens:gen
 
 Expected: `wrote packages/tokens/generated/tokens.css`.
 
-- [ ] **Step 8: Run.**
+- [x] **Step 8: Run.**
 
 ```bash
 pnpm vitest run --project tokens
@@ -6578,7 +6578,7 @@ pnpm vitest run --project tokens
 
 Expected: `11 passed`.
 
-- [ ] **Step 9: Wire tokens into the drift check and config validation.** `scripts/ci/check-generated.ts`, replace the two constants:
+- [x] **Step 9: Wire tokens into the drift check and config validation.** `scripts/ci/check-generated.ts`, replace the two constants:
 
 ```ts
 export const GENERATED_FILES = [
@@ -6629,7 +6629,7 @@ Add a token-failure case to the second `describe`:
 
 Root `tsconfig.json` references gain `{ "path": "packages/tokens" }` after `packages/config`.
 
-- [ ] **Step 10: Run the gate locally.**
+- [x] **Step 10: Run the gate locally.**
 
 ```bash
 pnpm typecheck
@@ -6639,7 +6639,7 @@ pnpm verify
 
 Expected: `tsc -b` exits 0; `pnpm verify` green with four `ok` lines and `generated files match`.
 
-- [ ] **Step 11: Commit.** The PR touches `scripts/ci/`, so it also needs the sensitive review artifact.
+- [x] **Step 11: Commit.** The PR touches `scripts/ci/`, so it also needs the sensitive review artifact.
 
 ```bash
 git commit -m "feat(b): tokens skeleton with day, night and red-shift modes
@@ -6669,7 +6669,7 @@ git commit -m "docs(b): sensitive review for tokens wiring in scripts/ci
 
 **IDs:** FR-005 (required indicator primitive), NFR-003, SEC-006
 
-- [ ] **Step 1: Write the client package files.** `packages/client/package.json`:
+- [x] **Step 1: Write the client package files.** `packages/client/package.json`:
 
 ```json
 {
@@ -6713,7 +6713,7 @@ export default defineProject({
 });
 ```
 
-- [ ] **Step 2: Write the failing test `packages/client/src/testing/fake-platform.test.ts`.**
+- [x] **Step 2: Write the failing test `packages/client/src/testing/fake-platform.test.ts`.**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -6754,7 +6754,7 @@ describe("NFR-003 ClientPlatform fake (spec 3)", () => {
 });
 ```
 
-- [ ] **Step 3: Run it.**
+- [x] **Step 3: Run it.**
 
 ```bash
 pnpm install
@@ -6763,7 +6763,7 @@ pnpm vitest run --project client
 
 Expected: FAIL, `Failed to resolve import "./fake-platform"`.
 
-- [ ] **Step 4: Implement `packages/client/src/platform.ts`, `packages/client/src/testing/fake-platform.ts`, `packages/client/src/index.ts`.**
+- [x] **Step 4: Implement `packages/client/src/platform.ts`, `packages/client/src/testing/fake-platform.ts`, `packages/client/src/index.ts`.**
 
 ```ts
 export type AuthTransport = "cookie" | "bearer";
@@ -6848,7 +6848,7 @@ export function createFakePlatform(opts: { authTransport?: AuthTransport; online
 export * from "./platform";
 ```
 
-- [ ] **Step 5: Run.**
+- [x] **Step 5: Run.**
 
 ```bash
 pnpm vitest run --project client
@@ -6856,7 +6856,7 @@ pnpm vitest run --project client
 
 Expected: `4 passed`.
 
-- [ ] **Step 6: Write the web-ui package files.** `packages/web-ui/package.json`:
+- [x] **Step 6: Write the web-ui package files.** `packages/web-ui/package.json`:
 
 ```json
 {
@@ -6905,7 +6905,7 @@ export default defineProject({
 });
 ```
 
-- [ ] **Step 7: Write the failing test `packages/web-ui/src/visually-hidden.test.tsx`.**
+- [x] **Step 7: Write the failing test `packages/web-ui/src/visually-hidden.test.tsx`.**
 
 ```tsx
 import { cleanup, render, screen } from "@testing-library/react";
@@ -6934,7 +6934,7 @@ describe("FR-005 visually hidden text (spec 6.2 required indicator)", () => {
 });
 ```
 
-- [ ] **Step 8: Run it.**
+- [x] **Step 8: Run it.**
 
 ```bash
 pnpm vitest run --project web-ui
@@ -6942,7 +6942,7 @@ pnpm vitest run --project web-ui
 
 Expected: FAIL, `Failed to resolve import "./visually-hidden"`.
 
-- [ ] **Step 9: Implement `packages/web-ui/src/visually-hidden.tsx` and `packages/web-ui/src/index.ts`.**
+- [x] **Step 9: Implement `packages/web-ui/src/visually-hidden.tsx` and `packages/web-ui/src/index.ts`.**
 
 ```tsx
 import type { CSSProperties, ReactNode } from "react";
@@ -6969,7 +6969,7 @@ export function VisuallyHidden({ children }: { children: ReactNode }) {
 export * from "./visually-hidden";
 ```
 
-- [ ] **Step 10: Add references and run.** Root `tsconfig.json` references gain `{ "path": "packages/client" }` and `{ "path": "packages/web-ui" }`.
+- [x] **Step 10: Add references and run.** Root `tsconfig.json` references gain `{ "path": "packages/client" }` and `{ "path": "packages/web-ui" }`.
 
 ```bash
 pnpm vitest run --project client --project web-ui
@@ -6980,7 +6980,7 @@ pnpm tsx scripts/ci/check-licences.ts licences.json
 
 Expected: `6 passed`; `tsc -b` exits 0; `licences ok`.
 
-- [ ] **Step 11: Commit.**
+- [x] **Step 11: Commit.**
 
 ```bash
 git add -A
@@ -7002,7 +7002,7 @@ git commit -m "feat(b): ClientPlatform contract with fake, web-ui VisuallyHidden
 
 **IDs:** UX-001, UX-002, UX-011, NFR-001
 
-- [ ] **Step 1: Write the package and add dependencies.** `apps/web/package.json`:
+- [x] **Step 1: Write the package and add dependencies.** `apps/web/package.json`:
 
 ```json
 {
@@ -7025,7 +7025,7 @@ pnpm --filter @querymodule/web add react@latest react-dom@latest react-router@la
 pnpm --filter @querymodule/web add -D vite@latest @vitejs/plugin-react@latest @types/react@latest @types/react-dom@latest @testing-library/react@latest jsdom@latest
 ```
 
-- [ ] **Step 2: Write the config files.** `apps/web/tsconfig.json`:
+- [x] **Step 2: Write the config files.** `apps/web/tsconfig.json`:
 
 ```json
 {
@@ -7092,7 +7092,7 @@ export default defineProject({
 </html>
 ```
 
-- [ ] **Step 3: Write the failing test `apps/web/src/shell.test.tsx`.**
+- [x] **Step 3: Write the failing test `apps/web/src/shell.test.tsx`.**
 
 ```tsx
 import { readFileSync } from "node:fs";
@@ -7131,7 +7131,7 @@ describe("UX-011 theme mode (spec 6.5)", () => {
 });
 ```
 
-- [ ] **Step 4: Run it.**
+- [x] **Step 4: Run it.**
 
 ```bash
 pnpm install
@@ -7140,7 +7140,7 @@ pnpm vitest run --project web
 
 Expected: FAIL, `Failed to resolve import "./shell"`.
 
-- [ ] **Step 5: Implement the shell.** `apps/web/src/theme.ts`:
+- [x] **Step 5: Implement the shell.** `apps/web/src/theme.ts`:
 
 ```ts
 import { THEME_MODES, type ThemeMode } from "@querymodule/tokens";
@@ -7227,7 +7227,7 @@ createRoot(container).render(
 );
 ```
 
-- [ ] **Step 6: Run tests, typecheck and a production build.** Root `tsconfig.json` references gain `{ "path": "apps/web" }`.
+- [x] **Step 6: Run tests, typecheck and a production build.** Root `tsconfig.json` references gain `{ "path": "apps/web" }`.
 
 ```bash
 pnpm vitest run --project web
@@ -7237,7 +7237,7 @@ pnpm --filter @querymodule/web build
 
 Expected: `4 passed`; `tsc -b` exits 0; Vite prints `built in` and writes `apps/web/dist/index.html` plus hashed assets including one `.css` file. Check `apps/web/dist/index.html` has no inline `<script>` body and no `<style>` element: `grep -c "<style" apps/web/dist/index.html` prints `0`.
 
-- [ ] **Step 7: Smoke the dev server.**
+- [x] **Step 7: Smoke the dev server.**
 
 ```bash
 pnpm dev:web
@@ -7245,7 +7245,7 @@ pnpm dev:web
 
 Open `http://localhost:5173`: heading "Query Module" on the day theme. In devtools run `document.documentElement.dataset.theme = "redShift"`: surfaces go near-black with amber text, no reload. Stop the server.
 
-- [ ] **Step 8: Commit.**
+- [x] **Step 8: Commit.**
 
 ```bash
 git add -A
@@ -7254,7 +7254,7 @@ git commit -m "feat(b): Vite + React web shell reading tokens
 <attribution trailer given by your session's system reminder>"
 ```
 
-- [ ] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
+- [x] **Step 9: Opus critic.** Dispatch the Opus 5.5 `medium` critic over Tasks 23 to 25 (tokens, web-ui, web shell): contrast pairs and values, CSP-safe styling, keyboard focus ring, landmark structure, no literal colours. Fix findings in this branch before the PR, or file them as Track B P1 issues when they belong to P1 scope.
 
 ### Task 26: Mobile placeholder and CI steps 8 and 9 (S) (#27)
 

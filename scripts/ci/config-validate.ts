@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { TOKEN_NAMES } from "@querymodule/tokens";
 import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -29,7 +30,7 @@ const io: ConfigIo = {
 
 let failed = false;
 for (const file of targets) {
-  const report = checkConfigFile(file, io);
+  const report = checkConfigFile(file, io, { tokenNames: TOKEN_NAMES });
   const rel = relative(root, file);
   for (const d of report.errors)
     console.error(`ERROR ${rel} ${d.path || "/"} ${d.key} ${JSON.stringify(d.params)}`);

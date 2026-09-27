@@ -1,0 +1,28 @@
+body {
+  margin: 0;
+  background: var(--qm-color-surface-base);
+  color: var(--qm-color-text-body);
+  font-family: var(--qm-type-family);
+  font-size: var(--qm-type-body-size);
+  line-height: var(--qm-type-body-lineHeight);
+}
+
+.qm-shell__header {
+  padding: var(--qm-space-4);
+  background: var(--qm-color-surface-raised);
+  border-bottom: var(--qm-border-width) solid var(--qm-color-border);
+}
+
+.qm-shell__header h1 {
+  margin: 0;
+  font-size: var(--qm-type-heading-size);
+}
+
+.qm-shell__main {
+  padding: var(--qm-space-4);
+}
+
+:focus-visible {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}

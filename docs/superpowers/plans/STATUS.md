@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 17:09 |
+| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 20:40 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: W4 merged (#38); board, automation and tiered review (ADR-0007) merged (#76); #78 review-rule recalibration in progress; next #24 (Task 23, W5)
-- Branch / PR: chore/review-tiers / (#78 PR, opening)
-- Last green: CI `ci` and `sensitive-review` on #76 at ec0c1cd (audit, dependency review, actionlint, zizmor green)
-- Next step: merge the #78 PR; then W5 in a new session on the recalibrated sdd-task and wave-review (tier-aware roles)
+- Issue: W5 done on the branch: Tasks 23 to 25 (#24 to #26), W5A (#79, #71), W5B (#80); phase Opus critic run; ADR-0008 (proposed, #81)
+- Branch / PR: feat/p0-wave-5 / #83 (gate-tier wave-review running)
+- Last green: pnpm verify at 371fc2d (573 tests, config:validate 4 ok, generated files match); audit --prod clean
+- Next step: wave-review (gate tier) for docs/reviews/pr-<n>.md; after merge run gh-setup-project.mjs --apply at once (Level field, renames, milestone parents, date backfill), record the five milestone-parent numbers in the next PR; then #61 as its own critical-tier PR; then W6
 - Blocked by: decision #61 (bound message and label keys) before the P0 freeze
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: W5 carries: #79 board tooling minors; SVG progress dashboard (README option B) and parent date roll-up in project-sync; W5 is gate tier (Task 23 touches scripts/ci)
+- Notes: open decisions #61 (chosen: option 1, own PR before the P0 freeze) and #81 (ADR-0008 proposed in the W5 PR; W6 Task 26 restructures ci.yml per it); Track B P1 plan defects from the phase critic filed as follow-ups
 
 ### Track B
 

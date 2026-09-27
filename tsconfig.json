@@ -3,7 +3,11 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/config" },
+    { "path": "packages/tokens" },
     { "path": "packages/api" },
+    { "path": "packages/client" },
+    { "path": "packages/web-ui" },
+    { "path": "apps/web" },
     { "path": "scripts" }
   ]
 }

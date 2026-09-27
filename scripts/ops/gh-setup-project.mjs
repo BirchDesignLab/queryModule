@@ -12,8 +12,9 @@
 //
 // Idempotent
 //   Every step reads first and writes only what differs. Existing issues are
-//   matched by exact title, fields and options by name. Status, Priority, Start
-//   and Finish are only seeded when empty (a closed issue is forced to Done; Done
+//   matched by their recorded issue number (a title change is a rename, #80),
+//   fields and options by name. Status, Priority, Start
+//   and Finish are only seeded when empty (an issue closed as completed is forced to Done; Done
 //   comes from issue state only), so a rerun never undoes project-sync or the
 //   developer. Prerequisites (milestones, task issues) are checked before the
 //   first write. A wave closes when all its tasks are
@@ -23,6 +24,9 @@
 // Usage (PowerShell or bash, repo root)
 //   node scripts/ops/gh-setup-project.mjs                 # dry run: reads only, prints the plan
 //   node scripts/ops/gh-setup-project.mjs --apply         # writes
+//   node scripts/ops/gh-setup-project.mjs --dashboard     # live reads only; writes the two SVGs and
+//                                                          # the README picture block, no GitHub writes
+//                                                          # (#80 requirement 8)
 //   node scripts/ops/gh-setup-project.mjs --as <login>    # gh account to act as (default BirchDesignLab)
 //
 // Requires
@@ -36,13 +40,22 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  bodyUpdate,
+  closedStatus,
+  leafDates,
+  matchParent,
+  rollUp,
+  titleUpdate,
+  waveParentStatus,
+} from "./board-model.mjs";
+import { renderDashboard } from "./progress-svg.mjs";
 
 const REPO = "BirchDesignLab/queryModule";
 const OWNER = "BirchDesignLab";
 const PROJECT_NUMBER = 1;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PLAN = "docs/superpowers/plans/2026-09-25-p0-contracts.md";
-const WAVE_DATE = "2026-09-26";
 
 // ---------------------------------------------------------------- data
 
@@ -146,87 +159,178 @@ const FIELDS = [
     ],
   },
   { name: "Req IDs", text: true },
+  {
+    name: "Level",
+    options: ["Milestone", "Phase", "Wave", "Task", "Follow-up"].map((name, i) => ({
+      name,
+      color: ["PURPLE", "BLUE", "GRAY", "GREEN", "YELLOW"][i],
+      description: `A ${name.toLowerCase()} item on the board`,
+    })),
+  },
 ];
 
+// Human-readable titles; codes live in fields (Level, Phase, Wave), never in
+// the title (developer decision, #80). Matched to GitHub by `number`
+// (recorded 09-26-26, .superpowers/sdd/2026-09-25-p0-contracts/task-W5B-mapping.md),
+// never by title: a title below that differs from GitHub is a planned rename
+// (matchParent, titleUpdate in board-model.mjs).
 const PHASES = [
   [
-    "M0 P0: Contracts",
+    39,
+    "Contracts (M0 P0)",
     "M0 Skeleton",
     "P0",
     "Typecheck and CI green; contracts frozen",
     "2026-09-25-p0-contracts.md",
   ],
   [
-    "M0 P1: Foundation",
+    40,
+    "Foundation (M0 P1)",
     "M0 Skeleton",
     "P1",
     "M0 exit",
     "2026-09-25-track-a-p1.md and 2026-09-25-track-b-p1.md",
   ],
   [
-    "M1 P2: Engine",
+    41,
+    "Engine (M1 P2)",
     "M1 Forms and terminal",
     "P2",
     "Form on GET config; parser property tests",
     null,
   ],
-  ["M1 P3: Flow", "M1 Forms and terminal", "P3", "M1 exit", null],
+  [42, "Flow (M1 P3)", "M1 Forms and terminal", "P3", "M1 exit", null],
   [
-    "M2 P0: Contracts",
+    43,
+    "Contracts (M2 P0)",
     "M2 Results and audit",
     "P0",
     "Contracts frozen; OpenAPI diff reviewed",
     null,
   ],
-  ["M2 P1: Feed", "M2 Results and audit", "P1", "A6; replay test", null],
-  ["M2 P2: Audit", "M2 Results and audit", "P2", "A7 to A9", null],
-  ["M2 P3: Hardening", "M2 Results and audit", "P3", "M2 exit", null],
-  ["M3 P0: Contracts", "M3 Workflow and compliance", "P0", "Contracts frozen; flags off", null],
+  [44, "Feed (M2 P1)", "M2 Results and audit", "P1", "A6; replay test", null],
+  [45, "Audit (M2 P2)", "M2 Results and audit", "P2", "A7 to A9", null],
+  [46, "Hardening (M2 P3)", "M2 Results and audit", "P3", "M2 exit", null],
   [
-    "M3 P1: Credentials and MFA",
+    47,
+    "Contracts (M3 P0)",
+    "M3 Workflow and compliance",
+    "P0",
+    "Contracts frozen; flags off",
+    null,
+  ],
+  [
+    48,
+    "Credentials and MFA (M3 P1)",
     "M3 Workflow and compliance",
     "P1",
     "B4; raw-bytes and log-capture",
     null,
   ],
-  ["M3 P2: Multi-source, nested, hide", "M3 Workflow and compliance", "P2", "B1, B2, B5, B7", null],
-  ["M3 P3: Delegation", "M3 Workflow and compliance", "P3", "M3 exit; flags on", null],
   [
-    "M4 P0: Contracts",
+    49,
+    "Multi-source, nested, hide (M3 P2)",
+    "M3 Workflow and compliance",
+    "P2",
+    "B1, B2, B5, B7",
+    null,
+  ],
+  [50, "Delegation (M3 P3)", "M3 Workflow and compliance", "P3", "M3 exit; flags on", null],
+  [
+    51,
+    "Contracts (M4 P0)",
     "M4 Mobile and host integration",
     "P0",
     "expo export green; contracts frozen",
     null,
   ],
   [
-    "M4 P1: Layouts and host",
+    52,
+    "Layouts and host (M4 P1)",
     "M4 Mobile and host integration",
     "P1",
     "C1 on web; host-simulator test",
     null,
   ],
-  ["M4 P2: Native", "M4 Mobile and host integration", "P2", "C1 and C2 on native", null],
-  ["M4 P3: Exit", "M4 Mobile and host integration", "P3", "M4 exit", null],
-].map(([title, milestone, phase, gate, plan]) => ({ title, milestone, phase, gate, plan }));
+  [53, "Native (M4 P2)", "M4 Mobile and host integration", "P2", "C1 and C2 on native", null],
+  [54, "Exit (M4 P3)", "M4 Mobile and host integration", "P3", "M4 exit", null],
+].map(([number, title, milestone, phase, gate, plan]) => ({
+  number,
+  title,
+  milestone,
+  phase,
+  gate,
+  plan,
+}));
+const CONTRACTS_M0P0 = 39;
 
-// P0 waves (plan "## Waves"). Task N is issue #N+1.
+// Five milestone parents (label epic, milestone set): title is the milestone
+// name (developer decision, #80). Number is null until the setup script
+// creates each one and prints the number for the controller to record here.
+const MILESTONE_PARENTS = Object.keys(MILESTONES).map((title) => ({ number: null, title }));
+
+// P0 waves (plan "## Waves"). Task N is issue #N+1. Numbers #55 to #60
+// recorded 09-26-26 (task-W5B-mapping.md); titles are the wave parent titles
+// from the #80 developer decision (human-readable, matched by number).
 const WAVES = [
-  { k: 1, tasks: [1, 6], pr: 31, state: "done" },
-  { k: 2, tasks: [7, 11], pr: 33, state: "done" },
-  { k: 3, tasks: [12, 16], pr: 35, state: "done" },
-  { k: 4, tasks: [17, 22], pr: 38, state: "done" },
-  { k: 5, tasks: [23, 25], pr: null, state: "ready" },
-  { k: 6, tasks: [26, 28], pr: null, state: "todo" },
+  {
+    number: 55,
+    k: 1,
+    title: "Wave 1: Workspace and first contracts (Tasks 1 to 6)",
+    tasks: [1, 6],
+    pr: 31,
+    state: "done",
+  },
+  {
+    number: 56,
+    k: 2,
+    title: "Wave 2: Site config schema (Tasks 7 to 11)",
+    tasks: [7, 11],
+    pr: 33,
+    state: "done",
+  },
+  {
+    number: 57,
+    k: 3,
+    title: "Wave 3: Config validation and shipped sites (Tasks 12 to 16)",
+    tasks: [12, 16],
+    pr: 35,
+    state: "done",
+  },
+  {
+    number: 58,
+    k: 4,
+    title: "Wave 4: Verify gate (Tasks 17 to 22)",
+    tasks: [17, 22],
+    pr: 38,
+    state: "done",
+  },
+  {
+    number: 59,
+    k: 5,
+    title: "Wave 5: Tokens and web shell (Tasks 23 to 25)",
+    tasks: [23, 25],
+    pr: null,
+    state: "ready",
+  },
+  {
+    number: 60,
+    k: 6,
+    title: "Wave 6: Mobile placeholder and ruleset (Tasks 26 to 28)",
+    tasks: [26, 28],
+    pr: null,
+    state: "todo",
+  },
 ];
-const waveTitle = (w) => `M0 P0 W${w.k}: Tasks ${w.tasks[0]} to ${w.tasks[1]}`;
 
 const src = (s) => `\n\n**Source:** ${s}`;
 const FOLLOW_UPS = [
   {
+    number: 61,
     title: "Decide: bound message and label keys before the P0 freeze (ADR-0005)",
     labels: ["decision", "follow-up", "core", "p0", "sensitive"],
     milestone: "M0 Skeleton",
-    parent: "M0 P0: Contracts",
+    parent: 39,
     track: "Core",
     phase: "P0",
     size: "S",
@@ -237,10 +341,11 @@ const FOLLOW_UPS = [
       src("PR #38 wave-review minor M3 (carry W4R-M3)."),
   },
   {
+    number: 62,
     title: "Sensitive paths: list nested biome.json files and .gitignore",
     labels: ["follow-up", "platform", "p0", "sensitive"],
     milestone: "M0 Skeleton",
-    parent: waveTitle(WAVES[4]),
+    parent: 59,
     track: "Platform (A)",
     phase: "P0",
     size: "S",
@@ -251,10 +356,11 @@ const FOLLOW_UPS = [
       src("PR #38 wave-review residual RR-M1."),
   },
   {
+    number: 63,
     title: "GET /api/v1/config returns only the ClientSiteConfig allowlist",
     labels: ["follow-up", "platform", "p1", "sensitive"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -265,10 +371,11 @@ const FOLLOW_UPS = [
       src("W2 Task 9 carry forward (ledger)."),
   },
   {
+    number: 64,
     title: "getLocale handler returns 400 validationFailed for a malformed locale",
     labels: ["follow-up", "platform", "p1"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -279,10 +386,11 @@ const FOLLOW_UPS = [
       src("Ruling W3-5, PR #35."),
   },
   {
+    number: 65,
     title: "Confirm Better Auth user ids fit BoundedIdSchema",
     labels: ["follow-up", "platform", "p1", "sensitive"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -293,10 +401,11 @@ const FOLLOW_UPS = [
       src("W1 xhigh review, Track A note (Ruling P-1)."),
   },
   {
+    number: 66,
     title: "Client parsers tolerate unknown WS message types and ApiError fields",
     labels: ["follow-up", "web", "p1"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Web (B)",
     phase: "P1",
     size: "S",
@@ -307,10 +416,11 @@ const FOLLOW_UPS = [
       src("W1 xhigh review M10, Track B note."),
   },
   {
+    number: 67,
     title: "promote.yml: milestone argument, full history, fail on non-zero",
     labels: ["follow-up", "platform", "p1", "sensitive"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -321,10 +431,11 @@ const FOLLOW_UPS = [
       src("W4 Task 20 carry forward."),
   },
   {
+    number: 68,
     title: "Licence check covers the first runtime dependency of api or apps",
     labels: ["follow-up", "platform", "p1"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -335,10 +446,11 @@ const FOLLOW_UPS = [
       src("W4 Task 19 carry forward."),
   },
   {
+    number: 69,
     title: "OpenAPI: input-side request bodies and a stable Condition component name",
     labels: ["follow-up", "platform", "p1", "sensitive"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -349,10 +461,11 @@ const FOLLOW_UPS = [
       src("W4 Task 17 critic minors M2 and M5."),
   },
   {
+    number: 70,
     title: "Threat model: sensitive-review cannot stop a PR editing its own checker",
     labels: ["follow-up", "documentation", "platform", "p1"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -363,10 +476,11 @@ const FOLLOW_UPS = [
       src("PR #38 wave-review answer 2."),
   },
   {
+    number: 71,
     title: "Core purity lint also catches IO globals",
     labels: ["follow-up", "core", "p0"],
     milestone: "M0 Skeleton",
-    parent: "M0 P0: Contracts",
+    parent: 39,
     track: "Core",
     phase: "P0",
     size: "S",
@@ -377,10 +491,11 @@ const FOLLOW_UPS = [
       src("W4 Task 22 critic minor M3."),
   },
   {
+    number: 72,
     title: "Embedded login: validate the host email claim before it reaches audit",
     labels: ["follow-up", "platform", "p1", "sensitive"],
     milestone: "M4 Mobile and host integration",
-    parent: "M4 P1: Layouts and host",
+    parent: 52,
     track: "Platform (A)",
     phase: "P1",
     size: "S",
@@ -391,10 +506,11 @@ const FOLLOW_UPS = [
       src("PR #38 wave-review minor M2 (carry W4R-M2)."),
   },
   {
+    number: 73,
     title: "Duplicate response-mapping check uses the canonical when condition",
     labels: ["follow-up", "core", "p2"],
     milestone: "M1 Forms and terminal",
-    parent: "M1 P2: Engine",
+    parent: 41,
     track: "Core",
     phase: "P2",
     size: "S",
@@ -405,10 +521,11 @@ const FOLLOW_UPS = [
       src("W3 Task 13 ruling and carry forward."),
   },
   {
+    number: 74,
     title: "Verify-gate CLI tidy-ups (deferred minors from W4)",
     labels: ["follow-up", "platform", "p1"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "M",
@@ -419,10 +536,11 @@ const FOLLOW_UPS = [
       src("SDD ledger, W4 deferred minors (Tasks 18 to 22)."),
   },
   {
+    number: 77,
     title: "Live progress dashboard on GitHub Pages",
     labels: ["follow-up", "enhancement", "platform", "p1", "sensitive"],
     milestone: "M0 Skeleton",
-    parent: "M0 P1: Foundation",
+    parent: 40,
     track: "Platform (A)",
     phase: "P1",
     size: "M",
@@ -433,10 +551,71 @@ const FOLLOW_UPS = [
       src("Developer request 09-26-26 (README visuals, option both)."),
   },
   {
+    number: 78,
+    title: "Decide: recalibrate review rules before W5 (sdd-task and wave-review by tier)",
+    labels: ["decision", "follow-up", "platform", "p1"],
+    milestone: "M0 Skeleton",
+    parent: 40,
+    track: "Platform (A)",
+    phase: "P1",
+    size: "M",
+    priority: "Medium",
+    reqIds: "",
+    body:
+      "ADR-0007 tiered the CI sensitive-review check; our own agent review rules are not tiered yet. PR #76 cost three xhigh reviews (about 1.4M tokens, over 2 hours); W4 cost 74 agents.\n\nQuestions to settle before W5:\n- `sdd-task`: `sensitive: true` runs Opus medium implementer, fixer, critic, ruler and re-reviewer for every sensitive task. Should gate-tier tasks use ordinary tiers plus the Opus critic, keeping the full set for critical-tier tasks?\n- Per-task critic when `wave-review` follows: redundant for gate-tier tasks?\n- `wave-review` default effort should follow the PR's highest tier automatically (critical xhigh, gate high), not a manual role override.\n- `.claude/workflows/**` and the CLAUDE.md roles table decide how much review everything gets but are in no tier. Gate tier?\n- Scope freeze: a PR's sensitive scope is fixed before its review starts; later work goes in the next PR.\n- Retro: per role across W1 to W4, which findings were real (spec reviewer, quality reviewer, critic, ruler, checker, re-reviewer)." +
+      src("developer, 09-26-26 (after PR #76)."),
+  },
+  {
+    number: 79,
+    title: "Board tooling: residual minors from the PR #76 review",
+    labels: ["follow-up", "platform", "p1", "sensitive"],
+    milestone: "M0 Skeleton",
+    parent: 40,
+    track: "Platform (A)",
+    phase: "P1",
+    size: "S",
+    priority: "Medium",
+    reqIds: "",
+    body:
+      "Residual minors from the final PR #76 `wave-review` (none fail open):\n- [ ] A setup-script rerun forces Done on an open wave parent whose tasks are all closed; derive it from issue state only.\n- [ ] The ci job's registry-only lockfile check is a text match; a block-style, quoted or differently spaced `resolution` with a tarball can slip past. Parse `pnpm-lock.yaml` instead.\n- [ ] `gh-setup-project.mjs` never rewrites existing issue bodies, so edits to follow-up text (#75) do not reach GitHub.\n\nNote: `scripts/ops/**` and `.github/**` are gate tier (ADR-0007), so these fixes need an Opus high review; bundle them into a wave PR." +
+      src("PR #76 review 3 residual M1, M5, M11."),
+  },
+  {
+    number: 80,
+    title: "Roadmap roll-up: milestone parents, Level field, date roll-ups",
+    labels: ["follow-up", "platform", "p0", "sensitive"],
+    milestone: "M0 Skeleton",
+    parent: 39,
+    track: "Platform (A)",
+    phase: "P0",
+    size: "L",
+    priority: "Urgent",
+    reqIds: "",
+    body:
+      'The Roadmap view falls apart when tweaked: two layers of data are missing (developer, 09-26-26).\n\n- [ ] Task and follow-up dates: Start = issue created date, Finish = closed date (the roadmap needs custom date fields, so copy them).\n- [ ] Parent dates (wave, phase, milestone): Start = earliest child Start; Finish = latest child Finish once all children are closed, else the latest child date so far.\n- [ ] Milestone parent issues M0 to M4 (label `epic`), phases as their sub-issues; "No Parent issue" then holds only milestones.\n- [ ] `Level` single-select field: Milestone, Phase, Wave, Task, Follow-up. Suggested views: "Plan" (level Milestone, Phase), "P0 detail" (level Wave, Task, grouped by parent).\n- [ ] `project-sync` rolls dates up on every event; `scripts/ops/gh-setup-project.mjs` backfills once.\n- [ ] README SVG dashboard (option B) reads the same roll-ups.\n\nGate tier (`.github/workflows/**`, `scripts/ops/**`): ride W5, which gets a gate `wave-review` anyway.' +
+      src("Roadmap view feedback, developer 09-26-26."),
+  },
+  {
+    number: 81,
+    title: "Decide: CI pipeline design before the ruleset (ADR, before W6 Tasks 26 and 28)",
+    labels: ["decision", "follow-up", "platform", "p1"],
+    milestone: "M0 Skeleton",
+    parent: 40,
+    track: "Platform (A)",
+    phase: "P1",
+    size: "M",
+    priority: "Medium",
+    reqIds: "",
+    body:
+      "Before the ruleset makes `ci` and `sensitive-review` required (Task 28) and CI grows (Task 26 web build and expo export; Track A P1 image, boot smoke, Playwright, publish), settle the pipeline design so CI never becomes a merge blocker the way the review workflows did on PR #76 (developer, 09-26-26).\n\n- [ ] One stable required check: heavy work in separate jobs, a final `ci` job aggregates them, so new steps never touch the ruleset.\n- [ ] Path-scoped jobs: web build, expo export, image and Playwright run only when their paths change (extends the docs-only fast path).\n- [ ] Fast fail first: lint and typecheck ahead of parallel heavy jobs; `timeout-minutes` on every job; PR CI budget under 10 minutes.\n- [ ] Flake policy: Playwright one retry with trace; quarantine label plus issue; no silent retry loops.\n- [ ] External services (oasdiff image, dependency review, pipx zizmor): pinned and cached; an outage fails with a clear message, not a code failure.\n- [ ] Break glass: spec 9.1's empty bypass list plus a broken CI deadlocks a CI fix. Who may lift the ruleset (repo admin), when, and how it is logged.\n- [ ] Merge style: squash with linear history (spec 9.1) or merge commits for wave PRs, recorded in an ADR.\n- [ ] CI duration per PR recorded next to agent metrics." +
+      src("developer, 09-26-26."),
+  },
+  {
+    number: 75,
     title: "Board and repo settings: the manual steps",
     labels: ["documentation", "platform", "p0"],
     milestone: "M0 Skeleton",
-    parent: "M0 P0: Contracts",
+    parent: 39,
     track: null,
     phase: "P0",
     size: "S",
@@ -451,14 +630,23 @@ const FOLLOW_UPS = [
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
+// --dashboard: live gh api reads only, writes the two committed SVGs and the
+// README picture block, no GitHub writes at all (task-W5B-carries W5B-2; #80
+// requirement 8). Mutually exclusive with --apply, so a single invocation is
+// never both "writes GitHub" and "read-only dashboard regen".
+const DASHBOARD = argv.includes("--dashboard");
 const asAt = argv.indexOf("--as");
 const AS = asAt >= 0 ? argv[asAt + 1] : "BirchDesignLab";
-const USAGE = "usage: node scripts/ops/gh-setup-project.mjs [--apply] [--as <login>]";
+const USAGE = "usage: node scripts/ops/gh-setup-project.mjs [--apply | --dashboard] [--as <login>]";
 if (!AS || AS.startsWith("--")) {
   console.error(`--as needs a login; ${USAGE}`);
   process.exit(2);
 }
-const known = new Set(["--apply", "--as", AS]);
+if (APPLY && DASHBOARD) {
+  console.error(`--apply and --dashboard are mutually exclusive; ${USAGE}`);
+  process.exit(2);
+}
+const known = new Set(["--apply", "--dashboard", "--as", AS]);
 for (const a of argv) {
   if (!known.has(a)) {
     console.error(`unknown argument ${a}; ${USAGE}`);
@@ -528,12 +716,17 @@ for (const title of Object.keys(MILESTONES)) {
   if (!milestones.has(title))
     throw new Error(`milestone "${title}" missing; run scripts/ops/gh-setup-labels.sh first`);
 }
+// Keyed by issue number (developer decision, #80: matching is by number, never
+// by title). issuesByTitle is a second index used only for the number:null
+// duplicate guard in ensureIssue (a milestone parent not yet created has no
+// number to match by).
 const issues = new Map(
   restAll(`repos/${REPO}/issues?state=all&per_page=100`)
     .filter((i) => !i.pull_request)
-    .map((i) => [i.title, i]),
+    .map((i) => [i.number, i]),
 );
-const byNumber = (n) => [...issues.values()].find((i) => i.number === n);
+const issuesByTitle = new Map([...issues.values()].map((i) => [i.title, i]));
+const byNumber = (n) => issues.get(n);
 {
   const missing = [];
   for (const w of WAVES)
@@ -544,6 +737,55 @@ const byNumber = (n) => [...issues.values()].find((i) => i.number === n);
     if (APPLY) throw new Error(m);
     console.log(`warning: ${m}`);
   }
+}
+
+// Leaf and roll-up Start/Finish (developer decision, #80 requirements 4-7),
+// from live issue state, using the same board-model.mjs functions
+// project-sync's inline copy mirrors (scripts/ci/project-sync.test.ts parity
+// test). Task N is issue #N+1; wave parents roll up their tasks; the
+// Contracts (M0 P0) phase parent rolls up its P0 wave parents (the only
+// phase with wave children so far); milestone parents roll up their phase
+// parents. A parent with no dated child (no wave children yet) keeps no
+// dates, same as project-sync. These child sets come from the data above, not
+// from live `parent` links as in project-sync (which also counts follow-ups
+// under their parent), and the values only seed empty Start/Finish; project-sync
+// recomputes both on its next run (PR #83 review M2).
+const datesByNumber = new Map();
+for (const w of WAVES)
+  for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
+    const issue = byNumber(t + 1);
+    if (issue)
+      datesByNumber.set(issue.number, { ...leafDates(issue), closed: issue.state === "closed" });
+  }
+for (const f of FOLLOW_UPS) {
+  const issue = f.number ? byNumber(f.number) : undefined;
+  if (issue)
+    datesByNumber.set(issue.number, { ...leafDates(issue), closed: issue.state === "closed" });
+}
+for (const w of WAVES) {
+  const issue = byNumber(w.number);
+  if (!issue) continue;
+  const children = [];
+  for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
+    const c = byNumber(t + 1);
+    if (c) children.push(datesByNumber.get(c.number));
+  }
+  datesByNumber.set(issue.number, { ...rollUp(children), closed: issue.state === "closed" });
+}
+for (const phase of PHASES) {
+  const issue = byNumber(phase.number);
+  if (!issue) continue;
+  const children =
+    phase.number === CONTRACTS_M0P0 ? WAVES.map((w) => datesByNumber.get(w.number)) : [];
+  datesByNumber.set(issue.number, { ...rollUp(children), closed: issue.state === "closed" });
+}
+for (const mp of MILESTONE_PARENTS) {
+  const issue = mp.number ? byNumber(mp.number) : undefined;
+  if (!issue) continue;
+  const children = PHASES.filter((p) => p.milestone === mp.title).map((p) =>
+    datesByNumber.get(p.number),
+  );
+  datesByNumber.set(issue.number, { ...rollUp(children), closed: issue.state === "closed" });
 }
 
 // Labels
@@ -664,8 +906,22 @@ for (const name of ["Start", "Finish"]) {
 if (APPLY) project = loadProject();
 
 // Issues (loaded with the prerequisites above)
+// Matched by issue `number` (developer decision, #80: match before any
+// rename), never by title. A spec with `number: null` (the five milestone
+// parents, not created yet) always creates; once created, record the number
+// it prints in the data above so the next run matches it.
 function ensureIssue(spec) {
-  let issue = issues.get(spec.title);
+  let issue = matchParent(spec, byNumber);
+  // A milestone parent (spec.number === null) is created once. Before POSTing,
+  // check for one already created by an earlier --apply run whose number was
+  // never recorded back into the data (for example a mid-run throw after the
+  // create but before this line printed): matched by title, since that is the
+  // only handle a number:null spec has.
+  let matchedUnrecordedParent = false;
+  if (!issue && spec.number === null && issuesByTitle.has(spec.title)) {
+    issue = issuesByTitle.get(spec.title);
+    matchedUnrecordedParent = true;
+  }
   if (!issue) {
     const body = {
       title: spec.title,
@@ -675,13 +931,35 @@ function ensureIssue(spec) {
       ...(spec.assignee ? { assignees: [spec.assignee] } : {}),
     };
     issue = write(`create issue "${spec.title}"`, () => rest(`repos/${REPO}/issues`, "POST", body));
-    if (issue) issues.set(issue.title, issue);
+    if (issue) {
+      issues.set(issue.number, issue);
+      issuesByTitle.set(issue.title, issue);
+      if (spec.number === null)
+        console.log(`record number #${issue.number} for "${spec.title}" in the setup-script data`);
+    }
   } else {
+    if (matchedUnrecordedParent)
+      console.log(`record number #${issue.number} for "${spec.title}" in the setup-script data`);
+    const nextTitle = titleUpdate(issue.title, spec.title);
+    if (nextTitle !== null) {
+      write(`rename #${issue.number} to "${nextTitle}"`, () =>
+        rest(`repos/${REPO}/issues/${issue.number}`, "PATCH", { title: nextTitle }),
+      );
+    }
     const have = new Set(issue.labels.map((l) => l.name));
     const missing = spec.labels.filter((l) => !have.has(l));
     if (missing.length > 0) {
       write(`add labels ${missing.join(", ")} to #${issue.number}`, () =>
         rest(`repos/${REPO}/issues/${issue.number}/labels`, "POST", { labels: missing }),
+      );
+    }
+    // Body edits to the data below (for example wording fixed after review) never
+    // reached GitHub before; sync them here, compared after normalising line
+    // endings so an unchanged rerun plans 0 writes (#79 item 3).
+    const nextBody = bodyUpdate(issue.body ?? "", spec.body ?? "");
+    if (nextBody !== null) {
+      write(`update body of #${issue.number} "${spec.title}"`, () =>
+        rest(`repos/${REPO}/issues/${issue.number}`, "PATCH", { body: nextBody }),
       );
     }
   }
@@ -692,6 +970,11 @@ function ensureIssue(spec) {
         state_reason: "completed",
       }),
     );
+    // Keep the local copy current so later readers (dashboardModel) see it closed.
+    if (APPLY) {
+      issue.state = "closed";
+      issue.state_reason = "completed";
+    }
   }
   return issue;
 }
@@ -721,39 +1004,55 @@ function ensureChild(parent, child, childLabel) {
 }
 
 const statusDocs = "`docs/superpowers/plans/STATUS.md`";
+
+// Five milestone parents (label epic, milestone set, #80 requirement 2).
+// Phase parents become their sub-issues; "No Parent issue" then holds only
+// these. Numbers are null until first created; the script prints each
+// number so the controller can record it here.
+const milestoneParentIssue = new Map();
+for (const mp of MILESTONE_PARENTS) {
+  const issue = ensureIssue({
+    number: mp.number,
+    title: mp.title,
+    labels: ["epic"],
+    milestone: mp.title,
+    body: `Milestone parent for ${mp.title}. Progress comes from its sub-issues (the phase parents).\n\nGrid and handoffs: ${statusDocs}.`,
+  });
+  milestoneParentIssue.set(mp.title, issue);
+}
+
 const phaseIssue = new Map();
 for (const p of PHASES) {
   const planLine = p.plan
     ? `Plan: \`docs/superpowers/plans/${p.plan}\`.`
     : "Plan: written at phase start (master plan 6.1).";
+  const name = p.title.replace(/ \([^)]*\)$/, "");
   const issue = ensureIssue({
+    number: p.number,
     title: p.title,
     labels: ["epic", p.phase.toLowerCase()],
     milestone: p.milestone,
-    body: `Phase parent for ${p.title.split(":")[0]} (${p.milestone}). Progress comes from its sub-issues.\n\n**Gate:** ${p.gate}.\n\n${planLine} Grid and handoffs: ${statusDocs}.`,
+    body: `Phase parent for ${name} (${p.milestone} ${p.phase}). Progress comes from its sub-issues.\n\n**Gate:** ${p.gate}.\n\n${planLine} Grid and handoffs: ${statusDocs}.`,
   });
-  phaseIssue.set(p.title, issue);
+  phaseIssue.set(p.number, issue);
+  ensureChild(milestoneParentIssue.get(p.milestone), issue, p.title);
 }
 
-// A wave is done when every task issue in it is closed (issue state is the truth).
-const waveDone = (w) => {
-  for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
-    if (byNumber(t + 1)?.state !== "closed") return false;
-  }
-  return true;
-};
 const waveIssue = new Map();
 for (const w of WAVES) {
   const tasks = `Tasks ${w.tasks[0]} to ${w.tasks[1]} (issues #${w.tasks[0] + 1} to #${w.tasks[1] + 1})`;
   const issue = ensureIssue({
-    title: waveTitle(w),
+    number: w.number,
+    title: w.title,
     labels: ["epic", "p0"],
     milestone: "M0 Skeleton",
-    closed: waveDone(w),
+    // Closing a wave parent stays with project-sync (docs/project-board.md,
+    // "a wave parent closes when all of its tasks are closed"); the setup
+    // script never requests a close here (critic:I1).
     body: `P0 wave ${w.k}: ${tasks}, one PR per wave (ADR-0006).${w.pr ? ` PR #${w.pr}.` : ""}\n\nWave map: \`${PLAN}\` section "Waves".`,
   });
-  waveIssue.set(w.k, issue);
-  ensureChild(phaseIssue.get("M0 P0: Contracts"), issue, waveTitle(w));
+  waveIssue.set(w.number, issue);
+  ensureChild(phaseIssue.get(CONTRACTS_M0P0), issue, w.title);
   for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1)
     ensureChild(issue, byNumber(t + 1), `#${t + 1}`);
 }
@@ -761,9 +1060,8 @@ for (const w of WAVES) {
 const followUps = new Map();
 for (const f of FOLLOW_UPS) {
   const issue = ensureIssue(f);
-  followUps.set(f.title, issue);
-  const parent =
-    phaseIssue.get(f.parent) ?? [...waveIssue.values()].find((i) => i?.title === f.parent);
+  followUps.set(f.number, issue);
+  const parent = phaseIssue.get(f.parent) ?? waveIssue.get(f.parent);
   ensureChild(parent, issue, `"${f.title}"`);
 }
 
@@ -795,50 +1093,76 @@ function desired(issue) {
   const task = issue.number >= 2 && issue.number <= 29 ? issue.number - 1 : null;
   if (task) {
     const w = WAVES.find((x) => task >= x.tasks[0] && task <= x.tasks[1]);
+    v.Level = "Task";
     v.Track = trackOf(names);
     v.Phase = "P0";
     v.Wave = `W${w.k}`;
     v.Size = sizeOf(taskLines.get(task) ?? 0);
     v["Req IDs"] = /\(([^)]*)\)\s*$/.exec(issue.title)?.[1] ?? "";
     // Done only from issue state; an open task in a finished wave is project-sync's.
-    if (issue.state === "closed") v.Status = "Done";
-    else v.Status = { review: "In Review", ready: "Ready", todo: "Todo" }[w.state];
+    if (issue.state === "closed") {
+      const done = closedStatus(issue);
+      if (done) v.Status = done;
+    } else v.Status = { review: "In Review", ready: "Ready", todo: "Todo" }[w.state];
     if (issue.state === "open") v.Priority = "High";
-    if (issue.state === "closed" || w.state === "review") {
-      v.Start = WAVE_DATE;
-      v.Finish = WAVE_DATE;
-    }
+    // Leaf dates (#80 requirement 4): Start = created date, Finish = closed
+    // date only when closed as completed, both clamped to the 2026-09-25
+    // floor (board-model.mjs leafDates, datesByNumber above).
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
-  const phase = PHASES.find((p) => p.title === issue.title);
+  const milestoneParent = MILESTONE_PARENTS.find((mp) => mp.number === issue.number);
+  if (milestoneParent) {
+    v.Level = "Milestone";
+    v.Status = milestoneParent.title === "M0 Skeleton" ? "In Progress" : "Todo";
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
+    return v;
+  }
+  const phase = PHASES.find((p) => p.number === issue.number);
   if (phase) {
+    v.Level = "Phase";
     v.Phase = phase.phase;
-    v.Status = phase.title === "M0 P0: Contracts" ? "In Progress" : "Todo";
-    if (phase.title === "M0 P0: Contracts") v.Start = WAVE_DATE;
+    v.Status = phase.number === CONTRACTS_M0P0 ? "In Progress" : "Todo";
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
-  const wave = WAVES.find((w) => waveTitle(w) === issue.title);
+  const wave = WAVES.find((w) => w.number === issue.number);
   if (wave) {
+    v.Level = "Wave";
     v.Phase = "P0";
     v.Wave = `W${wave.k}`;
-    v.Status =
-      issue.state === "closed" || waveDone(wave)
-        ? "Done"
-        : { review: "In Review", ready: "Ready", todo: "Todo" }[wave.state];
-    if (waveDone(wave) || wave.state === "review") {
-      v.Start = WAVE_DATE;
-      v.Finish = WAVE_DATE;
-    }
+    // Done comes only from the issue's own state; every task closed is not enough
+    // on its own (that transition is project-sync's, #79 item 1).
+    v.Status = waveParentStatus(issue, wave.state);
+    // Parent roll-up (#80 requirement 5): earliest child Start, latest child
+    // Finish once every task is closed (else the latest date so far).
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
-  const f = FOLLOW_UPS.find((x) => x.title === issue.title);
+  const f = FOLLOW_UPS.find((x) => x.number === issue.number);
   if (f) {
+    v.Level = "Follow-up";
     if (f.track) v.Track = f.track;
     v.Phase = f.phase;
     v.Size = f.size;
     v.Priority = f.priority;
     v["Req IDs"] = f.reqIds;
-    v.Status = issue.state === "closed" ? "Done" : "Todo";
+    if (issue.state === "open") v.Status = "Todo";
+    else {
+      const done = closedStatus(issue);
+      if (done) v.Status = done;
+    }
+    const dates = datesByNumber.get(issue.number);
+    if (dates?.start) v.Start = dates.start;
+    if (dates?.finish) v.Finish = dates.finish;
     return v;
   }
   return null;
@@ -866,7 +1190,7 @@ function loadItems() {
     after = page.pageInfo.endCursor;
   }
 }
-const items = loadItems();
+let items = loadItems();
 
 const fieldByName = (n) => project.fields.nodes.find((f) => f.name === n);
 const all = [...issues.values()].sort((a, b) => a.number - b.number);
@@ -887,8 +1211,9 @@ for (const issue of all) {
     if (value === undefined || value === null || value === "") continue;
     if (item.values[name] === value) continue;
     // Status, Priority, Start and Finish are seeded once; project-sync and the developer
-    // own them after that. Only a closed issue (or a wave whose tasks are all closed) is
-    // forced to Done.
+    // own them after that. Only a closed-as-completed issue is forced to Done
+    // (waveParentStatus, #79 item 1); a wave parent whose tasks are all closed but
+    // is itself still open is not.
     const seedOnly =
       name === "Priority" ||
       name === "Start" ||
@@ -912,117 +1237,129 @@ for (const issue of all) {
   }
 }
 
-// README progress block (Mermaid), regenerated from live data between markers.
+// Reload the live field values this run just wrote (Status, Priority, Start,
+// Finish) so dashboardModel() below reflects what --apply just set, not the
+// pre-run snapshot captured before the write loop. Mirrors the deleted
+// progressBlock()'s `APPLY ? loadItems() : items` (r2:new-1); a dry run or
+// --dashboard alone makes no field-value writes, so the pre-run snapshot is
+// already current and reloading is skipped.
+items = APPLY ? loadItems() : items;
+
+// README progress block: an SVG dashboard (README option B, #80 requirement
+// 8), regenerated from live data between markers. Superseded the earlier
+// Mermaid flowchart/gantt/pie block (#80: "replaces the Mermaid block ...
+// with a <picture>").
 const README_PATH = resolve(ROOT, "README.md");
+const ASSET_PATH = {
+  light: "docs/assets/progress-light.svg",
+  dark: "docs/assets/progress-dark.svg",
+};
 const START =
   "<!-- progress:start (generated by scripts/ops/gh-setup-project.mjs; do not edit) -->";
 const END = "<!-- progress:end -->";
 
-function progressBlock() {
-  const liveIssues = APPLY
-    ? restAll(`repos/${REPO}/issues?state=all&per_page=100`).filter((i) => !i.pull_request)
-    : [...issues.values()];
-  const liveItems = APPLY ? loadItems() : items;
-  const msLive = restAll(`repos/${REPO}/milestones?state=all&per_page=100`);
-  const lines = [];
-
-  // Roadmap: milestones left to right, phases coloured by status with sub-issue progress.
-  lines.push("```mermaid", "flowchart LR");
-  const classOf = new Map();
-  PHASES.forEach((p, idx) => {
-    const issue = liveIssues.find((i) => i.title === p.title);
-    const sum = issue ? rest(`repos/${REPO}/issues/${issue.number}`).sub_issues_summary : null;
-    const status = issue ? liveItems.get(issue.number)?.values.Status : undefined;
-    const done = issue?.state === "closed" || (sum && sum.total > 0 && sum.completed === sum.total);
-    const active =
-      !done && (status === "In Progress" || status === "In Review" || (sum?.completed ?? 0) > 0);
-    classOf.set(idx, done ? "done" : active ? "active" : "todo");
-    p.node = `ph${idx}`;
-    p.label = `${p.title.split(": ")[0].split(" ")[1]} ${p.title.split(": ")[1]}${sum && sum.total > 0 ? `<br/>${sum.completed}/${sum.total} done` : ""}`;
+/**
+ * Build the progress-svg.mjs model from live data: milestone and phase
+ * sub-issue progress, the P0 wave timeline (the same roll-up as
+ * datesByNumber above), open decisions (label `decision`) and task/follow-up
+ * counts by board Status (#80 requirement 8).
+ */
+function dashboardModel() {
+  const allIssues = [...issues.values()];
+  const milestones = Object.keys(MILESTONES).map((title) => {
+    const msIssues = allIssues.filter((i) => i.milestone?.title === title);
+    const phases = PHASES.filter((p) => p.milestone === title).map((p) => {
+      const issue = byNumber(p.number);
+      const sum = issue ? rest(`repos/${REPO}/issues/${issue.number}`).sub_issues_summary : null;
+      return { title: p.title, closed: sum?.completed ?? 0, total: sum?.total ?? 0 };
+    });
+    return {
+      title,
+      closed: msIssues.filter((i) => i.state === "closed").length,
+      total: msIssues.length,
+      phases,
+    };
   });
-  const byMilestone = new Map();
-  for (const p of PHASES)
-    byMilestone.set(p.milestone, [...(byMilestone.get(p.milestone) ?? []), p]);
-  let mi = 0;
-  const firstNodes = [];
-  for (const [title, phases] of byMilestone) {
-    const m = msLive.find((x) => x.title === title);
-    const total = m ? m.open_issues + m.closed_issues : 0;
-    const pct = total > 0 ? Math.round((100 * m.closed_issues) / total) : 0;
-    lines.push(
-      `  subgraph M${mi}["${title}<br/>${pct}% of ${total} issues closed"]`,
-      "    direction TB",
-    );
-    for (const p of phases) lines.push(`    ${p.node}["${p.label}"]`);
-    for (let j = 1; j < phases.length; j += 1)
-      lines.push(`    ${phases[j - 1].node} --> ${phases[j].node}`);
-    lines.push("  end");
-    firstNodes.push(`M${mi}`);
-    mi += 1;
-  }
-  lines.push(`  ${firstNodes.join(" --> ")}`);
-  lines.push(
-    "  classDef done fill:#2da44e,stroke:#1a7f37,color:#ffffff",
-    "  classDef active fill:#d29922,stroke:#9a6700,color:#ffffff",
-    "  classDef todo fill:#eaeef2,stroke:#8c959f,color:#24292f",
-  );
-  for (const cls of ["done", "active", "todo"]) {
-    const ids = PHASES.filter((_, i) => classOf.get(i) === cls).map((p) => p.node);
-    if (ids.length > 0) lines.push(`  class ${ids.join(",")} ${cls}`);
-  }
-  lines.push("```", "");
-
-  // P0 wave timeline: first commit to merge of each merged wave PR (UTC).
-  const spans = [];
-  for (const w of WAVES) {
-    if (!w.pr) continue;
-    const pr = rest(`repos/${REPO}/pulls/${w.pr}`);
-    if (!pr.merged_at) continue;
-    const commits = restAll(`repos/${REPO}/pulls/${w.pr}/commits?per_page=100`);
-    const first = commits.map((c) => c.commit.author.date).sort()[0] ?? pr.created_at;
-    spans.push({ w, start: first, end: pr.merged_at });
-  }
-  if (spans.length > 0) {
-    const fmt = (iso) => iso.slice(0, 16).replace("T", " ");
-    lines.push(
-      "```mermaid",
-      "gantt",
-      "  title P0 waves: first commit to merge (UTC)",
-      "  dateFormat YYYY-MM-DD HH:mm",
-      "  axisFormat %m-%d %H:%M",
-    );
-    lines.push("  section M0 P0 Contracts");
-    for (const s of spans) {
-      lines.push(
-        `  W${s.w.k} Tasks ${s.w.tasks[0]} to ${s.w.tasks[1]} (PR ${s.w.pr}) :done, w${s.w.k}, ${fmt(s.start)}, ${fmt(s.end)}`,
-      );
-    }
-    lines.push("```", "");
-  }
-
-  // Board status of task and follow-up issues (parents excluded).
+  const waves = WAVES.map((w) => {
+    const d = datesByNumber.get(w.number) ?? {};
+    return {
+      k: w.k,
+      title: w.title.replace(/^Wave \d+: /, "").replace(/ \(Tasks[^)]*\)$/, ""),
+      start: d.start ?? null,
+      finish: d.finish ?? null,
+    };
+  });
+  const decisions = allIssues
+    .filter((i) => i.state === "open" && i.labels.some((l) => (l.name ?? l) === "decision"))
+    .map((i) => ({ number: i.number, title: i.title }))
+    .sort((a, b) => a.number - b.number);
   const counts = new Map(STATUS_OPTIONS.map((o) => [o.name, 0]));
-  for (const i of liveIssues) {
+  for (const i of allIssues) {
     if (i.labels.some((l) => (l.name ?? l) === "epic")) continue;
-    const st = liveItems.get(i.number)?.values.Status;
+    const st = items.get(i.number)?.values.Status;
     if (st && counts.has(st)) counts.set(st, counts.get(st) + 1);
   }
-  lines.push("```mermaid", "pie showData", "  title Tasks and follow-ups by board status");
-  for (const [name, n] of counts) if (n > 0) lines.push(`  "${name}" : ${n}`);
-  lines.push("```");
-  return lines.join("\n");
+  const statusCounts = [...counts]
+    .filter(([, n]) => n > 0)
+    .map(([status, count]) => ({ status, count }));
+  return {
+    asOf: new Date().toISOString().slice(0, 10),
+    milestones,
+    waves,
+    decisions,
+    statusCounts,
+  };
+}
+
+// Local file writes (the two SVGs and README) run under --apply or
+// --dashboard; --dashboard makes no GitHub writes (`write()` above stays
+// gated on APPLY alone), so this is the only write path it takes
+// (task-W5B-carries W5B-2, #80 requirement 8).
+function writeLocalFile(what, fn) {
+  writes += 1;
+  if (!(APPLY || DASHBOARD)) {
+    console.log(`would ${what}`);
+    return undefined;
+  }
+  console.log(what);
+  return fn();
 }
 
 {
+  const model = dashboardModel();
+  for (const theme of ["light", "dark"]) {
+    const svg = renderDashboard(model, theme);
+    writeLocalFile(`write ${ASSET_PATH[theme]}`, () =>
+      writeFileSync(resolve(ROOT, ASSET_PATH[theme]), `${svg}\n`),
+    );
+  }
+  const totalIssues = model.milestones.reduce((n, m) => n + m.total, 0);
+  const closedIssues = model.milestones.reduce((n, m) => n + m.closed, 0);
+  const summary = `As of ${model.asOf}: ${closedIssues}/${totalIssues} issues closed across ${model.milestones.length} milestones. Full dashboard: the image above (or docs/project-board.md).`;
+  const alt = summary.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const picture = [
+    "<picture>",
+    `  <source media="(prefers-color-scheme: dark)" srcset="${ASSET_PATH.dark}">`,
+    `  <img src="${ASSET_PATH.light}" alt="${alt}">`,
+    "</picture>",
+    "",
+    summary,
+  ].join("\n");
   const readme = readFileSync(README_PATH, "utf8");
   const a = readme.indexOf(START);
   const b = readme.indexOf(END);
   if (a < 0 || b < a) throw new Error("README.md has no progress markers");
-  const next = `${readme.slice(0, a + START.length)}\n\n${progressBlock()}\n\n${readme.slice(b)}`;
+  const next = `${readme.slice(0, a + START.length)}\n\n${picture}\n\n${readme.slice(b)}`;
   if (next !== readme) {
-    write("update the README progress block", () => writeFileSync(README_PATH, next));
-    if (APPLY) console.log("README.md changed locally; commit it");
+    writeLocalFile("update the README progress block", () => writeFileSync(README_PATH, next));
+    if (APPLY || DASHBOARD) console.log("README.md changed locally; commit it");
   }
 }
 
-console.log(`${APPLY ? "applied" : "planned"} ${writes} change(s)`);
+console.log(
+  `${APPLY ? "applied" : DASHBOARD ? "regenerated dashboard," : "planned"} ${writes} change(s)`,
+);
+// These writes trigger no project-sync event; one manual run lets the board job
+// roll up and close wave parents now that the Level field exists (PR #83 review M1).
+if (APPLY)
+  console.log("next: gh workflow run project-sync.yml (one board reconcile after --apply)");

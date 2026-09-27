@@ -1421,6 +1421,8 @@ A GitHub ruleset on `main` requires a PR and the status checks `ci` and `sensiti
 
 Amended by ADR-0007 (tiered review: critical, gate, deps and exempt paths replace the one-tier artifact rule).
 
+Amended by ADR-0008 (aggregate ci check, path-scoped jobs, break glass, squash from W6).
+
 ### 9.2 Dark merges and migrations
 
 Unfinished capabilities merge dark behind their feature flag (5.8).
@@ -1454,6 +1456,8 @@ Triggers on pull requests and pushes to `main`. Concurrency is cancelled per ref
 13. Publish (push to `main` only, after steps 1 to 12 pass): log in to GHCR, push `sha-<commit>` and `latest`.
 
 `nightly.yml` runs Stryker mutation testing on `packages/api/src/{audit,credentials,delegation,dispatch}`. It is non-blocking and publishes its report as a workflow artifact. `promote.yml` is described in 8.4.
+
+Amended by ADR-0008 (aggregate ci check, path-scoped jobs, break glass, squash from W6).
 
 ### 9.4 Dependabot
 

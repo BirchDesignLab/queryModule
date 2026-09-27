@@ -2,6 +2,7 @@ export const GENERATED_FILES = [
   "packages/api/openapi.json",
   "packages/core/contracts/ws-events.schema.json",
   "packages/config/schema/site-config.schema.json",
+  "packages/tokens/generated/tokens.css",
 ];
 export type GitResult = { status: number | null; stdout: string };
 export type DriftResult =
