@@ -54,6 +54,17 @@ describe("BR-001 site config load", () => {
     rmSync(join(d, "locales"), { recursive: true });
     await expect(loadSiteConfig(file)).rejects.toThrow(/locale/);
   });
+  it("reports the real reason for a bad locale bundle instead of always saying missing", async () => {
+    const d = copy();
+    const file = join(d, "sites/default.json");
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { locales: string[] };
+    const locale = raw.locales[0];
+    const bundleFile = join(d, "locales", `${locale}.json`);
+    writeFileSync(bundleFile, "{ not json");
+    await expect(loadSiteConfig(file)).rejects.toThrow(/invalid JSON/);
+    rmSync(bundleFile);
+    await expect(loadSiteConfig(file)).rejects.toThrow(/file not readable/);
+  });
   it("canonicalJson sorts keys at every depth and keeps array order", () => {
     expect(canonicalJson({ b: 1, a: { d: [2, 1], c: null } })).toBe(
       '{"a":{"c":null,"d":[2,1]},"b":1}',

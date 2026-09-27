@@ -75,9 +75,7 @@ export async function loadSiteConfig(siteConfigFile: string): Promise<LoadedConf
   const configDir = resolve(dirname(file), "..");
   const locales: Record<string, Record<string, unknown>> = {};
   for (const locale of siteConfig.locales) {
-    const bundle = await readJson(join(configDir, "locales", `${locale}.json`)).catch(() => {
-      throw new ConfigLoadError(file, "/locales", `locale bundle ${locale}.json missing`);
-    });
+    const bundle = await readJson(join(configDir, "locales", `${locale}.json`));
     if (bundle === null || typeof bundle !== "object" || Array.isArray(bundle)) {
       throw new ConfigLoadError(file, "/locales", `locale bundle ${locale}.json is not an object`);
     }
