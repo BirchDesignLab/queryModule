@@ -28,10 +28,10 @@ P0 waves (one PR each): [W1](https://github.com/BirchDesignLab/queryModule/issue
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/progress-dark.svg">
-  <img src="docs/assets/progress-light.svg" alt="As of 2026-09-27: 28/70 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).">
+  <img src="docs/assets/progress-light.svg" alt="As of 2026-09-27: 36/77 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).">
 </picture>
 
-As of 2026-09-27: 28/70 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).
+As of 2026-09-27: 36/77 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).
 
 <!-- progress:end -->
 
@@ -67,6 +67,7 @@ Minimal steps:
 
 ```
 # Node 24 per .nvmrc (ADR-0001)
+# Node 24.15 or newer 24.x (engines floor; .nvmrc stays 24 so CI takes the latest 24)
 corepack enable
 pnpm install --frozen-lockfile
 ```

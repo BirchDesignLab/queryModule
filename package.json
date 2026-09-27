@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.15 <25"
   },
   "scripts": {
     "typecheck": "tsc -b",
@@ -27,6 +27,7 @@
     "@types/node": "^26.6.2",
     "@types/picomatch": "^4.0.3",
     "@vitest/coverage-v8": "^5.0.2",
+    "jsdom": "^30.1.1",
     "picomatch": "^4.0.7",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
