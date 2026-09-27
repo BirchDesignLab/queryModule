@@ -1,0 +1,96 @@
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { openDatabase } from "../../src/db/client";
+import {
+  AUDIT_TRIGGERS,
+  AuditTriggerMissingError,
+  checkAuditTriggers,
+  runMigrations,
+} from "../../src/db/migrate";
+import { TEST_DB_KEY, tempDbFile } from "../helpers/db";
+
+const MIGRATIONS = resolve(import.meta.dirname, "../../drizzle");
+
+async function migratedDb() {
+  const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+  await runMigrations(db, MIGRATIONS);
+  return db;
+}
+
+async function missingAfterDropping(dropped: readonly string[]): Promise<unknown> {
+  const db = await migratedDb();
+  try {
+    for (const name of dropped) await db.$client.execute(`DROP TRIGGER ${name}`);
+    return await checkAuditTriggers(db).catch((e: unknown) => e);
+  } finally {
+    db.$client.close();
+  }
+}
+
+describe("storage: SEC-006, SEC-010", () => {
+  it("opening the file without DB_ENCRYPTION_KEY fails", async () => {
+    const file = tempDbFile();
+    const db = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    await runMigrations(db, MIGRATIONS);
+    db.$client.close();
+    await expect(openDatabase({ file, encryptionKey: "" })).rejects.toThrow();
+  });
+
+  it("migrations are idempotent and triggers are found", async () => {
+    const db = await migratedDb();
+    try {
+      await runMigrations(db, MIGRATIONS);
+      await expect(checkAuditTriggers(db)).resolves.toBeUndefined();
+    } finally {
+      db.$client.close();
+    }
+  });
+
+  it("requires the update, delete and replace triggers", () => {
+    expect(AUDIT_TRIGGERS).toEqual([
+      "audit_event_no_update",
+      "audit_event_no_delete",
+      "audit_event_no_replace",
+    ]);
+  });
+
+  it.each(AUDIT_TRIGGERS)("a dropped %s makes the check refuse", async (name) => {
+    const err = await missingAfterDropping([name]);
+    expect(err).toBeInstanceOf(AuditTriggerMissingError);
+    expect((err as AuditTriggerMissingError).missing).toEqual([name]);
+    expect((err as AuditTriggerMissingError).message).toContain(name);
+  });
+
+  it("names every missing trigger, in AUDIT_TRIGGERS order", async () => {
+    const err = await missingAfterDropping([...AUDIT_TRIGGERS].reverse());
+    expect(err).toBeInstanceOf(AuditTriggerMissingError);
+    expect((err as AuditTriggerMissingError).missing).toEqual([...AUDIT_TRIGGERS]);
+  });
+
+  it("an unmigrated database fails the check", async () => {
+    const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+    try {
+      const err = await checkAuditTriggers(db).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AuditTriggerMissingError);
+      expect((err as AuditTriggerMissingError).missing).toEqual([...AUDIT_TRIGGERS]);
+    } finally {
+      db.$client.close();
+    }
+  });
+
+  it("a same-named trigger on another table does not count", async () => {
+    const db = await migratedDb();
+    try {
+      await db.$client.execute("DROP TRIGGER audit_event_no_replace");
+      await db.$client.execute("CREATE TABLE decoy (id INTEGER)");
+      await db.$client.execute(
+        "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON decoy BEGIN SELECT 1; END",
+      );
+      const err = await checkAuditTriggers(db).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AuditTriggerMissingError);
+      expect((err as AuditTriggerMissingError).missing).toEqual(["audit_event_no_replace"]);
+    } finally {
+      db.$client.close();
+    }
+  });
+});
