@@ -1,0 +1,32 @@
+import { ApiErrorSchema } from "@querymodule/core/contracts";
+import { Hono } from "hono";
+import { describe, expect, it } from "vitest";
+import { rateLimited } from "../src/http/errors";
+import type { AppEnv } from "../src/http/types";
+
+function app() {
+  const a = new Hono<AppEnv>();
+  a.get("/fractional", (c) => rateLimited(c, 0.2));
+  a.get("/whole", (c) => rateLimited(c, 2.5));
+  return a;
+}
+
+describe("SEC-006 rateLimited", () => {
+  it("clamps a fractional retryAfterSeconds up to a floor of 1", async () => {
+    const r = await app().request("/fractional");
+    expect(r.status).toBe(429);
+    expect(r.headers.get("Retry-After")).toBe("1");
+    const body = ApiErrorSchema.parse(await r.json());
+    expect(body.error.code).toBe("rateLimited");
+    expect(body.error.params?.retryAfterSeconds).toBe(1);
+  });
+
+  it("ceils a non-integer retryAfterSeconds", async () => {
+    const r = await app().request("/whole");
+    expect(r.status).toBe(429);
+    expect(r.headers.get("Retry-After")).toBe("3");
+    const body = ApiErrorSchema.parse(await r.json());
+    expect(body.error.code).toBe("rateLimited");
+    expect(body.error.params?.retryAfterSeconds).toBe(3);
+  });
+});
