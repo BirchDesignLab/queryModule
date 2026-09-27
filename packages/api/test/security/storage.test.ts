@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
+import { createClient } from "@libsql/client";
 import { describe, expect, it } from "vitest";
-import { openDatabase } from "../../src/db/client";
+import { DatabaseOpenError, openDatabase } from "../../src/db/client";
 import {
   AUDIT_TRIGGERS,
   AuditTriggerMissingError,
@@ -33,7 +34,22 @@ describe("storage: SEC-006, SEC-010", () => {
     const db = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
     await runMigrations(db, MIGRATIONS);
     db.$client.close();
-    await expect(openDatabase({ file, encryptionKey: "" })).rejects.toThrow();
+    // A client with no key reaches the file itself and finds no SQLite database in it:
+    // SQLITE_NOTADB means the bytes on disk are ciphertext, not a plaintext database.
+    const raw = createClient({ url: `file:${file}` });
+    try {
+      await expect(raw.execute("SELECT count(*) FROM sqlite_master")).rejects.toMatchObject({
+        code: "SQLITE_NOTADB",
+      });
+    } finally {
+      raw.close();
+    }
+  });
+
+  it("openDatabase refuses an empty DB_ENCRYPTION_KEY", async () => {
+    await expect(openDatabase({ file: tempDbFile(), encryptionKey: "" })).rejects.toThrow(
+      DatabaseOpenError,
+    );
   });
 
   it("migrations are idempotent and triggers are found", async () => {
