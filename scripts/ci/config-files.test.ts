@@ -10,6 +10,7 @@ type Json = Record<string, unknown>;
 type RawSite = Json & {
   site: Json;
   sources: Json[];
+  queryTypes: (Json & { fields: Json[] })[];
   quickAccess?: unknown;
   keywordSeverityStyles: { critical: Json; warning: Json; info: Json };
 };
@@ -76,6 +77,17 @@ describe("config:validate failures carry JSON paths", () => {
     const r = checkConfigFile(broken, layered({ [broken]: site }));
     expect(r.errors).toContainEqual(
       expect.objectContaining({ path: "/sources/0/kind", key: "config.schema" }),
+    );
+  });
+
+  it("#61 a nested labelKey outside the message-key pattern fails at its pointer (review M3)", () => {
+    const site = defaultSite();
+    const field = site.queryTypes[0]?.fields[0];
+    if (!field) throw new Error("default site has no field");
+    field.labelKey = "field.plate-ZZ";
+    const r = checkConfigFile(broken, layered({ [broken]: site }));
+    expect(r.errors).toContainEqual(
+      expect.objectContaining({ path: "/queryTypes/0/fields/0/labelKey", key: "config.schema" }),
     );
   });
 

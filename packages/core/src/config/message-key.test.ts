@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { AuditValidationErrorSchema } from "../contracts/audit";
+import { MESSAGE_KEY_MAX_LENGTH, MESSAGE_KEY_PATTERN } from "../contracts/primitives";
 import { ValidationErrorSchema } from "../contracts/validation-error";
 import { ClientSiteConfigSchema } from "./client-config";
 import { DiagnosticSchema } from "./diagnostic";
-import { makeSiteConfigSchemas } from "./schema";
+import { makeSiteConfigSchemas, SiteConfigSchema } from "./schema";
 import { makeFieldSchemas } from "./schema-fields";
 
 const GOOD = ["app.title", "config.unknownToken", "field.plate", "a"];
@@ -54,4 +56,42 @@ describe("#61 message and label keys are bounded the same way everywhere (ADR-00
       }).success,
     ).toBe(true);
   });
+
+  // Review M2 (PR #93): every labelKey node in the generated JSON Schema carries the bound, so
+  // reverting any one carrier (picklist value, source, query type, purpose, mappings...) fails.
+  for (const [name, schema] of Object.entries({
+    SiteConfigSchema,
+    ClientSiteConfigSchema,
+  })) {
+    it(`${name}: every labelKey in the JSON Schema is a MessageKey`, () => {
+      const json = z.toJSONSchema(schema, { io: "input", unrepresentable: "any" });
+      const defs = (json as { $defs?: Record<string, unknown> }).$defs ?? {};
+      const deref = (node: unknown): unknown => {
+        const ref = (node as { $ref?: string } | null)?.$ref;
+        return ref?.startsWith("#/$defs/") ? deref(defs[ref.slice(8)]) : node;
+      };
+      const found: string[] = [];
+      const walk = (node: unknown, path: string): void => {
+        if (Array.isArray(node)) {
+          for (const [i, n] of node.entries()) walk(n, `${path}/${i}`);
+          return;
+        }
+        if (node === null || typeof node !== "object") return;
+        for (const [k, v] of Object.entries(node)) {
+          if (k === "properties" && v && typeof v === "object" && "labelKey" in v) {
+            const lk = deref((v as Record<string, unknown>).labelKey);
+            found.push(path);
+            expect(lk, `${path}/properties/labelKey`).toMatchObject({
+              type: "string",
+              pattern: MESSAGE_KEY_PATTERN.source,
+              maxLength: MESSAGE_KEY_MAX_LENGTH,
+            });
+          }
+          walk(v, `${path}/${k}`);
+        }
+      };
+      walk(json, "");
+      expect(found.length).toBeGreaterThan(0);
+    });
+  }
 });
