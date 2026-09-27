@@ -327,6 +327,12 @@ On the fast path's first-pass approve, an extra line `mode: "fast"` follows `ver
 
 ## Controller procedure
 
+Which path a change takes (#92, CLAUDE.md "Controller rules"):
+- **Inline** when the brief or issue already states the exact design, the change is about 150 lines or fewer in a handful of files, and no design question is open. The controller implements it (TDD, `pnpm verify`, `pnpm audit --prod`); no `sdd-task` reviewers run on it.
+- **`sdd-task`** for real plan tasks: several interacting files, design judgement, or a brief that does not fully specify the work.
+- **Review by tier, not by implementer.** Ordinary: CI only. Gate or critical: one `wave-review` per PR, with `branch`, `criticalFiles`, `gateFiles`, `reviewedLines` (from `git diff --numstat base...head` over those files) and a `contextPath` excerpt.
+- **Split fixes by tier.** An ordinary fix goes in its own PR; gate chores ride the next wave PR.
+
 Before an `sdd-task` run:
 1. The wave branch is checked out in `repoDir` with a clean tree. `base = git rev-parse HEAD` (full sha).
 2. `bash scripts/sdd/task-brief.sh PLAN N <workDir>/task-<N>-brief.md`.
