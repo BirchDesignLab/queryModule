@@ -45,7 +45,7 @@ export {
   isThemeModePreference,
   THEME_PREFERENCES,
 } from "./preferences/preferences-store.js";
-export { createQueryClient } from "./query/query-client.js";
+export { createQueryClient, registerQueryCacheReset } from "./query/query-client.js";
 export type { ResetController } from "./session/reset.js";
 export { createResetController } from "./session/reset.js";
 export type { SessionController, SessionControllerDeps } from "./session/session-controller.js";
