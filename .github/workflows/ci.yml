@@ -174,11 +174,11 @@ jobs:
           git show "origin/$BASE_REF:packages/api/openapi.json" > base-openapi.json
           docker run --rm -v "$PWD:/work" tufin/oasdiff@sha256:3b14fe0112e5d1bf862f91ab234a4bcd161a3f399e98f8b0b665ce70857694ac breaking /work/base-openapi.json /work/packages/api/openapi.json --fail-on ERR
 
-  # ADR-0008: path-scoped, runs only when apps/web (or a shared root file) changed.
+  # ADR-0008: path-scoped, skipped only when changes says web=false (fails open, #96 G-M2).
   web:
     name: web
     needs: [changes, checks]
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.web != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -198,11 +198,11 @@ jobs:
       - name: Web build
         run: pnpm --filter @querymodule/web build
 
-  # ADR-0008: path-scoped, runs only when apps/mobile (or a shared root file) changed.
+  # ADR-0008: path-scoped, skipped only when changes says mobile=false (fails open, #96 G-M2).
   mobile:
     name: mobile
     needs: [changes, checks]
-    if: needs.changes.outputs.mobile == 'true'
+    if: needs.changes.outputs.mobile != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

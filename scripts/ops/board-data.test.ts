@@ -127,6 +127,24 @@ describe("validateBoardData: fails closed on each schema rule (R3)", () => {
     const result = validateBoardData({ ...valid, followUps }, known);
     expect(result.ok).toBe(false);
   });
+
+  it("rejects a follow-up parent that is not a phase or wave issue, before any write (#96 G-M3)", () => {
+    const followUps = valid.followUps.map((f, i) => (i === 0 ? { ...f, parent: 9999 } : f));
+    const result = validateBoardData({ ...valid, followUps }, known);
+    expect(result).toMatchObject({
+      ok: false,
+      errors: [{ pointer: "/followUps/0/parent", message: expect.stringMatching(/#9999/) }],
+    });
+  });
+
+  it("accepts a follow-up parent that is a phase or a wave issue", () => {
+    const phase = (valid.phases[0] as { number: number }).number;
+    const wave = valid.waves[0]?.number as number;
+    for (const parent of [phase, wave]) {
+      const followUps = valid.followUps.map((f, i) => (i === 0 ? { ...f, parent } : f));
+      expect(validateBoardData({ ...valid, followUps }, known).ok).toBe(true);
+    }
+  });
 });
 
 // R4 equivalence: the objects gh-setup-project.mjs builds from

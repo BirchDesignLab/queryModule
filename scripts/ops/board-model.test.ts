@@ -3,6 +3,7 @@ import {
   bodyUpdate,
   clampToFloor,
   closedStatus,
+  followUpAdoptionError,
   leafDates,
   matchParent,
   rollUp,
@@ -285,5 +286,29 @@ describe("closedStatus: Done only for an issue closed as completed (#79)", () =>
     expect(closedStatus({ state: "closed", state_reason: "not_planned" })).toBeUndefined();
     expect(closedStatus({ state: "closed", state_reason: "duplicate" })).toBeUndefined();
     expect(closedStatus({ state: "open" })).toBeUndefined();
+  });
+});
+
+describe("followUpAdoptionError (#96 G-M4)", () => {
+  const live = (n: number, labels: string[]) => ({
+    number: n,
+    labels: labels.map((name) => ({ name })),
+  });
+  const issues = new Map([
+    [61, live(61, ["platform", "follow-up"])],
+    [70, live(70, ["platform", "p1"])],
+  ]);
+  const byNumber = (n: number) => issues.get(n);
+
+  it("is null when every existing follow-up issue carries the follow-up label", () => {
+    expect(followUpAdoptionError([{ number: 61 }], byNumber)).toBeNull();
+  });
+  it("is null for a follow-up number with no live issue yet (it will be created)", () => {
+    expect(followUpAdoptionError([{ number: 999 }], byNumber)).toBeNull();
+  });
+  it("names every live issue that lacks the follow-up label", () => {
+    expect(followUpAdoptionError([{ number: 61 }, { number: 70 }], byNumber)).toMatch(
+      /#70.*follow-up/,
+    );
   });
 });
