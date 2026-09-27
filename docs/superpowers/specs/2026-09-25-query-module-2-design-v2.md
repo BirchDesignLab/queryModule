@@ -288,7 +288,7 @@ Errors:
 - Literals (defaults, `setDefault` values, presets, condition values) that fail canonicalisation for the target field (4.3); `$default` naming a field with no configured default; ordering operators on a field that is not number, year or date (4.2).
 - `role: "type"` or `picklistFilter` on a non-picklist field; `byField` not a picklist field; a `parent` code absent from the `byField` field's picklist; cycles among `picklistFilter` references.
 - A section key referenced by a field but not declared; no `base` section.
-- `require` or `setDefault` targeting an unreachable field (visible false and no `show` rule targets it); a cycle among `setDefault` dependencies (4.3); a rule reading a field whose `setDefault` appears later in `rules` (one pass then equals a fixed point).
+- `require` or `setDefault` targeting an unreachable field (visible false and no `show` rule targets it); a cycle among `setDefault` dependencies (4.3); a rule reading a field whose `setDefault` appears later in `rules` (one pass then equals a fixed point); a `setDefault` rule targeting a field that another field's `picklistFilter` uses as its `byField` (config.setDefaultTargetsFilterParent, #180).
 - `minLength` > `maxLength`, `maxLength` > 4096, a `pattern` that does not compile, a `defaultValue` that violates its own constraints.
 - `allowPlateOnly` without a field keyed `plate` or without at least one source flagged `plateOnly`.
 - A nested query type that declares `alsoRun` (one level only); more than 4 `alsoRun` entries; `fieldMap` target keys not in the nested type or source keys not in the parent.
@@ -388,7 +388,7 @@ CanonicalValue = string | number | boolean          // date = ISO YYYY-MM-DD str
 
 Conditions in steps 3 to 5 read effective values before pruning, so a hidden field's value can still satisfy a condition; sites that need otherwise add the field's visibility condition to the dependent rule. Type-field cascades need no such care: a child type value whose parent changed fails `notInPicklist` in step 2 and reads as empty.
 
-**Rule-set guarantees**, enforced by `validateSiteConfig` (4.1), make the single pass order-safe: no cycle among `setDefault` dependencies (an edge runs from each field a condition reads to the rule's target; `$default` references add no edge), and no rule reads a field whose `setDefault` appears later in `rules`.
+**Rule-set guarantees**, enforced by `validateSiteConfig` (4.1), make the single pass order-safe: no cycle among `setDefault` dependencies (an edge runs from each field a condition reads to the rule's target; `$default` references add no edge), and no rule reads a field whose `setDefault` appears later in `rules`. No `setDefault` rule targets a picklist filter parent (#180), so a child picklist's input check never runs against a parent value that setDefault supplies later in the pass.
 
 **Messages.** Every error is a `ValidationError` `{ key, params? }` (4.7) with no prose and the field in `params.field`; the renderer resolves `key` through the locale bundle (NFR-001) and passes the field's `labelKey` for display (see 6.2). The terminal reports the same keys (4.4).
 
