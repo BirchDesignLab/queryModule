@@ -998,7 +998,8 @@ describe("deps demotion against a real git repo (C1, I1 repros)", () => {
       expect(r.review.messages[0], label).toContain(`gate paths touched (${file})`);
       expect(r.label.files, label).toEqual([file]);
     }
-  });
+    // Six real git repos; about 6 s on Windows (slower process spawns), over vitest's 5 s default.
+  }, 30_000);
 
   it("fails the late-file rule on an injection added after reviewedSha", () => {
     const r = inRepo([

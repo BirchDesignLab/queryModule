@@ -6,7 +6,8 @@
   "sideEffects": false,
   "exports": {
     "./contracts": "./src/contracts/index.ts",
-    "./config": "./src/config/index.ts"
+    "./config": "./src/config/index.ts",
+    "./rules": "./src/rules/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -b",
@@ -14,5 +15,8 @@
   },
   "dependencies": {
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "fast-check": "^4.10.2"
   }
 }
