@@ -320,8 +320,8 @@ const WAVES = [
     k: 5,
     title: "Wave 5: Tokens and web shell (Tasks 23 to 25)",
     tasks: [23, 25],
-    pr: null,
-    state: "ready",
+    pr: 83,
+    state: "done",
   },
   {
     number: 60,
@@ -635,7 +635,7 @@ const FOLLOW_UPS = [
     priority: "Medium",
     reqIds: "",
     body:
-      'Deferred minors from the W5 reviews (PR #83), none fail open today:\n\n- [ ] Core IO-globals lint (#71) matches bare identifiers only: `globalThis.fetch`, `window.localStorage`, `self.navigator` in `packages/core/src` lint clean. Add a restricted member-access rule or a test-side scan.\n- [ ] `apps/web/vite.config.ts` and `vitest.config.ts` sit outside `tsc -b` (tsconfig `include: ["src"]`); add a node tsconfig so they are typechecked.\n- [ ] `packages/client` TokenStore (bearer token storage, SEC-006) has no `.github/sensitive-paths` tier, so the P1 native SecureStore store would land at ordinary tier. Decide its tier (critical-tier file change, own PR).\n- [ ] jsdom is held at 29.1.1 because jsdom 30 needs Node >= 24.15 and `engines` is `>=24 <25`. Decide whether to raise the Node floor to 24.15 (ADR-0001) and then take jsdom 30.\n- [ ] Dashboard wave timeline uses issue created dates (#80 rule), so every P0 wave shows 09-26; consider first-commit-to-merge spans for merged waves.\n- [ ] `milestone parents` get Level and dates only on the run after their numbers are recorded (first `--apply` creates them).' +
+      'Deferred minors from the W5 reviews (PR #83), none fail open today:\n\n- [ ] Core IO-globals lint (#71) matches bare identifiers only: `globalThis.fetch`, `window.localStorage`, `self.navigator` in `packages/core/src` lint clean. Add a restricted member-access rule or a test-side scan.\n- [ ] `apps/web/vite.config.ts` and `vitest.config.ts` sit outside `tsc -b` (tsconfig `include: ["src"]`); add a node tsconfig so they are typechecked.\n- [ ] `packages/client` TokenStore (bearer token storage, SEC-006) has no `.github/sensitive-paths` tier, so the P1 native SecureStore store would land at ordinary tier. Decide its tier (critical-tier file change, own PR).\n- [x] jsdom is held at 29.1.1 because jsdom 30 needs Node >= 24.15 and `engines` is `>=24 <25`. Decide whether to raise the Node floor to 24.15 (ADR-0001) and then take jsdom 30.\n- [ ] Dashboard wave timeline uses issue created dates (#80 rule), so every P0 wave shows 09-26; consider first-commit-to-merge spans for merged waves.\n- [x] `milestone parents` get Level and dates only on the run after their numbers are recorded (first `--apply` creates them).' +
       src("SDD ledger, W5 deferred minors (Tasks 23 to 25, W5A, W5B).\n"),
   },
   {

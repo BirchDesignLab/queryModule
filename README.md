@@ -67,6 +67,7 @@ Minimal steps:
 
 ```
 # Node 24 per .nvmrc (ADR-0001)
+# Node 24.15 or newer 24.x (engines floor; .nvmrc stays 24 so CI takes the latest 24)
 corepack enable
 pnpm install --frozen-lockfile
 ```

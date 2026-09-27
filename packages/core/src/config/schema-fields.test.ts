@@ -223,6 +223,9 @@ describe("date format pattern: no catastrophic backtracking (CodeQL js/redos ale
   it("bounds a configured date format to 32 characters", () => {
     const f = { key: "dob", labelKey: "field.dob", dataType: "date" };
     expect(strict.FieldDef.safeParse({ ...f, inputFormats: ["MM/DD/YYYY"] }).success).toBe(true);
+    const atCap = `MM/DD/YYYY${"-".repeat(22)}`;
+    expect(atCap).toHaveLength(32);
+    expect(strict.FieldDef.safeParse({ ...f, inputFormats: [atCap] }).success).toBe(true);
     expect(strict.FieldDef.safeParse({ ...f, inputFormats: ["MM/".repeat(11)] }).success).toBe(
       false,
     );
