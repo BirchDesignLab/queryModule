@@ -7628,7 +7628,7 @@ Expected: `ruleset: main (created)`, `vulnerability alerts: on`, `security updat
 
 Gate (master plan 4.1, row P0): Typecheck and CI green; contracts frozen. Run on `main` after the Task 28 run, from a clean checkout.
 
-- [x] **Step 1: Sync and install.**
+- [ ] **Step 1: Sync and install.**
 
 ```bash
 git switch main && git pull --ff-only
@@ -7637,7 +7637,7 @@ pnpm install --frozen-lockfile
 
 Expected: no lockfile changes, no engine warning.
 
-- [x] **Step 2: Typecheck and tests per package.**
+- [ ] **Step 2: Typecheck and tests per package.**
 
 ```bash
 pnpm -r typecheck
@@ -7723,7 +7723,7 @@ gh pr merge <PR> --squash --delete-branch
 
 Expected: the docs-only fast path runs; `ci` and `sensitive-review` pass; the merge goes through the ruleset.
 
-- [x] **Step 10: Issues to close.** Every issue created in "Before Task 1" Step 2 (28 issues, milestone `M0 Skeleton`, label `p0`) closes through its PR; Step 7 confirms none remain open. Any issue a whole-phase review finding creates goes to milestone `M0 Skeleton` with label `p1` and its track label.
+- [ ] **Step 10: Issues to close.** Every issue created in "Before Task 1" Step 2 (28 issues, milestone `M0 Skeleton`, label `p0`) closes through its PR; Step 7 confirms none remain open. Any issue a whole-phase review finding creates goes to milestone `M0 Skeleton` with label `p1` and its track label.
 
 ## Self-review
 
