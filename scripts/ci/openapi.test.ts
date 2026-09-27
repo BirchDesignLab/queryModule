@@ -43,7 +43,9 @@ describe("BR-007 OpenAPI generated from route contracts (spec 5.1)", () => {
     const [method, op] = Object.entries(paths[from] ?? {})[0] ?? [];
     if (method === undefined) throw new Error("need an operation");
     delete paths[from]?.[method];
-    (paths[to] ??= {})[`${method === "put" ? "patch" : "put"}`] = op;
+    const target = paths[to] ?? {};
+    paths[to] = target;
+    target[method === "put" ? "patch" : "put"] = op;
     expect(operations({ paths })).not.toEqual(routeOperations(ROUTES));
   });
 
