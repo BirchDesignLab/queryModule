@@ -759,7 +759,9 @@ for (const w of WAVES) {
     title: waveTitle(w),
     labels: ["epic", "p0"],
     milestone: "M0 Skeleton",
-    closed: waveDone(w),
+    // Closing a wave parent stays with project-sync (docs/project-board.md,
+    // "a wave parent closes when all of its tasks are closed"); the setup
+    // script never requests a close here (critic:I1).
     body: `P0 wave ${w.k}: ${tasks}, one PR per wave (ADR-0006).${w.pr ? ` PR #${w.pr}.` : ""}\n\nWave map: \`${PLAN}\` section "Waves".`,
   });
   waveIssue.set(w.k, issue);
@@ -896,8 +898,9 @@ for (const issue of all) {
     if (value === undefined || value === null || value === "") continue;
     if (item.values[name] === value) continue;
     // Status, Priority, Start and Finish are seeded once; project-sync and the developer
-    // own them after that. Only a closed issue (or a wave whose tasks are all closed) is
-    // forced to Done.
+    // own them after that. Only a closed-as-completed issue is forced to Done
+    // (waveParentStatus, #79 item 1); a wave parent whose tasks are all closed but
+    // is itself still open is not.
     const seedOnly =
       name === "Priority" ||
       name === "Start" ||

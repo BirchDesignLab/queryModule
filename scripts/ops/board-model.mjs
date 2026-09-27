@@ -20,7 +20,8 @@
  */
 export function waveParentStatus(issue, waveState) {
   if (issue.state === "closed") {
-    return issue.state_reason === "not_planned" ? undefined : "Done";
+    const reason = issue.state_reason ?? null;
+    return reason === "completed" || reason === null ? "Done" : undefined;
   }
   return { review: "In Review", ready: "Ready", todo: "Todo" }[waveState];
 }

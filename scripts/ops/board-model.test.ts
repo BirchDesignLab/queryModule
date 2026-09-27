@@ -21,6 +21,12 @@ describe("waveParentStatus: wave parent close from issue state only (#79)", () =
       waveParentStatus({ state: "closed", state_reason: "not_planned" }, "ready"),
     ).toBeUndefined();
   });
+
+  it("forces no Status for a closed duplicate issue (critic:I4)", () => {
+    expect(
+      waveParentStatus({ state: "closed", state_reason: "duplicate" }, "ready"),
+    ).toBeUndefined();
+  });
 });
 
 describe("bodyUpdate: rewrite existing issue bodies (#79)", () => {

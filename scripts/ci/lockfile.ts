@@ -16,9 +16,13 @@ export interface LockfileCheckResult {
  * carries the pnpm self-manifest ahead of the workspace lockfile.
  */
 export function parseLockfileDocs(text: string): unknown[] {
-  return parseAllDocuments(text, { merge: false })
-    .map((d) => d.toJS())
-    .filter((d) => d !== null && d !== undefined);
+  const docs = parseAllDocuments(text, { merge: false });
+  for (const d of docs) {
+    if (d.errors.length > 0) {
+      throw new Error(`unparsable YAML: ${d.errors[0].message}`);
+    }
+  }
+  return docs.map((d) => d.toJS()).filter((d) => d !== null && d !== undefined);
 }
 
 function resolutionKind(resolution: unknown): string {

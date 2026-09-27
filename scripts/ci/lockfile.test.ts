@@ -12,6 +12,33 @@ function parseOne(yamlText: string): unknown {
   return docs[0];
 }
 
+describe("parseLockfileDocs: malformed YAML fails closed (critic:I2)", () => {
+  it("throws on a duplicate mapping key that hides a tarball entry", () => {
+    const text =
+      "packages:\n" +
+      "  foo@1.0.0:\n" +
+      "    resolution: {integrity: sha512-abc==}\n" +
+      "  foo@1.0.0:\n" +
+      "    resolution: {tarball: https://example.com/foo.tgz}\n";
+    expect(() => parseLockfileDocs(text)).toThrow();
+  });
+
+  it("throws on a YAML syntax error", () => {
+    const text = "packages:\n  foo@1.0.0:\n    resolution: [1,2\n";
+    expect(() => parseLockfileDocs(text)).toThrow();
+  });
+
+  it("throws on mis-indented content that drops a tarball entry", () => {
+    const text =
+      "packages:\n" +
+      "  foo@1.0.0:\n" +
+      "    resolution: {integrity: sha512-abc==}\n" +
+      " bar@1.0.0:\n" +
+      "    resolution: {tarball: https://example.com/bar.tgz}\n";
+    expect(() => parseLockfileDocs(text)).toThrow();
+  });
+});
+
 describe("checkLockfile: registry-only lockfile (#79 item 2)", () => {
   it("passes a flow-style resolution with integrity", () => {
     const doc = parseOne("packages:\n  foo@1.0.0:\n    resolution: {integrity: sha512-abc==}\n");
