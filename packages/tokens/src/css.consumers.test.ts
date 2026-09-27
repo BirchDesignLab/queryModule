@@ -19,6 +19,6 @@ describe("BR-001 native theme object this plan's M4 rn-ui consumer depends on (s
   it("returns a mode, colours and scale", () => {
     const theme = buildTheme("night");
     expect(theme.mode).toBe("night");
-    expect(theme.colors["color.surface.base" as never]).toBeDefined();
+    expect(theme.colors["color.surface.base"]).toBeDefined();
   });
 });

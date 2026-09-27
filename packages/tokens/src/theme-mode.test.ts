@@ -50,6 +50,22 @@ describe("UX-002 theme mode selection (spec 6.5)", () => {
       { preference: "auto", selection: { defaultMode: "redShift", auto: "off" } },
       "redShift",
     ],
+    ["auto, no site theme, light OS", { preference: "auto" }, "day"],
+    [
+      "auto time, 18:00",
+      { preference: "auto", selection: { defaultMode: "night", auto: "time" }, localHour: 18 },
+      "day",
+    ],
+    [
+      "auto time, 23:00",
+      { preference: "auto", selection: { defaultMode: "day", auto: "time" }, localHour: 23 },
+      "night",
+    ],
+    [
+      "auto time, 00:00",
+      { preference: "auto", selection: { defaultMode: "day", auto: "time" }, localHour: 0 },
+      "night",
+    ],
   ] as const)("%s", (_name, patch, expected) => {
     expect(resolveThemeMode({ ...base, ...patch })).toBe(expected);
   });

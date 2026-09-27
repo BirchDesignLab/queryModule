@@ -12,7 +12,7 @@ export interface ThemeModeInput {
   /** SiteConfig.theme once config is loaded; null before (login screen, all of P1). */
   selection: ThemeSelection | null;
   osPrefersDark: boolean;
-  /** Local hour 0 to 23, for auto "time" (night from 19:00 to 07:00). */
+  /** Local hour 0 to 23 from `new Date().getHours()`, for auto "time" (night from 19:00 to 07:00). */
   localHour: number;
 }
 
