@@ -855,7 +855,7 @@ await test("wr: clean approve is one agent", async () => {
   assert.equal(r.res.verdict, "approve");
 });
 
-await test("wr: worst case is 5 agents; ruler opus/high with the sensitive rule verbatim; front matter exact", async () => {
+await test("wr: worst case is 5 agents; ruler opus/medium with the sensitive rule verbatim; front matter exact", async () => {
   const r = await run(
     wr,
     WBASE,
@@ -869,9 +869,9 @@ await test("wr: worst case is 5 agents; ruler opus/high with the sensitive rule 
     }),
   );
   assert.deepEqual(r.labels, ["reviewer", "ruler", "fixer", "progress", "re-reviewer"]);
-  assert.equal(`${r.find("ruler").model}/${r.find("ruler").effort}`, "opus/high");
+  assert.equal(`${r.find("ruler").model}/${r.find("ruler").effort}`, "opus/medium");
   assert.ok(r.find("ruler").prompt.includes(SENSITIVE_RULE));
-  assert.ok(r.find("re-reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "xhigh"'));
+  assert.ok(r.find("re-reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
   assert.ok(/never reverse a ruling/i.test(r.find("fixer").prompt));
   assert.equal(r.res.verdict, "approve");
 });
@@ -2759,21 +2759,21 @@ await test("tiers: sdd-wave passes tier and maxAgents through (task wins) and to
   assert.ok(!("tier" in none.childArgs[0].args) && !("maxAgents" in none.childArgs[0].args));
 });
 
-await test("tiers: wave-review gate tier runs Opus high; the artifact records high; ordinary throws", async () => {
+await test("tiers: wave-review gate tier runs Opus medium; critical runs Opus high; ordinary throws", async () => {
   const worst = {
     reviewer: reviewWith([WF("C1", "critical"), WF("I1", "important", { planMandated: true })]),
   };
   const g = await run(wr, { ...WBASE, tier: "gate" }, wrResponder(worst));
-  assert.equal(tierOf(g.find("reviewer")), "opus/high");
-  assert.equal(tierOf(g.find("re-reviewer")), "opus/high");
-  assert.ok(g.find("reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
-  assert.ok(g.find("re-reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
-  assert.equal(tierOf(g.find("ruler")), "opus/high");
+  assert.equal(tierOf(g.find("reviewer")), "opus/medium");
+  assert.equal(tierOf(g.find("re-reviewer")), "opus/medium");
+  assert.ok(g.find("reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "medium"'));
+  assert.ok(g.find("re-reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "medium"'));
+  assert.equal(tierOf(g.find("ruler")), "opus/low");
   const c = await run(wr, WBASE, wrResponder(worst));
-  assert.equal(tierOf(c.find("reviewer")), "opus/xhigh");
-  assert.equal(tierOf(c.find("re-reviewer")), "opus/xhigh");
+  assert.equal(tierOf(c.find("reviewer")), "opus/high");
+  assert.equal(tierOf(c.find("re-reviewer")), "opus/high");
   const cx = await run(wr, { ...WBASE, tier: "critical" }, wrResponder(worst));
-  assert.equal(tierOf(cx.find("reviewer")), "opus/xhigh");
+  assert.equal(tierOf(cx.find("reviewer")), "opus/high");
   await assert.rejects(
     run(wr, { ...WBASE, tier: "ordinary" }, wrResponder()),
     /no wave-review needed/,
@@ -2785,6 +2785,10 @@ await test("tiers: wave-review gate tier runs Opus high; the artifact records hi
     wrResponder(worst),
   );
   assert.equal(tierOf(ov.find("reviewer")), "opus/max", "a roles override still wins");
+  assert.ok(
+    ov.logs.some((l) => /"reviewer" overridden to effort "max"/.test(l)),
+    "override to max is logged",
+  );
 });
 
 await test("tiers: the wave-review reviewer prompt is diff-scoped", async () => {
@@ -2824,6 +2828,306 @@ await test("fix pass C4: a task that sets sensitive gets no wave tier (sensitive
   assert.ok(
     r.logs.some((l) => /task 17 .*tier ordinary/.test(l)),
     r.logs.join(" | "),
+  );
+});
+
+// ================= #92: review caps, tier slices, fast path, branch-keyed artifact =================
+
+await test("#92 R1: no sdd-task default role is xhigh or max, in any tier; the step-up ladder holds opus/high", async () => {
+  for (const tierName of ["ordinary", "gate", "critical"]) {
+    const r = await run(sdd, { ...BASE, tier: tierName }, sddResponder());
+    for (const c of r.calls) {
+      assert.ok(
+        !["xhigh", "max"].includes(c.effort),
+        `${tierName} ${c.label} defaulted to ${c.effort}`,
+      );
+    }
+  }
+  // An escalatedFixer built (ordinary tier, no tier-specific entry) from a roles.fixer override at
+  // opus/high must stay opus/high, never step to xhigh.
+  const r = await run(
+    sdd,
+    { ...BASE, roles: { fixer: { model: "opus", effort: "high" } }, maxAgents: 40 },
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "re-review*": (p) => ({
+        verdicts: ids(p).map((id) => ({ id, verdict: "NOT ADDRESSED", evidence: "a.ts:1" })),
+        newFindings: [],
+        outOfScope: [],
+      }),
+    }),
+  );
+  assert.equal(r.find("fixer-r3").model, "opus");
+  assert.equal(r.find("fixer-r3").effort, "high", "opus/high must not step to xhigh");
+});
+
+await test("#92 R1: no wave-review default role is xhigh or max, in either tier", async () => {
+  for (const t of ["critical", "gate"]) {
+    const r = await run(
+      wr,
+      { ...WBASE, tier: t },
+      wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+    );
+    for (const c of r.calls) {
+      assert.ok(!["xhigh", "max"].includes(c.effort), `${t} ${c.label} defaulted to ${c.effort}`);
+    }
+  }
+});
+
+await test("#92 R1: a roles override to xhigh or max logs one warning line per role (sdd-task and wave-review)", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, roles: { ruler: { model: "opus", effort: "xhigh" } } },
+    sddResponder(),
+  );
+  const rulerWarnings = r.logs.filter((l) => /"ruler" overridden to effort "xhigh"/.test(l));
+  assert.equal(rulerWarnings.length, 1, r.logs.join(" | "));
+
+  const wrR = await run(
+    wr,
+    { ...WBASE, roles: { reviewer: { model: "opus", effort: "max" } } },
+    wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+  );
+  assert.ok(
+    wrR.logs.some((l) => /"reviewer" overridden to effort "max"/.test(l)),
+    wrR.logs.join(" | "),
+  );
+});
+
+await test("#92 R2: a branch-keyed artifact path replaces docs/reviews/pr-<n>.md; a bad branch throws; neither branch nor pr throws; a mismatched artifactPath throws", async () => {
+  const { pr, ...noPr } = WBASE;
+  const r = await run(
+    wr,
+    { ...noPr, branch: "feat/p0-wave-6" },
+    wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+  );
+  assert.ok(r.find("reviewer").prompt.includes("docs/reviews/feat-p0-wave-6.md"));
+  assert.ok(!r.find("reviewer").prompt.includes("PR #"), "no PR number when pr is not given");
+
+  await assert.rejects(
+    run(wr, { ...noPr, branch: "feat/../evil" }, wrResponder()),
+    /not a plain branch name/,
+  );
+  await assert.rejects(run(wr, { ...noPr }, wrResponder()), /at least one of "branch" or "pr"/);
+  await assert.rejects(
+    run(
+      wr,
+      { ...noPr, branch: "feat/p0-wave-6", artifactPath: "docs/reviews/pr-1.md" },
+      wrResponder(),
+    ),
+    /must be docs\/reviews\/feat-p0-wave-6\.md/,
+  );
+
+  const both = await run(
+    wr,
+    { ...WBASE, branch: "feat/p0-wave-6" },
+    wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+  );
+  assert.ok(both.find("reviewer").prompt.includes("PR #32"), "pr still names the PR number");
+  assert.ok(both.find("reviewer").prompt.includes("docs/reviews/feat-p0-wave-6.md"));
+});
+
+await test("#92 R3: slices run gate then critical, in order; each prompt lists only its own files; ids are prefixed; the merged findings reach the ruler and fixer", async () => {
+  const r = await run(
+    wr,
+    { ...WBASE, gateFiles: ["g.ts"], criticalFiles: ["c.ts"] },
+    wrResponder({
+      "reviewer-gate": {
+        verdict: "fixes",
+        reviewedSha: "h0full",
+        preconditionFailed: "",
+        findings: [WF("G1", "important", { file: "g.ts", planMandated: true })],
+        answers: [],
+        declined: [],
+        artifactWritten: false,
+      },
+      "reviewer-critical": {
+        verdict: "approve",
+        reviewedSha: "h0full",
+        preconditionFailed: "",
+        findings: [],
+        answers: [],
+        declined: [],
+        artifactWritten: false,
+      },
+      ruler: {
+        rulings: [
+          { item: "G-G1", decision: "fix", reason: "r", costIfWrong: "c", fixInstruction: "fi" },
+        ],
+      },
+    }),
+  );
+  assert.deepEqual(
+    r.labels.filter((l) => l.startsWith("reviewer")),
+    ["reviewer-gate", "reviewer-critical"],
+  );
+  assert.ok(
+    r.find("reviewer-gate").prompt.includes("* g.ts") &&
+      !r.find("reviewer-gate").prompt.includes("* c.ts"),
+  );
+  assert.ok(
+    r.find("reviewer-critical").prompt.includes("* c.ts") &&
+      !r.find("reviewer-critical").prompt.includes("* g.ts"),
+  );
+  assert.equal(tierOf(r.find("reviewer-gate")), "opus/medium");
+  assert.equal(tierOf(r.find("reviewer-critical")), "opus/high");
+  assert.ok(r.find("ruler").prompt.includes("G-G1"));
+  assert.ok(r.find("fixer").prompt.includes("G-G1"));
+  assert.equal(r.res.verdict, "approve");
+});
+
+await test("#92 R3: a tier that disagrees with the derived tier throws; both slice lists empty throws", async () => {
+  await assert.rejects(
+    run(wr, { ...WBASE, gateFiles: ["g.ts"], tier: "critical" }, wrResponder()),
+    /disagrees with the derived tier "gate"/,
+  );
+  await assert.rejects(
+    run(wr, { ...WBASE, criticalFiles: [], gateFiles: [] }, wrResponder()),
+    /criticalFiles and gateFiles are both empty/,
+  );
+});
+
+await test("#92 R3: only the last slice's prompt can write the artifact; it carries the earlier slice's verdict and open-finding count; a slice reviewer returning nothing names the slice", async () => {
+  const clean = {
+    verdict: "approve",
+    reviewedSha: "h0full",
+    preconditionFailed: "",
+    findings: [],
+    answers: [],
+    declined: [],
+    artifactWritten: false,
+  };
+  const r = await run(
+    wr,
+    { ...WBASE, gateFiles: ["g.ts"], criticalFiles: ["c.ts"] },
+    wrResponder({
+      "reviewer-gate": clean,
+      "reviewer-critical": { ...clean, artifactWritten: true },
+    }),
+  );
+  assert.ok(!r.find("reviewer-gate").prompt.includes("Write the artifact"));
+  assert.ok(r.find("reviewer-critical").prompt.includes("Write the artifact"));
+  assert.ok(
+    r
+      .find("reviewer-critical")
+      .prompt.includes("The gate slice already ran: verdict approve, 0 open"),
+  );
+  assert.equal(r.res.verdict, "approve");
+  assert.equal(r.res.artifactWritten, true);
+
+  const dead = await run(
+    wr,
+    { ...WBASE, gateFiles: ["g.ts"] },
+    wrResponder({ "reviewer-gate": null }),
+  );
+  assert.equal(dead.res.stopped, "reviewer");
+  assert.ok(/gate slice reviewer returned no result/.test(dead.res.problem), dead.res.problem);
+});
+
+await test("#92 R4: fast-path approve is one agent whose prompt carries mode: fast; above the limit or a bad reviewedLines takes no fast path", async () => {
+  const r = await run(
+    wr,
+    { ...WBASE, reviewedLines: 12 },
+    wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+  );
+  assert.deepEqual(r.labels, ["reviewer"]);
+  assert.ok(r.find("reviewer").prompt.includes('mode: "fast"'));
+  assert.equal(r.res.verdict, "approve");
+  assert.equal(r.res.artifactWritten, true);
+
+  const over = await run(
+    wr,
+    { ...WBASE, reviewedLines: 51 },
+    wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+  );
+  assert.ok(!over.find("reviewer").prompt.includes('mode: "fast"'));
+
+  await assert.rejects(run(wr, { ...WBASE, reviewedLines: -1 }, wrResponder()), /reviewedLines/);
+  await assert.rejects(run(wr, { ...WBASE, reviewedLines: 1.5 }, wrResponder()), /reviewedLines/);
+  await assert.rejects(run(wr, { ...WBASE, reviewedLines: "12" }, wrResponder()), /reviewedLines/);
+});
+
+await test("#92 R4: a fast-path finding runs the normal flow; the re-reviewer's artifact carries no mode line", async () => {
+  const r = await run(
+    wr,
+    { ...WBASE, reviewedLines: 12 },
+    wrResponder({ reviewer: reviewWith([WF("I1", "important")]) }),
+  );
+  assert.deepEqual(r.labels, ["reviewer", "fixer", "progress", "re-reviewer"]);
+  assert.ok(r.find("reviewer").prompt.includes('mode: "fast"'));
+  assert.ok(!r.find("re-reviewer").prompt.includes("mode:"));
+  assert.equal(r.res.verdict, "approve");
+});
+
+await test("#92 R4: the fast-path constant in wave-review.js equals FAST_PATH_MAX_LINES in scripts/ci/sensitive-review.ts", async () => {
+  const wrSrc = fs.readFileSync(path.join(WF_DIR, "wave-review.js"), "utf8");
+  const wrM = /FAST_PATH_MAX_LINES = (\d+)/.exec(wrSrc);
+  const ciSrc = fs.readFileSync(
+    path.resolve(WF_DIR, "../../scripts/ci/sensitive-review.ts"),
+    "utf8",
+  );
+  const ciM = /FAST_PATH_MAX_LINES = (\d+)/.exec(ciSrc);
+  assert.ok(wrM && ciM, "constant not found in one of the files");
+  assert.equal(Number(wrM[1]), Number(ciM[1]));
+});
+
+await test("#92 R5: contextPath replaces the whole plan and ledger in the reviewer, ruler and re-reviewer prompts; planPath becomes optional", async () => {
+  const { planPath, ...noPlan } = WBASE;
+  const r = await run(
+    wr,
+    { ...noPlan, contextPath: "C:/w/w6-context.md" },
+    wrResponder({
+      reviewer: reviewWith([WF("I1", "important", { planMandated: true })]),
+      ruler: {
+        rulings: [
+          { item: "I1", decision: "fix", reason: "r", costIfWrong: "c", fixInstruction: "fi" },
+        ],
+      },
+    }),
+  );
+  for (const l of ["reviewer", "ruler", "re-reviewer"]) {
+    const p = r.find(l).prompt;
+    assert.ok(p.includes("C:/w/w6-context.md"), `${l} lacks the context excerpt`);
+    assert.ok(!p.includes("p.md"), `${l} still references the plan path`);
+    assert.ok(!p.includes("l.md"), `${l} still references the ledger path`);
+  }
+});
+
+await test("#92 R6: the cross-cutting budget line is in every reviewer prompt (single, slices, fast path) and the re-reviewer", async () => {
+  const single = await run(
+    wr,
+    WBASE,
+    wrResponder({ reviewer: reviewWith([WF("I1", "important")]) }),
+  );
+  assert.ok(single.find("reviewer").prompt.includes("Cross-cutting budget: at most 3 checks"));
+  assert.ok(single.find("re-reviewer").prompt.includes("Cross-cutting budget: at most 3 checks"));
+
+  const fast = await run(
+    wr,
+    { ...WBASE, reviewedLines: 10 },
+    wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+  );
+  assert.ok(fast.find("reviewer").prompt.includes("Cross-cutting budget: at most 3 checks"));
+
+  const clean = {
+    verdict: "approve",
+    reviewedSha: "h0full",
+    preconditionFailed: "",
+    findings: [],
+    answers: [],
+    declined: [],
+  };
+  const slices = await run(
+    wr,
+    { ...WBASE, gateFiles: ["g.ts"], criticalFiles: ["c.ts"] },
+    wrResponder({
+      "reviewer-gate": { ...clean, artifactWritten: false },
+      "reviewer-critical": { ...clean, artifactWritten: true },
+    }),
+  );
+  assert.ok(slices.find("reviewer-gate").prompt.includes("Cross-cutting budget: at most 3 checks"));
+  assert.ok(
+    slices.find("reviewer-critical").prompt.includes("Cross-cutting budget: at most 3 checks"),
   );
 });
 
