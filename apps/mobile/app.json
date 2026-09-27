@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Query Module",
+    "slug": "querymodule",
+    "version": "0.0.0",
+    "platforms": ["ios", "android"],
+    "userInterfaceStyle": "automatic"
+  }
+}

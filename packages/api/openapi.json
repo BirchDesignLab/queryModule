@@ -523,7 +523,7 @@
                         "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                       },
                       "when": {
-                        "$ref": "#/components/schemas/getConfig200___schema0"
+                        "$ref": "#/components/schemas/Condition"
                       }
                     },
                     "required": [
@@ -719,7 +719,7 @@
                         "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}$"
                       },
                       "when": {
-                        "$ref": "#/components/schemas/getConfig200___schema0"
+                        "$ref": "#/components/schemas/Condition"
                       },
                       "effect": {
                         "type": "string",
@@ -764,7 +764,7 @@
                         "type": "boolean"
                       },
                       "when": {
-                        "$ref": "#/components/schemas/getConfig200___schema0"
+                        "$ref": "#/components/schemas/Condition"
                       }
                     },
                     "required": [
@@ -796,7 +796,7 @@
                         }
                       },
                       "when": {
-                        "$ref": "#/components/schemas/getConfig200___schema0"
+                        "$ref": "#/components/schemas/Condition"
                       }
                     },
                     "required": [
@@ -1060,7 +1060,7 @@
                   "minLength": 1
                 },
                 "when": {
-                  "$ref": "#/components/schemas/getConfig200___schema0"
+                  "$ref": "#/components/schemas/Condition"
                 },
                 "elements": {
                   "minItems": 1,
@@ -1542,7 +1542,7 @@
         ],
         "additionalProperties": false
       },
-      "getConfig200___schema0": {
+      "Condition": {
         "anyOf": [
           {
             "type": "object",
@@ -1697,7 +1697,7 @@
               "all": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/getConfig200___schema0"
+                  "$ref": "#/components/schemas/Condition"
                 }
               }
             },
@@ -1712,7 +1712,7 @@
               "any": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/getConfig200___schema0"
+                  "$ref": "#/components/schemas/Condition"
                 }
               }
             },
@@ -1725,7 +1725,7 @@
             "type": "object",
             "properties": {
               "not": {
-                "$ref": "#/components/schemas/getConfig200___schema0"
+                "$ref": "#/components/schemas/Condition"
               }
             },
             "required": [

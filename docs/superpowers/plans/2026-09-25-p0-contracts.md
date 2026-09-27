@@ -7268,7 +7268,7 @@ git commit -m "feat(b): Vite + React web shell reading tokens
 
 **IDs:** none (scaffolding)
 
-- [ ] **Step 1: Write `apps/mobile/package.json`.**
+- [x] **Step 1: Write `apps/mobile/package.json`.**
 
 ```json
 {
@@ -7283,7 +7283,7 @@ git commit -m "feat(b): Vite + React web shell reading tokens
 }
 ```
 
-- [ ] **Step 2: Add Expo and its SDK-matched React Native versions.**
+- [x] **Step 2: Add Expo and its SDK-matched React Native versions.**
 
 ```bash
 pnpm --filter @querymodule/mobile add expo@latest
@@ -7293,7 +7293,7 @@ pnpm --filter @querymodule/mobile add -D typescript@latest @types/react@latest
 
 Expected: `expo install` pins `react` and `react-native` to the versions the installed Expo SDK expects.
 
-- [ ] **Step 3: Write the app files.** `apps/mobile/app.json`:
+- [x] **Step 3: Write the app files.** `apps/mobile/app.json`:
 
 ```json
 {
@@ -7348,7 +7348,7 @@ const styles = StyleSheet.create({
 });
 ```
 
-- [ ] **Step 4: Verify typecheck and export on Node 24.**
+- [x] **Step 4: Verify typecheck and export on Node 24.**
 
 ```bash
 node --version
@@ -7358,7 +7358,7 @@ pnpm --filter @querymodule/mobile export
 
 Expected: `v24.` prefix; `tsc --noEmit` exits 0; Expo prints bundle sizes for `ios` and `android` and `Exported: dist`. A failure here is handled in Task 27 Step 5.
 
-- [ ] **Step 5: Add CI steps 8 and 9.** In `.github/workflows/ci.yml`, replace the comment line `      # Step 8: web production build (added by Task 26)` with:
+- [x] **Step 5: Add CI steps 8 and 9.** In `.github/workflows/ci.yml`, replace the comment line `      # Step 8: web production build (added by Task 26)` with:
 
 ```yaml
       # Step 8: web production build
@@ -7372,7 +7372,7 @@ Expected: `v24.` prefix; `tsc --noEmit` exits 0; Expo prints bundle sizes for `i
         run: pnpm --filter @querymodule/mobile export
 ```
 
-- [ ] **Step 6: Run the local gate.**
+- [x] **Step 6: Run the local gate.**
 
 ```bash
 pnpm -r typecheck
@@ -7381,7 +7381,7 @@ pnpm verify
 
 Expected: every package `typecheck` exits 0, including `@querymodule/mobile`; `pnpm verify` green.
 
-- [ ] **Step 7: Commit, sensitive review, watch CI.**
+- [x] **Step 7: Commit, sensitive review, watch CI.**
 
 ```bash
 git add -A
@@ -7415,13 +7415,13 @@ Expected: `ci` green with the `Web build` and `Expo export` steps passing on `ub
 
 **IDs:** none (scaffolding); ADR-0001
 
-- [ ] **Step 1: Add the dependency.**
+- [x] **Step 1: Add the dependency.**
 
 ```bash
 pnpm --filter @querymodule/api add @libsql/client@latest
 ```
 
-- [ ] **Step 2: Write the test `packages/api/test/runtime/libsql-node24.test.ts`.**
+- [x] **Step 2: Write the test `packages/api/test/runtime/libsql-node24.test.ts`.**
 
 ```ts
 import { mkdtempSync, rmSync } from "node:fs";
@@ -7460,7 +7460,7 @@ describe("ADR-0001 @libsql/client on Node 24", () => {
 });
 ```
 
-- [ ] **Step 3: Run it on this machine.**
+- [x] **Step 3: Run it on this machine.**
 
 ```bash
 pnpm vitest run --project api
@@ -7468,9 +7468,9 @@ pnpm vitest run --project api
 
 Expected: `4 passed` (openapi plus three runtime tests). On Windows this exercises the win32-x64 binding; CI exercises linux-x64 (master plan 11).
 
-- [ ] **Step 4: Record the results.** Edit this step's text in the PR to read: "Result MM-DD-YY: Node <exact version>; `@libsql/client` <version> passes on <win32-x64 or linux-x64> locally and linux-x64 in CI; `expo export` (Expo SDK <n>) passes locally and in CI."
+- [x] **Step 4: Record the results.** Result 09-27-26: Node 24.21.0; `@libsql/client` 0.18.0 passes on win32-x64 locally (linux-x64 in CI on the W6 PR); `expo export` (Expo SDK 57) passes locally (and in CI on the W6 PR). The encrypted-file test leaves its OS-temp directory on Windows only: the native handle holds the file until the process exits.
 
-- [ ] **Step 5: If either check fails.** Rerun the failing command on Node 22 to separate a Node 24 cause from any other:
+- [x] **Step 5: If either check fails.** Rerun the failing command on Node 22 to separate a Node 24 cause from any other:
 
 ```bash
 fnm exec --using=22 pnpm vitest run --project api
@@ -7479,7 +7479,7 @@ fnm exec --using=22 pnpm --filter @querymodule/mobile export
 
 A failure that passes on Node 22 reopens ADR-0001: stop P0, open an issue titled `Reopen ADR-0001: <package> fails on Node 24 (ADR-0001)` labelled `core`, `p0`, milestone `M0 Skeleton`, with both outputs, and write the next ADR (`docs/decisions/0003-...`, since `docs/decisions/0002-drop-watchtower.md` already exists) before continuing. A failure that also happens on Node 22 is not an ADR matter: fix it inside this task (for Expo in a pnpm workspace, the documented fix is `node-linker=hoisted` in `.npmrc`, in its own commit with the reason in the message).
 
-- [ ] **Step 6: Commit.**
+- [x] **Step 6: Commit.**
 
 ```bash
 git add -A
@@ -7490,6 +7490,8 @@ git commit -m "test(a): Node 24 compatibility check for @libsql/client
 
 ### Task 28: Ruleset on main and security updates (S) (#29)
 
+Amended 09-27-26 (W6): the script defaults to a dry run (`--apply` writes) and acts as `--as <login>` (default BirchDesignLab) through `GH_TOKEN`; tested with a stub `gh` (`scripts/ops/gh-setup-repo.test.ts`). The live `--apply` runs after the W6 PR merges, once the ADR-0008 aggregate `ci` check has reported, with the developer's go.
+
 **Files:**
 - Create: `scripts/ops/gh-setup-repo.sh`
 
@@ -7499,7 +7501,7 @@ git commit -m "test(a): Node 24 compatibility check for @libsql/client
 
 **IDs:** SEC-020
 
-- [ ] **Step 1: Write `scripts/ops/gh-setup-repo.sh`.**
+- [x] **Step 1: Write `scripts/ops/gh-setup-repo.sh`.**
 
 ```bash
 #!/usr/bin/env bash
@@ -7586,7 +7588,7 @@ echo "security updates: on"
 echo "done"
 ```
 
-- [ ] **Step 2: Lint the script.**
+- [x] **Step 2: Lint the script.**
 
 ```bash
 bash -n scripts/ops/gh-setup-repo.sh && echo "syntax ok"

@@ -7,7 +7,7 @@ Saved Workflow scripts that run implementation plans in place of hand-dispatched
 | `sdd-task.js` | One plan task at its review tier: implement, review with gate-0, check, rule, fix, gate; returns the ledger lines |
 | `sdd-wave.js` | A whole wave: each task as a nested `sdd-task` run, in order, with carries flowing forward; stops at the first task that does not complete |
 | `smoke/sdd-task-stub.js` | Zero-agent stand-in for `sdd-task` (`sddTaskPath`), to smoke-test `sdd-wave` in the real runtime |
-| `wave-review.js` | Whole-branch review of a sensitive wave PR, one fix pass, one re-review, the `docs/reviews/pr-<n>.md` artifact |
+| `wave-review.js` | Whole-branch review of a sensitive wave PR, one fix pass, one re-review, the branch-keyed (or `docs/reviews/pr-<n>.md`) artifact |
 | `../../scripts/sdd/task-brief.sh` | Extracts one `### Task N:` section of a plan into a brief file |
 | `../../scripts/sdd/workflow-harness.mjs` | Mock harness: runs both scripts against stubbed agents |
 | `../../scripts/sdd/append-ledger.mjs` | Appends an `sdd-task` result's `ledgerLines` to the SDD ledger (controller step) |
@@ -88,7 +88,7 @@ There is no ledger role: the script returns `ledgerLines` and the controller app
 
 `critic: true` turns the critic on for an ordinary task without changing any tier or ruler rule (the sensitive ruler rule still follows the tier only). Its focus, when the tier is ordinary and `ui` is not set: "correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail". `criticFocus` replaces that sentence; on a gate, critical or UI task the usual focus stays and `criticFocus` is appended. A non-boolean `critic` or an empty `criticFocus` throws at start.
 
-Step-up ladder: haiku to sonnet/medium; sonnet/low to sonnet/medium; sonnet/medium to sonnet/high; sonnet/high or xhigh to opus/medium; opus/low to opus/medium; opus/medium to opus/high; opus/high to opus/xhigh.
+Step-up ladder: haiku to sonnet/medium; sonnet/low to sonnet/medium; sonnet/medium to sonnet/high; sonnet/high or xhigh to opus/medium; opus/low to opus/medium; opus/medium to opus/high; opus/high stays opus/high (no step to xhigh, developer decision 09-26-26, #92). No default role in this table is xhigh or max; a `roles` override may still ask for one, and the script logs one warning line per role overridden that way.
 
 ### Flow
 
@@ -247,48 +247,67 @@ A `parked` task, or a child that threw, has no stop point to answer. Adjudicate 
 ### Arguments
 
 ```
-{ pr, base, head, repoDir, planPath, ledgerPath, workDir, scratchRoot, runLabel,
-  sensitiveFiles: [], questions: [], artifactPath: "docs/reviews/pr-<pr>.md",
+{ pr?, branch?,                       // at least one required (both allowed); branch keys the artifact
+  base, head, repoDir, planPath,      // planPath required unless contextPath is given
+  ledgerPath, workDir, scratchRoot, runLabel,
+  sensitiveFiles: [], questions: [],
+  criticalFiles?: [], gateFiles?: [], // optional tier slices (#92); tier is derived when given
+  reviewedLines?: 12,                 // optional small-diff fast path (#92)
+  contextPath?,                       // optional context excerpt (#92), in place of the whole plan and ledger
+  artifactPath?: "docs/reviews/<branch>.md" | "docs/reviews/pr-<pr>.md",  // must equal the computed path
   specPath?, requirementsDoc?, date?: "MM-DD-YY", trailer, roles,
-  tier?: "critical" | "gate",        // default "critical"; "ordinary" throws (no wave-review needed)
+  tier?: "critical" | "gate",        // default "critical" (or derived from criticalFiles/gateFiles);
+                                      // "ordinary" throws (no wave-review needed)
   answers?: [{ at, text?, decisions? }] }
 ```
 
-Required: `pr`, `base`, `head`, `repoDir`, `planPath`, `workDir`, `scratchRoot`, `runLabel`, `trailer`. `artifactPath` must be `docs/reviews/pr-<pr>.md`; anything else throws. `wave-review` takes no `globalConstraints`, and the same rule applies to `questions` and `answers`: product and code constraints only, never process bullets.
+Required: `base`, `head`, `repoDir`, `workDir`, `scratchRoot`, `runLabel`, `trailer`, at least one of `pr` or `branch`, and `planPath` unless `contextPath` is given. `artifactPath`, when given, must equal the computed path (below); anything else throws. `wave-review` takes no `globalConstraints`, and the same rule applies to `questions` and `answers`: product and code constraints only, never process bullets.
+
+**Branch-keyed artifact (R2, #92).** With `branch`, the artifact is `docs/reviews/<branch, "/" turned to "-">.md`; without it, `docs/reviews/pr-<pr>.md`. `branch` is validated exactly like `branchArtifactPath` in `scripts/ci/sensitive-review.ts` (every `"/"`-separated segment matches `^[A-Za-z0-9_][A-Za-z0-9._-]*$` and contains no `".."`); an invalid `branch` throws before any agent runs. Prompts name the PR number only when `pr` is given, so the review can land before the PR (and its number) exists.
 
 ### Roles and defaults
 
 | Role | `tier: "critical"` (default) | `tier: "gate"` |
 |---|---|---|
-| reviewer | opus / xhigh | opus / high |
-| ruler | opus / high | opus / high |
+| reviewer | opus / high | opus / medium |
+| ruler | opus / medium | opus / low |
 | fixer | opus / medium | opus / medium |
 | progressChecker | sonnet / low | sonnet / low |
-| reReviewer | opus / xhigh | opus / high |
+| reReviewer | opus / high | opus / medium |
 
-Review tier (ADR-0007): pass the PR's highest tier in `.github/sensitive-paths`. `tier: "gate"` is for a PR whose highest tier is `[gate]`; the artifact front matter then reads `effort: "high"` (it follows the writing role), and `scripts/ci/sensitive-review.ts` accepts high for gate paths only, so a gate artifact on a PR that touches a critical path fails closed. `tier: "ordinary"` throws: a PR with only `[deps]` or `[exempt]` changes, or no sensitive path, needs no `wave-review`. An unknown tier throws. A `roles` override still wins over the tier. The reviewer prompt is diff-scoped: the branch diff and the listed sensitive files, then callers or callees of the changed code only for a concrete risk it can name, one focused check per risk; the plan, spec and requirement lines the tasks cite and the ledger Rulings still apply, and the controller questions and the sensitive-file list still steer it. Never touch the repository tree while a run is active: the fixer's clean-tree precondition stops the run (PR #76, 09-26-26).
+No default in this table is xhigh or max (developer decision 09-26-26, #92). A `roles` override may still ask for one; the script logs one warning line per role overridden that way. The artifact front matter still follows the role that writes it, so an override that lowers effort makes the check fail closed.
+
+Review tier (ADR-0007): pass the PR's highest tier in `.github/sensitive-paths`, or give `criticalFiles`/`gateFiles` and let the tier derive (below). `tier: "ordinary"` throws: a PR with only `[deps]` or `[exempt]` changes, or no sensitive path, needs no `wave-review`. An unknown tier throws. A `roles` override still wins over the tier. The reviewer prompt is diff-scoped: the branch diff and the listed sensitive files, then callers or callees of the changed code only for a concrete risk it can name, one focused check per risk; the plan, spec and requirement lines the tasks cite and the ledger Rulings still apply, and the controller questions and the sensitive-file list still steer it. Never touch the repository tree while a run is active: the fixer's clean-tree precondition stops the run (PR #76, 09-26-26).
+
+**Tier slices (R3, #92).** Give `criticalFiles` and/or `gateFiles` (the controller computes them from `.github/sensitive-paths`) to run one reviewer per non-empty slice instead of one reviewer over the whole `tier`: `sensitiveFiles` and `tier` are then derived (union of both lists; `tier` is critical when `criticalFiles` is non-empty, else gate); a passed `tier` that disagrees throws, and both lists empty throws (no wave-review needed). The slices run sequential, gate first, critical last, each reviewing only its own files (role `reviewer-gate` opus/medium, role `reviewer-critical` opus/high; a plain `roles.reviewer` override applies to both, a slice-named override wins over it). Finding ids are prefixed `G-` or `C-` and merge into the one Rule, Fix, Re-review flow. Only the last slice (the highest tier present) may write the artifact on the first pass, and only when every slice, including itself, approved with no open critical or important finding; its prompt carries the earlier slice's verdict and open-finding count. A slice reviewer that returns nothing stops the run at `reviewer` (the slice is named in `problem`). When neither list is given, one reviewer runs over `sensitiveFiles` at `tier`, as before.
+
+**Small-diff fast path (R4, #92).** Give `reviewedLines` (added plus deleted lines over critical and gate files, from `git diff --numstat`; the controller computes it) at or below `FAST_PATH_MAX_LINES` (50, defined once in `wave-review.js` with a comment that it must equal the constant of the same name in `scripts/ci/sensitive-review.ts`) to run exactly one reviewer, no slices, covering every critical and gate file, at the highest tier's reviewer role. A clean approve writes the artifact with the extra front-matter line `mode: "fast"` and the run ends there: no ruler, fixer, progress checker or re-reviewer. A critical or important finding runs the normal flow instead, and the re-reviewer's artifact then carries no `mode` line (the fix may take the diff over the limit; the check counts again). Without `reviewedLines`, or above the limit, there is no fast path.
+
+**Context diet (R5, #92).** Give `contextPath` (a controller-written excerpt holding only the ledger rulings and the plan and spec lines that touch the changed files) to have the reviewer, ruler and re-reviewer prompts point to it in place of the whole plan and ledger; `planPath` becomes optional when `contextPath` is given (still required otherwise). The spec and the requirements stay binding; reviewers read only the sections the excerpt cites unless a named risk needs more.
+
+**Cross-cutting budget (R6, #92).** Every reviewer prompt (slices, fast path and the re-reviewer) allows at most 3 cross-cutting checks outside the diff, each for a named risk, listed in the review file under "Cross-cutting checks".
 
 ### Flow
 
-1. **Review.** Whole-branch review of `base..head` against the plan, the spec (binding) and the requirements, with the sensitive-file list, the ledger's `Ruling` and `minor (deferred)` lines, the controller's questions and a "declined to judge" list. It checks a precondition first (`head` resolves, `base` is its ancestor, clean tree); a failure stops the run (`stopped: "precondition"`) before any ruler or fixer. Writes `workDir/<runLabel>-review.md`, and the artifact only on approve with no open critical or important finding. Returns `{ verdict: approve|fixes, reviewedSha, preconditionFailed, findings:[... contests], answers, declined, artifactWritten }`. Its prompt never carries answers, so a re-run with answers replays it from cache.
+1. **Review.** A single whole-tier reviewer, a fast-path reviewer, or one reviewer per tier slice (above), of `base..head` against the plan, the spec (binding) and the requirements, with the sensitive-file list, the ledger's `Ruling` and `minor (deferred)` lines, the controller's questions and a "declined to judge" list. It checks a precondition first (`head` resolves, `base` is its ancestor, clean tree); a failure stops the run (`stopped: "precondition"`) before any ruler or fixer. Writes `workDir/<runLabel>-review.md` (or, with tier slices, `workDir/<runLabel>-review-gate.md` and/or `-review-critical.md`), and the artifact only on approve with no open critical or important finding. Returns `{ verdict: approve|fixes, reviewedSha, preconditionFailed, findings:[... contests], answers, declined, artifactWritten }`. Its prompt never carries answers, so a re-run with answers replays it from cache.
 2. **Controller decisions, then Rule.** Findings with a controller decision are settled by it (final for the run; a controller `stands` on a critical stands). The ruler runs on the other critical or important findings that are plan-mandated or contest a ledger Ruling. The ruler prompt carries the escalation rule above verbatim, always, plus "A Critical finding may be ruled fix or escalate, never stands." The script escalates a critical ruled `stands` or `verified`. Any escalation stops the run.
 3. **One fix pass** with the complete list (critical and important must be fixed; minors when small). The fixer runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` once each and carries the no-push, no-PR, no-merge rule. Rulings in force are passed; the fixer never reverses one. A fixer precondition failure (HEAD moved, dirty tree) stops the run. Then the progress checker. Its problems become findings `progress-<k>`.
-4. **One re-review** of the fix diff against the first review file. It verdicts every finding including `progress-*`: ADDRESSED, NOT ADDRESSED (also to reject a ruler ruling), or STANDS. A controller ruling is final. Otherwise a critical is never STANDS. Every important accepted as STANDS must be listed in `acceptedStands` with the id of the stands ruling. No approve while any critical is open. It writes the artifact at the fix head on approve. There is no second fix pass.
+4. **One re-review** of the fix diff against the first review file(s). It verdicts every finding including `progress-*`: ADDRESSED, NOT ADDRESSED (also to reject a ruler ruling), or STANDS. A controller ruling is final. Otherwise a critical is never STANDS. Every important accepted as STANDS must be listed in `acceptedStands` with the id of the stands ruling. No approve while any critical is open. It writes the artifact at the fix head on approve, with no `mode` line. There is no second fix pass.
 
-Worst case: 5 agents, plus one `reviewer-retry` and one `fixer-retry` on answered precondition stops (7).
+The fast path, on a clean approve, is 1 agent. Otherwise, worst case: 5 agents (or 6 with two tier slices), plus one `reviewer-retry` (or `reviewer-<tier>-retry`) and one `fixer-retry` on answered precondition stops.
 
 ### Artifact
 
 ```
 ---
 reviewer: "opus-5.5"
-effort: "xhigh"
+effort: "high"
 reviewedSha: "<full head sha>"
 verdict: "approve"
 ---
 ```
 
-Front matter comes from the role that writes it; an override changes it, so the sensitive-review check fails closed. The body: scope, findings summary (with each ruling id kept as stands), answers, remaining minors. No em dashes; MM-DD-YY dates. The agent writes but never commits it.
+On the fast path's first-pass approve, an extra line `mode: "fast"` follows `verdict`; every other write (the normal flow, tier slices, the re-reviewer) omits it. Front matter comes from the role that writes it; an override changes it, so the sensitive-review check fails closed. The body: scope, findings summary (with each ruling id kept as stands), cross-cutting checks, answers, remaining minors. No em dashes; MM-DD-YY dates. The agent writes but never commits it.
 
 ### Return
 
@@ -302,11 +321,17 @@ Front matter comes from the role that writes it; an override changes it, so the 
 - `approve` with `artifactWritten`: commit the artifact on top of the reviewed head and push.
 - `approve` without `artifactWritten`: re-run the review. Never hand-write the artifact.
 - `fixes` without `stopped`: adjudicate `residual`.
-- `stopped` set: a decision is needed. Stop points and consumers: `reviewer` (the reviewer returned nothing): the ruler, fixer and re-reviewer; `precondition` (`stopPoint` `precondition:reviewer` or `precondition:fixer`; the problem names each untracked or modified file and calls out a stray artifact): the failing agent re-runs once as `reviewer-retry` or `fixer-retry`; `ruler`: decisions settle the escalated items and text goes to the fixer and re-reviewer; `fixer`: the fixer; `re-review`: the re-reviewer. Another `at` throws. Delivery is first consumer that runs, so `reviewer` or `ruler` text reaches the re-reviewer when no ruler or fixer runs.
+- `stopped` set: a decision is needed. Stop points and consumers: `reviewer` (the reviewer, or a slice's reviewer named in `problem`, returned nothing): the ruler, fixer and re-reviewer; `precondition` (`stopPoint` `precondition:reviewer` or `precondition:fixer`; the problem names each untracked or modified file and calls out a stray artifact): the failing agent re-runs once as `reviewer-retry` or `fixer-retry`; `ruler`: decisions settle the escalated items and text goes to the fixer and re-reviewer; `fixer`: the fixer; `re-review`: the re-reviewer. Another `at` throws. Delivery is first consumer that runs, so `reviewer` or `ruler` text reaches the re-reviewer when no ruler or fixer runs.
 - `strayArtifact` set: delete that file.
 - `declined` lists behaviours the reviewer set aside; the controller rules on each.
 
 ## Controller procedure
+
+Which path a change takes (#92, CLAUDE.md "Controller rules"):
+- **Inline** when the brief or issue already states the exact design, the change is about 150 lines or fewer in a handful of files, and no design question is open. The controller implements it (TDD, `pnpm verify`, `pnpm audit --prod`); no `sdd-task` reviewers run on it.
+- **`sdd-task`** for real plan tasks: several interacting files, design judgement, or a brief that does not fully specify the work.
+- **Review by tier, not by implementer.** Ordinary: CI only. Gate or critical: one `wave-review` per PR, with `branch`, `criticalFiles`, `gateFiles`, `reviewedLines` (from `git diff --numstat base...head` over those files) and a `contextPath` excerpt.
+- **Split fixes by tier.** An ordinary fix goes in its own PR; gate chores ride the next wave PR.
 
 Before an `sdd-task` run:
 1. The wave branch is checked out in `repoDir` with a clean tree. `base = git rev-parse HEAD` (full sha).

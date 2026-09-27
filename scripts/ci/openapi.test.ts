@@ -1,7 +1,7 @@
 import { ROUTES, type RouteDef } from "@querymodule/core/contracts";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { buildOpenApiDocument, toJsonSchema } from "./openapi";
+import { buildOpenApiDocument, registerSchema, toJsonSchema } from "./openapi";
 
 function refs(value: unknown, out: string[] = []): string[] {
   if (Array.isArray(value)) for (const v of value) refs(v, out);
@@ -88,5 +88,59 @@ describe("toJsonSchema fails closed (review W4 M9)", () => {
   it("throws on an unrepresentable type instead of publishing {}", () => {
     expect(() => toJsonSchema(z.date())).toThrow();
     expect(() => toJsonSchema(z.object({ n: z.bigint() }))).toThrow();
+  });
+});
+
+describe("#69 stable Condition component and input-side bodies", () => {
+  const doc = buildOpenApiDocument(ROUTES);
+
+  it("names the recursive Condition from its registry id, never from zod's internal counter", () => {
+    const names = Object.keys(doc.components.schemas);
+    expect(names).toContain("Condition");
+    expect(names.filter((n) => n.includes("__schema"))).toEqual([]);
+    const conditionRefs = refs(doc).filter((r) => r.endsWith("Condition"));
+    expect(conditionRefs.length).toBeGreaterThan(0);
+    for (const r of conditionRefs) expect(r).toBe("#/components/schemas/Condition");
+  });
+
+  const WithDefault = z.object({ a: z.string().default("x"), b: z.string() });
+  const route = {
+    id: "postThing",
+    method: "post",
+    path: "/api/v1/thing",
+    summary: "test route",
+    access: "authenticated",
+    since: "M1",
+    status: "planned",
+    requiresRequestedWith: true,
+    request: { body: WithDefault },
+    responses: { 200: { description: "ok", schema: WithDefault } },
+  } as unknown as RouteDef;
+
+  it("publishes a request body with io input: a defaulted field is optional", () => {
+    const d = buildOpenApiDocument([route]);
+    const body = d.components.schemas.postThingBody as { required?: string[] };
+    const res = d.components.schemas.postThing200 as { required?: string[] };
+    expect(body.required).toEqual(["b"]);
+    expect(res.required).toEqual(["a", "b"]);
+  });
+
+  it("toJsonSchema takes io, defaulting to output", () => {
+    expect((toJsonSchema(WithDefault) as { required: string[] }).required).toEqual(["a", "b"]);
+    expect((toJsonSchema(WithDefault, "input") as { required: string[] }).required).toEqual(["b"]);
+  });
+});
+
+describe("registerSchema fails closed on a shared id clash (#69)", () => {
+  it("throws when one registry id would name two different bodies", () => {
+    const B = z.object({ y: z.number() });
+    const components: Record<string, Record<string, unknown>> = {
+      Clash: { type: "object", properties: { x: { type: "string" } } },
+    };
+    const wrap = (s: z.ZodType) => z.object({ inner: s });
+    z.globalRegistry.add(B, { id: "Clash" });
+    expect(() => registerSchema("one", wrap(B), components)).toThrow(
+      "component Clash is defined twice with different bodies",
+    );
   });
 });

@@ -1,6 +1,8 @@
 # Tiered globs for the CLAUDE.md sensitive areas (spec 9.1, ADR-0007). One glob per line.
-# [critical]: docs/reviews/pr-<n>.md from an Opus 5.5 review at effort xhigh or max.
-# [gate]:     docs/reviews/pr-<n>.md from an Opus 5.5 review at effort high or above.
+# [critical]: a review artifact from Opus 5.5 at effort high or above (#92).
+# [gate]:     a review artifact from Opus 5.5 at effort medium or above (#92).
+#             The artifact is docs/reviews/<branch>.md ("/" to "-") or docs/reviews/pr-<n>.md;
+#             mode "fast" covers at most 50 changed lines in critical and gate files.
 # [deps]:     no artifact; the ci job's licence check, pnpm audit, dependency review and
 #             workflow lint cover it.
 # [exempt]:   never needs a review (lowers [gate] and [deps], never [critical]).
@@ -39,6 +41,10 @@ scripts/ci/sensitive-review.ts
 scripts/ci/check-sensitive-review.ts
 # Reserved: the audit_event immutability guard (spec 9.2, SEC-010 to SEC-013)
 scripts/ci/check-audit-migrations.ts
+# Reserved: TokenStore implementations, bearer token storage (SEC-006, #85); name
+# the file or directory *token-store* (for example the P1 native SecureStore store)
+**/*token-store*
+**/*token-store*/**
 
 [gate]
 # Verify gate and merge path

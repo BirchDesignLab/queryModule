@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 22:15 |
+| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 22:14 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,23 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: W5 merged (#83); #91 (ReDoS fix, Node >=24.15, jsdom 30, board data) merged; #93 (#61 message-key bounds) open, review approved, merge pending; next W6 (Tasks 26 to 28, #27 to #29)
-- Branch / PR: feat/core-61-message-keys / #93 (then feat/p0-wave-6 from main)
-- Last green: pnpm verify at d4c7a00 (623 tests; known flaky timeout in scripts/ci/sensitive-review.test.ts under coverage, #85)
-- Next step: W6 in a new session. Carries, all in the W6 PR: ADR-0008 ci.yml restructure before steps 8 and 9 (aggregate ci job, path-scoped jobs); #92 in full (split fixes by tier; board data out of scripts/ops; branch-keyed review artifact; inline rule for small specified changes; review effort caps: no xhigh, critical Opus high, gate Opus medium, in scripts/ci/sensitive-review.ts with tests, ADR-0007 rewrite, CLAUDE.md role tables rewrite, workflows README and wave-review/sdd-task defaults; tier slices, context diet, small-diff fast path); #69 named OpenAPI components (durable fix for the oasdiff one-of false positive); #85 items; #84 Track B P1 plan fixes; add #92, #94 to the setup-script FOLLOW_UPS
-- Blocked by: none (decisions #61 and #81 made)
-- Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: open sensitive PRs as draft, ready only after the review artifact and green CI; one `Closes #n` per issue; M0 release notes must list #93 as api-breaking (tightening only); docs plan in #94 (ordinary tier, can start any time)
+W6 on `feat/p0-wave-6`, PR #95 (critical tier); review minors in #96. Resumable: check the first unticked item, `git log main..`, and the ledger. If a session stalls mid-item, `git status` shows its partial edits; finish or discard that item only.
+
+- [x] 1 #92 check: `sensitive-review.ts` critical = high, gate = medium; branch-keyed artifact `docs/reviews/<branch>.md` (HEAD_REF); fast mode <= 50 reviewed lines counted by the check (inline)
+- [x] 2 #92 `wave-review.js` / `sdd-task.js`: caps defaults, tier slices, context diet, small-diff fast path (sdd-task, ordinary + critic)
+- [x] 3 #92 docs: ADR-0007, CLAUDE.md role tables, workflows README, split-by-tier and inline rules (inline)
+- [x] 4 #92 board data to `docs/board/board-data.json`; #85 dashboard spans, milestone parents; FOLLOW_UPS #92, #94 (sdd-task, gate)
+- [x] 5 ADR-0008 ci.yml restructure (sdd-task, gate)
+- [x] 6 Task 26 mobile placeholder, CI steps 8 and 9 (#27) (inline after item 5; licence exceptions for Expo tree)
+- [x] 7 Task 27 `@libsql/client` Node 24 check (#28) (inline)
+- [x] 8 Task 28 `gh-setup-repo.sh` (#29) (inline; live `--apply` after W6 merges, developer go)
+- [x] 9 #69 OpenAPI input bodies, Condition registry id (inline)
+- [x] 10 #85 IO-globals member access, web config typecheck, TokenStore critical tier (inline)
+- [x] 11 #84 Track B P1 plan fixes (inline)
+- [x] 12 wave-review (critical Opus high, gate Opus medium): approve 09-27-26, artifact `docs/reviews/feat-p0-wave-6.md` (2 agents, 0.32M tokens)
+- [ ] 13 PR CI green (first run of the ADR-0008 jobs); tag `p0-wave-6` before the squash merge; after merge: `gh-setup-repo.sh --apply` with the developer's go (closes #29), `gh-setup-project.mjs` dry run then `--apply`, then `--dashboard`
+
+Decisions 09-26-26: no xhigh/max anywhere; critical review Opus high, gate Opus medium, ordinary CI only; small diff = one reviewer, no ruler/re-reviewer unless findings. Notes: one `Closes #n` per issue; M0 release notes list #93 as api-breaking (tightening only) but not #95 (labelled `api-breaking` only to skip an oasdiff false positive on the #69 `Condition` rename; tech debt in #96); docs plan #94 (ordinary, any time).
 
 ### Track B
 

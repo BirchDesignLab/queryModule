@@ -35,14 +35,82 @@ export function changedFiles(base, head, runGit = gitOut) {
     .filter(Boolean);
 }
 
-function main() {
-  const base = process.env.BASE_SHA ?? "";
-  const head = process.env.HEAD_SHA ?? "HEAD";
-  if (base === "" || /^0+$/.test(base)) {
-    console.log("docs_only=false");
+// ADR-0008: root files shared by the web and mobile jobs (a build, install or
+// CI config change can affect either app regardless of where else it lands).
+const ROOT_FILES = [
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "tsconfig.base.json",
+  ".nvmrc",
+  ".npmrc",
+  ".github/workflows/ci.yml",
+  "scripts/ci/changed-paths.mjs",
+];
+
+/**
+ * Per-area outputs for the path-scoped CI jobs (ADR-0008). Pure function of
+ * the changed file list.
+ * @param {string[]} files
+ * @returns {{ docs_only: boolean, web: boolean, mobile: boolean }}
+ */
+export function areas(files) {
+  const touchesRoot = files.some((f) => ROOT_FILES.includes(f));
+  const web =
+    touchesRoot || files.some((f) => f.startsWith("apps/web/") || f.startsWith("packages/"));
+  const mobile =
+    touchesRoot || files.some((f) => f.startsWith("apps/mobile/") || f.startsWith("packages/"));
+  return { docs_only: isDocsOnly(files), web, mobile };
+}
+
+/** Fail-closed default: every job runs, docs_only stays false so nothing is skipped. */
+const ALL_TRUE = { docs_only: false, web: true, mobile: true };
+
+/** @param {(line: string) => void} write */
+function printAreas(write, a) {
+  write(`docs_only=${a.docs_only}`);
+  write(`web=${a.web}`);
+  write(`mobile=${a.mobile}`);
+}
+
+/**
+ * @param {{
+ *   env?: Record<string, string | undefined>,
+ *   runGit?: (args: string[]) => string,
+ *   write?: (line: string) => void,
+ *   warn?: (line: string) => void,
+ * }} [deps]
+ */
+export function main({
+  env = process.env,
+  runGit = gitOut,
+  write = (line) => console.log(line),
+  warn = (line) => console.error(line),
+} = {}) {
+  const base = env.BASE_SHA ?? "";
+  const head = env.HEAD_SHA ?? "HEAD";
+  const eventName = env.EVENT_NAME ?? "";
+
+  // Push to a new branch (no base to diff against), or a push to main: run everything.
+  if (base === "" || /^0+$/.test(base) || eventName === "push") {
+    printAreas(write, ALL_TRUE);
     return;
   }
-  console.log(`docs_only=${isDocsOnly(changedFiles(base, head))}`);
+
+  try {
+    printAreas(write, areas(changedFiles(base, head, runGit)));
+  } catch (err) {
+    // Goes to the warn sink (stderr), never the output sink: ci.yml pipes this
+    // script's stdout straight into $GITHUB_OUTPUT, which the runner rejects
+    // as an invalid line if it isn't key=value or a key<<EOF block (critic:C1).
+    const message = (err instanceof Error ? err.message : String(err))
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(" ");
+    warn(`::warning::changed-paths: ${message}`);
+    printAreas(write, ALL_TRUE);
+  }
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();

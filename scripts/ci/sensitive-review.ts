@@ -1,8 +1,9 @@
 import picomatch from "picomatch";
 
 /**
- * Review tiers (ADR-0007). critical: Opus 5.5 at effort xhigh or max. gate: Opus 5.5 at
- * effort high or above. deps: automated checks only, no artifact. exempt: never reviewed.
+ * Review tiers (ADR-0007, amended by #92). critical: Opus 5.5 at effort high or above.
+ * gate: Opus 5.5 at effort medium or above. deps: automated checks only, no artifact.
+ * exempt: never reviewed.
  */
 export type Tier = "critical" | "gate" | "deps";
 const RANK: Record<Tier, number> = { deps: 1, gate: 2, critical: 3 };
@@ -152,6 +153,8 @@ export interface ReviewFrontMatter {
   effort: string;
   reviewedSha: string;
   verdict: string;
+  /** "fast": the small-diff fast path (#92), one reviewer; the check counts the diff itself */
+  mode?: string;
 }
 
 export function parseReviewFrontMatter(text: string): ReviewFrontMatter | null {
@@ -162,9 +165,28 @@ export function parseReviewFrontMatter(text: string): ReviewFrontMatter | null {
     const kv = /^(\w+):\s*"?([^"]*)"?\s*$/.exec(line);
     if (kv?.[1] && kv[2] !== undefined) fields[kv[1]] = kv[2];
   }
-  const { reviewer, effort, reviewedSha, verdict } = fields;
+  const { reviewer, effort, reviewedSha, verdict, mode } = fields;
   if (!reviewer || !effort || !reviewedSha || !verdict) return null;
-  return { reviewer, effort, reviewedSha, verdict };
+  return mode === undefined
+    ? { reviewer, effort, reviewedSha, verdict }
+    : { reviewer, effort, reviewedSha, verdict, mode };
+}
+
+/** Most changed lines (added plus deleted, over critical and gate files) a fast-path review may cover. */
+export const FAST_PATH_MAX_LINES = 50;
+
+/** One plain branch-name segment: no leading ".", "-", no "..", no separators or spaces. */
+const REF_SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
+
+/**
+ * The branch-keyed artifact path (#92): `docs/reviews/<branch>.md` with "/" turned to "-",
+ * so the review can land before the PR (and its number) exists. Null for a name that is
+ * not a plain branch name, so no ref can reach outside docs/reviews.
+ */
+export function branchArtifactPath(ref: string): string | null {
+  const segments = ref.split("/");
+  if (!segments.every((seg) => REF_SEGMENT_RE.test(seg) && !seg.includes(".."))) return null;
+  return `docs/reviews/${segments.join("-")}.md`;
 }
 
 export interface ReviewInput {
@@ -172,14 +194,20 @@ export interface ReviewInput {
   /** tier of a file, or null when it needs no review */
   classify: (file: string) => Tier | null;
   prNumber: number;
+  /** branch-keyed artifact path, looked up before docs/reviews/pr-<n>.md */
+  branchPath?: string;
   artifactText: string | undefined;
+  /** the path artifactText was read from; defaults to docs/reviews/pr-<n>.md */
+  artifactPath?: string;
   /** undefined when reviewedSha is not an ancestor of the PR head */
   filesChangedAfterReviewedSha: string[] | undefined;
+  /** added plus deleted lines in critical and gate files; needed only for mode "fast" */
+  reviewedLineCount?: number;
 }
 
 const EFFORTS: Record<"critical" | "gate", { allowed: string[]; text: string }> = {
-  critical: { allowed: ["xhigh", "max"], text: "xhigh or max" },
-  gate: { allowed: ["high", "xhigh", "max"], text: "high, xhigh or max" },
+  critical: { allowed: ["high", "xhigh", "max"], text: "high, xhigh or max" },
+  gate: { allowed: ["medium", "high", "xhigh", "max"], text: "medium, high, xhigh or max" },
 };
 
 export function evaluateSensitiveReview(input: ReviewInput): { ok: boolean; messages: string[] } {
@@ -199,10 +227,13 @@ export function evaluateSensitiveReview(input: ReviewInput): { ok: boolean; mess
       ],
     };
   const tier = touched.some((f) => input.classify(f) === "critical") ? "critical" : "gate";
-  const artifactPath = `docs/reviews/pr-${input.prNumber}.md`;
+  const prPath = `docs/reviews/pr-${input.prNumber}.md`;
+  const artifactPath = input.artifactPath ?? prPath;
   const fail = (m: string) => ({ ok: false, messages: [m] });
-  if (input.artifactText === undefined)
-    return fail(`${tier} paths touched (${touched.join(", ")}); ${artifactPath} is missing`);
+  if (input.artifactText === undefined) {
+    const wanted = input.branchPath ? `${input.branchPath} or ${prPath}` : prPath;
+    return fail(`${tier} paths touched (${touched.join(", ")}); ${wanted} is missing`);
+  }
   const fm = parseReviewFrontMatter(input.artifactText);
   if (!fm)
     return fail(`${artifactPath}: front matter needs reviewer, effort, reviewedSha, verdict`);
@@ -215,6 +246,15 @@ export function evaluateSensitiveReview(input: ReviewInput): { ok: boolean; mess
   if (fm.verdict !== "approve")
     return fail(`${artifactPath}: verdict must be approve, got ${fm.verdict}`);
   if (!SHA_RE.test(fm.reviewedSha)) return fail(`${artifactPath}: reviewedSha is not a commit sha`);
+  if (fm.mode !== undefined) {
+    if (fm.mode !== "fast")
+      return fail(`${artifactPath}: mode must be "fast" when set, got ${fm.mode}`);
+    const n = input.reviewedLineCount;
+    if (n === undefined || n > FAST_PATH_MAX_LINES)
+      return fail(
+        `${artifactPath}: fast path allows at most ${FAST_PATH_MAX_LINES} changed lines in reviewed paths, got ${n ?? "an uncountable diff"}`,
+      );
+  }
   if (input.filesChangedAfterReviewedSha === undefined)
     return fail(`${artifactPath}: reviewedSha ${fm.reviewedSha} is not an ancestor of the PR head`);
   const late = input.filesChangedAfterReviewedSha.filter(reviewed);
@@ -239,6 +279,22 @@ const GLOB_FILE = ".github/sensitive-paths";
 const nulList = (s: string) => s.split("\0").filter((p) => p !== "");
 /** --no-renames lists both sides of a rename, so a move out of a sensitive path is seen */
 const nameDiff = ["diff", "--name-only", "-z", "--no-renames"];
+
+/**
+ * Added plus deleted lines over the files `counted` accepts, from `git diff --numstat -z`
+ * (records "added TAB deleted TAB path NUL"). A binary file ("-") counts as Infinity, so it
+ * never fits the fast path; a record that does not parse throws a GitFailure (fail closed).
+ */
+function countLines(numstat: string, counted: (file: string) => boolean): number {
+  let total = 0;
+  for (const rec of nulList(numstat)) {
+    const m = /^(\d+|-)\t(\d+|-)\t(.+)$/s.exec(rec);
+    if (!m?.[1] || !m[2] || !m[3]) throw new GitFailure(`git diff --numstat: cannot parse ${rec}`);
+    if (!counted(m[3])) continue;
+    total += m[1] === "-" || m[2] === "-" ? Number.POSITIVE_INFINITY : Number(m[1]) + Number(m[2]);
+  }
+  return total;
+}
 
 class GitFailure extends Error {}
 
@@ -360,11 +416,20 @@ export function runSensitiveReview(
   if (!SHA_RE.test(head)) return bad("HEAD_SHA is not a commit sha");
   if (!env.PR_NUMBER || !Number.isInteger(prNumber) || prNumber <= 0)
     return bad("PR_NUMBER must be a positive integer");
+  let branchPath: string | undefined;
+  if (env.HEAD_REF !== undefined && env.HEAD_REF !== "") {
+    const p = branchArtifactPath(env.HEAD_REF);
+    if (p === null) return bad("HEAD_REF is not a plain branch name");
+    branchPath = p;
+  }
   try {
     const d = diffAndTiers(deps, base, head);
     if (typeof d === "string") return bad(d);
     const { changedFiles, classify } = d;
-    const artifactText = deps.readFile(`docs/reviews/pr-${prNumber}.md`);
+    const prPath = `docs/reviews/pr-${prNumber}.md`;
+    const branchText = branchPath === undefined ? undefined : deps.readFile(branchPath);
+    const artifactPath = branchText !== undefined && branchPath ? branchPath : prPath;
+    const artifactText = branchText ?? deps.readFile(prPath);
     let filesChangedAfterReviewedSha: string[] | undefined = [];
     const fm = artifactText ? parseReviewFrontMatter(artifactText) : null;
     // A malformed reviewedSha never reaches git; evaluateSensitiveReview rejects it (code 1).
@@ -380,12 +445,30 @@ export function runSensitiveReview(
           `git merge-base --is-ancestor failed (status ${anc.status}): ${anc.stderr ?? ""}`.trim(),
         );
     }
+    let reviewedLineCount: number | undefined;
+    if (fm?.mode === "fast") {
+      const reviewedTier = (f: string) => {
+        const t = classify(f);
+        return t === "critical" || t === "gate";
+      };
+      const numstat = gitOut(deps.runGit, [
+        "diff",
+        "--numstat",
+        "-z",
+        "--no-renames",
+        `${base}...${head}`,
+      ]);
+      reviewedLineCount = countLines(numstat, reviewedTier);
+    }
     const result = evaluateSensitiveReview({
       changedFiles,
       classify,
       prNumber,
+      ...(branchPath === undefined ? {} : { branchPath }),
       artifactText,
+      artifactPath,
       filesChangedAfterReviewedSha,
+      ...(reviewedLineCount === undefined ? {} : { reviewedLineCount }),
     });
     return { code: result.ok ? 0 : 1, messages: result.messages };
   } catch (e) {

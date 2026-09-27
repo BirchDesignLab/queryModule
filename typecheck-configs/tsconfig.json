@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "../node_modules/.cache/typecheck-configs",
+    "types": ["node"]
+  },
+  "include": [
+    "../vitest.config.ts",
+    "../apps/web/vite.config.ts",
+    "../apps/web/vitest.config.ts",
+    "../packages/api/vitest.config.ts",
+    "../packages/client/vitest.config.ts",
+    "../packages/config/vitest.config.ts",
+    "../packages/core/vitest.config.ts",
+    "../packages/tokens/vitest.config.ts",
+    "../packages/web-ui/vitest.config.ts"
+  ]
+}

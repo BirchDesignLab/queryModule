@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "@querymodule/core": "workspace:*"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0"
   }
 }

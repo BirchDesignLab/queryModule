@@ -41,6 +41,9 @@
  * progressChecker, reReviewer, gate. There is no ledger role (roles.ledger is logged and ignored).
  * gate-0 runs in parallel with the reviewers; cannot-verify items go to the checker; a fix round
  * with only gate or progress findings skips the re-reviewer.
+ * Effort caps (developer decision 09-26-26, #92): no role default is xhigh or max anywhere, and
+ * the step-up ladder's opus/high stays opus/high (no step to xhigh). A roles override may still
+ * set xhigh or max; the script logs one warning line per role overridden that way.
  *
  * Returns { task, status, base, head, commits, rounds, rulings (in force, one per item, each
  * with source "ruler" | "checker" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
@@ -310,6 +313,8 @@ if (OVR.ledger !== undefined) {
 
 function stepUp(r) {
   const key = `${r.model}/${r.effort || ''}`
+  // No role default steps to xhigh or max anywhere (developer decision 09-26-26, #92):
+  // opus/high stays opus/high; every other rung is unchanged.
   const LADDER = {
     'haiku/': { model: 'sonnet', effort: 'medium' },
     'sonnet/low': { model: 'sonnet', effort: 'medium' },
@@ -318,7 +323,7 @@ function stepUp(r) {
     'sonnet/xhigh': { model: 'opus', effort: 'medium' },
     'opus/low': { model: 'opus', effort: 'medium' },
     'opus/medium': { model: 'opus', effort: 'high' },
-    'opus/high': { model: 'opus', effort: 'xhigh' },
+    'opus/high': { model: 'opus', effort: 'high' },
   }
   return LADDER[key] || { model: r.model, effort: r.effort }
 }
@@ -333,6 +338,17 @@ function resolve(name) {
   return Object.assign({}, DEFAULTS[name], OVR[name] || {})
 }
 
+// No sdd-task default role uses xhigh or max effort (developer decision 09-26-26, #92); a roles
+// override may still ask for one, but it is logged once per role so the choice reads as deliberate.
+const HOT_EFFORTS = ['xhigh', 'max']
+const warnedHotRoles = new Set()
+function warnHotOverride(name, effort) {
+  if (HOT_EFFORTS.includes(effort) && !warnedHotRoles.has(name)) {
+    warnedHotRoles.add(name)
+    log(`roles: "${name}" overridden to effort "${effort}" (xhigh or max; no default role uses it)`)
+  }
+}
+
 // Returns { model, effort } for agent(); effort omitted for Haiku; throws on a missing model.
 function role(name) {
   const r = resolve(name)
@@ -341,6 +357,7 @@ function role(name) {
   if (r.model === 'haiku') return { model: 'haiku' }
   if (!r.effort) throw new Error(`sdd-task: role "${name}" (${r.model}) has no effort`)
   if (!EFFORTS.includes(r.effort)) throw new Error(`sdd-task: role "${name}" effort "${r.effort}" is invalid`)
+  warnHotOverride(name, r.effort)
   return { model: r.model, effort: r.effort }
 }
 const tier = (name) => { const r = role(name); return r.effort ? `${r.model}/${r.effort}` : r.model }

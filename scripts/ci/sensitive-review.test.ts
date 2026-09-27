@@ -6,7 +6,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  branchArtifactPath,
   evaluateSensitiveReview,
+  FAST_PATH_MAX_LINES,
   listSensitiveChanges,
   packageJsonDepsOnly,
   parseReviewFrontMatter,
@@ -50,6 +52,10 @@ describe("sensitive-review (spec 9.1)", () => {
       "scripts/ci/sensitive-review.ts",
       "scripts/ci/check-sensitive-review.ts",
       "scripts/ci/check-audit-migrations.ts",
+      // #85: TokenStore implementations (bearer token storage, SEC-006), reserved.
+      "packages/client/src/token-store.ts",
+      "packages/client/src/token-store/secure.ts",
+      "apps/mobile/src/secure-token-store.ts",
     ])
       expect(c(f), f).toBe("critical");
     for (const f of [
@@ -79,6 +85,12 @@ describe("sensitive-review (spec 9.1)", () => {
       "docs/a.md",
     ])
       expect(c(f), f).toBeNull();
+  });
+
+  it("parses an optional mode field (#92 fast path)", () => {
+    const fast = artifact.replace('verdict: "approve"', 'verdict: "approve"\nmode: "fast"');
+    expect(parseReviewFrontMatter(fast)?.mode).toBe("fast");
+    expect(parseReviewFrontMatter(artifact)?.mode).toBeUndefined();
   });
 
   it("parses front matter and rejects missing fields", () => {
@@ -128,12 +140,13 @@ describe("sensitive-review (spec 9.1)", () => {
     }
   });
 
-  it("accepts effort xhigh or max and names a bad effort", () => {
+  it("accepts effort high, xhigh or max for critical paths and names a bad effort (#92)", () => {
     const run = (text: string) =>
       evaluateSensitiveReview({ ...base, changedFiles: ["scripts/ci/x.ts"], artifactText: text });
+    expect(run(artifact.replace('"xhigh"', '"high"')).ok).toBe(true);
     expect(run(artifact.replace('"xhigh"', '"max"')).ok).toBe(true);
-    expect(run(artifact.replace('"xhigh"', '"low"')).messages[0]).toContain(
-      "critical paths need effort xhigh or max, got low",
+    expect(run(artifact.replace('"xhigh"', '"medium"')).messages[0]).toContain(
+      "critical paths need effort high, xhigh or max, got medium",
     );
   });
 
@@ -399,7 +412,7 @@ describe("runSensitiveReview against a real git repo", () => {
     });
     return { status: r.status, stdout: r.stdout ?? null, stderr: r.stderr ?? null };
   };
-  const inRepo = (change: (dir: string) => void) => {
+  const inRepo = (change: (dir: string) => void, review?: (head: string) => string) => {
     const dir = mkdtempSync(join(tmpdir(), "sensitive-review-"));
     try {
       const write = (p: string, t: string) => {
@@ -431,7 +444,12 @@ describe("runSensitiveReview against a real git repo", () => {
         { EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head, PR_NUMBER: "7" },
         {
           runGit: (args) => git(dir, args),
-          readFile: (p) => (p === ".github/sensitive-paths" ? "scripts/ci/**\n" : undefined),
+          readFile: (p) =>
+            p === ".github/sensitive-paths"
+              ? "scripts/ci/**\n"
+              : p === "docs/reviews/pr-7.md" && review
+                ? review(head)
+                : undefined,
         },
       );
     } finally {
@@ -443,6 +461,29 @@ describe("runSensitiveReview against a real git repo", () => {
     const r = inRepo((dir) => git(dir, ["mv", "scripts/ci/x.ts", "moved-x.ts"]));
     expect(r.code).toBe(1);
     expect(r.messages[0]).toContain("scripts/ci/x.ts");
+  });
+
+  it("counts the fast-path limit from real git --numstat output, including a binary file (#92)", () => {
+    const fast = (head: string) =>
+      artifact.replace(sha, head).replace('verdict: "approve"', 'verdict: "approve"\nmode: "fast"');
+    const edit = (n: number) => (dir: string) =>
+      writeFileSync(join(dir, "scripts/ci/x.ts"), "export const y = 2;\n".repeat(n));
+    // 20 lines replaced: 20 added plus 20 deleted = 40, and a docs file that is not counted.
+    const small = inRepo((dir) => {
+      edit(20)(dir);
+      writeFileSync(join(dir, "notes.md"), "x\n".repeat(500));
+    }, fast);
+    expect(small.code).toBe(0);
+    // 20 deleted plus 31 added = 51.
+    const big = inRepo(edit(31), fast);
+    expect(big.code).toBe(1);
+    expect(big.messages[0]).toContain("got 51");
+    const binary = inRepo(
+      (dir) => writeFileSync(join(dir, "scripts/ci/b.bin"), Buffer.from([0, 1, 2, 0])),
+      fast,
+    );
+    expect(binary.code).toBe(1);
+    expect(binary.messages[0]).toContain("got Infinity");
   });
 
   it("catches a sensitive path with non-ASCII characters", () => {
@@ -569,15 +610,15 @@ describe("sensitive tiers (ADR-0007)", () => {
     expect(r.messages[0]).toContain("deps tier only (pnpm-lock.yaml)");
   });
 
-  it("accepts effort high for gate paths and requires xhigh or max for critical paths", () => {
-    const high = artifact.replace('"xhigh"', '"high"');
-    expect(run([".github/workflows/ci.yml"], high).ok).toBe(true);
-    const r = run([".github/workflows/ci.yml", "packages/api/src/audit/a.ts"], high);
+  it("accepts effort medium for gate paths and requires high or above for critical paths (#92)", () => {
+    const medium = artifact.replace('"xhigh"', '"medium"');
+    expect(run([".github/workflows/ci.yml"], medium).ok).toBe(true);
+    const r = run([".github/workflows/ci.yml", "packages/api/src/audit/a.ts"], medium);
     expect(r.ok).toBe(false);
-    expect(r.messages[0]).toContain("critical paths need effort xhigh or max, got high");
-    expect(run([".github/workflows/ci.yml"], artifact.replace('"xhigh"', '"medium"')).ok).toBe(
-      false,
-    );
+    expect(r.messages[0]).toContain("critical paths need effort high, xhigh or max, got medium");
+    const low = run([".github/workflows/ci.yml"], artifact.replace('"xhigh"', '"low"'));
+    expect(low.ok).toBe(false);
+    expect(low.messages[0]).toContain("gate paths need effort medium, high, xhigh or max, got low");
   });
 
   it("ignores deps and exempt files changed after reviewedSha", () => {
@@ -806,13 +847,13 @@ describe("deps demotion wired through git (M7)", () => {
       "ls-tree --name-only": ok(".github/sensitive-paths\0"),
       [`show ${BASE}:.github/sensitive-paths`]: ok(".github/**\n"),
     });
-    const high = artifact.replace('"xhigh"', '"high"');
+    const medium = artifact.replace('"xhigh"', '"medium"');
     const r = runSensitiveReview(env, {
       runGit,
-      readFile: (p) => (p === "docs/reviews/pr-7.md" ? high : readFile(p)),
+      readFile: (p) => (p === "docs/reviews/pr-7.md" ? medium : readFile(p)),
     });
     expect(r.code).toBe(1);
-    expect(r.messages[0]).toContain("critical paths need effort xhigh or max, got high");
+    expect(r.messages[0]).toContain("critical paths need effort high, xhigh or max, got medium");
   });
 });
 
@@ -966,5 +1007,157 @@ describe("deps demotion against a real git repo (C1, I1 repros)", () => {
     ]);
     expect(r.review.code).toBe(1);
     expect(r.review.messages[0]).toBe(`sensitive files changed after reviewedSha: ${wfPath}`);
+  });
+});
+
+describe("branch-keyed artifact (#92)", () => {
+  const ok = (stdout = "") => ({ status: 0, stdout, stderr: "" });
+  const env = {
+    EVENT_NAME: "pull_request",
+    BASE_SHA: BASE,
+    HEAD_SHA: HEAD,
+    PR_NUMBER: "7",
+    HEAD_REF: "feat/p0-wave-6",
+  };
+  const runGit = (args: string[]) => {
+    if (args[0] === "diff" && args.at(-1) === `${BASE}...${HEAD}`) return ok("scripts/ci/x.ts\0");
+    return ok();
+  };
+  const tiers = "scripts/ci/**\n";
+
+  it("maps a branch name to docs/reviews/<branch, slashes to dashes>.md", () => {
+    expect(branchArtifactPath("feat/p0-wave-6")).toBe("docs/reviews/feat-p0-wave-6.md");
+    expect(branchArtifactPath("fix_a.b")).toBe("docs/reviews/fix_a.b.md");
+  });
+
+  it("rejects a branch name that could escape docs/reviews or is not a plain name", () => {
+    for (const ref of ["", "../x", "a/../b", "a b", "-x", ".hidden", "a//b", "a/", "a\\b", "a:b"])
+      expect(branchArtifactPath(ref), ref).toBeNull();
+  });
+
+  it("reads the branch-keyed artifact first", () => {
+    const r = runSensitiveReview(env, {
+      runGit,
+      readFile: (p) =>
+        p === ".github/sensitive-paths"
+          ? tiers
+          : p === "docs/reviews/feat-p0-wave-6.md"
+            ? artifact
+            : undefined,
+    });
+    expect(r).toEqual({ code: 0, messages: ["sensitive review recorded for scripts/ci/x.ts"] });
+  });
+
+  it("falls back to docs/reviews/pr-<n>.md", () => {
+    const r = runSensitiveReview(env, {
+      runGit,
+      readFile: (p) =>
+        p === ".github/sensitive-paths"
+          ? tiers
+          : p === "docs/reviews/pr-7.md"
+            ? artifact
+            : undefined,
+    });
+    expect(r.code).toBe(0);
+  });
+
+  it("judges the branch-keyed artifact when both exist, and names it in a failure", () => {
+    const r = runSensitiveReview(env, {
+      runGit,
+      readFile: (p) =>
+        p === ".github/sensitive-paths"
+          ? tiers
+          : p === "docs/reviews/feat-p0-wave-6.md"
+            ? artifact.replace('"approve"', '"changes"')
+            : p === "docs/reviews/pr-7.md"
+              ? artifact
+              : undefined,
+    });
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain("docs/reviews/feat-p0-wave-6.md: verdict must be approve");
+  });
+
+  it("names both paths when neither exists", () => {
+    const r = runSensitiveReview(env, {
+      runGit,
+      readFile: (p) => (p === ".github/sensitive-paths" ? tiers : undefined),
+    });
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain(
+      "docs/reviews/feat-p0-wave-6.md or docs/reviews/pr-7.md is missing",
+    );
+  });
+
+  it("exits 2 on a HEAD_REF that is not a plain branch name", () => {
+    const r = runSensitiveReview(
+      { ...env, HEAD_REF: "../../etc/x" },
+      { runGit, readFile: (p) => (p === ".github/sensitive-paths" ? tiers : undefined) },
+    );
+    expect(r.code).toBe(2);
+    expect(r.messages[0]).toContain("HEAD_REF");
+  });
+});
+
+describe("small-diff fast path (#92)", () => {
+  const ok = (stdout = "") => ({ status: 0, stdout, stderr: "" });
+  const env = { EVENT_NAME: "pull_request", BASE_SHA: BASE, HEAD_SHA: HEAD, PR_NUMBER: "7" };
+  const tiers = "[critical]\nscripts/ci/sensitive-review.ts\n[gate]\n.github/**\n";
+  const fast = artifact.replace('verdict: "approve"', 'verdict: "approve"\nmode: "fast"');
+  const calls: string[][] = [];
+  const runWith =
+    (numstat: { status: number; stdout: string }, text = fast) =>
+    () => {
+      calls.length = 0;
+      return runSensitiveReview(env, {
+        runGit: (args) => {
+          calls.push(args);
+          if (args[0] === "diff" && args[1] === "--numstat")
+            return { ...numstat, stderr: numstat.status === 0 ? "" : "fatal" };
+          if (args[0] === "diff" && args.at(-1) === `${BASE}...${HEAD}`)
+            return ok(".github/a.yml\0docs/b.md\0");
+          return ok();
+        },
+        readFile: (p) =>
+          p === ".github/sensitive-paths" ? tiers : p === "docs/reviews/pr-7.md" ? text : undefined,
+      });
+    };
+
+  it("passes when the reviewed paths change at most FAST_PATH_MAX_LINES lines", () => {
+    expect(FAST_PATH_MAX_LINES).toBe(50);
+    const r = runWith(ok(["30\t20\t.github/a.yml", "400\t0\tdocs/b.md", ""].join("\0")))();
+    expect(r.code).toBe(0);
+    expect(calls).toContainEqual(["diff", "--numstat", "-z", "--no-renames", `${BASE}...${HEAD}`]);
+  });
+
+  it("fails when the reviewed paths change more lines than the limit", () => {
+    const r = runWith(ok("30\t21\t.github/a.yml\0"))();
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain(
+      "fast path allows at most 50 changed lines in reviewed paths, got 51",
+    );
+  });
+
+  it("counts a binary reviewed file as over the limit", () => {
+    const r = runWith(ok("-\t-\t.github/a.yml\0"))();
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain("fast path");
+  });
+
+  it("exits 2 when git diff --numstat fails or prints a line it cannot parse", () => {
+    expect(runWith({ status: 128, stdout: "" })().code).toBe(2);
+    expect(runWith(ok("garbage\0"))().code).toBe(2);
+  });
+
+  it("does not run --numstat without the fast mode", () => {
+    const r = runWith(ok("999\t0\t.github/a.yml\0"), artifact)();
+    expect(r.code).toBe(0);
+    expect(calls.some((c) => c[1] === "--numstat")).toBe(false);
+  });
+
+  it("fails on an unknown mode", () => {
+    const lite = artifact.replace('verdict: "approve"', 'verdict: "approve"\nmode: "lite"');
+    const r = runWith(ok(""), lite)();
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toContain('mode must be "fast" when set, got lite');
   });
 });

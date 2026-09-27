@@ -59,13 +59,14 @@ Paths landed so far, by review tier (ADR-0007; kept in step with
 `.github/sensitive-paths`, which also lists the globs reserved for areas that
 have no code yet):
 
-- Critical (Opus 5.5 `xhigh` artifact): audit logging
+- Critical (Opus 5.5 `high` artifact, #92): audit logging
   `packages/core/src/contracts/audit.ts`, `primitives.ts`, `identity.ts`; query
   dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`; the
   sensitive-review gate itself `.github/sensitive-paths`,
   `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`;
-  reserved: the audit-migration guard `scripts/ci/check-audit-migrations.ts`.
-- Gate (Opus 5.5 `high` artifact): the verify gate and merge path
+  reserved: the audit-migration guard `scripts/ci/check-audit-migrations.ts`;
+  reserved: TokenStore implementations `**/*token-store*` (SEC-006, #85).
+- Gate (Opus 5.5 `medium` artifact, #92): the verify gate and merge path
   `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
   `.gitignore`, `**/vitest.config.ts`, `package.json`, `pnpm-workspace.yaml`,
   `tsconfig.base.json`, `**/tsconfig.json`.
@@ -73,6 +74,14 @@ have no code yet):
   version-only change of an existing package (`package.json`) or action (the
   ref of an existing workflow `uses:` line). `.github/dependabot.yml` is gate.
 - Exempt: `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`.
+- Ordinary (everything else, including `.claude/workflows/**`, `scripts/sdd/**`
+  and `docs/board/board-data.json`): CI only, no artifact.
+
+The artifact is `docs/reviews/<branch>.md` (every "/" to "-"), so it can land
+before the PR exists; `docs/reviews/pr-<n>.md` is still accepted. A PR whose
+critical and gate files change at most 50 lines may use the fast path (one
+reviewer, front matter `mode: "fast"`); `sensitive-review` counts the lines
+itself and fails a mislabelled PR.
 
 This is CJIS and GDPR territory. There is no money path, but a mistake in
 credential handling or audit logging is a compliance failure, not a bug.
@@ -94,13 +103,13 @@ credential handling or audit logging is a compliance failure, not a bug.
 
 | Model | Effort | Use it for |
 |---|---|---|
-| Opus 5.5 | `max` | Only when the developer asks, or `xhigh` fell short on a correctness-critical question. One agent, never a fleet. |
-| Opus 5.5 | `xhigh` | Whole-branch review of a PR that touches a critical-tier path (ADR-0007). Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. |
-| Opus 5.5 | `high` | Hard finders, design and judge panels, whole-branch review of an ordinary PR or of a gate-tier PR (ADR-0007: CI, scripts, workflows, config; no critical path). Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
-| Opus 5.5 | `medium` | Implementing a critical-tier task from a plan (ruler and re-reviewer on it too). The critic role on a gate-tier or critical-tier task and on a UI-building workflow. Synthesizing several agents' reports into one answer. |
+| Opus 5.5 | `max` | Only when the developer asks for it by name. One agent, never a fleet. |
+| Opus 5.5 | `xhigh` | Only when the developer asks for it by name (developer decision 09-26-26, #92: no xhigh anywhere by default; this is a demo-scale prototype on mock data). |
+| Opus 5.5 | `high` | Whole-branch review (`wave-review`) of a PR that touches a critical-tier path, its critical slice and re-reviewer (ADR-0007 as amended by #92). Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. Hard finders, design and judge panels. Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
+| Opus 5.5 | `medium` | Whole-branch review of a gate-tier PR, and the gate slice of a mixed PR. Implementing a critical-tier task from a plan (ruler and re-reviewer on it too). The critic role on a gate-tier or critical-tier task and on a UI-building workflow. Synthesizing several agents' reports into one answer. |
 | Opus 5.5 | `low` | A narrow judgment call that needs Opus-grade reasoning but no exploration ("is this credential-storage change CJIS-safe, given these three lines"). |
 | Sonnet 5 | `max` | Not used. Work that hard goes to Opus. |
-| Sonnet 5 | `xhigh` | Rarely. A long unsupervised implementation that touches no sensitive code. If it is hard, use Opus instead. |
+| Sonnet 5 | `xhigh` | Not used by default (#92). Work that long goes to Sonnet `high` in smaller pieces, or to Opus. |
 | Sonnet 5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task; the combined spec and quality reviewer on an ordinary or gate-tier task (and the re-reviewer on a gate-tier task). |
 | Sonnet 5 | `medium` | Implementing one ordinary or gate-tier plan task with its tests (TDD) in one to three files; routine finders over a bounded area; spec-compliance review of one critical-tier task against its FR/UX/SEC IDs. |
 | Sonnet 5 | `low` | Verify or refute one claim against named files; a fully specified mechanical edit (a rename, one function to a given spec); run the suite and report. |
@@ -109,7 +118,8 @@ credential handling or audit logging is a compliance failure, not a bug.
 ## Rules
 
 - Start at the cheapest model and effort that can do the job. On a failure, step up one
-  notch at a time (the next row up the table), never straight to `max`.
+  notch at a time (the next row up the table), never past Opus `high` unless the
+  developer asks.
 - Volume is fine; tiering is the mandate. Do not shrink a fleet to save cost,
   tier it.
 - Before launching a workflow, state the per-stage model and effort plan and
@@ -143,6 +153,11 @@ Controller rules for every workflow run:
 
 - Freeze a PR's scope before its review starts. Nothing joins the PR after its review begins; later work goes in the next PR (PR #76 paid one more xhigh review for scope that grew mid-review).
 - Never write to the repository tree while a workflow run is active: no edits, commits, checkouts or stashes until it returns (a mid-run edit on PR #76 cost one extra xhigh reviewer).
+- Inline small specified changes (#92). The controller implements a change itself, not through `sdd-task`, when the brief or issue already states the exact design, it is about 150 changed lines or fewer in a handful of files, and no design question is open. Inline still means TDD, `pnpm verify` and `pnpm audit --prod`. Say "inline" or "sdd-task", with the reason, before starting each task.
+- The tier decides the review, not the implementer. Ordinary: CI only. Gate or critical: the one `wave-review` at the PR's tier (critical Opus `high`, gate Opus `medium`; a mixed PR runs both slices in one run), with no per-task reviewers on top for inline work.
+- Split small fixes by tier (#92). An ordinary fix goes in its own PR and merges on CI. Gate-tier chores ride the next wave PR, which pays for a review anyway. Critical-tier work gets its own PR or rides a critical wave PR. List the tiers of the files before cutting a fix branch.
+- Review before the PR: run `wave-review` with `branch` (artifact `docs/reviews/<branch>.md`) before pushing, so a sensitive PR never shows a red `sensitive-review`. Until that is routine, open sensitive PRs as draft and mark them ready only after the artifact is pushed and CI is green.
+- Give reviewers a context excerpt (`contextPath`: the ledger rulings and spec lines that touch the changed files), not the whole ledger and plan, and pass `reviewedLines` so small diffs take the fast path.
 
 The superpowers skills (brainstorming, writing specs and plans, subagent-driven development, executing plans) are recommended, not required. The plugin's rule that a skill must be invoked before any response does not apply in this repo. TDD is required for every task with behaviour, whichever way the task runs.
 

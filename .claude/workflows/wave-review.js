@@ -1,28 +1,66 @@
 /*
  * wave-review: whole-branch review of one wave PR that touches sensitive paths, one ruled fix
- * pass, one re-review, and the docs/reviews/pr-<n>.md artifact (ADR-0006).
+ * pass, one re-review, and the review artifact (ADR-0006, amended by #92).
  * Full reference: .claude/workflows/README.md. Test the control flow after any edit:
  * node scripts/sdd/workflow-harness.mjs
  *
  * Invoke: Workflow({ name: "wave-review", args: {
- *   pr: 32, base: "<merge-base sha with main>", head: "<wave branch head sha>",
+ *   pr: 32, branch: "feat/p0-wave-6",         // at least one of pr, branch is required (both allowed)
+ *   base: "<merge-base sha with main>", head: "<wave branch head sha>",
  *   repoDir: "C:\\git\\queryModule", planPath: "docs/superpowers/plans/2026-09-25-p0-contracts.md",
  *   ledgerPath, workDir,                      // SDD workspace: review, fix report, re-review files
- *   scratchRoot, runLabel: "w4-xhigh",        // agent scratch: <scratchRoot>/<runLabel>/<agent>/
+ *   scratchRoot, runLabel: "w6-t2",           // agent scratch: <scratchRoot>/<runLabel>/<agent>/
  *   sensitiveFiles: ["packages/core/src/audit/..."], questions: ["..."],
- *   artifactPath: "docs/reviews/pr-32.md",    // optional; must be docs/reviews/pr-<pr>.md
+ *   criticalFiles: [], gateFiles: [],          // optional tier slices (#92); see R3 below
+ *   reviewedLines: 12,                         // optional small-diff fast path (#92); see R4 below
+ *   contextPath: "docs/sdd/.../w6-context.md", // optional context excerpt (#92); see R5 below;
+ *                                               // planPath becomes optional when this is given
+ *   artifactPath: "docs/reviews/feat-p0-wave-6.md",  // optional; must equal the computed path
  *   specPath, requirementsDoc,                // optional; defaults below
  *   date: "09-27-26",                         // optional MM-DD-YY for the artifact body
  *   trailer: "Co-Authored-By: ...",           // fallback commit trailer for the fixer
  *   tier: "critical",                         // optional: "critical" (default) | "gate" (ADR-0007);
- *                                             // "ordinary" throws (no wave-review needed)
- *   roles: { reviewer: { model: "opus", effort: "xhigh" }, ... },  // optional overrides; win over tier
+ *                                             // "ordinary" throws (no wave-review needed); when
+ *                                             // criticalFiles or gateFiles is given, tier is derived
+ *                                             // (critical if criticalFiles is non-empty, else gate)
+ *                                             // and a tier that disagrees throws
+ *   roles: { reviewer: { model: "opus", effort: "high" }, ... },  // optional overrides; win over
+ *                                             // tier defaults; an effort of xhigh or max is logged
  *   answers: [{ at, text?, decisions? }]      // only on a re-run after a stop (below)
  * } })
- * Required: pr, base, head, repoDir, planPath, workDir, scratchRoot, runLabel, trailer.
- * Roles and defaults: reviewer opus/xhigh, ruler opus/high, fixer opus/medium,
- * progressChecker sonnet/low, reReviewer opus/xhigh. tier "gate": reviewer and reReviewer opus/high
- * (the artifact front matter then reads effort "high", which the check accepts for gate paths only).
+ * Required: base, head, repoDir, workDir, scratchRoot, runLabel, trailer, at least one of pr or
+ * branch, and planPath unless contextPath is given.
+ *
+ * Artifact path (R2, #92): with branch, docs/reviews/<branch, "/" turned to "-">.md; without it,
+ * docs/reviews/pr-<pr>.md. branch is validated exactly like branchArtifactPath in
+ * scripts/ci/sensitive-review.ts (every "/"-separated segment matches ^[A-Za-z0-9_][A-Za-z0-9._-]*$
+ * and contains no ".."); an invalid branch throws before any agent runs. Prompts name the PR
+ * number only when pr is given.
+ *
+ * Roles and defaults (#92, no default is xhigh or max anywhere): tier "critical" (default):
+ * reviewer opus/high, ruler opus/medium, fixer opus/medium, progressChecker sonnet/low, reReviewer
+ * opus/high. tier "gate": reviewer opus/medium, ruler opus/low, fixer opus/medium, progressChecker
+ * sonnet/low, reReviewer opus/medium. A roles override may still set xhigh or max; the script logs
+ * one warning line per role overridden that way.
+ *
+ * R3 Tier slices: when criticalFiles or gateFiles is given, one reviewer runs per non-empty slice,
+ * sequential, gate slice first, critical slice last (role reviewer-gate opus/medium, role
+ * reviewer-critical opus/high; a plain roles.reviewer override applies to both, a slice-named
+ * override wins over it). Each slice prompt lists and reviews only its own files. Finding ids are
+ * prefixed G- or C- and merge into one Rule, Fix, Re-review flow. Only the last slice (the highest
+ * tier present) may write the artifact on the first pass, and only when every slice approved clean.
+ * When neither list is given, one reviewer runs over sensitiveFiles at tier (today's behaviour).
+ *
+ * R4 Small-diff fast path: reviewedLines (added plus deleted lines over critical and gate files,
+ * from git diff --numstat) <= FAST_PATH_MAX_LINES (50, must equal the constant of the same name in
+ * scripts/ci/sensitive-review.ts) runs exactly one reviewer (no slices) at the highest tier's
+ * reviewer role. A clean approve writes the artifact with mode: "fast" and the run ends there (no
+ * ruler, fixer, progress checker or re-reviewer); a blocking finding runs the normal flow and the
+ * re-reviewer's artifact carries no mode line.
+ *
+ * R5 Context diet: contextPath, when given, replaces the whole plan and ledger in the reviewer,
+ * ruler and re-reviewer prompts with a controller-written excerpt (the ledger rulings and the plan
+ * and spec lines that touch the changed files); the spec and requirements stay binding.
  *
  * Returns { verdict: "approve" | "fixes", reviewedSha, artifactWritten, findings, residual,
  * answers, declined, rulings, supersededRulings, fixCommits?, strayArtifact?, answersUnconsumed?,
@@ -34,7 +72,8 @@
  *     them; there is no second fix pass.
  *   stopped set: a controller decision is needed. Each value is a stop point for answers, with
  *   the agent that consumes them:
- *     "reviewer"     the reviewer returned nothing; text goes to the ruler, fixer, re-reviewer.
+ *     "reviewer"     the reviewer (or a slice's reviewer, named in problem) returned nothing; text
+ *                    goes to the ruler, fixer, re-reviewer.
  *     "precondition" (problem says what) HEAD, base ancestry or a dirty tree, with the files
  *                    named (a stray artifact is called out); stopPoint is precondition:<label>.
  *                    Fix the repo, then answer: the failing agent (reviewer or fixer) re-runs
@@ -69,7 +108,7 @@ export const meta = {
   description: 'Whole-branch review of a sensitive wave PR, one ruled fix pass, one re-review, and the review artifact',
   whenToUse: 'Once per wave PR that touches sensitive paths, after every task of the wave has run through sdd-task',
   phases: [
-    { title: 'Review', detail: 'whole-branch review against the plan, the spec and the ledger' },
+    { title: 'Review', detail: 'whole-branch review against the plan, the spec and the ledger (or a fast-path or tier-sliced review, #92)' },
     { title: 'Rule', detail: 'ruler on plan-mandated or contested findings' },
     { title: 'Fix', detail: 'one fixer pass with the complete findings list, then the progress checker' },
     { title: 'Re-review', detail: 'one fresh re-review of the fix diff; writes the artifact on approve' },
@@ -78,31 +117,95 @@ export const meta = {
 
 // ---------- arguments ----------
 const A = args || {}
-for (const k of ['pr', 'base', 'head', 'repoDir', 'planPath', 'workDir', 'scratchRoot', 'runLabel', 'trailer']) {
+for (const k of ['base', 'head', 'repoDir', 'workDir', 'scratchRoot', 'runLabel', 'trailer']) {
   const v = A[k]
   if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) {
     throw new Error(`wave-review: required arg "${k}" is missing or empty (see .claude/workflows/README.md)`)
   }
 }
-const SENSITIVE_FILES = Array.isArray(A.sensitiveFiles) ? A.sensitiveFiles : []
-const QUESTIONS = Array.isArray(A.questions) ? A.questions : []
-const ARTIFACT = A.artifactPath || `docs/reviews/pr-${A.pr}.md`
-if (String(ARTIFACT).replace(/\\/g, '/') !== `docs/reviews/pr-${A.pr}.md`) {
-  throw new Error(`wave-review: artifactPath "${ARTIFACT}" must be docs/reviews/pr-${A.pr}.md (the sensitive-review check reads that path)`)
+const hasBranch = typeof A.branch === 'string' && A.branch.trim() !== ''
+const hasPr = A.pr !== undefined && A.pr !== null && String(A.pr).trim() !== ''
+if (!hasBranch && !hasPr) {
+  throw new Error('wave-review: at least one of "branch" or "pr" is required (see .claude/workflows/README.md)')
 }
-// Review tier (ADR-0007): the PR's highest tier in .github/sensitive-paths.
+const CONTEXT_PATH = A.contextPath || ''
+if (!CONTEXT_PATH) {
+  const v = A.planPath
+  if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) {
+    throw new Error('wave-review: required arg "planPath" is missing or empty (required unless contextPath is given; see .claude/workflows/README.md)')
+  }
+}
+const QUESTIONS = Array.isArray(A.questions) ? A.questions : []
+const prLabel = () => (hasPr ? `PR #${A.pr}` : `branch ${A.branch}`)
+
+// Branch-keyed artifact (R2, #92): mirrors branchArtifactPath in scripts/ci/sensitive-review.ts.
+const REF_SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/
+function branchArtifactPath(ref) {
+  const segments = String(ref).split('/')
+  if (!segments.every((seg) => REF_SEGMENT_RE.test(seg) && !seg.includes('..'))) return null
+  return `docs/reviews/${segments.join('-')}.md`
+}
+let COMPUTED_ARTIFACT
+if (hasBranch) {
+  const p = branchArtifactPath(A.branch)
+  if (!p) throw new Error(`wave-review: branch "${A.branch}" is not a plain branch name (each "/"-separated segment must match ^[A-Za-z0-9_][A-Za-z0-9._-]*$ and contain no "..")`)
+  COMPUTED_ARTIFACT = p
+} else {
+  COMPUTED_ARTIFACT = `docs/reviews/pr-${A.pr}.md`
+}
+const ARTIFACT = A.artifactPath || COMPUTED_ARTIFACT
+if (String(ARTIFACT).replace(/\\/g, '/') !== COMPUTED_ARTIFACT) {
+  throw new Error(`wave-review: artifactPath "${ARTIFACT}" must be ${COMPUTED_ARTIFACT} (the sensitive-review check reads that path)`)
+}
+
+// Review tier (ADR-0007) and tier slices (R3, #92).
 const TIERS = ['critical', 'gate']
-const TIER = A.tier === undefined || A.tier === null ? 'critical' : A.tier
-if (TIER === 'ordinary') throw new Error('wave-review: tier "ordinary": no wave-review needed (a PR with only [deps] or [exempt] changes, or no sensitive path, needs no artifact)')
-if (!TIERS.includes(TIER)) throw new Error(`wave-review: tier must be "critical" or "gate", got ${JSON.stringify(A.tier)}`)
+// A non-array or non-string-array criticalFiles/gateFiles must throw, not silently become []: an
+// empty list derives the wrong (lower) tier and drops the real file list from review (#92 C3).
+function fileListArg(v, name) {
+  if (v === undefined || v === null) return []
+  if (!Array.isArray(v) || v.some((f) => typeof f !== 'string' || f.trim() === '')) {
+    throw new Error(`wave-review: "${name}" must be an array of non-empty strings, got ${JSON.stringify(v)}`)
+  }
+  return v
+}
+const CRITICAL_FILES = fileListArg(A.criticalFiles, 'criticalFiles')
+const GATE_FILES = fileListArg(A.gateFiles, 'gateFiles')
+const HAS_SLICES = A.criticalFiles !== undefined || A.gateFiles !== undefined
+let TIER
+let SENSITIVE_FILES
+if (HAS_SLICES) {
+  if (CRITICAL_FILES.length === 0 && GATE_FILES.length === 0) {
+    throw new Error('wave-review: criticalFiles and gateFiles are both empty (no wave-review needed)')
+  }
+  const derivedTier = CRITICAL_FILES.length ? 'critical' : 'gate'
+  if (A.tier !== undefined && A.tier !== null && A.tier !== derivedTier) {
+    throw new Error(`wave-review: tier "${A.tier}" disagrees with the derived tier "${derivedTier}" (criticalFiles non-empty means critical, else gate)`)
+  }
+  TIER = derivedTier
+  SENSITIVE_FILES = [...new Set([...GATE_FILES, ...CRITICAL_FILES])]
+} else {
+  TIER = A.tier === undefined || A.tier === null ? 'critical' : A.tier
+  if (TIER === 'ordinary') throw new Error('wave-review: tier "ordinary": no wave-review needed (a PR with only [deps] or [exempt] changes, or no sensitive path, needs no artifact)')
+  if (!TIERS.includes(TIER)) throw new Error(`wave-review: tier must be "critical" or "gate", got ${JSON.stringify(A.tier)}`)
+  SENSITIVE_FILES = Array.isArray(A.sensitiveFiles) ? A.sensitiveFiles : []
+}
 const SPEC = A.specPath || 'docs/superpowers/specs/2026-09-25-query-module-2-design-v2.md'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 const MAX_LISTED_FILES = 200
-let listedFiles = SENSITIVE_FILES
-if (SENSITIVE_FILES.length > MAX_LISTED_FILES) {
-  listedFiles = SENSITIVE_FILES.slice(0, MAX_LISTED_FILES)
-  log(`cap: sensitiveFiles has ${SENSITIVE_FILES.length} entries; the prompt lists the first ${MAX_LISTED_FILES} and tells the reviewer to derive the rest from the sensitive-path globs`)
+
+// Small-diff fast path (R4, #92).
+const FAST_PATH_MAX_LINES = 50 // must equal FAST_PATH_MAX_LINES in scripts/ci/sensitive-review.ts
+let REVIEWED_LINES = null
+if (A.reviewedLines !== undefined && A.reviewedLines !== null) {
+  const n = A.reviewedLines
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < 0) {
+    throw new Error(`wave-review: reviewedLines must be a non-negative integer, got ${JSON.stringify(A.reviewedLines)}`)
+  }
+  REVIEWED_LINES = n
 }
+const FAST_PATH = REVIEWED_LINES !== null && REVIEWED_LINES <= FAST_PATH_MAX_LINES
+const usingSlices = HAS_SLICES && !FAST_PATH
 
 // ---------- answers to stopped runs: a history, one entry per answered stop ----------
 // answers: [{ at, text?, decisions? }], appended across re-runs, never replaced; a single object
@@ -157,39 +260,66 @@ function preconditionAnswers(label) {
   return withText.length ? answerBlock(withText, 'the precondition failure') : 'The controller reports the precondition failure resolved; check again.'
 }
 
-// ---------- roles ----------
+// ---------- roles (R1, #92: no default is xhigh or max anywhere) ----------
 const MODELS = ['haiku', 'sonnet', 'opus']
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
-const DEFAULTS = {
-  reviewer: { model: 'opus', effort: 'xhigh' },
-  ruler: { model: 'opus', effort: 'high' },
-  fixer: { model: 'opus', effort: 'medium' },
-  progressChecker: { model: 'sonnet', effort: 'low' },
-  reReviewer: { model: 'opus', effort: 'xhigh' },
+const DEFAULTS_BY_TIER = {
+  critical: {
+    reviewer: { model: 'opus', effort: 'high' },
+    ruler: { model: 'opus', effort: 'medium' },
+    fixer: { model: 'opus', effort: 'medium' },
+    progressChecker: { model: 'sonnet', effort: 'low' },
+    reReviewer: { model: 'opus', effort: 'high' },
+  },
+  gate: {
+    reviewer: { model: 'opus', effort: 'medium' },
+    ruler: { model: 'opus', effort: 'low' },
+    fixer: { model: 'opus', effort: 'medium' },
+    progressChecker: { model: 'sonnet', effort: 'low' },
+    reReviewer: { model: 'opus', effort: 'medium' },
+  },
 }
-if (TIER === 'gate') {
-  DEFAULTS.reviewer = { model: 'opus', effort: 'high' }
-  DEFAULTS.reReviewer = { model: 'opus', effort: 'high' }
-}
+const DEFAULTS = DEFAULTS_BY_TIER[TIER]
 const OVR = A.roles || {}
-
-// Returns { model, effort } for agent(); effort omitted for Haiku; throws on a missing model.
-function role(name) {
-  if (!DEFAULTS[name]) throw new Error(`wave-review: unknown role "${name}"`)
-  const r = Object.assign({}, DEFAULTS[name], OVR[name] || {})
+const HOT_EFFORTS = ['xhigh', 'max']
+const warnedHotRoles = new Set()
+function warnHotOverride(name, effort) {
+  if (HOT_EFFORTS.includes(effort) && !warnedHotRoles.has(name)) {
+    warnedHotRoles.add(name)
+    log(`roles: "${name}" overridden to effort "${effort}" (xhigh or max; no default role uses it)`)
+  }
+}
+function resolveRole(base, overrideObj, name) {
+  const r = Object.assign({}, base, overrideObj || {})
   if (!r.model) throw new Error(`wave-review: role "${name}" has no model`)
   if (!MODELS.includes(r.model)) throw new Error(`wave-review: role "${name}" model "${r.model}" is not one of ${MODELS.join(', ')}`)
   if (r.model === 'haiku') return { model: 'haiku' }
   if (!r.effort) throw new Error(`wave-review: role "${name}" (${r.model}) has no effort`)
   if (!EFFORTS.includes(r.effort)) throw new Error(`wave-review: role "${name}" effort "${r.effort}" is invalid`)
+  warnHotOverride(name, r.effort)
   return { model: r.model, effort: r.effort }
 }
+// Returns { model, effort } for agent(); effort omitted for Haiku; throws on a missing model.
+function role(name) {
+  if (!DEFAULTS[name]) throw new Error(`wave-review: unknown role "${name}"`)
+  return resolveRole(DEFAULTS[name], OVR[name], name)
+}
+// Slice reviewer roles (R3): reviewer-gate / reviewer-critical. A plain roles.reviewer override
+// applies to both; a roles["reviewer-<tier>"] override wins over it.
+function sliceRole(sliceTier) {
+  const name = `reviewer-${sliceTier}`
+  const merged = Object.assign({}, OVR.reviewer || {}, OVR[name] || {})
+  return resolveRole(DEFAULTS_BY_TIER[sliceTier].reviewer, merged, name)
+}
 const tier = (name) => { const r = role(name); return r.effort ? `${r.model}/${r.effort}` : r.model }
-// Front-matter reviewer and effort follow the role that writes the artifact (defaults give "opus-5.5" / "xhigh").
+const sliceTierText = (t) => { const r = sliceRole(t); return r.effort ? `${r.model}/${r.effort}` : r.model }
+// Front-matter reviewer and effort follow the role that writes the artifact (defaults give "opus-5.5" / "high").
 const REVIEWER_NAME = { opus: 'opus-5.5', sonnet: 'sonnet-5', haiku: 'haiku-4.5' }
-function frontMatter(roleName, sha) {
-  const r = role(roleName)
-  return ['---', `reviewer: "${REVIEWER_NAME[r.model]}"`, `effort: "${r.effort || 'n/a'}"`, `reviewedSha: "${sha}"`, 'verdict: "approve"', '---'].join('\n')
+function frontMatter(roleObj, sha, mode) {
+  const lines = ['---', `reviewer: "${REVIEWER_NAME[roleObj.model]}"`, `effort: "${roleObj.effort || 'n/a'}"`, `reviewedSha: "${sha}"`, 'verdict: "approve"']
+  if (mode) lines.push(`mode: "${mode}"`)
+  lines.push('---')
+  return lines.join('\n')
 }
 
 // ---------- paths ----------
@@ -198,6 +328,10 @@ const join = (...p) => p.map((s, i) => (i === 0 ? fwd(s).replace(/\/+$/, '') : f
 const REPO = fwd(A.repoDir)
 const scratch = (label) => join(A.scratchRoot, A.runLabel, label)
 const REVIEW_FILE = join(A.workDir, `${A.runLabel}-review.md`)
+const sliceReviewFile = (sliceT) => join(A.workDir, `${A.runLabel}-review-${sliceT}.md`)
+const REVIEW_FILE_REF = usingSlices
+  ? [GATE_FILES.length ? sliceReviewFile('gate') : null, CRITICAL_FILES.length ? sliceReviewFile('critical') : null].filter(Boolean).join(' and ')
+  : REVIEW_FILE
 const FIX_REPORT = join(A.workDir, `${A.runLabel}-fix-report.md`)
 const REREVIEW_FILE = join(A.workDir, `${A.runLabel}-re-review.md`)
 const ARTIFACT_ABS = join(REPO, ARTIFACT)
@@ -314,13 +448,27 @@ const READONLY = 'Read-only on this checkout: never change the working tree, the
 const RULER_RULE = 'In wave-review the ruler must escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules. A Critical finding may be ruled fix or escalate, never stands.'
 const findingsText = (fs) => fs.map((f) => `- [${f.id}] ${f.severity.toUpperCase()} ${f.file}${f.line ? ':' + f.line : ''}: ${f.summary}${f.fix ? ' Fix: ' + f.fix : ''}`).join('\n')
 const DATE_RULE = A.date ? `Date: ${A.date}.` : 'Date: today in MM-DD-YY (run date +%m-%d-%y).'
-function artifactRule(roleName, shaWord) {
+// R6: every reviewer prompt (slices, fast path and re-reviewer) allows at most 3 cross-cutting checks.
+const CROSS_CUTTING = 'Cross-cutting budget: at most 3 checks outside the diff, each for a named risk (examples: a new file in a sensitive area missing from .github/sensitive-paths; a guard or check that a changed path can now bypass; a dependency or lockfile rule). List each one, with the risk and what you found, under "Cross-cutting checks" in your review file.'
+// R5: contextPath replaces the whole plan and ledger in the reviewer, ruler and re-reviewer prompts.
+function planLedgerLines() {
+  if (CONTEXT_PATH) {
+    return [`Context excerpt (in place of the whole plan and ledger): ${CONTEXT_PATH}. It holds the ledger rulings and the plan and spec lines that touch the changed files; read only what it cites unless a named risk needs more. The spec and the requirements stay binding.`]
+  }
   return [
-    `Write the artifact ${ARTIFACT_ABS} ONLY when your verdict is approve with no open critical or important finding. Do not commit it. It starts with exactly this front matter, with <sha> replaced by the full ${shaWord} sha:`,
+    `Plan: ${A.planPath} (the tasks this range delivers).`,
+    A.ledgerPath ? `Ledger: ${A.ledgerPath}. Read every "Ruling:" and "minor (deferred):" line for these tasks. A deferred minor is known, not new; re-raise it only if it is worse than recorded. A finding that disputes a Ruling sets contests to that Ruling line.` : 'No ledger given.',
+  ]
+}
+const planRef = () => (CONTEXT_PATH ? `the context excerpt ${CONTEXT_PATH}` : `the plan ${A.planPath}`)
+function artifactRule(roleObj, shaWord, opts = {}) {
+  const condition = opts.condition || 'your verdict is approve with no open critical or important finding'
+  return [
+    `Write the artifact ${ARTIFACT_ABS} ONLY when ${condition}. Do not commit it. It starts with exactly this front matter, with <sha> replaced by the full ${shaWord} sha:`,
     '```',
-    frontMatter(roleName, '<sha>'),
+    frontMatter(roleObj, '<sha>', opts.mode),
     '```',
-    `Then a short body: Scope (PR #${A.pr}, range, what the wave delivers), Findings summary (counts by severity, how each critical or important was resolved, each ruling id kept as stands, each controller ruling), Answers to the controller's questions, Remaining Minors. No em dashes. ${DATE_RULE}`,
+    `Then a short body: Scope (${prLabel()}, range, what the wave delivers), Findings summary (counts by severity, how each critical or important was resolved, each ruling id kept as stands, each controller ruling), Cross-cutting checks (each named risk checked outside the diff and what you found), Answers to the controller's questions, Remaining Minors. No em dashes. ${DATE_RULE}`,
     'Otherwise do not create or touch the artifact. Set artifactWritten accordingly.',
   ].join('\n')
 }
@@ -357,39 +505,157 @@ function done(extra) {
   return out
 }
 
-// ================= 1. Whole-branch review =================
+// ================= 1. Whole-branch review (single, tier-sliced, or fast path) =================
 phase('Review')
-log(`wave-review PR #${A.pr} ${String(A.base).slice(0, 7)}..${String(A.head).slice(0, 7)}; tier ${TIER}; roles: reviewer ${tier('reviewer')}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}`)
-// The reviewer prompt never carries answers, so a re-run with answers replays it from cache.
-const reviewPrompt = [
-  `You are the whole-branch reviewer for wave PR #${A.pr}: every commit in ${A.base}..${A.head}. Review completed work against its plan and requirements and find issues before they merge.`,
-  `Plan: ${A.planPath} (the tasks this range delivers). Spec: ${SPEC}. Requirements: "${REQ_DOC}".`,
+{
+  const roleSummary = usingSlices
+    ? `reviewer-gate ${GATE_FILES.length ? sliceTierText('gate') : 'n/a'}, reviewer-critical ${CRITICAL_FILES.length ? sliceTierText('critical') : 'n/a'}`
+    : `reviewer ${tier('reviewer')}`
+  log(`wave-review ${prLabel()} ${String(A.base).slice(0, 7)}..${String(A.head).slice(0, 7)}; tier ${TIER}${FAST_PATH ? `; fast path (reviewedLines ${REVIEWED_LINES})` : usingSlices ? '; tier slices' : ''}; roles: ${roleSummary}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}`)
+}
+
+// Shared reviewer-prompt pieces (main/fast reviewer and each slice reviewer).
+const SPEC_INTRO = [
+  `Spec: ${SPEC}. Requirements: "${REQ_DOC}".`,
   'The spec is binding authority: where the plan and the spec disagree, the spec wins unless a ledger Ruling or an ADR in docs/decisions/ says otherwise; say which governs each such finding. For behaviour the spec is silent on, a reasonable user\'s expectation is a requirement, and a spec\'s silence is not permission.',
-  A.ledgerPath ? `Ledger: ${A.ledgerPath}. Read every "Ruling:" and "minor (deferred):" line for these tasks. A deferred minor is known, not new; re-raise it only if it is worse than recorded. A finding that disputes a Ruling sets contests to that Ruling line.` : 'No ledger given.',
-  SENSITIVE_FILES.length ? `Sensitive files in this range (read each in full, not only its hunks):\n${listedFiles.map((f) => `* ${f}`).join('\n')}` : 'No sensitive-file list given; derive it from the sensitive-path globs in the repo if present.',
-  QUESTIONS.length ? `Controller questions (answer each in answers, with file:line evidence):\n${QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : 'No controller questions.',
-  '',
-  `Precondition, checked first: git rev-parse ${A.head} resolves, ${A.base} is its ancestor (git merge-base --is-ancestor ${A.base} ${A.head}), and git status --porcelain prints nothing. If any fails, set preconditionFailed to what you found, write nothing, report no findings, and stop. It is never a finding. For a dirty tree, name each untracked or modified file from git status --porcelain; an untracked ${ARTIFACT} is a stray artifact from an earlier run, so say "stray artifact ${ARTIFACT}: delete it before re-running".`,
-  `Build your view first: mkdir -p "${scratch('reviewer')}" && cd "${REPO}" && { git log --oneline ${A.base}..${A.head}; echo; git diff --stat ${A.base}..${A.head}; echo; git diff -U10 ${A.base}..${A.head}; } > "${scratch('reviewer')}/branch.diff"; then read it. Resolve reviewedSha with git rev-parse ${A.head}.`,
-  'Diff scope: after the diff, read the sensitive files listed above; read outside the diff only files that call or are called by the changed code, and only for a concrete risk you can name, one focused check per risk; the plan, spec and requirement lines the changed tasks cite and the ledger Rulings still apply; do not read unrelated files. The controller questions and the sensitive-file list steer where you look first. Name each file you read outside the diff and the risk that sent you there.',
-  READONLY,
-  'Tests: each task already ran its suite and an independent gate. Run pnpm lint, pnpm typecheck or pnpm test at the head only for a named doubt; record the result.',
-  '',
+]
+const CHECKS = [
   'Check: plan alignment (all planned functionality present, deviations justified); correctness and edge cases; error handling; type safety; security, CJIS and GDPR exposure in the sensitive files (credentials, audit rows never deleted or rewritten, fail-open paths, real-looking records in fixtures); architecture and integration; tests verify real behaviour; production readiness (migrations, backward compatibility, docs).',
   'Severity: critical = broken behaviour, security or data risk; important = must fix before merge; minor = polish. A defect the plan explicitly mandates is still a finding: important, planMandated true. Every finding cites file:line and says why it matters and how to fix.',
   'Declined to judge: list every behaviour you considered and set aside as outside the plan or spec, one per entry with the reason. The controller rules on each; nothing set aside is dropped silently.',
-  `Write your full report to ${REVIEW_FILE}: Strengths, Issues (Critical, Important, Minor), Answers, Declined to judge, Assessment (approve or fixes, with reasoning).`,
-  artifactRule('reviewer', 'reviewed head'),
-  HOUSE,
-  'verdict: approve only with no critical or important finding. preconditionFailed: "" when the precondition holds.',
-].join('\n')
-let review = await agent(reviewPrompt, { label: 'reviewer', phase: 'Review', schema: REVIEW, ...role('reviewer') })
-
-const reviewPre = review && review.preconditionFailed ? preconditionAnswers('reviewer') : ''
-if (reviewPre) {
-  log(`review: cached precondition failure (${review.preconditionFailed}); retrying the reviewer with the controller answer`)
-  review = await agent(`${reviewPrompt}\n\n${reviewPre}`, { label: 'reviewer-retry', phase: 'Review', schema: REVIEW, ...role('reviewer') })
+]
+const TESTS_LINE = 'Tests: each task already ran its suite and an independent gate. Run pnpm lint, pnpm typecheck or pnpm test at the head only for a named doubt; record the result.'
+function preconditionLine() {
+  return `Precondition, checked first: git rev-parse ${A.head} resolves, ${A.base} is its ancestor (git merge-base --is-ancestor ${A.base} ${A.head}), and git status --porcelain prints nothing. If any fails, set preconditionFailed to what you found, write nothing, report no findings, and stop. It is never a finding. For a dirty tree, name each untracked or modified file from git status --porcelain; an untracked ${ARTIFACT} is a stray artifact from an earlier run, so say "stray artifact ${ARTIFACT}: delete it before re-running".`
 }
+
+let review
+if (usingSlices) {
+  // ---- R3: tier slices, sequential, gate first, critical last ----
+  async function runSliceReviewer(sliceT, files, isLast, earlier) {
+    const label = `reviewer-${sliceT}`
+    const roleObj = sliceRole(sliceT)
+    const out = sliceReviewFile(sliceT)
+    const isCapped = files.length > MAX_LISTED_FILES
+    const capped = isCapped ? files.slice(0, MAX_LISTED_FILES) : files
+    if (isCapped) log(`cap: ${sliceT}Files has ${files.length} entries; ${label} lists the first ${MAX_LISTED_FILES} and derives the rest from the sensitive-path globs`)
+    // The diff pathspec always covers every file in the slice, even when the prompt's printed file
+    // list is capped for readability: a capped pathspec would silently drop files 201+ from the
+    // diff itself, which the reviewer has no way to notice (#92 C2).
+    const pathspec = files.map((f) => `"${f}"`).join(' ')
+    const earlierNote = earlier
+      ? `The gate slice already ran: verdict ${earlier.verdict}, ${earlier.openCount} open critical or important finding(s). ${isLast ? 'Write the artifact only when your own verdict is also approve with no open critical or important finding, and that count above is 0.' : ''}`
+      : ''
+    const artifactClause = isLast
+      ? artifactRule(roleObj, 'reviewed head', {
+          condition: earlier
+            ? 'your verdict is approve with no open critical or important finding, and the gate slice above also approved with no open critical or important finding'
+            : 'your verdict is approve with no open critical or important finding',
+        })
+      : `Do not write the artifact ${ARTIFACT_ABS}: only the last slice's reviewer may write it, and only when every slice approved clean. Set artifactWritten to false.`
+    const prompt = [
+      `You are the ${sliceT}-tier reviewer for ${prLabel()}, one tier slice of this run (gate slice first, critical slice last${isLast && !earlier ? ', and the only slice this run' : ''}): review every commit in ${A.base}..${A.head} that touches your files. Review completed work against its plan and requirements and find issues before they merge.`,
+      ...SPEC_INTRO,
+      ...planLedgerLines(),
+      `Your files, ${sliceT} tier only (read each in full, not only its hunks):\n${capped.map((f) => `* ${f}`).join('\n')}${isCapped ? `\n(and ${files.length - MAX_LISTED_FILES} more not listed here; the diff above still covers them. Derive the rest of your ${sliceT} tier from the sensitive-path globs in .github/sensitive-paths.)` : ''}`,
+      QUESTIONS.length ? `Controller questions (answer each in answers, with file:line evidence):\n${QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : 'No controller questions.',
+      earlierNote,
+      '',
+      preconditionLine(),
+      `Build your view first: mkdir -p "${scratch(label)}" && cd "${REPO}" && { git log --oneline ${A.base}..${A.head} -- ${pathspec}; echo; git diff --stat ${A.base}..${A.head} -- ${pathspec}; echo; git diff -U10 ${A.base}..${A.head} -- ${pathspec}; } > "${scratch(label)}/branch.diff"; then read it. Resolve reviewedSha with git rev-parse ${A.head}.`,
+      'Diff scope: your files only. After the diff, read outside them only files that call or are called by the changed code, and only for a concrete risk you can name, one focused check per risk (see the cross-cutting budget below); the plan, spec and requirement lines the changed tasks cite and the ledger Rulings still apply; do not read unrelated files. Name each file you read outside your files and the risk that sent you there.',
+      READONLY,
+      TESTS_LINE,
+      '',
+      ...CHECKS,
+      CROSS_CUTTING,
+      `Write your full report to ${out}: Strengths, Issues (Critical, Important, Minor), Cross-cutting checks, Answers, Declined to judge, Assessment (approve or fixes, with reasoning).`,
+      artifactClause,
+      HOUSE,
+      'verdict: approve only with no critical or important finding. preconditionFailed: "" when the precondition holds.',
+    ].filter(Boolean).join('\n')
+    let res = await agent(prompt, { label, phase: 'Review', schema: REVIEW, ...roleObj })
+    const pre = res && res.preconditionFailed ? preconditionAnswers('reviewer') : ''
+    if (pre) {
+      log(`review: cached precondition failure (${res.preconditionFailed}) on the ${sliceT} slice; retrying with the controller answer`)
+      res = await agent(`${prompt}\n\n${pre}`, { label: `${label}-retry`, phase: 'Review', schema: REVIEW, ...roleObj })
+    }
+    return res
+  }
+
+  const sliceResults = []
+  let earlier = null
+  for (const [sliceT, files, isLast] of [
+    ['gate', GATE_FILES, CRITICAL_FILES.length === 0],
+    ['critical', CRITICAL_FILES, true],
+  ]) {
+    if (!files.length) continue
+    const res = await runSliceReviewer(sliceT, files, isLast, earlier)
+    if (!res) {
+      log(`review: ${sliceT} slice reviewer returned null (skipped or died); stopping`)
+      return done({ verdict: 'fixes', stopped: 'reviewer', problem: `${sliceT} slice reviewer returned no result`, reviewedSha: null, artifactWritten: false, findings: [], residual: [] })
+    }
+    if (res.preconditionFailed) {
+      log(`review: ${sliceT} slice precondition failed: ${res.preconditionFailed}; stopping before any ruler or fixer`)
+      return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `${sliceT} slice reviewer: ${res.preconditionFailed}`, reviewedSha: res.reviewedSha || null, artifactWritten: false, findings: [], residual: [] })
+    }
+    const prefix = sliceT === 'gate' ? 'G-' : 'C-'
+    const findings = res.findings.map((f) => Object.assign({}, f, { id: `${prefix}${f.id}` }))
+    const openCount = findings.filter(blocking).length
+    log(`review: ${sliceT} slice ${res.verdict}, ${findings.length} finding(s) (${openCount} critical/important), artifact ${isLast && res.artifactWritten ? 'written' : 'not written'}`)
+    // artifactWritten is masked to isLast (only the designated writer's claim counts for the
+    // "did the real write happen" success signal); rawArtifactWritten is never masked, so a write
+    // by any slice (including one that was told not to) still surfaces below (#92 C1).
+    const data = { tier: sliceT, verdict: res.verdict, openCount, findings, answers: res.answers, declined: res.declined, reviewedSha: res.reviewedSha, artifactWritten: !!(isLast && res.artifactWritten), rawArtifactWritten: !!res.artifactWritten }
+    sliceResults.push(data)
+    earlier = data
+  }
+  const last = sliceResults[sliceResults.length - 1]
+  const allApprove = sliceResults.every((s) => s.verdict === 'approve' && s.openCount === 0)
+  review = {
+    verdict: allApprove ? 'approve' : 'fixes',
+    rawArtifactWritten: sliceResults.some((s) => s.rawArtifactWritten),
+    reviewedSha: last.reviewedSha,
+    preconditionFailed: '',
+    findings: sliceResults.flatMap((s) => s.findings),
+    answers: sliceResults.flatMap((s) => s.answers),
+    declined: sliceResults.flatMap((s) => s.declined),
+    artifactWritten: allApprove && last.artifactWritten,
+  }
+} else {
+  // ---- single reviewer: today's whole-tier review, or the R4 fast path over every critical/gate file ----
+  const roleObj = role('reviewer')
+  const capped = SENSITIVE_FILES.length > MAX_LISTED_FILES ? SENSITIVE_FILES.slice(0, MAX_LISTED_FILES) : SENSITIVE_FILES
+  if (SENSITIVE_FILES.length > MAX_LISTED_FILES) log(`cap: sensitiveFiles has ${SENSITIVE_FILES.length} entries; the prompt lists the first ${MAX_LISTED_FILES} and tells the reviewer to derive the rest from the sensitive-path globs`)
+  const reviewPrompt = [
+    `You are the whole-branch reviewer for ${prLabel()}: every commit in ${A.base}..${A.head}.${FAST_PATH ? ` Small-diff fast path: reviewedLines ${REVIEWED_LINES} (<= ${FAST_PATH_MAX_LINES}); you are the only reviewer and cover every critical and gate file.` : ''} Review completed work against its plan and requirements and find issues before they merge.`,
+    ...SPEC_INTRO,
+    ...planLedgerLines(),
+    SENSITIVE_FILES.length ? `Sensitive files in this range (read each in full, not only its hunks):\n${capped.map((f) => `* ${f}`).join('\n')}` : 'No sensitive-file list given; derive it from the sensitive-path globs in the repo if present.',
+    QUESTIONS.length ? `Controller questions (answer each in answers, with file:line evidence):\n${QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : 'No controller questions.',
+    '',
+    preconditionLine(),
+    `Build your view first: mkdir -p "${scratch('reviewer')}" && cd "${REPO}" && { git log --oneline ${A.base}..${A.head}; echo; git diff --stat ${A.base}..${A.head}; echo; git diff -U10 ${A.base}..${A.head}; } > "${scratch('reviewer')}/branch.diff"; then read it. Resolve reviewedSha with git rev-parse ${A.head}.`,
+    'Diff scope: after the diff, read outside the diff only files that call or are called by the changed code, and only for a concrete risk you can name, one focused check per risk; the plan, spec and requirement lines the changed tasks cite and the ledger Rulings still apply; do not read unrelated files. The controller questions and the sensitive-file list steer where you look first. Name each file you read outside the diff and the risk that sent you there.',
+    READONLY,
+    TESTS_LINE,
+    '',
+    ...CHECKS,
+    CROSS_CUTTING,
+    `Write your full report to ${REVIEW_FILE}: Strengths, Issues (Critical, Important, Minor), Cross-cutting checks, Answers, Declined to judge, Assessment (approve or fixes, with reasoning).`,
+    artifactRule(roleObj, 'reviewed head', FAST_PATH ? { mode: 'fast' } : {}),
+    HOUSE,
+    'verdict: approve only with no critical or important finding. preconditionFailed: "" when the precondition holds.',
+  ].filter(Boolean).join('\n')
+  review = await agent(reviewPrompt, { label: 'reviewer', phase: 'Review', schema: REVIEW, ...roleObj })
+
+  const reviewPre = review && review.preconditionFailed ? preconditionAnswers('reviewer') : ''
+  if (reviewPre) {
+    log(`review: cached precondition failure (${review.preconditionFailed}); retrying the reviewer with the controller answer`)
+    review = await agent(`${reviewPrompt}\n\n${reviewPre}`, { label: 'reviewer-retry', phase: 'Review', schema: REVIEW, ...roleObj })
+  }
+}
+
 if (!review) {
   log('review: reviewer returned null (skipped or died); stopping')
   return done({ verdict: 'fixes', stopped: 'reviewer', reviewedSha: null, artifactWritten: false, findings: [], residual: [] })
@@ -398,6 +664,9 @@ if (review.preconditionFailed) {
   log(`review: precondition failed: ${review.preconditionFailed}; stopping before any ruler or fixer`)
   return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `reviewer: ${review.preconditionFailed}`, reviewedSha: review.reviewedSha || null, artifactWritten: false, findings: [], residual: [] })
 }
+// The single-reviewer path never masks its own artifactWritten claim, so rawArtifactWritten (set
+// by the slice path above) mirrors it here rather than being left unset (#92 C1).
+if (review.rawArtifactWritten === undefined) review.rawArtifactWritten = !!review.artifactWritten
 state.answers = review.answers
 state.declined = review.declined
 const firstBlocking = review.findings.filter(blocking)
@@ -409,7 +678,10 @@ if (review.verdict === 'approve' && firstBlocking.length === 0) {
   return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)) })
 }
 if (review.verdict === 'approve') log(`review: verdict approve but ${firstBlocking.length} critical/important finding(s); treating as fixes`)
-let stray = review.artifactWritten
+// rawArtifactWritten catches a write by any slice (not only the last one the merge credits), so a
+// stray write is never masked away by the merge that computes the success-path artifactWritten
+// (#92 C1).
+let stray = !!(review.artifactWritten || review.rawArtifactWritten)
 if (stray) log('review: artifact written despite blocking findings; the re-review overwrites it on approve, otherwise it is returned as strayArtifact')
 
 // ================= 2. Controller decisions, then the ruler =================
@@ -429,8 +701,8 @@ if (contested.length) {
   log(`rule: ${contested.length} plan-mandated or contested finding(s) to the ruler (${tier('ruler')})`)
   const res = await agent(
     [
-      `You are the ruler for wave PR #${A.pr} (${A.base}..${review.reviewedSha}). The spec (${SPEC}) is binding; the plan is not when it conflicts. ADRs in docs/decisions/ and ledger Rulings${A.ledgerPath ? ` (${A.ledgerPath})` : ''} are in force unless the spec contradicts them.`,
-      `The full review is ${REVIEW_FILE}. Read only the spec sections, plan text and files each item needs. ${GIT}`,
+      `You are the ruler for ${prLabel()} (${A.base}..${review.reviewedSha}). The spec (${SPEC}) is binding; the plan is not when it conflicts. ${CONTEXT_PATH ? `Context excerpt: ${CONTEXT_PATH} (ledger rulings and the plan and spec lines that touch the changed files); read only what it cites unless an item needs more.` : `ADRs in docs/decisions/ and ledger Rulings${A.ledgerPath ? ` (${A.ledgerPath})` : ''} are in force unless the spec contradicts them.`}`,
+      `The full review is ${REVIEW_FILE_REF}. Read only the spec sections, ${CONTEXT_PATH ? 'the context excerpt' : 'plan text'} and files each item needs. ${GIT}`,
       rulingsText(),
       answersFor(2),
       '',
@@ -475,7 +747,7 @@ if (mustFix.length || minors.length) {
   phase('Fix')
   log(`fix: one pass, ${mustFix.length} critical/important and ${minors.length} minor finding(s)`)
   const fixPrompt = [
-    `You are fixing the whole-branch review findings of wave PR #${A.pr} at ${review.reviewedSha}. Read the review ${REVIEW_FILE} and the plan ${A.planPath} and spec ${SPEC} sections the findings cite.`,
+    `You are fixing the whole-branch review findings of ${prLabel()} at ${review.reviewedSha}. Read the review ${REVIEW_FILE_REF} and ${planRef()} and spec ${SPEC} sections the findings cite.`,
     `Precondition: git rev-parse HEAD is ${review.reviewedSha} and git status --porcelain prints nothing (an untracked ${ARTIFACT} is allowed). If not, change nothing, set preconditionFailed to what you found (for a dirty tree, name each untracked or modified file from git status --porcelain), and report BLOCKED.`,
     rulingsText(),
     'Never reverse a ruling in force. If a finding cannot be fixed without reversing one, leave it and say so in concerns (kind planVsSpec).',
@@ -489,7 +761,7 @@ if (mustFix.length || minors.length) {
     '',
     'TDD: for each behavioural finding write or tighten a failing test first, see it fail, fix, see it pass. Then run pnpm lint, pnpm typecheck and pnpm coverage once each.',
     `Write ${FIX_REPORT}: per finding id, the change (file:line), the covering tests, commands and RED/GREEN output, and the lint, typecheck and test results.`,
-    `Commit only the files you changed (git add <paths>, never git add -A), message "fix: wave review findings for PR #${A.pr}", body listing the finding ids. End the message with the attribution trailer your session's system reminder gives; if none, use:\n${A.trailer}`,
+    `Commit only the files you changed (git add <paths>, never git add -A), message "fix: wave review findings for ${prLabel()}", body listing the finding ids. End the message with the attribution trailer your session's system reminder gives; if none, use:\n${A.trailer}`,
     GIT,
     'Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote.',
     HOUSE,
@@ -511,7 +783,7 @@ if (mustFix.length || minors.length) {
   }
   const pc = await agent(
     [
-      `Check the fix pass on wave PR #${A.pr} in ${REPO}. Fix base: ${review.reviewedSha}. ${GIT}`,
+      `Check the fix pass on ${prLabel()} in ${REPO}. Fix base: ${review.reviewedSha}. ${GIT}`,
       'Checks (one line per failure in problems; ok only with none):',
       `1. New commits: git log --oneline ${review.reviewedSha}..HEAD is not empty; list them in newCommits (full sha, subject).`,
       '2. Working tree clean: git status --porcelain prints nothing (the artifact, if present and untracked, is allowed; name it).',
@@ -548,7 +820,8 @@ const underVerification = review.findings.map((f) => {
 }).concat(progressFindings)
 const rr = await agent(
   [
-    `You are the fresh re-reviewer for wave PR #${A.pr}. The first review is ${REVIEW_FILE}; its findings are below with any ruling, followed by progress-check findings. ${fixHead === review.reviewedSha ? 'There was no fix diff: confirm each ruled item and the head.' : `A single fix pass produced ${review.reviewedSha}..${fixHead}; the fix report is ${FIX_REPORT}.`}`,
+    `You are the fresh re-reviewer for ${prLabel()}. The first review is ${REVIEW_FILE_REF}; its findings are below with any ruling, followed by progress-check findings. ${fixHead === review.reviewedSha ? 'There was no fix diff: confirm each ruled item and the head.' : `A single fix pass produced ${review.reviewedSha}..${fixHead}; the fix report is ${FIX_REPORT}.`}`,
+    CONTEXT_PATH ? `Context excerpt: ${CONTEXT_PATH} (ledger rulings and the plan and spec lines that touch the changed files); read only what it cites unless a named risk needs more.` : '',
     '',
     'Findings (verdict every one, including progress-*):',
     underVerification.map((f) => `- [${f.id}] ${f.severity.toUpperCase()} ${f.file}${f.line ? ':' + f.line : ''}: ${f.summary}${f.ruled ? ` (ruled ${f.ruled})` : ''}`).join('\n'),
@@ -561,9 +834,10 @@ const rr = await agent(
     READONLY,
     'Verdicts: ADDRESSED (the defect no longer exists; "attempted" is NOT ADDRESSED), NOT ADDRESSED, or STANDS (ruled stands or verified, and you accept the ruling). You may reject a ruler ruling: give NOT ADDRESSED with your reason. A controller ruling is final: verdict it STANDS. Otherwise a Critical finding is never STANDS, and you may not approve while any Critical is open. List every Important you accept as STANDS on a ruler ruling in acceptedStands with the id of the ruling that keeps it (the finding id the ruling names). file:line evidence each. List anything the fix broke as newFindings (contests "" unless it disputes a Ruling). Do not re-review code the fix did not touch.',
     'Tests: confirm the fix report shows RED/GREEN and lint, typecheck and test output; do not re-run the suite without a named doubt.',
-    `Write ${REREVIEW_FILE}: Finding Verdicts, Accepted stands, New Breakage, Verdict.`,
+    CROSS_CUTTING,
+    `Write ${REREVIEW_FILE}: Finding Verdicts, Accepted stands, New Breakage, Cross-cutting checks, Verdict.`,
     `reviewedSha: git rev-parse ${fixHead} (full).`,
-    artifactRule('reReviewer', 'reviewed head (the fix head)'),
+    artifactRule(role('reReviewer'), 'reviewed head (the fix head)'),
     HOUSE,
     'verdict: approve only when every critical finding is ADDRESSED (or final by controller ruling), every important one is ADDRESSED, final by controller ruling or listed in acceptedStands, every progress-* finding is ADDRESSED, and newFindings has no critical or important item.',
   ].filter(Boolean).join('\n'),
