@@ -36,13 +36,20 @@ export function deniedGlobals(biomeJson: string): string[] {
 function findGlobalAliases(source: string): string[] {
   const objects = GLOBAL_OBJECTS.join("|");
   const chain = String.raw`(?:${objects})(?:\s*(?:\?\.|\.)\s*(?:${objects})|\s*\[\s*["'\x60](?:${objects})["'\x60]\s*\])*`;
+  // [critic:I2] allow an optional type annotation between the binding name and `=`,
+  // e.g. `const g: typeof globalThis = globalThis;`.
   const re = new RegExp(
-    String.raw`\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:${chain})\s*(?:[;,\n]|$)`,
+    String.raw`\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:${chain})\s*(?:[;,\n]|$)`,
     "g",
   );
   const aliases = new Set<string>();
   for (const m of source.matchAll(re)) aliases.add(m[1]);
   return [...aliases];
+}
+
+/** Escapes a string for safe interpolation into a RegExp source (critic:I1). */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -52,7 +59,9 @@ function findGlobalAliases(source: string): string[] {
  */
 export function findGlobalMemberAccess(source: string, names: readonly string[]): string[] {
   const aliases = findGlobalAliases(source);
-  const objects = [...GLOBAL_OBJECTS, ...aliases].join("|");
+  // [critic:I1] alias names go into a RegExp source; escape them (e.g. `$g`, `$`)
+  // so a regex metacharacter in the alias name can't change what the pattern matches.
+  const objects = [...GLOBAL_OBJECTS, ...aliases.map(escapeRegExp)].join("|");
   const members = names.join("|");
   const link = String.raw`(?:${objects})\s*(?:(?:\?\.|\.)\s*(?:${objects})\s*|\[\s*["'\x60](?:${objects})["'\x60]\s*\]\s*)*`;
   const obj = String.raw`(?<![\w$.])${link}`;
@@ -63,13 +72,30 @@ export function findGlobalMemberAccess(source: string, names: readonly string[])
 
   // Destructuring from a global object or a one-level alias: `const { N } = globalThis`,
   // `let { N: f } = window`, `var { a, N } = g` (whitespace/newlines inside braces allowed).
+  // [critic:C1] the captured binding list excludes `{`, `}` and `;` so the match cannot
+  // cross into an earlier or later statement's own destructure (e.g. `const { x } = opts;`
+  // immediately before the real one). [critic:I2] an optional type annotation is allowed
+  // between the closing `}` and `=`, e.g. `const { fetch }: typeof globalThis = globalThis`.
   const destructure = new RegExp(
-    String.raw`\b(?:const|let|var)\s*\{\s*([\s\S]*?)\s*\}\s*=\s*(?<![\w$.])(?:${objects})(?![\w$])`,
+    String.raw`\b(?:const|let|var)\s*\{\s*([^{};]*?)\s*\}\s*(?::[^=;]+)?=\s*(?<![\w$.])(?:${objects})(?![\w$])`,
     "g",
   );
   const memberRe = new RegExp(`^(?:${members})$`);
   for (const m of source.matchAll(destructure)) {
-    const bindings = m[1].split(",").map((b) => b.trim().split(":")[0].trim());
+    const bindings = m[1]
+      .split(",")
+      .map((b) => b.trim())
+      .filter(Boolean)
+      .map((b) => {
+        // [critic:I3] strip a default value (`N = default`), then a rename (`N: f`),
+        // then quotes or a literal computed-key bracket (`'N'`, `['N']`) around the key.
+        const key = b.split("=")[0]?.split(":")[0]?.trim() ?? "";
+        const bracketed = key.match(/^\[\s*(['"`])([^'"`]*)\1\s*\]$/);
+        if (bracketed) return bracketed[2];
+        const quoted = key.match(/^(['"`])([^'"`]*)\1$/);
+        if (quoted) return quoted[2];
+        return key;
+      });
     if (bindings.some((b) => memberRe.test(b))) out.push(m[0]);
   }
 

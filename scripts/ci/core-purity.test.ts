@@ -79,7 +79,48 @@ describe("core purity: IO globals through a global object (#85)", () => {
       "const g = globalThis;\nfunction use(x) { x.fetch(url); }\nuse(g);",
       // reassignment
       "let g = 1;\ng = globalThis;\ng.fetch(url);",
+      // Reflect.get
+      'Reflect.get(globalThis, "fetch");',
+      // computed non-literal key
+      "globalThis[k];",
+      // eval / Function: access built dynamically, not a static literal
+      'eval("globalThis" + ".fetch(url)");\nnew Function("return globalThis" + ".fetch(url)")();',
     ])
       expect(findGlobalMemberAccess(src, names), src).toEqual([]);
+  });
+
+  // [critic:C1] an earlier, unrelated destructure must not hide a later real one
+  it("still flags a destructure from a global object after an unrelated destructure", () => {
+    expect(
+      findGlobalMemberAccess("const { x } = opts;\nconst { fetch } = globalThis;", names),
+    ).not.toEqual([]);
+  });
+
+  // [critic:I1] alias names containing `$` must not be treated as regex metacharacters
+  it("flags aliases whose name contains a dollar sign", () => {
+    for (const src of [
+      "const $g = globalThis;\n$g.fetch(u);",
+      "const $ = globalThis;\n$.fetch(u);",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  // [critic:I2] a type annotation must not bypass alias or destructuring detection
+  it("flags aliases and destructuring through a type annotation", () => {
+    for (const src of [
+      "const g: typeof globalThis = globalThis;\ng.fetch(u);",
+      "const { fetch }: typeof globalThis = globalThis;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  // [critic:I3] default values, quoted keys and literal computed keys must still be caught
+  it("flags destructured bindings with defaults or literal keys", () => {
+    for (const src of [
+      "const { fetch = undefined } = globalThis;",
+      "const { 'fetch': f } = globalThis;",
+      "const { ['fetch']: f } = globalThis;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
   });
 });
