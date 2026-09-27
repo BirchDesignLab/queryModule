@@ -163,6 +163,7 @@
                   "properties": {
                     "key": {
                       "type": "string",
+                      "minLength": 1,
                       "maxLength": 128,
                       "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                     },
@@ -292,6 +293,7 @@
               },
               "labelKey": {
                 "type": "string",
+                "minLength": 1,
                 "maxLength": 128,
                 "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
               }
@@ -345,6 +347,7 @@
                 },
                 "labelKey": {
                   "type": "string",
+                  "minLength": 1,
                   "maxLength": 128,
                   "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                 },
@@ -379,6 +382,7 @@
                     },
                     "labelKey": {
                       "type": "string",
+                      "minLength": 1,
                       "maxLength": 128,
                       "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                     },
@@ -454,6 +458,7 @@
                       },
                       "labelKey": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 128,
                         "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                       },
@@ -493,6 +498,7 @@
                 },
                 "labelKey": {
                   "type": "string",
+                  "minLength": 1,
                   "maxLength": 128,
                   "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                 },
@@ -512,6 +518,7 @@
                       },
                       "labelKey": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 128,
                         "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                       },
@@ -551,6 +558,7 @@
                       },
                       "labelKey": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 128,
                         "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                       },
@@ -1072,6 +1080,7 @@
                           },
                           "labelKey": {
                             "type": "string",
+                            "minLength": 1,
                             "maxLength": 128,
                             "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                           },
@@ -1189,6 +1198,7 @@
                           },
                           "labelKey": {
                             "type": "string",
+                            "minLength": 1,
                             "maxLength": 128,
                             "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                           },
@@ -1216,6 +1226,7 @@
                                 },
                                 "labelKey": {
                                   "type": "string",
+                                  "minLength": 1,
                                   "maxLength": 128,
                                   "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                                 },
@@ -1478,6 +1489,7 @@
                 },
                 "labelKey": {
                   "type": "string",
+                  "minLength": 1,
                   "maxLength": 128,
                   "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                 },

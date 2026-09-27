@@ -32,7 +32,13 @@ export type BoundedId = z.infer<typeof BoundedIdSchema>;
  */
 export const MESSAGE_KEY_MAX_LENGTH = 128;
 export const MESSAGE_KEY_PATTERN = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*$/;
-export const MessageKeySchema = z.string().max(MESSAGE_KEY_MAX_LENGTH).regex(MESSAGE_KEY_PATTERN);
+// min(1) is implied by the pattern but kept explicit: the generated OpenAPI then keeps
+// minLength 1, and oasdiff treats dropping it from a response as breaking.
+export const MessageKeySchema = z
+  .string()
+  .min(1)
+  .max(MESSAGE_KEY_MAX_LENGTH)
+  .regex(MESSAGE_KEY_PATTERN);
 export type MessageKey = z.infer<typeof MessageKeySchema>;
 
 export const HOST_SUBJECT_MAX_LENGTH = 255;

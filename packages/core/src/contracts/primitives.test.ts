@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   BOUNDED_ID_MAX_LENGTH,
   BoundedIdSchema,
@@ -162,6 +163,14 @@ describe("ADR-0005 shared contract primitives", () => {
     ]) {
       expect(ok(MessageKeySchema, bad)).toBe(false);
     }
+  });
+
+  it("MessageKey JSON Schema keeps minLength 1 (oasdiff: dropping it from a response is breaking)", () => {
+    expect(z.toJSONSchema(MessageKeySchema)).toMatchObject({
+      type: "string",
+      minLength: 1,
+      maxLength: MESSAGE_KEY_MAX_LENGTH,
+    });
   });
 
   it("MessageKey pattern runs in linear time on adversarial input (CodeQL js/redos)", {
