@@ -50,7 +50,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 W6 in progress on `feat/p0-wave-6` (one PR, critical tier). Resumable: check the first unticked item, `git log main..`, and the ledger. If a session stalls mid-item, `git status` shows its partial edits; finish or discard that item only.
 
 - [x] 1 #92 check: `sensitive-review.ts` critical = high, gate = medium; branch-keyed artifact `docs/reviews/<branch>.md` (HEAD_REF); fast mode <= 50 reviewed lines counted by the check (inline)
-- [ ] 2 #92 `wave-review.js` / `sdd-task.js`: caps defaults, tier slices, context diet, small-diff fast path (sdd-task, ordinary + critic)
+- [x] 2 #92 `wave-review.js` / `sdd-task.js`: caps defaults, tier slices, context diet, small-diff fast path (sdd-task, ordinary + critic)
 - [ ] 3 #92 docs: ADR-0007, CLAUDE.md role tables, workflows README, split-by-tier and inline rules (inline)
 - [ ] 4 #92 board data to `docs/board/board-data.json`; #85 dashboard spans, milestone parents; FOLLOW_UPS #92, #94 (sdd-task, gate)
 - [ ] 5 ADR-0008 ci.yml restructure (sdd-task, gate)
