@@ -265,9 +265,19 @@ const PHASES = [
 const CONTRACTS_M0P0 = 39;
 
 // Five milestone parents (label epic, milestone set): title is the milestone
-// name (developer decision, #80). Number is null until the setup script
-// creates each one and prints the number for the controller to record here.
-const MILESTONE_PARENTS = Object.keys(MILESTONES).map((title) => ({ number: null, title }));
+// name (developer decision, #80). Numbers recorded from the first --apply
+// (09-26-26); a new milestone starts at null until the script creates it.
+const MILESTONE_PARENT_NUMBERS = {
+  "M0 Skeleton": 86,
+  "M1 Forms and terminal": 87,
+  "M2 Results and audit": 88,
+  "M3 Workflow and compliance": 89,
+  "M4 Mobile and host integration": 90,
+};
+const MILESTONE_PARENTS = Object.keys(MILESTONES).map((title) => ({
+  number: MILESTONE_PARENT_NUMBERS[title] ?? null,
+  title,
+}));
 
 // P0 waves (plan "## Waves"). Task N is issue #N+1. Numbers #55 to #60
 // recorded 09-26-26 (task-W5B-mapping.md); titles are the wave parent titles
@@ -594,6 +604,39 @@ const FOLLOW_UPS = [
     body:
       'The Roadmap view falls apart when tweaked: two layers of data are missing (developer, 09-26-26).\n\n- [ ] Task and follow-up dates: Start = issue created date, Finish = closed date (the roadmap needs custom date fields, so copy them).\n- [ ] Parent dates (wave, phase, milestone): Start = earliest child Start; Finish = latest child Finish once all children are closed, else the latest child date so far.\n- [ ] Milestone parent issues M0 to M4 (label `epic`), phases as their sub-issues; "No Parent issue" then holds only milestones.\n- [ ] `Level` single-select field: Milestone, Phase, Wave, Task, Follow-up. Suggested views: "Plan" (level Milestone, Phase), "P0 detail" (level Wave, Task, grouped by parent).\n- [ ] `project-sync` rolls dates up on every event; `scripts/ops/gh-setup-project.mjs` backfills once.\n- [ ] README SVG dashboard (option B) reads the same roll-ups.\n\nGate tier (`.github/workflows/**`, `scripts/ops/**`): ride W5, which gets a gate `wave-review` anyway.' +
       src("Roadmap view feedback, developer 09-26-26."),
+  },
+  {
+    number: 84,
+    title: "Track B P1 plan: align with the P0 tokens, platform and shell (W5 phase critic)",
+    labels: ["follow-up", "web", "p1"],
+    milestone: "M0 Skeleton",
+    parent: 40,
+    track: "Web (B)",
+    phase: "P1",
+    size: "M",
+    priority: "Medium",
+    reqIds: "",
+    body:
+      'The W5 phase Opus critic (PR #83) found that the Track B P1 plan (`docs/superpowers/plans/2026-09-25-track-b-p1.md`) contradicts what P0 shipped. Amend the plan before Track B P1 starts:\n\n- [ ] F1 (important): Tasks 1 and 14 still create `packages/client/src/platform.ts` with another shape (`Signal.get`, `WritableSignal`, non-null `tokenStore`, no `clear()`, a `visibility` field; plan lines ~150, 3058, 3114-3116, 5461, 5601). Lead ruling R1: Modify, and use the P0 names (`PlatformSignal.current`, `visible`, nullable `tokenStore`).\n- [ ] F4 (important): `styles.css` (plan ~4716-4795) uses variables P0 never emits (`--focus-ring`, `--type-*`, `--space-*`, `--field-required`, `--radius-control`, `--motion-*`), so the focus outline is invalid and no ring shows (spec 6.4). Use the `--qm-` names from `cssVarName` (now including `--qm-focus-ring-width`, `--qm-focus-ring-offset`, `--qm-border-width`, `--qm-color-accent`), drop the literal `48px` (`--qm-target-min`), dedupe `body` and `:focus-visible` with `apps/web/src/shell.css`, and test that no unknown variable is used.\n- [ ] F5: Task 12 test expects `:root[data-theme="day"] {`; P0 emits day on bare `:root`.\n- [ ] F6: Task 11 quotes stale ratios; `it.each(COLOR_TOKENS)` gets an object (use `Object.keys`).\n- [ ] F7: the built entry script has no nonce; under `\'strict-dynamic\'` the app will not boot unless the API injects one. Use Vite `html.cspNonce` with a placeholder the API replaces, and an e2e check for zero CSP violations (Task 27 dependency).\n- [ ] F8: set `document.title` and `<html lang>` from the active locale (NFR-001).\n- [ ] F9: reuse P0 `VisuallyHidden` instead of a new `.qm-visually-hidden` class; add `clipPath: "inset(50%)"`.\n- [ ] F10: the focus ring colour equals some severity fills; keep offset rings on filled controls and draw badge edges with `color.border`.\n- [ ] Shell CSS tests read CSS from disk: a Vite `?raw` CSS import is `""` under Vitest (found in PR #83).' +
+      src(
+        "W5 phase critic, `.superpowers/sdd/2026-09-25-p0-contracts/w5-phase-critic.md` (Windows ledger), PR #83.\n",
+      ),
+  },
+  {
+    number: 85,
+    title:
+      "W5 deferred minors: IO-globals member access, config typecheck, TokenStore tier, jsdom and Node floor",
+    labels: ["follow-up", "platform", "p1"],
+    milestone: "M0 Skeleton",
+    parent: 40,
+    track: "Platform (A)",
+    phase: "P1",
+    size: "M",
+    priority: "Medium",
+    reqIds: "",
+    body:
+      'Deferred minors from the W5 reviews (PR #83), none fail open today:\n\n- [ ] Core IO-globals lint (#71) matches bare identifiers only: `globalThis.fetch`, `window.localStorage`, `self.navigator` in `packages/core/src` lint clean. Add a restricted member-access rule or a test-side scan.\n- [ ] `apps/web/vite.config.ts` and `vitest.config.ts` sit outside `tsc -b` (tsconfig `include: ["src"]`); add a node tsconfig so they are typechecked.\n- [ ] `packages/client` TokenStore (bearer token storage, SEC-006) has no `.github/sensitive-paths` tier, so the P1 native SecureStore store would land at ordinary tier. Decide its tier (critical-tier file change, own PR).\n- [ ] jsdom is held at 29.1.1 because jsdom 30 needs Node >= 24.15 and `engines` is `>=24 <25`. Decide whether to raise the Node floor to 24.15 (ADR-0001) and then take jsdom 30.\n- [ ] Dashboard wave timeline uses issue created dates (#80 rule), so every P0 wave shows 09-26; consider first-commit-to-merge spans for merged waves.\n- [ ] `milestone parents` get Level and dates only on the run after their numbers are recorded (first `--apply` creates them).' +
+      src("SDD ledger, W5 deferred minors (Tasks 23 to 25, W5A, W5B).\n"),
   },
   {
     number: 81,
