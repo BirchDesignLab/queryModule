@@ -1174,7 +1174,7 @@ function loadItems() {
     after = page.pageInfo.endCursor;
   }
 }
-const items = loadItems();
+let items = loadItems();
 
 const fieldByName = (n) => project.fields.nodes.find((f) => f.name === n);
 const all = [...issues.values()].sort((a, b) => a.number - b.number);
@@ -1220,6 +1220,14 @@ for (const issue of all) {
     );
   }
 }
+
+// Reload the live field values this run just wrote (Status, Priority, Start,
+// Finish) so dashboardModel() below reflects what --apply just set, not the
+// pre-run snapshot captured before the write loop. Mirrors the deleted
+// progressBlock()'s `APPLY ? loadItems() : items` (r2:new-1); a dry run or
+// --dashboard alone makes no field-value writes, so the pre-run snapshot is
+// already current and reloading is skipped.
+items = APPLY ? loadItems() : items;
 
 // README progress block: an SVG dashboard (README option B, #80 requirement
 // 8), regenerated from live data between markers. Superseded the earlier

@@ -48,8 +48,8 @@ describe("renderDashboard: both themes render (#80 requirement 8)", () => {
   }
 
   it("rejects an unknown theme", () => {
-    // @ts-expect-error deliberately invalid
-    expect(() => renderDashboard(MODEL, "sepia")).toThrow();
+    const invalidTheme = "sepia" as unknown as "light" | "dark";
+    expect(() => renderDashboard(MODEL, invalidTheme)).toThrow();
   });
 });
 

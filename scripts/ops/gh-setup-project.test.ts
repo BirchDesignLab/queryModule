@@ -93,6 +93,25 @@ describe("gh-setup-project: SVG dashboard, --dashboard flag (#80 requirement 8)"
   });
 });
 
+describe("gh-setup-project: dashboardModel reads post-write field values (r2:new-1)", () => {
+  it("reloads items after the field-value write loop, before dashboardModel() runs", () => {
+    const loopStart = source.indexOf("for (const issue of all) {");
+    const loopEnd = source.indexOf("// README progress block:");
+    const dashboardCallIndex = source.indexOf("const model = dashboardModel();");
+    expect(loopStart).toBeGreaterThan(-1);
+    expect(loopEnd).toBeGreaterThan(loopStart);
+    expect(dashboardCallIndex).toBeGreaterThan(loopEnd);
+    const betweenLoopAndDashboard = source.slice(loopStart, dashboardCallIndex);
+    // Mirrors the deleted progressBlock()'s `APPLY ? loadItems() : items`: a
+    // live --apply run must see the Status/field values this run just wrote,
+    // not the pre-run snapshot captured before the loop.
+    expect(betweenLoopAndDashboard).toMatch(/items = APPLY \? loadItems\(\) : items;/);
+    // `items` must be reassignable for the reload to take effect.
+    expect(source).toMatch(/let items = loadItems\(\);/);
+    expect(source).not.toMatch(/const items = loadItems\(\);/);
+  });
+});
+
 describe("gh-setup-project: number:null duplicate guard (#80, critic:C4)", () => {
   it("looks up an existing issue by title before POSTing a spec with number: null", () => {
     const start = source.indexOf("function ensureIssue(spec) {");
