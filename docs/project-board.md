@@ -64,7 +64,7 @@ Start and Finish roll up on every run, bottom up (developer decision, #80 requir
 
 Security: the board job uses the secret `PROJECT_TOKEN` (BirchDesignLab classic token, `project` scope only, with an expiry) and never checks out or runs repository code; without the secret, or on a fork PR, it skips with a notice. Anyone with push access can read the token by editing the workflow on a branch; that is accepted because repository writers are trusted. The label job uses only `GITHUB_TOKEN`.
 
-The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status and Priority when they are empty (a closed issue is forced to Done; Done comes from issue state only); Start and Finish are recomputed from the roll-up above on every run (setup-script backfill and project-sync agree); after that, project-sync and the developer own Status and Priority.
+The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status and Priority when they are empty (an issue closed as completed is forced to Done; closed not planned or duplicate gets no Status write; Done comes from issue state only); Start and Finish are recomputed from the roll-up above on every run (setup-script backfill and project-sync agree); after that, project-sync and the developer own Status and Priority.
 
 ## SVG dashboard
 

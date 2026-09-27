@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bodyUpdate,
   clampToFloor,
+  closedStatus,
   leafDates,
   matchParent,
   rollUp,
@@ -89,8 +90,8 @@ describe("matchParent: match data items to live issues by number (#80)", () => {
     expect(matchParent({ number: null, title: "M0 Skeleton" }, byNumber)).toBeUndefined();
   });
 
-  it("returns undefined when the recorded number has no matching live issue", () => {
-    expect(matchParent({ number: 999, title: "Contracts (M0 P0)" }, byNumber)).toBeUndefined();
+  it("returns undefined for an item with no recorded number yet (created on --apply)", () => {
+    expect(matchParent({ number: null, title: "M0 Skeleton" }, byNumber)).toBeUndefined();
   });
 });
 
@@ -210,5 +211,25 @@ describe("rollUp: parent dates from children, bottom up (#80 req. 5)", () => {
       { ...wave2, closed: false },
     ]);
     expect(phase).toEqual({ start: "2026-09-25", finish: "2026-09-29" });
+  });
+});
+
+describe("matchParent: a recorded number with no live issue fails closed (W5 wave-end)", () => {
+  it("throws instead of letting --apply create a duplicate on every run", () => {
+    expect(() => matchParent({ number: 999, title: "Gone (M9 P9)" }, () => undefined)).toThrow(
+      "issue #999 (Gone (M9 P9)) is recorded in the setup-script data but not found",
+    );
+  });
+});
+
+describe("closedStatus: Done only for an issue closed as completed (#79)", () => {
+  it("is Done for closed completed and for a closed issue with no reason", () => {
+    expect(closedStatus({ state: "closed", state_reason: "completed" })).toBe("Done");
+    expect(closedStatus({ state: "closed", state_reason: null })).toBe("Done");
+  });
+  it("is undefined for closed not planned, duplicate, and open issues", () => {
+    expect(closedStatus({ state: "closed", state_reason: "not_planned" })).toBeUndefined();
+    expect(closedStatus({ state: "closed", state_reason: "duplicate" })).toBeUndefined();
+    expect(closedStatus({ state: "open" })).toBeUndefined();
   });
 });

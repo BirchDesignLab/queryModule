@@ -27,7 +27,13 @@ describe("NFR-003 ClientPlatform fake (spec 3)", () => {
     expect(p.online.current()).toBe(true);
   });
 
-  it("visibility signal starts visible and follows setVisible", () => {
+  it("defaults to online and visible", () => {
+    const p = createFakePlatform();
+    expect(p.online.current()).toBe(true);
+    expect(p.visible.current()).toBe(true);
+  });
+
+  it("visibility signal follows setVisible from a hidden start", () => {
     const p = createFakePlatform({ visible: false });
     expect(p.visible.current()).toBe(false);
     p.setVisible(true);

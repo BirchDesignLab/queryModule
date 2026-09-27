@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
-  build: { outDir: "dist", sourcemap: true },
+  // No source maps in the production build: nothing extra to serve from a CJIS-facing app.
+  build: { outDir: "dist", sourcemap: false },
   server: { port: 5173, strictPort: true },
 });

@@ -1,9 +1,9 @@
 import { THEME_MODES as CORE_THEME_MODES } from "@querymodule/core/config";
 import { describe, expect, it } from "vitest";
-import { CONTRAST_PAIRS, contrastFailures, contrastRatio } from "./contrast";
+import { CONTRAST_PAIRS, contrastFailures, contrastRatio, relativeLuminance } from "./contrast";
 import { buildCss, cssVarName } from "./css";
 import { buildTheme } from "./theme";
-import { COLOR_TOKENS, THEME_MODES, TOKEN_NAMES } from "./tokens";
+import { COLOR_TOKENS, THEME_MODES, TOKEN_NAMES, tokenValue } from "./tokens";
 
 describe("UX-011 UX-002 tokens (spec 6.5)", () => {
   it("modes match the core config schema", () => {
@@ -21,10 +21,30 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
     });
   }
 
-  it("body text pairs require 7:1, severity 4.5:1, non-text 3:1", () => {
-    expect(CONTRAST_PAIRS.find((p) => p.fg === "color.text.body")?.min).toBe(7);
-    expect(CONTRAST_PAIRS.find((p) => p.fg === "color.severity.critical.fg")?.min).toBe(4.5);
-    expect(CONTRAST_PAIRS.find((p) => p.fg === "focus.ring")?.min).toBe(3);
+  it("declares every pair with its target: text 7:1, severity 4.5:1, non-text 3:1", () => {
+    expect(CONTRAST_PAIRS.map((p) => [p.fg, p.bg, p.min])).toEqual([
+      ["color.text.body", "color.surface.base", 7],
+      ["color.text.body", "color.surface.raised", 7],
+      ["color.accent", "color.surface.base", 7],
+      ["color.accent", "color.surface.raised", 7],
+      ["color.severity.critical.fg", "color.severity.critical.bg", 4.5],
+      ["color.severity.warning.fg", "color.severity.warning.bg", 4.5],
+      ["color.severity.info.fg", "color.severity.info.bg", 4.5],
+      ["field.required", "color.surface.base", 3],
+      ["focus.ring", "color.surface.base", 3],
+      ["color.border", "color.surface.base", 3],
+    ]);
+  });
+
+  it("rejects a colour that is not #rrggbb", () => {
+    expect(() => relativeLuminance("#abc")).toThrow("not a #rrggbb colour: #abc");
+  });
+
+  it("tokenValue reads colour tokens per mode and scale tokens in any mode", () => {
+    expect(tokenValue("color.accent", "night")).toBe(COLOR_TOKENS["color.accent"].night);
+    expect(tokenValue("focus.ring.width", "redShift")).toBe("3px");
+    expect(tokenValue("focus.ring.offset", "day")).toBe("2px");
+    expect(tokenValue("border.width", "day")).toBe("1px");
   });
 
   it("required marker is classified as non-text UI at 3:1 (spec 6.5)", () => {
@@ -38,10 +58,10 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
     expect(failures.map((f) => f.pair.fg)).toContain("color.text.body");
   });
 
-  it("redShift has no blue-dominant colours", () => {
+  it("redShift keeps blue strictly below red in every colour", () => {
     for (const [name, values] of Object.entries(COLOR_TOKENS)) {
       const n = Number.parseInt(values.redShift.slice(1), 16);
-      expect((n & 255) <= ((n >> 16) & 255), name).toBe(true);
+      expect((n & 255) < ((n >> 16) & 255), name).toBe(true);
     }
   });
 

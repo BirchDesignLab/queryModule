@@ -40,6 +40,13 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
     use: "body text on raised surfaces",
   },
   {
+    fg: "color.accent",
+    bg: "color.surface.base",
+    min: 7,
+    use: "links and accent text; 7:1 like body text",
+  },
+  { fg: "color.accent", bg: "color.surface.raised", min: 7, use: "accent text on raised surfaces" },
+  {
     fg: "color.severity.critical.fg",
     bg: "color.severity.critical.bg",
     min: 4.5,

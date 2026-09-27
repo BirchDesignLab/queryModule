@@ -13,7 +13,7 @@
 // Idempotent
 //   Every step reads first and writes only what differs. Existing issues are
 //   matched by exact title, fields and options by name. Status, Priority, Start
-//   and Finish are only seeded when empty (a closed issue is forced to Done; Done
+//   and Finish are only seeded when empty (an issue closed as completed is forced to Done; Done
 //   comes from issue state only), so a rerun never undoes project-sync or the
 //   developer. Prerequisites (milestones, task issues) are checked before the
 //   first write. A wave closes when all its tasks are
@@ -41,6 +41,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   bodyUpdate,
+  closedStatus,
   leafDates,
   matchParent,
   rollUp,
@@ -965,6 +966,11 @@ function ensureIssue(spec) {
         state_reason: "completed",
       }),
     );
+    // Keep the local copy current so later readers (dashboardModel) see it closed.
+    if (APPLY) {
+      issue.state = "closed";
+      issue.state_reason = "completed";
+    }
   }
   return issue;
 }
@@ -1090,8 +1096,10 @@ function desired(issue) {
     v.Size = sizeOf(taskLines.get(task) ?? 0);
     v["Req IDs"] = /\(([^)]*)\)\s*$/.exec(issue.title)?.[1] ?? "";
     // Done only from issue state; an open task in a finished wave is project-sync's.
-    if (issue.state === "closed") v.Status = "Done";
-    else v.Status = { review: "In Review", ready: "Ready", todo: "Todo" }[w.state];
+    if (issue.state === "closed") {
+      const done = closedStatus(issue);
+      if (done) v.Status = done;
+    } else v.Status = { review: "In Review", ready: "Ready", todo: "Todo" }[w.state];
     if (issue.state === "open") v.Priority = "High";
     // Leaf dates (#80 requirement 4): Start = created date, Finish = closed
     // date only when closed as completed, both clamped to the 2026-09-25
@@ -1143,7 +1151,11 @@ function desired(issue) {
     v.Size = f.size;
     v.Priority = f.priority;
     v["Req IDs"] = f.reqIds;
-    v.Status = issue.state === "closed" ? "Done" : "Todo";
+    if (issue.state === "open") v.Status = "Todo";
+    else {
+      const done = closedStatus(issue);
+      if (done) v.Status = done;
+    }
     const dates = datesByNumber.get(issue.number);
     if (dates?.start) v.Start = dates.start;
     if (dates?.finish) v.Finish = dates.finish;

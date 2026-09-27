@@ -11,7 +11,7 @@
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "contracts:gen": "tsx scripts/ci/contracts-gen.ts",
-    "tokens:gen": "pnpm --filter @querymodule/tokens gen",
+    "tokens:gen": "pnpm --filter @querymodule/tokens --fail-if-no-match gen",
     "gen:check": "tsx scripts/ci/check-generated.ts",
     "config:validate": "tsx scripts/ci/config-validate.ts",
     "config:migrate": "tsx scripts/ci/config-migrate.ts",

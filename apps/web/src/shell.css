@@ -10,7 +10,7 @@ body {
 .qm-shell__header {
   padding: var(--qm-space-4);
   background: var(--qm-color-surface-raised);
-  border-bottom: 1px solid var(--qm-color-border);
+  border-bottom: var(--qm-border-width) solid var(--qm-color-border);
 }
 
 .qm-shell__header h1 {
@@ -23,6 +23,6 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid var(--qm-focus-ring);
-  outline-offset: 2px;
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
 }

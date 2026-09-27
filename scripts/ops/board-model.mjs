@@ -19,11 +19,22 @@
  * @returns {"Done"|"In Review"|"Ready"|"Todo"|undefined}
  */
 export function waveParentStatus(issue, waveState) {
-  if (issue.state === "closed") {
-    const reason = issue.state_reason ?? null;
-    return reason === "completed" || reason === null ? "Done" : undefined;
-  }
+  if (issue.state === "closed") return closedStatus(issue);
   return { review: "In Review", ready: "Ready", todo: "Todo" }[waveState];
+}
+
+/**
+ * Done only for an issue closed as completed (or closed with no reason, as
+ * older issues report); not planned, duplicate and open issues get no Status
+ * write from the setup script (#79).
+ *
+ * @param {{state: "open"|"closed", state_reason?: string|null}} issue
+ * @returns {"Done"|undefined}
+ */
+export function closedStatus(issue) {
+  if (issue.state !== "closed") return undefined;
+  const reason = issue.state_reason ?? null;
+  return reason === "completed" || reason === null ? "Done" : undefined;
 }
 
 /**
@@ -66,7 +77,15 @@ export function titleUpdate(existing, desired) {
  * @returns {object|undefined}
  */
 export function matchParent(item, byNumber) {
-  return item.number ? byNumber(item.number) : undefined;
+  if (!item.number) return undefined;
+  const live = byNumber(item.number);
+  // A recorded number that no longer resolves (transferred or deleted) would
+  // otherwise make every --apply create a fresh copy; stop instead.
+  if (!live)
+    throw new Error(
+      `issue #${item.number} (${item.title}) is recorded in the setup-script data but not found; fix the data before --apply`,
+    );
+  return live;
 }
 
 // The project started 2026-09-25 (developer decision, #80): no Start or

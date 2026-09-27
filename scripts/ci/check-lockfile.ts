@@ -28,7 +28,7 @@ try {
 }
 
 if (result.offenders.length > 0) {
-  console.error("pnpm-lock.yaml has a non-registry resolution (never printing the full value):");
+  console.error(`${path} has a non-registry resolution (never printing the full value):`);
   for (const o of result.offenders) console.error(`  ${o.key}: ${o.kind}`);
   process.exit(1);
 }
