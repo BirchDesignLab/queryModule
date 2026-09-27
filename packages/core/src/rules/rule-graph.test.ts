@@ -97,3 +97,72 @@ describe("conditionFields", () => {
     ).toEqual(["a", "b", "c"]);
   });
 });
+
+function filterQt(rules: unknown[]): QueryType {
+  return QueryTypeSchema.parse({
+    code: "F",
+    labelKey: "queryType.f",
+    sections: [{ key: "base", labelKey: "section.base" }],
+    fields: [
+      { key: "hint", labelKey: "field.hint", dataType: "string" },
+      { key: "parent", labelKey: "field.parent", dataType: "picklist", picklist: "parent" },
+      {
+        key: "child",
+        labelKey: "field.child",
+        dataType: "picklist",
+        picklist: "child",
+        picklistFilter: { byField: "parent" },
+      },
+    ],
+    rules,
+    sources: [{ sourceId: "src", selectedByDefault: true }],
+  });
+}
+
+describe("FR-031 a setDefault rule may not target a picklist filter parent (decision 09-27-26)", () => {
+  it("rejects setDefault on a field another picklist filters by", () => {
+    const diagnostics = validateRuleGraph(
+      filterQt([
+        { field: "hint", when: { field: "child", op: "notEmpty" }, effect: "require" },
+        {
+          field: "parent",
+          when: { field: "hint", op: "notEmpty" },
+          effect: "setDefault",
+          value: "P1",
+        },
+      ]),
+      "/queryTypes/2",
+    );
+    expect(diagnostics).toEqual([
+      {
+        level: "error",
+        path: "/queryTypes/2/rules/1",
+        key: "config.setDefaultTargetsFilterParent",
+        params: { field: "parent" },
+      },
+    ]);
+  });
+  it("accepts setDefault on a field no picklist filters by", () => {
+    expect(
+      validateRuleGraph(
+        filterQt([
+          {
+            field: "hint",
+            when: { field: "child", op: "notEmpty" },
+            effect: "setDefault",
+            value: "H",
+          },
+        ]),
+        "/queryTypes/2",
+      ),
+    ).toEqual([]);
+  });
+  it("accepts a filter parent the user enters (no setDefault targets it)", () => {
+    expect(
+      validateRuleGraph(
+        filterQt([{ field: "parent", when: { field: "hint", op: "notEmpty" }, effect: "require" }]),
+        "/queryTypes/2",
+      ),
+    ).toEqual([]);
+  });
+});

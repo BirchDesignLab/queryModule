@@ -12,6 +12,7 @@ export function conditionFields(condition: Condition): string[] {
  * Spec 4.1 and 4.3 rule-set guarantees: no cycle among setDefault dependencies (an edge runs from
  * each field a setDefault condition reads to its target) and no rule reading a field whose
  * setDefault appears later in `rules`. Together they make the single pass equal a fixed point.
+ * Also no setDefault on a picklist filter parent (decision 09-27-26).
  */
 export function validateRuleGraph(queryType: QueryType, basePath: string): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
@@ -45,6 +46,21 @@ export function validateRuleGraph(queryType: QueryType, basePath: string): Diagn
         level: "error",
         path: `${basePath}/rules/${index}`,
         key: "config.setDefaultCycle",
+        params: { field: rule.field },
+      });
+    }
+  });
+  // Decision 09-27-26: step 2 checks a filtered child against its parent's canonical value in one
+  // pass, so a parent set only by setDefault would offer options the child then rejects.
+  const filterParents = new Set(
+    queryType.fields.flatMap((f) => (f.picklistFilter ? [f.picklistFilter.byField] : [])),
+  );
+  queryType.rules.forEach((rule, index) => {
+    if (rule.effect === "setDefault" && filterParents.has(rule.field)) {
+      diagnostics.push({
+        level: "error",
+        path: `${basePath}/rules/${index}`,
+        key: "config.setDefaultTargetsFilterParent",
         params: { field: rule.field },
       });
     }
