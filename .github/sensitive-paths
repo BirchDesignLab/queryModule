@@ -17,6 +17,7 @@ packages/api/src/credentials/**
 # Audit logging
 packages/api/src/audit/**
 packages/core/src/contracts/audit.ts
+packages/core/src/contracts/audit-auth.ts
 packages/core/src/contracts/primitives.ts
 packages/core/src/contracts/identity.ts
 # Query dispatch, source adapters, nested-query planner
