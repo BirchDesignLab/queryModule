@@ -138,7 +138,8 @@ class LockedTransaction implements Transaction {
     try {
       this.inner.close();
     } catch (e) {
-      void this.recover().finally(this.done);
+      // recover() never rejects; the second handler still keeps a fault off the unhandled path.
+      void this.recover().then(this.done, this.done);
       throw e;
     }
     this.done();
@@ -161,11 +162,20 @@ class SerializedClient implements Client {
     if (scope?.lock === this.lock && scope.open) throw new NestedTransactionError();
   }
 
-  async #locked<T>(op: () => Promise<T>): Promise<T> {
+  /**
+   * Runs op under the lock. With recoverOnError, a rejection re-applies the pragmas before
+   * the lock is released: batch, executeMultiple and migrate run their own transaction, and
+   * @libsql/client drops the connection when its ROLLBACK on release fails (migrate also
+   * leaves foreign_keys off when its ROLLBACK throws).
+   */
+  async #locked<T>(op: () => Promise<T>, recoverOnError = false): Promise<T> {
     this.assertOutsideOwnTransaction();
     const release = await this.lock.acquire(this.lockTimeoutMs);
     try {
       return await op();
+    } catch (e) {
+      if (recoverOnError) await this.reapplyPragmas();
+      throw e;
     } finally {
       release();
     }
@@ -182,13 +192,13 @@ class SerializedClient implements Client {
     stmts: Array<InStatement | [string, InArgs?]>,
     mode?: TransactionMode,
   ): Promise<Array<ResultSet>> {
-    return this.#locked(() => this.inner.batch(stmts, mode));
+    return this.#locked(() => this.inner.batch(stmts, mode), true);
   }
   migrate(stmts: Array<InStatement>): Promise<Array<ResultSet>> {
-    return this.#locked(() => this.inner.migrate(stmts));
+    return this.#locked(() => this.inner.migrate(stmts), true);
   }
   executeMultiple(sql: string): Promise<void> {
-    return this.#locked(() => this.inner.executeMultiple(sql));
+    return this.#locked(() => this.inner.executeMultiple(sql), true);
   }
   async transaction(mode: TransactionMode = "write"): Promise<Transaction> {
     this.assertOutsideOwnTransaction();
@@ -213,15 +223,19 @@ class SerializedClient implements Client {
     );
   }
   /**
-   * Re-applies the pragmas after a transaction failed to settle; the caller holds the
-   * lock. If that fails, the database is closed so every later call rejects (fail closed).
-   * Never throws: the caller rethrows the transaction's own error.
+   * Re-applies and reads back the pragmas after a call failed to settle; the caller holds
+   * the lock. If that fails, the database is closed so every later call rejects (fail
+   * closed). Never throws: the caller rethrows its own error.
    */
   async reapplyPragmas(): Promise<void> {
     try {
       await applyPragmas(this.inner);
     } catch {
-      this.inner.close();
+      try {
+        this.inner.close();
+      } catch {
+        // best effort: the connection is already unusable
+      }
     }
   }
   /** A reopened pool would hand out connections without the pragmas; reopen the database. */
@@ -242,13 +256,36 @@ class SerializedClient implements Client {
   }
 }
 
-/** The per-connection pragmas of spec 5.5; journal_mode WAL also persists in the file. */
+type PragmaName = keyof typeof REQUIRED_PRAGMAS;
+const PRAGMA_NAMES = Object.keys(REQUIRED_PRAGMAS) as PragmaName[];
+
+/**
+ * The per-connection pragmas of spec 5.5; journal_mode WAL also persists in the file.
+ * SQLite reports a pragma it could not apply by keeping the old value, not by an error, so
+ * every value is read back; a mismatch throws DatabaseOpenError naming the pragma.
+ */
 async function applyPragmas(client: Client): Promise<void> {
   await client.execute("PRAGMA busy_timeout = 5000");
   await client.execute("PRAGMA journal_mode = WAL");
   await client.execute("PRAGMA synchronous = FULL");
   await client.execute("PRAGMA secure_delete = ON");
   await client.execute("PRAGMA foreign_keys = ON");
+  const actual = await readPragmaValues(client);
+  for (const name of PRAGMA_NAMES) {
+    if (actual[name] !== REQUIRED_PRAGMAS[name]) {
+      throw new DatabaseOpenError(`pragma ${name} did not apply`);
+    }
+  }
+}
+
+async function readPragmaValues(client: Client): Promise<Record<PragmaName, string | number>> {
+  const out = {} as Record<PragmaName, string | number>;
+  for (const name of PRAGMA_NAMES) {
+    const row = (await client.execute(`PRAGMA ${name}`)).rows[0];
+    const v = row ? Object.values(row)[0] : null;
+    out[name] = typeof v === "bigint" ? Number(v) : (v as string | number);
+  }
+  return out;
 }
 
 export async function openDatabase(o: {
@@ -273,6 +310,7 @@ export async function openDatabase(o: {
     await client.execute("SELECT count(*) FROM sqlite_master"); // proves the key opens the file
   } catch (e) {
     client?.close();
+    if (e instanceof DatabaseOpenError) throw e;
     throw new DatabaseOpenError(e instanceof Error ? e.name : "unknown");
   }
   const serialized = new SerializedClient(client, lockTimeoutMs);
@@ -296,14 +334,6 @@ export function inTransactionScope<T>(db: Db, body: () => Promise<T>): Promise<T
   return txScope.run({ lock: client.lock, open: false }, body);
 }
 
-export async function readPragmas(
-  db: Db,
-): Promise<Record<keyof typeof REQUIRED_PRAGMAS, string | number>> {
-  const out = {} as Record<keyof typeof REQUIRED_PRAGMAS, string | number>;
-  for (const name of Object.keys(REQUIRED_PRAGMAS) as (keyof typeof REQUIRED_PRAGMAS)[]) {
-    const row = (await db.$client.execute(`PRAGMA ${name}`)).rows[0];
-    const v = row ? Object.values(row)[0] : null;
-    out[name] = typeof v === "bigint" ? Number(v) : (v as string | number);
-  }
-  return out;
+export function readPragmas(db: Db): Promise<Record<PragmaName, string | number>> {
+  return readPragmaValues(db.$client);
 }

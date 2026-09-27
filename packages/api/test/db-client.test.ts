@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { type Client, createClient, type Transaction } from "@libsql/client";
+import { type Client, createClient, type ResultSet, type Transaction } from "@libsql/client";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
 import { describe, expect, it, vi } from "vitest";
@@ -44,9 +44,34 @@ function innerClient(db: Db): Client {
   return (db.$client as unknown as { inner: Client }).inner;
 }
 
-/** The PRAGMA statements sent to the inner client since the spy started. */
+/** The PRAGMA assignments (not the read-backs) sent to the inner client since the spy started. */
 function pragmaCalls(spy: { mock: { calls: unknown[][] } }): string[] {
-  return spy.mock.calls.map((c) => String(c[0])).filter((s) => s.startsWith("PRAGMA"));
+  return spy.mock.calls.map((c) => String(c[0])).filter((s) => /^PRAGMA \w+ = /.test(s));
+}
+
+/** Makes the inner client's read of one pragma report a value other than the one set. */
+function misreportPragma(db: Db, name: string, value: string | number): void {
+  const inner = innerClient(db);
+  const real = inner.execute.bind(inner);
+  vi.spyOn(inner, "execute").mockImplementation(((stmt: string) =>
+    stmt === `PRAGMA ${name}`
+      ? Promise.resolve({ rows: [{ [name]: value }] } as unknown as ResultSet)
+      : real(stmt)) as Client["execute"]);
+}
+
+/** Makes every PRAGMA on the inner client fail, and its close() close and then throw. */
+function breakPragmasAndClose(db: Db): void {
+  const inner = innerClient(db);
+  const real = inner.execute.bind(inner);
+  vi.spyOn(inner, "execute").mockImplementation(((stmt: string) =>
+    stmt.startsWith("PRAGMA")
+      ? Promise.reject(new Error("pragma failed"))
+      : real(stmt)) as Client["execute"]);
+  const realClose = inner.close.bind(inner);
+  vi.spyOn(inner, "close").mockImplementation(() => {
+    realClose();
+    throw new Error("close failed");
+  });
 }
 
 const REAPPLIED = [
@@ -341,6 +366,96 @@ describe("SEC-006 encrypted database", () => {
       expect(() => t.close()).toThrow("close failed");
       expect(await readPragmas(db)).toEqual(REQUIRED_PRAGMAS);
       expect(pragmaCalls(exec).slice(0, REAPPLIED.length)).toEqual(REAPPLIED);
+    });
+  });
+
+  describe("pragma re-apply when a plain batch, executeMultiple or migrate fails", () => {
+    it("re-applies the pragmas after a failing batch", async () => {
+      const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+      const exec = vi.spyOn(innerClient(db), "execute");
+      await expect(db.$client.batch(["CREATE TABLE b (x)", "NOT SQL"])).rejects.toThrow();
+      expect(pragmaCalls(exec)).toEqual(REAPPLIED);
+      exec.mockRestore();
+      expect(await readPragmas(db)).toEqual(REQUIRED_PRAGMAS);
+    });
+
+    it("re-applies the pragmas after a failing executeMultiple and a failing migrate", async () => {
+      const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+      const exec = vi.spyOn(innerClient(db), "execute");
+      await expect(db.$client.executeMultiple("CREATE TABLE m (x); NOT SQL;")).rejects.toThrow();
+      expect(pragmaCalls(exec)).toEqual(REAPPLIED);
+      exec.mockClear();
+      await expect(db.$client.migrate([{ sql: "NOT SQL", args: [] }])).rejects.toThrow();
+      expect(pragmaCalls(exec)).toEqual(REAPPLIED);
+      exec.mockRestore();
+      expect(await readPragmas(db)).toEqual(REQUIRED_PRAGMAS);
+    });
+
+    it("does not re-apply after a successful batch", async () => {
+      const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+      const exec = vi.spyOn(innerClient(db), "execute");
+      await db.$client.batch(["CREATE TABLE b (x)"]);
+      expect(pragmaCalls(exec)).toEqual([]);
+    });
+
+    it("closes the database when the re-apply after a failing batch fails", async () => {
+      const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+      const inner = innerClient(db);
+      const real = inner.execute.bind(inner);
+      vi.spyOn(inner, "execute").mockImplementation(((stmt: string) =>
+        stmt.startsWith("PRAGMA")
+          ? Promise.reject(new Error("pragma failed"))
+          : real(stmt)) as Client["execute"]);
+      await expect(db.$client.batch(["NOT SQL"])).rejects.toThrow(/NOT/);
+      expect(db.$client.closed).toBe(true);
+    });
+  });
+
+  describe("pragma read-back", () => {
+    it("closes the database when a re-applied pragma reads back a different value", async () => {
+      const db = await withParentChild(tempDbFile());
+      misreportPragma(db, "foreign_keys", 0);
+      await expect(withTransaction(db, deferredFkViolation)).rejects.toThrow(/FOREIGN KEY/);
+      expect(db.$client.closed).toBe(true);
+      await expect(db.$client.execute("SELECT 1")).rejects.toThrow(/closed/);
+    });
+  });
+
+  describe("double fault: the re-apply fails and the fallback close throws", () => {
+    it("still rejects with the transaction's own error and fails closed", async () => {
+      const db = await withParentChild(tempDbFile());
+      breakPragmasAndClose(db);
+      await expect(withTransaction(db, deferredFkViolation)).rejects.toThrow(/FOREIGN KEY/);
+      expect(db.$client.closed).toBe(true);
+      await expect(db.$client.execute("SELECT 1")).rejects.toThrow(/closed/);
+    });
+
+    it("leaves no unhandled rejection when a raw transaction's close throws", async () => {
+      const db = await openDatabase({
+        file: tempDbFile(),
+        encryptionKey: TEST_DB_KEY,
+        lockTimeoutMs: 200,
+      });
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on("unhandledRejection", onUnhandled);
+      try {
+        const t = await db.$client.transaction();
+        const innerTx = (t as unknown as { inner: Transaction }).inner;
+        const realTxClose = innerTx.close.bind(innerTx);
+        vi.spyOn(innerTx, "close").mockImplementation(() => {
+          realTxClose();
+          throw new Error("tx close failed");
+        });
+        breakPragmasAndClose(db);
+        expect(() => t.close()).toThrow("tx close failed");
+        await new Promise((r) => setTimeout(r, 20));
+        expect(unhandled).toEqual([]);
+        // the lock was released: the next call fails closed at once, not by lock timeout
+        await expect(db.$client.execute("SELECT 1")).rejects.toThrow(/closed/);
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
     });
   });
 
