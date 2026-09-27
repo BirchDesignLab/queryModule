@@ -3,15 +3,31 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/fake-platform.ts"
   },
   "scripts": {
+    "gen:api": "tsx scripts/gen-api-types.ts",
     "typecheck": "tsc -b",
     "test": "vitest run"
   },
   "dependencies": {
-    "@querymodule/core": "workspace:*"
+    "@querymodule/core": "workspace:*",
+    "@tanstack/react-query": "^5.104.0",
+    "openapi-fetch": "^0.17.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "msw": "^2.15.0",
+    "openapi-typescript": "^7.13.0",
+    "react": "^19.3.0",
+    "tsx": "^4.23.15"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
   }
 }
