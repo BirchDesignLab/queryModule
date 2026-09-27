@@ -14,6 +14,11 @@ describe("docs-only fast path (master plan 11)", () => {
     expect(isDocsOnly(["docs/testing/stories.json"])).toBe(false);
     expect(isDocsOnly(["docs/testing/stories.json", "docs/a.md"])).toBe(false);
   });
+
+  it("treats docs/board/ as non-docs, so board data runs its schema test (#96 G-M1)", () => {
+    expect(isDocsOnly(["docs/board/board-data.json"])).toBe(false);
+    expect(isDocsOnly(["docs/board/board-data.json", "docs/a.md"])).toBe(false);
+  });
 });
 
 describe("changedFiles (review critic:K1)", () => {
@@ -21,11 +26,21 @@ describe("changedFiles (review critic:K1)", () => {
     const calls: string[][] = [];
     const files = changedFiles("abc", "def", (args: string[]) => {
       calls.push(args);
-      return "packages/core/src/x.ts\ndocs/x.md\n\n";
+      return "packages/core/src/x.ts\0docs/x.md\0";
     });
-    expect(calls).toEqual([["diff", "--name-only", "--no-renames", "abc...def"]]);
+    expect(calls).toEqual([["diff", "--name-only", "-z", "--no-renames", "abc...def"]]);
     expect(files).toEqual(["packages/core/src/x.ts", "docs/x.md"]);
     expect(isDocsOnly(files)).toBe(false);
+  });
+
+  it("keeps non-ASCII and space-containing paths verbatim with -z (#96 C-M2)", () => {
+    const files = changedFiles(
+      "abc",
+      "def",
+      () => "apps/web/src/caf\u00e9.ts\0apps/mobile/a b.ts\0",
+    );
+    expect(files).toEqual(["apps/web/src/caf\u00e9.ts", "apps/mobile/a b.ts"]);
+    expect(areas(files)).toMatchObject({ web: true, mobile: true });
   });
 });
 
@@ -133,7 +148,7 @@ describe("main (fail-closed, ADR-0008)", () => {
     const { lines, write } = sink();
     main({
       env: { BASE_SHA: "abc", HEAD_SHA: "def", EVENT_NAME: "pull_request" },
-      runGit: () => "docs/a.md\n",
+      runGit: () => "docs/a.md\0",
       write,
     });
     expect(lines).toEqual(["docs_only=true", "web=false", "mobile=false"]);

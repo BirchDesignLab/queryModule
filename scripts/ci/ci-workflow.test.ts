@@ -107,4 +107,9 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
     expect(jobNeeds(jobs.web)).toContain("changes");
     expect(jobNeeds(jobs.mobile)).toContain("changes");
   });
+
+  it("`web` and `mobile` fail open when `changes` emits no key (#96 G-M2)", () => {
+    expect(jobs.web.if).toBe("needs.changes.outputs.web != 'false'");
+    expect(jobs.mobile.if).toBe("needs.changes.outputs.mobile != 'false'");
+  });
 });

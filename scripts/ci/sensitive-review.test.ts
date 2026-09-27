@@ -56,6 +56,11 @@ describe("sensitive-review (spec 9.1)", () => {
       "packages/client/src/token-store.ts",
       "packages/client/src/token-store/secure.ts",
       "apps/mobile/src/secure-token-store.ts",
+      // #96 C-M1: any case and separator, file or directory form.
+      "apps/mobile/src/SecureTokenStore.ts",
+      "packages/client/src/tokenStore.ts",
+      "packages/client/src/token_store/x.ts",
+      "packages/client/src/TokenStore/index.ts",
     ])
       expect(c(f), f).toBe("critical");
     for (const f of [
@@ -85,6 +90,35 @@ describe("sensitive-review (spec 9.1)", () => {
       "docs/a.md",
     ])
       expect(c(f), f).toBeNull();
+  });
+
+  it("the shipped tier file classifies the P1 api paths (developer ruling 09-27-26)", () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const shipped = parseSensitiveTiers(
+      readFileSync(join(repoRoot, ".github/sensitive-paths"), "utf8"),
+    );
+    const c = (f: string) => tierOf(f, [shipped]);
+    for (const f of [
+      "packages/api/src/db/client.ts",
+      "packages/api/src/secrets.ts",
+      "packages/api/src/keys/canary.ts",
+      "packages/api/src/seams.ts",
+      "packages/api/src/startup.ts",
+    ])
+      expect(c(f), f).toBe("critical");
+    for (const f of [
+      "packages/api/src/auth/x.ts",
+      "packages/api/src/http/session.ts",
+      "packages/api/src/ws/server.ts",
+      "packages/api/src/seed/users.ts",
+      "packages/api/src/ops/grant-role.ts",
+      "packages/api/src/deps.ts",
+    ])
+      expect(c(f), f).toBe("gate");
+    for (const f of ["packages/api/src/env.ts"]) expect(c(f), f).toBeNull();
+    // Developer decision 09-27-26: the redacting logger (spec 5.9) is the gate-tier
+    // control that keeps secrets and query values out of logs.
+    for (const f of ["packages/api/src/log/logger.ts"]) expect(c(f), f).toBe("gate");
   });
 
   it("parses an optional mode field (#92 fast path)", () => {
@@ -1089,13 +1123,25 @@ describe("branch-keyed artifact (#92)", () => {
     );
   });
 
-  it("exits 2 on a HEAD_REF that is not a plain branch name", () => {
-    const r = runSensitiveReview(
-      { ...env, HEAD_REF: "../../etc/x" },
-      { runGit, readFile: (p) => (p === ".github/sensitive-paths" ? tiers : undefined) },
-    );
-    expect(r.code).toBe(2);
-    expect(r.messages[0]).toContain("HEAD_REF");
+  it("falls back to pr-<n>.md on a HEAD_REF that is not a plain branch name (#96)", () => {
+    for (const ref of ["../../etc/x", "feat/a+b", "fix@x", "feat/#1", "feat/caf\u00e9"]) {
+      const read = (withPr: boolean) => (p: string) =>
+        p === ".github/sensitive-paths"
+          ? tiers
+          : withPr && p === "docs/reviews/pr-7.md"
+            ? artifact
+            : undefined;
+      const ok = runSensitiveReview({ ...env, HEAD_REF: ref }, { runGit, readFile: read(true) });
+      expect(ok.code, ref).toBe(0);
+      expect(ok.messages.join(" "), ref).toContain("docs/reviews/pr-7.md");
+      const missing = runSensitiveReview(
+        { ...env, HEAD_REF: ref },
+        { runGit, readFile: read(false) },
+      );
+      expect(missing.code, ref).toBe(1);
+      expect(missing.messages.join(" "), ref).toContain("docs/reviews/pr-7.md is missing");
+      expect(missing.messages.join(" "), ref).not.toContain("etc");
+    }
   });
 });
 

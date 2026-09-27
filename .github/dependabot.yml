@@ -8,6 +8,10 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     open-pull-requests-limit: 10
+    ignore:
+      # ADR-0001: the runtime is Node 24 LTS, so @types/node stays on 24.x.
+      - dependency-name: "@types/node"
+        versions: [">=25"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

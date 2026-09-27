@@ -417,10 +417,16 @@ export function runSensitiveReview(
   if (!env.PR_NUMBER || !Number.isInteger(prNumber) || prNumber <= 0)
     return bad("PR_NUMBER must be a positive integer");
   let branchPath: string | undefined;
+  const notes: string[] = [];
   if (env.HEAD_REF !== undefined && env.HEAD_REF !== "") {
     const p = branchArtifactPath(env.HEAD_REF);
-    if (p === null) return bad("HEAD_REF is not a plain branch name");
-    branchPath = p;
+    // #96: a legal git branch name with "+", "@", "#" or non-ASCII has no branch key; fall
+    // back to the PR key rather than failing. The ref itself is never echoed or used as a path.
+    if (p === null)
+      notes.push(
+        `sensitive-review: HEAD_REF is not a plain branch name; using docs/reviews/pr-${prNumber}.md`,
+      );
+    else branchPath = p;
   }
   try {
     const d = diffAndTiers(deps, base, head);
@@ -470,7 +476,7 @@ export function runSensitiveReview(
       filesChangedAfterReviewedSha,
       ...(reviewedLineCount === undefined ? {} : { reviewedLineCount }),
     });
-    return { code: result.ok ? 0 : 1, messages: result.messages };
+    return { code: result.ok ? 0 : 1, messages: [...notes, ...result.messages] };
   } catch (e) {
     if (e instanceof GitFailure) return bad(e.message);
     throw e;

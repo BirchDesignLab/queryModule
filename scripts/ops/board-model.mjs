@@ -185,3 +185,22 @@ export function bodyUpdate(existing, desired) {
       .join("\n");
   return normalise(existing) === normalise(desired) ? null : desired;
 }
+
+/**
+ * #96 G-M4: a follow-up number in the board data may only adopt a live issue that
+ * already carries the `follow-up` label; otherwise --apply would rename and rewrite
+ * an unrelated issue. Returns an error naming every offending issue, or null. A
+ * number with no live issue is fine (the script creates it).
+ * @param {Array<{number: number}>} followUps
+ * @param {(n: number) => {number: number, labels: Array<{name: string}>} | undefined} byNumber
+ * @returns {string | null}
+ */
+export function followUpAdoptionError(followUps, byNumber) {
+  const bad = followUps
+    .map((f) => byNumber(f.number))
+    .filter((i) => i !== undefined && !i.labels.some((l) => l.name === "follow-up"))
+    .map((i) => `#${i?.number}`);
+  return bad.length === 0
+    ? null
+    : `refusing to adopt ${bad.join(", ")} as follow-up issue(s): live labels lack "follow-up"; fix docs/board/board-data.json or label the issue`;
+}

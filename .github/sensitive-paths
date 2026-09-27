@@ -14,8 +14,13 @@
 [critical]
 # Credential handling
 packages/api/src/credentials/**
+packages/api/src/secrets.ts
+packages/api/src/keys/**
+packages/api/src/db/**
 # Audit logging
 packages/api/src/audit/**
+packages/api/src/seams.ts
+packages/api/src/startup.ts
 packages/core/src/contracts/audit.ts
 packages/core/src/contracts/audit-auth.ts
 packages/core/src/contracts/primitives.ts
@@ -45,9 +50,13 @@ scripts/ci/check-sensitive-review.ts
 # Reserved: the audit_event immutability guard (spec 9.2, SEC-010 to SEC-013)
 scripts/ci/check-audit-migrations.ts
 # Reserved: TokenStore implementations, bearer token storage (SEC-006, #85); name
-# the file or directory *token-store* (for example the P1 native SecureStore store)
+# the file or directory *token-store* (for example the P1 native SecureStore store).
+# The bracket forms match any case and separator (TokenStore, tokenStore,
+# token_store), file or directory (#96 C-M1; picomatch has no per-glob nocase).
 **/*token-store*
 **/*token-store*/**
+**/*[Tt][Oo][Kk][Ee][Nn]*[Ss][Tt][Oo][Rr][Ee]*
+**/*[Tt][Oo][Kk][Ee][Nn]*[Ss][Tt][Oo][Rr][Ee]*/**
 
 [gate]
 # Verify gate and merge path
@@ -61,6 +70,15 @@ package.json
 pnpm-workspace.yaml
 tsconfig.base.json
 **/tsconfig.json
+# Log redaction, spec 5.9 (developer decision 09-27-26: gate)
+packages/api/src/log/**
+# Auth and sessions (developer decision 09-27-26: gate, not critical)
+packages/api/src/auth/**
+packages/api/src/http/session.ts
+packages/api/src/ws/**
+packages/api/src/seed/**
+packages/api/src/ops/**
+packages/api/src/deps.ts
 
 [deps]
 # .github/dependabot.yml stays [gate] (.github/**): no automated check reads it.
