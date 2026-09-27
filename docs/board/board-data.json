@@ -183,8 +183,8 @@
       "k": 6,
       "title": "Wave 6: Mobile placeholder and ruleset (Tasks 26 to 28)",
       "tasks": [26, 28],
-      "pr": null,
-      "state": "todo"
+      "pr": 95,
+      "state": "review"
     }
   ],
   "followUps": [
