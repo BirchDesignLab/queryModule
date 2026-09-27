@@ -12,39 +12,65 @@ import { pathToFileURL } from "node:url";
 // fails whether or not it names audit_event: it can drop or rewrite the triggers.
 
 /**
- * The code of one chunk for matching: comments become a space, every string
- * literal becomes '' (so neither a comment opener nor a keyword inside a string
- * counts), identifier quotes are dropped and whitespace is collapsed.
+ * The code of one chunk, in two forms. Comments become a space in both. A quoted
+ * identifier ("...", `...` or [...]) is one opaque token: it is scanned to its
+ * closing delimiter and its text is kept without the quotes, so a comment opener or
+ * a quote inside it starts nothing. A string literal keeps its text unquoted in
+ * `detect` (SQLite accepts 'audit_event' where a table name goes, so detection must
+ * see it) and becomes '' in `shape` (so a keyword or ';' inside a string does not
+ * count when matching the allowed statement forms). Whitespace is collapsed.
  */
-function codeOf(raw: string): string {
-  let out = "";
+function codeOf(raw: string): { detect: string; shape: string } {
+  let detect = "";
+  let shape = "";
+  const emit = (d: string, s = d) => {
+    detect += d;
+    shape += s;
+  };
+  // Scans from the opening delimiter at i to its close; a doubled close is an escape.
+  const quoted = (i: number, close: string, doubled: boolean): [string, number] => {
+    let text = "";
+    let j = i + 1;
+    while (j < raw.length) {
+      if (raw[j] === close) {
+        if (doubled && raw[j + 1] === close) {
+          text += close;
+          j += 2;
+          continue;
+        }
+        return [text, j + 1];
+      }
+      text += raw[j];
+      j++;
+    }
+    return [text, j];
+  };
   let i = 0;
   while (i < raw.length) {
-    const c = raw[i];
+    const c = raw[i] as string;
     if (c === "-" && raw[i + 1] === "-") {
       const nl = raw.indexOf("\n", i);
       i = nl === -1 ? raw.length : nl;
-      out += " ";
+      emit(" ");
     } else if (c === "/" && raw[i + 1] === "*") {
       const close = raw.indexOf("*/", i + 2);
       i = close === -1 ? raw.length : close + 2;
-      out += " ";
+      emit(" ");
     } else if (c === "'") {
-      // '' inside a literal is an escaped quote, so skip pairs until a lone quote
-      i++;
-      while (i < raw.length && !(raw[i] === "'" && raw[i + 1] !== "'")) {
-        i += raw[i] === "'" ? 2 : 1;
-      }
-      i++;
-      out += "''";
-    } else if (c === "`" || c === '"' || c === "[" || c === "]") {
-      i++;
+      const [text, next] = quoted(i, "'", true);
+      emit(text, "''");
+      i = next;
+    } else if (c === '"' || c === "`" || c === "[") {
+      const [text, next] = quoted(i, c === "[" ? "]" : c, c !== "[");
+      emit(text);
+      i = next;
     } else {
-      out += c;
+      emit(c);
       i++;
     }
   }
-  return out.replace(/\s+/g, " ").trim();
+  const tidy = (x: string) => x.replace(/\s+/g, " ").trim();
+  return { detect: tidy(detect), shape: tidy(shape) };
 }
 
 const display = (raw: string) => raw.replace(/\s+/g, " ").trim().slice(0, 120);
@@ -76,14 +102,14 @@ export function checkAuditMigrations(files: { name: string; sql: string }[]): st
   const triggers = new Set<string>();
   for (const f of [...files].sort((a, b) => a.name.localeCompare(b.name))) {
     for (const raw of f.sql.split("--> statement-breakpoint")) {
-      const s = codeOf(raw);
+      const { detect, shape: s } = codeOf(raw);
       const bad = (why: string) => errors.push(`${f.name}: ${why}: ${display(raw)}`);
-      if (SCHEMA_TABLE.test(s)) {
+      if (SCHEMA_TABLE.test(detect)) {
         bad("statement touches the schema table");
         continue;
       }
-      if (!/audit_event/i.test(s)) continue;
-      if (/__new_audit_event/i.test(s)) {
+      if (!/audit_event/i.test(detect)) continue;
+      if (/__new_audit_event/i.test(detect)) {
         bad("table rebuild");
         continue;
       }

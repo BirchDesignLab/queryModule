@@ -97,6 +97,25 @@ describe("SEC-010 audit_event additive-only migrations", () => {
       "UPDATE SQLITE_SCHEMA SET sql = 'CREATE TRIGGER t BEFORE UPDATE ON t BEGIN SELECT 1; END' WHERE name = 't';",
     ],
     ["sqlite_temp_master write", "DELETE FROM sqlite_temp_master;"],
+    ["single-quoted drop", "DROP TABLE 'audit_event';"],
+    ["single-quoted rename", "ALTER TABLE 'audit_event' RENAME TO x;"],
+    ["single-quoted schema table", "DELETE FROM 'sqlite_master';"],
+    [
+      "drop hidden by a comment opener in a double-quoted identifier",
+      'CREATE INDEX "i/*" ON other (x); DROP TABLE audit_event; -- */',
+    ],
+    [
+      "drop hidden by a comment opener in a backtick identifier",
+      "CREATE INDEX `i/*` ON other (x); DROP TABLE audit_event; -- */",
+    ],
+    [
+      "drop hidden by a comment opener in a bracketed identifier",
+      "CREATE INDEX [i--] ON other (x); DROP TABLE audit_event;",
+    ],
+    [
+      "drop hidden by a quote in a double-quoted identifier",
+      "CREATE INDEX \"i'\" ON other (x); DROP TABLE audit_event; -- '",
+    ],
   ])("rejects %s", (_n, sql) => {
     expect(
       checkAuditMigrations([
