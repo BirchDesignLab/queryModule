@@ -7490,6 +7490,8 @@ git commit -m "test(a): Node 24 compatibility check for @libsql/client
 
 ### Task 28: Ruleset on main and security updates (S) (#29)
 
+Amended 09-27-26 (W6): the script defaults to a dry run (`--apply` writes) and acts as `--as <login>` (default BirchDesignLab) through `GH_TOKEN`; tested with a stub `gh` (`scripts/ops/gh-setup-repo.test.ts`). The live `--apply` runs after the W6 PR merges, once the ADR-0008 aggregate `ci` check has reported, with the developer's go.
+
 **Files:**
 - Create: `scripts/ops/gh-setup-repo.sh`
 
@@ -7499,7 +7501,7 @@ git commit -m "test(a): Node 24 compatibility check for @libsql/client
 
 **IDs:** SEC-020
 
-- [ ] **Step 1: Write `scripts/ops/gh-setup-repo.sh`.**
+- [x] **Step 1: Write `scripts/ops/gh-setup-repo.sh`.**
 
 ```bash
 #!/usr/bin/env bash
@@ -7586,7 +7588,7 @@ echo "security updates: on"
 echo "done"
 ```
 
-- [ ] **Step 2: Lint the script.**
+- [x] **Step 2: Lint the script.**
 
 ```bash
 bash -n scripts/ops/gh-setup-repo.sh && echo "syntax ok"
@@ -7626,7 +7628,7 @@ Expected: `ruleset: main (created)`, `vulnerability alerts: on`, `security updat
 
 Gate (master plan 4.1, row P0): Typecheck and CI green; contracts frozen. Run on `main` after the Task 28 run, from a clean checkout.
 
-- [ ] **Step 1: Sync and install.**
+- [x] **Step 1: Sync and install.**
 
 ```bash
 git switch main && git pull --ff-only
@@ -7635,7 +7637,7 @@ pnpm install --frozen-lockfile
 
 Expected: no lockfile changes, no engine warning.
 
-- [ ] **Step 2: Typecheck and tests per package.**
+- [x] **Step 2: Typecheck and tests per package.**
 
 ```bash
 pnpm -r typecheck
@@ -7721,7 +7723,7 @@ gh pr merge <PR> --squash --delete-branch
 
 Expected: the docs-only fast path runs; `ci` and `sensitive-review` pass; the merge goes through the ruleset.
 
-- [ ] **Step 10: Issues to close.** Every issue created in "Before Task 1" Step 2 (28 issues, milestone `M0 Skeleton`, label `p0`) closes through its PR; Step 7 confirms none remain open. Any issue a whole-phase review finding creates goes to milestone `M0 Skeleton` with label `p1` and its track label.
+- [x] **Step 10: Issues to close.** Every issue created in "Before Task 1" Step 2 (28 issues, milestone `M0 Skeleton`, label `p0`) closes through its PR; Step 7 confirms none remain open. Any issue a whole-phase review finding creates goes to milestone `M0 Skeleton` with label `p1` and its track label.
 
 ## Self-review
 
