@@ -1587,6 +1587,85 @@ await test("sdd P9: a gate-only fix round skips the re-reviewer; progress and ga
   assert.ok(p.find("fixer-r2").prompt.includes("[progress-r1-1]"));
 });
 
+// Run wf_cfeda18c-be1 (B1 Task 1, 09-27-26): a fixer stop answered with a no-code ruling. The
+// resumed fixer rightly commits nothing, but a real progress checker reports "no new commits"
+// unless told check 1 does not apply, so the task looped to its budget. The stub checker below
+// behaves like the real one: it raises that problem unless the prompt waives check 1.
+const NO_CODE_TEXT = "S1 closed by ruling: the brief allows it; no code change";
+const noCodeResponder = (over = {}) =>
+  sddResponder({
+    "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+    "fixer*": (p) =>
+      p.includes(NO_CODE_TEXT)
+        ? work("h-impl", { commits: [] })
+        : work("h-impl", { status: "BLOCKED", commits: [], questions: ["S1 needs a ruling"] }),
+    "progress*": (p) =>
+      /Check 1 does not apply/.test(p)
+        ? { ok: true, problems: [], head: "h-impl", newCommits: [], testCount: 10 }
+        : {
+            ok: false,
+            problems: ["No new commits since round base"],
+            head: "h-impl",
+            newCommits: [],
+            testCount: 10,
+          },
+    ...over,
+  });
+
+await test("sdd: a fixer stop answered noCode ends the round without a new-commits problem", async () => {
+  const stop = await run(sdd, { ...BASE, maxAgents: 16 }, noCodeResponder());
+  assert.equal(stop.res.stopped, "fixer-r1");
+  const r = await run(
+    sdd,
+    { ...BASE, maxAgents: 16, answers: { at: "fixer-r1", text: NO_CODE_TEXT, noCode: true } },
+    noCodeResponder(),
+  );
+  assert.ok(!r.labels.includes("fixer-r2"), r.labels.join(","));
+  assert.ok(r.labels.includes("re-review-r1") && r.labels.includes("gate-r1"), r.labels.join(","));
+  assert.equal(r.res.status, "complete");
+  const pp = r.find("progress-r1").prompt;
+  assert.ok(pp.includes("Working tree clean"), "the other progress checks still run");
+  assert.ok(
+    r.logs.some((l) => /round 1: controller answered noCode/.test(l)),
+    r.logs.join(" | "),
+  );
+});
+
+await test("sdd: a fixer that commits nothing without a noCode answer still raises the progress problem", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, maxAgents: 16, answers: { at: "fixer-r1", text: NO_CODE_TEXT } },
+    noCodeResponder(),
+  );
+  assert.ok(!/Check 1 does not apply/.test(r.find("progress-r1").prompt));
+  assert.ok(r.find("fixer-r2").prompt.includes("[progress-r1-1]"), r.labels.join(","));
+  // re-reviewer ADDRESSED on an empty diff does not waive the check either
+  assert.ok(r.labels.includes("re-review-r1"));
+  assert.notEqual(r.res.status, "complete");
+});
+
+await test("sdd: noCode is only valid on a fixer-r<r> answer with text", async () => {
+  await assert.rejects(
+    run(sdd, { ...BASE, answers: { at: "review", text: "t", noCode: true } }, sddResponder()),
+    /noCode/,
+  );
+  await assert.rejects(
+    run(
+      sdd,
+      {
+        ...BASE,
+        answers: {
+          at: "fixer-r1",
+          noCode: true,
+          decisions: [{ item: "spec:S1", decision: "stands", reason: "r" }],
+        },
+      },
+      sddResponder(),
+    ),
+    /noCode/,
+  );
+});
+
 const specCV = (n = 1) => ({
   verdict: "pass",
   findings: [],
