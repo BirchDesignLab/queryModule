@@ -225,9 +225,10 @@ jobs:
         run: 'echo "Step 9: expo export lands in Task 26."'
 
   # ADR-0008: the one required check. Needs every job above (never
-  # sensitive-review, which stays its own required check), runs regardless of
-  # their outcome, and fails only when one of them actually failed or was
-  # cancelled; a job skipped by its path filter counts as passed.
+  # sensitive-review, which stays its own required check) and runs regardless
+  # of their outcome. Allowlist: it passes only when every needed job reports
+  # success or skipped (a path-filter skip counts as passed); failure,
+  # cancelled, a missing or unknown result, or no jobs at all fail it.
   ci:
     name: ci
     needs: [changes, checks, test, web, mobile]
@@ -242,12 +243,12 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           node -e '
-            const needs = JSON.parse(process.env.NEEDS_JSON);
-            const bad = Object.entries(needs).filter(
-              ([, job]) => job.result === "failure" || job.result === "cancelled",
-            );
-            if (bad.length > 0) {
-              console.error("Failed or cancelled: " + bad.map(([id]) => id).join(", "));
+            const needs = Object.entries(JSON.parse(process.env.NEEDS_JSON));
+            const ok = new Set(["success", "skipped"]);
+            const bad = needs.filter(([, job]) => !ok.has(job && job.result));
+            if (needs.length === 0 || bad.length > 0) {
+              const list = bad.map(([id, job]) => id + "=" + ((job && job.result) || "none"));
+              console.error("Not passed: " + (list.join(", ") || "no needed jobs"));
               process.exit(1);
             }
             console.log("All needed jobs passed or were skipped.");

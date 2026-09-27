@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,5 +68,43 @@ describe("ci.yml structure (ADR-0008)", () => {
     );
     expect(aggregate, "no aggregate step reads needs via an env var").toBeDefined();
     expect(aggregate.run.includes("${{")).toBe(false);
+  });
+});
+
+describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+  const step: any = jobs.ci.steps.find((s: { run?: unknown }) => typeof s.run === "string");
+  const run: string = step.run;
+  const script = run.slice(run.indexOf("'") + 1, run.lastIndexOf("'"));
+  const aggregate = (needs: unknown) =>
+    spawnSync(process.execPath, ["-e", script], {
+      env: { ...process.env, NEEDS_JSON: JSON.stringify(needs) },
+      encoding: "utf8",
+    }).status;
+  const all = (result: string) =>
+    Object.fromEntries(jobNeeds(jobs.ci).map((id) => [id, { result, outputs: {} }]));
+
+  it("passes when every needed job succeeded or was skipped", () => {
+    expect(aggregate(all("success"))).toBe(0);
+    expect(aggregate({ ...all("success"), web: { result: "skipped" } })).toBe(0);
+  });
+
+  it("fails on failure, cancelled, a missing or unknown result, or no jobs at all", () => {
+    for (const result of ["failure", "cancelled", "", "neutral"])
+      expect(aggregate({ ...all("success"), checks: { result } }), result).toBe(1);
+    expect(aggregate({ ...all("success"), checks: {} })).toBe(1);
+    expect(aggregate({})).toBe(1);
+  });
+
+  it("caps timeouts: changes and ci at most 5 minutes, every other job at most 20", () => {
+    for (const id of jobIds) {
+      const cap = id === "changes" || id === "ci" ? 5 : 20;
+      expect(jobs[id]["timeout-minutes"], id).toBeLessThanOrEqual(cap);
+    }
+  });
+
+  it("`web` and `mobile` also need `changes`", () => {
+    expect(jobNeeds(jobs.web)).toContain("changes");
+    expect(jobNeeds(jobs.mobile)).toContain("changes");
   });
 });

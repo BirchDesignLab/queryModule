@@ -38,6 +38,8 @@ describe("areas (ADR-0008 per-area outputs)", () => {
     expect(areas(["pnpm-workspace.yaml"]).web).toBe(true);
     expect(areas(["tsconfig.base.json"]).web).toBe(true);
     expect(areas([".nvmrc"]).web).toBe(true);
+    expect(areas([".npmrc"]).web).toBe(true);
+    expect(areas([".npmrc"]).mobile).toBe(true);
     expect(areas([".github/workflows/ci.yml"]).web).toBe(true);
     expect(areas(["scripts/ci/changed-paths.mjs"]).web).toBe(true);
     expect(areas(["apps/mobile/App.tsx"]).web).toBe(false);

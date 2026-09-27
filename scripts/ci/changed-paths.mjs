@@ -43,6 +43,7 @@ const ROOT_FILES = [
   "pnpm-workspace.yaml",
   "tsconfig.base.json",
   ".nvmrc",
+  ".npmrc",
   ".github/workflows/ci.yml",
   "scripts/ci/changed-paths.mjs",
 ];
