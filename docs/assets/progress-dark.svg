@@ -4,14 +4,14 @@
 <rect width="900" height="956" fill="#0d1117"/>
 <text x="24" y="44" fill="#e6edf3" font-size="15" font-weight="700">Milestones</text>
 <rect x="24" y="56" width="320" height="10" fill="#30363d"/>
-<rect x="24" y="56" width="202" height="10" fill="#3fb950"/>
-<text x="354" y="65" fill="#9198a1" font-size="12">M0 Skeleton 63% (36/57)</text>
+<rect x="24" y="56" width="244" height="10" fill="#3fb950"/>
+<text x="354" y="65" fill="#9198a1" font-size="12">M0 Skeleton 76% (45/59)</text>
 <rect x="48" y="80" width="320" height="10" fill="#30363d"/>
-<rect x="48" y="80" width="224" height="10" fill="#3fb950"/>
-<text x="378" y="89" fill="#9198a1" font-size="12">Contracts (M0 P0) 70% (7/10)</text>
+<rect x="48" y="80" width="291" height="10" fill="#3fb950"/>
+<text x="378" y="89" fill="#9198a1" font-size="12">Contracts (M0 P0) 91% (10/11)</text>
 <rect x="48" y="104" width="320" height="10" fill="#30363d"/>
-<rect x="48" y="104" width="64" height="10" fill="#3fb950"/>
-<text x="378" y="113" fill="#9198a1" font-size="12">Foundation (M0 P1) 20% (3/15)</text>
+<rect x="48" y="104" width="128" height="10" fill="#3fb950"/>
+<text x="378" y="113" fill="#9198a1" font-size="12">Foundation (M0 P1) 40% (6/15)</text>
 <rect x="24" y="128" width="320" height="10" fill="#30363d"/>
 <text x="354" y="137" fill="#9198a1" font-size="12">M1 Forms and terminal 0% (0/4)</text>
 <rect x="48" y="152" width="320" height="10" fill="#30363d"/>
@@ -39,7 +39,7 @@
 <rect x="48" y="416" width="320" height="10" fill="#30363d"/>
 <text x="378" y="425" fill="#9198a1" font-size="12">Delegation (M3 P3) 0% (0/0)</text>
 <rect x="24" y="440" width="320" height="10" fill="#30363d"/>
-<text x="354" y="449" fill="#9198a1" font-size="12">M4 Mobile and host integration 0% (0/6)</text>
+<text x="354" y="449" fill="#9198a1" font-size="12">M4 Mobile and host integration 0% (0/7)</text>
 <rect x="48" y="464" width="320" height="10" fill="#30363d"/>
 <text x="378" y="473" fill="#9198a1" font-size="12">Contracts (M4 P0) 0% (0/0)</text>
 <rect x="48" y="488" width="320" height="10" fill="#30363d"/>
@@ -47,7 +47,7 @@
 <rect x="48" y="512" width="320" height="10" fill="#30363d"/>
 <text x="378" y="521" fill="#9198a1" font-size="12">Native (M4 P2) 0% (0/0)</text>
 <rect x="48" y="536" width="320" height="10" fill="#30363d"/>
-<text x="378" y="545" fill="#9198a1" font-size="12">Exit (M4 P3) 0% (0/0)</text>
+<text x="378" y="545" fill="#9198a1" font-size="12">Exit (M4 P3) 0% (0/1)</text>
 <text x="24" y="580" fill="#e6edf3" font-size="15" font-weight="700">P0 wave timeline</text>
 <rect x="24" y="592" width="320" height="10" fill="#30363d"/>
 <rect x="24" y="592" width="2" height="10" fill="#d29922"/>
@@ -65,15 +65,16 @@
 <rect x="24" y="688" width="320" height="10" fill="#d29922"/>
 <text x="354" y="697" fill="#9198a1" font-size="12">W5: Tokens and web shell 2026-09-26 to 2026-09-27</text>
 <rect x="24" y="712" width="320" height="10" fill="#30363d"/>
-<rect x="24" y="712" width="2" height="10" fill="#d29922"/>
-<text x="354" y="721" fill="#9198a1" font-size="12">W6: Mobile placeholder and ruleset 2026-09-26 to 2026-09-26</text>
+<rect x="344" y="712" width="2" height="10" fill="#d29922"/>
+<text x="354" y="721" fill="#9198a1" font-size="12">W6: Mobile placeholder and ruleset 2026-09-27 to 2026-09-27</text>
 <text x="24" y="756" fill="#e6edf3" font-size="15" font-weight="700">Open decisions</text>
-<text x="24" y="777" fill="#e6edf3" font-size="12">#61 Decide: bound message and label keys before the P0 freeze (ADR-0005)</text>
-<text x="24" y="801" fill="#e6edf3" font-size="12">#81 Decide: CI pipeline design before the ruleset (ADR, before W6 Tasks 26 and 28)</text>
-<text x="24" y="836" fill="#e6edf3" font-size="15" font-weight="700">Tasks and follow-ups by status</text>
-<rect x="24" y="848" width="320" height="10" fill="#30363d"/>
-<rect x="24" y="848" width="122" height="10" fill="#9198a1"/>
-<rect x="146" y="848" width="198" height="10" fill="#3fb950"/>
-<text x="24" y="881" fill="#9198a1" font-size="12">Todo: 19</text>
-<text x="24" y="905" fill="#9198a1" font-size="12">Done: 31</text>
+<text x="24" y="777" fill="#e6edf3" font-size="12">#81 Decide: CI pipeline design before the ruleset (ADR, before W6 Tasks 26 and 28)</text>
+<text x="24" y="812" fill="#e6edf3" font-size="15" font-weight="700">Tasks and follow-ups by status</text>
+<rect x="24" y="824" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="824" width="74" height="10" fill="#9198a1"/>
+<rect x="98" y="824" width="6" height="10" fill="#d29922"/>
+<rect x="104" y="824" width="240" height="10" fill="#3fb950"/>
+<text x="24" y="857" fill="#9198a1" font-size="12">Todo: 12</text>
+<text x="24" y="881" fill="#9198a1" font-size="12">In Progress: 1</text>
+<text x="24" y="905" fill="#9198a1" font-size="12">Done: 39</text>
 </svg>
