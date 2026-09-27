@@ -3,14 +3,18 @@ import { pathToFileURL } from "node:url";
 
 /**
  * Docs-only fast path (master plan 11). Files under docs/testing/ are gate inputs
- * (check-story-tags reads docs/testing/stories.json, spec 9.3 step 6), so they never count as docs.
+ * (check-story-tags reads docs/testing/stories.json, spec 9.3 step 6), and docs/board/ is data
+ * with its own schema test (#96 G-M1), so neither ever counts as docs.
  * @param {string[]} files
  */
 export function isDocsOnly(files) {
   return (
     files.length > 0 &&
     files.every(
-      (f) => !f.startsWith("docs/testing/") && (f.startsWith("docs/") || f.endsWith(".md")),
+      (f) =>
+        !f.startsWith("docs/testing/") &&
+        !f.startsWith("docs/board/") &&
+        (f.startsWith("docs/") || f.endsWith(".md")),
     )
   );
 }
@@ -22,16 +26,16 @@ function gitOut(args) {
 
 /**
  * Changed paths between base and head. Rename detection is off so a move out of a
- * source path lists the old path too (same reason as sensitive-review.ts).
+ * source path lists the old path too (same reason as sensitive-review.ts). -z keeps
+ * non-ASCII paths verbatim instead of C-quoted, so they still match their area (#96 C-M2).
  * @param {string} base
  * @param {string} head
  * @param {(args: string[]) => string} [runGit]
  * @returns {string[]}
  */
 export function changedFiles(base, head, runGit = gitOut) {
-  return runGit(["diff", "--name-only", "--no-renames", `${base}...${head}`])
-    .split("\n")
-    .map((s) => s.trim())
+  return runGit(["diff", "--name-only", "-z", "--no-renames", `${base}...${head}`])
+    .split("\0")
     .filter(Boolean);
 }
 

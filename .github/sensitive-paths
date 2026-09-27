@@ -50,9 +50,13 @@ scripts/ci/check-sensitive-review.ts
 # Reserved: the audit_event immutability guard (spec 9.2, SEC-010 to SEC-013)
 scripts/ci/check-audit-migrations.ts
 # Reserved: TokenStore implementations, bearer token storage (SEC-006, #85); name
-# the file or directory *token-store* (for example the P1 native SecureStore store)
+# the file or directory *token-store* (for example the P1 native SecureStore store).
+# The bracket forms match any case and separator (TokenStore, tokenStore,
+# token_store), file or directory (#96 C-M1; picomatch has no per-glob nocase).
 **/*token-store*
 **/*token-store*/**
+**/*[Tt][Oo][Kk][Ee][Nn]*[Ss][Tt][Oo][Rr][Ee]*
+**/*[Tt][Oo][Kk][Ee][Nn]*[Ss][Tt][Oo][Rr][Ee]*/**
 
 [gate]
 # Verify gate and merge path

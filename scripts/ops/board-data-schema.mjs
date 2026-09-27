@@ -49,7 +49,8 @@ export function pointer(...segments) {
  * (W6 critic C2: a wave k with no W<k> option used to throw mid --apply).
  * Every issue number is unique across phases, waves, their task issues (task
  * N is issue #N+1), follow-ups and milestone parents (W6 critic C3: a reused
- * number would rename and rewrite the wrong live issue).
+ * number would rename and rewrite the wrong live issue). A follow-up's parent
+ * must be a phase or wave issue (#96 G-M3).
  *
  * @param {{milestoneNames: string[], labelNames: string[], fields: Array<{name: string, options?: Array<{name: string}>}>}} known
  */
@@ -132,6 +133,18 @@ export function buildBoardDataSchema({ milestoneNames, labelNames, fields }) {
         for (let t = w.tasks[0]; t <= w.tasks[1]; t++) claim(t + 1, ["waves", i, "tasks"]);
       });
       for (const [i, f] of d.followUps.entries()) claim(f.number, ["followUps", i, "number"]);
+      // #96 G-M3: a follow-up's parent must be a phase or wave parent issue, so a bad
+      // parent fails validation instead of throwing mid --apply after earlier writes.
+      const parents = new Set([...d.phases.map((p) => p.number), ...d.waves.map((w) => w.number)]);
+      for (const [i, f] of d.followUps.entries()) {
+        if (f.parent !== undefined && !parents.has(f.parent)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["followUps", i, "parent"],
+            message: `parent #${f.parent} is not a phase or wave issue`,
+          });
+        }
+      }
     });
 }
 

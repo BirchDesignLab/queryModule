@@ -55,6 +55,7 @@ import { loadBoardDataOrExit } from "./board-data.mjs";
 import {
   bodyUpdate,
   closedStatus,
+  followUpAdoptionError,
   leafDates,
   matchParent,
   rollUp,
@@ -216,6 +217,12 @@ const issues = new Map(
 );
 const issuesByTitle = new Map([...issues.values()].map((i) => [i.title, i]));
 const byNumber = (n) => issues.get(n);
+// #96 G-M4: fail closed before any write if a follow-up number points at a live
+// issue that is not labelled follow-up.
+{
+  const adoption = followUpAdoptionError(FOLLOW_UPS, byNumber);
+  if (adoption) throw new Error(adoption);
+}
 {
   const missing = [];
   for (const w of WAVES)

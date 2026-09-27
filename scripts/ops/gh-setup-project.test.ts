@@ -112,6 +112,17 @@ describe("gh-setup-project: dashboardModel reads post-write field values (r2:new
   });
 });
 
+describe("gh-setup-project: refuses to adopt a non-follow-up issue (#96 G-M4)", () => {
+  it("checks followUpAdoptionError after loading issues and throws before the first write", () => {
+    const load = source.indexOf("const byNumber = ");
+    const check = source.indexOf("followUpAdoptionError(FOLLOW_UPS, byNumber)");
+    const firstWrite = source.indexOf("write(`");
+    expect(load).toBeGreaterThan(-1);
+    expect(check).toBeGreaterThan(load);
+    expect(check).toBeLessThan(firstWrite);
+  });
+});
+
 describe("gh-setup-project: board data loads and validates before any gh call (Task 604, #92 R3)", () => {
   it("imports the ordinary-tier board data loader and the gate-tier config module", () => {
     expect(source).toMatch(/import \{ loadBoardDataOrExit \} from "\.\/board-data\.mjs";/);
