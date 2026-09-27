@@ -123,4 +123,15 @@ describe("core purity: IO globals through a global object (#85)", () => {
     ])
       expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
   });
+
+  // [critic:re1:nested-destructure-brace-regression] a brace inside the binding list
+  // (a nested destructuring pattern) must not make the whole destructure match fail.
+  it("flags a destructure whose binding list itself contains a nested destructuring pattern", () => {
+    for (const src of [
+      "const { navigator: { userAgent } } = window;",
+      "const { navigator: { userAgent } } = globalThis;",
+      "const { a, navigator: { userAgent }, b } = window;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
 });

@@ -72,34 +72,75 @@ export function findGlobalMemberAccess(source: string, names: readonly string[])
 
   // Destructuring from a global object or a one-level alias: `const { N } = globalThis`,
   // `let { N: f } = window`, `var { a, N } = g` (whitespace/newlines inside braces allowed).
-  // [critic:C1] the captured binding list excludes `{`, `}` and `;` so the match cannot
-  // cross into an earlier or later statement's own destructure (e.g. `const { x } = opts;`
-  // immediately before the real one). [critic:I2] an optional type annotation is allowed
-  // between the closing `}` and `=`, e.g. `const { fetch }: typeof globalThis = globalThis`.
-  const destructure = new RegExp(
-    String.raw`\b(?:const|let|var)\s*\{\s*([^{};]*?)\s*\}\s*(?::[^=;]+)?=\s*(?<![\w$.])(?:${objects})(?![\w$])`,
-    "g",
-  );
+  // [critic:C1] the binding list's closing `}` is found by brace-depth scanning (see
+  // `findBraceEnd` below), not by a regex character class, so the match cannot cross into
+  // an earlier or later statement's own destructure (e.g. `const { x } = opts;` immediately
+  // before the real one). [critic:re1:nested-destructure-brace-regression] brace-depth
+  // scanning also means a brace nested inside the binding list itself (a nested
+  // destructuring pattern, e.g. `const { navigator: { userAgent } } = window;`) no longer
+  // makes the whole match fail, unlike a flat "exclude every brace" character class would.
+  // [critic:I2] an optional type annotation is allowed between the closing `}` and `=`,
+  // e.g. `const { fetch }: typeof globalThis = globalThis`.
   const memberRe = new RegExp(`^(?:${members})$`);
-  for (const m of source.matchAll(destructure)) {
-    const bindings = m[1]
-      .split(",")
-      .map((b) => b.trim())
-      .filter(Boolean)
-      .map((b) => {
-        // [critic:I3] strip a default value (`N = default`), then a rename (`N: f`),
-        // then quotes or a literal computed-key bracket (`'N'`, `['N']`) around the key.
-        const key = b.split("=")[0]?.split(":")[0]?.trim() ?? "";
-        const bracketed = key.match(/^\[\s*(['"`])([^'"`]*)\1\s*\]$/);
-        if (bracketed) return bracketed[2];
-        const quoted = key.match(/^(['"`])([^'"`]*)\1$/);
-        if (quoted) return quoted[2];
-        return key;
-      });
-    if (bindings.some((b) => memberRe.test(b))) out.push(m[0]);
+  const openBrace = /\b(?:const|let|var)\s*\{/g;
+  const afterBrace = new RegExp(String.raw`^\s*(?::[^=;]+)?=\s*(?<![\w$.])(?:${objects})(?![\w$])`);
+  for (const m of source.matchAll(openBrace)) {
+    const bindingsStart = m.index + m[0].length;
+    const braceEnd = findBraceEnd(source, bindingsStart - 1);
+    if (braceEnd === -1) continue;
+    const rest = afterBrace.exec(source.slice(braceEnd + 1));
+    if (!rest) continue;
+    const bindingList = source.slice(bindingsStart, braceEnd);
+    const bindings = splitTopLevel(bindingList).map((b) => {
+      // [critic:I3] strip a default value (`N = default`), then a rename (`N: f`), then
+      // quotes or a literal computed-key bracket (`'N'`, `['N']`) around the key.
+      const key = b.split("=")[0]?.split(":")[0]?.trim() ?? "";
+      const bracketed = key.match(/^\[\s*(['"`])([^'"`]*)\1\s*\]$/);
+      if (bracketed) return bracketed[2];
+      const quoted = key.match(/^(['"`])([^'"`]*)\1$/);
+      if (quoted) return quoted[2];
+      return key;
+    });
+    if (bindings.some((b) => memberRe.test(b)))
+      out.push(source.slice(m.index, braceEnd + 1 + rest[0].length));
   }
 
   return out;
+}
+
+/**
+ * Given the index of an opening `{`, returns the index of its matching `}` by brace-depth
+ * scanning, or -1 if unbalanced before the source ends. [critic:re1] lets the destructure
+ * scan handle a binding list containing its own nested braces (e.g. a nested destructuring
+ * pattern) instead of excluding every brace outright.
+ */
+function findBraceEnd(source: string, openIndex: number): number {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** Splits a destructuring binding list on top-level commas only (brace-depth aware). */
+function splitTopLevel(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] === "{" || list[i] === "[") depth++;
+    else if (list[i] === "}" || list[i] === "]") depth--;
+    else if (list[i] === "," && depth === 0) {
+      parts.push(list.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(list.slice(start));
+  return parts.map((p) => p.trim()).filter(Boolean);
 }
 
 /** Violations in packages/core/src, test files excluded, as "path: match". */
