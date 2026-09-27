@@ -117,6 +117,80 @@
           }
         }
       }
+    },
+    "/api/v1/me/preferences": {
+      "get": {
+        "operationId": "getMePreferences",
+        "summary": "The caller's own preference row; nulls when unset",
+        "responses": {
+          "200": {
+            "description": "Preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getMePreferences200"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putMePreferences",
+        "summary": "Replace the caller's own preference row",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/putMePreferencesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putMePreferences200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed preferences body (validationFailed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1734,6 +1808,213 @@
             "additionalProperties": false
           }
         ]
+      },
+      "getMePreferences200": {
+        "type": "object",
+        "properties": {
+          "themeMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "day",
+                  "night",
+                  "redShift",
+                  "auto"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personaOverride": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "horizontal",
+                      "vertical"
+                    ]
+                  },
+                  "terminal": {
+                    "type": "string",
+                    "enum": [
+                      "toggle",
+                      "pane"
+                    ]
+                  }
+                },
+                "required": [
+                  "orientation",
+                  "terminal"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "themeMode",
+          "personaOverride",
+          "layout"
+        ],
+        "additionalProperties": false
+      },
+      "putMePreferences200": {
+        "type": "object",
+        "properties": {
+          "themeMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "day",
+                  "night",
+                  "redShift",
+                  "auto"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personaOverride": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "horizontal",
+                      "vertical"
+                    ]
+                  },
+                  "terminal": {
+                    "type": "string",
+                    "enum": [
+                      "toggle",
+                      "pane"
+                    ]
+                  }
+                },
+                "required": [
+                  "orientation",
+                  "terminal"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "themeMode",
+          "personaOverride",
+          "layout"
+        ],
+        "additionalProperties": false
+      },
+      "putMePreferencesBody": {
+        "type": "object",
+        "properties": {
+          "themeMode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "day",
+                  "night",
+                  "redShift",
+                  "auto"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personaOverride": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "horizontal",
+                      "vertical"
+                    ]
+                  },
+                  "terminal": {
+                    "type": "string",
+                    "enum": [
+                      "toggle",
+                      "pane"
+                    ]
+                  }
+                },
+                "required": [
+                  "orientation",
+                  "terminal"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "themeMode",
+          "personaOverride",
+          "layout"
+        ],
+        "additionalProperties": false
       }
     }
   }

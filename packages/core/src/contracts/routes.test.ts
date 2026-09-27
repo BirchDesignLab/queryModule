@@ -1,7 +1,14 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { ClientSiteConfigSchema } from "../config/client-config";
 import { ApiErrorSchema } from "./api-error";
-import { findRoute, LocaleParamsSchema, MetaResponseSchema, ROUTES, type RouteId } from "./routes";
+import {
+  findRoute,
+  LocaleParamsSchema,
+  MetaResponseSchema,
+  ROUTES,
+  type RouteId,
+  UserPreferenceSchema,
+} from "./routes";
 import { CORE_VERSION } from "./version";
 
 describe("BR-007 route contracts (spec 5.1)", () => {
@@ -31,6 +38,8 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["getMeta", "get", "/api/v1/meta", "public", "m0", "planned"],
       ["getLocale", "get", "/api/v1/locales/{locale}", "public", "m0", "planned"],
       ["getConfig", "get", "/api/v1/config", "session", "m1", "planned"],
+      ["getMePreferences", "get", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
+      ["putMePreferences", "put", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
@@ -38,7 +47,9 @@ describe("BR-007 route contracts (spec 5.1)", () => {
   });
 
   it("route ids are a closed type and ROUTES cannot be changed at runtime", () => {
-    expectTypeOf<RouteId>().toEqualTypeOf<"getHealth" | "getMeta" | "getLocale" | "getConfig">();
+    expectTypeOf<RouteId>().toEqualTypeOf<
+      "getHealth" | "getMeta" | "getLocale" | "getConfig" | "getMePreferences" | "putMePreferences"
+    >();
     expectTypeOf(findRoute).parameter(0).toEqualTypeOf<RouteId>();
     expect(Object.isFrozen(ROUTES)).toBe(true);
     for (const r of ROUTES) {
@@ -94,6 +105,80 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       expect(r.responses[400]?.schema, r.id).toBe(ApiErrorSchema);
     }
     expect(findRoute("getLocale").responses[400]?.schema).toBe(ApiErrorSchema);
+  });
+
+  it("getMePreferences and putMePreferences are session-own routes since m1", () => {
+    const get = findRoute("getMePreferences");
+    const put = findRoute("putMePreferences");
+    expect(get).toMatchObject({
+      method: "get",
+      path: "/api/v1/me/preferences",
+      access: "sessionOwn",
+      since: "m1",
+    });
+    expect(put).toMatchObject({
+      method: "put",
+      path: "/api/v1/me/preferences",
+      access: "sessionOwn",
+      since: "m1",
+    });
+    expect(get.requiresRequestedWith).toBe(false);
+    expect(put.requiresRequestedWith).toBe(true);
+    expect(put.request?.body).toBe(UserPreferenceSchema);
+    for (const r of [get, put]) {
+      expect(r.responses[200]?.schema, r.id).toBe(UserPreferenceSchema);
+      expect(r.responses[401]?.schema, r.id).toBe(ApiErrorSchema);
+    }
+    expect(
+      UserPreferenceSchema.safeParse({ themeMode: "night", personaOverride: null, layout: null })
+        .success,
+    ).toBe(true);
+    expect(
+      UserPreferenceSchema.safeParse({ themeMode: "loud", personaOverride: null, layout: null })
+        .success,
+    ).toBe(false);
+  });
+
+  it("UX-014 preference body: parse and reject cases", () => {
+    const ok = (v: unknown) => UserPreferenceSchema.safeParse(v).success;
+    expect(ok({ themeMode: null, personaOverride: null, layout: null })).toBe(true);
+    for (const themeMode of ["day", "night", "redShift", "auto"]) {
+      expect(ok({ themeMode, personaOverride: null, layout: null }), themeMode).toBe(true);
+    }
+    expect(
+      ok({
+        themeMode: "day",
+        personaOverride: "dispatcher",
+        layout: { orientation: "vertical", terminal: "pane" },
+      }),
+    ).toBe(true);
+    expect(ok({ themeMode: null, personaOverride: "", layout: null })).toBe(false);
+    expect(ok({ themeMode: null, personaOverride: null })).toBe(false);
+    expect(ok({ themeMode: null, personaOverride: null, layout: null, extra: 1 })).toBe(false);
+    expect(
+      ok({
+        themeMode: null,
+        personaOverride: null,
+        layout: { orientation: "diagonal", terminal: "pane" },
+      }),
+    ).toBe(false);
+    expect(
+      ok({
+        themeMode: null,
+        personaOverride: null,
+        layout: { orientation: "horizontal", terminal: "popup" },
+      }),
+    ).toBe(false);
+    expect(
+      ok({ themeMode: null, personaOverride: null, layout: { orientation: "horizontal" } }),
+    ).toBe(false);
+    expect(
+      ok({
+        themeMode: null,
+        personaOverride: null,
+        layout: { orientation: "horizontal", terminal: "pane", x: 1 },
+      }),
+    ).toBe(false);
   });
 
   it("locale param accepts en and en-US only shapes", () => {
