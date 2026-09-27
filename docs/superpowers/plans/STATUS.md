@@ -59,7 +59,7 @@ W6 in progress on `feat/p0-wave-6` (one PR, critical tier). Resumable: check the
 - [x] 8 Task 28 `gh-setup-repo.sh` (#29) (inline; live `--apply` after W6 merges, developer go)
 - [x] 9 #69 OpenAPI input bodies, Condition registry id (inline)
 - [x] 10 #85 IO-globals member access, web config typecheck, TokenStore critical tier (inline)
-- [ ] 11 #84 Track B P1 plan fixes (inline)
+- [x] 11 #84 Track B P1 plan fixes (inline)
 - [ ] 12 wave-review (critical Opus high, gate Opus medium), PR draft until artifact and CI green
 
 Decisions 09-26-26: no xhigh/max anywhere; critical review Opus high, gate Opus medium, ordinary CI only; small diff = one reviewer, no ruler/re-reviewer unless findings. Notes: one `Closes #n` per issue; M0 release notes list #93 as api-breaking (tightening only); docs plan #94 (ordinary, any time).
