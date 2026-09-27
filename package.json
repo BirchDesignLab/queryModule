@@ -16,6 +16,7 @@
     "config:validate": "tsx scripts/ci/config-validate.ts",
     "config:migrate": "tsx scripts/ci/config-migrate.ts",
     "dev:web": "pnpm --filter @querymodule/web dev",
+    "image:smoke": "bash scripts/ci/boot-smoke.sh all querymodule:local --build",
     "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm config:validate && pnpm gen:check"
   },
   "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
@@ -26,12 +27,15 @@
     "@querymodule/tokens": "workspace:*",
     "@types/node": "^24.19.0",
     "@types/picomatch": "^4.0.3",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.2",
+    "esbuild": "^0.28.2",
     "jsdom": "^30.1.1",
     "picomatch": "^4.0.7",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2",
+    "ws": "^8.22.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   }
