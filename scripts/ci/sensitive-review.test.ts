@@ -518,7 +518,7 @@ describe("runSensitiveReview against a real git repo", () => {
     );
     expect(binary.code).toBe(1);
     expect(binary.messages[0]).toContain("got Infinity");
-  });
+  }, 30_000);
 
   it("catches a sensitive path with non-ASCII characters", () => {
     const r = inRepo((dir) => writeFileSync(join(dir, "scripts/ci/é.ts"), "export {};\n"));

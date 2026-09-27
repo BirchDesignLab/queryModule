@@ -108,6 +108,11 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
     expect(jobNeeds(jobs.mobile)).toContain("changes");
   });
 
+  it("checks runs the schema-table write guard over packages/api/src (#189)", () => {
+    const runs = (jobs.checks.steps as Array<{ run?: string }>).map((st) => st.run ?? "");
+    expect(runs).toContain("node scripts/ci/check-schema-writes.ts packages/api/src");
+  });
+
   it("`web` and `mobile` fail open when `changes` emits no key (#96 G-M2)", () => {
     expect(jobs.web.if).toBe("needs.changes.outputs.web != 'false'");
     expect(jobs.mobile.if).toBe("needs.changes.outputs.mobile != 'false'");
