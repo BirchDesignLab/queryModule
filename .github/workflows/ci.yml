@@ -175,7 +175,6 @@ jobs:
           docker run --rm -v "$PWD:/work" tufin/oasdiff@sha256:3b14fe0112e5d1bf862f91ab234a4bcd161a3f399e98f8b0b665ce70857694ac breaking /work/base-openapi.json /work/packages/api/openapi.json --fail-on ERR
 
   # ADR-0008: path-scoped, runs only when apps/web (or a shared root file) changed.
-  # Task 26 adds the actual build step here.
   web:
     name: web
     needs: [changes, checks]
@@ -195,12 +194,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # Step 8: web production build (added by Task 26)
-      - name: Web build placeholder
-        run: 'echo "Step 8: web production build lands in Task 26."'
+      # Step 8: web production build
+      - name: Web build
+        run: pnpm --filter @querymodule/web build
 
   # ADR-0008: path-scoped, runs only when apps/mobile (or a shared root file) changed.
-  # Task 26 adds the actual export step here.
   mobile:
     name: mobile
     needs: [changes, checks]
@@ -220,9 +218,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # Step 9: expo export (added by Task 26)
-      - name: Mobile export placeholder
-        run: 'echo "Step 9: expo export lands in Task 26."'
+      # Step 9: mobile typecheck (apps/mobile is outside the root tsc -b) and
+      # expo export, bundles only (spec 9.3, 10.7)
+      - name: Mobile typecheck
+        run: pnpm --filter @querymodule/mobile typecheck
+      - name: Expo export
+        run: pnpm --filter @querymodule/mobile export
 
   # ADR-0008: the one required check. Needs every job above (never
   # sensitive-review, which stays its own required check) and runs regardless
