@@ -135,8 +135,18 @@ jobs:
               waveCache.set(k, s);
               return s;
             }
-            const waveOf = (item) =>
-              /^M0 P0 W(\d+):/.exec(item.title)?.[1] ?? /^M0 P0 W(\d+):/.exec(item.parent?.title ?? "")?.[1];
+            // Wave identity comes from the Wave field (developer decision, #80),
+            // never a title regex: a renamed wave parent (old or new title style)
+            // still maps to its branch, and a task inherits its wave parent's Wave
+            // field through the sub-issue `parent` link when the task carries none
+            // of its own.
+            const waveNumber = (v) => /^W(\d+)$/.exec(v ?? "")?.[1];
+            const waveOf = (item) => {
+              const own = waveNumber(item.values.Wave);
+              if (own) return own;
+              const parent = item.parent ? items.get(item.parent.number) : null;
+              return parent ? waveNumber(parent.values.Wave) : undefined;
+            };
 
             // Status from truth; null means no PR or wave speaks for the item.
             async function truth(item) {
@@ -153,8 +163,10 @@ jobs:
 
             async function reconcile(item) {
               if (!item) return;
-              // A wave parent closes when all of its tasks are closed.
-              const isWaveParent = /^M0 P0 W\d+:/.test(item.title);
+              // A wave parent closes when all of its tasks are closed. Identity
+              // comes from the Level field (developer decision, #80), never a
+              // title regex.
+              const isWaveParent = item.values.Level === "Wave";
               const sum = item.subIssuesSummary;
               if (isWaveParent && item.state === "OPEN" && sum.total > 0 && sum.completed === sum.total) {
                 await github.rest.issues.update({ ...context.repo, issue_number: item.number, state: "closed", state_reason: "completed" });

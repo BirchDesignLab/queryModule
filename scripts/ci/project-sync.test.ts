@@ -29,6 +29,10 @@ interface FakeItem {
   state: "OPEN" | "CLOSED";
   stateReason?: string | null;
   status?: string;
+  level?: string;
+  wave?: string;
+  parentNumber?: number;
+  sub?: { total: number; completed: number };
   prs?: Array<{ state: string; isDraft: boolean; repo: string | null }>;
 }
 interface WaveBranch {
@@ -71,8 +75,8 @@ async function runBoard(
                   state: i.state,
                   stateReason: i.stateReason ?? null,
                   repository: { nameWithOwner: REPO },
-                  parent: null,
-                  subIssuesSummary: { total: 0, completed: 0 },
+                  parent: i.parentNumber ? { number: i.parentNumber, title: "" } : null,
+                  subIssuesSummary: i.sub ?? { total: 0, completed: 0 },
                   closedByPullRequestsReferences: {
                     nodes: (i.prs ?? []).map((p) => ({
                       state: p.state,
@@ -82,7 +86,11 @@ async function runBoard(
                   },
                 },
                 fieldValues: {
-                  nodes: i.status ? [{ name: i.status, field: { name: "Status" } }] : [],
+                  nodes: [
+                    ...(i.status ? [{ name: i.status, field: { name: "Status" } }] : []),
+                    ...(i.level ? [{ name: i.level, field: { name: "Level" } }] : []),
+                    ...(i.wave ? [{ name: i.wave, field: { name: "Wave" } }] : []),
+                  ],
                 },
               })),
             },
@@ -186,7 +194,7 @@ describe("project-sync board job", () => {
           status: "Todo",
           prs: [{ state: "OPEN", isDraft: false, repo: fork }],
         },
-        { number: 2, title: "M0 P0 W9: wave task", state: "OPEN", status: "Todo" },
+        { number: 2, title: "wave task", state: "OPEN", status: "Todo", wave: "W9" },
         {
           number: 3,
           title: "own PR",
@@ -204,5 +212,59 @@ describe("project-sync board job", () => {
 
   it("triggers on pull_request edited, for a Closes line added later (M2)", () => {
     expect(readFileSync(workflowPath, "utf8")).toMatch(/types: \[[^\]]*\bedited\b[^\]]*\]/);
+  });
+
+  it("closes a wave parent identified by the Level field, not a title regex (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1: Workspace and first contracts (Tasks 1 to 6)",
+          state: "OPEN",
+          level: "Wave",
+          sub: { total: 2, completed: 2 },
+        },
+      ],
+      issueEvent,
+    );
+    expect(writes).toContainEqual({ item: 55, field: "Status", value: "Done" });
+  });
+
+  it("does not close an open item with Level Wave whose title no longer matches the retired regex, when its sub-issues are incomplete (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1: Workspace and first contracts (Tasks 1 to 6)",
+          state: "OPEN",
+          status: "Todo",
+          level: "Wave",
+          sub: { total: 2, completed: 1 },
+        },
+      ],
+      issueEvent,
+    );
+    expect(writes.find((w) => w.item === 55 && w.field === "Status")).toBeUndefined();
+  });
+
+  it("derives a task's wave from its parent's Wave field, not from a title regex, even when the parent has been renamed (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 9: Renamed wave parent (Tasks 90 to 91)",
+          state: "OPEN",
+          level: "Wave",
+          wave: "W9",
+        },
+        { number: 2, title: "child task", state: "OPEN", status: "Todo", parentNumber: 55 },
+      ],
+      issueEvent,
+      { "9": { ref: true, prs: [] } },
+    );
+    expect(writes).toContainEqual({ item: 2, field: "Status", value: "In Progress" });
   });
 });

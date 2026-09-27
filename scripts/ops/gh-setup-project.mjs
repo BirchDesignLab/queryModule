@@ -695,12 +695,17 @@ for (const title of Object.keys(MILESTONES)) {
   if (!milestones.has(title))
     throw new Error(`milestone "${title}" missing; run scripts/ops/gh-setup-labels.sh first`);
 }
+// Keyed by issue number (developer decision, #80: matching is by number, never
+// by title). issuesByTitle is a second index used only for the number:null
+// duplicate guard in ensureIssue (a milestone parent not yet created has no
+// number to match by).
 const issues = new Map(
   restAll(`repos/${REPO}/issues?state=all&per_page=100`)
     .filter((i) => !i.pull_request)
-    .map((i) => [i.title, i]),
+    .map((i) => [i.number, i]),
 );
-const byNumber = (n) => [...issues.values()].find((i) => i.number === n);
+const issuesByTitle = new Map([...issues.values()].map((i) => [i.title, i]));
+const byNumber = (n) => issues.get(n);
 {
   const missing = [];
   for (const w of WAVES)
@@ -837,6 +842,16 @@ if (APPLY) project = loadProject();
 // it prints in the data above so the next run matches it.
 function ensureIssue(spec) {
   let issue = matchParent(spec, byNumber);
+  // A milestone parent (spec.number === null) is created once. Before POSTing,
+  // check for one already created by an earlier --apply run whose number was
+  // never recorded back into the data (for example a mid-run throw after the
+  // create but before this line printed): matched by title, since that is the
+  // only handle a number:null spec has.
+  let matchedUnrecordedParent = false;
+  if (!issue && spec.number === null && issuesByTitle.has(spec.title)) {
+    issue = issuesByTitle.get(spec.title);
+    matchedUnrecordedParent = true;
+  }
   if (!issue) {
     const body = {
       title: spec.title,
@@ -847,11 +862,14 @@ function ensureIssue(spec) {
     };
     issue = write(`create issue "${spec.title}"`, () => rest(`repos/${REPO}/issues`, "POST", body));
     if (issue) {
-      issues.set(issue.title, issue);
+      issues.set(issue.number, issue);
+      issuesByTitle.set(issue.title, issue);
       if (spec.number === null)
         console.log(`record number #${issue.number} for "${spec.title}" in the setup-script data`);
     }
   } else {
+    if (matchedUnrecordedParent)
+      console.log(`record number #${issue.number} for "${spec.title}" in the setup-script data`);
     const nextTitle = titleUpdate(issue.title, spec.title);
     if (nextTitle !== null) {
       write(`rename #${issue.number} to "${nextTitle}"`, () =>
