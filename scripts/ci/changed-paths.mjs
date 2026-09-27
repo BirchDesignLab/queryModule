@@ -77,12 +77,14 @@ function printAreas(write, a) {
  *   env?: Record<string, string | undefined>,
  *   runGit?: (args: string[]) => string,
  *   write?: (line: string) => void,
+ *   warn?: (line: string) => void,
  * }} [deps]
  */
 export function main({
   env = process.env,
   runGit = gitOut,
   write = (line) => console.log(line),
+  warn = (line) => console.error(line),
 } = {}) {
   const base = env.BASE_SHA ?? "";
   const head = env.HEAD_SHA ?? "HEAD";
@@ -97,7 +99,15 @@ export function main({
   try {
     printAreas(write, areas(changedFiles(base, head, runGit)));
   } catch (err) {
-    write(`::warning::changed-paths: ${err instanceof Error ? err.message : String(err)}`);
+    // Goes to the warn sink (stderr), never the output sink: ci.yml pipes this
+    // script's stdout straight into $GITHUB_OUTPUT, which the runner rejects
+    // as an invalid line if it isn't key=value or a key<<EOF block (critic:C1).
+    const message = (err instanceof Error ? err.message : String(err))
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(" ");
+    warn(`::warning::changed-paths: ${message}`);
     printAreas(write, ALL_TRUE);
   }
 }

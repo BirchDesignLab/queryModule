@@ -92,17 +92,39 @@ describe("main (fail-closed, ADR-0008)", () => {
     expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
   });
 
-  it("fails closed and prints a ::warning:: naming the failure when git fails", () => {
+  it("fails closed and warns (not to the output sink) naming the failure when git fails", () => {
     const { lines, write } = sink();
+    const { lines: warnLines, write: warn } = sink();
     main({
       env: { BASE_SHA: "abc", HEAD_SHA: "def", EVENT_NAME: "pull_request" },
       runGit: () => {
         throw new Error("git exited with 128");
       },
       write,
+      warn,
     });
-    expect(lines[0]).toBe("::warning::changed-paths: git exited with 128");
-    expect(lines.slice(1)).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    // The output sink is piped straight into $GITHUB_OUTPUT (ci.yml); it must
+    // contain only the three key=value lines, never a ::warning:: line.
+    expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    expect(warnLines).toEqual(["::warning::changed-paths: git exited with 128"]);
+  });
+
+  it("collapses a multi-line git failure message to one line on the warn sink", () => {
+    const { lines, write } = sink();
+    const { lines: warnLines, write: warn } = sink();
+    main({
+      env: { BASE_SHA: "abc", HEAD_SHA: "def", EVENT_NAME: "pull_request" },
+      runGit: () => {
+        throw new Error("git exited with 128\nfatal: bad object\nstderr line");
+      },
+      write,
+      warn,
+    });
+    expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    expect(warnLines).toHaveLength(1);
+    expect(warnLines[0]).toBe(
+      "::warning::changed-paths: git exited with 128 fatal: bad object stderr line",
+    );
   });
 
   it("computes areas normally on a successful diff", () => {
