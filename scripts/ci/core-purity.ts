@@ -26,20 +26,43 @@ export function deniedGlobals(biomeJson: string): string[] {
 }
 
 /**
+ * Builds a regex source for a chain of `names` (dot, optional-chain dot, or a
+ * string-indexed bracket, optionally itself preceded by `?.`), e.g.
+ * `globalThis`, `globalThis.window`, `globalThis?.['window']`. Shared by
+ * `findGlobalAliases` (a chain of global objects) and `findGlobalMemberAccess`
+ * (a chain of global objects and/or one-level aliases) so the two stay in
+ * sync (#184 item 5).
+ */
+function buildChainPattern(names: string): string {
+  const dotStep = String.raw`(?:\?\.|\.)\s*(?:${names})\s*`;
+  const indexStep = String.raw`(?:\?\.)?\s*\[\s*["'\x60](?:${names})["'\x60]\s*\]\s*`;
+  return String.raw`(?:${names})\s*(?:${dotStep}|${indexStep})*`;
+}
+
+/**
  * One-level alias tracking only (developer ruling 09-27-26, #96 G-M5): a
  * `const`/`let`/`var` whose initializer is exactly a global-object name, or a
  * chain of global-object names (`const g = globalThis;`, `const w =
- * globalThis.window;`). Deeper alias tracking is out of scope: an alias of an
- * alias, an alias passed through a function, reassignment, `Reflect.get`,
- * computed non-literal keys and `eval`/`Function` are not followed.
+ * globalThis.window;`), optionally followed by a type cast (`const g =
+ * globalThis as any;`). Any declarator in a multi-declarator statement is
+ * checked (`let a = 1, g = globalThis;`), not only the first. Deeper alias
+ * tracking is out of scope: an alias of an alias, an alias passed through a
+ * function, reassignment, `Reflect.get`, computed non-literal keys and
+ * `eval`/`Function` are not followed. Detection is whole-file and scope-blind:
+ * a same-named identifier initialized this way in another, unrelated scope is
+ * still treated as a global alias everywhere in the file; over-flagging (a
+ * false positive) is the safe failure for a purity gate, never under-flagging.
  */
 function findGlobalAliases(source: string): string[] {
   const objects = GLOBAL_OBJECTS.join("|");
-  const chain = String.raw`(?:${objects})(?:\s*(?:\?\.|\.)\s*(?:${objects})|\s*\[\s*["'\x60](?:${objects})["'\x60]\s*\])*`;
+  const chain = buildChainPattern(objects);
   // [critic:I2] allow an optional type annotation between the binding name and `=`,
-  // e.g. `const g: typeof globalThis = globalThis;`.
+  // e.g. `const g: typeof globalThis = globalThis;`. The terminator is a lookahead
+  // (not consumed) so a comma stays available to start the next declarator's match.
   const re = new RegExp(
-    String.raw`\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:${chain})\s*(?:[;,\n]|$)`,
+    String.raw`(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*` +
+      chain +
+      String.raw`(?:\s*as\s+[^;,\n]+)?(?=\s*(?:[;,\n]|$))`,
     "g",
   );
   const aliases = new Set<string>();
@@ -63,7 +86,7 @@ export function findGlobalMemberAccess(source: string, names: readonly string[])
   // so a regex metacharacter in the alias name can't change what the pattern matches.
   const objects = [...GLOBAL_OBJECTS, ...aliases.map(escapeRegExp)].join("|");
   const members = names.join("|");
-  const link = String.raw`(?:${objects})\s*(?:(?:\?\.|\.)\s*(?:${objects})\s*|\[\s*["'\x60](?:${objects})["'\x60]\s*\]\s*)*`;
+  const link = buildChainPattern(objects);
   const obj = String.raw`(?<![\w$.])${link}`;
   const dot = String.raw`(?:\?\.|\.)\s*(?:${members})(?![\w$])`;
   const index = String.raw`(?:\?\.)?\[\s*["'\x60](?:${members})["'\x60]\s*\]`;
@@ -81,9 +104,14 @@ export function findGlobalMemberAccess(source: string, names: readonly string[])
   // makes the whole match fail, unlike a flat "exclude every brace" character class would.
   // [critic:I2] an optional type annotation is allowed between the closing `}` and `=`,
   // e.g. `const { fetch }: typeof globalThis = globalThis`.
+  // #184 item 1: the source must be exactly a global object or a chain of global
+  // objects, ending the expression right there; a member of a global object
+  // (`window.api`) is not itself a global object and must not match.
   const memberRe = new RegExp(`^(?:${members})$`);
   const openBrace = /\b(?:const|let|var)\s*\{/g;
-  const afterBrace = new RegExp(String.raw`^\s*(?::[^=;]+)?=\s*(?<![\w$.])(?:${objects})(?![\w$])`);
+  const afterBrace = new RegExp(
+    String.raw`^\s*(?::[^=;]+)?=\s*(?<![\w$.])${link}(?=\s*(?:[;,\n]|$))`,
+  );
   for (const m of source.matchAll(openBrace)) {
     const bindingsStart = m.index + m[0].length;
     const braceEnd = findBraceEnd(source, bindingsStart - 1);
