@@ -87,6 +87,33 @@ describe("sensitive-review (spec 9.1)", () => {
       expect(c(f), f).toBeNull();
   });
 
+  it("the shipped tier file classifies the P1 api paths (developer ruling 09-27-26)", () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const shipped = parseSensitiveTiers(
+      readFileSync(join(repoRoot, ".github/sensitive-paths"), "utf8"),
+    );
+    const c = (f: string) => tierOf(f, [shipped]);
+    for (const f of [
+      "packages/api/src/db/client.ts",
+      "packages/api/src/secrets.ts",
+      "packages/api/src/keys/canary.ts",
+      "packages/api/src/seams.ts",
+      "packages/api/src/startup.ts",
+    ])
+      expect(c(f), f).toBe("critical");
+    for (const f of [
+      "packages/api/src/auth/x.ts",
+      "packages/api/src/http/session.ts",
+      "packages/api/src/ws/server.ts",
+      "packages/api/src/seed/users.ts",
+      "packages/api/src/ops/grant-role.ts",
+      "packages/api/src/deps.ts",
+    ])
+      expect(c(f), f).toBe("gate");
+    for (const f of ["packages/api/src/env.ts", "packages/api/src/log/logger.ts"])
+      expect(c(f), f).toBeNull();
+  });
+
   it("parses an optional mode field (#92 fast path)", () => {
     const fast = artifact.replace('verdict: "approve"', 'verdict: "approve"\nmode: "fast"');
     expect(parseReviewFrontMatter(fast)?.mode).toBe("fast");

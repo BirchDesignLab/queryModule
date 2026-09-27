@@ -14,8 +14,13 @@
 [critical]
 # Credential handling
 packages/api/src/credentials/**
+packages/api/src/secrets.ts
+packages/api/src/keys/**
+packages/api/src/db/**
 # Audit logging
 packages/api/src/audit/**
+packages/api/src/seams.ts
+packages/api/src/startup.ts
 packages/core/src/contracts/audit.ts
 packages/core/src/contracts/audit-auth.ts
 packages/core/src/contracts/primitives.ts
@@ -61,6 +66,13 @@ package.json
 pnpm-workspace.yaml
 tsconfig.base.json
 **/tsconfig.json
+# Auth and sessions (developer decision 09-27-26: gate, not critical)
+packages/api/src/auth/**
+packages/api/src/http/session.ts
+packages/api/src/ws/**
+packages/api/src/seed/**
+packages/api/src/ops/**
+packages/api/src/deps.ts
 
 [deps]
 # .github/dependabot.yml stays [gate] (.github/**): no automated check reads it.
