@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Sha256HexSchema } from "../contracts/primitives";
+import { MessageKeySchema, Sha256HexSchema } from "../contracts/primitives";
 import { CONFIG_SCHEMA_VERSION } from "../contracts/version";
 import { FEATURES, type FeatureKey } from "./features";
 import { makeSiteConfigSchemas, type SiteConfig, SOURCE_SCOPES } from "./schema";
@@ -10,7 +10,7 @@ const C = makeSiteConfigSchemas("client");
 export const ClientSiteConfigSchema = z.object({
   schemaVersion: z.literal(CONFIG_SCHEMA_VERSION),
   configHash: Sha256HexSchema,
-  site: z.object({ id: z.string().min(1), labelKey: z.string().min(1) }),
+  site: z.object({ id: z.string().min(1), labelKey: MessageKeySchema }),
   locales: z.array(z.string().min(1)).min(1),
   // One key per catalogue entry, typed by FeatureKey; z.object strips feature keys a newer server adds.
   features: z.object(
@@ -21,7 +21,7 @@ export const ClientSiteConfigSchema = z.object({
     purposes: z.array(
       z.object({
         key: z.string().min(1),
-        labelKey: z.string().min(1),
+        labelKey: MessageKeySchema,
         maxDurationMinutes: z.int().positive().optional(),
       }),
     ),
@@ -45,7 +45,7 @@ export const ClientSiteConfigSchema = z.object({
   sources: z.array(
     z.object({
       id: z.string().min(1),
-      labelKey: z.string().min(1),
+      labelKey: MessageKeySchema,
       scope: z.enum(SOURCE_SCOPES),
       timeoutMs: z.int().positive(),
       requiresCredentials: z.boolean(),
