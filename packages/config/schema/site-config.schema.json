@@ -22,7 +22,9 @@
         },
         "labelKey": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
         }
       },
       "required": [
@@ -64,7 +66,9 @@
           },
           "labelKey": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
           },
           "layout": {
             "type": "string",
@@ -206,7 +210,9 @@
               },
               "labelKey": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
               },
               "delegatorRoles": {
                 "minItems": 1,
@@ -320,7 +326,9 @@
                 },
                 "labelKey": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                 },
                 "enabled": {
                   "default": true,
@@ -358,7 +366,9 @@
           },
           "labelKey": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
           },
           "scope": {
             "type": "string",
@@ -417,7 +427,9 @@
           },
           "labelKey": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
           },
           "allowPlateOnly": {
             "default": false,
@@ -435,7 +447,9 @@
                 },
                 "labelKey": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                 },
                 "when": {
                   "$ref": "#/$defs/__schema0"
@@ -473,7 +487,9 @@
                 },
                 "labelKey": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                 },
                 "dataType": {
                   "type": "string",
@@ -979,7 +995,9 @@
                     },
                     "labelKey": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                     },
                     "view": {
                       "type": "string",
@@ -1094,7 +1112,9 @@
                     },
                     "labelKey": {
                       "type": "string",
-                      "minLength": 1
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                     },
                     "view": {
                       "type": "string",
@@ -1120,7 +1140,9 @@
                           },
                           "labelKey": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[a-z][A-Za-z0-9]*(?:\\.[A-Za-z0-9]+)*$"
                           },
                           "format": {
                             "oneOf": [

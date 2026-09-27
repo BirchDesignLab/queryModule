@@ -7,6 +7,7 @@ import {
   FieldKeySchema,
   HostSubjectSchema,
   MAX_ALSO_RUN,
+  MessageKeySchema,
   NestedPartIdSchema,
   ParentPartIdSchema,
   PartIdSchema,
@@ -21,11 +22,11 @@ const FieldMapApplied = z.record(FieldKeySchema, FieldKeySchema);
 
 /** ValidationError restricted for audit: params limited to field keys, label keys and positions. */
 export const AuditValidationErrorSchema = z.strictObject({
-  key: z.string().min(1),
+  key: MessageKeySchema,
   params: z
     .strictObject({
       field: FieldKeySchema.optional(),
-      labelKey: z.string().min(1).optional(),
+      labelKey: MessageKeySchema.optional(),
       position: z.int().min(0).optional(),
     })
     .optional(),

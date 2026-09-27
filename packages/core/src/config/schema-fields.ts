@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BoundedIdSchema, FieldKeySchema } from "../contracts/primitives";
+import { BoundedIdSchema, FieldKeySchema, MessageKeySchema } from "../contracts/primitives";
 import { objectFor, optionalEnum, type SchemaMode } from "./schema-mode";
 
 export type Literal = string | number | boolean;
@@ -37,7 +37,10 @@ export { MAX_ALSO_RUN } from "../contracts/primitives";
 
 export function makeFieldSchemas(mode: SchemaMode) {
   const obj = objectFor(mode);
+  // Names, codes and paths: unconstrained here (ADR-0005 keeps codes such as BLK/WHI).
   const Key = z.string().min(1);
+  // Message and label keys (ADR-0005, #61).
+  const MessageKey = MessageKeySchema;
   const Literal = z.union([z.string(), z.number(), z.boolean()]);
   const DefaultRef = obj({ $default: Key });
   const LiteralOrDefault = z.union([Literal, DefaultRef]);
@@ -60,11 +63,11 @@ export function makeFieldSchemas(mode: SchemaMode) {
 
   const DateFormat = z.string().max(DATE_FORMAT_MAX_LENGTH).regex(DATE_FORMAT_PATTERN);
 
-  const SectionDef = obj({ key: Key, labelKey: Key, when: Condition.optional() });
+  const SectionDef = obj({ key: Key, labelKey: MessageKey, when: Condition.optional() });
 
   const FieldDef = obj({
     key: FieldKeySchema,
-    labelKey: Key,
+    labelKey: MessageKey,
     dataType: z.enum(DATA_TYPES),
     role: optionalEnum(mode, ["type"]),
     picklist: Key.optional(),
@@ -110,7 +113,7 @@ export function makeFieldSchemas(mode: SchemaMode) {
 
   const QueryType = obj({
     code: BoundedIdSchema,
-    labelKey: Key,
+    labelKey: MessageKey,
     allowPlateOnly: z.boolean().default(false),
     sections: z.array(SectionDef).min(1),
     defaults: z.record(z.string(), Literal).optional(),
@@ -122,6 +125,7 @@ export function makeFieldSchemas(mode: SchemaMode) {
 
   return {
     Key,
+    MessageKey,
     Literal,
     DefaultRef,
     Condition,

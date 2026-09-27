@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   BOUNDED_ID_MAX_LENGTH,
   BoundedIdSchema,
@@ -9,6 +10,9 @@ import {
   HOST_SUBJECT_MAX_LENGTH,
   HostSubjectSchema,
   MAX_ALSO_RUN,
+  MESSAGE_KEY_MAX_LENGTH,
+  MESSAGE_KEY_PATTERN,
+  MessageKeySchema,
   NestedPartIdSchema,
   ParentPartIdSchema,
   PartIdSchema,
@@ -128,5 +132,58 @@ describe("ADR-0005 shared contract primitives", () => {
     expect(ok(TypeValuesSchema, {})).toBe(true);
     expect(ok(TypeValuesSchema, { "plate-type": "PC" })).toBe(false);
     expect(ok(TypeValuesSchema, { plateType: "P C" })).toBe(false);
+  });
+
+  it("MessageKey: lowerCamel segments separated by dots, at most 128 characters (#61)", () => {
+    expect(MESSAGE_KEY_MAX_LENGTH).toBe(128);
+    expect(MESSAGE_KEY_PATTERN.source).toBe(String.raw`^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*$`);
+    const longest = `a${".b".repeat(63)}a`;
+    expect(longest).toHaveLength(128);
+    for (const good of [
+      "app.title",
+      "config.unknownToken",
+      "field.plate",
+      "a",
+      "picklist.state.TX",
+      longest,
+    ]) {
+      expect(ok(MessageKeySchema, good)).toBe(true);
+    }
+    for (const bad of [
+      "",
+      "App.title",
+      "app..title",
+      "app.",
+      ".app",
+      "app title",
+      "app-title",
+      "app_title",
+      `${longest}b`,
+      "plate.ZZ-0001",
+    ]) {
+      expect(ok(MessageKeySchema, bad)).toBe(false);
+    }
+  });
+
+  it("MessageKey JSON Schema keeps minLength 1 (oasdiff: dropping it from a response is breaking)", () => {
+    expect(z.toJSONSchema(MessageKeySchema)).toMatchObject({
+      type: "string",
+      minLength: 1,
+      maxLength: MESSAGE_KEY_MAX_LENGTH,
+    });
+  });
+
+  it("MessageKey pattern runs in linear time on adversarial input (CodeQL js/redos)", {
+    timeout: 2000,
+  }, () => {
+    for (const evil of [
+      `a${".a".repeat(5000)}!`,
+      `${"a".repeat(10000)}!`,
+      `a${".".repeat(9999)}`,
+    ]) {
+      const start = performance.now();
+      expect(MESSAGE_KEY_PATTERN.test(evil)).toBe(false);
+      expect(performance.now() - start).toBeLessThan(100);
+    }
   });
 });

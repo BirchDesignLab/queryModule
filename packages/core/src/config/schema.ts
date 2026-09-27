@@ -27,11 +27,11 @@ export const DEFAULT_DELEGATION_PURPOSE = {
 export function makeSiteConfigSchemas(mode: SchemaMode) {
   const f = makeFieldSchemas(mode);
   const obj = objectFor(mode);
-  const { Key, Literal, Condition } = f;
+  const { Key, MessageKey, Literal, Condition } = f;
 
   const PicklistValue = obj({
     code: Key,
-    labelKey: Key,
+    labelKey: MessageKey,
     enabled: z.boolean().default(true),
     parent: Key.optional(),
   });
@@ -41,7 +41,7 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
   // Task W2F (BR-001): Source.id bounded too (QueryTypeSource.sourceId already is).
   const Source = obj({
     id: BoundedIdSchema,
-    labelKey: Key,
+    labelKey: MessageKey,
     scope: z.enum(SOURCE_SCOPES),
     kind: BoundedIdSchema,
     timeoutMs: z.int().positive().default(10000),
@@ -88,7 +88,7 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
   const ValueElement = obj({
     kind: z.literal("value"),
     path: Key,
-    labelKey: Key,
+    labelKey: MessageKey,
     view: View,
     format: Format.optional(),
     highlight: z.boolean().default(true),
@@ -96,14 +96,14 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
   const TableElement = obj({
     kind: z.literal("table"),
     path: Key,
-    labelKey: Key,
+    labelKey: MessageKey,
     view: View,
     highlight: z.boolean().default(true),
     columns: z
       .array(
         obj({
           path: Key,
-          labelKey: Key,
+          labelKey: MessageKey,
           format: Format.optional(),
           highlight: z.boolean().optional(),
         }),
@@ -141,7 +141,7 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
     }).optional(),
   });
 
-  const PersonaDef = obj({ key: Key, labelKey: Key, layout: z.enum(PERSONA_LAYOUTS) });
+  const PersonaDef = obj({ key: Key, labelKey: MessageKey, layout: z.enum(PERSONA_LAYOUTS) });
 
   const AuthConfig = obj({
     mfaRequired: z.union([z.boolean(), obj({ roles: z.array(RoleSchema).min(1) })]).default(false),
@@ -160,7 +160,7 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
       .array(
         obj({
           key: Key,
-          labelKey: Key,
+          labelKey: MessageKey,
           delegatorRoles: z.array(RoleSchema).min(1),
           maxDurationMinutes: z.int().positive().optional(),
         }),
@@ -179,7 +179,7 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
     // Task W2F (BR-001): extends names a site id; site.id is already BoundedIdSchema.
     extends: BoundedIdSchema.optional(),
     // ADR-0005 / W1 xhigh ruling 2 / ledger Ruling P-7: site.id is BoundedIdSchema.
-    site: obj({ id: BoundedIdSchema, labelKey: Key }),
+    site: obj({ id: BoundedIdSchema, labelKey: MessageKey }),
     locales: z.array(z.string().regex(LOCALE_PATTERN)).min(1).default(["en"]),
     features: z.record(z.string(), z.boolean()).default({}),
     personas: z.array(PersonaDef).min(1),

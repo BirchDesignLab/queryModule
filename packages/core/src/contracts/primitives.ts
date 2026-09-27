@@ -23,6 +23,23 @@ export const BOUNDED_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 export const BoundedIdSchema = z.string().regex(BOUNDED_ID_PATTERN);
 export type BoundedId = z.infer<typeof BoundedIdSchema>;
 
+/**
+ * Message and label keys: lowerCamel segments separated by dots, for example
+ * "config.unknownToken" (ADR-0005, #61). One definition for config, validation
+ * errors, diagnostics and audit, so a valid config never fails an audit write.
+ * Linear time: segments are split by a literal dot, so no two branches overlap.
+ */
+export const MESSAGE_KEY_MAX_LENGTH = 128;
+export const MESSAGE_KEY_PATTERN = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*$/;
+// min(1) is implied by the pattern but kept explicit: the generated OpenAPI then keeps
+// minLength 1, and oasdiff treats dropping it from a response as breaking.
+export const MessageKeySchema = z
+  .string()
+  .min(1)
+  .max(MESSAGE_KEY_MAX_LENGTH)
+  .regex(MESSAGE_KEY_PATTERN);
+export type MessageKey = z.infer<typeof MessageKeySchema>;
+
 /** Host JWT subject (embedded mode): issued by the host, so any printable text, capped. */
 export const HOST_SUBJECT_MAX_LENGTH = 255;
 export const HOST_SUBJECT_PATTERN = /^\P{C}{1,255}$/u;

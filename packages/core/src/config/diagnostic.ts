@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { MessageKeySchema } from "../contracts/primitives";
 
 export const DiagnosticSchema = z.strictObject({
   level: z.enum(["error", "warning"]),
   path: z.string(),
-  key: z.string().min(1),
+  key: MessageKeySchema,
   params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 export type Diagnostic = z.infer<typeof DiagnosticSchema>;
