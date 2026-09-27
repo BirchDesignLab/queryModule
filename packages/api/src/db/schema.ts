@@ -124,5 +124,7 @@ export const userPreference = sqliteTable("user_preference", {
   themeMode: text({ enum: ["day", "night", "redShift", "auto"] }),
   personaOverride: text(),
   layout: text({ mode: "json" }),
+  defaultView: text(),
+  locale: text(),
   updatedAt: ms().notNull(),
 });

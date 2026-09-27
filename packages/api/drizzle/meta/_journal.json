@@ -15,6 +15,13 @@
       "when": 1790539239378,
       "tag": "0001_audit_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790540052704,
+      "tag": "0002_user_preference_view_locale",
+      "breakpoints": true
     }
   ]
 }
