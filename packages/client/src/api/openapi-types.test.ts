@@ -1,6 +1,6 @@
-import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { formatApiTypes } from "../../scripts/format-api-types.js";
 import { renderApiTypes } from "./render-api-types.js";
 
 describe("generated OpenAPI types", () => {
@@ -10,11 +10,9 @@ describe("generated OpenAPI types", () => {
       "utf8",
     );
     // gen-api-types.ts formats its output with biome (see that script); reproduce the same
-    // step here so this stays a drift check on content, not on openapi-typescript's raw style.
-    const formatted = execSync("pnpm exec biome format --stdin-file-path=openapi-types.ts -", {
-      input: await renderApiTypes(),
-      encoding: "utf8",
-    });
+    // step here via the scripts/ helper (S1) so this stays a drift check on content, not on
+    // openapi-typescript's raw style, without importing node:child_process from src/.
+    const formatted = formatApiTypes(await renderApiTypes());
     expect(committed).toBe(formatted);
   });
 });
