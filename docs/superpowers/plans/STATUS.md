@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | running | 09-26-26 20:40 |
+| Windows 11 | P0 | M0 P0 contracts | paused | 09-26-26 22:15 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: W5 done on the branch: Tasks 23 to 25 (#24 to #26), W5A (#79, #71), W5B (#80); phase Opus critic run; ADR-0008 (proposed, #81)
-- Branch / PR: feat/p0-wave-5 / #83 (gate-tier wave-review running)
-- Last green: pnpm verify at 371fc2d (573 tests, config:validate 4 ok, generated files match); audit --prod clean
-- Next step: wave-review (gate tier) for docs/reviews/pr-<n>.md; after merge run gh-setup-project.mjs --apply at once (Level field, renames, milestone parents, date backfill), record the five milestone-parent numbers in the next PR; then #61 as its own critical-tier PR; then W6
-- Blocked by: decision #61 (bound message and label keys) before the P0 freeze
+- Issue: W5 merged (#83); #91 (ReDoS fix, Node >=24.15, jsdom 30, board data) merged; #93 (#61 message-key bounds) open, review approved, merge pending; next W6 (Tasks 26 to 28, #27 to #29)
+- Branch / PR: feat/core-61-message-keys / #93 (then feat/p0-wave-6 from main)
+- Last green: pnpm verify at d4c7a00 (623 tests; known flaky timeout in scripts/ci/sensitive-review.test.ts under coverage, #85)
+- Next step: W6 in a new session. Carries, all in the W6 PR: ADR-0008 ci.yml restructure before steps 8 and 9 (aggregate ci job, path-scoped jobs); #92 in full (split fixes by tier; board data out of scripts/ops; branch-keyed review artifact; inline rule for small specified changes; review effort caps: no xhigh, critical Opus high, gate Opus medium, in scripts/ci/sensitive-review.ts with tests, ADR-0007 rewrite, CLAUDE.md role tables rewrite, workflows README and wave-review/sdd-task defaults; tier slices, context diet, small-diff fast path); #69 named OpenAPI components (durable fix for the oasdiff one-of false positive); #85 items; #84 Track B P1 plan fixes; add #92, #94 to the setup-script FOLLOW_UPS
+- Blocked by: none (decisions #61 and #81 made)
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: open decisions #61 (chosen: option 1, own PR before the P0 freeze) and #81 (ADR-0008 proposed in the W5 PR; W6 Task 26 restructures ci.yml per it); Track B P1 plan defects from the phase critic filed as follow-ups
+- Notes: open sensitive PRs as draft, ready only after the review artifact and green CI; one `Closes #n` per issue; M0 release notes must list #93 as api-breaking (tightening only); docs plan in #94 (ordinary tier, can start any time)
 
 ### Track B
 
