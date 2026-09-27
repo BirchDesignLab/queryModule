@@ -48,7 +48,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track A
 
 - Issue: W5 done on the branch: Tasks 23 to 25 (#24 to #26), W5A (#79, #71), W5B (#80); phase Opus critic run; ADR-0008 (proposed, #81)
-- Branch / PR: feat/p0-wave-5 / W5 PR (gate-tier wave-review next)
+- Branch / PR: feat/p0-wave-5 / #83 (gate-tier wave-review running)
 - Last green: pnpm verify at 371fc2d (573 tests, config:validate 4 ok, generated files match); audit --prod clean
 - Next step: wave-review (gate tier) for docs/reviews/pr-<n>.md; after merge run gh-setup-project.mjs --apply at once (Level field, renames, milestone parents, date backfill), record the five milestone-parent numbers in the next PR; then #61 as its own critical-tier PR; then W6
 - Blocked by: decision #61 (bound message and label keys) before the P0 freeze

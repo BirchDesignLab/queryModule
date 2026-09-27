@@ -45,7 +45,7 @@ Developer direction 09-26-26 (ADR-0006): tasks land one PR per wave, on a branch
 | W2 | 7 to 11, plus the W2F pre-freeze pass | none | #33 (merged 09-26-26) |
 | W3 | 12 to 16 | none | #35 (merged 09-26-26) |
 | W4 | 17 to 22 | 17 to 22 | #38 (merged 09-26-26) |
-| W5 | 23 to 25, W5A (#79, #71), W5B (#80), then the phase Opus critic | gate tier (ADR-0007): all five | (opening) |
+| W5 | 23 to 25, W5A (#79, #71), W5B (#80), then the phase Opus critic | gate tier (ADR-0007): all five | #83 |
 | W6 | 26 to 28 | 26, 28 | |
 
 ## File Structure
