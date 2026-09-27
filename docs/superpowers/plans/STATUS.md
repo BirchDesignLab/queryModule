@@ -55,7 +55,7 @@ W6 in progress on `feat/p0-wave-6` (one PR, critical tier). Resumable: check the
 - [x] 4 #92 board data to `docs/board/board-data.json`; #85 dashboard spans, milestone parents; FOLLOW_UPS #92, #94 (sdd-task, gate)
 - [x] 5 ADR-0008 ci.yml restructure (sdd-task, gate)
 - [x] 6 Task 26 mobile placeholder, CI steps 8 and 9 (#27) (inline after item 5; licence exceptions for Expo tree)
-- [ ] 7 Task 27 `@libsql/client` Node 24 check (#28) (inline)
+- [x] 7 Task 27 `@libsql/client` Node 24 check (#28) (inline)
 - [ ] 8 Task 28 `gh-setup-repo.sh` (#29) (inline; developer confirms live apply)
 - [ ] 9 #69 OpenAPI input bodies, Condition registry id (inline)
 - [ ] 10 #85 IO-globals member access, web config typecheck, TokenStore critical tier (inline)
