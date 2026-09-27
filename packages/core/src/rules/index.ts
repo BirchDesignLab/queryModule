@@ -18,6 +18,7 @@ export { isCalendarDate, parseDate, resolveYear } from "./dates.js";
 export type { UserValueResult } from "./effective-values.js";
 export { computeEffectiveValues, computeUserValues, optionsFor } from "./effective-values.js";
 export { evaluateForm } from "./evaluate-form.js";
+export { conditionFields, validateRuleGraph } from "./rule-graph.js";
 export type {
   CanonicalValue,
   EvaluateOptions,
