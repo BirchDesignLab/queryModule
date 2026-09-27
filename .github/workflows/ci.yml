@@ -82,6 +82,8 @@ jobs:
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
+      - name: audit_event migrations are additive-only
+        run: node scripts/ci/check-audit-migrations.ts packages/api/drizzle
 
       # Step 3: config:validate
       - name: Config validate
