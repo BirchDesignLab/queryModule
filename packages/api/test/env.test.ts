@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readDeployEnv } from "../src/env";
 
@@ -11,9 +12,10 @@ describe("readDeployEnv", () => {
       nodeEnv: "production",
       port: 3000,
       dataDir: "/data",
-      dbFile: "/data/querymodule.db",
+      // node:path join, as env.ts builds them, so the expectation holds on Windows too
+      dbFile: join("/data", "querymodule.db"),
       secretsDir: "/run/secrets",
-      siteConfigFile: "/app/config/sites/default.json",
+      siteConfigFile: join("/app/config", "sites/default.json"),
       identityModes: ["standalone"],
       allowMockSources: false,
       minClientVersion: null,

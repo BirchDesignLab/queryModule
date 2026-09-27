@@ -367,16 +367,19 @@ importers:
         version: 19.3.0
       msw:
         specifier: ^2.15.0
-        version: 2.15.0(@types/node@26.6.3)(typescript@7.0.2)
+        version: 2.15.0(@types/node@26.6.3)(typescript@6.0.3)
       openapi-typescript:
         specifier: ^7.13.0
-        version: 7.13.0(typescript@7.0.2)
+        version: 7.13.0(typescript@6.0.3)
       react:
         specifier: ^19.3.0
         version: 19.3.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
   packages/config:
     devDependencies:
@@ -3881,6 +3884,11 @@ packages:
     resolution: {integrity: sha512-NoSdpq/WEiAg5sjmBkmV/hfxv6HJH4NqPNrqjtSO5CwRmpsDfaf4begxW34KdJykH/l1yHtwBWQkCRdoXO8mPA==}
     engines: {node: '>=20'}
 
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
@@ -7104,7 +7112,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  msw@2.15.0(@types/node@26.6.3)(typescript@7.0.2):
+  msw@2.15.0(@types/node@26.6.3)(typescript@6.0.3):
     dependencies:
       '@inquirer/confirm': 6.3.2(@types/node@26.6.3)
       '@mswjs/interceptors': 0.41.9
@@ -7125,7 +7133,7 @@ snapshots:
       until-async: 3.0.2
       yargs: 17.7.3
     optionalDependencies:
-      typescript: 7.0.2
+      typescript: 6.0.3
     transitivePeerDependencies:
       - '@types/node'
 
@@ -7191,14 +7199,14 @@ snapshots:
 
   openapi-typescript-helpers@0.1.0: {}
 
-  openapi-typescript@7.13.0(typescript@7.0.2):
+  openapi-typescript@7.13.0(typescript@6.0.3):
     dependencies:
       '@redocly/openapi-core': 1.34.20(supports-color@10.2.2)
       ansi-colors: 4.1.3
       change-case: 5.4.4
       parse-json: 8.3.0
       supports-color: 10.2.2
-      typescript: 7.0.2
+      typescript: 6.0.3
       yargs-parser: 21.1.1
 
   ora@3.4.0:
@@ -7664,6 +7672,8 @@ snapshots:
   type-fest@5.10.0:
     dependencies:
       tagged-tag: 1.0.0
+
+  typescript@6.0.3: {}
 
   typescript@7.0.2:
     optionalDependencies:

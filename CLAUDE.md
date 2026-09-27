@@ -33,17 +33,18 @@ effort means more thinking and more tool calls per task.
 
 **Fable is never a subagent model.** It costs more than twice Opus.
 
-**Sensitive code in this repo** (the roles below name it). No code exists yet;
-update the paths here as each area lands, and treat the area as sensitive from
-its first commit:
+**Sensitive code in this repo** (the roles below name it). Update the paths
+here as each area lands, and treat the area as sensitive from its first commit:
 
 - Credential handling: entry, storage, change and rotation of state-system
   credentials; delegated credentials (training officer acting for a trainee);
   anything that touches encryption at rest or in transit (SEC-001 to SEC-003,
-  SEC-011).
+  SEC-006, SEC-011). Includes the Docker secret loader, the key canaries and
+  the encrypted database connection.
 - Audit logging: the query audit record (user, timestamp, query type, sources,
   ack and response times), audit of response deletion and of delegated-credential
   use. Audit rows are never deleted or rewritten (SEC-010 to SEC-013).
+  Includes the audit and identity seams and the fail-closed startup sequence.
 - Query dispatch: the request pipeline to external sources, source adapters
   (mock now, real later), per-source timeouts and nested queries, the
   acknowledgment and correlation ID (FR-040 to FR-044, FR-064, FR-065).
@@ -54,23 +55,42 @@ its first commit:
 - Delete-from-view: soft delete only; the row stays in the database and the
   deletion is audited (FR-062, FR-063, SEC-013).
 - The verify gate (lint, typecheck, tests) and the merge-to-`main` path.
+- Auth and sessions: Better Auth, session limits, the auth rate limiter,
+  `requireSession`, the WebSocket upgrade checks, demo-user seeding and the ops
+  scripts (SEC-005). Gate tier, not critical (developer decision 09-27-26).
+- Log redaction: the structured logger that keeps secrets, key material,
+  passwords, tokens and query values out of every log line (spec 5.9). Gate
+  tier (developer decision 09-27-26).
 
 Paths landed so far, by review tier (ADR-0007; kept in step with
 `.github/sensitive-paths`, which also lists the globs reserved for areas that
 have no code yet):
 
-- Critical (Opus 5.5 `high` artifact, #92): audit logging
-  `packages/core/src/contracts/audit.ts`, `primitives.ts`, `identity.ts`; query
+- Critical (Opus 5.5 `high` artifact, #92): credential handling
+  `packages/api/src/secrets.ts`, `packages/api/src/keys/**`,
+  `packages/api/src/db/**` (encryption at rest); audit logging
+  `packages/api/src/audit/**`, `packages/api/src/seams.ts`,
+  `packages/api/src/startup.ts`, `packages/api/drizzle/**` (migrations),
+  `packages/core/src/contracts/audit.ts`, `audit-auth.ts`, `primitives.ts`,
+  `identity.ts`; query
   dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
   `packages/core/contracts/ws-events.schema.json`; the
   sensitive-review gate itself `.github/sensitive-paths`,
   `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`;
   reserved: the audit-migration guard `scripts/ci/check-audit-migrations.ts`;
-  reserved: TokenStore implementations `**/*token-store*` (SEC-006, #85).
+  reserved: TokenStore implementations `**/*token-store*` and the case- and
+  separator-insensitive `**/*[Tt][Oo][Kk][Ee][Nn]*[Ss][Tt][Oo][Rr][Ee]*`, file
+  and directory forms (SEC-006, #85, #96); reserved: credentials, dispatch,
+  adapters, planner, delegation, terminal parser, write-back and results
+  directories named in `.github/sensitive-paths`.
 - Gate (Opus 5.5 `medium` artifact, #92): the verify gate and merge path
   `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
   `.gitignore`, `**/vitest.config.ts`, `package.json`, `pnpm-workspace.yaml`,
-  `tsconfig.base.json`, `**/tsconfig.json`.
+  `tsconfig.base.json`, `**/tsconfig.json`; log redaction
+  `packages/api/src/log/**`; auth and sessions `packages/api/src/auth/**`,
+  `packages/api/src/http/session.ts`, `packages/api/src/ws/**`,
+  `packages/api/src/seed/**`, `packages/api/src/ops/**`,
+  `packages/api/src/deps.ts`.
 - Deps (automated checks only, no artifact): `pnpm-lock.yaml`, and a
   version-only change of an existing package (`package.json`) or action (the
   ref of an existing workflow `uses:` line). `.github/dependabot.yml` is gate.
