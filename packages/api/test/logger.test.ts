@@ -37,4 +37,29 @@ describe("SEC-006 logger redaction", () => {
     log.error("fail", { err: new TypeError("bad") });
     expect(JSON.parse(lines[0] ?? "").err).toEqual({ name: "TypeError", message: "bad" });
   });
+  it("serialises a Date field as an ISO string instead of dropping it", () => {
+    const { lines, log } = capture();
+    const when = new Date("2026-01-02T03:04:05.000Z");
+    log.info("tick", { when });
+    expect(JSON.parse(lines[0] ?? "").when).toBe(when.toISOString());
+  });
+  it("redacts a Map field's redacted keys instead of dropping it", () => {
+    const { lines, log } = capture();
+    log.warn("x", {
+      m: new Map<string, unknown>([
+        ["password", "pw-2"],
+        ["ok", 1],
+      ]),
+    });
+    const o = JSON.parse(lines[0] ?? "");
+    expect(o.m).toEqual({ password: "[redacted]", ok: 1 });
+    expect(lines[0]).not.toContain("pw-2");
+  });
+  it("redacts objects inside a Set field instead of dropping it", () => {
+    const { lines, log } = capture();
+    log.warn("x", { s: new Set([{ secret: "sec-1" }, { ok: 2 }]) });
+    const o = JSON.parse(lines[0] ?? "");
+    expect(o.s).toEqual([{ secret: "[redacted]" }, { ok: 2 }]);
+    expect(lines[0]).not.toContain("sec-1");
+  });
 });

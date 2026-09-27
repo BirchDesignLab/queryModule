@@ -27,8 +27,11 @@ export function redact(
 ): unknown {
   if (value instanceof Error) return { name: value.name, message: value.message };
   if (value === null || typeof value !== "object") return value;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
   if (seen.has(value)) return "[circular]";
   seen.add(value);
+  if (value instanceof Map) return redact(Object.fromEntries(value), keys, seen);
+  if (value instanceof Set) return redact(Array.from(value), keys, seen);
   if (Array.isArray(value)) return value.map((v) => redact(v, keys, seen));
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value))
