@@ -76,7 +76,7 @@ The issue content the setup script writes to GitHub (`PHASES`, `CONTRACTS_M0P0`,
 
 `node scripts/ops/gh-setup-project.mjs --dashboard` reads GitHub live (no writes at all, GitHub or otherwise gated behind `--apply`) and regenerates `docs/assets/progress-light.svg`, `docs/assets/progress-dark.svg` and the README `<picture>` block between the `progress:start`/`progress:end` markers. The controller runs it after a wave merges; the two SVGs in the repo right now are rendered from a fixture model (`scripts/mock-data/render-fixture-dashboard.mjs`) so the README image resolves before the first live regen.
 
-For a wave whose `pr` is recorded and whose PR has merged, the wave timeline uses that PR's own span (start: the first commit's author date; finish: `merged_at`) instead of the Start/Finish roll-up, which would otherwise show every P0 wave on the same day (issue #85). `scripts/ops/board-model.mjs`'s `waveSpan` makes the choice; the two live reads it needs (`repos/{repo}/pulls/{n}` and its `commits`) happen only under `--dashboard`, never during a plain dry run or `--apply` alone.
+For a wave whose `pr` is recorded and whose PR has merged, the wave timeline uses that PR's own span (start: the first commit's author date; finish: `merged_at`) instead of the Start/Finish roll-up, which would otherwise show every P0 wave on the same day (issue #85). `scripts/ops/board-model.mjs`'s `waveSpan` makes the choice; the two live reads it needs (`repos/{repo}/pulls/{n}` and its `commits`) happen only under `--dashboard`, never during a plain dry run or `--apply` alone. `--apply` alone re-renders the SVGs and README block with roll-up wave dates; run `--dashboard` after any `--apply` and commit that output, not the `--apply` render.
 
 ## Manual steps
 
