@@ -32,7 +32,54 @@ describe("core purity: IO globals through a global object (#85)", () => {
       expect(findGlobalMemberAccess(src, names), src).toEqual([]);
   });
 
+  it("ignores destructuring of non-denied names only", () => {
+    expect(findGlobalMemberAccess("const { Math } = globalThis;", names)).toEqual([]);
+  });
+
   it("packages/core/src (tests excluded) has no such access", () => {
     expect(scanCore(root, names)).toEqual([]);
+  });
+
+  // Developer ruling 09-27-26 (#96 G-M5): destructuring, chained globals, one-level aliases.
+  it("flags destructuring from a global object", () => {
+    for (const src of [
+      "const { fetch } = globalThis;",
+      "let { localStorage: f } = window;",
+      "var { a, fetch } = self;",
+      "const {\n  fetch,\n  navigator\n} = global;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  it("flags chained global objects", () => {
+    for (const src of [
+      "globalThis.window.fetch(url)",
+      "globalThis.self.localStorage",
+      "window.globalThis.fetch",
+      'globalThis["window"].fetch',
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  it("flags one-level aliases of a global object", () => {
+    for (const src of [
+      "const g = globalThis;\ng.fetch(url);",
+      "const w = window;\nw?.localStorage;",
+      'const g = globalThis;\ng["fetch"]();',
+      "const g = globalThis;\nconst { fetch } = g;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  it("does not track deeper aliases (documented out of scope)", () => {
+    for (const src of [
+      // alias of an alias
+      "const g = globalThis;\nconst g2 = g;\ng2.fetch(url);",
+      // alias passed through a function
+      "const g = globalThis;\nfunction use(x) { x.fetch(url); }\nuse(g);",
+      // reassignment
+      "let g = 1;\ng = globalThis;\ng.fetch(url);",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).toEqual([]);
   });
 });

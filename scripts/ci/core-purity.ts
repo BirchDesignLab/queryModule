@@ -25,15 +25,55 @@ export function deniedGlobals(biomeJson: string): string[] {
   return [...found].sort();
 }
 
-/** Every `<global object>.<denied name>` (or `?.`, or `["name"]`) in one source text. */
-export function findGlobalMemberAccess(source: string, names: readonly string[]): string[] {
+/**
+ * One-level alias tracking only (developer ruling 09-27-26, #96 G-M5): a
+ * `const`/`let`/`var` whose initializer is exactly a global-object name, or a
+ * chain of global-object names (`const g = globalThis;`, `const w =
+ * globalThis.window;`). Deeper alias tracking is out of scope: an alias of an
+ * alias, an alias passed through a function, reassignment, `Reflect.get`,
+ * computed non-literal keys and `eval`/`Function` are not followed.
+ */
+function findGlobalAliases(source: string): string[] {
   const objects = GLOBAL_OBJECTS.join("|");
+  const chain = String.raw`(?:${objects})(?:\s*(?:\?\.|\.)\s*(?:${objects})|\s*\[\s*["'\x60](?:${objects})["'\x60]\s*\])*`;
+  const re = new RegExp(
+    String.raw`\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:${chain})\s*(?:[;,\n]|$)`,
+    "g",
+  );
+  const aliases = new Set<string>();
+  for (const m of source.matchAll(re)) aliases.add(m[1]);
+  return [...aliases];
+}
+
+/**
+ * Every `<global object or one-level alias>.<denied name>` (dot, optional
+ * chain or string index, through any chain of global-object names), and
+ * every destructuring of a denied name from a global object or alias.
+ */
+export function findGlobalMemberAccess(source: string, names: readonly string[]): string[] {
+  const aliases = findGlobalAliases(source);
+  const objects = [...GLOBAL_OBJECTS, ...aliases].join("|");
   const members = names.join("|");
-  const obj = String.raw`(?<![\w$.])(?:${objects})\s*`;
+  const link = String.raw`(?:${objects})\s*(?:(?:\?\.|\.)\s*(?:${objects})\s*|\[\s*["'\x60](?:${objects})["'\x60]\s*\]\s*)*`;
+  const obj = String.raw`(?<![\w$.])${link}`;
   const dot = String.raw`(?:\?\.|\.)\s*(?:${members})(?![\w$])`;
   const index = String.raw`(?:\?\.)?\[\s*["'\x60](?:${members})["'\x60]\s*\]`;
-  const re = new RegExp(`${obj}(?:${dot}|${index})`, "g");
-  return [...source.matchAll(re)].map((m) => m[0]);
+  const access = new RegExp(`${obj}(?:${dot}|${index})`, "g");
+  const out = [...source.matchAll(access)].map((m) => m[0]);
+
+  // Destructuring from a global object or a one-level alias: `const { N } = globalThis`,
+  // `let { N: f } = window`, `var { a, N } = g` (whitespace/newlines inside braces allowed).
+  const destructure = new RegExp(
+    String.raw`\b(?:const|let|var)\s*\{\s*([\s\S]*?)\s*\}\s*=\s*(?<![\w$.])(?:${objects})(?![\w$])`,
+    "g",
+  );
+  const memberRe = new RegExp(`^(?:${members})$`);
+  for (const m of source.matchAll(destructure)) {
+    const bindings = m[1].split(",").map((b) => b.trim().split(":")[0].trim());
+    if (bindings.some((b) => memberRe.test(b))) out.push(m[0]);
+  }
+
+  return out;
 }
 
 /** Violations in packages/core/src, test files excluded, as "path: match". */
