@@ -21,6 +21,9 @@ function app() {
   a.post("/api/v1/y", (c) => c.json({ ok: true }));
   a.post("/api/v1/auth/sign-in/email", (c) => c.json({ ok: true }));
   a.post("/api/v1/auth/embedded", (c) => c.json({ ok: true }));
+  a.post("/api/v1/auth/embedded/", (c) => c.json({ ok: true }));
+  a.post("/api/v1/auth/embedded/sub", (c) => c.json({ ok: true }));
+  a.post("/api/v1/auth/EMBEDDED", (c) => c.json({ ok: true }));
   return a;
 }
 
@@ -51,6 +54,33 @@ describe("SEC-006 SEC-007 baseline", () => {
       200,
     );
     expect((await app().request("/api/v1/auth/embedded", { method: "POST" })).status).toBe(403);
+  });
+  it("/auth/embedded stays guarded with a trailing slash, a sub-path or other case", async () => {
+    for (const p of [
+      "/api/v1/auth/embedded/",
+      "/api/v1/auth/embedded/sub",
+      "/api/v1/auth/EMBEDDED",
+    ]) {
+      expect((await app().request(p, { method: "POST" })).status, p).toBe(403);
+    }
+  });
+  it("sets security headers and no-store on 403 and 413 error responses too", async () => {
+    const forbidden = await app().request("/api/v1/y", { method: "POST" });
+    const tooLarge = await app().request("/api/v1/y", {
+      method: "POST",
+      headers: { "x-requested-with": "querymodule", "content-type": "application/json" },
+      body: JSON.stringify({ a: "x".repeat(33 * 1024) }),
+    });
+    for (const r of [forbidden, tooLarge]) {
+      expect(r.headers.get("x-content-type-options"), String(r.status)).toBe("nosniff");
+      expect(r.headers.get("referrer-policy"), String(r.status)).toBe("no-referrer");
+      expect(r.headers.get("strict-transport-security"), String(r.status)).toBe("max-age=31536000");
+      expect(r.headers.get("permissions-policy"), String(r.status)).toBe(
+        "camera=(), microphone=(), geolocation=()",
+      );
+      expect(r.headers.get("cache-control"), String(r.status)).toBe("no-store");
+    }
+    expect([forbidden.status, tooLarge.status]).toEqual([403, 413]);
   });
   it("413 payloadTooLarge over 32 KB", async () => {
     const r = await app().request("/api/v1/y", {
