@@ -66,6 +66,8 @@ package.json
 pnpm-workspace.yaml
 tsconfig.base.json
 **/tsconfig.json
+# Log redaction, spec 5.9 (developer decision 09-27-26: gate)
+packages/api/src/log/**
 # Auth and sessions (developer decision 09-27-26: gate, not critical)
 packages/api/src/auth/**
 packages/api/src/http/session.ts

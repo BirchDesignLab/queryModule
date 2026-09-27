@@ -110,8 +110,10 @@ describe("sensitive-review (spec 9.1)", () => {
       "packages/api/src/deps.ts",
     ])
       expect(c(f), f).toBe("gate");
-    for (const f of ["packages/api/src/env.ts", "packages/api/src/log/logger.ts"])
-      expect(c(f), f).toBeNull();
+    for (const f of ["packages/api/src/env.ts"]) expect(c(f), f).toBeNull();
+    // Developer decision 09-27-26: the redacting logger (spec 5.9) is the gate-tier
+    // control that keeps secrets and query values out of logs.
+    for (const f of ["packages/api/src/log/logger.ts"]) expect(c(f), f).toBe("gate");
   });
 
   it("parses an optional mode field (#92 fast path)", () => {
