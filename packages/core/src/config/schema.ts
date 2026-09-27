@@ -230,6 +230,9 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
 const S = makeSiteConfigSchemas("strict");
 
 export const SiteConfigSchema = S.SiteConfig;
+// #141: strict entity schemas whose .parse fills the spec 4.1 defaults (Track B rules engine).
+export const QueryTypeSchema = S.QueryType;
+export const PicklistSchema = S.Picklist;
 export type SiteConfig = z.infer<typeof S.SiteConfig>;
 export type SiteConfigInput = z.input<typeof S.SiteConfig>;
 export type QueryType = z.infer<typeof S.QueryType>;

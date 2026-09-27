@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SiteConfigSchema } from "./schema";
+import { PicklistSchema, QueryTypeSchema, SiteConfigSchema } from "./schema";
+import { DEFAULT_INPUT_FORMATS } from "./schema-fields";
 import { minimalSiteConfigInput } from "./test-fixtures";
 
 describe("BR-001 SiteConfig v1 (spec 4.1)", () => {
@@ -338,5 +339,52 @@ describe("BR-001 SiteConfig v1 (spec 4.1)", () => {
       a.delegation.purposes[0].delegatorRoles.push("admin" as never);
       expect(b.delegation.purposes[0].delegatorRoles).toEqual(["trainingOfficer"]);
     });
+  });
+});
+
+describe("#141 QueryTypeSchema and PicklistSchema fill the spec 4.1 defaults", () => {
+  it("QueryTypeSchema.parse fills query type, field and source defaults", () => {
+    const qt = QueryTypeSchema.parse({
+      code: "VEH",
+      labelKey: "queryType.VEH",
+      sections: [{ key: "base", labelKey: "section.base" }],
+      fields: [{ key: "plate", labelKey: "field.plate", dataType: "string" }],
+      sources: [{ sourceId: "src1", selectedByDefault: true }],
+    });
+    expect(qt.allowPlateOnly).toBe(false);
+    expect(qt.rules).toEqual([]);
+    expect(qt.sources[0]?.plateOnly).toBe(false);
+    expect(qt.fields[0]).toMatchObject({
+      visible: true,
+      required: false,
+      section: "base",
+      maxLength: 64,
+      charset: "printableAscii",
+      transform: "none",
+      numberKind: "integer",
+      century: "2000",
+      inputFormats: [...DEFAULT_INPUT_FORMATS],
+      outputFormat: "MMDDYYYY",
+    });
+  });
+
+  it("QueryTypeSchema is the strict server schema", () => {
+    const raw = {
+      code: "VEH",
+      labelKey: "queryType.VEH",
+      sections: [{ key: "base", labelKey: "section.base" }],
+      fields: [{ key: "plate", labelKey: "field.plate", dataType: "string" }],
+      sources: [{ sourceId: "src1", selectedByDefault: true }],
+      colour: "red",
+    };
+    expect(QueryTypeSchema.safeParse(raw).success).toBe(false);
+  });
+
+  it("PicklistSchema.parse fills enabled on each value", () => {
+    const p = PicklistSchema.parse({
+      id: "state",
+      values: [{ code: "TX", labelKey: "picklist.state.TX" }],
+    });
+    expect(p.values[0]?.enabled).toBe(true);
   });
 });
