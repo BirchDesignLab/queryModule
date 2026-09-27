@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { createQueryClient } from "./query-client.js";
+import { describe, expect, it, vi } from "vitest";
+import { createResetController } from "../session/reset.js";
+import { createQueryClient, registerQueryCacheReset } from "./query-client.js";
 
 describe("SEC-006 query cache is memory only and clearable (spec 6.7)", () => {
   it("clear drops cached data", () => {
@@ -13,5 +14,15 @@ describe("SEC-006 query cache is memory only and clearable (spec 6.7)", () => {
       retry: 1,
       refetchOnWindowFocus: false,
     });
+  });
+  it("registerQueryCacheReset cancels queries and clears the cache on reset (SEC-006, spec 6.7)", async () => {
+    const client = createQueryClient();
+    const cancelSpy = vi.spyOn(client, "cancelQueries");
+    client.setQueryData(["probe"], 1);
+    const reset = createResetController();
+    registerQueryCacheReset(reset, client);
+    reset.resetAll();
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(["probe"])).toBeUndefined();
   });
 });

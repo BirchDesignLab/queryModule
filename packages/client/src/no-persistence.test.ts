@@ -6,19 +6,24 @@ const FORBIDDEN = [
   /\blocalStorage\b/,
   /\bsessionStorage\b/,
   /\bindexedDB\b/,
-  /persistQueryClient/,
+  /persistQueryClient/i,
+  /persist-?client/i,
+  /PersistQueryClient/i,
+  /createQueryPersister/i,
   /StoragePersister/,
   /AsyncStorage/,
   /zustand\/middleware/,
   /\bdocument\./,
   /\bwindow\./,
   /from "react-native"/,
+  /\bcaches\./,
+  /serviceWorker/i,
 ];
 
 describe("SEC-006 no persistent query data and no DOM in packages/client (spec 3, 6.7)", () => {
   it("no source file uses browser storage, persisters, the DOM or React Native", () => {
     const files = readdirSync(SRC, { recursive: true, encoding: "utf8" }).filter(
-      (f) => f.endsWith(".ts") && !f.endsWith(".test.ts"),
+      (f) => (f.endsWith(".ts") || f.endsWith(".tsx")) && !/\.test\.tsx?$/.test(f),
     );
     const offenders = files.flatMap((file) => {
       const text = readFileSync(new URL(file.replaceAll("\\", "/"), SRC), "utf8");

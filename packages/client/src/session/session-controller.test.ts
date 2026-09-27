@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AuthApi, SessionUser } from "../auth/auth-api.js";
 import { createAuthStore } from "../auth/auth-store.js";
+import { createQueryClient, registerQueryCacheReset } from "../query/query-client.js";
 import { createResetController } from "./reset.js";
 import { createSessionController } from "./session-controller.js";
 
@@ -69,6 +70,56 @@ describe("SEC-006 client state resets on logout, 401 and user change (spec 6.7)"
     await t.session.bootstrap();
     expect(t.spy).toHaveBeenCalledTimes(1);
     expect(t.authStore.getState().user).toEqual(B);
+  });
+  it("a throwing reset still leaves the auth state updated (fail-safe, spec 6.7)", async () => {
+    const t = setup();
+    t.reset.register(() => {
+      throw new Error("boom");
+    });
+    await t.session.signIn("a@querymodule.test", "x");
+    await expect(t.session.signOut()).rejects.toThrow(AggregateError);
+    expect(t.authStore.getState()).toMatchObject({ status: "signedOut", user: null });
+  });
+  it("drops a stale bootstrap result that resolves after a newer sign-in (spec 6.7)", async () => {
+    let resolveDeferred!: (user: SessionUser | null) => void;
+    const deferred = new Promise<SessionUser | null>((resolve) => {
+      resolveDeferred = resolve;
+    });
+    const t = setup({
+      getSession: () => deferred,
+      signInEmail: async () => ({ ok: true, user: B }),
+    });
+    const bootstrapPromise = t.session.bootstrap();
+    await t.session.signIn("b@querymodule.test", "x");
+    resolveDeferred(A);
+    await bootstrapPromise;
+    expect(t.authStore.getState()).toMatchObject({ status: "signedIn", user: B });
+    expect(t.spy).not.toHaveBeenCalled();
+  });
+  it("the registered query cache is cancelled and cleared on sign-out, a 401 and a user change (SEC-006, spec 6.7)", async () => {
+    const t = setup();
+    const client = createQueryClient();
+    const cancelSpy = vi.spyOn(client, "cancelQueries");
+    registerQueryCacheReset(t.reset, client);
+
+    await t.session.signIn("a@querymodule.test", "x");
+    client.setQueryData(["probe"], 1);
+    await t.session.signOut();
+    expect(cancelSpy).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(["probe"])).toBeUndefined();
+
+    await t.session.signIn("a@querymodule.test", "x");
+    client.setQueryData(["probe"], 1);
+    t.session.handleUnauthenticated();
+    expect(cancelSpy).toHaveBeenCalledTimes(2);
+    expect(client.getQueryData(["probe"])).toBeUndefined();
+
+    const t2 = setup({ getSession: async () => B });
+    registerQueryCacheReset(t2.reset, client);
+    await t2.session.signIn("a@querymodule.test", "x");
+    client.setQueryData(["probe"], 1);
+    await t2.session.bootstrap();
+    expect(client.getQueryData(["probe"])).toBeUndefined();
   });
   it("unregistered reset functions are not called", () => {
     const reset = createResetController();

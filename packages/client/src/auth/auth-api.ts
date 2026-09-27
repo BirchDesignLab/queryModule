@@ -87,6 +87,7 @@ export function createAuthApi(options: AuthApiOptions): AuthApi {
         const response = await send("/get-session", { method: "GET" });
         return response.ok ? parseSessionUser(await response.json()) : null;
       } catch {
+        // A network failure looks like "no session"; the controller treats both as signed out.
         return null;
       }
     },

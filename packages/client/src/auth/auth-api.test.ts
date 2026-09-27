@@ -76,6 +76,10 @@ describe("BR-002 standalone login through Better Auth (spec 5.6)", () => {
     server.use(http.post(`${BASE}/api/v1/auth/sign-out`, () => HttpResponse.error()));
     await expect(api.signOut()).resolves.toBeUndefined();
   });
+  it("getSession never throws on a network failure", async () => {
+    server.use(http.get(`${BASE}/api/v1/auth/get-session`, () => HttpResponse.error()));
+    await expect(api.getSession()).resolves.toBeNull();
+  });
   it("parseSessionUser rejects malformed bodies", () => {
     expect(parseSessionUser({ user: { id: 1, email: "x" } })).toBeNull();
     expect(parseSessionUser({ user: { id: "u", email: "x@querymodule.test" } })).toEqual({

@@ -21,22 +21,38 @@ export function createSessionController({
   authStore,
   reset,
 }: SessionControllerDeps): SessionController {
+  // Bumped at the start of every bootstrap/signIn/signOut/handleUnauthenticated so a stale
+  // in-flight response (e.g. a slow getSession from a prior identity) is dropped, not adopted
+  // over a newer state (spec 6.7).
+  let epoch = 0;
   const adopt = (user: SessionUser | null): void => {
-    const previous = authStore.getState().user;
-    if (previous !== null && (user === null || user.id !== previous.id)) reset.resetAll();
-    if (user === null) authStore.getState().setSignedOut();
-    else authStore.getState().setSignedIn(user);
+    let resetError: unknown;
+    try {
+      const previous = authStore.getState().user;
+      if (previous !== null && (user === null || user.id !== previous.id)) reset.resetAll();
+    } catch (error) {
+      resetError = error;
+    } finally {
+      if (user === null) authStore.getState().setSignedOut();
+      else authStore.getState().setSignedIn(user);
+    }
+    if (resetError !== undefined) throw resetError;
   };
   return {
     async bootstrap() {
-      adopt(await authApi.getSession());
+      const startEpoch = ++epoch;
+      const user = await authApi.getSession();
+      if (epoch !== startEpoch) return;
+      adopt(user);
     },
     async signIn(email, password) {
+      const startEpoch = ++epoch;
       const result = await authApi.signInEmail(email, password);
-      if (result.ok) adopt(result.user);
+      if (result.ok && epoch === startEpoch) adopt(result.user);
       return result;
     },
     async signOut() {
+      ++epoch;
       try {
         await authApi.signOut();
       } finally {
@@ -44,6 +60,7 @@ export function createSessionController({
       }
     },
     handleUnauthenticated() {
+      ++epoch;
       if (authStore.getState().status === "signedIn") adopt(null);
     },
   };

@@ -14,7 +14,15 @@ export function createResetController(): ResetController {
       };
     },
     resetAll() {
-      for (const reset of [...resets]) reset();
+      const errors: unknown[] = [];
+      for (const reset of [...resets]) {
+        try {
+          reset();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length > 0) throw new AggregateError(errors, "One or more resets failed");
     },
   };
 }
