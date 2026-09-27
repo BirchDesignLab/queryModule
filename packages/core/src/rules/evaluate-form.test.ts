@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  makeConfig,
   NOW,
   propertyConfig,
   ruleTestConfig,
@@ -8,6 +9,86 @@ import {
 import { evaluateForm } from "./evaluate-form.js";
 
 const opts = { now: NOW };
+
+// B1/B2 carry-forward (Task 6 ruling spec:CV1): parent set only by setDefault.
+function setDefaultParentConfig() {
+  return makeConfig({
+    defaults: {},
+    picklists: [
+      {
+        id: "kindType",
+        values: [
+          { code: "FIREARM", labelKey: "kindType.firearm" },
+          { code: "ELECTRONICS", labelKey: "kindType.electronics" },
+        ],
+      },
+      {
+        id: "kindSub",
+        values: [
+          { code: "HANDGUN", labelKey: "kindSub.handgun", parent: "FIREARM" },
+          { code: "LAPTOP", labelKey: "kindSub.laptop", parent: "ELECTRONICS" },
+        ],
+      },
+    ],
+    queryTypes: [
+      {
+        code: "SDP",
+        labelKey: "queryType.sdp",
+        sections: [{ key: "base", labelKey: "section.base" }],
+        fields: [
+          { key: "hint", labelKey: "field.hint", dataType: "string", transform: "upper" },
+          {
+            key: "kindType",
+            labelKey: "field.kindType",
+            dataType: "picklist",
+            picklist: "kindType",
+          },
+          {
+            key: "kindSub",
+            labelKey: "field.kindSub",
+            dataType: "picklist",
+            picklist: "kindSub",
+            picklistFilter: { byField: "kindType" },
+          },
+        ],
+        rules: [
+          {
+            field: "kindType",
+            when: { field: "hint", op: "eq", value: "F" },
+            effect: "setDefault",
+            value: "FIREARM",
+          },
+        ],
+        sources: [{ sourceId: "sdp", selectedByDefault: true }],
+      },
+    ],
+  });
+}
+
+describe("FR-031 child picklist when the parent is set only by setDefault (spec 4.1, 4.3)", () => {
+  it("options follow the parent's effective value after setDefault", () => {
+    const state = evaluateForm(setDefaultParentConfig(), "SDP", { hint: "f" }, opts);
+    expect(state.values.kindType).toBe("FIREARM");
+    const sub = state.fields.find((f) => f.key === "kindSub");
+    expect(sub?.options?.map((o) => o.code)).toEqual(["HANDGUN"]);
+  });
+  it("step 2 is one pass: a typed child checks against the parent's canonical value, so it fails notInPicklist", () => {
+    // Spec 4.3 step 2 canonicalises against the parent's canonical value and runs once; it is not
+    // re-run after step 3. Controller ruling 09-27-26: keep one pass (spec binding); the gap is
+    // raised as a spec question in the B2 PR.
+    const state = evaluateForm(
+      setDefaultParentConfig(),
+      "SDP",
+      { hint: "f", kindSub: "handgun" },
+      opts,
+    );
+    expect(state.errors).toContainEqual({
+      key: "validation.notInPicklist",
+      params: { field: "kindSub" },
+    });
+    expect(state.values.kindSub).toBeUndefined();
+  });
+});
 
 describe("evaluateForm assembly (spec 4.3 steps 1, 7, 8)", () => {
   it("unknown query type is an error, never a throw", () => {
