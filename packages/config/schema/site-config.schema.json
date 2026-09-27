@@ -591,13 +591,15 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "pattern": "^(?:MM|DD|YYYY|YY|[^A-Za-z0-9])+$"
+                    "maxLength": 32,
+                    "pattern": "^(?:MM|DD|YYYY|YY(?!YY)|[^A-Za-z0-9])+$"
                   }
                 },
                 "outputFormat": {
                   "default": "MMDDYYYY",
                   "type": "string",
-                  "pattern": "^(?:MM|DD|YYYY|YY|[^A-Za-z0-9])+$"
+                  "maxLength": 32,
+                  "pattern": "^(?:MM|DD|YYYY|YY(?!YY)|[^A-Za-z0-9])+$"
                 }
               },
               "required": [

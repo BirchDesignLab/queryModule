@@ -25,8 +25,13 @@ export const DEFAULT_INPUT_FORMATS = [
   "MM-DD-YYYY",
   "YYYY-MM-DD",
 ] as const;
-/** Tokens MM, DD, YY, YYYY and literal non-alphanumeric separators. */
-export const DATE_FORMAT_PATTERN = /^(?:MM|DD|YYYY|YY|[^A-Za-z0-9])+$/;
+/**
+ * Tokens MM, DD, YY, YYYY and literal non-alphanumeric separators. YY only matches
+ * when YY does not follow, so a run of Y splits one way only: no catastrophic
+ * backtracking (CodeQL js/redos alert 1).
+ */
+export const DATE_FORMAT_PATTERN = /^(?:MM|DD|YYYY|YY(?!YY)|[^A-Za-z0-9])+$/;
+export const DATE_FORMAT_MAX_LENGTH = 32;
 export const MAX_VALUE_LENGTH = 4096;
 export { MAX_ALSO_RUN } from "../contracts/primitives";
 
@@ -53,7 +58,7 @@ export function makeFieldSchemas(mode: SchemaMode) {
     ]),
   );
 
-  const DateFormat = z.string().regex(DATE_FORMAT_PATTERN);
+  const DateFormat = z.string().max(DATE_FORMAT_MAX_LENGTH).regex(DATE_FORMAT_PATTERN);
 
   const SectionDef = obj({ key: Key, labelKey: Key, when: Condition.optional() });
 

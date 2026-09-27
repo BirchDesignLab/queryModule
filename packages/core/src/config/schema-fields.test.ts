@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeFieldSchemas } from "./schema-fields";
+import { DATE_FORMAT_PATTERN, makeFieldSchemas } from "./schema-fields";
 
 const strict = makeFieldSchemas("strict");
 const client = makeFieldSchemas("client");
@@ -194,5 +194,37 @@ describe("FR-032 query type (spec 4.1)", () => {
         alsoRun: [{ queryType: "WNT", fieldMap: { last: "1last" } }],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("date format pattern: no catastrophic backtracking (CodeQL js/redos alert 1)", () => {
+  it("rejects a long run of Y followed by a non-token in linear time", () => {
+    const start = performance.now();
+    expect(DATE_FORMAT_PATTERN.test(`${"Y".repeat(34)}a`)).toBe(false);
+    expect(DATE_FORMAT_PATTERN.test(`${"Y".repeat(5001)}a`)).toBe(false);
+    expect(performance.now() - start).toBeLessThan(100);
+  }, 2000);
+
+  it("accepts and rejects the same formats as before", () => {
+    for (const ok of [
+      "MMDDYYYY",
+      "MM/DD/YYYY",
+      "MM-DD-YYYY",
+      "YYYY-MM-DD",
+      "DD.MM.YY",
+      "YYYYYY",
+      "YY",
+    ])
+      expect(DATE_FORMAT_PATTERN.test(ok), ok).toBe(true);
+    for (const bad of ["Y", "YYY", "YYYYY", "M", "MMM", "D", "YYYY-MM-DDa", "", "2026-09-26"])
+      expect(DATE_FORMAT_PATTERN.test(bad), bad).toBe(false);
+  });
+
+  it("bounds a configured date format to 32 characters", () => {
+    const f = { key: "dob", labelKey: "field.dob", dataType: "date" };
+    expect(strict.FieldDef.safeParse({ ...f, inputFormats: ["MM/DD/YYYY"] }).success).toBe(true);
+    expect(strict.FieldDef.safeParse({ ...f, inputFormats: ["MM/".repeat(11)] }).success).toBe(
+      false,
+    );
   });
 });
