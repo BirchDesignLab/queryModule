@@ -1,53 +1,80 @@
-<svg role="img" viewBox="0 0 900 668" width="900" height="668" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
-<title>Query Module 2.0 progress dashboard, as of 2026-09-26</title>
+<svg role="img" viewBox="0 0 900 980" width="900" height="980" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+<title>Query Module 2.0 progress dashboard, as of 2026-09-27</title>
 <desc>Milestone and phase progress, the P0 wave timeline, open decisions and task/follow-up counts by status.</desc>
-<rect width="900" height="668" fill="#0d1117"/>
+<rect width="900" height="980" fill="#0d1117"/>
 <text x="24" y="44" fill="#e6edf3" font-size="15" font-weight="700">Milestones</text>
 <rect x="24" y="56" width="320" height="10" fill="#30363d"/>
 <rect x="24" y="56" width="166" height="10" fill="#3fb950"/>
-<text x="354" y="65" fill="#9198a1" font-size="12">M0 Skeleton 52% (26/50)</text>
+<text x="354" y="65" fill="#9198a1" font-size="12">M0 Skeleton 52% (28/54)</text>
 <rect x="48" y="80" width="320" height="10" fill="#30363d"/>
-<rect x="48" y="80" width="213" height="10" fill="#3fb950"/>
-<text x="378" y="89" fill="#9198a1" font-size="12">Contracts (M0 P0) 67% (6/9)</text>
+<rect x="48" y="80" width="160" height="10" fill="#3fb950"/>
+<text x="378" y="89" fill="#9198a1" font-size="12">Contracts (M0 P0) 50% (5/10)</text>
 <rect x="48" y="104" width="320" height="10" fill="#30363d"/>
-<text x="378" y="113" fill="#9198a1" font-size="12">Foundation (M0 P1) 0% (0/10)</text>
+<text x="378" y="113" fill="#9198a1" font-size="12">Foundation (M0 P1) 0% (0/11)</text>
 <rect x="24" y="128" width="320" height="10" fill="#30363d"/>
 <text x="354" y="137" fill="#9198a1" font-size="12">M1 Forms and terminal 0% (0/3)</text>
 <rect x="48" y="152" width="320" height="10" fill="#30363d"/>
 <text x="378" y="161" fill="#9198a1" font-size="12">Engine (M1 P2) 0% (0/1)</text>
-<rect x="24" y="176" width="320" height="10" fill="#30363d"/>
-<text x="354" y="185" fill="#9198a1" font-size="12">M2 Results and audit 0% (0/4)</text>
+<rect x="48" y="176" width="320" height="10" fill="#30363d"/>
+<text x="378" y="185" fill="#9198a1" font-size="12">Flow (M1 P3) 0% (0/0)</text>
 <rect x="24" y="200" width="320" height="10" fill="#30363d"/>
-<text x="354" y="209" fill="#9198a1" font-size="12">M3 Workflow and compliance 0% (0/4)</text>
-<rect x="24" y="224" width="320" height="10" fill="#30363d"/>
-<text x="354" y="233" fill="#9198a1" font-size="12">M4 Mobile and host integration 0% (0/5)</text>
+<text x="354" y="209" fill="#9198a1" font-size="12">M2 Results and audit 0% (0/4)</text>
+<rect x="48" y="224" width="320" height="10" fill="#30363d"/>
+<text x="378" y="233" fill="#9198a1" font-size="12">Contracts (M2 P0) 0% (0/0)</text>
 <rect x="48" y="248" width="320" height="10" fill="#30363d"/>
-<text x="378" y="257" fill="#9198a1" font-size="12">Layouts and host (M4 P1) 0% (0/1)</text>
-<text x="24" y="292" fill="#e6edf3" font-size="15" font-weight="700">P0 wave timeline</text>
-<rect x="24" y="304" width="320" height="10" fill="#30363d"/>
-<rect x="24" y="304" width="320" height="10" fill="#d29922"/>
-<text x="354" y="313" fill="#9198a1" font-size="12">W1: Workspace and first contracts (Tasks 1 to 6) 2026-09-25 to 2026-09-26</text>
-<rect x="24" y="328" width="320" height="10" fill="#30363d"/>
-<rect x="344" y="328" width="2" height="10" fill="#d29922"/>
-<text x="354" y="337" fill="#9198a1" font-size="12">W2: Site config schema (Tasks 7 to 11) 2026-09-26 to 2026-09-26</text>
-<rect x="24" y="352" width="320" height="10" fill="#30363d"/>
-<rect x="344" y="352" width="2" height="10" fill="#d29922"/>
-<text x="354" y="361" fill="#9198a1" font-size="12">W3: Config validation and shipped sites (Tasks 12 to 16) 2026-09-26 to 2026-09-26</text>
-<rect x="24" y="376" width="320" height="10" fill="#30363d"/>
-<rect x="344" y="376" width="2" height="10" fill="#d29922"/>
-<text x="354" y="385" fill="#9198a1" font-size="12">W4: Verify gate (Tasks 17 to 22) 2026-09-26 to 2026-09-26</text>
-<rect x="24" y="400" width="320" height="10" fill="#30363d"/>
-<rect x="344" y="400" width="2" height="10" fill="#d29922"/>
-<text x="354" y="409" fill="#9198a1" font-size="12">W5: Tokens and web shell (Tasks 23 to 25) 2026-09-26 to in progress</text>
-<text x="24" y="433" fill="#9198a1" font-size="12">W6: Mobile placeholder and ruleset (Tasks 26 to 28)</text>
-<text x="24" y="468" fill="#e6edf3" font-size="15" font-weight="700">Open decisions</text>
-<text x="24" y="489" fill="#9198a1" font-size="12">None open.</text>
-<text x="24" y="524" fill="#e6edf3" font-size="15" font-weight="700">Tasks and follow-ups by status</text>
-<rect x="24" y="536" width="320" height="10" fill="#30363d"/>
-<rect x="24" y="536" width="138" height="10" fill="#9198a1"/>
-<rect x="162" y="536" width="22" height="10" fill="#d29922"/>
-<rect x="184" y="536" width="160" height="10" fill="#3fb950"/>
-<text x="24" y="569" fill="#9198a1" font-size="12">Todo: 19</text>
-<text x="24" y="593" fill="#9198a1" font-size="12">Ready: 3</text>
-<text x="24" y="617" fill="#9198a1" font-size="12">Done: 22</text>
+<text x="378" y="257" fill="#9198a1" font-size="12">Feed (M2 P1) 0% (0/0)</text>
+<rect x="48" y="272" width="320" height="10" fill="#30363d"/>
+<text x="378" y="281" fill="#9198a1" font-size="12">Audit (M2 P2) 0% (0/0)</text>
+<rect x="48" y="296" width="320" height="10" fill="#30363d"/>
+<text x="378" y="305" fill="#9198a1" font-size="12">Hardening (M2 P3) 0% (0/0)</text>
+<rect x="24" y="320" width="320" height="10" fill="#30363d"/>
+<text x="354" y="329" fill="#9198a1" font-size="12">M3 Workflow and compliance 0% (0/4)</text>
+<rect x="48" y="344" width="320" height="10" fill="#30363d"/>
+<text x="378" y="353" fill="#9198a1" font-size="12">Contracts (M3 P0) 0% (0/0)</text>
+<rect x="48" y="368" width="320" height="10" fill="#30363d"/>
+<text x="378" y="377" fill="#9198a1" font-size="12">Credentials and MFA (M3 P1) 0% (0/0)</text>
+<rect x="48" y="392" width="320" height="10" fill="#30363d"/>
+<text x="378" y="401" fill="#9198a1" font-size="12">Multi-source, nested, hide (M3 P2) 0% (0/0)</text>
+<rect x="48" y="416" width="320" height="10" fill="#30363d"/>
+<text x="378" y="425" fill="#9198a1" font-size="12">Delegation (M3 P3) 0% (0/0)</text>
+<rect x="24" y="440" width="320" height="10" fill="#30363d"/>
+<text x="354" y="449" fill="#9198a1" font-size="12">M4 Mobile and host integration 0% (0/5)</text>
+<rect x="48" y="464" width="320" height="10" fill="#30363d"/>
+<text x="378" y="473" fill="#9198a1" font-size="12">Contracts (M4 P0) 0% (0/0)</text>
+<rect x="48" y="488" width="320" height="10" fill="#30363d"/>
+<text x="378" y="497" fill="#9198a1" font-size="12">Layouts and host (M4 P1) 0% (0/1)</text>
+<rect x="48" y="512" width="320" height="10" fill="#30363d"/>
+<text x="378" y="521" fill="#9198a1" font-size="12">Native (M4 P2) 0% (0/0)</text>
+<rect x="48" y="536" width="320" height="10" fill="#30363d"/>
+<text x="378" y="545" fill="#9198a1" font-size="12">Exit (M4 P3) 0% (0/0)</text>
+<text x="24" y="580" fill="#e6edf3" font-size="15" font-weight="700">P0 wave timeline</text>
+<rect x="24" y="592" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="592" width="2" height="10" fill="#d29922"/>
+<text x="354" y="601" fill="#9198a1" font-size="12">W1: Workspace and first contracts 2026-09-26 to 2026-09-26</text>
+<rect x="24" y="616" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="616" width="2" height="10" fill="#d29922"/>
+<text x="354" y="625" fill="#9198a1" font-size="12">W2: Site config schema 2026-09-26 to 2026-09-26</text>
+<rect x="24" y="640" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="640" width="2" height="10" fill="#d29922"/>
+<text x="354" y="649" fill="#9198a1" font-size="12">W3: Config validation and shipped sites 2026-09-26 to 2026-09-26</text>
+<rect x="24" y="664" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="664" width="2" height="10" fill="#d29922"/>
+<text x="354" y="673" fill="#9198a1" font-size="12">W4: Verify gate 2026-09-26 to 2026-09-26</text>
+<rect x="24" y="688" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="688" width="2" height="10" fill="#d29922"/>
+<text x="354" y="697" fill="#9198a1" font-size="12">W5: Tokens and web shell 2026-09-26 to 2026-09-26</text>
+<rect x="24" y="712" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="712" width="2" height="10" fill="#d29922"/>
+<text x="354" y="721" fill="#9198a1" font-size="12">W6: Mobile placeholder and ruleset 2026-09-26 to 2026-09-26</text>
+<text x="24" y="756" fill="#e6edf3" font-size="15" font-weight="700">Open decisions</text>
+<text x="24" y="777" fill="#e6edf3" font-size="12">#61 Decide: bound message and label keys before the P0 freeze (ADR-0005)</text>
+<text x="24" y="801" fill="#e6edf3" font-size="12">#81 Decide: CI pipeline design before the ruleset (ADR, before W6 Tasks 26 and 28)</text>
+<text x="24" y="836" fill="#e6edf3" font-size="15" font-weight="700">Tasks and follow-ups by status</text>
+<rect x="24" y="848" width="320" height="10" fill="#30363d"/>
+<rect x="24" y="848" width="133" height="10" fill="#9198a1"/>
+<rect x="157" y="848" width="27" height="10" fill="#d29922"/>
+<rect x="184" y="848" width="160" height="10" fill="#3fb950"/>
+<text x="24" y="881" fill="#9198a1" font-size="12">Todo: 20</text>
+<text x="24" y="905" fill="#9198a1" font-size="12">Ready: 4</text>
+<text x="24" y="929" fill="#9198a1" font-size="12">Done: 24</text>
 </svg>
