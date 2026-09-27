@@ -1,0 +1,71 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
+
+// ADR-0008: one aggregate `ci` check, path-scoped jobs. This test parses the
+// real ci.yml so a structural regression fails here instead of only in CI.
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const workflowPath = resolve(root, ".github", "workflows", "ci.yml");
+// biome-ignore lint/suspicious/noExplicitAny: the parsed workflow has no local type
+const workflow: any = parse(readFileSync(workflowPath, "utf8"));
+// biome-ignore lint/suspicious/noExplicitAny: same as above
+const jobs: Record<string, any> = workflow.jobs;
+const jobIds = Object.keys(jobs);
+
+// biome-ignore lint/suspicious/noExplicitAny: same as above
+function jobNeeds(job: any): string[] {
+  if (!job?.needs) return [];
+  return Array.isArray(job.needs) ? job.needs : [job.needs];
+}
+
+describe("ci.yml structure (ADR-0008)", () => {
+  it("has an aggregate `ci` job that runs always() and needs every other job except sensitive-review", () => {
+    const ci = jobs.ci;
+    expect(ci).toBeDefined();
+    expect(ci.if).toBe("always()");
+    const expected = jobIds.filter((id) => id !== "ci" && id !== "sensitive-review").sort();
+    expect(jobNeeds(ci).sort()).toEqual(expected);
+  });
+
+  it("every job sets timeout-minutes", () => {
+    for (const id of jobIds) {
+      expect(jobs[id]["timeout-minutes"], `job ${id} is missing timeout-minutes`).toBeTypeOf(
+        "number",
+      );
+    }
+  });
+
+  it("the lockfile pre-install guard step precedes pnpm/action-setup in `checks`", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+    const steps: any[] = jobs.checks.steps;
+    const guardIndex = steps.findIndex(
+      (s) => typeof s.run === "string" && s.run.includes("lockfile-guard.mjs"),
+    );
+    const setupIndex = steps.findIndex(
+      (s) => typeof s.uses === "string" && s.uses.startsWith("pnpm/action-setup"),
+    );
+    expect(guardIndex).toBeGreaterThanOrEqual(0);
+    expect(setupIndex).toBeGreaterThanOrEqual(0);
+    expect(guardIndex).toBeLessThan(setupIndex);
+  });
+
+  it("`web` and `mobile` jobs need `checks`", () => {
+    expect(jobNeeds(jobs.web)).toContain("checks");
+    expect(jobNeeds(jobs.mobile)).toContain("checks");
+  });
+
+  it("the aggregate step reads job results through env, never interpolating the placeholder syntax into the run body", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+    const steps: any[] = jobs.ci.steps;
+    const aggregate = steps.find(
+      (s) =>
+        typeof s.run === "string" &&
+        s.env &&
+        Object.values(s.env).some((v) => typeof v === "string" && v.includes("toJSON(needs)")),
+    );
+    expect(aggregate, "no aggregate step reads needs via an env var").toBeDefined();
+    expect(aggregate.run.includes("${{")).toBe(false);
+  });
+});

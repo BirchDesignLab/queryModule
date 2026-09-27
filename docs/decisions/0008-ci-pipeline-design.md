@@ -1,6 +1,6 @@
 ---
 date: 09-26-26
-status: proposed
+status: accepted
 track: a
 phase: m0-p0
 supersedes: ["spec 9.1", "spec 9.3"]
