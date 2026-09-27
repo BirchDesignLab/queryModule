@@ -94,6 +94,13 @@ class Lock {
 interface TxScope {
   lock: Lock;
   open: boolean;
+  /** The enclosing scope, so a nested scope of another database does not mask this one. */
+  parent: TxScope | undefined;
+}
+/** The innermost scope, in the current async context, that belongs to lock. */
+function scopeOf(lock: Lock): TxScope | undefined {
+  for (let s = txScope.getStore(); s; s = s.parent) if (s.lock === lock) return s;
+  return undefined;
 }
 const txScope = new AsyncLocalStorage<TxScope>();
 
@@ -129,6 +136,13 @@ class LockedTransaction implements Transaction {
     }
   }
   rollback(): Promise<void> {
+    // SQLite may have ended the transaction itself (auto-rollback on SQLITE_FULL, IOERR or
+    // NOMEM, or a raw ROLLBACK or COMMIT in the body). ROLLBACK would then throw
+    // TRANSACTION_CLOSED, and drizzle awaits it in its catch, hiding the body's own error;
+    // close() settles the connection without a ROLLBACK.
+    if (this.inner.closed) {
+      return this.#settle(async () => this.inner.close());
+    }
     return this.#settle(() => this.inner.rollback());
   }
   commit(): Promise<void> {
@@ -158,8 +172,7 @@ class SerializedClient implements Client {
 
   /** Throws when the caller runs inside this client's own open transaction. */
   assertOutsideOwnTransaction(): void {
-    const scope = txScope.getStore();
-    if (scope?.lock === this.lock && scope.open) throw new NestedTransactionError();
+    if (scopeOf(this.lock)?.open) throw new NestedTransactionError();
   }
 
   /**
@@ -200,6 +213,11 @@ class SerializedClient implements Client {
   executeMultiple(sql: string): Promise<void> {
     return this.#locked(() => this.inner.executeMultiple(sql), true);
   }
+  /**
+   * The "write" default is what makes withTransaction IMMEDIATE: drizzle-orm 0.45 ignores
+   * { behavior: "immediate" } and calls transaction() with no mode, and libsql maps "write"
+   * to BEGIN IMMEDIATE. Pinned by the db-client test "begins withTransaction IMMEDIATE".
+   */
   async transaction(mode: TransactionMode = "write"): Promise<Transaction> {
     this.assertOutsideOwnTransaction();
     const release = await this.lock.acquire(this.lockTimeoutMs);
@@ -210,8 +228,7 @@ class SerializedClient implements Client {
       release();
       throw e;
     }
-    const scope = txScope.getStore();
-    const own = scope?.lock === this.lock ? scope : undefined;
+    const own = scopeOf(this.lock);
     if (own) own.open = true;
     return new LockedTransaction(
       tx,
@@ -331,7 +348,7 @@ export function inTransactionScope<T>(db: Db, body: () => Promise<T>): Promise<T
   } catch (e) {
     return Promise.reject(e);
   }
-  return txScope.run({ lock: client.lock, open: false }, body);
+  return txScope.run({ lock: client.lock, open: false, parent: txScope.getStore() }, body);
 }
 
 export function readPragmas(db: Db): Promise<Record<PragmaName, string | number>> {

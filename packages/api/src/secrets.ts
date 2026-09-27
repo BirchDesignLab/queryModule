@@ -74,6 +74,10 @@ export async function loadSecrets(env: NodeJS.ProcessEnv, secretsDir: string): P
     throw new SecretConfigError("DB_ENCRYPTION_KEY", "must be at least 32 characters");
   if (betterAuthSecret.length < 32)
     throw new SecretConfigError("BETTER_AUTH_SECRET", "must be at least 32 characters");
+  // Optional, but when present it keys the seed passwords' HMAC and must be long enough for
+  // the logger's secretValues scrub (log/logger.ts MIN_SECRET_VALUE_LENGTH) to cover it.
+  if (seedPasswordSecret !== null && seedPasswordSecret.length < 32)
+    throw new SecretConfigError("SEED_PASSWORD_SECRET", "must be at least 32 characters");
   const credentialKey = key32("CREDENTIAL_KEY", credentialRaw);
   const dataKey = key32("DATA_KEY", dataRaw);
   if (new Set([dbEncryptionKey, credentialRaw, dataRaw]).size !== 3) {

@@ -269,6 +269,59 @@ describe("SEC-006 encrypted database", () => {
     });
   });
 
+  describe("wave review fixes", () => {
+    it("surfaces the body's own error when SQLite already ended the transaction (C-M2)", async () => {
+      const db = await openDatabase({
+        file: tempDbFile(),
+        encryptionKey: TEST_DB_KEY,
+        lockTimeoutMs: 1000,
+      });
+      await db.$client.execute("CREATE TABLE t (x INTEGER)");
+      await expect(
+        withTransaction(db, async (tx) => {
+          await tx.run(sql`INSERT INTO t VALUES (1)`);
+          await tx.run(sql`ROLLBACK`); // what SQLite does itself on SQLITE_FULL, IOERR or NOMEM
+          throw new Error("disk full");
+        }),
+      ).rejects.toThrow("disk full");
+      expect(await count(db)).toBe(0);
+      expect(await readPragmas(db)).toEqual(REQUIRED_PRAGMAS);
+    });
+
+    it("begins withTransaction IMMEDIATE: a second connection cannot take the write lock (C-M3)", async () => {
+      const file = tempDbFile();
+      const db = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+      await db.$client.execute("CREATE TABLE t (x INTEGER)");
+      const other = createClient({ url: `file:${file}`, encryptionKey: TEST_DB_KEY });
+      try {
+        await withTransaction(db, async () => {
+          // the body has run no statement: only BEGIN IMMEDIATE can hold the write lock here
+          await expect(other.transaction("write")).rejects.toThrow(/SQLITE_BUSY|locked/);
+        });
+        const t = await other.transaction("write"); // free again once the body settled
+        await t.rollback();
+      } finally {
+        other.close();
+      }
+    });
+
+    it("rejects a plain call on the outer database inside a nested database's transaction (C-M4)", async () => {
+      const a = await openDatabase({
+        file: tempDbFile(),
+        encryptionKey: TEST_DB_KEY,
+        lockTimeoutMs: 1000,
+      });
+      const b = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+      await withTransaction(a, async () => {
+        await withTransaction(b, async () => {
+          await expect(a.$client.execute("SELECT 1")).rejects.toThrow(NestedTransactionError);
+          await expect(withTransaction(a, async () => 1)).rejects.toThrow(NestedTransactionError);
+          await expect(b.$client.execute("SELECT 1")).rejects.toThrow(NestedTransactionError);
+        });
+      });
+    });
+  });
+
   describe("bounded lock wait", () => {
     it("throws instead of hanging behind a transaction that never closes", async () => {
       const db = await openDatabase({

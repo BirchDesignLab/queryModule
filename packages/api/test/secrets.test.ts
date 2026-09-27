@@ -69,8 +69,17 @@ describe("SEC-006 loadSecrets", () => {
     expect((err as Error).message).toContain("empty");
   });
   it("returns SEED_PASSWORD_SECRET when present", async () => {
-    const s = await loadSecrets({}, dir({ ...good, SEED_PASSWORD_SECRET: "seed-secret-value" }));
-    expect(s.seedPasswordSecret).toBe("seed-secret-value");
+    const s = await loadSecrets({}, dir({ ...good, SEED_PASSWORD_SECRET: k(5) }));
+    expect(s.seedPasswordSecret).toBe(k(5));
+  });
+  it("fails closed when SEED_PASSWORD_SECRET is shorter than 32 characters, without echoing it", async () => {
+    const short = "seed-secret-value";
+    const err = await loadSecrets({}, dir({ ...good, SEED_PASSWORD_SECRET: short })).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(SecretConfigError);
+    expect((err as SecretConfigError).secret).toBe("SEED_PASSWORD_SECRET");
+    expect((err as Error).message).not.toContain(short);
   });
   it("fails closed when an explicitly configured optional secret file is missing", async () => {
     const missing = join(dir({}), "nope");
