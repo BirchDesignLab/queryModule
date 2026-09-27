@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  LoginFailedDetailsSchema,
+  LoginSucceededDetailsSchema,
+  LogoutDetailsSchema,
+  RoleChangedDetailsSchema,
+} from "./audit-auth";
 import { IdentitySourceSchema, RoleSchema } from "./identity";
 import {
   BoundedIdSchema,
@@ -39,6 +45,10 @@ export const AUDIT_EVENT_TYPES = [
   "sourceResponded",
   "interrupted",
   "partSkipped",
+  "loginSucceeded",
+  "loginFailed",
+  "logout",
+  "roleChanged",
 ] as const;
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
@@ -171,6 +181,10 @@ export const AUDIT_DETAILS_SCHEMAS = {
     typeValues: TypeValuesSchema,
     reasons: z.array(AuditValidationErrorSchema).min(1),
   }),
+  loginSucceeded: LoginSucceededDetailsSchema,
+  loginFailed: LoginFailedDetailsSchema,
+  logout: LogoutDetailsSchema,
+  roleChanged: RoleChangedDetailsSchema,
 } as const;
 
 export type AuditDetails<T extends AuditEventType> = z.infer<(typeof AUDIT_DETAILS_SCHEMAS)[T]>;
@@ -204,6 +218,13 @@ const envelope = {
 const queryEnvelope = { ...envelope, correlationId: Uuid7Schema };
 /** Part-scoped types: envelope partId is required and equals details.partId (ADR-0003). */
 const partEnvelope = { ...queryEnvelope, partId: PartIdSchema };
+/** Auth types (spec 5.6): no query part and no state credential, so no partId or credentialUserId. */
+const authEnvelope = {
+  correlationId: envelope.correlationId,
+  actor: envelope.actor,
+  identitySource: envelope.identitySource,
+  hostSubject: envelope.hostSubject,
+};
 
 export const AuditEventSchema = z
   .discriminatedUnion("type", [
@@ -237,6 +258,26 @@ export const AuditEventSchema = z
       ...partEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.partSkipped,
     }),
+    z.strictObject({
+      type: z.literal("loginSucceeded"),
+      ...authEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.loginSucceeded,
+    }),
+    z.strictObject({
+      type: z.literal("loginFailed"),
+      ...authEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.loginFailed,
+    }),
+    z.strictObject({
+      type: z.literal("logout"),
+      ...authEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.logout,
+    }),
+    z.strictObject({
+      type: z.literal("roleChanged"),
+      ...authEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.roleChanged,
+    }),
   ])
   .superRefine((e, ctx) => {
     // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they do.
@@ -262,6 +303,15 @@ export const AuditEventSchema = z
         path: ["hostSubject"],
         message: "hostSubject needs identitySource host",
       });
+    }
+    // Auth types have neither envelope column (authEnvelope); the checks below are query-only.
+    if (
+      e.type === "loginSucceeded" ||
+      e.type === "loginFailed" ||
+      e.type === "logout" ||
+      e.type === "roleChanged"
+    ) {
+      return;
     }
     // SEC-011 (#98): one row names one credential owner; the envelope column equals details.
     if (

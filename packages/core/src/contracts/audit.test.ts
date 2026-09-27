@@ -61,17 +61,36 @@ const samples = {
       { key: "validation.required", params: { field: "last", position: 1 } },
     ],
   },
+  loginSucceeded: { method: "password", sessionId: "s1", clientIp: "203.0.113.9" },
+  loginFailed: {
+    targetUserId: "u1",
+    reason: "badPassword",
+    clientIp: "203.0.113.9",
+    lockoutUntil: 1,
+  },
+  logout: { sessionId: "s1" },
+  roleChanged: { targetUserId: "u1", role: "admin", change: "granted", via: "grant-role" },
 } as const;
 
-describe("SEC-010 audit catalogue (spec 4.7 query events)", () => {
-  it("lists exactly the six query event types frozen in M0 P0", () => {
+/** The six query types frozen in M0 P0; the auth types (M0 P1) have their own envelope. */
+const QUERY_EVENT_TYPES = [
+  "submitted",
+  "acknowledged",
+  "sourceDispatched",
+  "sourceResponded",
+  "interrupted",
+  "partSkipped",
+] as const satisfies readonly AuditEventType[];
+type QueryEventType = (typeof QUERY_EVENT_TYPES)[number];
+
+describe("SEC-010 audit catalogue (spec 4.7 query events, spec 5.6 auth events)", () => {
+  it("lists the six query event types frozen in M0 P0, then the four M0 P1 auth types", () => {
     expect([...AUDIT_EVENT_TYPES]).toEqual([
-      "submitted",
-      "acknowledged",
-      "sourceDispatched",
-      "sourceResponded",
-      "interrupted",
-      "partSkipped",
+      ...QUERY_EVENT_TYPES,
+      "loginSucceeded",
+      "loginFailed",
+      "logout",
+      "roleChanged",
     ]);
     expect(Object.keys(AUDIT_DETAILS_SCHEMAS).sort()).toEqual([...AUDIT_EVENT_TYPES].sort());
   });
@@ -439,7 +458,7 @@ const events = {
   interrupted: { partId: 0, details: samples.interrupted },
   partSkipped: { partId: 1, details: samples.partSkipped },
 } as const;
-const eventOf = (type: AuditEventType, extra: object = {}) => ({
+const eventOf = (type: QueryEventType, extra: object = {}) => ({
   type,
   correlationId: CID,
   actor: USER_ACTOR,
@@ -450,7 +469,7 @@ const eventOf = (type: AuditEventType, extra: object = {}) => ({
 const parses = (event: unknown) => AuditEventSchema.safeParse(event).success;
 
 describe("SEC-014 I1 every query audit row carries the correlation id (spec 5.2 step 1)", () => {
-  for (const type of AUDIT_EVENT_TYPES) {
+  for (const type of QUERY_EVENT_TYPES) {
     it(`${type}: accepts the event with a correlationId`, () => {
       expect(parses(eventOf(type))).toBe(true);
     });
