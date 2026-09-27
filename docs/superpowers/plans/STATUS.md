@@ -15,8 +15,8 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Milestone | Phase | Track A (Linux) | Track B (Windows) | Track D (mobile) | Core | Gate |
 |---|---|---|---|---|---|---|
-| M0 | P0 contracts | active · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | active · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | n/a | active · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | active · Typecheck and CI green; contracts frozen · [all][m0-p0] |
-| M0 | P1 foundation | planned · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | planned · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | planned · in B plan · [issues][m0-p1-c] | planned · M0 exit · [all][m0-p1] |
+| M0 | P0 contracts | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | n/a | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · Typecheck and CI green; contracts frozen · [all][m0-p0] |
+| M0 | P1 foundation | planned, next · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | planned, next · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | planned, next · in B plan · [issues][m0-p1-c] | planned · M0 exit · [all][m0-p1] |
 | M1 | P2 engine | planned · `<date>-track-a-p2.md` · [issues][m1-p2-a] | planned · `<date>-track-b-p2.md` · [issues][m1-p2-b] | n/a | planned · in A and B plans · [issues][m1-p2-c] | planned · Form on `GET config`; parser property tests · [all][m1-p2] |
 | M1 | P3 flow | planned · `<date>-track-a-p3.md` · [issues][m1-p3-a] | planned · `<date>-track-b-p3.md` · [issues][m1-p3-b] | n/a | n/a | planned · M1 exit · [all][m1-p3] |
 | M2 | P0 contracts | n/a | n/a | n/a | planned · `<date>-m2-p0-contracts.md` · [issues][m2-p0] | planned · Contracts frozen; OpenAPI diff reviewed · [all][m2-p0] |
@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 contracts | paused | 09-27-26 |
+| Windows 11 | P0 | M0 P0 done | idle | 09-27-26 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,13 +47,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: W6 merged (#95, merge commit 0748994, tag `p0-wave-6`); ruleset `main` applied (#29 closed); board applied and reconciled; all six P0 waves done. Next: the P0 gate (plan section "Gate check").
-- Branch / PR: chore/w6-close (dashboard and W6 done in board data, ordinary) then a gate branch from main
-- Last green: main CI at 0748994 (every ADR-0008 job ran on the push); pnpm verify 707 tests
-- Next step: P0 gate per `2026-09-25-p0-contracts.md` "Gate check" (contracts frozen note, gate PR); from now on main takes squash merges through PRs only (ruleset, ADR-0008)
+- Issue: M0 P0 done (gate 09-27-26); next M0 P1 (Track A and Track B plans, Core in the B plan)
+- Branch / PR: docs/status-a-20260927 (gate PR); P1 starts from main after it merges
+- Last green: main CI at 71bd7af; pnpm verify 707 tests
+- Next step: P1 foundation. Early P1: #98 contract tightenings (C-M1, C-M3, C-M5, C-M7) through master plan 8 before the first audit writer; #75 manual board and repo settings (developer); #96 W6 minors ride the first P1 wave PR
 - Blocked by: none
-- Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` (W6 runs in `w6-runs.md`) on the Windows machine (git-ignored)
-- Notes: review minors and the oasdiff rename tech debt in #96 (gate-tier, ride the next wave PR); M0 release notes list #93 as api-breaking (tightening only), not #95 (label only for the #69 rename false positive); docs plan #94 (ordinary, any time); wave-review now takes `branch`, `criticalFiles`, `gateFiles`, `reviewedLines`, `contextPath` (W6: 2 agents, 0.32M tokens)
+- Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
+- Notes: Contracts frozen for M0/M1 on 09-27-26 at 71bd7af (P0 gate): core contracts, SiteConfig v1, ClientSiteConfig, audit query events, WS v1 messages, route skeleton, openapi.json. Changes only through master plan 8. M0 release notes: #93 api-breaking (tightening only), #95 not breaking (label only for the #69 rename false positive, #96).
 
 ### Track B
 

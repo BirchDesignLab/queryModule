@@ -464,11 +464,11 @@
     {
       "number": 75,
       "title": "Board and repo settings: the manual steps",
-      "labels": ["documentation", "platform", "p0"],
+      "labels": ["documentation", "platform", "p1"],
       "milestone": "M0 Skeleton",
-      "parent": 39,
+      "parent": 40,
       "track": null,
-      "phase": "P0",
+      "phase": "P1",
       "size": "S",
       "priority": "High",
       "reqIds": "",
@@ -500,6 +500,32 @@
       "priority": "Medium",
       "reqIds": "BR-005",
       "body": "BR-005 (\"Product documentation shall be fully reviewed and updated to reflect the enhancements\") is covered only per milestone today: each exit PR refreshes `docs/site-config.md`, `docs/api.md` and `docs/demo.md` (spec 9.5, master plan 4.6). Three gaps, all to fix (developer 09-26-26); items 1 and 3 are handed over with the finished product.\n\n- [ ] **Final whole-product documentation review at M4 exit.** Read the full doc set end to end against the spec and BR-005: consistency, stale sections, cross-links, and whether an admin or site developer can run the product from the docs alone. Run it as a review with an Opus critic over the whole set; fix in the M4 exit PR. Add it to the M4 P3 plan and to master plan 4.6's exit table.\n- [ ] **Owners for `docs/adapters.md` and `docs/embedding.md`** (spec 7). Add rows to master plan 4.6's exit-ownership table at the milestones that build them: adapters (SourceAdapter API v1) from the M1 or M2 exit, embedding (6.9 protocol, host JWT) at the M4 exit; refreshed at every later exit.\n- [ ] **Architecture and operations overview for a newcomer**, handed over with the finished product: how the pieces fit (core, api, client, web, mobile, config), how a query flows, where audit and credentials live, how to deploy, back up, restore and rotate keys, with links to the runbooks (spec 8.7) and ADRs. Addresses the spec 14 bus-factor risk. Owned by the M4 exit PR; drafted earlier if a phase makes it cheap.\n\n**Source:** developer discussion 09-26-26 (documentation pass).\n"
+    },
+    {
+      "number": 96,
+      "title": "W6 review minors: CI fail-open edges, board data checks, TokenStore glob case",
+      "labels": ["follow-up", "platform", "p1"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "",
+      "body": "Minors from the W6 wave-review (PR #95, `docs/reviews/feat-p0-wave-6.md`), none blocking; each touches a gate or critical file, so they ride the next wave PR (split fixes by tier).\r\n\r\n- [ ] G-M1 `scripts/ci/changed-paths.mjs`: `docs/board/board-data.json` counts as docs-only, so a board-data-only PR skips `checks` and `test` (the schema test never runs; `loadBoardDataOrExit` still fails closed at run time). Treat `docs/board/**` as non-docs.\r\n- [ ] G-M2 `.github/workflows/ci.yml`: `web` and `mobile` run only on `outputs.web == 'true'`; a `changes` job that succeeds without emitting the key skips both and the aggregate passes. Invert to `!= 'false'` or have `ci` assert the outputs exist.\r\n- [ ] G-M3 `scripts/ops/board-data-schema.mjs`: a follow-up `parent` is not checked against phase and wave numbers; a bad parent throws mid `--apply` after earlier writes.\r\n- [ ] G-M4 `scripts/ops/gh-setup-project.mjs`: a follow-up number can point at any live issue the data does not otherwise claim; `--apply` would rename and rewrite it. Consider refusing to adopt an issue whose live labels lack `follow-up`.\r\n- [ ] G-M5 `scripts/ci/core-purity.ts`: misses destructuring (`const { fetch } = globalThis`), chained globals (`globalThis.window.fetch`) and aliases.\r\n- [ ] G-M6 `.github/dependabot.yml`: no ignore rule for `@types/node` majors above 24 (ADR-0001, plan amendment M5).\r\n- [ ] C-M1 `.github/sensitive-paths` (critical): TokenStore globs are case-sensitive kebab-case; `SecureTokenStore.ts` or `tokenStore.ts` would be ordinary. Add a case-insensitive form.\r\n- [ ] C-M2 `scripts/ci/changed-paths.mjs`: `git diff --name-only` without `-z` C-quotes non-ASCII paths, so such a path under `apps/web/` or `apps/mobile/` skips its job.\r\n- [ ] Declined item: `sensitive-review.ts` exits 2 on a legal branch name with `+`, `@`, `#` or non-ASCII even when no sensitive path is touched; fall back to the `pr-<n>` key instead.\r\n- [ ] Track B P1 plan still lists `Delete: apps/web/src/App.tsx` (P0 shipped `shell.tsx`); fix before Track B P1 starts.\r\n- [ ] Tech debt (oasdiff, PR #95): the `api-breaking` label was used to skip a false positive (the #69 rename `getConfig200___schema0` to `Condition`, byte-identical otherwise). The label skips the whole oasdiff step, so a real break in the same PR would pass unseen. Add a rename-aware step (normalise component names, or prove rename-only equivalence against the base) so a component rename never needs the label; and make M0 release notes treat #95 as not breaking.\r\n\r\n**Source:** W6 wave-review 09-27-26 and the #84 plan amendment.\r\n\r\n"
+    },
+    {
+      "number": 98,
+      "title": "P0 phase review: audit and WS contract tightenings before the first writer",
+      "labels": ["follow-up", "core", "p1", "sensitive", "contract"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Core",
+      "phase": "P1",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "SEC-010, SEC-011",
+      "body": "Minors from the M0 P0 whole-phase review (gate Step 8, Opus 5.5 high over the 8 P0 critical-tier files; artifact `docs/reviews/docs-status-a-20260927.md`). None blocks the freeze. Contract changes go through master plan 8 (contract change procedure); all are critical tier.\n\n**Land early in P1, before the first audit writer (M1 P2 T1), while no audit rows exist:**\n- [ ] C-M1 `packages/core/src/contracts/audit.ts:204,130,148`: envelope `credentialUserId` is unconstrained against `details.credentialOwnerUserId` on `sourceDispatched` and `sourceResponded`; one append-only row can name two credential owners, and owner searches on `audit_event(credential_user_id, at)` can miss delegated queries (SEC-011). Require equality in `AuditEventSchema.superRefine`, with tests.\n- [ ] C-M3 `audit.ts:140-146`: `sourceResponded.status` is a hand-written literal list; derive it with `SourceStatusSchema.exclude([\"pending\", \"interrupted\"])` (same JSON) and test that every other terminal status is accepted, so a new SourceStatus value cannot crash the dispatcher's audit write.\n- [ ] C-M5 `primitives.ts:21-22,44-45`: `BOUNDED_ID_MAX_LENGTH` and `HOST_SUBJECT_MAX_LENGTH` are repeated as literals in the regexes; build the patterns from the constants or test the boundary.\n- [ ] C-M7 `.github/sensitive-paths`: `packages/core/src/contracts/version.ts` (WS protocol version) and `packages/core/contracts/ws-events.schema.json` are ordinary tier; list them under [critical] (query dispatch).\n\n**Before M4:**\n- [ ] C-M2 `audit.ts:263-270`: a row with `identitySource: \"host\"` and no `hostSubject` passes; spec 5.6 requires the host subject on host rows (SEC-010). Require it, with a test.\n- [ ] C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8.\n\n**Track A (no contract change):**\n- [ ] C-M6 `audit.ts:192`: `AuditActor.email` uses `z.email()`; the identity layer may accept addresses that fail it, and an audit write failure fails every submit. IdentityService normalises with `AuditActorSchema.shape.email` and stores null on failure, with a test.\n\nDeclined by the reviewer for the developer: whether `packages/api/src/auth/**` should be critical tier (CLAUDE.md does not list authentication as a sensitive area).\n\n**Source:** M0 P0 gate whole-phase review, 09-27-26.\n"
     }
   ]
 }

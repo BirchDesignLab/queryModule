@@ -1,5 +1,7 @@
 # M0 P0 Contracts Implementation Plan
 
+Frozen: 09-27-26 (P0 gate at 71bd7af; contracts change only through master plan 8)
+
 > **For agentic workers:** Recommended: run each task through the `sdd-task` workflow (`.claude/workflows/sdd-task.js`) and each sensitive wave PR through `wave-review` (ADR-0006). superpowers:subagent-driven-development or superpowers:executing-plans also work. TDD is required whichever way a task runs. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up the pnpm workspace, freeze the M0/M1 contracts in `packages/core`, and land the CI, tokens, web shell and mobile placeholder skeletons so both tracks can start P1 against one green `main`.
@@ -7596,7 +7598,7 @@ bash -n scripts/ops/gh-setup-repo.sh && echo "syntax ok"
 
 Expected: `syntax ok`.
 
-- [ ] **Step 3: Commit, sensitive review, merge** (the ruleset is not active yet, so this PR merges on green checks like the others).
+- [x] **Step 3: Commit, sensitive review, merge** (done in the W6 PR #95, one tier-sliced wave-review) (the ruleset is not active yet, so this PR merges on green checks like the others).
 
 ```bash
 git add scripts/ops/gh-setup-repo.sh
@@ -7614,7 +7616,7 @@ git commit -m "docs(a): sensitive review for repo setup script
 <attribution trailer given by your session's system reminder>"
 ```
 
-- [ ] **Step 4: Run it once from `main` after the merge (developer approves: it changes repository settings).**
+- [x] **Step 4: Run it once from `main` after the merge (developer approves: it changes repository settings).** Result 09-27-26: ruleset id 24070189 active (`--apply` as BirchDesignLab after #95 merged); vulnerability alerts and security updates on.
 
 ```bash
 git switch main && git pull --ff-only
@@ -7628,7 +7630,7 @@ Expected: `ruleset: main (created)`, `vulnerability alerts: on`, `security updat
 
 Gate (master plan 4.1, row P0): Typecheck and CI green; contracts frozen. Run on `main` after the Task 28 run, from a clean checkout.
 
-- [ ] **Step 1: Sync and install.**
+- [x] **Step 1: Sync and install.**
 
 ```bash
 git switch main && git pull --ff-only
@@ -7637,7 +7639,7 @@ pnpm install --frozen-lockfile
 
 Expected: no lockfile changes, no engine warning.
 
-- [ ] **Step 2: Typecheck and tests per package.**
+- [x] **Step 2: Typecheck and tests per package.**
 
 ```bash
 pnpm -r typecheck
@@ -7646,7 +7648,7 @@ pnpm -r test
 
 Expected: `typecheck` exits 0 in `@querymodule/core`, `config`, `api`, `client`, `web-ui`, `tokens`, `web`, `mobile`; `test` passes in `core`, `config`, `api`, `client`, `web-ui`, `tokens`, `web` (no package prints `No test files found`).
 
-- [ ] **Step 3: Full local verify.**
+- [x] **Step 3: Full local verify.**
 
 ```bash
 pnpm verify
@@ -7654,7 +7656,7 @@ pnpm verify
 
 Expected: biome clean; `tsc -b` exits 0; Vitest passes with `packages/core/src/**` at or above 95% lines and branches; `ok packages/config/sites/default.json (0 warnings)`, `ok packages/config/sites/example-ok.json (0 warnings)`, `ok packages/config/test/all-on.json (0 warnings)`, `ok packages/config/test/flags-off.json (0 warnings)`; `generated files match`.
 
-- [ ] **Step 4: CI green on `main` and both checks reporting on PRs.**
+- [x] **Step 4: CI green on `main` and both checks reporting on PRs.**
 
 ```bash
 gh run list --workflow ci --branch main --limit 1 --json conclusion --jq '.[0].conclusion'
@@ -7663,7 +7665,7 @@ gh pr checks <number of the last P0 PR>
 
 Expected: `success`; the PR lists `ci` and `sensitive-review`, both `pass`.
 
-- [ ] **Step 5: Ruleset active.**
+- [x] **Step 5: Ruleset active.**
 
 ```bash
 gh api repos/BirchDesignLab/queryModule/rules/branches/main --jq '[.[].type] | sort'
@@ -7671,7 +7673,7 @@ gh api repos/BirchDesignLab/queryModule/rules/branches/main --jq '[.[].type] | s
 
 Expected: `["deletion","non_fast_forward","pull_request","required_linear_history","required_status_checks"]`.
 
-- [ ] **Step 6: Contract files merged (master plan 8.2).**
+- [x] **Step 6: Contract files merged (master plan 8.2).**
 
 ```bash
 git ls-files packages/core/src/contracts packages/core/src/config packages/api/openapi.json packages/core/contracts/ws-events.schema.json packages/config/schema/site-config.schema.json packages/config/sites packages/config/test docs/testing/stories.json
@@ -7679,7 +7681,7 @@ git ls-files packages/core/src/contracts packages/core/src/config packages/api/o
 
 Expected: lists `api-error.ts`, `audit.ts`, `identity.ts`, `mock-file.ts`, `routes.ts`, `source-status.ts`, `validation-error.ts`, `version.ts`, `ws.ts` (plus tests and `index.ts`), the config schema files, the three generated files, both sites, both test configs and `stories.json`.
 
-- [ ] **Step 7: Stories and labels.**
+- [x] **Step 7: Stories and labels.**
 
 ```bash
 node -e "console.log(JSON.parse(require('fs').readFileSync('docs/testing/stories.json','utf8')).map(r=>r.story+':'+r.milestone).join(' '))"
@@ -7689,9 +7691,9 @@ gh issue list --milestone "M0 Skeleton" --label p0 --state open
 
 Expected: `A1:m1 A2:m1 A3:m1 A4:m1 A5:m1` (M0 has no stories, 12.7); labels include `api-breaking contract core mobile p0 p1 p2 p3 platform sensitive web`; no open P0 issues (each closed by its PR's `Closes #n`).
 
-- [ ] **Step 8: Whole-phase review.** Run the Opus 5.5 `xhigh` whole-phase review (the phase has sensitive work, master plan 10.2 item 3) over the P0 range on `main`. Fix findings in a follow-up PR or file them as P1 issues on the owning track.
+- [x] **Step 8: Whole-phase review.** Done 09-27-26 at Opus 5.5 `high` (review caps, ADR-0007 amendment), scoped by the developer to the 8 P0 critical-tier files: approve, 7 minors filed as #98 (`docs/reviews/docs-status-a-20260927.md`). Planned: the Opus 5.5 `xhigh` whole-phase review (the phase has sensitive work, master plan 10.2 item 3) over the P0 range on `main`. Fix findings in a follow-up PR or file them as P1 issues on the owning track.
 
-- [ ] **Step 9: Gate PR.** Branch `docs/status-a-<yyyymmdd>`. Edit `docs/superpowers/plans/STATUS.md`:
+- [x] **Step 9: Gate PR.** Branch `docs/status-a-<yyyymmdd>`. Edit `docs/superpowers/plans/STATUS.md`:
 
 Grid row M0 / P0 contracts becomes:
 
@@ -7723,7 +7725,7 @@ gh pr merge <PR> --squash --delete-branch
 
 Expected: the docs-only fast path runs; `ci` and `sensitive-review` pass; the merge goes through the ruleset.
 
-- [ ] **Step 10: Issues to close.** Every issue created in "Before Task 1" Step 2 (28 issues, milestone `M0 Skeleton`, label `p0`) closes through its PR; Step 7 confirms none remain open. Any issue a whole-phase review finding creates goes to milestone `M0 Skeleton` with label `p1` and its track label.
+- [x] **Step 10: Issues to close.** Done 09-27-26: #75 (manual board and repo settings) moved to P1 by the developer; #81 closed (ADR-0008); #39 closes with this gate. Every issue created in "Before Task 1" Step 2 (28 issues, milestone `M0 Skeleton`, label `p0`) closes through its PR; Step 7 confirms none remain open. Any issue a whole-phase review finding creates goes to milestone `M0 Skeleton` with label `p1` and its track label.
 
 ## Self-review
 
