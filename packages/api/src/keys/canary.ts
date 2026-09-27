@@ -7,6 +7,14 @@ import { type Tx, withTransaction } from "../db/tx";
 
 export type CanaryKeyName = "credential" | "data";
 export const CURRENT_KEY_VERSION = 1;
+/**
+ * Tables sealed under each key. A missing canary counts as first boot only
+ * while its guard table is absent or empty (spec 5.7, 8.1 fail closed).
+ */
+export const CANARY_GUARD_TABLES = {
+  credential: "state_credential",
+  data: "request_key",
+} as const satisfies Record<"credential" | "data", string>;
 const PLAINTEXT = Buffer.from("querymodule-key-canary-v1", "utf8");
 const aad = (n: CanaryKeyName, v: number) => Buffer.from(`key_canary|${n}|${v}`, "utf8");
 
@@ -51,6 +59,16 @@ export async function writeCanary(
     .onConflictDoUpdate({ target: keyCanary.keyName, set: values });
 }
 
+async function guardTableHasRows(db: Db, table: string): Promise<boolean> {
+  const exists = await db.$client.execute({
+    sql: "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+    args: [table],
+  });
+  if (exists.rows.length === 0) return false;
+  const rows = await db.$client.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
+  return rows.rows.length > 0;
+}
+
 export async function checkKeyCanaries(
   db: Db,
   keys: { credentialKey: Buffer; dataKey: Buffer },
@@ -63,6 +81,7 @@ export async function checkKeyCanaries(
   ] as const) {
     const row = (await db.select().from(keyCanary).where(eq(keyCanary.keyName, name)))[0];
     if (!row) {
+      if (await guardTableHasRows(db, CANARY_GUARD_TABLES[name])) throw new KeyCanaryError(name);
       await withTransaction(db, (tx) => writeCanary(tx, key, name, clock));
       out[name] = "created";
     } else if (opens(key, row)) {
