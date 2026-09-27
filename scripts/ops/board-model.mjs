@@ -38,6 +38,37 @@ export function waveParentStatus(issue, waveState) {
  * @param {string} desired
  * @returns {string|null} the desired body to write, or null when no write is needed
  */
+/**
+ * Whether a parent or follow-up issue the setup script owns needs its title
+ * rewritten to the desired human-readable title (developer decision, #80:
+ * codes live in fields, not titles). A stale live title is a planned rename,
+ * never a mismatch: the caller finds the issue by number first (see
+ * `matchParent`) and only then compares titles.
+ *
+ * @param {string} existing
+ * @param {string} desired
+ * @returns {string|null} the desired title to write, or null when no write is needed
+ */
+export function titleUpdate(existing, desired) {
+  return existing === desired ? null : desired;
+}
+
+/**
+ * Find the live issue a data item (phase parent, wave parent or follow-up)
+ * refers to. Matching is by recorded issue number only, never by title
+ * (developer decision, #80): once a number is recorded, a title change in
+ * the data is a rename to apply, not a new issue to create. An item with no
+ * number yet (a milestone parent not yet created) matches nothing; the
+ * caller creates it and records the number it gets back.
+ *
+ * @param {{number: number|null, title?: string}} item
+ * @param {(n: number) => object|undefined} byNumber looks up a live issue by number
+ * @returns {object|undefined}
+ */
+export function matchParent(item, byNumber) {
+  return item.number ? byNumber(item.number) : undefined;
+}
+
 export function bodyUpdate(existing, desired) {
   const normalise = (s) =>
     s
