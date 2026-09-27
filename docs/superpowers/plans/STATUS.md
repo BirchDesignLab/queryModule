@@ -48,9 +48,9 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track A
 
 - Issue: M0 P0 done (gate 09-27-26); next M0 P1 (Track A and Track B plans, Core in the B plan)
-- Branch / PR: docs/status-a-20260927 (gate PR); P1 starts from main after it merges
+- Branch / PR: none open after #101; P1 starts from main
 - Last green: main CI at 71bd7af; pnpm verify 707 tests
-- Next step: P1 foundation. Early P1: #98 contract tightenings (C-M1, C-M3, C-M5, C-M7) through master plan 8 before the first audit writer; #75 manual board and repo settings (developer); #96 W6 minors ride the first P1 wave PR
+- Next step: P1 foundation. First: #98 contract tightenings (C-M1, C-M3, C-M5, C-M7) through master plan 8 before the first audit writer (critical tier, inline, own PR, one tier-sliced wave-review); #96 W6 minors ride the first P1 wave PR. #75 (manual board and repo settings) done 09-27-26 (#101)
 - Blocked by: none
 - Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
 - Notes: Contracts frozen for M0/M1 on 09-27-26 at 71bd7af (P0 gate): core contracts, SiteConfig v1, ClientSiteConfig, audit query events, WS v1 messages, route skeleton, openapi.json. Changes only through master plan 8. M0 release notes: #93 api-breaking (tightening only), #95 not breaking (label only for the #69 rename false positive, #96).
