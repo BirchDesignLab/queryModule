@@ -68,7 +68,8 @@ export const PreferenceLayoutSchema = z.strictObject({
 });
 export const UserPreferenceSchema = z.strictObject({
   themeMode: z.enum(["day", "night", "redShift", "auto"]).nullable(),
-  personaOverride: z.string().min(1).nullable(),
+  /** A site persona key (PersonaDef.key); bounded because it is stored user input. */
+  personaOverride: z.string().min(1).max(64).nullable(),
   layout: PreferenceLayoutSchema.nullable(),
 });
 export type UserPreference = z.infer<typeof UserPreferenceSchema>;

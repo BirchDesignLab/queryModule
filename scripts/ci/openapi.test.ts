@@ -20,12 +20,11 @@ describe("BR-007 OpenAPI generated from route contracts (spec 5.1)", () => {
   it("is OpenAPI 3.1 for API v1 with one operation per route", () => {
     expect(doc.openapi).toBe("3.1.0");
     expect(doc.info.version).toBe("v1");
-    expect(Object.keys(doc.paths)).toEqual([
-      "/api/v1/health",
-      "/api/v1/meta",
-      "/api/v1/locales/{locale}",
-      "/api/v1/config",
-    ]);
+    // Derived from ROUTES so a new route contract needs no edit here; the operation count
+    // still fails a generator that drops or merges a route.
+    expect(Object.keys(doc.paths)).toEqual([...new Set(ROUTES.map((r) => r.path))]);
+    const ops = Object.values(doc.paths).reduce((n, methods) => n + Object.keys(methods).length, 0);
+    expect(ops).toBe(ROUTES.length);
   });
 
   it("declares path parameters", () => {

@@ -153,6 +153,8 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       }),
     ).toBe(true);
     expect(ok({ themeMode: null, personaOverride: "", layout: null })).toBe(false);
+    expect(ok({ themeMode: null, personaOverride: "p".repeat(64), layout: null })).toBe(true);
+    expect(ok({ themeMode: null, personaOverride: "p".repeat(65), layout: null })).toBe(false);
     expect(ok({ themeMode: null, personaOverride: null })).toBe(false);
     expect(ok({ themeMode: null, personaOverride: null, layout: null, extra: 1 })).toBe(false);
     expect(
