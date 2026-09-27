@@ -163,4 +163,17 @@ describe("core purity: IO globals through a global object (#85)", () => {
     ])
       expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
   });
+
+  // [critic:C1] the destructuring source's terminator lookahead must not require
+  // an immediate `;`, `,`, `\n` or end-of-string right after the chain: a trailing
+  // cast, a trailing comment, or a following `}` must not hide a real destructure.
+  it("flags a destructure whose source has a cast, a comment, or is followed by a brace", () => {
+    for (const src of [
+      "const { fetch } = globalThis as any;",
+      "const { fetch } = window // grab",
+      "{ const { fetch } = globalThis }",
+      "const { fetch } = window satisfies Window;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
 });

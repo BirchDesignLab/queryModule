@@ -107,10 +107,18 @@ export function findGlobalMemberAccess(source: string, names: readonly string[])
   // #184 item 1: the source must be exactly a global object or a chain of global
   // objects, ending the expression right there; a member of a global object
   // (`window.api`) is not itself a global object and must not match.
+  // [critic:C1] the terminator is a negative lookahead rejecting a further member,
+  // index or call step right after the chain (`?.`, `.`, `[` or `(`), rather than a
+  // positive lookahead requiring one of a fixed set of terminator characters
+  // immediately after it. The old fixed set (`;`, `,`, `\n` or end-of-string) missed
+  // a trailing cast (`as any`), a trailing `satisfies` clause, a same-line comment,
+  // or a following `}` (e.g. a block-scoped destructure) — each of those is neither
+  // a continuation of the chain nor one of the allowed terminators, so the old regex
+  // failed to match and the destructure went unflagged (a false negative).
   const memberRe = new RegExp(`^(?:${members})$`);
   const openBrace = /\b(?:const|let|var)\s*\{/g;
   const afterBrace = new RegExp(
-    String.raw`^\s*(?::[^=;]+)?=\s*(?<![\w$.])${link}(?=\s*(?:[;,\n]|$))`,
+    String.raw`^\s*(?::[^=;]+)?=\s*(?<![\w$.])${link}(?!\s*(?:\?\.|\.|\[|\())`,
   );
   for (const m of source.matchAll(openBrace)) {
     const bindingsStart = m.index + m[0].length;
