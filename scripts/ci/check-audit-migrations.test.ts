@@ -29,6 +29,15 @@ describe("SEC-010 audit_event additive-only migrations", () => {
         },
         { name: "0001_audit_triggers.sql", sql: triggers },
         { name: "0002_x.sql", sql: "ALTER TABLE `audit_event` ADD `note_id` text;" },
+        {
+          name: "0003_y.sql",
+          sql: [
+            "-- a nullable column with a literal default\nALTER TABLE `audit_event` ADD COLUMN `n` integer DEFAULT 0;",
+            "ALTER TABLE audit_event ADD `w` text DEFAULT 'a--b /* c */';",
+            'ALTER TABLE "audit_event" ADD [v] real DEFAULT NULL;',
+            "ALTER TABLE audit_event ADD q text DEFAULT 'it''s; DROP'; -- trailing note",
+          ].join("\n--> statement-breakpoint\n"),
+        },
       ]),
     ).toEqual([]);
   });
@@ -54,12 +63,73 @@ describe("SEC-010 audit_event additive-only migrations", () => {
       "hidden second statement",
       "ALTER TABLE `audit_event` ADD `y` text;\nDROP TABLE `audit_event`;",
     ],
+    ["lowercase drop", "drop table audit_event;"],
+    ["double-quoted drop", 'DROP TABLE "audit_event";'],
+    ["bracketed drop", "DROP TABLE [audit_event];"],
+    ["multi-line drop", "DROP\n  TABLE\n\taudit_event;"],
+    ["alter column", "ALTER TABLE audit_event ALTER COLUMN type TO integer;"],
+    [
+      "trigger if not exists",
+      "CREATE TRIGGER IF NOT EXISTS audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END;",
+    ],
+    [
+      "not null through a block comment",
+      "ALTER TABLE audit_event ADD x text NOT/**/NULL DEFAULT '';",
+    ],
+    [
+      "not null through a line comment",
+      "ALTER TABLE audit_event ADD x text NOT -- c\nNULL DEFAULT '';",
+    ],
+    ["check constraint", "ALTER TABLE audit_event ADD x text CHECK (0);"],
+    ["references constraint", "ALTER TABLE audit_event ADD x text REFERENCES user(id);"],
+    ["generated column", "ALTER TABLE audit_event ADD x text GENERATED ALWAYS AS ('a');"],
+    ["collate constraint", "ALTER TABLE audit_event ADD x text COLLATE NOCASE;"],
+    ["unique column", "ALTER TABLE audit_event ADD x text UNIQUE;"],
+    [
+      "comment opener inside a string",
+      "ALTER TABLE audit_event ADD x text DEFAULT '/*'; DROP TABLE audit_event; -- */';",
+    ],
+    ["statement before an unclosed comment", "DROP TABLE audit_event; /* never closed"],
+    ["writable_schema", "PRAGMA writable_schema = ON;"],
+    ["sqlite_master delete", "DELETE FROM sqlite_master WHERE type = 'trigger';"],
+    [
+      "sqlite_schema rewrite",
+      "UPDATE SQLITE_SCHEMA SET sql = 'CREATE TRIGGER t BEFORE UPDATE ON t BEGIN SELECT 1; END' WHERE name = 't';",
+    ],
+    ["sqlite_temp_master write", "DELETE FROM sqlite_temp_master;"],
   ])("rejects %s", (_n, sql) => {
     expect(
       checkAuditMigrations([
         { name: "0000_init.sql", sql: create },
         { name: "0001_audit_triggers.sql", sql: triggers },
         { name: "0005_bad.sql", sql },
+      ]).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["hidden statement after a trigger body", `${trig}\nDROP TABLE audit_event;`],
+    [
+      "hidden statement after a trigger body, no semicolon",
+      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END; DROP TABLE audit_event",
+    ],
+    [
+      "no-op trigger body",
+      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT 1; END;",
+    ],
+    [
+      "trigger on the wrong event",
+      "CREATE TRIGGER audit_event_no_update BEFORE INSERT ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END;",
+    ],
+    [
+      "trigger on another table",
+      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON other BEGIN SELECT RAISE(ABORT, 'x'); END;",
+    ],
+  ])("rejects an initial trigger migration with a %s", (_n, sql) => {
+    expect(
+      checkAuditMigrations([
+        { name: "0000_init.sql", sql: create },
+        { name: "0001_audit_triggers.sql", sql },
       ]).length,
     ).toBeGreaterThan(0);
   });

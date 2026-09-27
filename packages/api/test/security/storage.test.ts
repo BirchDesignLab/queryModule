@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@libsql/client";
 import { describe, expect, it } from "vitest";
 import { DatabaseOpenError, openDatabase } from "../../src/db/client";
 import {
+  AUDIT_TRIGGER_SQL,
   AUDIT_TRIGGERS,
   AuditTriggerMissingError,
   checkAuditTriggers,
@@ -105,6 +107,50 @@ describe("storage: SEC-006, SEC-010", () => {
       const err = await checkAuditTriggers(db).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(AuditTriggerMissingError);
       expect((err as AuditTriggerMissingError).missing).toEqual(["audit_event_no_replace"]);
+    } finally {
+      db.$client.close();
+    }
+  });
+
+  it("pins each trigger's statement to migration 0001", () => {
+    const file = readFileSync(resolve(MIGRATIONS, "0001_audit_triggers.sql"), "utf8");
+    const statements = file
+      .split("--> statement-breakpoint")
+      .map((st) => st.replace(/\s+/g, " ").trim().replace(/;$/, ""));
+    expect(statements).toEqual(AUDIT_TRIGGERS.map((t) => AUDIT_TRIGGER_SQL[t]));
+  });
+
+  it.each(AUDIT_TRIGGERS)(
+    "a same-named %s with a rewritten body makes the check refuse",
+    async (name) => {
+      const db = await migratedDb();
+      try {
+        await db.$client.execute(`DROP TRIGGER ${name}`);
+        await db.$client.execute(
+          `CREATE TRIGGER ${name} BEFORE UPDATE ON audit_event BEGIN SELECT 1; END`,
+        );
+        const err = await checkAuditTriggers(db).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(AuditTriggerMissingError);
+        expect((err as AuditTriggerMissingError).missing).toEqual([]);
+        expect((err as AuditTriggerMissingError).altered).toEqual([name]);
+        expect((err as AuditTriggerMissingError).message).toContain(name);
+      } finally {
+        db.$client.close();
+      }
+    },
+  );
+
+  it("a trigger body rewritten through writable_schema makes the check refuse", async () => {
+    const db = await migratedDb();
+    try {
+      await db.$client.execute("PRAGMA writable_schema = ON");
+      await db.$client.execute(
+        "UPDATE sqlite_master SET sql = 'CREATE TRIGGER audit_event_no_delete BEFORE DELETE ON audit_event BEGIN SELECT 1; END' WHERE type = 'trigger' AND name = 'audit_event_no_delete'",
+      );
+      await db.$client.execute("PRAGMA writable_schema = OFF");
+      const err = await checkAuditTriggers(db).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AuditTriggerMissingError);
+      expect((err as AuditTriggerMissingError).altered).toEqual(["audit_event_no_delete"]);
     } finally {
       db.$client.close();
     }
