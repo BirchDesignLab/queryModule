@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@libsql/client";
 import { describe, expect, it } from "vitest";
+import { systemClock } from "../../src/clock";
 import { DatabaseOpenError, openDatabase } from "../../src/db/client";
 import {
   AUDIT_TRIGGER_SQL,
@@ -10,6 +11,7 @@ import {
   checkAuditTriggers,
   runMigrations,
 } from "../../src/db/migrate";
+import { checkKeyCanaries, KeyCanaryError } from "../../src/keys/canary";
 import { TEST_DB_KEY, tempDbFile } from "../helpers/db";
 
 const MIGRATIONS = resolve(import.meta.dirname, "../../drizzle");
@@ -154,5 +156,32 @@ describe("storage: SEC-006, SEC-010", () => {
     } finally {
       db.$client.close();
     }
+  });
+});
+
+describe("storage: key canaries", () => {
+  const keys = { credentialKey: Buffer.alloc(32, 2), dataKey: Buffer.alloc(32, 3) };
+  it("a mismatched CREDENTIAL_KEY fails the canary", async () => {
+    const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+    await runMigrations(db, MIGRATIONS);
+    await checkKeyCanaries(db, keys, systemClock);
+    const err = await checkKeyCanaries(
+      db,
+      { ...keys, credentialKey: Buffer.alloc(32, 7) },
+      systemClock,
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(KeyCanaryError);
+    expect((err as KeyCanaryError).keyName).toBe("credential");
+  });
+  it("a mismatched DATA_KEY fails the canary and names only data", async () => {
+    const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+    await runMigrations(db, MIGRATIONS);
+    await checkKeyCanaries(db, keys, systemClock);
+    const err = await checkKeyCanaries(
+      db,
+      { ...keys, dataKey: Buffer.alloc(32, 8) },
+      systemClock,
+    ).catch((e: unknown) => e);
+    expect((err as KeyCanaryError).keyName).toBe("data");
   });
 });
