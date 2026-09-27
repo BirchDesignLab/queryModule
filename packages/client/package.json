@@ -10,7 +10,7 @@
   },
   "scripts": {
     "gen:api": "tsx scripts/gen-api-types.ts",
-    "typecheck": "tsc -b",
+    "typecheck": "pnpm -w exec tsc -b packages/client",
     "test": "vitest run"
   },
   "dependencies": {
@@ -25,7 +25,8 @@
     "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",
     "react": "^19.3.0",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "typescript": "6.0.3"
   },
   "peerDependencies": {
     "react": "^19.3.0"
