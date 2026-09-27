@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { createClient } from "@libsql/client";
+import { type Client, createClient, type Transaction } from "@libsql/client";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DatabaseLockTimeoutError,
   DatabaseOpenError,
@@ -37,6 +37,38 @@ async function expectKeyStillApplies(db: Db, file: string): Promise<void> {
   const again = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
   expect(await readPragmas(again)).toEqual(REQUIRED_PRAGMAS);
   again.$client.close();
+}
+
+/** The libsql client SerializedClient wraps (private at the type level only). */
+function innerClient(db: Db): Client {
+  return (db.$client as unknown as { inner: Client }).inner;
+}
+
+/** The PRAGMA statements sent to the inner client since the spy started. */
+function pragmaCalls(spy: { mock: { calls: unknown[][] } }): string[] {
+  return spy.mock.calls.map((c) => String(c[0])).filter((s) => s.startsWith("PRAGMA"));
+}
+
+const REAPPLIED = [
+  "PRAGMA busy_timeout = 5000",
+  "PRAGMA journal_mode = WAL",
+  "PRAGMA synchronous = FULL",
+  "PRAGMA secure_delete = ON",
+  "PRAGMA foreign_keys = ON",
+];
+
+async function withParentChild(file: string): Promise<Db> {
+  const db = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+  await db.$client.executeMultiple(
+    "CREATE TABLE p (id INTEGER PRIMARY KEY); CREATE TABLE c (p INTEGER REFERENCES p(id));",
+  );
+  return db;
+}
+
+/** A body whose COMMIT fails: a deferred foreign key violation. */
+async function deferredFkViolation(tx: Parameters<Parameters<typeof withTransaction>[1]>[0]) {
+  await tx.run(sql`PRAGMA defer_foreign_keys = ON`);
+  await tx.run(sql`INSERT INTO c VALUES (1)`);
 }
 
 describe("SEC-006 encrypted database", () => {
@@ -267,6 +299,48 @@ describe("SEC-006 encrypted database", () => {
       expect(await count(db)).toBe(0);
       expect(await readPragmas(db)).toEqual(REQUIRED_PRAGMAS);
       await expectKeyStillApplies(db, file);
+    });
+  });
+
+  describe("pragma re-apply when a transaction fails to settle", () => {
+    it("re-applies the pragmas when COMMIT fails, and the key still applies", async () => {
+      const file = tempDbFile();
+      const db = await withParentChild(file);
+      const exec = vi.spyOn(innerClient(db), "execute");
+      await expect(withTransaction(db, deferredFkViolation)).rejects.toThrow(/FOREIGN KEY/);
+      expect(pragmaCalls(exec)).toEqual(REAPPLIED);
+      exec.mockRestore();
+      expect(await count(db, "c")).toBe(0);
+      expect(await readPragmas(db)).toEqual(REQUIRED_PRAGMAS);
+      await expectKeyStillApplies(db, file);
+    });
+
+    it("closes the database when the re-apply fails, and rethrows the original error", async () => {
+      const db = await withParentChild(tempDbFile());
+      const inner = innerClient(db);
+      const real = inner.execute.bind(inner);
+      vi.spyOn(inner, "execute").mockImplementation(((stmt: string) =>
+        stmt.startsWith("PRAGMA")
+          ? Promise.reject(new Error("pragma failed"))
+          : real(stmt)) as Client["execute"]);
+      await expect(withTransaction(db, deferredFkViolation)).rejects.toThrow(/FOREIGN KEY/);
+      expect(db.$client.closed).toBe(true);
+      await expect(db.$client.execute("SELECT 1")).rejects.toThrow(/closed/);
+    });
+
+    it("re-applies the pragmas when a raw transaction's close throws", async () => {
+      const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+      const exec = vi.spyOn(innerClient(db), "execute");
+      const t = await db.$client.transaction();
+      const innerTx = (t as unknown as { inner: Transaction }).inner;
+      const realClose = innerTx.close.bind(innerTx);
+      vi.spyOn(innerTx, "close").mockImplementation(() => {
+        realClose();
+        throw new Error("close failed");
+      });
+      expect(() => t.close()).toThrow("close failed");
+      expect(await readPragmas(db)).toEqual(REQUIRED_PRAGMAS);
+      expect(pragmaCalls(exec).slice(0, REAPPLIED.length)).toEqual(REAPPLIED);
     });
   });
 

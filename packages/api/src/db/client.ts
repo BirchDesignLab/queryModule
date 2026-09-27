@@ -97,10 +97,17 @@ interface TxScope {
 }
 const txScope = new AsyncLocalStorage<TxScope>();
 
+/**
+ * A transaction that holds the lock until it settles. When commit, rollback or close
+ * throws, @libsql/client may have dropped the connection (its pool closes one whose
+ * ROLLBACK fails) and would open a fresh one without the pragmas, so recover re-applies
+ * them, still under the lock, before the lock is released.
+ */
 class LockedTransaction implements Transaction {
   constructor(
     private readonly inner: Transaction,
     private readonly done: Release,
+    private readonly recover: () => Promise<void>,
   ) {}
   execute(stmt: InStatement): Promise<ResultSet> {
     return this.inner.execute(stmt);
@@ -111,26 +118,30 @@ class LockedTransaction implements Transaction {
   executeMultiple(sql: string): Promise<void> {
     return this.inner.executeMultiple(sql);
   }
-  async rollback(): Promise<void> {
+  async #settle(op: () => Promise<void>): Promise<void> {
     try {
-      await this.inner.rollback();
+      await op();
+    } catch (e) {
+      await this.recover();
+      throw e;
     } finally {
       this.done();
     }
   }
-  async commit(): Promise<void> {
-    try {
-      await this.inner.commit();
-    } finally {
-      this.done();
-    }
+  rollback(): Promise<void> {
+    return this.#settle(() => this.inner.rollback());
+  }
+  commit(): Promise<void> {
+    return this.#settle(() => this.inner.commit());
   }
   close(): void {
     try {
       this.inner.close();
-    } finally {
-      this.done();
+    } catch (e) {
+      void this.recover().finally(this.done);
+      throw e;
     }
+    this.done();
   }
   get closed(): boolean {
     return this.inner.closed;
@@ -192,10 +203,26 @@ class SerializedClient implements Client {
     const scope = txScope.getStore();
     const own = scope?.lock === this.lock ? scope : undefined;
     if (own) own.open = true;
-    return new LockedTransaction(tx, () => {
-      if (own) own.open = false;
-      release();
-    });
+    return new LockedTransaction(
+      tx,
+      () => {
+        if (own) own.open = false;
+        release();
+      },
+      () => this.reapplyPragmas(),
+    );
+  }
+  /**
+   * Re-applies the pragmas after a transaction failed to settle; the caller holds the
+   * lock. If that fails, the database is closed so every later call rejects (fail closed).
+   * Never throws: the caller rethrows the transaction's own error.
+   */
+  async reapplyPragmas(): Promise<void> {
+    try {
+      await applyPragmas(this.inner);
+    } catch {
+      this.inner.close();
+    }
   }
   /** A reopened pool would hand out connections without the pragmas; reopen the database. */
   async sync(): Promise<Replicated> {
@@ -213,6 +240,15 @@ class SerializedClient implements Client {
   get protocol(): string {
     return this.inner.protocol;
   }
+}
+
+/** The per-connection pragmas of spec 5.5; journal_mode WAL also persists in the file. */
+async function applyPragmas(client: Client): Promise<void> {
+  await client.execute("PRAGMA busy_timeout = 5000");
+  await client.execute("PRAGMA journal_mode = WAL");
+  await client.execute("PRAGMA synchronous = FULL");
+  await client.execute("PRAGMA secure_delete = ON");
+  await client.execute("PRAGMA foreign_keys = ON");
 }
 
 export async function openDatabase(o: {
@@ -233,12 +269,8 @@ export async function openDatabase(o: {
       encryptionKey: o.encryptionKey,
       concurrency: 1,
     });
-    await client.execute("PRAGMA busy_timeout = 5000");
+    await applyPragmas(client);
     await client.execute("SELECT count(*) FROM sqlite_master"); // proves the key opens the file
-    await client.execute("PRAGMA journal_mode = WAL");
-    await client.execute("PRAGMA synchronous = FULL");
-    await client.execute("PRAGMA secure_delete = ON");
-    await client.execute("PRAGMA foreign_keys = ON");
   } catch (e) {
     client?.close();
     throw new DatabaseOpenError(e instanceof Error ? e.name : "unknown");
