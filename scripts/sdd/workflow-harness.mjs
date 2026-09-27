@@ -185,6 +185,8 @@ const BASE = {
   globalConstraints: "- TDD for every task",
   carries: "none",
   trailer: "Co-Authored-By: X",
+  // The scenarios below were written against five fix rounds; the default (2) has its own scenario.
+  maxRounds: 5,
 };
 const SENSITIVE_RULE =
   "escalate any ruling that would: (a) weaken a security, audit, credential, delegation or dispatch invariant; (b) change a shape frozen at a phase gate or listed as a contract file (master plan 8.2); (c) keep a Critical finding with stands. Everything else it rules.";
@@ -556,6 +558,35 @@ await test("sdd: required args throw clearly, including globalConstraints", asyn
   }
 });
 
+// Developer rule 09-27-26: with no maxRounds arg a task still open after fix round 2 parks for a
+// controller ruling (no round 3).
+await test("sdd: default maxRounds is 2; findings open after round 2 park", async () => {
+  const { maxRounds: _unset, ...noCap } = BASE;
+  const r = await run(
+    sdd,
+    noCap,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "re-review*": (p) => ({
+        verdicts: ids(p).map((id) => ({ id, verdict: "NOT ADDRESSED", evidence: "a.ts:1" })),
+        newFindings: [],
+        outOfScope: [],
+      }),
+    }),
+  );
+  assert.ok(r.labels.includes("fixer-r2") && !r.labels.includes("fixer-r3"), r.labels.join(","));
+  assert.equal(r.res.status, "parked");
+  assert.equal(r.res.rounds, 2);
+  assert.ok(
+    r.logs.some((l) => /maxRounds 2;/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.ok(
+    r.logs.some((l) => /cap: maxRounds 2 reached/.test(l)),
+    r.logs.join(" | "),
+  );
+});
+
 await test("sdd: maxRounds is coerced and logged (numeric string, float, junk)", async () => {
   const a = await run(sdd, { ...BASE, maxRounds: "3" }, sddResponder());
   assert.ok(
@@ -565,7 +596,7 @@ await test("sdd: maxRounds is coerced and logged (numeric string, float, junk)",
   const b = await run(sdd, { ...BASE, maxRounds: 2.7 }, sddResponder());
   assert.ok(b.logs.some((l) => /maxRounds 2\.7 coerced to 2/.test(l)));
   const c = await run(sdd, { ...BASE, maxRounds: "abc" }, sddResponder());
-  assert.ok(c.logs.some((l) => /maxRounds "abc" is not a number; using 5/.test(l)));
+  assert.ok(c.logs.some((l) => /maxRounds "abc" is not a number; using 2/.test(l)));
   const d = await run(sdd, { ...BASE, maxRounds: 99 }, sddResponder());
   assert.ok(d.logs.some((l) => /clamped to 8/.test(l)));
 });

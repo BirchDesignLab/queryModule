@@ -22,8 +22,10 @@
  *   maxAgents: 14,                           // agent budget (every agent() call); default by tier: ordinary 14,
  *                                            // gate 16, critical 20; coerced like maxRounds;
  *                                            // past it the run stops at "budget"
- *   maxRounds: 5,                            // fix-round cap; numeric strings and floats are
- *                                            // coerced (logged), then clamped to 1..8
+ *   maxRounds: 2,                            // fix-round cap, default 2 (developer rule 09-27-26: a task
+ *                                            // open after round 2 parks for a controller ruling);
+ *                                            // numeric strings and floats are coerced (logged), then
+ *                                            // clamped to 1..8
  *   answers: [{ at, text?, decisions?, noCode? }],    // only on a re-run after a stop (below)
  *   implemented: { head: "<full sha>" }      // optional: review stages only; skips the implementer
  *                                            // and reviews base..head (README "Fallbacks")
@@ -136,12 +138,14 @@ if (CRITIC_FOCUS && !CRITIC) log('review: criticFocus ignored (critic off: set c
 const DEFAULT_CRITIC_FOCUS = 'correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 
-let MAX_ROUNDS = 5
+// Developer rule 09-27-26: a task still open after fix round 2 parks for a controller ruling.
+const DEFAULT_MAX_ROUNDS = 2
+let MAX_ROUNDS = DEFAULT_MAX_ROUNDS
 if (A.maxRounds !== undefined && A.maxRounds !== null) {
   const raw = A.maxRounds
   const n = typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '') ? Number(raw) : Number.NaN
   if (!Number.isFinite(n)) {
-    log(`cap: maxRounds ${JSON.stringify(raw)} is not a number; using 5`)
+    log(`cap: maxRounds ${JSON.stringify(raw)} is not a number; using ${DEFAULT_MAX_ROUNDS}`)
   } else if (typeof raw !== 'number' || !Number.isInteger(n)) {
     MAX_ROUNDS = Math.trunc(n)
     log(`cap: maxRounds ${JSON.stringify(raw)} coerced to ${MAX_ROUNDS}`)
