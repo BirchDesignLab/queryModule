@@ -1,5 +1,6 @@
 export * from "./api-error";
 export * from "./audit";
+export * from "./audit-auth";
 export * from "./identity";
 export * from "./mock-file";
 export * from "./primitives";

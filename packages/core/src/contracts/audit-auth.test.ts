@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AUDIT_DETAILS_SCHEMAS, AuditEventSchema, SYSTEM_ACTOR } from "./audit";
+import * as contracts from "./index";
 
 /** Synthetic fixtures (spec 5.4 fixture policy): documentation IP range, example.test email. */
 const IP = "203.0.113.9";
@@ -102,6 +103,10 @@ describe("SEC-010 ADR-0005 auth audit ids, times and client IP are bounded", () 
       expect(ok(v)).toBe(true);
     }
     for (const v of ["fe80::1%eth0", "::1"]) expect(ok(v)).toBe(true);
+    // 64-character boundary, and the longest real value: IPv4-mapped IPv6 plus a 15-char zone (61).
+    const longest = "0000:0000:0000:0000:0000:ffff:255.255.255.255%abcdefghijklmno";
+    expect(longest).toHaveLength(61);
+    for (const v of ["x".repeat(64), longest]) expect(ok(v)).toBe(true);
     for (const v of ["", "a b", "203.0.113.9\n", "x".repeat(65)]) expect(ok(v)).toBe(false);
   });
   it("clientIp rejects header punctuation (review C-M1, spec 4.7 identifiers only)", () => {
@@ -180,7 +185,14 @@ describe("SEC-005 SEC-012 auth rows parse through AuditEventSchema (AuditService
     expect(e.credentialUserId ?? null).toBeNull();
   });
   it("AuditEventSchema converts to JSON Schema", () => {
-    expect(() => z.toJSONSchema(AuditEventSchema, { unrepresentable: "any" })).not.toThrow();
+    // Default options: z.undefined() would throw here, z.never() emits { not: {} } (ruling point 1).
+    const json = z.toJSONSchema(AuditEventSchema) as { anyOf?: unknown[]; oneOf?: unknown[] };
+    const variants = (json.anyOf ?? json.oneOf ?? []) as {
+      properties?: Record<string, { const?: unknown; not?: unknown }>;
+    }[];
+    const login = variants.find((v) => v.properties?.type?.const === "loginSucceeded");
+    expect(login?.properties?.partId).toEqual({ not: {} });
+    expect(login?.properties?.credentialUserId).toEqual({ not: {} });
   });
   it("auth rows keep the actor and identity source invariant", () => {
     const e = {
@@ -199,5 +211,17 @@ describe("SEC-005 SEC-012 auth rows parse through AuditEventSchema (AuditService
       details: { method: "password", sessionId: SID, clientIp: IP },
     };
     expect(AuditEventSchema.safeParse(e).success).toBe(false);
+  });
+});
+
+describe("SEC-010 auth contracts are exported from the package entry (Task 16 imports them)", () => {
+  it("ClientIpSchema and the auth details schemas are reachable from ./index", () => {
+    expect(contracts.ClientIpSchema.safeParse("203.0.113.9").success).toBe(true);
+    expect(contracts.ClientIpSchema.safeParse("a, b").success).toBe(false);
+    expect(contracts.CLIENT_IP_MAX_LENGTH).toBe(64);
+    expect(contracts.LoginSucceededDetailsSchema).toBe(AUDIT_DETAILS_SCHEMAS.loginSucceeded);
+    expect(contracts.LoginFailedDetailsSchema).toBe(AUDIT_DETAILS_SCHEMAS.loginFailed);
+    expect(contracts.LogoutDetailsSchema).toBe(AUDIT_DETAILS_SCHEMAS.logout);
+    expect(contracts.RoleChangedDetailsSchema).toBe(AUDIT_DETAILS_SCHEMAS.roleChanged);
   });
 });
