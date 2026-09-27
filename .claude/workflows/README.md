@@ -46,7 +46,7 @@ Vocabulary: **role** (implementer, reviewer (the combined spec and quality revie
   roles: { ... optional overrides ... },
   maxAgents: 14,                           // agent budget per run; default by tier (ordinary 14, gate 16,
                                            // critical 20); coerced like maxRounds (logged); at least 1
-  maxRounds: 5,                            // numeric strings and floats are coerced (logged); clamped to 1..8
+  maxRounds: 2,                            // default 2; numeric strings and floats are coerced (logged); clamped to 1..8
   answers: [{ at, text?, decisions?, noCode? }], // only on a re-run after a stop: one entry per answered stop
   implemented: { head: "<full sha>" }      // optional: review stages only (see Fallbacks)
 }
@@ -125,20 +125,23 @@ Every `sdd-task` agent can run shell commands, so every `sdd-task` prompt carrie
 6. **Gate.** `gate-0` ran in step 2; a clean review plus a green `gate-0` completes the task with no further gate. After a fix loop that ends clean, `gate-r<r>` runs. Each gate runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` (the full suite with the coverage thresholds) once each in `repoDir`, confirms the branch and that HEAD equals the expected head, and that the tree is clean. Returns `{ ok, head, problems, preconditionFailed? }`. A branch or HEAD mismatch is a precondition failure and stops the run. A red gate with no problem listed counts as one problem. Problems become open findings and go back through the fix loop within `maxRounds`. `complete` needs a green gate.
 7. **Return** (below). The script computes the ledger lines and returns them as `ledgerLines`; no agent writes the ledger. With `ledgerPath` it logs "ledger: controller appends N lines to <ledgerPath>".
 
-Agent counts at the default maxRounds 5 (no budget stop):
+`maxRounds` defaults to 2 (developer rule 09-27-26): a task still open after fix round 2 parks, the controller rules on each parked finding (fix inline, "stands" with a follow-up issue, or a no-code ruling answered with `noCode: true`), and a follow-on run continues. An explicit `maxRounds` (1..8) still wins.
+
+Agent counts at the default maxRounds 2 (no budget stop):
 
 | | ordinary | gate | critical |
 |---|---|---|---|
 | Clean task | 3 (implementer, combined reviewer, gate-0) | 4 (plus the critic) | 5 (implementer, spec, quality, critic, gate-0) |
 | One fix round on reviewer findings | 7 | 8 | 9 |
-| Worst case | 24 (25 with `ui` or `critic: true`) | 25 | 26 |
+| Worst case | 15 (16 with `ui` or `critic: true`) | 16 | 17 |
+| Worst case at an explicit maxRounds 5 | 24 (25 with `ui` or `critic: true`) | 25 | 26 |
 
 - A cannot-verify item adds the checker; a `needsJudgment` item or a plan-mandated finding adds the ruler. One mechanical round after a red `gate-0` adds 3 (fixer, progress, gate-r1).
-- Worst case: implementer, concern ruler, pre-review fixer and progress check, the reviewers, critic and `gate-0`, checker, review ruler, round 1 on a reviewer finding with fixer, progress, re-review and a red gate-r1, then four mechanical rounds of fixer, progress and a red gate. A run whose findings are never addressed parks two agents earlier (22, 23, 24; one more with a checker). An answered implementer or precondition stop adds one `implementer-continue` or retry agent (`implementer-retry`, `checker-retry`, `ruler-review-retry`, `gate-...-retry`). Controller decisions can remove the checker or a ruler call.
+- Worst case: implementer, concern ruler, pre-review fixer and progress check, the reviewers, critic and `gate-0`, checker, review ruler, round 1 on a reviewer finding with fixer, progress, re-review and a red gate-r1, then one mechanical round (four at maxRounds 5) of fixer, progress and a red gate. A run whose findings are never addressed parks after round 2 at 13, 14, 15 (22, 23, 24 at maxRounds 5; one more with a checker). An answered implementer or precondition stop adds one `implementer-continue` or retry agent (`implementer-retry`, `checker-retry`, `ruler-review-retry`, `gate-...-retry`). Controller decisions can remove the checker or a ruler call.
 
 ### Agent budget
 
-`maxAgents` caps the agent calls in one run. Its default follows the tier: ordinary 14, gate 16, critical 20; an explicit `maxAgents` wins (numeric strings and floats coerced and logged like `maxRounds`; at least 1). Every `agent()` call counts, a cached replay on resume included. When the next call would exceed the cap, it is not made and the run stops with `stopped: "budget"`, `stopPoint: "budget"` and a `problem` naming the count, the cap and the stage (for example `agent 17 would exceed maxAgents 16 at fixer-r3 (Fix)`). The parallel review block reserves all its calls first, so a budget stop never splits it. Findings still open at the stop are returned as `parked` too (for visibility; a resume recomputes them from cache). The defaults stop every worst case above before it ends; a typical task stays well under them.
+`maxAgents` caps the agent calls in one run. Its default follows the tier: ordinary 14, gate 16, critical 20; an explicit `maxAgents` wins (numeric strings and floats coerced and logged like `maxRounds`; at least 1). Every `agent()` call counts, a cached replay on resume included. When the next call would exceed the cap, it is not made and the run stops with `stopped: "budget"`, `stopPoint: "budget"` and a `problem` naming the count, the cap and the stage (for example `agent 17 would exceed maxAgents 16 at fixer-r3 (Fix)`). The parallel review block reserves all its calls first, so a budget stop never splits it. Findings still open at the stop are returned as `parked` too (for visibility; a resume recomputes them from cache). At the default maxRounds 2 the gate and critical worst cases fit their caps and the ordinary worst case (15) stops at budget; at maxRounds 5 the caps stop every worst case before it ends. A typical task stays well under them.
 
 Answer at `budget` (`{ at: "budget", text, decisions? }`) and re-run with `resumeFromRunId` and the full args. Each budget entry raises the cap by the tier default (14, 16 or 20), once. The text goes to no agent (it is logged), so every earlier call replays from cache and the run resumes at the stage it stopped. Decisions apply like decisions at a later stop (after the checker). So a decision given at `budget` on a cannot-verify item still sends that item to the checker (one agent against the cap) before the decision overrides its result. If it stops at `budget` again, append another entry.
 
