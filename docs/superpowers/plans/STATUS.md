@@ -60,7 +60,8 @@ W6 in progress on `feat/p0-wave-6` (one PR, critical tier). Resumable: check the
 - [x] 9 #69 OpenAPI input bodies, Condition registry id (inline)
 - [x] 10 #85 IO-globals member access, web config typecheck, TokenStore critical tier (inline)
 - [x] 11 #84 Track B P1 plan fixes (inline)
-- [ ] 12 wave-review (critical Opus high, gate Opus medium), PR draft until artifact and CI green
+- [x] 12 wave-review (critical Opus high, gate Opus medium): approve 09-27-26, artifact `docs/reviews/feat-p0-wave-6.md` (2 agents, 0.32M tokens)
+- [ ] 13 PR CI green (first run of the ADR-0008 jobs); tag `p0-wave-6` before the squash merge; after merge: `gh-setup-repo.sh --apply` with the developer's go (closes #29), `gh-setup-project.mjs` dry run then `--apply`, then `--dashboard`
 
 Decisions 09-26-26: no xhigh/max anywhere; critical review Opus high, gate Opus medium, ordinary CI only; small diff = one reviewer, no ruler/re-reviewer unless findings. Notes: one `Closes #n` per issue; M0 release notes list #93 as api-breaking (tightening only); docs plan #94 (ordinary, any time).
 
