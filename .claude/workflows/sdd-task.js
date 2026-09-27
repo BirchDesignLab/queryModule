@@ -24,7 +24,7 @@
  *                                            // past it the run stops at "budget"
  *   maxRounds: 5,                            // fix-round cap; numeric strings and floats are
  *                                            // coerced (logged), then clamped to 1..8
- *   answers: [{ at, text?, decisions? }],    // only on a re-run after a stop (below)
+ *   answers: [{ at, text?, decisions?, noCode? }],    // only on a re-run after a stop (below)
  *   implemented: { head: "<full sha>" }      // optional: review stages only; skips the implementer
  *                                            // and reviews base..head (README "Fallbacks")
  * } })
@@ -70,6 +70,8 @@
  * unchanged) plus answers: a list with one entry per answered stop, appended across re-runs and
  * never replaced: [{ at: <the returned stopped value, or stopPoint for a precondition>, text: "...",
  * decisions: [{ item, decision: "fix" | "stands" | "verified", reason, fixInstruction? }] }].
+ * noCode: true (only on a fixer-r<r> entry with text) says the text closes every finding open in
+ * round r with no code change: progress-r<r> then waives its new-commits check, and only that one.
  * A single object is a one-entry list. Every entry's at is validated; an unknown one throws.
  * Each entry's text goes to exactly one agent (the first consumer at or after its stop point that
  * runs), so earlier calls, including an earlier stop's continue or retry agent, replay from cache.
@@ -218,6 +220,10 @@ if (A.answers !== undefined && A.answers !== null) {
     const text = typeof e.text === 'string' ? e.text.trim() : ''
     const decisions = Array.isArray(e.decisions) ? e.decisions : []
     if (!text && !decisions.length) throw new Error(`sdd-task: answers[${i}] needs text or decisions (or both)`)
+    const noCode = e.noCode === true
+    if (e.noCode !== undefined && e.noCode !== false && (!noCode || !/^fixer-r[1-9]\d*$/.test(at) || !text)) {
+      throw new Error(`sdd-task: answers[${i}].noCode must be true on a fixer-r<r> entry with text (the controller's no-code ruling)`)
+    }
     if (at === 'precondition' && decisions.length) throw new Error(`sdd-task: answers[${i}] carries decisions at a plain precondition stop; use the returned stopPoint (for example precondition:checker) as at`)
     for (const d of decisions) {
       if (!d || typeof d.item !== 'string' || !['fix', 'stands', 'verified'].includes(d.decision) || typeof d.reason !== 'string') {
@@ -233,7 +239,7 @@ if (A.answers !== undefined && A.answers !== null) {
       if (text) log(`budget: answers[${i}]: ${text}`)
       return { index: i, at, pos: -1, preLabel: null, text, delivered: true }
     }
-    return { index: i, at, pos: pre ? -1 : stopPos(at), preLabel: pre ? pre[1] || '' : null, text, delivered: !text }
+    return { index: i, at, pos: pre ? -1 : stopPos(at), preLabel: pre ? pre[1] || '' : null, text, delivered: !text, noCode }
   })
   const raised = entries.filter((e) => e.at === 'budget').length
   if (raised) log(`budget: maxAgents ${MAX_AGENTS - raised * DEFAULT_MAX_AGENTS} raised to ${MAX_AGENTS} (${raised} answer(s) at budget, +${DEFAULT_MAX_AGENTS} each)`)
@@ -853,12 +859,16 @@ async function runChecker(items, headNow, expectedHead, answerText, label) {
   )
 }
 
-async function runProgress(label, roundBase, priorTests) {
+// noCode: the controller closed every open finding of this round with no code change (an answer
+// { at: "fixer-r<r>", text, noCode: true }), so an empty round is expected. Only check 1 is waived.
+async function runProgress(label, roundBase, priorTests, noCode = false) {
   return call(
     [
       `Check a fix round on Task ${N} in ${REPO}. Round base: ${roundBase}. ${GIT}`,
       'Checks (report each failure as one line in problems; ok is true only with no problems):',
-      `1. New commits exist: git log --oneline ${roundBase}..HEAD is not empty. List them in newCommits (full sha, subject).`,
+      noCode
+        ? `1. Check 1 does not apply this round: the controller closed every open finding with no code change, so no new commit is expected. Still list any commits from git log --oneline ${roundBase}..HEAD in newCommits (full sha, subject); an empty list is not a problem.`
+        : `1. New commits exist: git log --oneline ${roundBase}..HEAD is not empty. List them in newCommits (full sha, subject).`,
       '2. Working tree clean: git status --porcelain prints nothing.',
       `3. No test was skipped or focused: git diff ${roundBase}..HEAD adds no .skip( / .only( / it.skip / describe.only / test.todo (grep the + lines).`,
       `4. No test file deleted or emptied: git diff --diff-filter=D --name-only ${roundBase}..HEAD and git diff --numstat ${roundBase}..HEAD show no *.test.* or *.spec.* file deleted or left with no content.`,
@@ -1346,7 +1356,11 @@ while (!gatePassed) {
     state.concerns.push(...fx.concerns.filter((c) => c.kind !== 'observation'))
     for (const c of fx.concerns.filter((c) => c.kind === 'observation')) state.deferredMinors.push(`fixer r${r} observation: ${c.text}`)
 
-    const pc = await runProgress(`progress-r${r}`, roundBase, lastTests)
+    // Only an explicit controller ruling waives the new-commits check; a re-reviewer ADDRESSED on an
+    // empty diff never does, so a fixer that fails to commit is still caught.
+    const noCode = !!ANSWERS && ANSWERS.entries.some((e) => e.noCode && e.at === `fixer-r${r}`)
+    if (noCode) log(`fix: round ${r}: controller answered noCode; progress-r${r} waives the new-commits check`)
+    const pc = await runProgress(`progress-r${r}`, roundBase, lastTests, noCode)
     const progressProblems = []
     const guardHits = []
     if (pc) {
