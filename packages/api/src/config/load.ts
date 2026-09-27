@@ -28,7 +28,9 @@ export class ConfigLoadError extends Error {
 }
 
 export function canonicalJson(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(",")}]`;
+  // undefined elements become null, as in JSON.stringify, so the output is always valid JSON
+  if (Array.isArray(v))
+    return `[${v.map((x) => (x === undefined ? "null" : canonicalJson(x))).join(",")}]`;
   if (v !== null && typeof v === "object") {
     const o = v as Record<string, unknown>;
     return `{${Object.keys(o)

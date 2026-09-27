@@ -54,6 +54,19 @@ describe("BR-001 site config load", () => {
     rmSync(join(d, "locales"), { recursive: true });
     await expect(loadSiteConfig(file)).rejects.toThrow(/locale/);
   });
+  it("canonicalJson sorts keys at every depth and keeps array order", () => {
+    expect(canonicalJson({ b: 1, a: { d: [2, 1], c: null } })).toBe(
+      '{"a":{"c":null,"d":[2,1]},"b":1}',
+    );
+  });
+  it("canonicalJson writes undefined array elements as null, like JSON.stringify", () => {
+    expect(canonicalJson([1, undefined, { a: undefined }])).toBe(
+      JSON.stringify([1, undefined, { a: undefined }]),
+    );
+  });
+});
+
+describe("NFR-001 locale bundles", () => {
   it("reports the real reason for a bad locale bundle instead of always saying missing", async () => {
     const d = copy();
     const file = join(d, "sites/default.json");
@@ -64,10 +77,5 @@ describe("BR-001 site config load", () => {
     await expect(loadSiteConfig(file)).rejects.toThrow(/invalid JSON/);
     rmSync(bundleFile);
     await expect(loadSiteConfig(file)).rejects.toThrow(/file not readable/);
-  });
-  it("canonicalJson sorts keys at every depth and keeps array order", () => {
-    expect(canonicalJson({ b: 1, a: { d: [2, 1], c: null } })).toBe(
-      '{"a":{"c":null,"d":[2,1]},"b":1}',
-    );
   });
 });
