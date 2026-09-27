@@ -19,3 +19,12 @@ export interface ClientPlatform {
   online: PlatformSignal;
   visible: PlatformSignal;
 }
+
+/** Web uses the `__Host-` cookie; there is no token to store. Holds nothing, so it stays in
+ * platform.ts rather than a *token-store* file (W6 #85; a real SecureStore or web store
+ * implementation would go in such a file, reserved at [critical] tier). */
+export const noTokenStore: TokenStore = {
+  get: async () => null,
+  set: async () => undefined,
+  clear: async () => undefined,
+};
