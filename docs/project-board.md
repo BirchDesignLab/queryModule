@@ -80,37 +80,35 @@ For a wave whose `pr` is recorded and whose PR has merged, the wave timeline use
 
 ## Manual steps
 
-Views, built-in project workflows and repo settings have no API. BirchDesignLab does these in the web UI. This list is the one checklist: tick it here, and close issue #75 when it is done.
+Views, built-in project workflows and repo settings have no API. BirchDesignLab does these in the web UI. This list is the one checklist; verified read-only through the API on 09-27-26 and issue #75 closed.
 
 Automation token (for `project-sync`):
-- [ ] As BirchDesignLab, create a classic personal access token with only the `project` scope (Settings, Developer settings, Personal access tokens, Tokens (classic)); set an expiry and a calendar reminder.
-- [ ] Repo Settings, Secrets and variables, Actions: new repository secret `PROJECT_TOKEN` with that token.
+- [x] As BirchDesignLab, create a classic personal access token with only the `project` scope (Settings, Developer settings, Personal access tokens, Tokens (classic)); set an expiry and a calendar reminder. (Scope and expiry are not readable through the API; the token works: project-sync runs green.)
+- [x] Repo Settings, Secrets and variables, Actions: new repository secret `PROJECT_TOKEN` with that token.
 
 Built-in workflows (Project, menu, Workflows); project-sync owns Status moves, so keep the built-ins to adding items:
-- [ ] "Item added to project": set Status to Todo.
-- [ ] "Auto-add sub-issues to project": on.
-- [ ] "Auto-add to project" (if offered): repository `queryModule`, filter `is:issue`.
-- [ ] "Item closed", "Pull request merged", "Pull request linked to issue", "Auto-close issue": off (project-sync handles them; the built-ins would mark not-planned closes Done).
+- [x] "Item added to project": set Status to Todo.
+- [x] "Auto-add sub-issues to project": on.
+- [x] "Auto-add to project": not offered on this project; nothing to set.
+- [x] "Item closed", "Pull request merged", "Pull request linked to issue", "Auto-close issue": off (project-sync handles them; the built-ins would mark not-planned closes Done).
 
-Views:
-- [ ] "Plan": group by Level, showing Milestone and Phase rows only (filter `level:Milestone,Phase` or equivalent), for the release-level view.
-- [ ] "P0 detail": group by parent, showing Level Wave and Task rows only (filter `level:Wave,Task`), for the current-wave view.
-- [ ] Rename "M - aybe Later" to "Later"; give it the filter `no:milestone` (or the later label once used).
-- [ ] M1 to M4 boards: add filters `milestone:"M1 Forms and terminal"` and so on (they currently show everything).
-- [ ] New board "Current wave": filter `wave:W5`, columns Status (update the wave number each wave).
-- [ ] New board "By track": columns Status, swimlanes (group by) Track.
-- [ ] New table "Follow-ups and decisions": filter `label:follow-up,decision is:open`, sort by Priority.
-- [ ] New table "Sensitive": filter `label:sensitive`, show Track, Wave, Status, Linked pull requests.
-- [ ] Roadmap: date fields Start and Finish, group by Phase, markers for milestones.
-- [ ] Every view: show Track, Phase, Size, Priority and Sub-issues progress where useful; hide Repository.
+Views (convenience only; no script, check or workflow depends on them):
+- [x] M0 to M4 boards filtered by milestone; "Later" (renamed from "M - aybe Later") filtered `no:milestone`.
+- [x] Table "Follow-ups and decisions": filter `label:follow-up,decision is:open`, sort by Priority, columns Track, Phase, Size, Priority, Status.
+- Optional, add when wanted (the recipe: + New view, rename from the tab menu, filter box, Sort by, + for columns, Save):
+  - "Plan": group by Level, filter `level:Milestone,Phase`.
+  - "By track": board, columns Status, swimlanes Track.
+  - "Sensitive": table, filter `label:sensitive`, show Track, Wave, Status, Linked pull requests.
+  - Roadmap grouped by Phase instead of Milestone.
+  - Track, Phase, Size and Priority columns on the milestone boards.
 
 Repo settings (Settings, General):
-- [ ] "Automatically delete head branches": on.
-- [ ] Merge button: keep the options you use (wave PRs merge with a merge commit so far); consider turning off the rest.
+- [x] "Automatically delete head branches": on.
+- [x] Merge button: squash only (merge commits and rebase off), matching the ruleset on `main` (ADR-0008).
 
 Public repository (public since 09-26-26):
-- [ ] Settings, Code security: secret scanning and push protection on (free for public repos).
-- [ ] Settings, Code security: Dependency graph on (the ci job's dependency review needs it, ADR-0007).
-- [ ] Settings, Actions, General: "Require approval for all external contributors" for fork pull request workflows; workflow permissions read-only by default.
-- [ ] Settings, General, Features: turn off Wiki if unused; keep Issues; Discussions optional.
-- [ ] Private vulnerability reporting on (Settings, Code security), since the module handles CJIS-adjacent design.
+- [x] Settings, Code security: secret scanning and push protection on (free for public repos).
+- [x] Settings, Code security: Dependency graph on (the ci job's dependency review needs it, ADR-0007).
+- [x] Settings, Actions, General: "Require approval for all external contributors" for fork pull request workflows; workflow permissions read-only by default.
+- [ ] Settings, General, Features: Wiki is on; turn it off if unused. Issues on; Discussions off.
+- [x] Private vulnerability reporting on (Settings, Code security), since the module handles CJIS-adjacent design.
