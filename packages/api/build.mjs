@@ -4,7 +4,7 @@ import { build } from "esbuild";
 
 const root = resolve(import.meta.dirname, "../..");
 const ops = readdirSync(resolve(root, "scripts/ops"))
-  .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
+  .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.endsWith(".d.ts"))
   .map((f) => resolve(root, "scripts/ops", f));
 const common = {
   bundle: true,
