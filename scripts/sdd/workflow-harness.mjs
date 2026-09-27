@@ -10,16 +10,33 @@
 // root, required a subset of properties). Scenarios assert control flow, agent counts, role
 // tiers, gate, rulings routing, answers re-runs and the sensitive ruler rule.
 // Exit code 0 when every scenario passes, 1 otherwise. Run it after any change to a workflow.
+//
+// Options (for a RED proof, task 602 round 3):
+//   --workflows-dir <dir>  load sdd-task.js, wave-review.js, sdd-wave.js and README.md from <dir>
+//                          instead of .claude/workflows (e.g. a pre-change copy from git show, or a
+//                          mutated copy), so a scenario can be seen failing without touching the tree.
+//   --only <text>          run only the scenarios whose name contains <text>.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const WF_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../.claude/workflows",
-);
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+function optArg(name) {
+  const i = process.argv.indexOf(name);
+  if (i === -1) return undefined;
+  const v = process.argv[i + 1];
+  if (!v || v.startsWith("--")) {
+    console.error(`workflow-harness: ${name} needs a value`);
+    process.exit(2);
+  }
+  return v;
+}
+const WF_DIR_ARG = optArg("--workflows-dir");
+const ONLY = optArg("--only");
+const WF_DIR = WF_DIR_ARG ? path.resolve(WF_DIR_ARG) : path.join(REPO_ROOT, ".claude/workflows");
+if (WF_DIR_ARG) console.log(`workflow-harness: workflows from ${WF_DIR}`);
 
 async function load(file) {
   const src = fs.readFileSync(path.join(WF_DIR, file), "utf8");
@@ -250,6 +267,7 @@ function sddBase(over) {
 // ---------- runner ----------
 const results = [];
 async function test(name, fn) {
+  if (ONLY && !name.includes(ONLY)) return;
   try {
     await fn();
     results.push([true, name]);
@@ -3189,10 +3207,7 @@ await test("#92 R4: a fast-path finding runs the normal flow; the re-reviewer's 
 await test("#92 R4: the fast-path constant in wave-review.js equals FAST_PATH_MAX_LINES in scripts/ci/sensitive-review.ts", async () => {
   const wrSrc = fs.readFileSync(path.join(WF_DIR, "wave-review.js"), "utf8");
   const wrM = /FAST_PATH_MAX_LINES = (\d+)/.exec(wrSrc);
-  const ciSrc = fs.readFileSync(
-    path.resolve(WF_DIR, "../../scripts/ci/sensitive-review.ts"),
-    "utf8",
-  );
+  const ciSrc = fs.readFileSync(path.join(REPO_ROOT, "scripts/ci/sensitive-review.ts"), "utf8");
   const ciM = /FAST_PATH_MAX_LINES = (\d+)/.exec(ciSrc);
   assert.ok(wrM && ciM, "constant not found in one of the files");
   assert.equal(Number(wrM[1]), Number(ciM[1]));
