@@ -2833,9 +2833,50 @@ await test("fix pass C4: a task that sets sensitive gets no wave tier (sensitive
 
 // ================= #92: review caps, tier slices, fast path, branch-keyed artifact =================
 
-await test("#92 R1: no sdd-task default role is xhigh or max, in any tier; the step-up ladder holds opus/high", async () => {
+// #92 C4: a scenario that only drives the happy path never touches ruler, checker, fixer,
+// escalatedFixer, progressChecker or reReviewer, so a regression there (a default left at xhigh or
+// max) would still pass. This responder drives the worst-case flow so every one of those roles
+// actually runs, in every tier: an implementer concern (ruler-concerns, fixer-pre, progress-pre), a
+// cannot-verify item the checker calls needsJudgment (ruler-review), and a repeated NOT ADDRESSED
+// verdict (escalatedFixer by round 3).
+function sddWorstResponder() {
+  return sddResponder({
+    implementer: work("h0", { concerns: [{ kind: "correctness", text: "unsure" }] }),
+    "spec-review": {
+      verdict: "fail",
+      findings: [F("S1", "important")],
+      cannotVerify: [{ item: "i", check: "c" }],
+    },
+    "quality-review": {
+      verdict: "fail",
+      findings: [F("Q1", "important", { planMandated: true })],
+      cannotVerify: [],
+    },
+    checker: checkAll("needsJudgment"),
+    "re-review*": (p) => ({
+      verdicts: ids(p).map((id) => ({ id, verdict: "NOT ADDRESSED", evidence: "a.ts:1" })),
+      newFindings: [],
+      outOfScope: [],
+    }),
+  });
+}
+
+await test("#92 R1/C4: no sdd-task default role is xhigh or max, in any tier, across the worst-case flow (ruler-concerns, fixer-pre, checker, ruler-review, fixer, escalatedFixer, progress and re-review all run); the step-up ladder holds opus/high", async () => {
   for (const tierName of ["ordinary", "gate", "critical"]) {
-    const r = await run(sdd, { ...BASE, tier: tierName }, sddResponder());
+    const r = await run(sdd, { ...BASE, tier: tierName, maxAgents: 60 }, sddWorstResponder());
+    for (const label of [
+      "ruler-concerns",
+      "fixer-pre",
+      "progress-pre",
+      "checker",
+      "ruler-review",
+      "fixer-r1",
+      "progress-r1",
+      "re-review-r1",
+      "fixer-r3",
+    ]) {
+      assert.ok(r.labels.includes(label), `${tierName}: missing ${label} (${r.labels.join(",")})`);
+    }
     for (const c of r.calls) {
       assert.ok(
         !["xhigh", "max"].includes(c.effort),
@@ -2861,12 +2902,19 @@ await test("#92 R1: no sdd-task default role is xhigh or max, in any tier; the s
   assert.equal(r.find("fixer-r3").effort, "high", "opus/high must not step to xhigh");
 });
 
-await test("#92 R1: no wave-review default role is xhigh or max, in either tier", async () => {
+await test("#92 R1/C4: no wave-review default role is xhigh or max, in either tier, across the full review-rule-fix-progress-re-review flow (fixer and progressChecker are checked too)", async () => {
   for (const t of ["critical", "gate"]) {
     const r = await run(
       wr,
       { ...WBASE, tier: t },
-      wrResponder({ reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true } }),
+      wrResponder({
+        reviewer: reviewWith([WF("C1", "critical"), WF("I1", "important", { planMandated: true })]),
+      }),
+    );
+    assert.deepEqual(
+      r.labels,
+      ["reviewer", "ruler", "fixer", "progress", "re-reviewer"],
+      `${t}: ${r.labels.join(",")}`,
     );
     for (const c of r.calls) {
       assert.ok(!["xhigh", "max"].includes(c.effort), `${t} ${c.label} defaulted to ${c.effort}`);
@@ -3022,6 +3070,85 @@ await test("#92 R3: only the last slice's prompt can write the artifact; it carr
   );
   assert.equal(dead.res.stopped, "reviewer");
   assert.ok(/gate slice reviewer returned no result/.test(dead.res.problem), dead.res.problem);
+});
+
+await test("#92 R3 C1: a critical slice that writes the artifact while the gate slice found a blocking finding is reported as strayArtifact, never swallowed by the merge", async () => {
+  const r = await run(
+    wr,
+    { ...WBASE, gateFiles: ["g.ts"], criticalFiles: ["c.ts"] },
+    wrResponder({
+      "reviewer-gate": {
+        verdict: "fixes",
+        reviewedSha: "h0full",
+        preconditionFailed: "",
+        findings: [WF("G1", "important", { file: "g.ts" })],
+        answers: [],
+        declined: [],
+        artifactWritten: false,
+      },
+      "reviewer-critical": {
+        verdict: "approve",
+        reviewedSha: "h0full",
+        preconditionFailed: "",
+        findings: [],
+        answers: [],
+        declined: [],
+        artifactWritten: true, // wrote the artifact despite the gate slice not approving
+      },
+      "re-reviewer": {
+        verdict: "fixes",
+        reviewedSha: "h1full",
+        verdicts: [{ id: "G-G1", verdict: "NOT ADDRESSED", evidence: "e" }],
+        acceptedStands: [],
+        newFindings: [],
+        artifactWritten: false,
+      },
+    }),
+  );
+  assert.equal(r.res.verdict, "fixes");
+  assert.equal(r.res.strayArtifact, "docs/reviews/pr-32.md", JSON.stringify(r.res));
+});
+
+await test("#92 R3 C2: a slice with more than 200 files diffs every file, not just the 200 the prompt lists", async () => {
+  const files = Array.from({ length: 201 }, (_, i) => `f${i}.ts`);
+  const r = await run(
+    wr,
+    { ...WBASE, criticalFiles: files },
+    wrResponder({
+      "reviewer-critical": { ...reviewWith([]), verdict: "approve", artifactWritten: true },
+    }),
+  );
+  const p = r.find("reviewer-critical").prompt;
+  assert.ok(p.includes('"f200.ts"'), "the 201st file is missing from the diff pathspec");
+  assert.ok(p.includes("* f0.ts"), "the prompt file list is missing an early file");
+  assert.ok(!p.includes("* f200.ts"), "the listed-files section should still cap at 200 entries");
+  assert.ok(
+    /sensitive-paths/.test(p),
+    "a capped slice must tell the reviewer to derive the rest from .github/sensitive-paths",
+  );
+});
+
+await test("#92 R3 C3: a non-array criticalFiles or gateFiles throws instead of silently downgrading the tier", async () => {
+  await assert.rejects(
+    run(
+      wr,
+      {
+        ...WBASE,
+        criticalFiles: "packages/core/src/contracts/audit.ts",
+        gateFiles: ["package.json"],
+      },
+      wrResponder(),
+    ),
+    /"criticalFiles" must be an array of non-empty strings/,
+  );
+  await assert.rejects(
+    run(wr, { ...WBASE, gateFiles: "package.json" }, wrResponder()),
+    /"gateFiles" must be an array of non-empty strings/,
+  );
+  await assert.rejects(
+    run(wr, { ...WBASE, criticalFiles: ["ok.ts", ""] }, wrResponder()),
+    /"criticalFiles" must be an array of non-empty strings/,
+  );
 });
 
 await test("#92 R4: fast-path approve is one agent whose prompt carries mode: fast; above the limit or a bad reviewedLines takes no fast path", async () => {

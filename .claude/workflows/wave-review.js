@@ -160,8 +160,17 @@ if (String(ARTIFACT).replace(/\\/g, '/') !== COMPUTED_ARTIFACT) {
 
 // Review tier (ADR-0007) and tier slices (R3, #92).
 const TIERS = ['critical', 'gate']
-const CRITICAL_FILES = Array.isArray(A.criticalFiles) ? A.criticalFiles : []
-const GATE_FILES = Array.isArray(A.gateFiles) ? A.gateFiles : []
+// A non-array or non-string-array criticalFiles/gateFiles must throw, not silently become []: an
+// empty list derives the wrong (lower) tier and drops the real file list from review (#92 C3).
+function fileListArg(v, name) {
+  if (v === undefined || v === null) return []
+  if (!Array.isArray(v) || v.some((f) => typeof f !== 'string' || f.trim() === '')) {
+    throw new Error(`wave-review: "${name}" must be an array of non-empty strings, got ${JSON.stringify(v)}`)
+  }
+  return v
+}
+const CRITICAL_FILES = fileListArg(A.criticalFiles, 'criticalFiles')
+const GATE_FILES = fileListArg(A.gateFiles, 'gateFiles')
 const HAS_SLICES = A.criticalFiles !== undefined || A.gateFiles !== undefined
 let TIER
 let SENSITIVE_FILES
@@ -527,9 +536,13 @@ if (usingSlices) {
     const label = `reviewer-${sliceT}`
     const roleObj = sliceRole(sliceT)
     const out = sliceReviewFile(sliceT)
-    const capped = files.length > MAX_LISTED_FILES ? files.slice(0, MAX_LISTED_FILES) : files
-    if (files.length > MAX_LISTED_FILES) log(`cap: ${sliceT}Files has ${files.length} entries; ${label} lists the first ${MAX_LISTED_FILES} and derives the rest from the sensitive-path globs`)
-    const pathspec = capped.map((f) => `"${f}"`).join(' ')
+    const isCapped = files.length > MAX_LISTED_FILES
+    const capped = isCapped ? files.slice(0, MAX_LISTED_FILES) : files
+    if (isCapped) log(`cap: ${sliceT}Files has ${files.length} entries; ${label} lists the first ${MAX_LISTED_FILES} and derives the rest from the sensitive-path globs`)
+    // The diff pathspec always covers every file in the slice, even when the prompt's printed file
+    // list is capped for readability: a capped pathspec would silently drop files 201+ from the
+    // diff itself, which the reviewer has no way to notice (#92 C2).
+    const pathspec = files.map((f) => `"${f}"`).join(' ')
     const earlierNote = earlier
       ? `The gate slice already ran: verdict ${earlier.verdict}, ${earlier.openCount} open critical or important finding(s). ${isLast ? 'Write the artifact only when your own verdict is also approve with no open critical or important finding, and that count above is 0.' : ''}`
       : ''
@@ -544,7 +557,7 @@ if (usingSlices) {
       `You are the ${sliceT}-tier reviewer for ${prLabel()}, one tier slice of this run (gate slice first, critical slice last${isLast && !earlier ? ', and the only slice this run' : ''}): review every commit in ${A.base}..${A.head} that touches your files. Review completed work against its plan and requirements and find issues before they merge.`,
       ...SPEC_INTRO,
       ...planLedgerLines(),
-      `Your files, ${sliceT} tier only (read each in full, not only its hunks):\n${capped.map((f) => `* ${f}`).join('\n')}`,
+      `Your files, ${sliceT} tier only (read each in full, not only its hunks):\n${capped.map((f) => `* ${f}`).join('\n')}${isCapped ? `\n(and ${files.length - MAX_LISTED_FILES} more not listed here; the diff above still covers them. Derive the rest of your ${sliceT} tier from the sensitive-path globs in .github/sensitive-paths.)` : ''}`,
       QUESTIONS.length ? `Controller questions (answer each in answers, with file:line evidence):\n${QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : 'No controller questions.',
       earlierNote,
       '',
@@ -590,7 +603,10 @@ if (usingSlices) {
     const findings = res.findings.map((f) => Object.assign({}, f, { id: `${prefix}${f.id}` }))
     const openCount = findings.filter(blocking).length
     log(`review: ${sliceT} slice ${res.verdict}, ${findings.length} finding(s) (${openCount} critical/important), artifact ${isLast && res.artifactWritten ? 'written' : 'not written'}`)
-    const data = { tier: sliceT, verdict: res.verdict, openCount, findings, answers: res.answers, declined: res.declined, reviewedSha: res.reviewedSha, artifactWritten: !!(isLast && res.artifactWritten) }
+    // artifactWritten is masked to isLast (only the designated writer's claim counts for the
+    // "did the real write happen" success signal); rawArtifactWritten is never masked, so a write
+    // by any slice (including one that was told not to) still surfaces below (#92 C1).
+    const data = { tier: sliceT, verdict: res.verdict, openCount, findings, answers: res.answers, declined: res.declined, reviewedSha: res.reviewedSha, artifactWritten: !!(isLast && res.artifactWritten), rawArtifactWritten: !!res.artifactWritten }
     sliceResults.push(data)
     earlier = data
   }
@@ -598,6 +614,7 @@ if (usingSlices) {
   const allApprove = sliceResults.every((s) => s.verdict === 'approve' && s.openCount === 0)
   review = {
     verdict: allApprove ? 'approve' : 'fixes',
+    rawArtifactWritten: sliceResults.some((s) => s.rawArtifactWritten),
     reviewedSha: last.reviewedSha,
     preconditionFailed: '',
     findings: sliceResults.flatMap((s) => s.findings),
@@ -647,6 +664,9 @@ if (review.preconditionFailed) {
   log(`review: precondition failed: ${review.preconditionFailed}; stopping before any ruler or fixer`)
   return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `reviewer: ${review.preconditionFailed}`, reviewedSha: review.reviewedSha || null, artifactWritten: false, findings: [], residual: [] })
 }
+// The single-reviewer path never masks its own artifactWritten claim, so rawArtifactWritten (set
+// by the slice path above) mirrors it here rather than being left unset (#92 C1).
+if (review.rawArtifactWritten === undefined) review.rawArtifactWritten = !!review.artifactWritten
 state.answers = review.answers
 state.declined = review.declined
 const firstBlocking = review.findings.filter(blocking)
@@ -658,7 +678,10 @@ if (review.verdict === 'approve' && firstBlocking.length === 0) {
   return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)) })
 }
 if (review.verdict === 'approve') log(`review: verdict approve but ${firstBlocking.length} critical/important finding(s); treating as fixes`)
-let stray = review.artifactWritten
+// rawArtifactWritten catches a write by any slice (not only the last one the merge credits), so a
+// stray write is never masked away by the merge that computes the success-path artifactWritten
+// (#92 C1).
+let stray = !!(review.artifactWritten || review.rawArtifactWritten)
 if (stray) log('review: artifact written despite blocking findings; the re-review overwrites it on approve, otherwise it is returned as strayArtifact')
 
 // ================= 2. Controller decisions, then the ruler =================
