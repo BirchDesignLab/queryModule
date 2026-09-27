@@ -19,7 +19,7 @@ export type Sha256Hex = z.infer<typeof Sha256HexSchema>;
 
 /** User, source, site, query-type and adapter-kind ids. */
 export const BOUNDED_ID_MAX_LENGTH = 64;
-export const BOUNDED_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+export const BOUNDED_ID_PATTERN = new RegExp(`^[A-Za-z0-9_-]{1,${BOUNDED_ID_MAX_LENGTH}}$`);
 export const BoundedIdSchema = z.string().regex(BOUNDED_ID_PATTERN);
 export type BoundedId = z.infer<typeof BoundedIdSchema>;
 
@@ -42,7 +42,7 @@ export type MessageKey = z.infer<typeof MessageKeySchema>;
 
 /** Host JWT subject (embedded mode): issued by the host, so any printable text, capped. */
 export const HOST_SUBJECT_MAX_LENGTH = 255;
-export const HOST_SUBJECT_PATTERN = /^\P{C}{1,255}$/u;
+export const HOST_SUBJECT_PATTERN = new RegExp(`^\\P{C}{1,${HOST_SUBJECT_MAX_LENGTH}}$`, "u");
 export const HostSubjectSchema = z.string().regex(HOST_SUBJECT_PATTERN);
 export type HostSubject = z.infer<typeof HostSubjectSchema>;
 

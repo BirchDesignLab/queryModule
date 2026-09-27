@@ -69,6 +69,13 @@ describe("ADR-0005 shared contract primitives", () => {
     }
   });
 
+  it("C-M5 BoundedId and HostSubject patterns are bounded by their length constants (#98)", () => {
+    expect(ok(BoundedIdSchema, "x".repeat(BOUNDED_ID_MAX_LENGTH))).toBe(true);
+    expect(ok(BoundedIdSchema, "x".repeat(BOUNDED_ID_MAX_LENGTH + 1))).toBe(false);
+    expect(ok(HostSubjectSchema, "s".repeat(HOST_SUBJECT_MAX_LENGTH))).toBe(true);
+    expect(ok(HostSubjectSchema, "s".repeat(HOST_SUBJECT_MAX_LENGTH + 1))).toBe(false);
+  });
+
   it("HostSubject: printable text, 1 to 255 characters", () => {
     expect(HOST_SUBJECT_MAX_LENGTH).toBe(255);
     for (const good of ["host|0001", "urn:example:user:0001", "s".repeat(255)]) {

@@ -574,3 +574,37 @@ describe("SEC-010 M7 further details invariants stated by the spec", () => {
     ).toBe(false);
   });
 });
+
+describe("SEC-011 C-M1 envelope credentialUserId equals details credentialOwnerUserId (#98)", () => {
+  for (const type of ["sourceDispatched", "sourceResponded"] as const) {
+    const owned = { ...samples[type], credentialOwnerUserId: "u2", delegationId: DID };
+    it(`${type}: accepts an envelope credentialUserId equal to the owner`, () => {
+      expect(parses(eventOf(type, { credentialUserId: "u2", details: owned }))).toBe(true);
+    });
+    it(`${type}: accepts no credential in the envelope or details`, () => {
+      expect(parses(eventOf(type))).toBe(true);
+    });
+    it(`${type}: rejects an envelope credentialUserId naming another user`, () => {
+      expect(parses(eventOf(type, { credentialUserId: "u3", details: owned }))).toBe(false);
+    });
+    it(`${type}: rejects a missing envelope credentialUserId when details name an owner`, () => {
+      expect(parses(eventOf(type, { details: owned }))).toBe(false);
+    });
+    it(`${type}: rejects an envelope credentialUserId when details name no owner`, () => {
+      expect(parses(eventOf(type, { credentialUserId: "u1" }))).toBe(false);
+    });
+  }
+});
+
+describe("FR-043 C-M3 sourceResponded status follows SourceStatus (#98)", () => {
+  const recorded = SOURCE_STATUSES.filter((s) => s !== "pending" && s !== "interrupted");
+  it("accepts every terminal status other than interrupted", () => {
+    for (const status of recorded) {
+      const d = { ...samples.sourceResponded, status };
+      expect(parseAuditDetails("sourceResponded", d)).toEqual(d);
+    }
+  });
+  it("offers exactly SourceStatus minus pending and interrupted, in order", () => {
+    expect(AUDIT_DETAILS_SCHEMAS.sourceResponded.shape.status.options).toEqual(recorded);
+  });
+});
