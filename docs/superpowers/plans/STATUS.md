@@ -52,7 +52,7 @@ W6 in progress on `feat/p0-wave-6` (one PR, critical tier). Resumable: check the
 - [x] 1 #92 check: `sensitive-review.ts` critical = high, gate = medium; branch-keyed artifact `docs/reviews/<branch>.md` (HEAD_REF); fast mode <= 50 reviewed lines counted by the check (inline)
 - [x] 2 #92 `wave-review.js` / `sdd-task.js`: caps defaults, tier slices, context diet, small-diff fast path (sdd-task, ordinary + critic)
 - [x] 3 #92 docs: ADR-0007, CLAUDE.md role tables, workflows README, split-by-tier and inline rules (inline)
-- [ ] 4 #92 board data to `docs/board/board-data.json`; #85 dashboard spans, milestone parents; FOLLOW_UPS #92, #94 (sdd-task, gate)
+- [x] 4 #92 board data to `docs/board/board-data.json`; #85 dashboard spans, milestone parents; FOLLOW_UPS #92, #94 (sdd-task, gate)
 - [ ] 5 ADR-0008 ci.yml restructure (sdd-task, gate)
 - [ ] 6 Task 26 mobile placeholder, CI steps 8 and 9 (#27) (sdd-task, gate)
 - [ ] 7 Task 27 `@libsql/client` Node 24 check (#28) (inline)
