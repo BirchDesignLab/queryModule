@@ -64,7 +64,8 @@ have no code yet):
   dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`; the
   sensitive-review gate itself `.github/sensitive-paths`,
   `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`;
-  reserved: the audit-migration guard `scripts/ci/check-audit-migrations.ts`.
+  reserved: the audit-migration guard `scripts/ci/check-audit-migrations.ts`;
+  reserved: TokenStore implementations `**/*token-store*` (SEC-006, #85).
 - Gate (Opus 5.5 `medium` artifact, #92): the verify gate and merge path
   `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
   `.gitignore`, `**/vitest.config.ts`, `package.json`, `pnpm-workspace.yaml`,

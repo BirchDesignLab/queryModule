@@ -41,6 +41,10 @@ scripts/ci/sensitive-review.ts
 scripts/ci/check-sensitive-review.ts
 # Reserved: the audit_event immutability guard (spec 9.2, SEC-010 to SEC-013)
 scripts/ci/check-audit-migrations.ts
+# Reserved: TokenStore implementations, bearer token storage (SEC-006, #85); name
+# the file or directory *token-store* (for example the P1 native SecureStore store)
+**/*token-store*
+**/*token-store*/**
 
 [gate]
 # Verify gate and merge path

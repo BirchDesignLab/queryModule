@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -149,22 +150,30 @@ type BoardData = {
   followUps: Array<{ number: number }>;
 };
 
-describe("R4 equivalence: board-data.json matches the pre-move in-script constants", () => {
+describe("R4 equivalence: the move commit's board-data.json matches the pre-move constants", () => {
+  // A one-time migration proof, anchored to the move commit (8a438d2) so later
+  // ordinary edits to docs/board/board-data.json (a wave's PR number, a ticked
+  // follow-up) never trip it; the schema tests above judge the live file.
+  const MOVE_COMMIT = "8a438d20877d834d4210a447c6fe751ff03738b0";
   const fixturePath = resolve(ROOT, "scripts/ops/__fixtures__/board-data-pre-move.json");
   const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as BoardData;
   // #92 and #94 (R5) never existed in the pre-move script; every other
   // follow-up must match byte for byte.
   const ADDED_BY_TASK_604 = new Set([92, 94]);
-
-  it("parses and validates docs/board/board-data.json", () => {
-    const result = parseBoardData(readFileSync(BOARD_DATA_PATH, "utf8"), known);
-    expect(result.ok).toBe(true);
+  const shown = spawnSync("git", ["show", `${MOVE_COMMIT}:docs/board/board-data.json`], {
+    cwd: ROOT,
+    encoding: "utf8",
   });
+  const moved = () => {
+    // CI checks out full history (fetch-depth 0); a missing commit fails, never skips.
+    expect(shown.status, shown.stderr).toBe(0);
+    const result = parseBoardData(shown.stdout, known);
+    if (!result.ok) throw new Error("expected the move commit's board-data.json to validate");
+    return result.data as BoardData;
+  };
 
   it("phases, contractsM0P0, milestoneParentNumbers and waves are unchanged by the move", () => {
-    const result = parseBoardData(readFileSync(BOARD_DATA_PATH, "utf8"), known);
-    if (!result.ok) throw new Error("expected board-data.json to validate");
-    const data = result.data as BoardData;
+    const data = moved();
     expect(data.phases).toEqual(fixture.phases);
     expect(data.contractsM0P0).toEqual(fixture.contractsM0P0);
     expect(data.milestoneParentNumbers).toEqual(fixture.milestoneParentNumbers);
@@ -172,21 +181,15 @@ describe("R4 equivalence: board-data.json matches the pre-move in-script constan
   });
 
   it("every follow-up that existed before the move is byte-identical after it", () => {
-    const result = parseBoardData(readFileSync(BOARD_DATA_PATH, "utf8"), known);
-    if (!result.ok) throw new Error("expected board-data.json to validate");
-    const data = result.data as BoardData;
-    const carried = data.followUps.filter((f) => !ADDED_BY_TASK_604.has(f.number));
+    const carried = moved().followUps.filter((f) => !ADDED_BY_TASK_604.has(f.number));
     expect(carried).toEqual(fixture.followUps);
   });
 
   it("adds exactly #92 and #94 on top of the pre-move follow-ups", () => {
-    const result = parseBoardData(readFileSync(BOARD_DATA_PATH, "utf8"), known);
-    if (!result.ok) throw new Error("expected board-data.json to validate");
-    const data = result.data as BoardData;
-    const added = data.followUps
-      .map((f) => f.number)
+    const added = moved()
+      .followUps.map((f) => f.number)
       .filter((n) => ADDED_BY_TASK_604.has(n))
-      .sort((a, b) => a - b);
+      .sort((x, y) => x - y);
     expect(added).toEqual([92, 94]);
   });
 });
