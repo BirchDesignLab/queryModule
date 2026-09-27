@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export interface Secrets {
   dbEncryptionKey: string;
@@ -18,19 +18,39 @@ export class SecretConfigError extends Error {
   }
 }
 
+/** Spec 5.5, 8.2: no secret may live on the data dir; defaults to /data like env.ts (Task 3). */
+async function dataDirOf(env: NodeJS.ProcessEnv): Promise<string> {
+  const dataDir = resolve(env.DATA_DIR ?? "/data");
+  return realpath(dataDir).catch(() => dataDir);
+}
+
+function isInside(path: string, dir: string): boolean {
+  const rel = relative(dir, path);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
 export async function readSecretFile(
   name: string,
   env: NodeJS.ProcessEnv,
   secretsDir: string,
   required: boolean,
 ): Promise<string | null> {
-  const path = env[`${name}_FILE`] ?? join(secretsDir, name);
+  const explicit = env[`${name}_FILE`];
+  const path = resolve(explicit ?? join(secretsDir, name));
+  let real: string;
   let v: string;
   try {
-    v = (await readFile(path, "utf8")).trim();
-  } catch {
-    if (!required) return null;
-    throw new SecretConfigError(name, `file not readable at ${path}`);
+    real = await realpath(path);
+    if (isInside(real, await dataDirOf(env))) {
+      throw new SecretConfigError(name, "file must not be inside the data dir");
+    }
+    v = (await readFile(real, "utf8")).trim();
+  } catch (err) {
+    if (err instanceof SecretConfigError) throw err;
+    const code = (err as NodeJS.ErrnoException).code;
+    // Fail closed (spec 8.1): only an optional secret whose default file is absent may be null.
+    if (!required && explicit === undefined && code === "ENOENT") return null;
+    throw new SecretConfigError(name, `file not readable at ${path} (${String(code)})`);
   }
   if (v.length === 0) throw new SecretConfigError(name, "file is empty");
   return v;

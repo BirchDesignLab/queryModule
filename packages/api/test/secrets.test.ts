@@ -1,8 +1,8 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadSecrets, SecretConfigError } from "../src/secrets";
+import { loadSecrets, readSecretFile, SecretConfigError } from "../src/secrets";
 
 const k = (fill: number) => Buffer.alloc(32, fill).toString("base64");
 function dir(files: Record<string, string>): string {
@@ -48,6 +48,76 @@ describe("SEC-006 loadSecrets", () => {
     await expect(loadSecrets({}, dir({ ...good, DATA_KEY: good.CREDENTIAL_KEY }))).rejects.toThrow(
       /distinct/,
     );
+  });
+  it.each(["DB_ENCRYPTION_KEY", "BETTER_AUTH_SECRET"])(
+    "fails closed when %s is shorter than 32 characters, without echoing it",
+    async (name) => {
+      const short = "x".repeat(31);
+      const err = await loadSecrets({}, dir({ ...good, [name]: short })).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(SecretConfigError);
+      expect((err as SecretConfigError).secret).toBe(name);
+      expect((err as Error).message).toContain(name);
+      expect((err as Error).message).not.toContain(short);
+    },
+  );
+  it("fails closed on an empty (whitespace-only) secret file", async () => {
+    const err = await loadSecrets({}, dir({ ...good, DB_ENCRYPTION_KEY: "  \n " })).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(SecretConfigError);
+    expect((err as Error).message).toContain("DB_ENCRYPTION_KEY");
+    expect((err as Error).message).toContain("empty");
+  });
+  it("returns SEED_PASSWORD_SECRET when present", async () => {
+    const s = await loadSecrets({}, dir({ ...good, SEED_PASSWORD_SECRET: "seed-secret-value" }));
+    expect(s.seedPasswordSecret).toBe("seed-secret-value");
+  });
+  it("fails closed when an explicitly configured optional secret file is missing", async () => {
+    const missing = join(dir({}), "nope");
+    const err = await loadSecrets({ SEED_PASSWORD_SECRET_FILE: missing }, dir(good)).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(SecretConfigError);
+    expect((err as SecretConfigError).secret).toBe("SEED_PASSWORD_SECRET");
+  });
+  it("fails closed when the default optional secret path exists but is unreadable", async () => {
+    const d = dir(good);
+    mkdirSync(join(d, "SEED_PASSWORD_SECRET"));
+    await expect(loadSecrets({}, d)).rejects.toThrow(/SEED_PASSWORD_SECRET/);
+    await expect(readSecretFile("SEED_PASSWORD_SECRET", {}, d, false)).rejects.toThrow(
+      SecretConfigError,
+    );
+  });
+  it("rejects a secrets dir inside the data dir, naming the secret only", async () => {
+    const data = dir(good);
+    const err = await loadSecrets({ DATA_DIR: data }, data).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SecretConfigError);
+    expect((err as SecretConfigError).secret).toBe("DB_ENCRYPTION_KEY");
+    expect((err as Error).message).toMatch(/data dir/);
+    expect((err as Error).message).not.toContain(good.DB_ENCRYPTION_KEY);
+  });
+  it("rejects a <NAME>_FILE under the data dir, including through a symlink", async () => {
+    const data = dir({});
+    const sub = join(data, "keys");
+    mkdirSync(sub);
+    writeFileSync(join(sub, "DB_ENCRYPTION_KEY"), good.DB_ENCRYPTION_KEY);
+    const direct = { DATA_DIR: data, DB_ENCRYPTION_KEY_FILE: join(sub, "DB_ENCRYPTION_KEY") };
+    await expect(loadSecrets(direct, dir(good))).rejects.toThrow(/DB_ENCRYPTION_KEY.*data dir/);
+    const link = join(dir({}), "link");
+    symlinkSync(join(sub, "DB_ENCRYPTION_KEY"), link);
+    await expect(
+      loadSecrets({ DATA_DIR: data, DB_ENCRYPTION_KEY_FILE: link }, dir(good)),
+    ).rejects.toThrow(/DB_ENCRYPTION_KEY.*data dir/);
+  });
+  it("rejects a data dir file whose name starts with two dots", async () => {
+    const data = dir({ "..DB_ENCRYPTION_KEY": good.DB_ENCRYPTION_KEY });
+    const env = { DATA_DIR: data, DB_ENCRYPTION_KEY_FILE: join(data, "..DB_ENCRYPTION_KEY") };
+    await expect(loadSecrets(env, dir(good))).rejects.toThrow(/data dir/);
+  });
+  it("accepts a sibling of the data dir that only shares its prefix", async () => {
+    const secrets = dir(good);
+    const s = await loadSecrets({ DATA_DIR: secrets.slice(0, -1) }, secrets);
+    expect(s.dbEncryptionKey).toBe(good.DB_ENCRYPTION_KEY);
   });
   it("ignores a secret value placed directly in the environment", async () => {
     const files: Record<string, string> = { ...good };
