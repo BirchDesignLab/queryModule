@@ -218,10 +218,15 @@ const envelope = {
 const queryEnvelope = { ...envelope, correlationId: Uuid7Schema };
 /** Part-scoped types: envelope partId is required and equals details.partId (ADR-0003). */
 const partEnvelope = { ...queryEnvelope, partId: PartIdSchema };
-/** Auth types (spec 5.6): no query part and no state credential, so no partId or credentialUserId. */
+/**
+ * Auth types (spec 5.6): no query part and no state credential. partId and credentialUserId stay
+ * in the type as never, so a consumer reads them off any AuditEvent, and any value is rejected.
+ */
 const authEnvelope = {
   correlationId: envelope.correlationId,
+  partId: z.never().optional(),
   actor: envelope.actor,
+  credentialUserId: z.never().optional(),
   identitySource: envelope.identitySource,
   hostSubject: envelope.hostSubject,
 };

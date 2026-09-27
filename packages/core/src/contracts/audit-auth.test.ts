@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { AUDIT_DETAILS_SCHEMAS, AuditEventSchema, SYSTEM_ACTOR } from "./audit";
 
 /** Synthetic fixtures (spec 5.4 fixture policy): documentation IP range, example.test email. */
 const IP = "203.0.113.9";
 const CID = "0199a0b0-0000-7000-8000-000000000001";
+/** Session row id: Better Auth generateId is uuidv7 (plan Task 14), never the session token. */
+const SID = "0199a0b0-0000-7000-8000-0000000000e1";
 const USER_ACTOR = { id: "u1", email: "officer@example.test", role: "user" } as const;
 
 describe("SEC-010 auth audit details", () => {
   it("loginSucceeded requires method, sessionId, clientIp", () => {
     const s = AUDIT_DETAILS_SCHEMAS.loginSucceeded;
-    expect(s.safeParse({ method: "password", sessionId: "s1", clientIp: IP }).success).toBe(true);
-    expect(s.safeParse({ method: "magic", sessionId: "s1", clientIp: "x" }).success).toBe(false);
+    expect(s.safeParse({ method: "password", sessionId: SID, clientIp: IP }).success).toBe(true);
+    expect(s.safeParse({ method: "magic", sessionId: SID, clientIp: "x" }).success).toBe(false);
     expect(
-      s.safeParse({ method: "password", sessionId: "s1", clientIp: "x", password: "p" }).success,
+      s.safeParse({ method: "password", sessionId: SID, clientIp: "x", password: "p" }).success,
     ).toBe(false);
   });
   it("loginFailed allows lockoutUntil only as epoch ms", () => {
@@ -31,7 +34,7 @@ describe("SEC-010 auth audit details", () => {
     expect(s.safeParse({ targetUserId: "u", reason: "typo", clientIp: "x" }).success).toBe(false);
   });
   it("logout requires sessionId", () => {
-    expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({ sessionId: "s1" }).success).toBe(true);
+    expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({ sessionId: SID }).success).toBe(true);
     expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({}).success).toBe(false);
   });
   it("roleChanged pins via to grant-role", () => {
@@ -51,10 +54,28 @@ describe("SEC-010 auth audit details", () => {
 });
 
 describe("SEC-010 ADR-0005 auth audit ids, times and client IP are bounded", () => {
-  it("user and session ids are bounded ids", () => {
+  it("sessionId is the UUIDv7 session row id, so a session token never fits", () => {
+    const token = "Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z";
+    for (const sessionId of ["s1", token, CID.toUpperCase()]) {
+      expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({ sessionId }).success).toBe(false);
+      expect(
+        AUDIT_DETAILS_SCHEMAS.loginSucceeded.safeParse({
+          method: "password",
+          sessionId,
+          clientIp: IP,
+        }).success,
+      ).toBe(false);
+    }
+  });
+  it("user ids are bounded ids", () => {
     const long = "a".repeat(65);
-    expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({ sessionId: "has space" }).success).toBe(false);
-    expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({ sessionId: long }).success).toBe(false);
+    expect(
+      AUDIT_DETAILS_SCHEMAS.loginFailed.safeParse({
+        targetUserId: "has space",
+        reason: "badPassword",
+        clientIp: IP,
+      }).success,
+    ).toBe(false);
     expect(
       AUDIT_DETAILS_SCHEMAS.roleChanged.safeParse({
         targetUserId: long,
@@ -74,13 +95,23 @@ describe("SEC-010 ADR-0005 auth audit ids, times and client IP are bounded", () 
     const ok = (clientIp: string) =>
       AUDIT_DETAILS_SCHEMAS.loginSucceeded.safeParse({
         method: "password",
-        sessionId: "s1",
+        sessionId: SID,
         clientIp,
       }).success;
     for (const v of [IP, "2001:db8::1", "::ffff:203.0.113.9", "local", "unknown"]) {
       expect(ok(v)).toBe(true);
     }
+    for (const v of ["fe80::1%eth0", "::1"]) expect(ok(v)).toBe(true);
     for (const v of ["", "a b", "203.0.113.9\n", "x".repeat(65)]) expect(ok(v)).toBe(false);
+  });
+  it("clientIp rejects header punctuation (review C-M1, spec 4.7 identifiers only)", () => {
+    const ok = (clientIp: string) =>
+      AUDIT_DETAILS_SCHEMAS.logout
+        .extend({ clientIp: AUDIT_DETAILS_SCHEMAS.loginSucceeded.shape.clientIp })
+        .safeParse({ sessionId: SID, clientIp }).success;
+    for (const v of ["<x>", "pw=a;b", 'a"b', "a'b", "a/b", "a,b", "203.0.113.9?x"]) {
+      expect(ok(v)).toBe(false);
+    }
   });
 });
 
@@ -96,8 +127,8 @@ describe("SEC-005 SEC-012 auth rows parse through AuditEventSchema (AuditService
   });
   it("loginSucceeded and logout with the user as actor", () => {
     for (const [type, details] of [
-      ["loginSucceeded", { method: "password", sessionId: "s1", clientIp: IP }],
-      ["logout", { sessionId: "s1" }],
+      ["loginSucceeded", { method: "password", sessionId: SID, clientIp: IP }],
+      ["logout", { sessionId: SID }],
     ] as const) {
       const e = { type, actor: USER_ACTOR, identitySource: "local", details };
       expect(AuditEventSchema.parse(e)).toEqual(e);
@@ -122,11 +153,34 @@ describe("SEC-005 SEC-012 auth rows parse through AuditEventSchema (AuditService
       type: "logout",
       actor: USER_ACTOR,
       identitySource: "local",
-      details: { sessionId: "s1" },
+      details: { sessionId: SID },
     };
     expect(AuditEventSchema.safeParse({ ...base, correlationId: CID }).success).toBe(true);
     expect(AuditEventSchema.safeParse({ ...base, partId: 0 }).success).toBe(false);
     expect(AuditEventSchema.safeParse({ ...base, credentialUserId: "u1" }).success).toBe(false);
+  });
+  it("loginFailed with a system-role actor and identitySource local is rejected", () => {
+    const e = {
+      type: "loginFailed",
+      actor: SYSTEM_ACTOR,
+      identitySource: "local",
+      details: { targetUserId: null, reason: "unknownAccount", clientIp: IP },
+    };
+    expect(AuditEventSchema.safeParse(e).success).toBe(false);
+  });
+  it("Task 11 AuditService reads partId and credentialUserId off any parsed event", () => {
+    const e = AuditEventSchema.parse({
+      type: "logout",
+      actor: USER_ACTOR,
+      identitySource: "local",
+      details: { sessionId: SID },
+    });
+    // Type-level: these reads must compile on the whole union (plan Task 11 insert).
+    expect(e.partId ?? null).toBeNull();
+    expect(e.credentialUserId ?? null).toBeNull();
+  });
+  it("AuditEventSchema converts to JSON Schema", () => {
+    expect(() => z.toJSONSchema(AuditEventSchema, { unrepresentable: "any" })).not.toThrow();
   });
   it("auth rows keep the actor and identity source invariant", () => {
     const e = {
@@ -142,7 +196,7 @@ describe("SEC-005 SEC-012 auth rows parse through AuditEventSchema (AuditService
       type: "logout",
       actor: USER_ACTOR,
       identitySource: "local",
-      details: { method: "password", sessionId: "s1", clientIp: IP },
+      details: { method: "password", sessionId: SID, clientIp: IP },
     };
     expect(AuditEventSchema.safeParse(e).success).toBe(false);
   });

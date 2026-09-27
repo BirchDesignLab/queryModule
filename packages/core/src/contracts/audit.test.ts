@@ -61,14 +61,18 @@ const samples = {
       { key: "validation.required", params: { field: "last", position: 1 } },
     ],
   },
-  loginSucceeded: { method: "password", sessionId: "s1", clientIp: "203.0.113.9" },
+  loginSucceeded: {
+    method: "password",
+    sessionId: "0199a0b0-0000-7000-8000-0000000000e1",
+    clientIp: "203.0.113.9",
+  },
   loginFailed: {
     targetUserId: "u1",
     reason: "badPassword",
     clientIp: "203.0.113.9",
     lockoutUntil: 1,
   },
-  logout: { sessionId: "s1" },
+  logout: { sessionId: "0199a0b0-0000-7000-8000-0000000000e1" },
   roleChanged: { targetUserId: "u1", role: "admin", change: "granted", via: "grant-role" },
 } as const;
 
