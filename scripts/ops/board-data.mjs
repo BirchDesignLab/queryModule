@@ -14,7 +14,7 @@ import { validateBoardData } from "./board-data-schema.mjs";
  * Parse and validate raw JSON text against the board-data schema.
  *
  * @param {string} raw
- * @param {{milestoneNames: string[], labelNames: string[]}} known
+ * @param {{milestoneNames: string[], labelNames: string[], fields: object[]}} known
  * @returns {{ok: true, data: object} | {ok: false, errors: Array<{pointer: string, message: string}>}}
  */
 export function parseBoardData(raw, known) {
@@ -33,7 +33,7 @@ export function parseBoardData(raw, known) {
  * without ever calling `gh` or GitHub (R3). Never returns on failure.
  *
  * @param {string} path absolute path to board-data.json
- * @param {{milestoneNames: string[], labelNames: string[]}} known
+ * @param {{milestoneNames: string[], labelNames: string[], fields: object[]}} known
  * @returns {object} the validated board data
  */
 export function loadBoardDataOrExit(path, known) {

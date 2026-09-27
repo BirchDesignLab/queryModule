@@ -23,7 +23,8 @@
 //        the script has since been edited on the current branch.
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,15 +53,20 @@ if (start < 0 || end < 0 || end <= start) {
 }
 const dataSection = source.slice(start, end);
 
-const tmpDir = resolve(process.env.CLAUDE_SCRATCHPAD ?? ROOT, ".board-data-extract-tmp");
-mkdirSync(tmpDir, { recursive: true });
+// OS temp, never the repo tree (W6 critic C6); removed after the import below.
+const tmpDir = mkdtempSync(resolve(tmpdir(), "board-data-extract-"));
 const tmpFile = resolve(tmpDir, `board-data-source-${ref.replace(/[^A-Za-z0-9]/g, "_")}.mjs`);
 writeFileSync(
   tmpFile,
   `${dataSection}\nexport { PHASES, CONTRACTS_M0P0, MILESTONE_PARENT_NUMBERS, WAVES, FOLLOW_UPS };\n`,
 );
 
-const mod = await import(`file://${tmpFile.replace(/\\/g, "/")}`);
+let mod;
+try {
+  mod = await import(`file://${tmpFile.replace(/\\/g, "/")}`);
+} finally {
+  rmSync(tmpDir, { recursive: true, force: true });
+}
 const fixture = {
   phases: mod.PHASES,
   contractsM0P0: mod.CONTRACTS_M0P0,

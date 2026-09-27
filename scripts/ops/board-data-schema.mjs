@@ -10,25 +10,28 @@
 // issue number; it can never invent a new milestone or label the script
 // would then have to create.
 //
-// Label vocabulary: the script's own LABELS array (gh-setup-project.mjs)
+// Label vocabulary: the script's own LABELS array (board-config.mjs)
 // creates only `epic`, `follow-up`, `decision`; the track and phase labels
 // (`platform`, `web`, `core`, `mobile`, `p0`-`p3`), `sensitive`, `contract`
 // and `api-breaking` are created by scripts/ops/gh-setup-labels.sh, and
 // `documentation`, `bug`, `enhancement`, `question`, `accessibility` are
 // GitHub's own defaults (docs/project-board.md "## Labels"). All of these are
 // labels the *scripts* (setup-project and setup-labels together) manage or
-// rely on, so `KNOWN_LABELS` in gh-setup-project.mjs lists the full set; see
+// rely on, so `KNOWN_LABELS` in board-config.mjs lists the full set; see
 // the report for Task 604 (planVsSpec: R3 says "the script's LABELS names",
 // which taken literally is only 3 names and would reject most of the
 // existing follow-up data).
 
 import { z } from "zod";
 
-export const PHASE_CODES = ["P0", "P1", "P2", "P3"];
-export const TRACKS = ["Platform (A)", "Web (B)", "Core", "Mobile (D)"];
-export const SIZES = ["S", "M", "L", "XL"];
-export const PRIORITIES = ["Urgent", "High", "Medium", "Low"];
 export const WAVE_STATES = ["todo", "ready", "review", "done"];
+
+/** Option names of one single-select field in the script's FIELDS (board-config.mjs). */
+function optionNames(fields, name) {
+  const f = fields.find((x) => x.name === name);
+  if (!f?.options?.length) throw new Error(`board-data schema: FIELDS has no options for ${name}`);
+  return f.options.map((o) => o.name);
+}
 
 const positiveInt = z.int().positive();
 const positiveIntOrNull = z.union([positiveInt, z.null()]);
@@ -39,22 +42,29 @@ export function pointer(...segments) {
 }
 
 /**
- * Build the board-data schema. `milestoneNames` and `labelNames` come from
- * the script's own MILESTONES and KNOWN_LABELS constants (R2, R3): a
- * milestone or label the script does not know about fails validation.
+ * Build the board-data schema. `milestoneNames`, `labelNames` and `fields` come
+ * from the script's own MILESTONES, KNOWN_LABELS and FIELDS (R2, R3): a
+ * milestone, label or field option the script does not know about fails
+ * validation, so a data edit can never reach a write the script cannot make
+ * (W6 critic C2: a wave k with no W<k> option used to throw mid --apply).
+ * Every issue number is unique across phases, waves, their task issues (task
+ * N is issue #N+1), follow-ups and milestone parents (W6 critic C3: a reused
+ * number would rename and rewrite the wrong live issue).
  *
- * @param {{milestoneNames: string[], labelNames: string[]}} known
+ * @param {{milestoneNames: string[], labelNames: string[], fields: Array<{name: string, options?: Array<{name: string}>}>}} known
  */
-export function buildBoardDataSchema({ milestoneNames, labelNames }) {
+export function buildBoardDataSchema({ milestoneNames, labelNames, fields }) {
   const Milestone = z.enum(milestoneNames);
   const Label = z.enum(labelNames);
+  const PhaseCode = z.enum(optionNames(fields, "Phase"));
+  const waveOptions = new Set(optionNames(fields, "Wave"));
 
   const Phase = z
     .object({
       number: positiveInt,
       title: z.string().min(1),
       milestone: Milestone,
-      phase: z.enum(PHASE_CODES),
+      phase: PhaseCode,
       gate: z.string().min(1).nullable(),
       plan: z.string().min(1).nullable(),
     })
@@ -63,7 +73,9 @@ export function buildBoardDataSchema({ milestoneNames, labelNames }) {
   const Wave = z
     .object({
       number: positiveInt,
-      k: positiveInt,
+      k: positiveInt.refine((k) => waveOptions.has(`W${k}`), {
+        message: "no W<k> option in the Wave field (board-config.mjs FIELDS)",
+      }),
       title: z.string().min(1),
       tasks: z
         .tuple([positiveInt, positiveInt])
@@ -80,10 +92,10 @@ export function buildBoardDataSchema({ milestoneNames, labelNames }) {
       labels: z.array(Label).min(1),
       milestone: Milestone,
       parent: positiveInt.optional(),
-      track: z.enum(TRACKS).nullable(),
-      phase: z.enum(PHASE_CODES),
-      size: z.enum(SIZES),
-      priority: z.enum(PRIORITIES),
+      track: z.enum(optionNames(fields, "Track")).nullable(),
+      phase: PhaseCode,
+      size: z.enum(optionNames(fields, "Size")),
+      priority: z.enum(optionNames(fields, "Priority")),
       reqIds: z.string(),
       body: z.string().min(1),
       assignee: z.string().min(1).optional(),
@@ -98,7 +110,29 @@ export function buildBoardDataSchema({ milestoneNames, labelNames }) {
       waves: z.array(Wave).min(1),
       followUps: z.array(FollowUp).min(1),
     })
-    .strict();
+    .strict()
+    .superRefine((d, ctx) => {
+      const seen = new Map();
+      const claim = (n, path) => {
+        if (n === null) return;
+        const first = seen.get(n);
+        if (first === undefined) seen.set(n, path);
+        else
+          ctx.addIssue({
+            code: "custom",
+            path,
+            message: `issue #${n} is used more than once (first at ${pointer(...first)})`,
+          });
+      };
+      for (const [i, p] of d.phases.entries()) claim(p.number, ["phases", i, "number"]);
+      for (const [m, n] of Object.entries(d.milestoneParentNumbers))
+        claim(n, ["milestoneParentNumbers", m]);
+      d.waves.forEach((w, i) => {
+        claim(w.number, ["waves", i, "number"]);
+        for (let t = w.tasks[0]; t <= w.tasks[1]; t++) claim(t + 1, ["waves", i, "tasks"]);
+      });
+      for (const [i, f] of d.followUps.entries()) claim(f.number, ["followUps", i, "number"]);
+    });
 }
 
 /**
@@ -106,7 +140,7 @@ export function buildBoardDataSchema({ milestoneNames, labelNames }) {
  * JSON pointer to its location and no partial data (R3).
  *
  * @param {unknown} data
- * @param {{milestoneNames: string[], labelNames: string[]}} known
+ * @param {{milestoneNames: string[], labelNames: string[], fields: Array<{name: string, options?: Array<{name: string}>}>}} known
  * @returns {{ok: true, data: object} | {ok: false, errors: Array<{pointer: string, message: string}>}}
  */
 export function validateBoardData(data, known) {

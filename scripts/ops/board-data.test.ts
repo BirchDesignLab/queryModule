@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { KNOWN_LABELS, MILESTONES } from "./board-config.mjs";
+import { FIELDS, KNOWN_LABELS, MILESTONES } from "./board-config.mjs";
 import { parseBoardData } from "./board-data.mjs";
 import { validateBoardData } from "./board-data-schema.mjs";
 
@@ -16,7 +16,7 @@ import { validateBoardData } from "./board-data-schema.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BOARD_DATA_PATH = resolve(ROOT, "docs/board/board-data.json");
 
-const known = { milestoneNames: Object.keys(MILESTONES), labelNames: KNOWN_LABELS };
+const known = { milestoneNames: Object.keys(MILESTONES), labelNames: KNOWN_LABELS, fields: FIELDS };
 
 function loadBoardData(): unknown {
   return JSON.parse(readFileSync(BOARD_DATA_PATH, "utf8"));
@@ -188,5 +188,56 @@ describe("R4 equivalence: board-data.json matches the pre-move in-script constan
       .filter((n) => ADDED_BY_TASK_604.has(n))
       .sort((a, b) => a - b);
     expect(added).toEqual([92, 94]);
+  });
+});
+
+describe("validateBoardData: numbers and field options (W6 critic C2, C3)", () => {
+  const valid = JSON.parse(readFileSync(BOARD_DATA_PATH, "utf8")) as {
+    phases: Array<Record<string, unknown>>;
+    milestoneParentNumbers: Record<string, number | null>;
+    waves: Array<Record<string, unknown>>;
+    followUps: Array<Record<string, unknown>>;
+  };
+  const errorsOf = (doc: unknown) => {
+    const r = validateBoardData(doc, known);
+    return r.ok ? [] : r.errors;
+  };
+
+  it("rejects a follow-up that reuses a phase issue number", () => {
+    const phaseNo = valid.phases[0]?.number as number;
+    const followUps = valid.followUps.map((f, i) => (i === 0 ? { ...f, number: phaseNo } : f));
+    const errs = errorsOf({ ...valid, followUps });
+    expect(errs.some((e) => e.message.includes(`#${phaseNo} is used more than once`))).toBe(true);
+  });
+
+  it("rejects a follow-up that reuses a task issue number (task N is issue #N+1)", () => {
+    const [first] = (valid.waves[0] as { tasks: [number, number] }).tasks;
+    const followUps = valid.followUps.map((f, i) => (i === 0 ? { ...f, number: first + 1 } : f));
+    expect(
+      errorsOf({ ...valid, followUps }).some((e) => e.message.includes("more than once")),
+    ).toBe(true);
+  });
+
+  it("rejects a wave that reuses a milestone parent number", () => {
+    const mp = Object.values(valid.milestoneParentNumbers).find((n) => n !== null) as number;
+    const waves = valid.waves.map((w, i) => (i === 0 ? { ...w, number: mp } : w));
+    expect(errorsOf({ ...valid, waves }).some((e) => e.message.includes(`#${mp}`))).toBe(true);
+  });
+
+  it("rejects a wave k with no W<k> option in the Wave field", () => {
+    const waves = valid.waves.map((w, i) => (i === 0 ? { ...w, k: 7 } : w));
+    const errs = errorsOf({ ...valid, waves });
+    expect(errs.some((e) => e.pointer === "/waves/0/k")).toBe(true);
+  });
+
+  it("takes track, size and priority options from FIELDS, not a hardcoded list", () => {
+    const narrowed = FIELDS.map((f) =>
+      f.name === "Size" && f.options
+        ? { ...f, options: f.options.filter((o) => o.name !== "S") }
+        : f,
+    );
+    const followUps = valid.followUps.map((f, i) => (i === 0 ? { ...f, size: "S" } : f));
+    const r = validateBoardData({ ...valid, followUps }, { ...known, fields: narrowed });
+    expect(r.ok).toBe(false);
   });
 });

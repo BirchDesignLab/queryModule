@@ -85,6 +85,7 @@ const BOARD_DATA_PATH = resolve(ROOT, "docs/board/board-data.json");
 const boardData = loadBoardDataOrExit(BOARD_DATA_PATH, {
   milestoneNames: Object.keys(MILESTONES),
   labelNames: KNOWN_LABELS,
+  fields: FIELDS,
 });
 
 // Human-readable titles; codes live in fields (Level, Phase, Wave), never in
