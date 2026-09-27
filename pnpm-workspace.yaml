@@ -4,6 +4,16 @@ packages:
 engineStrict: true
 allowBuilds:
   esbuild: false
+# [critic:T2] better-auth declares drizzle-kit, vitest, react and react-dom as
+# optional peerDependencies for adapters/integrations the api does not use. pnpm
+# resolves peers workspace-wide by default, using the root project's own
+# devDependencies (which include vitest) as an extra source; turning that off
+# narrows the peer graph pnpm considers for every project in the workspace.
+# It does not remove drizzle-kit/react/react-dom, which are satisfied from other
+# workspace projects' own (non-root) dependencies rather than the root's — see the
+# Task 2 report's "Fix round 1" section for what was tried and why that residual
+# part of this finding is left open.
+resolvePeersFromWorkspaceRoot: false
 overrides:
   # GHSA-w5hq-g745-h8pq: xcode@3.0.1 (newest; via expo config plugins) pins uuid ^7.
   # 11.x is patched and still ships CommonJS for xcode's require("uuid").

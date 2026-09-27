@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "@querymodule/core": "workspace:*",
-    "@types/node": "^26.6.3",
+    "@types/node": "^24.19.0",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.31.11"
   },
