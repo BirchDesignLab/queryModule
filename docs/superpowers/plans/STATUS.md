@@ -16,7 +16,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Milestone | Phase | Track A (Linux) | Track B (Windows) | Track D (mobile) | Core | Gate |
 |---|---|---|---|---|---|---|
 | M0 | P0 contracts | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | n/a | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · Typecheck and CI green; contracts frozen · [all][m0-p0] |
-| M0 | P1 foundation | planned, next · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | planned, next · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | planned, next · in B plan · [issues][m0-p1-c] | planned · M0 exit · [all][m0-p1] |
+| M0 | P1 foundation | active · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | active · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | active · in B plan · [issues][m0-p1-c] | planned · M0 exit · [all][m0-p1] |
 | M1 | P2 engine | planned · `<date>-track-a-p2.md` · [issues][m1-p2-a] | planned · `<date>-track-b-p2.md` · [issues][m1-p2-b] | n/a | planned · in A and B plans · [issues][m1-p2-c] | planned · Form on `GET config`; parser property tests · [all][m1-p2] |
 | M1 | P3 flow | planned · `<date>-track-a-p3.md` · [issues][m1-p3-a] | planned · `<date>-track-b-p3.md` · [issues][m1-p3-b] | n/a | n/a | planned · M1 exit · [all][m1-p3] |
 | M2 | P0 contracts | n/a | n/a | n/a | planned · `<date>-m2-p0-contracts.md` · [issues][m2-p0] | planned · Contracts frozen; OpenAPI diff reviewed · [all][m2-p0] |
@@ -36,8 +36,8 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
-| Linux laptop | A | none | idle | 09-25-26 |
-| Windows 11 | P0 | M0 P0 done | idle | 09-27-26 |
+| Linux laptop | A | M0 P1 | idle, starts next | 09-27-26 05:22 |
+| Windows 11 | B | M0 P1 | running | 09-27-26 05:22 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -47,15 +47,23 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: M0 P0 done (gate 09-27-26); next M0 P1 (Track A and Track B plans, Core in the B plan)
-- Branch / PR: none open after #101; P1 starts from main
-- Last green: main CI at 71bd7af; pnpm verify 707 tests
-- Next step: P1 foundation. First: #98 contract tightenings (C-M1, C-M3, C-M5, C-M7) through master plan 8 before the first audit writer (critical tier, inline, own PR, one tier-sliced wave-review); #96 W6 minors ride the first P1 wave PR. #75 (manual board and repo settings) done 09-27-26 (#101)
+- Issue: #104 Contract: auth and roleChanged audit schemas (Task 1); Task 0 done 09-27-26 on Windows (issues #104 to #140, headings numbered)
+- Branch / PR: none; start from main after #103 (#98 C-M1, C-M3, C-M5, C-M7) merges
+- Last green: `pnpm verify` at 7d5e14c on feat/core-98 (720 tests)
+- Next step: "### Task 1: Contract: auth and roleChanged audit schemas (S) (#104)", as its own critical contract PR (master plan 8), then waves A1 T2 to T6 with #96 (gate minors ride it), A2 T7 to T11, A3 T12 to T17, A4 T18 to T23 and T36, A5 T24 to T28, A6 T29 to T35 and T37
 - Blocked by: none
-- Local-only state: SDD ledger `.superpowers/sdd/2026-09-25-p0-contracts/` on the Windows machine (git-ignored)
-- Notes: Contracts frozen for M0/M1 on 09-27-26 at 71bd7af (P0 gate): core contracts, SiteConfig v1, ClientSiteConfig, audit query events, WS v1 messages, route skeleton, openapi.json. Changes only through master plan 8. M0 release notes: #93 api-breaking (tightening only), #95 not breaking (label only for the #69 rename false positive, #96).
+- Local-only state: none; check machine setup (master plan 9.1) before Task 2
+- Notes: #98 C-M6 and C-M8 land with IdentityService (T15) and the audit writer; Track B waits on #120, #121, #122, #132 (B27) and #139 (B19), so land those early when they fit
 
 ### Track B
+
+- Issue: M0 P1 Task 0 done 09-27-26 (#141 contract, #142 to #167; Task 2 skipped, root-ok)
+- Branch / PR: none yet
+- Last green: `pnpm verify` at 7d5e14c on feat/core-98 (720 tests)
+- Next step: #141 contract PR (export `QueryTypeSchema`, `PicklistSchema`), then wave B1 "### Task 1" (#142) and Tasks 3 to 5
+- Blocked by: #141 blocks Tasks 4 to 9
+- Local-only state: none
+- Notes: Step 0.3: `packages/core/src/rules/index.ts` and the `./rules` package export do not exist yet; Task 3 creates them
 
 ### Track D
 
