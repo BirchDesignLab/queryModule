@@ -21,7 +21,7 @@ write("packages/core/contracts/ws-events.schema.json", {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   title: "Query Module WebSocket protocol v1",
   $defs: {
-    WsClientMessage: toJsonSchema(WsClientMessageSchema),
+    WsClientMessage: toJsonSchema(WsClientMessageSchema, "input"),
     WsServerMessage: toJsonSchema(WsServerMessageSchema),
   },
 });

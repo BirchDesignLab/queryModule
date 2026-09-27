@@ -6,6 +6,13 @@ import { makeSiteConfigSchemas, type SiteConfig, SOURCE_SCOPES } from "./schema"
 
 const C = makeSiteConfigSchemas("client");
 
+/**
+ * The recursive rule condition inside ClientSiteConfigSchema, the same instance.
+ * The OpenAPI generator gives it the registry id "Condition" so its component
+ * name never comes from zod's internal counter (#69).
+ */
+export const ClientConditionSchema = C.Condition;
+
 /** Separate allowlist schema, never the server object with fields stripped (spec 4.1). */
 export const ClientSiteConfigSchema = z.object({
   schemaVersion: z.literal(CONFIG_SCHEMA_VERSION),
