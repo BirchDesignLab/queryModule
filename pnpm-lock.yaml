@@ -291,15 +291,28 @@ importers:
 
   packages/api:
     dependencies:
-      '@hono/node-server':
-        specifier: ^2.1.1
-        version: 2.1.1(hono@4.13.9)
       '@libsql/client':
         specifier: ^0.18.0
         version: 0.18.0
+    devDependencies:
+      '@hono/node-server':
+        specifier: ^2.1.1
+        version: 2.1.1(hono@4.13.9)
+      '@querymodule/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: ^24.19.0
+        version: 24.19.0
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       better-auth:
         specifier: ^1.7.6
         version: 1.7.6(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@libsql/client@0.18.0)(kysely@0.29.6))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.2)
+      drizzle-kit:
+        specifier: ^0.31.11
+        version: 0.31.11
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(@libsql/client@0.18.0)(kysely@0.29.6)
@@ -312,19 +325,6 @@ importers:
       zod:
         specifier: ^4.6.5
         version: 4.6.5
-    devDependencies:
-      '@querymodule/core':
-        specifier: workspace:*
-        version: link:../core
-      '@types/node':
-        specifier: ^24.19.0
-        version: 24.19.0
-      '@types/ws':
-        specifier: ^8.18.1
-        version: 8.18.1
-      drizzle-kit:
-        specifier: ^0.31.11
-        version: 0.31.11
 
   packages/client:
     dependencies:
