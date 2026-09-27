@@ -112,6 +112,51 @@ describe("gh-setup-project: dashboardModel reads post-write field values (r2:new
   });
 });
 
+describe("gh-setup-project: board data loads and validates before any gh call (Task 604, #92 R3)", () => {
+  it("imports the ordinary-tier board data loader and the gate-tier config module", () => {
+    expect(source).toMatch(/import \{ loadBoardDataOrExit \} from "\.\/board-data\.mjs";/);
+    expect(source).toMatch(/from "\.\/board-config\.mjs";/);
+  });
+
+  it("calls loadBoardDataOrExit before the first gh CLI invocation", () => {
+    const loadIndex = source.indexOf("loadBoardDataOrExit(");
+    const firstGhCall = source.indexOf('spawnSync("gh"');
+    expect(loadIndex).toBeGreaterThan(-1);
+    expect(firstGhCall).toBeGreaterThan(-1);
+    expect(loadIndex).toBeLessThan(firstGhCall);
+  });
+
+  it("no longer hardcodes PHASES, WAVES or FOLLOW_UPS; they come from boardData", () => {
+    expect(source).not.toMatch(/const PHASES = \[/);
+    expect(source).not.toMatch(/const WAVES = \[/);
+    expect(source).not.toMatch(/const FOLLOW_UPS = \[/);
+    expect(source).toMatch(/const PHASES = boardData\.phases;/);
+    expect(source).toMatch(/const WAVES = boardData\.waves;/);
+    expect(source).toMatch(/const FOLLOW_UPS = boardData\.followUps;/);
+  });
+});
+
+describe("gh-setup-project: merged-wave PR reads gated on --dashboard (#85, #92 R6)", () => {
+  it("reads a wave's PR and commits only from inside fetchPrSpan/dashboardModel", () => {
+    const start = source.indexOf("function fetchPrSpan(prNumber) {");
+    const end = source.indexOf("// Local file writes");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = source.slice(start, end);
+    expect(block).toMatch(/pulls\/\$\{/);
+    expect(block).toMatch(/DASHBOARD/);
+  });
+
+  it("only calls the PR-span fetch when DASHBOARD is true and the wave has a pr", () => {
+    // fetchPrSpan is the only place `pulls/{n}` (and its commits) are read;
+    // gating this call site is what keeps the live reads out of a plain dry
+    // run or --apply alone (R6: "only in --dashboard mode").
+    expect(source).toMatch(
+      /DASHBOARD\s*&&\s*w\.pr\s*\?\s*waveSpan\(rolled,\s*fetchPrSpan\(w\.pr\)\)\s*:\s*rolled/,
+    );
+  });
+});
+
 describe("gh-setup-project: number:null duplicate guard (#80, critic:C4)", () => {
   it("looks up an existing issue by title before POSTing a spec with number: null", () => {
     const start = source.indexOf("function ensureIssue(spec) {");
