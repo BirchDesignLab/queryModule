@@ -1,1 +1,74 @@
-[]
+[
+  {
+    "package": "argparse",
+    "licence": "Python-2.0",
+    "reason": "Permissive (PSF-style), no copyleft. Build-time CLI argument parsing under Metro/Expo tooling; not bundled into the app. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "big-integer",
+    "licence": "Unlicense",
+    "reason": "Public-domain dedication, no conditions. Used by Expo native config tooling (plist handling). Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "caniuse-lite",
+    "licence": "CC-BY-4.0",
+    "reason": "Browser-support data, not code; attribution satisfied by the package's own notice. Build-time only (browserslist). Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "glob",
+    "licence": "BlueOak-1.0.0",
+    "reason": "Permissive (Blue Oak Model), comparable to MIT with an explicit patent grant. Build-time file matching. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "jsc-safe-url",
+    "licence": "0BSD",
+    "reason": "Zero-clause BSD, public-domain equivalent. Metro URL helper, build-time. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "lightningcss",
+    "licence": "MPL-2.0",
+    "reason": "Weak, file-level copyleft: obligations only if we modify its source files, which we do not (used unmodified as a build-time CSS transformer). Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "lru-cache",
+    "licence": "BlueOak-1.0.0",
+    "reason": "Permissive (Blue Oak Model). Cache utility in Expo and Metro tooling. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "minimatch",
+    "licence": "BlueOak-1.0.0",
+    "reason": "Permissive (Blue Oak Model). Glob matching, build-time. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "minipass",
+    "licence": "BlueOak-1.0.0",
+    "reason": "Permissive (Blue Oak Model). Stream utility, build-time. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "path-scurry",
+    "licence": "BlueOak-1.0.0",
+    "reason": "Permissive (Blue Oak Model). Path walking for glob, build-time. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "sax",
+    "licence": "BlueOak-1.0.0",
+    "reason": "Permissive (Blue Oak Model). XML parsing in Expo config plugins (plist), build-time. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  },
+  {
+    "package": "stream-buffers",
+    "licence": "Unlicense",
+    "reason": "Public-domain dedication, no conditions. Used by Expo native config tooling, build-time. Via Expo SDK 57 runtime tree (apps/mobile placeholder, Task 26).",
+    "reviewed": "09-27-26"
+  }
+]
