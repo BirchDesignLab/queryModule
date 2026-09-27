@@ -57,7 +57,7 @@ W6 in progress on `feat/p0-wave-6` (one PR, critical tier). Resumable: check the
 - [x] 6 Task 26 mobile placeholder, CI steps 8 and 9 (#27) (inline after item 5; licence exceptions for Expo tree)
 - [x] 7 Task 27 `@libsql/client` Node 24 check (#28) (inline)
 - [x] 8 Task 28 `gh-setup-repo.sh` (#29) (inline; live `--apply` after W6 merges, developer go)
-- [ ] 9 #69 OpenAPI input bodies, Condition registry id (inline)
+- [x] 9 #69 OpenAPI input bodies, Condition registry id (inline)
 - [ ] 10 #85 IO-globals member access, web config typecheck, TokenStore critical tier (inline)
 - [ ] 11 #84 Track B P1 plan fixes (inline)
 - [ ] 12 wave-review (critical Opus high, gate Opus medium), PR draft until artifact and CI green
