@@ -24,6 +24,8 @@ packages/api/src/dispatch/**
 packages/api/src/adapters/**
 packages/core/src/contracts/source-status.ts
 packages/core/src/contracts/ws.ts
+packages/core/src/contracts/version.ts
+packages/core/contracts/ws-events.schema.json
 packages/core/src/planner/**
 # Delegation
 packages/api/src/delegation/**

@@ -15,7 +15,7 @@ import {
   TypeValuesSchema,
   Uuid7Schema,
 } from "./primitives";
-import { AdapterErrorCodeSchema } from "./source-status";
+import { AdapterErrorCodeSchema, SourceStatusSchema } from "./source-status";
 
 /** alsoRun fieldMap as applied: target field key to source field key (spec 4.6). */
 const FieldMapApplied = z.record(FieldKeySchema, FieldKeySchema);
@@ -137,13 +137,8 @@ export const AUDIT_DETAILS_SCHEMAS = {
       partId: PartIdSchema,
       sourceId: BoundedIdSchema,
       resultId: Uuid7Schema,
-      status: z.enum([
-        "returned",
-        "failed",
-        "timedOut",
-        "credentialsMissing",
-        "credentialsRejected",
-      ]),
+      /** Spec 4.7: a terminal SourceStatus other than interrupted (that one has its own type). */
+      status: SourceStatusSchema.exclude(["pending", "interrupted"]),
       latencyMs: DurationMsSchema,
       credentialOwnerUserId: BoundedIdSchema.nullable(),
       delegationId: Uuid7Schema.nullable(),
@@ -266,6 +261,17 @@ export const AuditEventSchema = z
         code: "custom",
         path: ["hostSubject"],
         message: "hostSubject needs identitySource host",
+      });
+    }
+    // SEC-011 (#98): one row names one credential owner; the envelope column equals details.
+    if (
+      "credentialOwnerUserId" in e.details &&
+      (e.credentialUserId ?? null) !== e.details.credentialOwnerUserId
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["credentialUserId"],
+        message: "envelope credentialUserId must equal details.credentialOwnerUserId",
       });
     }
     // ADR-0003: envelope partId equals details.partId for part-scoped types.
