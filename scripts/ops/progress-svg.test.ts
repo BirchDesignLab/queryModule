@@ -63,6 +63,30 @@ describe("renderDashboard: escaping (#80 requirement 9)", () => {
 });
 
 describe("renderDashboard: SVG safety (#80 requirement 9)", () => {
+  it("coerces numeric model fields, so markup passed as a number is never emitted (PR #83 review M4)", () => {
+    const evil = "<script>x</script>" as unknown as number;
+    const svg = renderDashboard(
+      {
+        ...MODEL,
+        milestones: [
+          {
+            title: "M",
+            closed: evil,
+            total: evil,
+            phases: [{ title: "P", closed: 1, total: evil }],
+          },
+        ],
+        waves: [{ k: evil, title: "W", start: "2026-09-25", finish: null }],
+        decisions: [{ number: evil, title: "D" }],
+        statusCounts: [{ status: "Todo", count: evil }],
+      },
+      "light",
+    );
+    expect(svg).not.toContain("<script");
+    expect(svg).not.toContain("&lt;script");
+    expect(svg).not.toContain("NaN");
+  });
+
   it("has no <script>, event attributes, <foreignObject> or external href/font URL", () => {
     for (const theme of ["light", "dark"] as const) {
       const svg = renderDashboard(MODEL, theme);

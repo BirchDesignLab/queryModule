@@ -42,6 +42,16 @@ export function escapeXml(value) {
     .replace(/'/g, "&apos;");
 }
 
+/**
+ * A model count or number as a finite number (0 otherwise), so the "every text
+ * node escaped" contract never depends on the caller passing real numbers
+ * (PR #83 review M4).
+ */
+const num = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
 const clampPct = (closed, total) => (total > 0 ? Math.round((100 * closed) / total) : 0);
 
 /**
@@ -75,7 +85,9 @@ export function renderDashboard(model, theme) {
     );
     y += ROW_H;
   };
-  const bar = (x, closed, total, label) => {
+  const bar = (x, rawClosed, rawTotal, label) => {
+    const closed = num(rawClosed);
+    const total = num(rawTotal);
     const pct = clampPct(closed, total);
     const w = total > 0 ? Math.round((BAR_W * closed) / total) : 0;
     body.push(
@@ -106,7 +118,7 @@ export function renderDashboard(model, theme) {
     const hi = Math.max(...dated.map((w) => days(w.finish ?? w.start)));
     const span = Math.max(1, hi - lo);
     for (const w of model.waves) {
-      const label = `W${w.k}: ${w.title}`;
+      const label = `W${num(w.k)}: ${w.title}`;
       if (!w.start) {
         body.push(
           `<text x="${MARGIN}" y="${y - 3}" fill="${c.subtext}" font-size="12">${escapeXml(label)}</text>`,
@@ -140,7 +152,7 @@ export function renderDashboard(model, theme) {
   if (model.decisions.length > 0) {
     for (const d of model.decisions) {
       body.push(
-        `<text x="${MARGIN}" y="${y - 3}" fill="${c.text}" font-size="12">#${d.number} ${escapeXml(d.title)}</text>`,
+        `<text x="${MARGIN}" y="${y - 3}" fill="${c.text}" font-size="12">#${num(d.number)} ${escapeXml(d.title)}</text>`,
       );
       y += ROW_H;
     }
@@ -154,7 +166,7 @@ export function renderDashboard(model, theme) {
   // Task and follow-up counts by board Status.
   y += 8;
   heading("Tasks and follow-ups by status");
-  const totalCount = model.statusCounts.reduce((n, s) => n + s.count, 0) || 1;
+  const totalCount = model.statusCounts.reduce((n, s) => n + num(s.count), 0) || 1;
   let x = MARGIN;
   const statusFill = (status) =>
     status === "Done"
@@ -168,7 +180,7 @@ export function renderDashboard(model, theme) {
     `<rect x="${MARGIN}" y="${y - 12}" width="${BAR_W}" height="${BAR_H}" fill="${c.track}"/>`,
   );
   for (const s of model.statusCounts) {
-    const w = Math.round((BAR_W * s.count) / totalCount);
+    const w = Math.round((BAR_W * num(s.count)) / totalCount);
     if (w > 0)
       body.push(
         `<rect x="${x}" y="${y - 12}" width="${w}" height="${BAR_H}" fill="${statusFill(s.status)}"/>`,
@@ -178,7 +190,7 @@ export function renderDashboard(model, theme) {
   y += ROW_H;
   for (const s of model.statusCounts) {
     body.push(
-      `<text x="${MARGIN}" y="${y - 3}" fill="${c.subtext}" font-size="12">${escapeXml(s.status)}: ${s.count}</text>`,
+      `<text x="${MARGIN}" y="${y - 3}" fill="${c.subtext}" font-size="12">${escapeXml(s.status)}: ${num(s.count)}</text>`,
     );
     y += ROW_H;
   }

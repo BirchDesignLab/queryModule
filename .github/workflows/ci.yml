@@ -36,25 +36,15 @@ jobs:
         if: steps.changes.outputs.docs_only == 'true'
         run: echo "Only docs/ or Markdown changed; heavy steps skipped."
 
-      # Step 0b: dependency-free textual guard on the lockfile (critic:I3). This
-      # runs before Install so a [deps] PR cannot repoint yaml or tsx at a
-      # tarball and have that same install's parser call the check clean; a
-      # shell grep needs no dependency from the PR's own lockfile.
+      # Step 0b: dependency-free allowlist guard on the lockfile (critic:I3,
+      # PR #83 review I1). It runs with the runner's own node before
+      # pnpm/action-setup and Install, so a [deps] PR cannot repoint tsx, yaml
+      # or esbuild at a tarball and have that code run the parsed check below.
+      # Every resolution line must be exactly `resolution: {integrity: <hash>}`;
+      # quoted, spaced, tagged or multi-line forms fail (lockfile-guard.test.ts).
       - name: Lockfile registry-only (pre-install guard)
         if: steps.changes.outputs.docs_only != 'true'
-        run: |
-          set -uo pipefail
-          fail=0
-          if grep -nE '^\s+(tarball|repo|commit|directory|path|type):' pnpm-lock.yaml; then
-            fail=1
-          fi
-          if grep -nE 'resolution: \{' pnpm-lock.yaml | grep -vE 'resolution: \{integrity: [^,}]+\}'; then
-            fail=1
-          fi
-          if [ "$fail" -ne 0 ]; then
-            echo "pnpm-lock.yaml has a non-registry resolution (tarball/repo/commit/directory/path/type)." >&2
-            exit 1
-          fi
+        run: node scripts/ci/lockfile-guard.mjs pnpm-lock.yaml
 
       # Step 1: install
       - uses: pnpm/action-setup@v6

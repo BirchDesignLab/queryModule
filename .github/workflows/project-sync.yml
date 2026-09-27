@@ -24,6 +24,9 @@ on:
     types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed, edited]
   issues:
     types: [closed, reopened]
+  # Run once by hand after gh-setup-project.mjs --apply creates the Level field
+  # (its writes trigger no event), so the roll-up and wave-parent close catch up.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -63,6 +66,12 @@ jobs:
             );
             const project = user.projectV2;
             const field = (name) => project.fields.nodes.find((f) => f.name === name);
+            // Parent identity (wave-parent close, date roll-up) comes from the
+            // Level field. Until gh-setup-project.mjs --apply creates it, every
+            // item would look like a leaf, so both wait (PR #83 review M1).
+            const hasLevel = Boolean(field("Level"));
+            if (!hasLevel)
+              core.notice("Level field missing; roll-up and wave-parent close wait for gh-setup-project --apply");
 
             // Items of this repository only, keyed by issue number.
             const items = new Map();
@@ -166,7 +175,7 @@ jobs:
               // A wave parent closes when all of its tasks are closed. Identity
               // comes from the Level field (developer decision, #80), never a
               // title regex.
-              const isWaveParent = item.values.Level === "Wave";
+              const isWaveParent = hasLevel && item.values.Level === "Wave";
               const sum = item.subIssuesSummary;
               if (isWaveParent && item.state === "OPEN" && sum.total > 0 && sum.completed === sum.total) {
                 await github.rest.issues.update({ ...context.repo, issue_number: item.number, state: "closed", state_reason: "completed" });
@@ -207,6 +216,7 @@ jobs:
             // in JS for the setup-script backfill; this copy exists because the
             // board job runs no repository code (docs/project-board.md
             // "Automation"), so the YAML cannot import it.
+            if (!hasLevel) return;
             const FLOOR = "2026-09-25";
             const clampToFloor = (date) => {
               const d = date.slice(0, 10);

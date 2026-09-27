@@ -12,7 +12,8 @@
 //
 // Idempotent
 //   Every step reads first and writes only what differs. Existing issues are
-//   matched by exact title, fields and options by name. Status, Priority, Start
+//   matched by their recorded issue number (a title change is a rename, #80),
+//   fields and options by name. Status, Priority, Start
 //   and Finish are only seeded when empty (an issue closed as completed is forced to Done; Done
 //   comes from issue state only), so a rerun never undoes project-sync or the
 //   developer. Prerequisites (milestones, task issues) are checked before the
@@ -745,7 +746,10 @@ const byNumber = (n) => issues.get(n);
 // Contracts (M0 P0) phase parent rolls up its P0 wave parents (the only
 // phase with wave children so far); milestone parents roll up their phase
 // parents. A parent with no dated child (no wave children yet) keeps no
-// dates, same as project-sync.
+// dates, same as project-sync. These child sets come from the data above, not
+// from live `parent` links as in project-sync (which also counts follow-ups
+// under their parent), and the values only seed empty Start/Finish; project-sync
+// recomputes both on its next run (PR #83 review M2).
 const datesByNumber = new Map();
 for (const w of WAVES)
   for (let t = w.tasks[0]; t <= w.tasks[1]; t += 1) {
@@ -1355,3 +1359,7 @@ function writeLocalFile(what, fn) {
 console.log(
   `${APPLY ? "applied" : DASHBOARD ? "regenerated dashboard," : "planned"} ${writes} change(s)`,
 );
+// These writes trigger no project-sync event; one manual run lets the board job
+// roll up and close wave parents now that the Level field exists (PR #83 review M1).
+if (APPLY)
+  console.log("next: gh workflow run project-sync.yml (one board reconcile after --apply)");
