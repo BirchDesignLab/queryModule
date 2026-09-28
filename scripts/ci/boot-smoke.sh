@@ -168,13 +168,18 @@ up() {
   docker volume rm -f "$vol" >/dev/null 2>&1 || true
   docker volume create "$vol" >/dev/null
   docker run -d --name "$name" -p 127.0.0.1:3000:3000 -v "$vol:/data" -v "$sec:/run/secrets:ro" \
-    -e PUBLIC_ORIGIN=http://localhost:3000 -e ALLOW_MOCK_SOURCES=true --stop-timeout 40 "$image" >/dev/null
+    -e PUBLIC_ORIGIN=http://localhost:3000 -e ALLOW_MOCK_SOURCES=true --stop-timeout 30 "$image" >/dev/null
   for i in $(seq 1 60); do
     if curl -fsS http://127.0.0.1:3000/api/v1/health >/dev/null 2>&1; then break; fi
     if [ "$i" = 60 ]; then docker logs "$name"; echo "health not ok within 60 s"; exit 1; fi
     sleep 1
   done
   [ "$(docker inspect -f '{{.Config.User}}' "$name")" = "10001" ] || { echo "container not running as uid 10001"; exit 1; }
+  if docker run --rm --entrypoint sh "$image" -c 'find /app/node_modules -maxdepth 3 -name "react-native*" | grep -q .'; then
+    echo "react-native found in /app/node_modules"
+    exit 1
+  fi
+  echo "ops check ok: no react-native in /app/node_modules"
   docker exec "$name" node scripts/ops/check-triggers.js
   docker exec "$name" node scripts/ops/seed.js > "$work/seed-output.txt"
   if [ -n "${GITHUB_ENV:-}" ]; then
@@ -186,7 +191,7 @@ up() {
 
 down() {
   docker kill --signal=SIGTERM "$name" >/dev/null
-  code=$(timeout 40 docker wait "$name") || { echo "no exit within the 30 s grace period plus margin"; docker rm -f "$name"; exit 1; }
+  code=$(timeout 30 docker wait "$name") || { echo "no exit within the 30 s grace period"; docker rm -f "$name"; exit 1; }
   docker logs "$name" > "$work/container.log" 2>&1
   for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSWORD_SECRET; do
     if grep -qF "$(cat "$sec/$k")" "$work/container.log"; then echo "container log contains $k"; exit 1; fi
