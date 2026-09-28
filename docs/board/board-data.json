@@ -669,6 +669,32 @@
       "priority": "Medium",
       "reqIds": "SEC-010",
       "body": "A2 wave-review residual rr:N-M2 (`docs/reviews/feat-a-p1-wave-2.md`). Tier: critical (`scripts/ci/check-audit-migrations.ts`).\n\nThe migration guard pins the three `audit_event` trigger statements, but compares `codeOf().detect`, which drops string-literal quotes. An in-place edit of `packages/api/drizzle/0001_audit_triggers.sql` to `... WHERE 'id' = NEW.id ...` therefore equals the pinned text and passes CI. In `node:sqlite` that edit disables `audit_event_no_replace`: `INSERT OR REPLACE` replaced row 1.\n\n**Startup still fails closed:** `checkAuditTriggers` (`packages/api/src/db/migrate.ts`) compares the stored trigger SQL exactly (whitespace collapsed, quotes kept) with `AUDIT_TRIGGER_SQL`, so such a database refuses to serve. The gap is CI-only.\n\n- [ ] Compare the trigger statements in the guard with quotes preserved (the `shape`-style form with literals kept, or the raw text with whitespace and comments normalised), matching what `checkAuditTriggers` pins.\n- [ ] Test: the quoted-identifier and string-literal variants of each trigger (`'id'`, `\"id\"`, `[id]`) fail the guard; the committed 0001 passes.\n"
+    },
+    {
+      "number": 206,
+      "title": "sensitive-review: files a main merge brings in after reviewedSha count as late",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "",
+      "body": "Found on B5 (#202), checker session 09-28-26. Tier: critical (`scripts/ci/sensitive-review.ts`).\n\n**Problem**\n`sensitive-review` flags as \"changed after reviewedSha\" every critical or gate file in `git diff --name-only <reviewedSha> <head>` (the `nameDiff` call near the `merge-base --is-ancestor` check, then the `late` filter in `evaluateSensitiveReview`). The list is not intersected with the PR's own changed files (`base...head`). So merging `origin/main` into a wave branch after its review makes every sensitive file that main changed count as late, although the PR does not change them. B5 had to re-run wave-review at the merge head (8ebd5d3) to pass.\n\nWorkaround until fixed: merge main before wave-review; if main is merged after the review, re-run the review on the merge head.\n\n**Fix**\n- [ ] Intersect the late list with the PR's changed files (`base...head`): late = reviewed-tier files changed in `reviewedSha..head` that are also in `changedFiles`.\n- [ ] Tests: (1) a main merge after review that brings only main-side sensitive files passes; (2) a PR-touched sensitive file changed after review still fails; (3) a main merge that changes a sensitive file the PR also touches still fails.\n- [ ] README \"Review tiers\" / wave-review notes: drop the \"re-review after a main merge\" workaround once merged.\n\nSafety: a file outside the PR's diff is not changed by the PR, so dropping it opens no bypass; any PR-touched sensitive file changed after review stays late.\n\nDelivery: own critical PR (not riding a wave PR, so the loosened check is not judging the PR that loosens it; see #70). Implementer Opus 5.5 medium; critical wave-review, fast path if the PR stays within 50 changed lines.\n"
+    },
+    {
+      "number": 208,
+      "title": "sensitive-review: #206 review minors (real-git merge test, ok assertions, PR template wording)",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "",
+      "body": "Deferred minors from the #206 review (`docs/reviews/fix-sensitive-review-late-files.md`, fast mode, Opus 5.5 high). Tier: critical for the test file (`scripts/ci/sensitive-review.test.ts`), exempt for the PR template. Ride the next critical PR that touches `scripts/ci/`.\n\n- [ ] m1: add one `runSensitiveReview` test with a real git fixture: branch reviewed at sha R, then `main` gains a sensitive file and is merged into the branch; the check passes. A second merge that also edits a sensitive file the PR changes fails.\n- [ ] m2: the two #206 failing cases assert `ok === false` as well as the message.\n- [ ] `.github/pull_request_template.md`: refresh the effort wording to the #92 caps (critical Opus high, gate Opus medium, no xhigh) and name both artifact paths (`docs/reviews/<branch>.md` and `docs/reviews/pr-<n>.md`). Predates #206.\n"
     }
   ]
 }
