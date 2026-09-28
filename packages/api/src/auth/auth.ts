@@ -100,17 +100,38 @@ function toBetterAuthLoggerArg(a: unknown): unknown {
  * can drive it directly: Better Auth's own default log level ("warn") means the scenarios this
  * test exercises never happen to emit a warn/error line on their own (critic finding C1/S1), so
  * the redaction and arg-mapping behaviour needs a direct call to be observable at all.
+ *
+ * Better Auth's own call sites are not consistent about what they pass as `message`: most pass a
+ * string, but some (`better-auth` dist `api/routes/session.mjs:370`, the `/list-sessions`
+ * endpoint's `catch (e) { ctx.context.logger.error(e); }`) pass the raw `Error` itself as the
+ * sole/`message` argument, with no extra `args` at all (re-review r1:CV1-message-gap). The app
+ * logger's `serialise()` only scrubs `head` (the `message` string) against the fixed
+ * `secretValues` list via `String.prototype.split`, which throws a `TypeError` when `message` is
+ * not a string (an object has no `.split`). So an unmapped `message` here would either throw, or
+ * (if it happened to stringify) carry a Drizzle adapter error's free-text query and params
+ * (session tokens, user ids, emails) straight past `secretValues`. `message` is reduced through
+ * the same `toBetterAuthLoggerArg` rule as every other arg before it is ever handed to the app
+ * logger, so it is always a string by the time it reaches `log[appLevel]`.
  */
 export function toBetterAuthLogger(log: Logger) {
   return {
     log(
       level: "debug" | "info" | "success" | "warn" | "error",
-      message: string,
+      message: unknown,
       ...args: unknown[]
     ) {
       const appLevel = level === "success" ? "info" : level;
       const mapped = args.map(toBetterAuthLoggerArg);
-      log[appLevel](message, { args: mapped });
+      const msg =
+        typeof message === "string"
+          ? message
+          : (() => {
+              const reduced = toBetterAuthLoggerArg(message);
+              return reduced !== null && typeof reduced === "object" && "errorName" in reduced
+                ? (reduced as { errorName: string }).errorName
+                : typeof message;
+            })();
+      log[appLevel](msg, { args: mapped });
     },
   };
 }

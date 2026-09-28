@@ -132,4 +132,32 @@ describe("toBetterAuthLogger (A3 T14 CV2)", () => {
     expect(all).toContain("errorName");
     expect(all).toContain("Error");
   });
+
+  it("does not throw and never leaks a token-like value when message itself is the raw Error, with no extra args (re-review r1:CV1-message-gap)", () => {
+    // Mirrors `better-auth` dist `api/routes/session.mjs:370`
+    // (`catch (e) { ctx.context.logger.error(e); }`), the `/list-sessions` endpoint: a single
+    // positional argument, so Better Auth's own `(...[message, ...args]) =>
+    // LogFunc(level, message, args)` destructure makes the Error the `message` parameter itself,
+    // not an `args` entry. `deps.ts` always builds a non-empty `secretValues`, so `createLogger`
+    // here is given one too, matching every real deployment and test harness.
+    const lines: string[] = [];
+    const logger = createLogger({
+      sink: (l) => lines.push(l),
+      secretValues: [TEST_SECRETS.dbEncryptionKey],
+    });
+    const bal = toBetterAuthLogger(logger);
+    const tokenLike = "sess_tok_abcdefghijklmnopqrstuvwxyz012345";
+
+    expect(() => {
+      bal.log("error", new Error(`Failed query: insert into session ... params: ${tokenLike}`));
+    }).not.toThrow();
+
+    const parsed = JSON.parse(lines[0] ?? "{}") as { msg?: string };
+    const all = lines.join("\n");
+    expect(all).not.toContain(tokenLike);
+    expect(all).not.toContain("Failed query");
+    // `message` was the raw Error itself (no separate `args` entry to carry an errorName field
+    // under); reduced to its name, so the sink's message text is just "Error".
+    expect(parsed.msg).toBe("Error");
+  });
 });
