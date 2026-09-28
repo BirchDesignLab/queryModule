@@ -121,6 +121,16 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
   });
 });
 
+// progress-r1-guard-1/2 (round 2): a named type instead of an `any[]` local,
+// so these task-29 tests never need a new noExplicitAny suppression.
+type WorkflowStep = {
+  run?: string;
+  if?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+};
+
 describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-003)", () => {
   it("`image` job is gated on docs-only like the other gated jobs", () => {
     expect(jobs.image).toBeDefined();
@@ -129,18 +139,16 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   });
 
   it("`image` job's boot-smoke down step always runs, even if an earlier step failed", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
-    const steps: any[] = jobs.image.steps;
+    const steps = jobs.image.steps as WorkflowStep[];
     const down = steps.find(
       (s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh down"),
     );
     expect(down, "no boot-smoke.sh down step in the image job").toBeDefined();
-    expect(down.if).toBe("always()");
+    expect(down?.if).toBe("always()");
   });
 
   it("`image` job builds and boots the same tag it smoke-tests (querymodule:ci)", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
-    const steps: any[] = jobs.image.steps;
+    const steps = jobs.image.steps as WorkflowStep[];
     const build = steps.find(
       (s) => typeof s.run === "string" && s.run.includes("docker buildx build"),
     );
@@ -165,8 +173,7 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   it("`publish` has read-only contents and write packages permissions, and pushes sha- and latest tags of the loaded image (not a rebuild)", () => {
     const publish = jobs.publish;
     expect(publish.permissions).toEqual({ contents: "read", packages: "write" });
-    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
-    const steps: any[] = publish.steps;
+    const steps = publish.steps as WorkflowStep[];
     // C2 (round 1 review): publish must not build the image itself; it loads
     // and pushes the exact bytes the `image` job already smoke-tested.
     const build = steps.find((s) => s.uses?.startsWith("docker/build-push-action"));
@@ -183,7 +190,7 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
       (s) => typeof s.run === "string" && s.run.includes("docker push") && s.env,
     );
     expect(push, "no run step pushes both tags through env vars").toBeDefined();
-    expect(push?.run.includes("${{")).toBe(false);
+    expect(push?.run?.includes("${{")).toBe(false);
     const envValues = Object.values(push?.env ?? {});
     expect(
       envValues.some(
@@ -198,16 +205,14 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
 
   it("every checkout step in `image` and `publish` sets persist-credentials: false", () => {
     for (const id of ["image", "publish"]) {
-      // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
-      const steps: any[] = jobs[id].steps;
+      const steps = jobs[id].steps as WorkflowStep[];
       const checkout = steps.find((s) => s.uses?.startsWith("actions/checkout"));
       expect(checkout?.with?.["persist-credentials"], `${id} checkout`).toBe(false);
     }
   });
 
   it("`image` job exposes real GHA cache credentials to the buildx `run:` step (fixes C1)", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
-    const steps: any[] = jobs.image.steps;
+    const steps = jobs.image.steps as WorkflowStep[];
     const runtimeIndex = steps.findIndex((s) =>
       s.uses?.startsWith("crazy-max/ghaction-github-runtime"),
     );
@@ -223,8 +228,7 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   });
 
   it("`image` job saves and uploads the tested image only on a push to main (fixes C2)", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
-    const steps: any[] = jobs.image.steps;
+    const steps = jobs.image.steps as WorkflowStep[];
     const pushGate = "github.event_name == 'push' && github.ref == 'refs/heads/main'";
     const save = steps.find(
       (s) =>
