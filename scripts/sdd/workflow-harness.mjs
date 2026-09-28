@@ -223,6 +223,8 @@ const hex40 = (h) =>
   /^[0-9a-f]{40}$/.test(h) ? h : crypto.createHash("sha1").update(String(h)).digest("hex");
 // A review-stages-only run (implemented: { head }) has no implementer, so the fixture's git HEAD is
 // the implemented head: gitAt(head) overrides the first verify.
+// A 40-hex implemented head: git reports it unchanged, so it matches (critic M3 on #222).
+const IMPL_HEAD = "cafe1234".repeat(5);
 const gitAt = (h) => ({
   "verify-head-impl": { revParse: `${hex40(h)}\n`, catFile: `EXISTS ${hex40(h)}\n` },
 });
@@ -396,6 +398,48 @@ await test("sdd: bad-sha: a cat-file answer for a different sha than revParse st
   assert.ok(!r.labels.includes("combined-review"));
   // the second command prints the sha it checked, and the prompt asks for it
   assert.ok(r.find("verify-head-impl").prompt.includes('echo "EXISTS $sha"'));
+});
+
+await test("sdd: bad-sha: an implemented.head that git does not report stops at precondition, not a silent swap (critic M3)", async () => {
+  const GIT = "d".repeat(40);
+  const r = await run(
+    sdd,
+    { ...BASE, implemented: { head: IMPL_HEAD } },
+    sddResponder({ "verify-head-impl": { revParse: `${GIT}\n`, catFile: `EXISTS ${GIT}\n` } }),
+  );
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stopPoint, "precondition:verifyHead");
+  assert.ok(/implemented\.head/.test(r.res.problem), r.res.problem);
+  assert.ok(!r.labels.includes("combined-review"));
+});
+
+await test("sdd: bad-sha: a verifyHead stop after the implementer keeps its questions (critic M2)", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      implementer: () => ({ ...work("h-impl"), questions: ["Q-keep"] }),
+      "verify-head*": { revParse: "not-a-sha\n", catFile: "MISSING\n" },
+    }),
+  );
+  assert.equal(r.res.stopPoint, "precondition:verifyHead");
+  assert.ok(r.res.questions.includes("Q-keep"), JSON.stringify(r.res.questions));
+});
+
+await test("sdd: bad-sha: a verifyHead stop in a fix round returns the open findings as parked (critic M4)", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "verify-head-r1": { revParse: "not-a-sha\n", catFile: "MISSING\n" },
+    }),
+  );
+  assert.equal(r.res.stopPoint, "precondition:verifyHead");
+  assert.ok(
+    r.res.parked.some((f) => /S1/.test(f.id)),
+    JSON.stringify(r.res.parked),
+  );
 });
 
 await test("sdd: bad-sha: an answer at precondition:verifyHead re-runs verifyHead once as -retry", async () => {
@@ -1167,7 +1211,7 @@ await test("wr: bad-sha: an answer at precondition:verifyHead re-runs verifyHead
   assert.equal(r.res.reviewedSha, hex40("h0full"));
 });
 
-await test("wr: clean approve is one agent", async () => {
+await test("wr: clean approve is the reviewer plus verifyHead", async () => {
   const r = await run(
     wr,
     WBASE,
@@ -1580,12 +1624,12 @@ await test("wr R3: the reviewer precondition names files and calls out a stray a
 await test("sdd R2: implemented { head } skips the implementer and reviews base..head (review stages only)", async () => {
   const r = await run(
     sdd,
-    { ...BASE, implemented: { head: "cafe1234cafe1234" } },
-    sddResponder(gitAt("cafe1234cafe1234")),
+    { ...BASE, implemented: { head: IMPL_HEAD } },
+    sddResponder(gitAt(IMPL_HEAD)),
   );
   assert.ok(!r.labels.includes("implementer"), r.labels.join(","));
   assert.deepEqual(r.labels, ["combined-review", "gate-0"]);
-  assert.ok(r.find("combined-review").prompt.includes(`aaaaaaa1111..${hex40("cafe1234cafe1234")}`));
+  assert.ok(r.find("combined-review").prompt.includes(`aaaaaaa1111..${hex40(IMPL_HEAD)}`));
   assert.equal(r.res.status, "complete");
   await assert.rejects(run(sdd, { ...BASE, implemented: {} }, sddResponder()), /implemented\.head/);
   await assert.rejects(
@@ -1854,11 +1898,11 @@ await test("sdd P7: a gate-0 precondition failure stops after the parallel revie
 await test("sdd P7: review stages only (implemented) runs gate-0 in parallel on implemented.head", async () => {
   const r = await run(
     sdd,
-    { ...BASE, implemented: { head: "cafe1234cafe1234" } },
-    sddResponder({ ...gitAt("cafe1234cafe1234"), "spec-review": specS1Mandated }),
+    { ...BASE, implemented: { head: IMPL_HEAD } },
+    sddResponder({ ...gitAt(IMPL_HEAD), "spec-review": specS1Mandated }),
   );
   assert.equal(r.labels.slice(0, 2).join(","), "combined-review,gate-0");
-  assert.ok(r.find("gate-0").prompt.includes(`equals ${hex40("cafe1234cafe1234")}`));
+  assert.ok(r.find("gate-0").prompt.includes(`equals ${hex40(IMPL_HEAD)}`));
 });
 
 await test("sdd P9: a gate-only fix round skips the re-reviewer; progress and gate-r<r> decide", async () => {
@@ -2505,7 +2549,11 @@ await test("sdd FP-M3: every sdd-task agent that can run shell commands carries 
 });
 
 await test("sdd FP-M4: review-stages-only text names coverage, not test", async () => {
-  const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
+  const r = await run(
+    sdd,
+    { ...BASE, implemented: { head: IMPL_HEAD } },
+    sddResponder(gitAt(IMPL_HEAD)),
+  );
   assert.ok(!r.logs.some((l) => /lint, typecheck and test\b/.test(l)), r.logs.join(" | "));
   assert.ok(r.logs.some((l) => /re-runs lint, typecheck and coverage/.test(l)));
 });

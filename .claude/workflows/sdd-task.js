@@ -767,7 +767,9 @@ const gitSha = (v) => {
   const head = String((v && v.revParse) || '').trim()
   return SHA40.test(head) && String((v && v.catFile) || '').trim() === `EXISTS ${head}` ? head : null
 }
-async function verifyHead(agentHead, label) {
+// exact: agentHead was named by the controller (implemented.head); a difference stops the run
+// instead of reviewing a range the controller did not name (critic M3 on #222).
+async function verifyHead(agentHead, label, exact = false) {
   const prompt = [
     `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,
     `1. git -C "${REPO}" rev-parse HEAD`,
@@ -793,6 +795,11 @@ async function verifyHead(agentHead, label) {
     })
   }
   const a = String(agentHead || '').trim().toLowerCase()
+  if (exact && !(a.length >= 7 && head.startsWith(a))) {
+    throw Object.assign(new Error(`verifyHead: implemented.head ${a.slice(0, 16)} is not git HEAD ${head}`), {
+      verifyStop: `verifyHead: implemented.head ${a.slice(0, 16)} is not git HEAD ${head} in ${REPO}; check out the named head or pass git's, then re-run`,
+    })
+  }
   if (a && !(a.length >= 7 && head.startsWith(a))) log(`agent-reported head ${a.slice(0, 16)}... differs from git; using git`)
   return head
 }
@@ -1115,8 +1122,8 @@ if (IMPLEMENTED) {
 }
 
 state.commits.push(...impl.commits)
-state.head = await verifyHead(impl.head, 'verify-head-impl')
 state.questions.push(...impl.questions)
+state.head = await verifyHead(impl.head, 'verify-head-impl', Boolean(IMPLEMENTED))
 log(`implement: ${impl.status}, ${impl.commits.length} commit(s), head ${String(state.head).slice(0, 7)}, tests: ${impl.testSummary}`)
 
 if (impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') {
@@ -1509,6 +1516,7 @@ if (state.parked.length || !gatePassed) return await finish(build('parked'))
 return await finish(build('complete'))
 } catch (e) {
   if (e && e.verifyStop) {
+    if (open.length) state.parked.push(...open)
     log(`${e.message}; stopping`)
     return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:verifyHead', problem: e.verifyStop }))
   }
