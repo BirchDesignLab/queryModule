@@ -18,6 +18,7 @@
 //   --only <text>          run only the scenarios whose name contains <text>.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -123,9 +124,14 @@ async function run(mod, args, responder, sub = null) {
     {},
     workflow,
   );
-  const labels = calls.map((c) => c.label);
+  // labels leaves out the verify-head-* agents (#222: one Haiku git read after each stage that
+  // commits) so the flow assertions read as before; calls and verifyLabels carry them, and every
+  // agent-count assertion counts them through calls.length.
+  const isVerify = (l) => l.startsWith("verify-head");
+  const labels = calls.map((c) => c.label).filter((l) => !isVerify(l));
+  const verifyLabels = calls.map((c) => c.label).filter(isVerify);
   const find = (l) => calls.find((c) => c.label === l);
-  return { res, calls, logs, labels, find, childArgs };
+  return { res, calls, logs, labels, verifyLabels, find, childArgs };
 }
 
 // ---------- fixtures ----------
@@ -209,9 +215,32 @@ function postFill(label, prompt, r) {
   if (label.startsWith("progress") && !("guardHits" in r)) return { ...r, guardHits: [] };
   return r;
 }
+// verifyHead (#222): the script takes every head from a "verify-head-*" agent that reads git. The
+// fixture plays git: it answers with a 40-hex sha derived from the head the last agent reported
+// (a 40-hex head passes through unchanged), so a scenario that sets a head sees it back as hex40(head).
+// A scenario overrides "verify-head*" to play a lying agent or a broken git.
+const hex40 = (h) =>
+  /^[0-9a-f]{40}$/.test(h) ? h : crypto.createHash("sha1").update(String(h)).digest("hex");
+// A review-stages-only run (implemented: { head }) has no implementer, so the fixture's git HEAD is
+// the implemented head: gitAt(head) overrides the first verify.
+const gitAt = (h) => ({
+  "verify-head-impl": { revParse: `${hex40(h)}\n`, catFile: "EXISTS\n" },
+});
 function sddResponder(over = {}) {
-  const base = sddBase(over);
-  return (label, prompt, calls) => postFill(label, prompt, base(label, prompt, calls));
+  const ctx = { lastHead: BASE.base };
+  const base = sddBase(over, ctx);
+  return (label, prompt, calls) => {
+    const r = postFill(label, prompt, base(label, prompt, calls));
+    // only the agents that commit set the git head; gates, the checker and rulers merely report it
+    if (
+      r &&
+      typeof r === "object" &&
+      typeof r.head === "string" &&
+      /^(implementer|fixer|progress)/.test(label)
+    )
+      ctx.lastHead = r.head;
+    return r;
+  };
 }
 // Ordinary and gate tasks run one combined reviewer ("combined-review") in place of the spec and
 // quality reviewers. Unless a test overrides "combined-review" itself, the fixture answers it by
@@ -233,7 +262,7 @@ function combineReviews(get) {
     cannotVerify: [...a.cannotVerify, ...b.cannotVerify],
   };
 }
-function sddBase(over) {
+function sddBase(over, ctx = { lastHead: BASE.base }) {
   const self = (label, prompt, calls) => {
     if (label === "combined-review" && !("combined-review" in over))
       return combineReviews((l) => self(l, prompt, calls));
@@ -242,6 +271,8 @@ function sddBase(over) {
         return typeof v === "function" ? v(prompt, calls, label) : v;
       }
     }
+    if (label.startsWith("verify-head"))
+      return { revParse: `${hex40(ctx.lastHead)}\n`, catFile: "EXISTS\n" };
     if (label === "implementer") return work("h-impl");
     if (label === "implementer-continue") return work("h-cont");
     if (label.startsWith("ruler")) {
@@ -292,7 +323,77 @@ await test("sdd: happy path runs implementer, the combined reviewer and gate-0, 
   assert.ok(
     /pnpm lint/.test(r.find("gate-0").prompt) && /pnpm typecheck/.test(r.find("gate-0").prompt),
   );
-  assert.equal(r.res.head, "h-gate-0");
+  // the head comes from verifyHead (git), not from the gate: the fixture's git head for h-impl
+  assert.equal(r.res.head, hex40("h-impl"));
+  assert.deepEqual(r.verifyLabels, ["verify-head-impl"]);
+  assert.equal(r.calls.length, 4);
+});
+
+// #222: heads come from git (verifyHead), never from an implementer, fixer, progress checker or gate.
+await test("sdd: fabricated-head: a head the fixer and progress checker report is never used, git's is", async () => {
+  const LIE = "2e31c7761aecdcf5d0f0a1e0a3f9e1a5f6c5e6a1";
+  const GIT = "2e31c77c6d9b971f6afc69a7ff4a714fb5315268";
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({
+      "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+      "fixer-r1": () => work(LIE),
+      "progress-r1": () => ({ ...progress("progress-r1"), head: LIE }),
+      "verify-head-r1": { revParse: `${GIT}\n`, catFile: "EXISTS\n" },
+    }),
+  );
+  const gate = r.find("gate-r1").prompt;
+  assert.ok(gate.includes(`equals ${GIT} `), "gate-r1 expectedHead was not the git head");
+  assert.ok(!gate.includes(LIE), "gate-r1 prompt carries the fabricated head");
+  assert.ok(
+    r.logs.includes("agent-reported head 2e31c7761aecdcf5... differs from git; using git"),
+    r.logs.join("\n"),
+  );
+  assert.equal(r.res.status, "complete");
+  assert.equal(r.res.head, GIT);
+  // the verifyHead role is Haiku and gets no effort, and its prompt never carries the reported head
+  assert.equal(r.find("verify-head-r1").model, "haiku");
+  assert.equal(r.find("verify-head-r1").effort, undefined);
+  assert.ok(!r.find("verify-head-r1").prompt.includes(LIE));
+});
+
+await test("sdd: bad-sha: a verifyHead answer that is not a 40-hex sha stops the run at precondition", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({ "verify-head*": { revParse: "not-a-sha\n", catFile: "EXISTS\n" } }),
+  );
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:verifyHead");
+  assert.ok(/verifyHead/.test(r.res.problem), r.res.problem);
+  assert.deepEqual(r.labels, ["implementer"]);
+  assert.deepEqual(r.verifyLabels, ["verify-head-impl"]);
+});
+
+await test("sdd: bad-sha: a 40-hex sha the role could not find in git stops the run at precondition", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({ "verify-head*": { revParse: `${"a".repeat(40)}\n`, catFile: "MISSING\n" } }),
+  );
+  assert.equal(r.res.stopped, "precondition");
+  assert.ok(/verifyHead/.test(r.res.problem), r.res.problem);
+  assert.ok(!r.labels.includes("combined-review"));
+});
+
+await test("sdd: bad-sha: an answer at precondition:verifyHead re-runs verifyHead once as -retry", async () => {
+  const r = await run(
+    sdd,
+    { ...BASE, answers: [{ at: "precondition:verifyHead", text: "git repaired" }] },
+    sddResponder({
+      "verify-head-impl": { revParse: "not-a-sha\n", catFile: "EXISTS\n" },
+    }),
+  );
+  assert.equal(r.res.status, "complete", r.logs.join("\n"));
+  assert.ok(r.find("verify-head-impl-retry").prompt.includes("git repaired"));
+  assert.equal(r.res.answersUnconsumed, undefined);
 });
 
 await test("sdd: a failing gate opens findings that go through the fix loop, then the gate re-runs", async () => {
@@ -322,8 +423,9 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
 
 // Worst case at maxRounds 5: implementer, ruler-concerns, fixer-pre, progress-pre, three reviewers
 // and gate-0 in parallel, checker (needsJudgment), ruler-review, then round 1 with a review finding (fixer, progress,
-// re-review, red gate-r1) and four mechanical rounds (fixer, progress, red gate).
-await test("sdd: gate failing every round parks at the cap (worst case 26 agents at maxRounds 5)", async () => {
+// re-review, red gate-r1) and four mechanical rounds (fixer, progress, red gate), plus verifyHead
+// after the implementer, the pre-review fixer and each of the five rounds (7, #222).
+await test("sdd: gate failing every round parks at the cap (worst case 33 agents at maxRounds 5)", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true, maxAgents: 40 },
@@ -346,14 +448,15 @@ await test("sdd: gate failing every round parks at the cap (worst case 26 agents
       "gate*": { ok: false, head: "hg", problems: ["tests red"] },
     }),
   );
-  assert.equal(r.calls.length, 26, r.labels.join(","));
+  assert.equal(r.calls.length, 33, r.labels.join(","));
+  assert.equal(r.verifyLabels.length, 7, r.verifyLabels.join(","));
   assert.equal(r.labels.filter((l) => l.startsWith("re-review")).join(","), "re-review-r1");
   assert.equal(r.labels.filter((l) => l.startsWith("gate")).length, 6);
   assert.equal(r.res.status, "parked");
   assert.equal(r.res.rounds, 5);
 });
 
-await test("sdd: worst case with every finding NOT ADDRESSED is 24 agents; escalated fixer after a repeat", async () => {
+await test("sdd: worst case with every finding NOT ADDRESSED is 31 agents; escalated fixer after a repeat", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true, maxAgents: 40 },
@@ -373,7 +476,7 @@ await test("sdd: worst case with every finding NOT ADDRESSED is 24 agents; escal
       }),
     }),
   );
-  assert.equal(r.calls.length, 24, r.labels.join(","));
+  assert.equal(r.calls.length, 31, r.labels.join(","));
   assert.equal(r.res.status, "parked");
   assert.equal(r.find("fixer-r2").effort, "medium");
   assert.equal(r.find("fixer-r3").effort, "high");
@@ -847,9 +950,25 @@ const WBASE = {
   trailer: "T",
 };
 const WF = (id, severity, extra = {}) => F(id, severity, { contests: "", ...extra });
+// verifyHead (#222): the fixture plays git and answers with hex40 of the head the last agent reported.
 function wrResponder(over = {}) {
+  const ctx = { lastHead: "h0full" };
+  const inner = wrInner(over, ctx);
+  return (label, prompt) => {
+    const r = inner(label, prompt);
+    if (r && typeof r === "object" && !label.startsWith("verify-head")) {
+      if (typeof r.head === "string") ctx.lastHead = r.head;
+      else if (typeof r.reviewedSha === "string" && label !== "re-reviewer")
+        ctx.lastHead = r.reviewedSha;
+    }
+    return r;
+  };
+}
+function wrInner(over, ctx) {
   return (label, prompt) => {
     if (label in over) return typeof over[label] === "function" ? over[label](prompt) : over[label];
+    if (label.startsWith("verify-head"))
+      return { revParse: `${hex40(ctx.lastHead)}\n`, catFile: "EXISTS\n" };
     if (label === "fixer") return work("h1");
     if (label === "progress")
       return {
@@ -892,6 +1011,80 @@ const reviewWith = (findings) => ({
   artifactWritten: false,
 });
 
+// #222: wave-review reads reviewedSha and the fix head from git, never from an agent field.
+await test("wr: fabricated-head: the fix head and reviewedSha come from git, not the progress checker or re-reviewer", async () => {
+  const LIE = "2e31c7761aecdcf5d0f0a1e0a3f9e1a5f6c5e6a1";
+  const GIT = "2e31c77c6d9b971f6afc69a7ff4a714fb5315268";
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({
+      reviewer: reviewWith([WF("I1", "important")]),
+      progress: () => ({ ok: true, problems: [], head: LIE, newCommits: [], testCount: 12 }),
+      "verify-head-fix": { revParse: `${GIT}\n`, catFile: "EXISTS\n" },
+      "re-reviewer": (p) => ({
+        verdict: "approve",
+        reviewedSha: LIE,
+        verdicts: ids(p).map((id) => ({ id, verdict: "ADDRESSED", evidence: "e" })),
+        acceptedStands: [],
+        newFindings: [],
+        artifactWritten: true,
+      }),
+    }),
+  );
+  assert.equal(r.res.reviewedSha, GIT);
+  assert.ok(
+    !r.find("re-reviewer").prompt.includes(LIE),
+    "re-reviewer prompt carries the fabricated head",
+  );
+  assert.ok(r.find("re-reviewer").prompt.includes(GIT));
+  assert.ok(r.logs.includes("agent-reported head 2e31c7761aecdcf5... differs from git; using git"));
+  assert.deepEqual(r.verifyLabels, ["verify-head-review", "verify-head-fix"]);
+  assert.equal(r.find("verify-head-review").model, "haiku");
+  assert.equal(r.find("verify-head-review").effort, undefined);
+});
+
+await test("wr: bad-sha: a verifyHead answer that is not a 40-hex sha stops the run at precondition:verifyHead", async () => {
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({
+      reviewer: reviewWith([WF("I1", "important")]),
+      "verify-head-review": { revParse: "not-a-sha\n", catFile: "EXISTS\n" },
+    }),
+  );
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:verifyHead");
+  assert.ok(/verifyHead/.test(r.res.problem), r.res.problem);
+  assert.deepEqual(r.labels, ["reviewer"]);
+  assert.equal(r.res.reviewedSha, null);
+  // a clean approve is gated on it too: no reviewedSha returns unverified
+  const a = await run(
+    wr,
+    WBASE,
+    wrResponder({
+      reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true },
+      "verify-head-review": { revParse: `${"a".repeat(40)}\n`, catFile: "MISSING\n" },
+    }),
+  );
+  assert.equal(a.res.stopped, "precondition");
+  assert.equal(a.res.strayArtifact, "docs/reviews/pr-32.md");
+});
+
+await test("wr: bad-sha: an answer at precondition:verifyHead re-runs verifyHead once as -retry", async () => {
+  const r = await run(
+    wr,
+    { ...WBASE, answers: [{ at: "precondition:verifyHead", text: "git repaired" }] },
+    wrResponder({
+      reviewer: { ...reviewWith([]), verdict: "approve", artifactWritten: true },
+      "verify-head-review": { revParse: "not-a-sha\n", catFile: "EXISTS\n" },
+    }),
+  );
+  assert.equal(r.res.verdict, "approve", r.logs.join("\n"));
+  assert.ok(r.find("verify-head-review-retry").prompt.includes("git repaired"));
+  assert.equal(r.res.reviewedSha, hex40("h0full"));
+});
+
 await test("wr: clean approve is one agent", async () => {
   const r = await run(
     wr,
@@ -904,7 +1097,7 @@ await test("wr: clean approve is one agent", async () => {
   assert.equal(r.res.verdict, "approve");
 });
 
-await test("wr: worst case is 5 agents; ruler opus/medium with the sensitive rule verbatim; front matter exact", async () => {
+await test("wr: worst case is 7 agents (5 plus two verifyHead reads); ruler opus/medium with the sensitive rule verbatim; front matter exact", async () => {
   const r = await run(
     wr,
     WBASE,
@@ -918,6 +1111,8 @@ await test("wr: worst case is 5 agents; ruler opus/medium with the sensitive rul
     }),
   );
   assert.deepEqual(r.labels, ["reviewer", "ruler", "fixer", "progress", "re-reviewer"]);
+  assert.deepEqual(r.verifyLabels, ["verify-head-review", "verify-head-fix"]);
+  assert.equal(r.calls.length, 7);
   assert.equal(`${r.find("ruler").model}/${r.find("ruler").effort}`, "opus/medium");
   assert.ok(r.find("ruler").prompt.includes(SENSITIVE_RULE));
   assert.ok(r.find("re-reviewer").prompt.includes('reviewer: "opus-5.5"\neffort: "high"'));
@@ -1301,10 +1496,14 @@ await test("wr R3: the reviewer precondition names files and calls out a stray a
 });
 
 await test("sdd R2: implemented { head } skips the implementer and reviews base..head (review stages only)", async () => {
-  const r = await run(sdd, { ...BASE, implemented: { head: "cafe1234cafe1234" } }, sddResponder());
+  const r = await run(
+    sdd,
+    { ...BASE, implemented: { head: "cafe1234cafe1234" } },
+    sddResponder(gitAt("cafe1234cafe1234")),
+  );
   assert.ok(!r.labels.includes("implementer"), r.labels.join(","));
   assert.deepEqual(r.labels, ["combined-review", "gate-0"]);
-  assert.ok(r.find("combined-review").prompt.includes("aaaaaaa1111..cafe1234cafe1234"));
+  assert.ok(r.find("combined-review").prompt.includes(`aaaaaaa1111..${hex40("cafe1234cafe1234")}`));
   assert.equal(r.res.status, "complete");
   await assert.rejects(run(sdd, { ...BASE, implemented: {} }, sddResponder()), /implemented\.head/);
   await assert.rejects(
@@ -1506,10 +1705,10 @@ await test("sdd P7: gate-0 runs in parallel with the reviewers on the review hea
     r.labels.join(","),
   );
   assert.ok(
-    r.find("gate-0").prompt.includes("equals h-progress-pre"),
+    r.find("gate-0").prompt.includes(`equals ${hex40("h-progress-pre")}`),
     "gate-0 not on the review head",
   );
-  assert.ok(r.find("combined-review").prompt.includes("head h-progress-pre"));
+  assert.ok(r.find("combined-review").prompt.includes(`head ${hex40("h-progress-pre")}`));
   assert.equal(r.labels.filter((l) => l.startsWith("gate")).join(","), "gate-0,gate-r1");
   assert.equal(r.res.status, "complete");
 });
@@ -1574,10 +1773,10 @@ await test("sdd P7: review stages only (implemented) runs gate-0 in parallel on 
   const r = await run(
     sdd,
     { ...BASE, implemented: { head: "cafe1234cafe1234" } },
-    sddResponder({ "spec-review": specS1Mandated }),
+    sddResponder({ ...gitAt("cafe1234cafe1234"), "spec-review": specS1Mandated }),
   );
   assert.equal(r.labels.slice(0, 2).join(","), "combined-review,gate-0");
-  assert.ok(r.find("gate-0").prompt.includes("equals cafe1234cafe1234"));
+  assert.ok(r.find("gate-0").prompt.includes(`equals ${hex40("cafe1234cafe1234")}`));
 });
 
 await test("sdd P9: a gate-only fix round skips the re-reviewer; progress and gate-r<r> decide", async () => {
@@ -1923,7 +2122,7 @@ await test("sdd FP-I1: a checker that reports another head or a dirty tree stops
   });
   const r = await run(sdd, BASE, resp);
   const c = r.find("checker").prompt;
-  assert.ok(c.includes("git rev-parse HEAD must equal h-gate-0."), c);
+  assert.ok(c.includes(`git rev-parse HEAD must equal ${hex40("h-impl")}.`), c);
   assert.ok(c.includes("git status --porcelain") && /never edit/i.test(c));
   assert.equal(r.res.status, "stopped");
   assert.equal(r.res.stopped, "precondition");
@@ -1997,7 +2196,9 @@ await test("sdd FP-I1: a ruler-review that reports another head stops at precond
     }),
   });
   const r = await run(sdd, BASE, resp);
-  assert.ok(r.find("ruler-review").prompt.includes("git rev-parse HEAD must equal h-gate-0."));
+  assert.ok(
+    r.find("ruler-review").prompt.includes(`git rev-parse HEAD must equal ${hex40("h-impl")}.`),
+  );
   assert.equal(r.res.stopPoint, "precondition:ruler-review");
   assert.ok(r.res.problem.includes("moved111"));
   assert.equal(r.res.rulings.length, 0, "rulings from a moved head must not be applied");
@@ -2309,9 +2510,10 @@ const WAVE = {
 // Per-task overrides use "<label>@<task>"; the task is read from a brief, report or review path
 // in the prompt.
 function waveResponder(over = {}) {
-  const base = sddResponder();
+  const taskOf = (p) => (/task-(\d+)-(?:brief|report|review)/.exec(p) || [])[1];
+  const base = sddResponder({ implementer: (p) => work(`h-impl-${taskOf(p)}`) });
   const self = (label, prompt, calls) => {
-    const n = (/task-(\d+)-(?:brief|report|review)/.exec(prompt) || [])[1];
+    const n = taskOf(prompt);
     const k = `${label}@${n}`;
     if (label === "combined-review" && !(k in over))
       return combineReviews((l) => self(l, prompt, calls));
@@ -2319,7 +2521,6 @@ function waveResponder(over = {}) {
       const v = over[k];
       return postFill(label, prompt, typeof v === "function" ? v(prompt, calls, label) : v);
     }
-    if (label === "implementer") return work(`h-impl-${n}`);
     return base(label, prompt, calls);
   };
   return self;
@@ -2402,6 +2603,50 @@ await test("sdd-wave: every task runs through sdd-task in order; base and carrie
   assert.equal(r.res.totals.rounds, 1);
   const al = await import(new URL("./append-ledger.mjs", import.meta.url).href);
   assert.deepEqual(al.findLedgerLines(JSON.stringify(r.res)), r.res.ledgerLines);
+});
+
+// #222: the next task's base is read from git between tasks, never taken from the child's head.
+await test("sdd-wave: fabricated-head: the next base is git's head, and a differing child head is logged", async () => {
+  const GIT = "2e31c77c6d9b971f6afc69a7ff4a714fb5315268";
+  const r = await run(wave, WAVE, waveResponder(), sdd);
+  assert.equal(r.res.status, "complete", r.logs.join(" | "));
+  assert.deepEqual(
+    r.calls.filter((c) => /^verify-head-t\d+$/.test(c.label)).map((c) => c.label),
+    ["verify-head-t17", "verify-head-t18"],
+  );
+  const lied = await run(
+    wave,
+    WAVE,
+    (label, prompt, calls) =>
+      label === "verify-head-t17"
+        ? { revParse: `${GIT}\n`, catFile: "EXISTS\n" }
+        : waveResponder()(label, prompt, calls),
+    sdd,
+  );
+  assert.equal(lied.childArgs[1].args.base, GIT);
+  assert.ok(
+    lied.logs.some((l) => / differs from git; using git$/.test(l)),
+    lied.logs.join(" | "),
+  );
+  assert.equal(lied.find("verify-head-t17").model, "haiku");
+  assert.equal(lied.find("verify-head-t17").effort, undefined);
+});
+
+await test("sdd-wave: bad-sha: a verifyHead answer that is not a 40-hex sha stops the wave", async () => {
+  const r = await run(
+    wave,
+    WAVE,
+    (label, prompt, calls) =>
+      label === "verify-head-t17"
+        ? { revParse: "not-a-sha\n", catFile: "EXISTS\n" }
+        : waveResponder()(label, prompt, calls),
+    sdd,
+  );
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stoppedTask, 17);
+  assert.equal(r.res.stop.stopPoint, "precondition:verifyHead");
+  assert.ok(/verifyHead/.test(r.res.stop.problem), r.res.stop.problem);
+  assert.equal(r.childArgs.length, 1, "Task 18 must not start");
 });
 
 await test("sdd-wave: stops at the first task that does not complete; answers[task] resumes, earlier args unchanged", async () => {
@@ -2792,16 +3037,16 @@ await test("fix pass C1: ruler and fixer prompts point at a review-file pattern 
 
 await test("tiers: the agent budget stops the run at the next call past maxAgents", async () => {
   const resp = sddResponder({ ...specQ(), "re-review*": twiceNotAddressed() });
-  const r = await run(sdd, { ...BASE, maxAgents: 6 }, resp);
-  assert.equal(r.calls.length, 6, r.labels.join(","));
+  const r = await run(sdd, { ...BASE, maxAgents: 8 }, resp);
+  assert.equal(r.calls.length, 8, r.labels.join(","));
   assert.equal(r.res.status, "stopped");
   assert.equal(r.res.stopped, "budget");
   assert.equal(r.res.stopPoint, "budget");
   assert.ok(
-    /7/.test(r.res.problem) && /6/.test(r.res.problem) && /fixer-r2/.test(r.res.problem),
+    /9/.test(r.res.problem) && /8/.test(r.res.problem) && /fixer-r2/.test(r.res.problem),
     r.res.problem,
   );
-  assert.equal(r.res.agents, 6);
+  assert.equal(r.res.agents, 8);
   assert.ok(
     r.res.parked.some((f) => f.id === "spec:S1"),
     "open findings return as parked at a budget stop",
@@ -2816,10 +3061,10 @@ await test("tiers: the agent budget stops the run at the next call past maxAgent
 
 await test("tiers: a budget answer raises the cap by the default once and replays from cache", async () => {
   const resp = () => sddResponder({ ...specQ(), "re-review*": twiceNotAddressed() });
-  const r = await run(sdd, { ...BASE, maxAgents: 6 }, resp());
+  const r = await run(sdd, { ...BASE, maxAgents: 8 }, resp());
   const again = await run(
     sdd,
-    { ...BASE, maxAgents: 6, answers: [{ at: "budget", text: "go on" }] },
+    { ...BASE, maxAgents: 8, answers: [{ at: "budget", text: "go on" }] },
     resp(),
   );
   for (let i = 0; i < r.calls.length; i++)
@@ -2832,14 +3077,14 @@ await test("tiers: a budget answer raises the cap by the default once and replay
   assert.equal(again.res.status, "complete", again.logs.join(" | "));
   assert.equal(again.res.agents, again.calls.length);
   assert.ok(
-    again.logs.some((l) => /maxAgents 6 raised to 20/.test(l)),
+    again.logs.some((l) => /maxAgents 8 raised to 26/.test(l)),
     again.logs.join(" | "),
   );
   assert.ok(
     again.res.ledgerLines.at(-1).endsWith(`gate green; ${again.calls.length} agents)`),
     again.res.ledgerLines.at(-1),
   );
-  // default cap 16: the 26-agent worst case stops at budget
+  // default cap 24: the 33-agent worst case stops at budget
   const w = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true },
@@ -2848,7 +3093,7 @@ await test("tiers: a budget answer raises the cap by the default once and replay
       "gate*": { ok: false, head: "hg", problems: ["red"] },
     }),
   );
-  assert.equal(w.calls.length, 20, "critical default is 20");
+  assert.equal(w.calls.length, 24, "critical default is 24");
   assert.equal(w.res.stopped, "budget");
 });
 
@@ -2860,7 +3105,7 @@ await test("tiers: maxAgents is coerced like maxRounds", async () => {
     s.logs.join(" | "),
   );
   const j = await run(sdd, { ...BASE, maxAgents: "lots" }, sddResponder());
-  assert.ok(j.logs.some((l) => /maxAgents "lots" is not a number; using 14/.test(l)));
+  assert.ok(j.logs.some((l) => /maxAgents "lots" is not a number; using 18/.test(l)));
   assert.equal(j.res.status, "complete");
   const f = await run(sdd, { ...BASE, maxAgents: 2.9 }, sddResponder());
   assert.equal(f.res.stopped, "budget");
@@ -2879,10 +3124,10 @@ await test("tiers: sdd-wave passes tier and maxAgents through (task wins) and to
   assert.ok(!("tier" in a19) && a19.sensitive === true, "sensitive task gets no wave tier");
   assert.equal(r.res.status, "complete", r.logs.join(" | "));
   assert.equal(r.res.totals.agents, r.calls.length);
-  assert.equal(
-    r.res.totals.agents,
-    r.res.tasks.reduce((s, t) => s + t.agents, 0),
-  );
+  // the wave's own agents are the verifyHead reads between tasks (#222): two, none after the last task
+  const waveVerifies = r.calls.filter((c) => /^verify-head-t\d+$/.test(c.label)).length;
+  assert.equal(waveVerifies, 2);
+  assert.equal(r.res.totals.agents, r.res.tasks.reduce((s, t) => s + t.agents, 0) + waveVerifies);
   const none = await run(wave, WAVE, waveResponder(), sdd);
   assert.ok(!("tier" in none.childArgs[0].args) && !("maxAgents" in none.childArgs[0].args));
 });
@@ -2930,11 +3175,11 @@ await test("tiers: the wave-review reviewer prompt is diff-scoped", async () => 
   );
 });
 
-await test("fix pass: maxAgents defaults per tier (ordinary 14, gate 16, critical 20); explicit wins", async () => {
+await test("fix pass: maxAgents defaults per tier (ordinary 18, gate 20, critical 24); explicit wins", async () => {
   for (const [tier, n] of [
-    ["ordinary", 14],
-    ["gate", 16],
-    ["critical", 20],
+    ["ordinary", 18],
+    ["gate", 20],
+    ["critical", 24],
   ]) {
     const r = await run(sdd, { ...BASE, tier }, sddResponder());
     assert.ok(

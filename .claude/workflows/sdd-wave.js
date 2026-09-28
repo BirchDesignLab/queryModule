@@ -25,7 +25,9 @@ export const meta = {
  * next task's carries, each earlier task's carryForward items (always) and its stands and verified
  * ruler and controller rulings (precedents; the most recent RULING_CAP lines), and sets the next
  * base to the previous head. A fix ruling is settled inside its own task and is not forwarded.
- * No agent runs between tasks, and nothing here writes to GitHub. The wave stops at the first task
+ * Nothing here writes to GitHub. The only agent the wave runs is verifyHead (#222): between two tasks
+ * it reads git rev-parse HEAD and git cat-file -e <sha>^{commit} (a Haiku role) and the next task's
+ * base is that value, never a head an earlier agent reported. The wave stops at the first task
  * whose status is not "complete".
  *
  * Returns { wave, status: "complete" | "stopped" | "parked", stoppedTask?, stop?, base, head, tasks:
@@ -104,6 +106,39 @@ function childArgs(t, base, flow) {
   return out
 }
 
+// ---------- verifyHead (#222) ----------
+// One Haiku agent reads git; only a 40-hex sha it confirmed exists is accepted. The child head is
+// compared and logged on a difference, never used. Returns { head } or { problem }.
+const SHA40 = /^[0-9a-f]{40}$/
+const REPO = String(A.repoDir).replace(/\\/g, '/')
+let verifyCalls = 0
+async function verifyHead(childHead, label) {
+  const prompt = [
+    `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,
+    `1. git -C "${REPO}" rev-parse HEAD`,
+    `2. sha=$(git -C "${REPO}" rev-parse HEAD) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo EXISTS || echo MISSING`,
+    'Return revParse (the stdout of command 1) and catFile (the stdout of command 2).',
+    'Rules: never dispatch subagents; finish every command before you reply; never run git push, gh pr, gh api writes or git merge.',
+  ].join('\n')
+  const schema = {
+    type: 'object',
+    properties: {
+      revParse: { type: 'string', description: 'the raw stdout of git rev-parse HEAD, copied exactly' },
+      catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS or MISSING' },
+    },
+    required: ['revParse', 'catFile'],
+  }
+  verifyCalls++
+  const v = await agent(prompt, { label, phase: 'Wave', schema, model: 'haiku' })
+  const head = String((v && v.revParse) || '').trim()
+  if (!SHA40.test(head) || String((v && v.catFile) || '').trim() !== 'EXISTS') {
+    return { problem: `verifyHead: ${label} did not return a 40-hex sha that exists in git (${v ? JSON.stringify({ revParse: String(v.revParse).slice(0, 60), catFile: String(v.catFile).slice(0, 20) }) : 'no result'}); fix the repository in ${REPO}, then start a fresh sdd-wave with base set to git rev-parse HEAD and carried set to the returned carried` }
+  }
+  const c = String(childHead || '').trim().toLowerCase()
+  if (c && !(c.length >= 7 && head.startsWith(c))) log(`agent-reported head ${c.slice(0, 16)}... differs from git; using git`)
+  return { head }
+}
+
 // ---------- run ----------
 phase('Wave')
 log(`wave ${W}: ${A.tasks.length} task(s) (${A.tasks.map((t) => t.task).join(', ')}) on ${A.branch} from ${h7(A.base)}; each runs as a nested ${SDD_TASK}`)
@@ -148,7 +183,18 @@ for (const t of A.tasks) {
     }
     break
   }
-  base = res.head
+  if (t === A.tasks[A.tasks.length - 1]) {
+    base = res.head // no later task: nothing to carry the head into
+  } else {
+    const v = await verifyHead(res.head, `verify-head-t${t.task}`)
+    if (v.problem) {
+      log(`wave ${W}: ${v.problem}`)
+      stop = { task: t.task, status: 'stopped', stopped: 'precondition', stopPoint: 'precondition:verifyHead', problem: v.problem, questions: [], escalated: [], parked: [] }
+      ledger.push(`- Task ${t.task}: complete, but the wave stopped: ${short(v.problem, 300)}; controller action needed`)
+      break
+    }
+    base = v.head
+  }
   for (const c of res.carryForward || []) flow.push(`- Task ${t.task} carry forward: ${short(c, 400)}`)
   for (const r of res.rulings || []) {
     // checker rulings are verified checks; a fix ruling was settled inside its own task
@@ -167,7 +213,7 @@ const totals = {
   escalations: results.reduce((s, r) => s + ((r.escalated || []).length), 0),
   parked: results.reduce((s, r) => s + ((r.parked || []).length), 0),
   deferredMinors: results.reduce((s, r) => s + ((r.deferredMinors || []).length), 0),
-  agents: results.reduce((s, r) => s + (r.agents || 0), 0),
+  agents: results.reduce((s, r) => s + (r.agents || 0), 0) + verifyCalls,
 }
 const head = results.length ? results[results.length - 1].head || base : base
 if (stop) {

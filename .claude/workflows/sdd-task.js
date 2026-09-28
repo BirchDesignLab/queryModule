@@ -19,8 +19,8 @@
  *   carries: "<rulings, interfaces>",        // never edit between re-runs of one task
  *   trailer: "Co-Authored-By: ...",          // fallback commit trailer
  *   roles: { implementer: { model: "opus", effort: "medium" }, ... },   // optional overrides
- *   maxAgents: 14,                           // agent budget (every agent() call); default by tier: ordinary 14,
- *                                            // gate 16, critical 20; coerced like maxRounds;
+ *   maxAgents: 18,                           // agent budget (every agent() call); default by tier: ordinary 18,
+ *                                            // gate 20, critical 24; coerced like maxRounds;
  *                                            // past it the run stops at "budget"
  *   maxRounds: 2,                            // fix-round cap, default 2 (developer rule 09-27-26: a task
  *                                            // open after round 2 parks for a controller ruling);
@@ -53,8 +53,8 @@
  * stopped (a stop point, with the agent that consumes answers there):
  *   "implementer"     -> implementer-continue finishes on top of the existing commits
  *   "precondition"    -> (problem says what: branch, HEAD, dirty tree with the files named; stopPoint
- *                        is precondition:<label>: implementer, gate-0, checker, ruler-review or
- *                        gate-r<r>) fix the repo; the failing agent re-runs once as <label>-retry
+ *                        is precondition:<label>: implementer, gate-0, checker, ruler-review,
+ *                        gate-r<r> or verifyHead) fix the repo; the failing agent re-runs once as <label>-retry
  *   "ruler-concerns"  -> ruler-concerns        "fixer-pre" -> fixer-pre
  *   "review"          -> ruler-review, then the fixers (a reviewer returned nothing)
  *   "ruler-review"    -> ruler-review          "fixer-r<r>" -> fixer-r<r>
@@ -84,6 +84,10 @@
  *              args: <same args + answers> })
  * Resume after a pause, kill or script edit: the same call without new answers. Always pass
  * args: a resume without them throws at the first required-arg check.
+ * Head shas (#222): every head the script uses (expectedHead, reviewHead, gate heads, the carried
+ * base, the returned head) comes from verifyHead, a Haiku role that runs git rev-parse HEAD and
+ * git cat-file -e <sha>^{commit} in repoDir. An implementer, fixer, progress checker or gate never
+ * supplies one; a head they report is only compared, and a difference is logged.
  * This script never pushes or merges; every shell-running agent is told the same.
  */
 export const meta = {
@@ -97,6 +101,7 @@ export const meta = {
     { title: 'Check', detail: 'checker runs the suggested check for each cannot-verify item' },
     { title: 'Fix', detail: 'fixer, progress checker and re-reviewer per round, up to maxRounds' },
     { title: 'Gate', detail: 'independent lint, typecheck, coverage, head and clean-tree check' },
+    { title: 'Verify', detail: 'verifyHead reads the head sha from git after each stage that commits (#222)' },
   ],
 }
 
@@ -161,8 +166,10 @@ if (MAX_ROUNDS < 1 || MAX_ROUNDS > 8) {
 
 // Agent budget: every agent() call in the run counts, cached replays included. The call that would
 // exceed MAX_AGENTS is not made; the run stops at "budget". Each answer at "budget" raises the cap
-// by DEFAULT_MAX_AGENTS once (below, with the answers). The default follows the tier.
-const DEFAULT_MAX_AGENTS = { ordinary: 14, gate: 16, critical: 20 }[TIER]
+// by DEFAULT_MAX_AGENTS once (below, with the answers). The default follows the tier. verifyHead
+// (#222) adds up to 4 calls to the worst case at maxRounds 2 (after the implementer, the pre-review
+// fixer and each of two fix rounds), so the defaults are the pre-#222 14, 16, 20 plus 4.
+const DEFAULT_MAX_AGENTS = { ordinary: 18, gate: 20, critical: 24 }[TIER]
 let MAX_AGENTS = DEFAULT_MAX_AGENTS
 if (A.maxAgents !== undefined && A.maxAgents !== null) {
   const raw = A.maxAgents
@@ -192,7 +199,7 @@ if (MAX_AGENTS < 1) {
 // point that runs. So an agent's prompt holds only the entries for its own stop point, and a
 // later entry never changes an earlier agent's prompt (earlier calls replay from cache).
 // Decisions from all entries become controller rulings; a later entry wins for the same item.
-const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>, budget'
+const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>, verifyHead),ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>, budget'
 function stopPos(at) {
   const fixed = { implementer: 0, 'ruler-concerns': 1, 'fixer-pre': 2, review: 3, 'ruler-review': 4 }
   if (at in fixed) return fixed[at]
@@ -203,7 +210,7 @@ function stopPos(at) {
   if (m) return 11 + 2 * Number(m[1])
   return -1
 }
-const PRECONDITION_AT = /^precondition(?::(implementer|gate-0|checker|ruler-review|gate-r[1-9]\d*))?$/
+const PRECONDITION_AT = /^precondition(?::(implementer|gate-0|checker|ruler-review|verifyHead|gate-r[1-9]\d*))?$/
 let ANSWERS = null
 const CONTROLLER = new Map()
 // Items decided in entries at or before the review stop (implementer .. review, and the
@@ -300,6 +307,8 @@ const COMMON_ROLES = {
   progressChecker: { model: 'sonnet', effort: 'low' },
   reReviewer: { model: 'sonnet', effort: 'medium' },
   gate: { model: 'sonnet', effort: 'low' },
+  // Reads shas from git for the script (model only: the API rejects effort on Haiku).
+  verifyHead: { model: 'haiku' },
 }
 const TIER_ROLES = {
   ordinary: {},
@@ -547,6 +556,15 @@ const GATE = {
   required: ['ok', 'head', 'problems'],
 }
 
+const VERIFY_HEAD = {
+  type: 'object',
+  properties: {
+    revParse: { type: 'string', description: 'the raw stdout of git rev-parse HEAD, copied exactly' },
+    catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS or MISSING' },
+  },
+  required: ['revParse', 'catFile'],
+}
+
 // ---------- shared prompt pieces ----------
 const GIT = `Shell: Git Bash. Run every git and shell command in ${REPO} (cd there, or use git -C "${REPO}"). Branch: ${A.branch}.`
 // Every agent in this script can run shell commands, so every prompt carries NO_REMOTE through
@@ -738,6 +756,45 @@ function build(status, extra) {
     },
     extra || {},
   )
+}
+
+// ---------- verifyHead (#222) ----------
+// The only source of a head sha in this script. One Haiku agent reads git; the script accepts only
+// a 40-hex value the agent confirmed exists. agentHead is what an earlier agent reported: compared
+// and logged on a difference, never used. An invalid answer stops the run (precondition:verifyHead).
+const SHA40 = /^[0-9a-f]{40}$/
+const gitSha = (v) => {
+  const head = String((v && v.revParse) || '').trim()
+  return SHA40.test(head) && String((v && v.catFile) || '').trim() === 'EXISTS' ? head : null
+}
+async function verifyHead(agentHead, label) {
+  const prompt = [
+    `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,
+    `1. git -C "${REPO}" rev-parse HEAD`,
+    `2. sha=$(git -C "${REPO}" rev-parse HEAD) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo EXISTS || echo MISSING`,
+    'Return revParse (the stdout of command 1) and catFile (the stdout of command 2).',
+    HOUSE,
+  ].join('\n')
+  const run = (p, l) => call(p, { label: l, phase: 'Verify', schema: VERIFY_HEAD, ...role('verifyHead') })
+  let v = await run(prompt, label)
+  let head = gitSha(v)
+  if (!head) {
+    const ans = preconditionAnswers('verifyHead')
+    if (ans) {
+      log(`verifyHead: ${label} returned no valid sha; retrying with the controller answer`)
+      v = await run(`${prompt}\n\n${ans}`, `${label}-retry`)
+      head = gitSha(v)
+    }
+  }
+  if (!head) {
+    const shown = v ? JSON.stringify({ revParse: String(v.revParse).slice(0, 60), catFile: String(v.catFile).slice(0, 20) }) : 'no result'
+    throw Object.assign(new Error(`verifyHead: ${label} did not return a 40-hex sha that exists (${shown})`), {
+      verifyStop: `verifyHead: ${label} did not return a 40-hex sha that exists in git (${shown}); check the repository in ${REPO}, then answer at precondition:verifyHead to re-run it once`,
+    })
+  }
+  const a = String(agentHead || '').trim().toLowerCase()
+  if (a && !(a.length >= 7 && head.startsWith(a))) log(`agent-reported head ${a.slice(0, 16)}... differs from git; using git`)
+  return head
 }
 
 // ---------- ruler ----------
@@ -949,7 +1006,7 @@ async function gateOutcome(gl, g, expectedHead) {
     log(`gate: ${gl} precondition failed: ${g.preconditionFailed}; stopping, not a finding`)
     return { stop: await finish(build('stopped', { stopped: 'precondition', stopPoint: `precondition:${gl}`, problem: `${gl}: ${g.preconditionFailed}` })) }
   }
-  if (g.head) state.head = g.head
+  // g.head is never taken: the gate's precondition already required HEAD to equal the verified expectedHead.
   if (g.ok) {
     log(`gate: ${gl} green at ${String(state.head).slice(0, 7)}`)
     return { ok: true }
@@ -1058,7 +1115,7 @@ if (IMPLEMENTED) {
 }
 
 state.commits.push(...impl.commits)
-state.head = impl.head || A.base
+state.head = await verifyHead(impl.head, 'verify-head-impl')
 state.questions.push(...impl.questions)
 log(`implement: ${impl.status}, ${impl.commits.length} commit(s), head ${String(state.head).slice(0, 7)}, tests: ${impl.testSummary}`)
 
@@ -1096,7 +1153,6 @@ if (implConcerns.length) {
     state.concerns.push(...fx.concerns.filter((c) => c.kind !== 'observation'))
     const pc = await runProgress('progress-pre', preBase, lastTests)
     if (pc) {
-      state.head = pc.head
       state.commits.push(...pc.newCommits)
       if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
       if (pc.guardHits.length) state.preReviewProblems.push(...pc.guardHits.map((g) => `gate weakening: ${g}`))
@@ -1105,10 +1161,10 @@ if (implConcerns.length) {
         log(`fix: pre-review progress problems (passed to the reviewers): ${pc.problems.join('; ')}`)
       }
     } else {
-      state.head = fx.head
       state.commits.push(...fx.commits)
-      log('fix: pre-review progress checker returned null; using the fixer-reported head')
+      log('fix: pre-review progress checker returned null; the head still comes from git')
     }
+    state.head = await verifyHead(pc ? pc.head : fx.head, 'verify-head-pre')
     state.roundLog.push(`fix round pre-review (ruled concerns ${ruled.fixes.map((f) => f.id).join(', ')}; head ${String(state.head).slice(0, 7)})`)
   }
 }
@@ -1368,16 +1424,15 @@ while (!gatePassed) {
     const progressProblems = []
     const guardHits = []
     if (pc) {
-      state.head = pc.head
       state.commits.push(...pc.newCommits)
       if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
       if (!pc.ok) progressProblems.push(...pc.problems)
       guardHits.push(...pc.guardHits)
     } else {
-      state.head = fx.head
       state.commits.push(...fx.commits)
       progressProblems.push('progress checker returned no result; round unchecked')
     }
+    state.head = await verifyHead(pc ? pc.head : fx.head, `verify-head-r${r}`)
 
     // Mechanical round: every open finding came from a gate or the progress checker. The progress
     // checker and gate-r<r> decide; the re-reviewer is skipped.
@@ -1453,6 +1508,10 @@ if (state.carryForward.length) log(`carry forward: ${state.carryForward.length} 
 if (state.parked.length || !gatePassed) return await finish(build('parked'))
 return await finish(build('complete'))
 } catch (e) {
+  if (e && e.verifyStop) {
+    log(`${e.message}; stopping`)
+    return await finish(build('stopped', { stopped: 'precondition', stopPoint: 'precondition:verifyHead', problem: e.verifyStop }))
+  }
   if (!e || !e.budgetStop) throw e
   // open findings come back as parked for visibility; a resume recomputes them from cache
   if (open.length) state.parked.push(...open)
