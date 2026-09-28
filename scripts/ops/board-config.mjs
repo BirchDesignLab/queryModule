@@ -47,7 +47,6 @@ export const MILESTONES = {
 
 export const STATUS_OPTIONS = [
   { name: "Todo", color: "GRAY", description: "Not started" },
-  { name: "Ready", color: "BLUE", description: "Briefed and unblocked; next up" },
   { name: "In Progress", color: "YELLOW", description: "A session is working on it" },
   { name: "In Review", color: "PURPLE", description: "PR open; review or checks running" },
   {
