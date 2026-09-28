@@ -36,7 +36,9 @@ export function FieldRenderer({
   const label = t(field.labelKey);
   const requiredText = t("form.required");
   const tag = field.isDefault ? t("form.defaultTag") : undefined;
-  const shown = userValue !== null ? userValue : field.isDefault ? field.effectiveValue : null;
+  // "" is no user value: core canonicalises it to null, so the default still applies (FR-004, FR-005).
+  const hasUser = userValue !== null && userValue !== "";
+  const shown = hasUser ? userValue : field.isDefault ? field.effectiveValue : null;
   const common = { id, label, requiredText, required: field.required, error, tag };
 
   if (field.dataType === "boolean") {

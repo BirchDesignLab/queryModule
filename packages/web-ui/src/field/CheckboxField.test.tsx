@@ -21,7 +21,7 @@ describe("FR-001 CheckboxField primitive", () => {
     const box = screen.getByRole("checkbox", { name: /Flag/ });
     expect(box).toHaveAttribute("aria-required", "true");
     expect(box).toHaveAttribute("aria-invalid", "true");
-    expect(box).toHaveAttribute("aria-describedby", "c-description c-error");
+    expect(box).toHaveAttribute("aria-describedby", "c-tag c-description c-error");
     expect(screen.getByText("default")).toBeInTheDocument();
   });
   it("reports the checked state", async () => {

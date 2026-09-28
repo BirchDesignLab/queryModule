@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from "react";
-import { VisuallyHidden } from "../visually-hidden.js";
+import { FieldMessages, fieldIds, RequiredMark } from "./field-parts.js";
 
 export interface TextFieldProps {
   id: string;
@@ -36,22 +36,12 @@ export function TextField({
   tag,
   ref,
 }: TextFieldProps) {
-  const descriptionId = description === undefined ? undefined : `${id}-description`;
-  const errorId = error === undefined ? undefined : `${id}-error`;
-  const describedBy = [descriptionId, errorId].filter((x) => x !== undefined).join(" ");
+  const ids = fieldIds(id, tag, description, error);
   return (
     <div className="qm-field">
       <label htmlFor={id} className="qm-field__label">
         {label}
-        {required ? (
-          <>
-            <span aria-hidden="true" className="qm-field__required-mark">
-              {" "}
-              *
-            </span>
-            <VisuallyHidden> {requiredText}</VisuallyHidden>
-          </>
-        ) : null}
+        <RequiredMark required={required} requiredText={requiredText} />
       </label>
       <input
         ref={ref}
@@ -64,20 +54,10 @@ export function TextField({
         inputMode={inputMode}
         aria-required={required ? "true" : undefined}
         aria-invalid={error === undefined ? undefined : "true"}
-        aria-describedby={describedBy === "" ? undefined : describedBy}
+        aria-describedby={ids.describedBy}
         onChange={(event) => onChange(event.currentTarget.value)}
       />
-      {tag === undefined || tag === null ? null : <span className="qm-field__tag">{tag}</span>}
-      {description === undefined ? null : (
-        <p id={descriptionId} className="qm-field__description">
-          {description}
-        </p>
-      )}
-      {error === undefined ? null : (
-        <p id={errorId} className="qm-field__error">
-          {error}
-        </p>
-      )}
+      <FieldMessages ids={ids} tag={tag} description={description} error={error} />
     </div>
   );
 }

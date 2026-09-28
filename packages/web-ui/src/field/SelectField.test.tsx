@@ -27,7 +27,7 @@ describe("FR-001 SelectField primitive", () => {
     const select = screen.getByLabelText(/Pick/);
     expect(select).toHaveAttribute("aria-required", "true");
     expect(select).toHaveAttribute("aria-invalid", "true");
-    expect(select).toHaveAttribute("aria-describedby", "s-description s-error");
+    expect(select).toHaveAttribute("aria-describedby", "s-tag s-description s-error");
     expect(screen.getByText("default")).toBeInTheDocument();
   });
   it("reports the selected code", async () => {

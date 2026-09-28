@@ -88,6 +88,38 @@ describe("FR-004 default values show the effective value and a tag", () => {
   });
 });
 
+describe("FR-004, FR-005 an empty draft value means no user value", () => {
+  it("shows the default again for a cleared text default", () => {
+    setup({ isDefault: true, effectiveValue: "ZZ" }, { userValue: "" });
+    expect(screen.getByLabelText("Name")).toHaveValue("ZZ");
+    expect(screen.getByText("default")).toBeInTheDocument();
+  });
+  it("shows the default for the empty picklist option on a default", () => {
+    setup({ ...picklist, isDefault: true, effectiveValue: "TX" }, { userValue: "" });
+    expect(screen.getByLabelText("State")).toHaveValue("TX");
+  });
+  it("shows blank for an empty value with no default", () => {
+    setup({}, { userValue: "" });
+    expect(screen.getByLabelText("Name")).toHaveValue("");
+  });
+});
+
+describe("UX-004 the default tag is announced", () => {
+  it("describes a text input, select and checkbox by the tag", () => {
+    setup({ isDefault: true, effectiveValue: "ZZ" });
+    expect(screen.getByLabelText("Name")).toHaveAccessibleDescription("default");
+  });
+  it("describes a select by the tag", () => {
+    setup({ ...picklist, isDefault: true, effectiveValue: "TX" });
+    expect(screen.getByLabelText("State")).toHaveAccessibleDescription("default");
+  });
+  it("describes a checkbox by the tag and keeps it out of the name", () => {
+    setup({ dataType: "boolean", labelKey: "f.flag", isDefault: true, effectiveValue: true });
+    const box = screen.getByRole("checkbox", { name: "Flag" });
+    expect(box).toHaveAccessibleDescription("default");
+  });
+});
+
 describe("UX-004 required and invalid state never rely on colour", () => {
   it("marks a required field with aria-required and hidden text", () => {
     setup({ required: true });
