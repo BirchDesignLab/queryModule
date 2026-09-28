@@ -1,0 +1,62 @@
+import { createHash } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { sql } from "drizzle-orm";
+import type { Clock } from "../clock";
+import type { Db } from "../db/client";
+import { withTransaction } from "../db/tx";
+
+export interface BackupManifest {
+  createdAt: string;
+  files: { name: string; sha256: string; bytes: number }[];
+  auditCount: number;
+  auditMaxId: number;
+}
+
+/**
+ * Takes an online, consistent, still-encrypted copy of the database (spec 8.6, NFR-003).
+ * wal_checkpoint(TRUNCATE) folds the WAL back into the main file, then withTransaction opens
+ * a write transaction (BEGIN IMMEDIATE) that holds the connection and the write lock for the
+ * duration of the copy (other writers wait on busy_timeout, SEC-010), so the main file and
+ * any remaining WAL are copied byte for byte, still encrypted under DB_ENCRYPTION_KEY
+ * (SEC-006). The manifest carries the audit row count and max id for the restore test. The
+ * transaction does no writes, so it commits (a no-op) rather than rolling back; either way
+ * releases the lock, and withTransaction is the only sanctioned way to hold one outside
+ * src/db (SEC-006 db-client.test.ts forbids a raw client transaction call elsewhere).
+ */
+export async function takeBackup(
+  db: Db,
+  dbFile: string,
+  outDir: string,
+  clock: Clock,
+): Promise<BackupManifest> {
+  mkdirSync(outDir, { recursive: true });
+  await db.$client.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+  return withTransaction(db, async (tx) => {
+    const row = await tx.get<{ n: number | bigint; m: number | bigint }>(
+      sql`SELECT count(*) AS n, coalesce(max(id), 0) AS m FROM audit_event`,
+    );
+    const auditCount = Number(row?.n ?? 0);
+    const auditMaxId = Number(row?.m ?? 0);
+    const files: BackupManifest["files"] = [];
+    for (const src of [dbFile, `${dbFile}-wal`]) {
+      if (!existsSync(src)) continue;
+      const name = basename(src);
+      copyFileSync(src, join(outDir, name));
+      const buf = readFileSync(join(outDir, name));
+      files.push({
+        name,
+        sha256: createHash("sha256").update(buf).digest("hex"),
+        bytes: buf.length,
+      });
+    }
+    const m: BackupManifest = {
+      createdAt: new Date(clock.now()).toISOString(),
+      files,
+      auditCount,
+      auditMaxId,
+    };
+    writeFileSync(join(outDir, "manifest.json"), `${JSON.stringify(m, null, 2)}\n`);
+    return m;
+  });
+}
