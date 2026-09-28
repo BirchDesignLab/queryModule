@@ -5,7 +5,10 @@ import type { ResetController } from "./reset.js";
 export interface SessionController {
   bootstrap(): Promise<void>;
   signIn(email: string, password: string): Promise<SignInResult>;
+  /** Rejects when the server did not end the session; local state is wiped either way. */
   signOut(): Promise<void>;
+  /** Repeats the server sign-out after a failed one; clears signOutFailed on success. */
+  retrySignOut(): Promise<void>;
   handleUnauthenticated(): void;
 }
 
@@ -53,11 +56,20 @@ export function createSessionController({
     },
     async signOut() {
       ++epoch;
+      let failed = true;
       try {
         await authApi.signOut();
+        failed = false;
       } finally {
+        // Flag first (a reset error in adopt must not lose it), then wipe this device even when
+        // the server call failed; a failure still rethrows (SEC-006).
+        authStore.getState().setSignOutFailed(failed);
         adopt(null);
       }
+    },
+    async retrySignOut() {
+      await authApi.signOut();
+      authStore.getState().setSignOutFailed(false);
     },
     handleUnauthenticated() {
       ++epoch;

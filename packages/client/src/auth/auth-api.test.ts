@@ -72,9 +72,18 @@ describe("BR-002 standalone login through Better Auth (spec 5.6)", () => {
     server.use(http.get(`${BASE}/api/v1/auth/get-session`, () => HttpResponse.json(null)));
     expect(await api.getSession()).toBeNull();
   });
-  it("signOut never throws", async () => {
-    server.use(http.post(`${BASE}/api/v1/auth/sign-out`, () => HttpResponse.error()));
+  it("signOut resolves when the server ends the session", async () => {
     await expect(api.signOut()).resolves.toBeUndefined();
+  });
+  it("SEC-006: signOut throws on a network failure, since the server session may still be valid", async () => {
+    server.use(http.post(`${BASE}/api/v1/auth/sign-out`, () => HttpResponse.error()));
+    await expect(api.signOut()).rejects.toThrow();
+  });
+  it("SEC-006: signOut throws on a non-2xx response", async () => {
+    server.use(
+      http.post(`${BASE}/api/v1/auth/sign-out`, () => new HttpResponse(null, { status: 503 })),
+    );
+    await expect(api.signOut()).rejects.toThrow(/503/);
   });
   it("getSession never throws on a network failure", async () => {
     server.use(http.get(`${BASE}/api/v1/auth/get-session`, () => HttpResponse.error()));

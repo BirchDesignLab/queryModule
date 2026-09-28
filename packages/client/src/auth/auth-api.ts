@@ -76,11 +76,11 @@ export function createAuthApi(options: AuthApiOptions): AuthApi {
       return user === null ? failure("unavailable") : { ok: true, user };
     },
     async signOut() {
-      try {
-        await send("/sign-out", { method: "POST", headers: json, body: "{}" });
-      } catch {
-        // The controller resets local state regardless.
-      }
+      // Throws on a network failure or a non-2xx: the server session (and its cookie) may still
+      // be valid, so the caller must be able to say so (SEC-006, spec 5.6). The controller still
+      // wipes local state first.
+      const response = await send("/sign-out", { method: "POST", headers: json, body: "{}" });
+      if (!response.ok) throw new Error(`sign-out failed: ${response.status}`);
     },
     async getSession() {
       try {

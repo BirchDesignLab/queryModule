@@ -55,6 +55,53 @@ describe("SEC-006 client state resets on logout, 401 and user change (spec 6.7)"
     expect(t.spy).toHaveBeenCalledTimes(1);
     expect(t.authStore.getState()).toMatchObject({ status: "signedOut", user: null });
   });
+  it("SEC-006: a failed server sign-out still wipes local state, flags it and rethrows", async () => {
+    const t = setup({
+      signOut: vi.fn(async () => {
+        throw new Error("sign-out failed: 503");
+      }),
+    });
+    await t.session.signIn("a@querymodule.test", "x");
+    await expect(t.session.signOut()).rejects.toThrow(/503/);
+    expect(t.spy).toHaveBeenCalledTimes(1);
+    expect(t.authStore.getState()).toMatchObject({
+      status: "signedOut",
+      user: null,
+      signOutFailed: true,
+    });
+  });
+  it("a successful sign-out leaves signOutFailed false", async () => {
+    const t = setup();
+    await t.session.signIn("a@querymodule.test", "x");
+    await t.session.signOut();
+    expect(t.authStore.getState().signOutFailed).toBe(false);
+  });
+  it("retrySignOut keeps the flag while the server still fails and clears it on success", async () => {
+    let fail = true;
+    const signOut = vi.fn(async () => {
+      if (fail) throw new Error("sign-out failed: network");
+    });
+    const t = setup({ signOut });
+    await t.session.signIn("a@querymodule.test", "x");
+    await expect(t.session.signOut()).rejects.toThrow();
+    await expect(t.session.retrySignOut()).rejects.toThrow();
+    expect(t.authStore.getState().signOutFailed).toBe(true);
+    fail = false;
+    await t.session.retrySignOut();
+    expect(t.authStore.getState().signOutFailed).toBe(false);
+    expect(signOut).toHaveBeenCalledTimes(3);
+  });
+  it("a new sign-in clears a stale signOutFailed", async () => {
+    const t = setup({
+      signOut: vi.fn(async () => {
+        throw new Error("sign-out failed: network");
+      }),
+    });
+    await t.session.signIn("a@querymodule.test", "x");
+    await expect(t.session.signOut()).rejects.toThrow();
+    await t.session.signIn("a@querymodule.test", "x");
+    expect(t.authStore.getState().signOutFailed).toBe(false);
+  });
   it("a 401 while signed in resets and signs out; while signed out it does nothing", async () => {
     const t = setup();
     t.session.handleUnauthenticated();

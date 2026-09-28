@@ -19,11 +19,48 @@ function failureKey(result: Failure): { key: string; params?: Record<string, num
   return { key: "login.failed" };
 }
 
+/**
+ * SEC-006, spec 5.6: the last sign-out wiped this device but the server did not confirm it, so
+ * the session cookie may still be valid. role="alert" announces it on arrival; a retry repeats
+ * the server sign-out and the notice goes away only when the server confirms.
+ */
+function SignOutFailedNotice() {
+  const { session, announcer } = useServices();
+  const t = useT();
+  const [retrying, setRetrying] = useState(false);
+  async function retry(): Promise<void> {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      await session.retrySignOut();
+      announcer.announce(t("signOut.done"));
+    } catch {
+      announcer.announce(t("signOut.failed"), "assertive");
+    } finally {
+      setRetrying(false);
+    }
+  }
+  return (
+    <div role="alert" className="qm-form-error">
+      <p>{t("signOut.failed")}</p>
+      <button
+        type="button"
+        className="qm-button"
+        aria-disabled={retrying ? "true" : undefined}
+        onClick={() => void retry()}
+      >
+        {t("signOut.retry")}
+      </button>
+    </div>
+  );
+}
+
 export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
   const { api, session, authStore, announcer, preferences } = useServices();
   const t = useT();
   const navigate = useNavigate();
   const status = useStore(authStore, (s) => s.status);
+  const signOutFailed = useStore(authStore, (s) => s.signOutFailed);
   const themeMode = useStore(preferences, (s) => s.themeMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -94,6 +131,7 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
       <h1 ref={headingRef} tabIndex={-1}>
         {t("login.title")}
       </h1>
+      {signOutFailed ? <SignOutFailedNotice /> : null}
       <form
         ref={formRef}
         noValidate
