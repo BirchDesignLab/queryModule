@@ -69,6 +69,8 @@ describe("BR-002 home after sign-in", () => {
       expect(within(screen.getByRole("main")).queryByRole("alert")).not.toBeInTheDocument(),
     );
     expect(screen.queryByRole("button", { name: "Retry sign-out" })).not.toBeInTheDocument();
+    // The focused retry button is gone; focus goes to the page heading, not body (spec 6.4).
+    expect(screen.getByRole("heading", { name: "Sign in" })).toHaveFocus();
     expect(screen.getByTestId("announcer-polite")).toHaveTextContent("Signed out.");
   });
   it("UX-014 loads the saved theme at sign-in", async () => {

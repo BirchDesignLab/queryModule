@@ -24,7 +24,7 @@ function failureKey(result: Failure): { key: string; params?: Record<string, num
  * the session cookie may still be valid. role="alert" announces it on arrival; a retry repeats
  * the server sign-out and the notice goes away only when the server confirms.
  */
-function SignOutFailedNotice() {
+function SignOutFailedNotice({ onCleared }: { onCleared(): void }) {
   const { session, announcer } = useServices();
   const t = useT();
   const [retrying, setRetrying] = useState(false);
@@ -34,6 +34,8 @@ function SignOutFailedNotice() {
     try {
       await session.retrySignOut();
       announcer.announce(t("signOut.done"));
+      // This notice (and its focused button) unmounts; move focus before it does (spec 6.4).
+      onCleared();
     } catch {
       announcer.announce(t("signOut.failed"), "assertive");
     } finally {
@@ -131,7 +133,7 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
       <h1 ref={headingRef} tabIndex={-1}>
         {t("login.title")}
       </h1>
-      {signOutFailed ? <SignOutFailedNotice /> : null}
+      {signOutFailed ? <SignOutFailedNotice onCleared={() => headingRef.current?.focus()} /> : null}
       <form
         ref={formRef}
         noValidate

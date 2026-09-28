@@ -70,6 +70,19 @@ describe("SEC-006 client state resets on logout, 401 and user change (spec 6.7)"
       signOutFailed: true,
     });
   });
+  it("SEC-006: the signOutFailed flag survives a reset that throws during the wipe", async () => {
+    const t = setup({
+      signOut: vi.fn(async () => {
+        throw new Error("sign-out failed: 503");
+      }),
+    });
+    await t.session.signIn("a@querymodule.test", "x");
+    t.reset.register(() => {
+      throw new Error("a store failed to reset");
+    });
+    await expect(t.session.signOut()).rejects.toThrow();
+    expect(t.authStore.getState()).toMatchObject({ status: "signedOut", signOutFailed: true });
+  });
   it("a successful sign-out leaves signOutFailed false", async () => {
     const t = setup();
     await t.session.signIn("a@querymodule.test", "x");
