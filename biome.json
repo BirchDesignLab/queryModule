@@ -10,6 +10,7 @@
       "!packages/core/contracts/*.schema.json",
       "!packages/config/schema/*.json",
       "!packages/tokens/generated",
+      "!packages/client/src/api/generated",
       "!.claude/workflows"
     ]
   },
