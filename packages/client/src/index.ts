@@ -34,6 +34,7 @@ export type { PersonaInput, PersonaResolution } from "./persona/resolve-persona.
 export { resolvePersona } from "./persona/resolve-persona.js";
 export type { AuthTransport, ClientPlatform, PlatformSignal, TokenStore } from "./platform.js";
 export { noTokenStore } from "./platform.js";
+export { loadPreferences, savePreferences } from "./preferences/preferences-api.js";
 export type {
   PreferencesSnapshot,
   PreferencesState,
