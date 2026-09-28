@@ -17,7 +17,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 |---|---|---|---|---|---|---|
 | M0 | P0 contracts | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | n/a | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · Typecheck and CI green; contracts frozen · [all][m0-p0] |
 | M0 | P1 foundation | active · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | active · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | active · in B plan · [issues][m0-p1-c] | planned · M0 exit · [all][m0-p1] |
-| M1 | P2 engine | planned · `<date>-track-a-p2.md` · [issues][m1-p2-a] | planned · `<date>-track-b-p2.md` · [issues][m1-p2-b] | n/a | planned · in A and B plans · [issues][m1-p2-c] | planned · Form on `GET config`; parser property tests · [all][m1-p2] |
+| M1 | P2 engine | planned · [plan](2026-09-28-track-a-p2.md) (draft) · [issues][m1-p2-a] | planned · [plan](2026-09-28-track-b-p2.md) (draft) · [issues][m1-p2-b] | n/a | planned · in A and B plans · [issues][m1-p2-c] | planned · Form on `GET config`; parser property tests · [all][m1-p2] |
 | M1 | P3 flow | planned · `<date>-track-a-p3.md` · [issues][m1-p3-a] | planned · `<date>-track-b-p3.md` · [issues][m1-p3-b] | n/a | n/a | planned · M1 exit · [all][m1-p3] |
 | M2 | P0 contracts | n/a | n/a | n/a | planned · `<date>-m2-p0-contracts.md` · [issues][m2-p0] | planned · Contracts frozen; OpenAPI diff reviewed · [all][m2-p0] |
 | M2 | P1 feed | planned · `<date>-m2-track-a-p1.md` · [issues][m2-p1-a] | planned · `<date>-m2-track-b-p1.md` · [issues][m2-p1-b] | n/a | planned · in B plan · [issues][m2-p1-c] | planned · A6; replay test · [all][m2-p1] |
