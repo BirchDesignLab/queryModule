@@ -22,7 +22,7 @@
       "milestone": "M1 Forms and terminal",
       "phase": "P2",
       "gate": "Form on GET config; parser property tests",
-      "plan": null
+      "plan": "2026-09-28-track-a-p2.md and 2026-09-28-track-b-p2.md"
     },
     {
       "number": 42,
@@ -848,6 +848,32 @@
       "priority": "High",
       "reqIds": "SEC-006",
       "body": "From the wave B11 UI critic (PR for #241/#242), a server-side finding outside Track B's lane. Tier: gate (`packages/api/src/auth/**`). Checker ruling 09-28-26: M1 P2, Track A.\n\nPOST `/api/v1/auth/sign-out` (Better Auth) answers 200 even when deleting the session row fails. The client (#235, #241) treats 200 as \"server session ended\", so a DB failure during sign-out leaves a valid session cookie behind on a shared console with no signal to the user.\n\n- [ ] Sign-out answers a non-2xx (e.g. 500) when the session row is not deleted, so the client's #235/#241 failure path runs.\n- [ ] Audit: `logout` is recorded only when the session row is actually gone (check the existing `logout` audit write order).\n- [ ] Tests: a sign-out whose session delete fails answers non-2xx and the session still resolves as live afterwards (so the client retry is meaningful); a normal sign-out still answers 200 and the session no longer resolves.\n\nIDs: SEC-006; spec 5.6."
+    },
+    {
+      "number": 288,
+      "title": "Wave A0 review minors: sign-out failure path and board test pin",
+      "labels": ["platform", "p2", "sensitive", "follow-up"],
+      "milestone": "M1 Forms and terminal",
+      "parent": 41,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "SEC-006",
+      "body": "From the wave A0 gate wave-review (`docs/reviews/feat-a-p2-wave-0.md`, reviewed b923536). Minors left unfixed because each touches a gate file; ride the next Track A gate wave.\n\n- [ ] `packages/api/src/auth/routes.ts`: a failed Better Auth sign-out response passes through unchanged, including any Set-Cookie it carries. Re-check the session row on the failure path too, so a surviving row never yields a cleared cookie.\n- [ ] `packages/api/test/auth/sign-out.test.ts`: the \"delete aborts\" case does not assert the session cookie is kept.\n- [ ] `scripts/ops/gh-setup-project.test.ts`: the \"writes no files\" check looks only for `writeFileSync`; also pin the `node:fs` import (no other write API).\n\n**Source:** A0 wave-review, checker ruling 09-28-26.\n"
+    },
+    {
+      "number": 289,
+      "title": "Logout audit row lost when the audit write fails after Better Auth deletes the session (SEC-010)",
+      "labels": ["platform", "p2", "sensitive", "follow-up"],
+      "milestone": "M1 Forms and terminal",
+      "parent": 41,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "High",
+      "reqIds": "SEC-010",
+      "body": "Better Auth deletes the session row before the `logout` audit transaction runs. If that audit write fails, the session is gone with no `logout` row, and a retry cannot write one because no session remains to sign out. Pre-dates #246 and is outside its scope.\n\n- [ ] Decide the order: write the `logout` audit row (or a pending marker) before or atomically with the session delete, fail closed if the audit write fails.\n- [ ] Test: audit write failure during sign-out leaves either both (session + no audit) intact or both done; never a deleted session with no `logout` row.\n\nTier: gate (auth) with audit implications; if the fix touches `packages/api/src/audit/**` it is critical.\n\n**Source:** A0 wave-review follow-up, checker ruling 09-28-26.\n"
     }
   ]
 }
