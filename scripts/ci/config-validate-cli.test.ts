@@ -21,7 +21,12 @@ const run = (args: string[]) =>
 // PowerShell run and a Git Bash run of the same head commit are
 // byte-identical to each other.
 describe("config:validate CLI output has no backslashes (master plan 9, review CV1)", () => {
-  it("prints only forward-slash paths for the shipped configs", () => {
+  // This spawns a real Node + tsx/cli subprocess to run config-validate.ts.
+  // ~500ms in isolation, but tsx's own module-resolution/transpile startup
+  // cost means it can exceed vitest's 5000ms default under full-suite
+  // parallel load on Windows (same class of contention as the sensitive-review
+  // spawn tests). Give it real headroom instead of relying on the default.
+  it("prints only forward-slash paths for the shipped configs", { timeout: 20000 }, () => {
     const r = run([]);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("ok packages/config/sites/default.json");
