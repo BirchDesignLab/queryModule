@@ -1,14 +1,17 @@
 // scripts/ops/ws-soak.ts
-// Usage: node scripts/ops/ws-soak.ts <baseUrl> <cookie name=value> <seconds>
+// Usage: QM_COOKIE=<name=value> node scripts/ops/ws-soak.ts <baseUrl> <seconds>
 // Holds an authenticated socket, pings every 20 s, fails on 2 missed pongs or an early close (spec 6.8, 8.7).
+// The cookie comes from the environment, never argv, where other local users could read it.
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 
-const [base, cookie, secsArg] = process.argv.slice(2);
-if (!base || !cookie) {
-  process.stderr.write("usage: ws-soak <baseUrl> <cookie> <seconds>\n");
+const [baseArg, secsArg] = process.argv.slice(2);
+const cookie = process.env.QM_COOKIE;
+if (!baseArg || !cookie) {
+  process.stderr.write("usage: QM_COOKIE=<name=value> ws-soak <baseUrl> <seconds>\n");
   process.exit(2);
 }
+const base = baseArg.replace(/\/$/, "");
 const secs = Number(secsArg ?? "25");
 const ws = new WebSocket(`${base.replace(/^http/, "ws")}/api/v1/ws`, {
   headers: { origin: base, cookie },
