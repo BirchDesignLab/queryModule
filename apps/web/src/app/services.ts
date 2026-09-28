@@ -16,14 +16,17 @@ import {
   type ResetController,
   registerQueryCacheReset,
   type SessionController,
+  type SignOutMarker,
   type SocketLike,
 } from "@querymodule/client";
 import { createBrowserSocket } from "../platform/browser-socket.js";
+import { createStorageSignOutMarker } from "../platform/sign-out-marker.js";
 
 export interface ServicesOptions {
   baseUrl: string;
   platform: ClientPlatform;
   createSocket?: (url: string) => SocketLike;
+  signOutMarker?: SignOutMarker;
 }
 
 export interface Services {
@@ -48,7 +51,12 @@ export function createServices(options: ServicesOptions): Services {
   const reset = createResetController();
   const authStore = createAuthStore();
   const authApi = createAuthApi({ baseUrl: options.baseUrl });
-  const session = createSessionController({ authApi, authStore, reset });
+  const session = createSessionController({
+    authApi,
+    authStore,
+    reset,
+    signOutMarker: options.signOutMarker ?? createStorageSignOutMarker(),
+  });
   const api = createApiClient({
     baseUrl: options.baseUrl,
     platform: options.platform,

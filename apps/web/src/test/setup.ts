@@ -28,5 +28,6 @@ afterEach(() => {
   resetMswState();
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("data-persona");
+  localStorage.clear();
 });
 afterAll(() => server.close());

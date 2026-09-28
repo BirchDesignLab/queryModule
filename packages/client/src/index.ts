@@ -49,5 +49,9 @@ export {
 export { createQueryClient, registerQueryCacheReset } from "./query/query-client.js";
 export type { ResetController } from "./session/reset.js";
 export { createResetController } from "./session/reset.js";
-export type { SessionController, SessionControllerDeps } from "./session/session-controller.js";
+export type {
+  SessionController,
+  SessionControllerDeps,
+  SignOutMarker,
+} from "./session/session-controller.js";
 export { createSessionController } from "./session/session-controller.js";

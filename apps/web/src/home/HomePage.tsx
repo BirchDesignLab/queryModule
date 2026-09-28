@@ -1,27 +1,21 @@
 import { savePreferences, useStore } from "@querymodule/client";
 import { ThemeModeSelect } from "@querymodule/web-ui";
 import { useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { useSignOut } from "../app/use-sign-out.js";
 
 export function HomePage() {
-  const { api, authStore, session, preferences } = useServices();
+  const { api, authStore, preferences } = useServices();
   const t = useT();
-  const navigate = useNavigate();
+  const signOut = useSignOut();
   const user = useStore(authStore, (s) => s.user);
   const themeMode = useStore(preferences, (s) => s.themeMode);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
-
-  async function handleSignOut(): Promise<void> {
-    // A server failure still wipes this device and rejects; the sign-in page then shows the
-    // "sign-out failed" notice with a retry (SEC-006), so there is nothing to render here.
-    await session.signOut().catch(() => undefined);
-    navigate("/login", { replace: true });
-  }
 
   return (
     <main className="qm-page">
@@ -33,7 +27,7 @@ export function HomePage() {
         type="button"
         className="qm-button"
         onClick={() => {
-          void handleSignOut();
+          void signOut();
         }}
       >
         {t("home.signOut")}

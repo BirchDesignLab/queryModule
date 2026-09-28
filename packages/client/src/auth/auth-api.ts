@@ -14,7 +14,7 @@ export type SignInResult =
 
 export interface AuthApi {
   signInEmail(email: string, password: string): Promise<SignInResult>;
-  signOut(): Promise<void>;
+  signOut(options?: { signal?: AbortSignal }): Promise<void>;
   getSession(): Promise<SessionUser | null>;
 }
 
@@ -75,11 +75,16 @@ export function createAuthApi(options: AuthApiOptions): AuthApi {
       const user = parseSessionUser(await response.json());
       return user === null ? failure("unavailable") : { ok: true, user };
     },
-    async signOut() {
+    async signOut(o) {
       // Throws on a network failure or a non-2xx: the server session (and its cookie) may still
       // be valid, so the caller must be able to say so (SEC-006, spec 5.6). The controller still
       // wipes local state first.
-      const response = await send("/sign-out", { method: "POST", headers: json, body: "{}" });
+      const response = await send("/sign-out", {
+        method: "POST",
+        headers: json,
+        body: "{}",
+        ...(o?.signal === undefined ? {} : { signal: o.signal }),
+      });
       if (!response.ok) throw new Error(`sign-out failed: ${response.status}`);
     },
     async getSession() {
