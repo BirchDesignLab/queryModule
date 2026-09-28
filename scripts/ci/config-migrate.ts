@@ -10,6 +10,21 @@ export type { ReadJsonResult } from "./cli-io";
 // check-licences and story-tags stop each carrying their own copy.
 export { readJsonFile, toPosixRel } from "./cli-io";
 
+/** Writes the migrated config; a failed write prints `<rel>: cannot write file` (never the raw error, which carries the absolute path) and returns false (#220 M1). */
+export function writeConfigFile(path: string, rel: string, config: unknown): boolean {
+  try {
+    writeFileSync(
+      path,
+      `${JSON.stringify(config, null, 2)}
+`,
+    );
+    return true;
+  } catch {
+    console.error(`${rel}: cannot write file`);
+    return false;
+  }
+}
+
 function main(): void {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
   const argRaw = process.argv[2];
@@ -38,7 +53,7 @@ function main(): void {
     process.exit(0);
   }
   for (const step of result.applied) console.warn(`migrated ${rel}: ${step.from} -> ${step.to}`);
-  writeFileSync(path, `${JSON.stringify(result.config, null, 2)}\n`);
+  if (!writeConfigFile(path, rel, result.config)) process.exit(1);
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) main();

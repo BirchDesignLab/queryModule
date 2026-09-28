@@ -1,8 +1,18 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  type RawFile,
+  resolveSiteShape,
+  type SiteConfig,
+  validateResolved,
+  validateSiteConfig,
+} from "@querymodule/core/config";
+import { TOKEN_NAMES } from "@querymodule/tokens";
 import { describe, expect, it } from "vitest";
+import { BUILTIN_ADAPTER_KINDS, tokensContrast } from "../../packages/api/src/config/load";
 
 const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -32,5 +42,67 @@ describe("config:validate CLI output has no backslashes (master plan 9, review C
     expect(r.stdout).toContain("ok packages/config/sites/default.json");
     expect(r.stdout).not.toContain("\\");
     expect(r.stderr).not.toContain("\\");
+  });
+});
+
+describe("config:validate arguments (#220 M3)", () => {
+  it("`--` ends option parsing and a named file is checked", { timeout: 20000 }, () => {
+    const r = run(["--", "packages/config/sites/default.json"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("ok packages/config/sites/default.json");
+  });
+
+  it("--diff is an explicit reject with exit 2", { timeout: 20000 }, () => {
+    const r = run(["--diff", "v1"]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("config:validate: --diff arrives with M2 P2 (spec 7, 9.5)");
+  });
+});
+
+const readJson = (rel: string): unknown =>
+  JSON.parse(readFileSync(resolve(root, "packages/config", rel), "utf8"));
+const shapeOf = (rel: string, base?: string): SiteConfig => {
+  const site: RawFile = { ok: true, value: readJson(rel) };
+  const r = resolveSiteShape(
+    site,
+    base ? { id: "default", file: { ok: true, value: readJson(base) } } : undefined,
+  );
+  if (!r.ok) throw new Error("shape failed");
+  return r.config;
+};
+const realContext = {
+  tokenNames: TOKEN_NAMES,
+  contrast: tokensContrast,
+  adapterKinds: BUILTIN_ADAPTER_KINDS,
+  now: Date.now(),
+};
+
+describe("shipped sites pass under the real tokens contrast context (Task 6 carry forward)", () => {
+  it("default and resolved example-ok have 0 errors from validateSiteConfig", () => {
+    for (const config of [
+      shapeOf("sites/default.json"),
+      shapeOf("sites/example-ok.json", "sites/default.json"),
+    ]) {
+      const locales = Object.fromEntries(
+        config.locales.map((l) => [l, readJson(`locales/${l}.json`) as Record<string, string>]),
+      );
+      expect(validateSiteConfig(config, locales, realContext).errors).toEqual([]);
+    }
+  });
+});
+
+describe("config.missingLocale pointer parity (#220 r1-b)", () => {
+  it("core's missingLocale pointer is the one validateResolved filters: one diagnostic", () => {
+    const config = shapeOf("sites/default.json");
+    const missing = validateSiteConfig(config, {}, {}).errors.filter(
+      (d) => d.key === "config.missingLocale",
+    );
+    expect(missing[0]?.path).toBe("/locales/0");
+    const locale = config.locales[0] ?? "en";
+    const r = validateResolved(config, { [locale]: { ok: false } }, realContext);
+    expect(r.errors.filter((d) => d.path === "/locales/0")).toEqual([
+      { level: "error", path: "/locales/0", key: "config.invalidJson", params: { locale } },
+    ]);
+    expect(r.errors.some((d) => d.key === "config.missingLocale")).toBe(false);
   });
 });

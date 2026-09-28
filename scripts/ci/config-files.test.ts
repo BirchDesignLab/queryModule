@@ -3,7 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOKEN_NAMES } from "@querymodule/tokens";
 import { describe, expect, it } from "vitest";
-import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
+import {
+  type ConfigIo,
+  ConfigUnreadableError,
+  checkConfigFile,
+  configTargets,
+} from "./config-files";
 
 type Json = Record<string, unknown>;
 /** Raw site JSON, typed only as far as these tests mutate it (ruling S12: no `any`). */
@@ -246,6 +251,57 @@ describe("config:validate failures carry JSON paths", () => {
         key: "config.unknownToken",
       }),
     );
+  });
+});
+
+describe("config:validate contrast and unreadable files (Task 9)", () => {
+  it("resolved example-ok passes the contrast check with the real tokens context", () => {
+    const r = checkConfigFile(cfg("sites/example-ok.json"), fsIo);
+    expect(r.errors.some((e) => e.key === "config.severityContrast")).toBe(false);
+    expect(r.errors).toEqual([]);
+  });
+
+  it("a severity style that fails contrast reports config.severityContrast", () => {
+    const site = defaultSite();
+    site.keywordSeverityStyles.info.color = "color.severity.info.bg";
+    site.keywordSeverityStyles.info.background = "color.severity.info.bg";
+    const broken = cfg("sites/broken.json");
+    const r = checkConfigFile(broken, layered({ [broken]: site }));
+    expect(r.errors).toContainEqual(
+      expect.objectContaining({
+        path: "/keywordSeverityStyles/info",
+        key: "config.severityContrast",
+      }),
+    );
+  });
+
+  it("an unreadable site file is config.unreadableFile, not missing", () => {
+    const broken = cfg("sites/broken.json");
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) throw new ConfigUnreadableError();
+        return fsIo.readJson(p);
+      },
+    };
+    expect(checkConfigFile(broken, io).errors).toEqual([
+      { level: "error", path: "", key: "config.unreadableFile", params: {} },
+    ]);
+  });
+
+  it("an unreadable locale bundle is config.unreadableFile at its pointer", () => {
+    const site = defaultSite();
+    const broken = cfg("sites/broken.json");
+    const localeFile = cfg(`locales/${(site.locales as string[])[0]}.json`);
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return site;
+        if (p === localeFile) throw new ConfigUnreadableError();
+        return fsIo.readJson(p);
+      },
+    };
+    expect(checkConfigFile(broken, io).errors).toEqual([
+      { level: "error", path: "/locales/0", key: "config.unreadableFile", params: {} },
+    ]);
   });
 });
 
