@@ -9,5 +9,9 @@
   },
   "include": ["**/*.ts", "**/*.mjs"],
   "exclude": ["dist"],
-  "references": [{ "path": "../packages/core" }, { "path": "../packages/tokens" }]
+  "references": [
+    { "path": "../packages/core" },
+    { "path": "../packages/tokens" },
+    { "path": "../packages/api" }
+  ]
 }
