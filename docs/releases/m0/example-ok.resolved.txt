@@ -1,0 +1,565 @@
+{
+  "$schema": "../schema/site-config.schema.json",
+  "schemaVersion": 1,
+  "site": {
+    "id": "example-ok",
+    "labelKey": "site.exampleOk"
+  },
+  "locales": [
+    "en"
+  ],
+  "features": {
+    "credentials": false,
+    "delegation": false,
+    "resultHide": false,
+    "adminAudit": false
+  },
+  "personas": [
+    {
+      "key": "dispatch",
+      "labelKey": "persona.dispatch",
+      "layout": "dispatch"
+    },
+    {
+      "key": "mobileUnit",
+      "labelKey": "persona.mobileUnit",
+      "layout": "mobileUnit"
+    },
+    {
+      "key": "mobile",
+      "labelKey": "persona.mobile",
+      "layout": "mobile"
+    },
+    {
+      "key": "records",
+      "labelKey": "persona.records",
+      "layout": "dispatch"
+    }
+  ],
+  "auth": {
+    "mfaRequired": false,
+    "session": {
+      "absoluteMinutes": 720,
+      "idleMinutes": 30
+    }
+  },
+  "delegation": {
+    "maxDurationMinutes": 480,
+    "purposes": [
+      {
+        "key": "training",
+        "labelKey": "delegation.training",
+        "delegatorRoles": [
+          "trainingOfficer"
+        ]
+      }
+    ]
+  },
+  "retention": {
+    "payloadDays": null,
+    "valuesDays": null
+  },
+  "terminal": {
+    "delimiter": "/"
+  },
+  "defaults": {
+    "state": "OK"
+  },
+  "picklists": [
+    {
+      "id": "state",
+      "values": [
+        {
+          "code": "TX",
+          "labelKey": "picklist.state.TX"
+        },
+        {
+          "code": "OK",
+          "labelKey": "picklist.state.OK"
+        },
+        {
+          "code": "NM",
+          "labelKey": "picklist.state.NM"
+        }
+      ]
+    },
+    {
+      "id": "plateType",
+      "values": [
+        {
+          "code": "PC",
+          "labelKey": "picklist.plateType.PC"
+        },
+        {
+          "code": "TK",
+          "labelKey": "picklist.plateType.TK"
+        },
+        {
+          "code": "MC",
+          "labelKey": "picklist.plateType.MC"
+        }
+      ]
+    },
+    {
+      "id": "sex",
+      "values": [
+        {
+          "code": "F",
+          "labelKey": "picklist.sex.F"
+        },
+        {
+          "code": "M",
+          "labelKey": "picklist.sex.M"
+        },
+        {
+          "code": "X",
+          "labelKey": "picklist.sex.X"
+        }
+      ]
+    },
+    {
+      "id": "race",
+      "values": [
+        {
+          "code": "A",
+          "labelKey": "picklist.race.A"
+        },
+        {
+          "code": "B",
+          "labelKey": "picklist.race.B"
+        },
+        {
+          "code": "I",
+          "labelKey": "picklist.race.I"
+        },
+        {
+          "code": "U",
+          "labelKey": "picklist.race.U"
+        },
+        {
+          "code": "W",
+          "labelKey": "picklist.race.W"
+        }
+      ]
+    },
+    {
+      "id": "propertyType",
+      "values": [
+        {
+          "code": "FIREARM",
+          "labelKey": "picklist.propertyType.FIREARM"
+        },
+        {
+          "code": "ARTICLE",
+          "labelKey": "picklist.propertyType.ARTICLE"
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "stateSource",
+      "labelKey": "source.stateSource",
+      "scope": "state",
+      "kind": "mock",
+      "timeoutMs": 10000,
+      "maxConcurrent": 4,
+      "requiresCredentials": false
+    },
+    {
+      "id": "nationalSource",
+      "labelKey": "source.nationalSource",
+      "scope": "national",
+      "kind": "mock",
+      "timeoutMs": 10000,
+      "maxConcurrent": 4,
+      "requiresCredentials": false
+    }
+  ],
+  "queryTypes": [
+    {
+      "code": "VEH",
+      "labelKey": "queryType.VEH",
+      "allowPlateOnly": true,
+      "sections": [
+        {
+          "key": "base",
+          "labelKey": "section.base"
+        },
+        {
+          "key": "expanded",
+          "labelKey": "section.expanded"
+        }
+      ],
+      "fields": [
+        {
+          "key": "plate",
+          "labelKey": "field.plate",
+          "dataType": "string",
+          "maxLength": 10,
+          "transform": "upper",
+          "pattern": "[A-Z0-9-]+"
+        },
+        {
+          "key": "state",
+          "labelKey": "field.state",
+          "dataType": "picklist",
+          "picklist": "state"
+        },
+        {
+          "key": "year",
+          "labelKey": "field.year",
+          "dataType": "year"
+        },
+        {
+          "key": "vin",
+          "labelKey": "field.vin",
+          "dataType": "string",
+          "maxLength": 17,
+          "transform": "upper",
+          "pattern": "[A-Z0-9]+"
+        },
+        {
+          "key": "plateType",
+          "labelKey": "field.plateType",
+          "dataType": "picklist",
+          "picklist": "plateType",
+          "visible": false
+        },
+        {
+          "key": "tagSticker",
+          "labelKey": "field.tagSticker",
+          "dataType": "string",
+          "section": "expanded",
+          "custom": true
+        }
+      ],
+      "rules": [
+        {
+          "field": "plateType",
+          "when": {
+            "field": "state",
+            "op": "neq",
+            "value": {
+              "$default": "state"
+            }
+          },
+          "effect": "show"
+        },
+        {
+          "field": "plateType",
+          "when": {
+            "field": "state",
+            "op": "neq",
+            "value": {
+              "$default": "state"
+            }
+          },
+          "effect": "require"
+        }
+      ],
+      "sources": [
+        {
+          "sourceId": "stateSource",
+          "selectedByDefault": true,
+          "plateOnly": true
+        },
+        {
+          "sourceId": "nationalSource",
+          "selectedByDefault": true
+        }
+      ]
+    },
+    {
+      "code": "PER",
+      "labelKey": "queryType.PER",
+      "sections": [
+        {
+          "key": "base",
+          "labelKey": "section.base"
+        }
+      ],
+      "fields": [
+        {
+          "key": "last",
+          "labelKey": "field.last",
+          "dataType": "string",
+          "required": true,
+          "transform": "upper",
+          "charset": "printable"
+        },
+        {
+          "key": "first",
+          "labelKey": "field.first",
+          "dataType": "string",
+          "transform": "upper",
+          "charset": "printable"
+        },
+        {
+          "key": "dob",
+          "labelKey": "field.dob",
+          "dataType": "date",
+          "century": "past",
+          "inputFormats": [
+            "MMDDYYYY",
+            "MM-DD-YYYY",
+            "YYYY-MM-DD"
+          ]
+        },
+        {
+          "key": "sex",
+          "labelKey": "field.sex",
+          "dataType": "picklist",
+          "picklist": "sex"
+        },
+        {
+          "key": "race",
+          "labelKey": "field.race",
+          "dataType": "picklist",
+          "picklist": "race"
+        }
+      ],
+      "rules": [],
+      "sources": [
+        {
+          "sourceId": "stateSource",
+          "selectedByDefault": true
+        },
+        {
+          "sourceId": "nationalSource",
+          "selectedByDefault": true
+        }
+      ],
+      "alsoRun": [
+        {
+          "queryType": "WNT",
+          "fieldMap": {
+            "last": "last",
+            "first": "first",
+            "dob": "dob"
+          }
+        }
+      ]
+    },
+    {
+      "code": "PRO",
+      "labelKey": "queryType.PRO",
+      "sections": [
+        {
+          "key": "base",
+          "labelKey": "section.base"
+        }
+      ],
+      "fields": [
+        {
+          "key": "serial",
+          "labelKey": "field.serial",
+          "dataType": "string",
+          "transform": "upper"
+        },
+        {
+          "key": "propertyType",
+          "labelKey": "field.propertyType",
+          "dataType": "picklist",
+          "picklist": "propertyType",
+          "role": "type",
+          "required": true
+        },
+        {
+          "key": "description",
+          "labelKey": "field.description",
+          "dataType": "string",
+          "maxLength": 200,
+          "charset": "printable"
+        }
+      ],
+      "rules": [],
+      "sources": [
+        {
+          "sourceId": "stateSource",
+          "selectedByDefault": true
+        },
+        {
+          "sourceId": "nationalSource",
+          "selectedByDefault": true
+        }
+      ]
+    },
+    {
+      "code": "WNT",
+      "labelKey": "queryType.WNT",
+      "sections": [
+        {
+          "key": "base",
+          "labelKey": "section.base"
+        }
+      ],
+      "fields": [
+        {
+          "key": "last",
+          "labelKey": "field.last",
+          "dataType": "string",
+          "required": true,
+          "transform": "upper",
+          "charset": "printable"
+        },
+        {
+          "key": "first",
+          "labelKey": "field.first",
+          "dataType": "string",
+          "transform": "upper",
+          "charset": "printable"
+        },
+        {
+          "key": "dob",
+          "labelKey": "field.dob",
+          "dataType": "date",
+          "century": "past",
+          "inputFormats": [
+            "MMDDYYYY",
+            "MM-DD-YYYY",
+            "YYYY-MM-DD"
+          ]
+        }
+      ],
+      "rules": [],
+      "sources": [
+        {
+          "sourceId": "nationalSource",
+          "selectedByDefault": true
+        }
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "code": "VEH",
+      "queryType": "VEH",
+      "positions": [
+        "plate",
+        "state",
+        "year",
+        "vin"
+      ]
+    },
+    {
+      "code": "PER",
+      "queryType": "PER",
+      "positions": [
+        "last",
+        "first",
+        "dob",
+        "sex",
+        "race"
+      ]
+    },
+    {
+      "code": "PRO",
+      "queryType": "PRO",
+      "positions": [
+        "serial",
+        "propertyType",
+        {
+          "field": "description",
+          "rest": true
+        }
+      ]
+    },
+    {
+      "code": "WNT",
+      "queryType": "WNT",
+      "positions": [
+        "last",
+        "first",
+        "dob"
+      ]
+    }
+  ],
+  "keywords": [
+    {
+      "keyword": "STOLEN",
+      "severity": "critical",
+      "except": [
+        "NOT STOLEN",
+        "RECOVERED STOLEN"
+      ]
+    },
+    {
+      "keyword": "WANTED",
+      "severity": "critical",
+      "except": [
+        "NOT WANTED"
+      ]
+    },
+    {
+      "keyword": "EXPIRED",
+      "severity": "warning"
+    },
+    {
+      "keyword": "NO RECORD",
+      "severity": "info"
+    }
+  ],
+  "keywordSeverityStyles": {
+    "critical": {
+      "color": "color.severity.critical.fg",
+      "background": "color.severity.critical.bg",
+      "bold": true,
+      "icon": "alert-octagon",
+      "marker": "!!",
+      "audibleCue": false
+    },
+    "warning": {
+      "color": "color.severity.warning.fg",
+      "background": "color.severity.warning.bg",
+      "bold": true,
+      "icon": "alert-triangle",
+      "marker": "!",
+      "audibleCue": false
+    },
+    "info": {
+      "color": "color.severity.info.fg",
+      "background": "color.severity.info.bg",
+      "bold": false,
+      "icon": "info",
+      "marker": "i",
+      "audibleCue": false
+    }
+  },
+  "responseMappings": [
+    {
+      "id": "veh-summary",
+      "queryType": "VEH",
+      "elements": [
+        {
+          "kind": "value",
+          "path": "status",
+          "labelKey": "mapping.status",
+          "view": "both"
+        },
+        {
+          "kind": "value",
+          "path": "plate",
+          "labelKey": "field.plate",
+          "view": "summary",
+          "highlight": false
+        }
+      ]
+    }
+  ],
+  "quickAccess": [
+    "VEH",
+    "PER",
+    "PRO"
+  ],
+  "theme": {
+    "defaultMode": "day",
+    "auto": "off"
+  },
+  "shortcuts": {
+    "focusTerminal": {
+      "keys": "Ctrl+Slash",
+      "context": "global"
+    }
+  }
+}

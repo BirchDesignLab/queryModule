@@ -405,12 +405,14 @@ for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSW
   openssl rand -base64 32 | sudo tee "/opt/querymodule/secrets/$k" >/dev/null
 done
 sudo chown 10001:10001 /opt/querymodule/secrets/{DB_ENCRYPTION_KEY,CREDENTIAL_KEY,DATA_KEY,BETTER_AUTH_SECRET,SEED_PASSWORD_SECRET}
-sudo chmod 400 /opt/querymodule/secrets/*
+# Explicit names, not a glob: the non-root shell expands the glob and cannot list a root-only
+# 700 directory (found on the host, 09-28-26).
+sudo chmod 400 /opt/querymodule/secrets/{DB_ENCRYPTION_KEY,CREDENTIAL_KEY,DATA_KEY,BETTER_AUTH_SECRET,SEED_PASSWORD_SECRET}
 ```
 
 1. Copy `DB_ENCRYPTION_KEY`, `CREDENTIAL_KEY` and `DATA_KEY` to offline storage off the laptop, never beside backups (8.2). They are the only recovery path.
 2. Cloudflare tunnel token (developer, in the Cloudflare dashboard: Zero Trust, Networks, Tunnels, create tunnel, public hostname `querymodule.birchdesignlab.com` to `http://app:3000`). Save the token without echoing it: `sudo sh -c 'umask 077; cat > /opt/querymodule/secrets/TUNNEL_TOKEN'`, paste, Ctrl+D. Then give it to the cloudflared image user: `sudo chown 65532:65532 /opt/querymodule/secrets/TUNNEL_TOKEN` (verify the uid with `docker image inspect cloudflare/cloudflared --format '{{.Config.User}}'`).
-3. GHCR read token for the deploy-pull timer (ADR-0002; developer creates a fine-grained PAT with read packages only): `sudo install -d -m 700 /opt/querymodule/ghcr` then `sudo DOCKER_CONFIG=/opt/querymodule/ghcr docker login ghcr.io -u <github-user> --password-stdin` and paste the token.
+3. GHCR read token for the deploy-pull timer (ADR-0002; developer creates a fine-grained PAT with read packages only): `sudo install -d -m 700 /opt/querymodule/ghcr` then `sudo DOCKER_CONFIG=/opt/querymodule/ghcr docker login ghcr.io -u <github-user> --password-stdin` and paste the token. Optional while the package is public: `docker compose pull` works anonymously, and the host skipped this login on 09-28-26.
 4. Backups: `rclone config` (remote for the R2 bucket), and put only the `age` recipient public key on the laptop; `age-keygen` runs on another machine.
 
 Deploy (from M0 P1, when `deploy/` exists):

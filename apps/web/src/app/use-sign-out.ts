@@ -1,0 +1,16 @@
+import { useNavigate } from "react-router";
+import { useServices } from "./services-context.js";
+
+/**
+ * The one sign-out path for every screen (#242). A server failure still wipes this device and
+ * rejects; the controller flags it and persists the marker (#235, #241), and the sign-in page
+ * shows the notice with a retry, so there is nothing to render here.
+ */
+export function useSignOut(): () => Promise<void> {
+  const { session } = useServices();
+  const navigate = useNavigate();
+  return async () => {
+    await session.signOut().catch(() => undefined);
+    navigate("/login", { replace: true });
+  };
+}

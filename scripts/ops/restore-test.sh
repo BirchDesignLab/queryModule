@@ -23,7 +23,14 @@ max=$(jq -r '.auditMaxId' "$dir/manifest.json")
 
 docker volume create "$vol" >/dev/null
 docker run --rm -v "$vol:/data" -v "$dir:/src:ro" alpine:3 sh -c 'cp /src/querymodule.db* /data/ && chown -R 10001:10001 /data'
-docker run -d --name "$name" -v "$vol:/data" -v "$QM_SECRETS_DIR:/run/secrets:ro" -e PUBLIC_ORIGIN=http://localhost:3000 "$image" >/dev/null
+# One read-only bind mount per app secret, the set deploy/compose.yml gives `app` (#135): the
+# host secrets dir is root mode 700, so uid 10001 cannot enter a mount of the whole directory,
+# while each file is uid 10001 mode 400. TUNNEL_TOKEN belongs to cloudflared and is not mounted.
+secret_mounts=()
+for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSWORD_SECRET; do
+  secret_mounts+=(-v "$QM_SECRETS_DIR/$k:/run/secrets/$k:ro")
+done
+docker run -d --name "$name" -v "$vol:/data" "${secret_mounts[@]}" -e PUBLIC_ORIGIN=http://localhost:3000 "$image" >/dev/null
 for i in $(seq 1 60); do
   if docker exec "$name" node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" 2>/dev/null; then break; fi
   if [ "$i" = 60 ]; then docker logs "$name"; echo "restored app never became healthy"; exit 1; fi

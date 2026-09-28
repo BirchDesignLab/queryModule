@@ -1,32 +1,21 @@
 import { savePreferences, useStore } from "@querymodule/client";
 import { ThemeModeSelect } from "@querymodule/web-ui";
-import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useEffect, useRef } from "react";
+import { Link } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { useSignOut } from "../app/use-sign-out.js";
 
 export function HomePage() {
-  const { api, authStore, session, preferences } = useServices();
+  const { api, authStore, preferences } = useServices();
   const t = useT();
-  const navigate = useNavigate();
+  const signOut = useSignOut();
   const user = useStore(authStore, (s) => s.user);
   const themeMode = useStore(preferences, (s) => s.themeMode);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
-
-  async function handleSignOut(): Promise<void> {
-    try {
-      await session.signOut();
-      navigate("/login", { replace: true });
-    } catch {
-      // Mirrors LoginPage.tsx's error.unavailable handling: a rejection is no longer
-      // swallowed silently, so the button always resolves to a visible outcome.
-      setSignOutError(t("error.unavailable"));
-    }
-  }
 
   return (
     <main className="qm-page">
@@ -38,12 +27,11 @@ export function HomePage() {
         type="button"
         className="qm-button"
         onClick={() => {
-          void handleSignOut();
+          void signOut();
         }}
       >
         {t("home.signOut")}
       </button>
-      {signOutError === null ? null : <p id="home-sign-out-error">{signOutError}</p>}
       <nav aria-label={t("home.navLabel")}>
         <Link to="/status">{t("status.title")}</Link>
       </nav>
