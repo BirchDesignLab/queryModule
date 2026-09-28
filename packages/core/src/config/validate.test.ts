@@ -1100,3 +1100,34 @@ describe("Task 13 branch coverage", () => {
     );
   });
 });
+
+describe("FR-060 duplicate mappings (#73)", () => {
+  const mapping = (id: string, when?: unknown) => ({
+    id,
+    queryType: "VEH",
+    sourceId: "src1",
+    persona: "dispatch",
+    ...(when === undefined ? {} : { when }),
+    elements: [
+      { kind: "value" as const, path: "status", labelKey: "field.plate", view: "both" as const },
+    ],
+  });
+  const dupes = (a?: unknown, b?: unknown) =>
+    run((r) => {
+      r.responseMappings = [mapping("m1", a), mapping("m2", b)] as never;
+    }).errors.filter((e) => e.key === "config.duplicateMapping");
+
+  it("different canonical when conditions are not duplicates", () => {
+    expect(
+      dupes({ field: "state", op: "eq", value: "OK" }, { field: "state", op: "eq", value: "TX" }),
+    ).toEqual([]);
+  });
+  it("when conditions differing only in literal spelling are duplicates", () => {
+    expect(
+      dupes({ field: "state", op: "eq", value: "ok" }, { field: "state", op: "eq", value: "OK" }),
+    ).toEqual([expect.objectContaining({ path: "/responseMappings/1" })]);
+  });
+  it("two mappings with no when are still duplicates", () => {
+    expect(dupes()).toEqual([expect.objectContaining({ path: "/responseMappings/1" })]);
+  });
+});

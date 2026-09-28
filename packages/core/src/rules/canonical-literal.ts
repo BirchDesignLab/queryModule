@@ -1,10 +1,5 @@
-import {
-  type Condition,
-  type FieldDef,
-  isDefaultRef,
-  type Literal,
-  type Picklist,
-} from "../config/index.js";
+import { isDefaultRef } from "../config/conditions.js";
+import type { Condition, FieldDef, Literal, Picklist } from "../config/index.js";
 import { type CanonResult, canonicalise } from "./canonicalise.js";
 
 /**
