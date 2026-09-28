@@ -28,4 +28,11 @@ describe("dependabot (ADR-0001, #96 G-M6)", () => {
       ]);
     }
   });
+
+  it("never proposes a typescript major (#182, #199: the client pins TS 6 for codegen)", () => {
+    const npm = config.updates.find((u) => u["package-ecosystem"] === "npm");
+    const rule = npm?.ignore?.find((i) => i["dependency-name"] === "typescript");
+    expect(rule?.["update-types"]).toEqual(["version-update:semver-major"]);
+    expect(rule?.versions).toBeUndefined();
+  });
 });
