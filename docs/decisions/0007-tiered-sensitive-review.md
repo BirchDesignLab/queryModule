@@ -32,7 +32,7 @@ Option 3. `.github/sensitive-paths` gains sections; `scripts/ci/sensitive-review
 - Lines before any section header are `[critical]`, so an old untiered file is read at the strictest tier.
 - Precedence within one file: critical, then exempt, then deps, then gate. `[exempt]` never lowers `[critical]`.
 - A changed file takes the highest tier from the base and the head copy of the file, so a PR cannot lower the tier that judges it.
-- The PR's highest tier sets the effort the artifact needs. Files changed after `reviewedSha` fail the check only when they are gate or critical.
+- The PR's highest tier sets the effort the artifact needs. Files changed after `reviewedSha` fail the check only when they are gate or critical and the PR itself changes them (`base...head`), so merging `main` after the review does not need a re-review for files only `main` changed (#206).
 - `wave-review` runs with its reviewer and re-reviewer at effort medium for a gate-only PR and at high when any critical path is touched (amended by #92; the artifact front matter follows the role).
 - The `ci` job adds `pnpm audit --prod`, `actions/dependency-review-action` (fail on moderate), a check that every `pnpm-lock.yaml` resolution is a registry entry (integrity only; no tarball URL, git repo or directory), actionlint and zizmor (`.github/zizmor.yml`, tag pins accepted per spec 9.4). actionlint and zizmor are pinned by image digest and wheel hash.
 - `.github/dependabot.yml` stays `[gate]`: no automated check reads it.
