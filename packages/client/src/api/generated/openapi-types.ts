@@ -86,6 +86,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit a query; answers 202 with the correlation id once the request is recorded */
+        post: operations["submitQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -480,6 +497,28 @@ export interface components {
                 terminal: "toggle" | "pane";
             } | null;
         };
+        submitQuery202: {
+            correlationId: string;
+            acknowledgedAt: number;
+            parts: {
+                partId: number;
+                queryType: string;
+                /** @enum {string} */
+                status: "dispatched" | "skipped";
+                sourceIds: string[];
+                droppedSourceIds: string[];
+            }[];
+        };
+        submitQueryBody: {
+            queryType: string;
+            values: {
+                [key: string]: string | number | boolean | null;
+            };
+            sourceIds: string[];
+            /** @enum {string} */
+            mode: "normal" | "plateOnly";
+            configHash: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -660,6 +699,104 @@ export interface operations {
             };
             /** @description No session */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    submitQuery: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["submitQueryBody"];
+            };
+        };
+        responses: {
+            /** @description Acknowledged */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["submitQuery202"];
+                };
+            };
+            /** @description Malformed body or failed validation or plan (validationFailed, errors[]) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Query type or source not allowed for the caller (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Stale config hash (configHashMismatch, currentConfigHash) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Body over the size cap (payloadTooLarge) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Rate limited (rateLimited, Retry-After) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Internal error; nothing was acknowledged (internal) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Shutting down or not ready (unavailable) */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
