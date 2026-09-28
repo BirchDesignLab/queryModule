@@ -134,4 +134,68 @@ describe("core purity: IO globals through a global object (#85)", () => {
     ])
       expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
   });
+
+  // #184 item 1: the destructuring source must be exactly a global object (or chain),
+  // ending the expression; `window.api` is not itself a global object.
+  it("does not flag a destructure whose source is a member of a global object", () => {
+    expect(findGlobalMemberAccess("const { fetch } = window.api;", names)).toEqual([]);
+  });
+
+  // #184 item 2: an optional-chain index counts as a chain link, not just a dot link.
+  it("flags an optional-chain bracket index as a chain link", () => {
+    for (const src of ["globalThis?.['window'].fetch", 'globalThis?.["window"]?.fetch'])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  // #184 item 3: one-level aliases in a non-first declarator, and through a cast.
+  it("flags a one-level alias declared in a non-first declarator", () => {
+    for (const src of [
+      "let a = 1, g = globalThis;\ng.fetch(url);",
+      "const g = globalThis, h = window;\ng.fetch(url);\nh.localStorage;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  it("flags a one-level alias declared with a cast", () => {
+    for (const src of [
+      "const g = globalThis as any;\ng.fetch(url);",
+      "const g = globalThis as unknown as Window;\ng.fetch(url);",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  // A2 review G-M2: the alias declarator ends like the destructure source does, so a
+  // trailing comment, a satisfies clause or a following brace does not hide the alias.
+  it("flags a one-level alias followed by a comment, satisfies or a brace", () => {
+    for (const src of [
+      "const g = globalThis // note\ng.fetch(url);",
+      "const g = globalThis satisfies object;\ng.fetch(url);",
+      "{ const g = window }\ng.localStorage;",
+      "const g = globalThis /* c */;\ng.fetch(url);",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  it("does not take a member or a longer name of a global object as an alias", () => {
+    for (const src of [
+      "const g = window.api // note\ng.fetch(url);",
+      "const g = globalThis.windowish;\ng.fetch(url);",
+      "const g = globalThisLike;\ng.fetch(url);",
+      "const g = window\n  .api;\ng.fetch(url);",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).toEqual([]);
+  });
+
+  // [critic:C1] the destructuring source's terminator lookahead must not require
+  // an immediate `;`, `,`, `\n` or end-of-string right after the chain: a trailing
+  // cast, a trailing comment, or a following `}` must not hide a real destructure.
+  it("flags a destructure whose source has a cast, a comment, or is followed by a brace", () => {
+    for (const src of [
+      "const { fetch } = globalThis as any;",
+      "const { fetch } = window // grab",
+      "{ const { fetch } = globalThis }",
+      "const { fetch } = window satisfies Window;",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
 });

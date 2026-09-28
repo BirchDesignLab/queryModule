@@ -177,3 +177,38 @@ describe("SEC-006 logger redaction: wave review fixes", () => {
     expect(out).toContain("v-ok");
   });
 });
+
+describe("spec 5.9 redaction walk is bounded (#183)", () => {
+  const lines: string[] = [];
+  const log = createLogger({ sink: (l) => lines.push(l) });
+
+  it("a heavily shared object graph logs in bounded time and size, with a truncation marker", () => {
+    // Each level holds two references to the next: 2^30 paths if walked per path.
+    let node: Record<string, unknown> = { leaf: 1 };
+    for (let i = 0; i < 30; i++) node = { a: node, b: node };
+    const start = Date.now();
+    log.info("dag", { node });
+    expect(Date.now() - start).toBeLessThan(1000);
+    const line = lines.at(-1) ?? "";
+    expect(line.length).toBeLessThan(2_000_000);
+    expect(line).toContain("[truncated]");
+  });
+
+  it("caps depth on a deep non-cyclic chain", () => {
+    let node: Record<string, unknown> = { leaf: 1 };
+    for (let i = 0; i < 200; i++) node = { next: node };
+    log.info("deep", { node });
+    expect(lines.at(-1)).toContain("[truncated]");
+  });
+
+  it("still prints a real cycle as [circular] and a twice-referenced object in full", () => {
+    const shared = { x: 1 };
+    const cyc: Record<string, unknown> = { shared, again: shared };
+    cyc.self = cyc;
+    log.info("cyc", { cyc });
+    const parsed = JSON.parse(lines.at(-1) ?? "{}");
+    expect(parsed.cyc.self).toBe("[circular]");
+    expect(parsed.cyc.shared).toEqual({ x: 1 });
+    expect(parsed.cyc.again).toEqual({ x: 1 });
+  });
+});

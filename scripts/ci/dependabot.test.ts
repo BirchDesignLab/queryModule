@@ -17,4 +17,15 @@ describe("dependabot (ADR-0001, #96 G-M6)", () => {
     const rule = npm?.ignore?.find((i) => i["dependency-name"] === "@types/node");
     expect(rule?.versions).toEqual([">=25"]);
   });
+
+  it("holds Expo-pinned packages to patch updates (PR #186, Expo SDK 57)", () => {
+    const npm = config.updates.find((u) => u["package-ecosystem"] === "npm");
+    for (const name of ["react-native", "react", "react-dom", "@types/react"]) {
+      const rule = npm?.ignore?.find((i) => i["dependency-name"] === name);
+      expect(rule?.["update-types"], name).toEqual([
+        "version-update:semver-minor",
+        "version-update:semver-major",
+      ]);
+    }
+  });
 });

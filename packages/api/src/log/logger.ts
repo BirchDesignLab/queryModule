@@ -44,6 +44,21 @@ const SENSITIVE_SUFFIXES: readonly string[] = [
 export const MIN_SECRET_VALUE_LENGTH = 8;
 const ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 const R = "[redacted]";
+/**
+ * #183: bounds on one walk. A shared object graph (each level referencing the next twice)
+ * is walked once per path, which is exponential; JSON output expands shared references
+ * too, so memoising alone would not bound the line. Past either cap a value is "[truncated]".
+ */
+export const MAX_LOG_DEPTH = 32;
+export const MAX_LOG_NODES = 10_000;
+const TRUNCATED = "[truncated]";
+
+interface WalkState {
+  keys: ReadonlySet<string>;
+  secrets: readonly string[];
+  ancestors: WeakSet<object>;
+  nodes: number;
+}
 
 function isRedactedKey(k: string, keys: ReadonlySet<string>): boolean {
   const lower = k.toLowerCase();
@@ -59,12 +74,8 @@ function scrub(s: string, secrets: readonly string[]): string {
   return out;
 }
 
-function walk(
-  value: unknown,
-  keys: ReadonlySet<string>,
-  secrets: readonly string[],
-  ancestors: WeakSet<object>,
-): unknown {
+function walk(value: unknown, st: WalkState, depth = 0): unknown {
+  const { keys, secrets, ancestors } = st;
   if (typeof value === "string") return scrub(value, secrets);
   if (typeof value === "bigint") return value.toString();
   if (value instanceof Error) {
@@ -76,14 +87,16 @@ function walk(
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
   // Only the current path counts: an object referenced twice without a cycle prints twice.
   if (ancestors.has(value)) return "[circular]";
+  st.nodes += 1;
+  if (depth >= MAX_LOG_DEPTH || st.nodes > MAX_LOG_NODES) return TRUNCATED;
   ancestors.add(value);
   try {
-    if (value instanceof Map) return walk(Object.fromEntries(value), keys, secrets, ancestors);
-    if (value instanceof Set) return walk(Array.from(value), keys, secrets, ancestors);
-    if (Array.isArray(value)) return value.map((v) => walk(v, keys, secrets, ancestors));
+    if (value instanceof Map) return walk(Object.fromEntries(value), st, depth);
+    if (value instanceof Set) return walk(Array.from(value), st, depth);
+    if (Array.isArray(value)) return value.map((v) => walk(v, st, depth + 1));
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      out[scrub(k, secrets)] = isRedactedKey(k, keys) ? R : walk(v, keys, secrets, ancestors);
+      out[scrub(k, secrets)] = isRedactedKey(k, keys) ? R : walk(v, st, depth + 1);
     }
     return out;
   } finally {
@@ -92,7 +105,7 @@ function walk(
 }
 
 export function redact(value: unknown, keys: ReadonlySet<string>): unknown {
-  return walk(value, keys, [], new WeakSet());
+  return walk(value, { keys, secrets: [], ancestors: new WeakSet(), nodes: 0 });
 }
 
 export function createLogger(
@@ -118,7 +131,10 @@ export function createLogger(
   const serialise = (level: LogLevel, msg: string, f: Record<string, unknown>): string => {
     const head = { level, time: Date.now(), msg: scrub(msg, secrets) };
     try {
-      const fields = walk({ ...base, ...f }, keys, secrets, new WeakSet()) as object;
+      const fields = walk(
+        { ...base, ...f },
+        { keys, secrets, ancestors: new WeakSet(), nodes: 0 },
+      ) as object;
       // head first for key order, and again last so no field can forge level, time or msg.
       return JSON.stringify({ ...head, ...fields, ...head });
     } catch {
