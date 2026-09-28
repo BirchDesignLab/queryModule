@@ -1,22 +1,23 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { checkAuditMigrations } from "./check-audit-migrations";
+import { AUDIT_TRIGGER_STATEMENTS, checkAuditMigrations } from "./check-audit-migrations";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const cli = resolve(root, "scripts", "ci", "check-audit-migrations.ts");
 
 const create =
   "CREATE TABLE `audit_event` (`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL, `type` text NOT NULL);";
+// The three statements exactly as migration 0001 creates them (A2 review C-M1 pins them).
 const trig =
-  "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END;";
+  "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event\nBEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;";
 const triggers = [
   trig,
-  "CREATE TRIGGER audit_event_no_delete BEFORE DELETE ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END;",
-  "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON audit_event WHEN NEW.id IS NOT NULL BEGIN SELECT RAISE(ABORT, 'x'); END;",
+  "CREATE TRIGGER audit_event_no_delete BEFORE DELETE ON audit_event\nBEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;",
+  "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON audit_event WHEN NEW.id IS NOT NULL AND EXISTS (SELECT 1 FROM audit_event WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;",
 ].join("\n--> statement-breakpoint\n");
 
 describe("SEC-010 audit_event additive-only migrations", () => {
@@ -56,6 +57,14 @@ describe("SEC-010 audit_event additive-only migrations", () => {
       "other trigger",
       "CREATE TRIGGER audit_event_x AFTER INSERT ON audit_event BEGIN SELECT 1; END;",
     ],
+    // A2 review G-I2 / C-I1 (spec 9.2, 5.5): only a non-unique index. With a unique one,
+    // INSERT OR REPLACE deletes the colliding audit row and no trigger fires.
+    ["unique index", "CREATE UNIQUE INDEX `u` ON `audit_event` (`correlation_id`);"],
+    [
+      "partial unique index",
+      "CREATE UNIQUE INDEX u ON audit_event (correlation_id) WHERE correlation_id IS NOT NULL;",
+    ],
+    ["lowercase unique index", "create unique index u on audit_event (correlation_id);"],
     ["update rows", "UPDATE audit_event SET type = 'x';"],
     ["delete rows", "DELETE FROM audit_event;"],
     ["second create", create],
@@ -70,7 +79,7 @@ describe("SEC-010 audit_event additive-only migrations", () => {
     ["alter column", "ALTER TABLE audit_event ALTER COLUMN type TO integer;"],
     [
       "trigger if not exists",
-      "CREATE TRIGGER IF NOT EXISTS audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END;",
+      "CREATE TRIGGER IF NOT EXISTS audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;",
     ],
     [
       "not null through a block comment",
@@ -130,7 +139,7 @@ describe("SEC-010 audit_event additive-only migrations", () => {
     ["hidden statement after a trigger body", `${trig}\nDROP TABLE audit_event;`],
     [
       "hidden statement after a trigger body, no semicolon",
-      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END; DROP TABLE audit_event",
+      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END; DROP TABLE audit_event",
     ],
     [
       "no-op trigger body",
@@ -138,11 +147,24 @@ describe("SEC-010 audit_event additive-only migrations", () => {
     ],
     [
       "trigger on the wrong event",
-      "CREATE TRIGGER audit_event_no_update BEFORE INSERT ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END;",
+      "CREATE TRIGGER audit_event_no_update BEFORE INSERT ON audit_event BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;",
     ],
     [
       "trigger on another table",
-      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON other BEGIN SELECT RAISE(ABORT, 'x'); END;",
+      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON other BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;",
+    ],
+    // A2 review C-M1: the statement is pinned to the text migration 0001 creates.
+    [
+      "WHEN clause that never fires",
+      "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event WHEN 0 BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;",
+    ],
+    [
+      "different RAISE message",
+      "CREATE TRIGGER audit_event_no_delete BEFORE DELETE ON audit_event BEGIN SELECT RAISE(ABORT, 'x'); END;",
+    ],
+    [
+      "weakened replace condition",
+      "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON audit_event WHEN NEW.id IS NULL BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END;",
     ],
   ])("rejects an initial trigger migration with a %s", (_n, sql) => {
     expect(
@@ -151,6 +173,17 @@ describe("SEC-010 audit_event additive-only migrations", () => {
         { name: "0001_audit_triggers.sql", sql },
       ]).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("pins the same trigger statements as the startup check in migrate.ts (C-M1)", () => {
+    const migrate = readFileSync(resolve(root, "packages/api/src/db/migrate.ts"), "utf8");
+    expect(Object.keys(AUDIT_TRIGGER_STATEMENTS).sort()).toEqual([
+      "audit_event_no_delete",
+      "audit_event_no_replace",
+      "audit_event_no_update",
+    ]);
+    for (const [name, sql] of Object.entries(AUDIT_TRIGGER_STATEMENTS))
+      expect(migrate, name).toContain(`${name}:\n    ${JSON.stringify(sql)},`);
   });
 
   it("the CLI passes on the real migrations and exits 1 on a violation", () => {

@@ -164,6 +164,28 @@ describe("core purity: IO globals through a global object (#85)", () => {
       expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
   });
 
+  // A2 review G-M2: the alias declarator ends like the destructure source does, so a
+  // trailing comment, a satisfies clause or a following brace does not hide the alias.
+  it("flags a one-level alias followed by a comment, satisfies or a brace", () => {
+    for (const src of [
+      "const g = globalThis // note\ng.fetch(url);",
+      "const g = globalThis satisfies object;\ng.fetch(url);",
+      "{ const g = window }\ng.localStorage;",
+      "const g = globalThis /* c */;\ng.fetch(url);",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
+  });
+
+  it("does not take a member or a longer name of a global object as an alias", () => {
+    for (const src of [
+      "const g = window.api // note\ng.fetch(url);",
+      "const g = globalThis.windowish;\ng.fetch(url);",
+      "const g = globalThisLike;\ng.fetch(url);",
+      "const g = window\n  .api;\ng.fetch(url);",
+    ])
+      expect(findGlobalMemberAccess(src, names), src).toEqual([]);
+  });
+
   // [critic:C1] the destructuring source's terminator lookahead must not require
   // an immediate `;`, `,`, `\n` or end-of-string right after the chain: a trailing
   // cast, a trailing comment, or a following `}` must not hide a real destructure.

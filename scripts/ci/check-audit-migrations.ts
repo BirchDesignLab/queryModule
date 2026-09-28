@@ -5,8 +5,8 @@ import { pathToFileURL } from "node:url";
 // Spec 9.2: audit_event is append-only and additive-only across migrations
 // (SEC-010). A statement naming audit_event passes only if it is the first
 // CREATE TABLE audit_event, one of the three append-only triggers (once each,
-// in the exact BEFORE <event> ... RAISE(ABORT) form), a nullable ADD COLUMN with
-// at most a literal DEFAULT, or a CREATE [UNIQUE] INDEX on audit_event. Anything
+// in the exact statement migration 0001 creates), a nullable ADD COLUMN with
+// at most a literal DEFAULT, or a (non-unique) CREATE INDEX on audit_event. Anything
 // else, including drizzle's __new_audit_event table rebuild, fails. A statement
 // that touches the schema table (writable_schema, sqlite_master, sqlite_schema)
 // fails whether or not it names audit_event: it can drop or rewrite the triggers.
@@ -90,6 +90,25 @@ const TRIGGER_EVENT: Record<string, string> = {
 const TRIGGER =
   /^CREATE TRIGGER (audit_event_no_update|audit_event_no_delete|audit_event_no_replace) BEFORE (UPDATE|DELETE|INSERT) ON audit_event (WHEN [^;]+ )?BEGIN SELECT RAISE\(ABORT, ''\); END;?$/i;
 
+/**
+ * Each trigger statement exactly as migration 0001 creates it (A2 review C-M1). This is
+ * the text AUDIT_TRIGGER_SQL in packages/api/src/db/migrate.ts pins at startup; the scripts
+ * project cannot import across its rootDir, so check-audit-migrations.test.ts asserts the
+ * two copies match. A WHEN clause or RAISE message that differs fails here, in CI, and not
+ * only at startup.
+ */
+export const AUDIT_TRIGGER_STATEMENTS: Record<string, string> = {
+  audit_event_no_update:
+    "CREATE TRIGGER audit_event_no_update BEFORE UPDATE ON audit_event BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END",
+  audit_event_no_delete:
+    "CREATE TRIGGER audit_event_no_delete BEFORE DELETE ON audit_event BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END",
+  audit_event_no_replace:
+    "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON audit_event WHEN NEW.id IS NOT NULL AND EXISTS (SELECT 1 FROM audit_event WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END",
+};
+const PINNED = Object.fromEntries(
+  Object.entries(AUDIT_TRIGGER_STATEMENTS).map(([n, sql]) => [n, codeOf(sql).detect]),
+);
+
 const ADD_COLUMN = /^ALTER TABLE audit_event ADD /i;
 // Only a name, a type and an optional literal DEFAULT: NOT NULL, CHECK, REFERENCES,
 // GENERATED, COLLATE, UNIQUE and every other constraint fail.
@@ -121,11 +140,14 @@ export function checkAuditMigrations(files: { name: string; sql: string }[]): st
       const t = TRIGGER.exec(s);
       const name = t?.[1]?.toLowerCase();
       if (name && TRIGGER_EVENT[name] === t?.[2]?.toUpperCase()) {
-        if (triggers.has(name)) bad("trigger created twice");
+        if (detect.replace(/;$/, "") !== PINNED[name]) bad("trigger differs from migration 0001");
+        else if (triggers.has(name)) bad("trigger created twice");
         triggers.add(name);
         continue;
       }
-      if (/^CREATE (UNIQUE )?INDEX \S+ ON audit_event \(/i.test(s) && single(s)) continue;
+      // Spec 9.2, 5.5: CREATE INDEX only. A UNIQUE index would let INSERT OR REPLACE delete
+      // the colliding audit row with no trigger firing (A2 review G-I2, C-I1).
+      if (/^CREATE INDEX \S+ ON audit_event \(/i.test(s) && single(s)) continue;
       if (ADD_COLUMN.test(s)) {
         if (!NULLABLE_COLUMN.test(s)) {
           bad("added column must be nullable with no constraint but a literal DEFAULT");

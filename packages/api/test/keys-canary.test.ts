@@ -57,6 +57,32 @@ describe("SEC-006 key canaries", () => {
     });
     expect(Number(left.rows[0]?.n)).toBe(0);
   });
+  // A2 review C-M4: a second process on the same file creates the canary between this
+  // process's read and its create. The create must not overwrite it; this process then
+  // verifies its own key against the stored canary and fails closed.
+  it("never overwrites a canary another process created after the read", async () => {
+    const file = tempDbFile();
+    const a = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    await runMigrations(a, resolve(import.meta.dirname, "../drizzle"));
+    const b = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    const other = { credentialKey: Buffer.alloc(32, 7), dataKey: Buffer.alloc(32, 8) };
+    const transaction = a.transaction.bind(a);
+    let raced = false;
+    a.transaction = (async (...args: Parameters<typeof a.transaction>) => {
+      if (!raced) {
+        raced = true;
+        await checkKeyCanaries(b, other, systemClock);
+      }
+      return transaction(...args);
+    }) as typeof a.transaction;
+    const err = await checkKeyCanaries(a, keys, systemClock).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(KeyCanaryError);
+    expect((err as KeyCanaryError).keyName).toBe("credential");
+    expect(await checkKeyCanaries(b, other, systemClock)).toEqual({
+      credential: "verified",
+      data: "verified",
+    });
+  });
   it("recreates a lost canary when its guard table exists but is empty", async () => {
     const db = await fresh();
     await checkKeyCanaries(db, keys, systemClock);

@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Clock } from "../clock";
 import type { Db } from "../db/client";
 import { keyCanary } from "../db/schema";
@@ -45,6 +45,10 @@ function opens(key: Buffer, row: typeof keyCanary.$inferSelect): boolean {
   }
 }
 
+/**
+ * Seals and stores the canary for keyName, replacing any existing one. For the lost-key
+ * runbooks only; checkKeyCanaries creates with createCanary, which never replaces.
+ */
 export async function writeCanary(
   tx: Tx,
   key: Buffer,
@@ -59,14 +63,40 @@ export async function writeCanary(
     .onConflictDoUpdate({ target: keyCanary.keyName, set: values });
 }
 
-async function guardTableHasRows(db: Db, table: string): Promise<boolean> {
-  const exists = await db.$client.execute({
-    sql: "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-    args: [table],
+async function guardTableHasRows(tx: Tx, table: string): Promise<boolean> {
+  const exists = await tx.all(
+    sql`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ${table}`,
+  );
+  if (exists.length === 0) return false;
+  return (await tx.all(sql`SELECT 1 FROM ${sql.identifier(table)} LIMIT 1`)).length > 0;
+}
+
+const readCanary = async (db: Db | Tx, name: CanaryKeyName) =>
+  (await db.select().from(keyCanary).where(eq(keyCanary.keyName, name)))[0];
+
+/**
+ * First boot for keyName: in one IMMEDIATE transaction, re-reads the row, refuses when the
+ * guard table holds rows, and inserts without replacing (A2 review C-M4). A canary another
+ * process created after the caller's read is kept, never overwritten; the caller then
+ * verifies its key against the stored row. Returns whether this call inserted the row.
+ */
+async function createCanary(
+  db: Db,
+  key: Buffer,
+  name: CanaryKeyName,
+  clock: Clock,
+): Promise<boolean> {
+  return withTransaction(db, async (tx) => {
+    if (await readCanary(tx, name)) return false;
+    if (await guardTableHasRows(tx, CANARY_GUARD_TABLES[name])) throw new KeyCanaryError(name);
+    const sealed = sealCanary(key, name, CURRENT_KEY_VERSION);
+    const inserted = await tx
+      .insert(keyCanary)
+      .values({ keyName: name, ...sealed, keyVersion: CURRENT_KEY_VERSION, createdAt: clock.now() })
+      .onConflictDoNothing({ target: keyCanary.keyName })
+      .returning({ keyName: keyCanary.keyName });
+    return inserted.length > 0;
   });
-  if (exists.rows.length === 0) return false;
-  const rows = await db.$client.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
-  return rows.rows.length > 0;
 }
 
 export async function checkKeyCanaries(
@@ -79,16 +109,16 @@ export async function checkKeyCanaries(
     ["credential", keys.credentialKey],
     ["data", keys.dataKey],
   ] as const) {
-    const row = (await db.select().from(keyCanary).where(eq(keyCanary.keyName, name)))[0];
-    if (!row) {
-      if (await guardTableHasRows(db, CANARY_GUARD_TABLES[name])) throw new KeyCanaryError(name);
-      await withTransaction(db, (tx) => writeCanary(tx, key, name, clock));
-      out[name] = "created";
-    } else if (opens(key, row)) {
+    const row = await readCanary(db, name);
+    if (row) {
+      if (!opens(key, row)) throw new KeyCanaryError(name);
       out[name] = "verified";
-    } else {
-      throw new KeyCanaryError(name);
+      continue;
     }
+    const created = await createCanary(db, key, name, clock);
+    const stored = await readCanary(db, name);
+    if (!stored || !opens(key, stored)) throw new KeyCanaryError(name);
+    out[name] = created ? "created" : "verified";
   }
   return out;
 }

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: the cases are JS source text with template holes, scanned as data.
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findSchemaWrites, scanSchemaWrites } from "./check-schema-writes";
@@ -25,6 +26,53 @@ describe("schema-table writes in packages/api/src are refused (spec 9.2, #189)",
       "update sqlite_temp_master set sql = 'x'",
     ])
       expect(findSchemaWrites(src), src).not.toEqual([]);
+  });
+
+  // A2 review G-M1: a conflict clause after UPDATE and any schema name before the table.
+  it("flags UPDATE OR <conflict> and any schema prefix", () => {
+    for (const src of [
+      "UPDATE OR IGNORE sqlite_master SET sql = 'x'",
+      "update or replace main.sqlite_master set sql='x'",
+      "UPDATE aux.sqlite_master SET sql = 'x'",
+      'DELETE FROM "aux"."sqlite_schema"',
+    ])
+      expect(findSchemaWrites(src), src).not.toEqual([]);
+  });
+
+  // A2 review C-M2: a SQL comment between the keyword and the table.
+  it("flags a write with a SQL comment between the keyword and the table", () => {
+    for (const src of [
+      "sql`UPDATE -- note\n  sqlite_master SET sql = 'x'`",
+      'c.execute("UPDATE -- note\\n sqlite_master SET sql = 1")',
+      'c.execute("DELETE FROM /* x */ sqlite_master")',
+    ])
+      expect(findSchemaWrites(src), src).not.toEqual([]);
+  });
+
+  // A2 review G-I1 / C-M2: a comment opener inside a string, template or regex literal
+  // starts no comment, so it cannot blank the code that follows it.
+  it("flags writable_schema after a string that holds a comment opener", () => {
+    for (const src of [
+      "const g = 'drizzle/*.sql';\nawait c.execute('PRAGMA writable_schema=ON');\n/** doc */",
+      "const u = 'a // b'; c.execute('PRAGMA writable_schema=ON');",
+      'app.get("/api/*", h);\nc.execute("PRAGMA writable_schema=ON");\n/* note */',
+      "const t = `a // b ${x}`; c.execute('PRAGMA writable_schema=ON');",
+      "const t = `a ${'`'} /* b`; c.execute('PRAGMA writable_schema=ON'); /* c */",
+      "const e = 'it\\'s /*'; c.execute('PRAGMA writable_schema=ON'); /* c */",
+      "const r = /\\/*/; c.execute('PRAGMA writable_schema=ON'); /* c */",
+      "const r = x.split(/[/*]/); c.execute('PRAGMA writable_schema=ON'); /* c */",
+    ])
+      expect(findSchemaWrites(src), src).not.toEqual([]);
+  });
+
+  it("still strips comments that follow strings, templates and division", () => {
+    for (const src of [
+      'const a = "it\'s"; // writable_schema',
+      "const t = `${a /* writable_schema */}`; // UPDATE sqlite_master",
+      "const s = '/* not a comment */'; const x = 1;",
+      "const h = a / b; /* writable_schema */ const k = c / d; // writable_schema",
+    ])
+      expect(findSchemaWrites(src), src).toEqual([]);
   });
 
   it("allows reads of sqlite_master and mentions inside comments", () => {

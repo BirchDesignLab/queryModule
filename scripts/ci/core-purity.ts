@@ -59,10 +59,13 @@ function findGlobalAliases(source: string): string[] {
   // [critic:I2] allow an optional type annotation between the binding name and `=`,
   // e.g. `const g: typeof globalThis = globalThis;`. The terminator is a lookahead
   // (not consumed) so a comma stays available to start the next declarator's match.
+  // A2 review G-M2: as for a destructure source (afterBrace below), the terminator
+  // rejects only a longer name or a further member, index or call step, so a trailing
+  // comment, a `satisfies` clause or a following `}` still ends an alias.
   const re = new RegExp(
     String.raw`(?:\b(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*` +
       chain +
-      String.raw`(?:\s*as\s+[^;,\n]+)?(?=\s*(?:[;,\n]|$))`,
+      String.raw`(?:\s*as\s+[^;,\n]+)?(?![\w$])(?!\s*(?:\?\.|\.|\[|\())`,
     "g",
   );
   const aliases = new Set<string>();
