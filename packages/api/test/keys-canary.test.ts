@@ -1,14 +1,13 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { systemClock } from "../src/clock";
-import { openDatabase } from "../src/db/client";
 import { runMigrations } from "../src/db/migrate";
 import { CANARY_GUARD_TABLES, checkKeyCanaries, KeyCanaryError } from "../src/keys/canary";
-import { TEST_DB_KEY, tempDbFile } from "./helpers/db";
+import { openTempDatabase, tempDbFile } from "./helpers/db";
 
 const keys = { credentialKey: Buffer.alloc(32, 2), dataKey: Buffer.alloc(32, 3) };
 async function fresh() {
-  const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+  const db = await openTempDatabase();
   await runMigrations(db, resolve(import.meta.dirname, "../drizzle"));
   return db;
 }
@@ -62,9 +61,9 @@ describe("SEC-006 key canaries", () => {
   // verifies its own key against the stored canary and fails closed.
   it("never overwrites a canary another process created after the read", async () => {
     const file = tempDbFile();
-    const a = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    const a = await openTempDatabase({ file });
     await runMigrations(a, resolve(import.meta.dirname, "../drizzle"));
-    const b = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    const b = await openTempDatabase({ file });
     const other = { credentialKey: Buffer.alloc(32, 7), dataKey: Buffer.alloc(32, 8) };
     const transaction = a.transaction.bind(a);
     let raced = false;

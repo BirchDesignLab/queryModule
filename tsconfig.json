@@ -8,6 +8,7 @@
     { "path": "packages/client" },
     { "path": "packages/web-ui" },
     { "path": "apps/web" },
+    { "path": "apps/web/e2e" },
     { "path": "scripts" },
     { "path": "typecheck-configs" }
   ]

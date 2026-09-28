@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | M0 P1 | running | 09-27-26 22:04 |
-| Windows 11 | B | M0 P1 | paused | 09-27-26 16:08 |
+| Windows 11 | B | M0 P1 | paused | 09-27-26 23:56 |
 | Windows 11 | A offload | M0 P1 | idle | 09-27-26 16:08 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
@@ -50,13 +50,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track B
 
-- Issue: #160 Web-ui: LiveAnnouncer and base styles (Task 20); B1 (#179), B2 (#181) and B4 (#191) merged, B3 by the A-offload lane (#176)
-- Branch / PR: none; cut feat/b-p1-wave-5 from main
-- Last green: `pnpm verify` at 3c55573 on main (1153 tests)
-- Next step: "### Task 20: Web-ui: LiveAnnouncer and base styles (#160)", wave B5 Tasks 20 to 25 (#160 to #165), UI, Opus medium critic
-- Blocked by: Task 19 (#159) waits on #139's route in Linux A4; Task 27 (#167) on #120, #121, #122, #132
+- Issue: none active; B5 (#202) and B6 (#204) merged, so Tasks 20 to 26 are done
+- Branch / PR: none
+- Last green: `pnpm verify` at 16a901e on feat/b-p1-wave-6 (1313 tests pass); on Windows only the known packages/api EPERM teardown fails (A2 test helper), accepted, fix in OFFLOAD's PR
+- Next step: "### Task 19: Client: preferences sync with `/api/v1/me/preferences` (#159)" once #139's route lands (Linux A4); then "### Task 27: Web: M0 Playwright suite (#167)" once #120, #121, #122, #132 land
+- Blocked by: #139 route (A4) for Task 19; #120, #121, #122, #132 for Task 27
 - Local-only state: none
-- Notes: Task 23 (#163) and Task 27 (#167) carry B4 carry-forwards in issue comments; follow-ups #178, #182, #190
+- Notes: Task 27 carries B4 and B5 carry-forwards in #167 comments; Task 26 Step 26.7 runs with Track A's web serving; follow-ups #66 (WS half needs the M2 WS client) and #178 (gate tsconfig chore, rides a later B wave PR before M4) stay parked while idle
 
 ### Track D
 

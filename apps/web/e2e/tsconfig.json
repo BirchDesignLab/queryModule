@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../../../node_modules/.cache/typecheck-web-e2e",
+    "types": ["node"],
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["./**/*.ts"]
+}
