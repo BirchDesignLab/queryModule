@@ -201,9 +201,17 @@ down() {
   for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSWORD_SECRET; do
     if grep -qF "$(cat "$sec/$k")" "$work/container.log"; then echo "container log contains $k"; exit 1; fi
   done
+  # Spec 8.5: seeded demo passwords print once to seed.js stdout, never to the service log.
+  checked=0
+  while IFS=$'\t' read -r _ _ pw; do
+    [ -n "$pw" ] || continue
+    if grep -qF "$pw" "$work/container.log"; then echo "container log contains a seeded demo password"; exit 1; fi
+    checked=$((checked + 1))
+  done < <(tail -n +2 "$work/seed-output.txt" | tr -d '\r')
+  [ "$checked" -gt 0 ] || { echo "no seeded demo passwords to check in $work/seed-output.txt"; exit 1; }
   docker rm "$name" >/dev/null; docker volume rm "$vol" >/dev/null
   [ "$code" = "0" ] || { echo "exit code $code"; exit 1; }
-  echo "boot smoke down: clean exit 0, no key material in the log"
+  echo "boot smoke down: clean exit 0, no key material or demo password in the log"
 }
 
 case "$cmd" in
