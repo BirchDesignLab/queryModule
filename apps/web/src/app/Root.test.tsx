@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { API, server } from "../test/msw-server.js";
+import { API, META, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 
 describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
@@ -47,4 +47,24 @@ describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
     const heading = await screen.findByRole("heading", { name });
     await waitFor(() => expect(heading).toHaveFocus());
   });
+  for (const path of ["/", "/status"]) {
+    it(`NFR-001: an unsupported client with a live session gets the update gate at ${path}`, async () => {
+      server.use(
+        http.get(`${API}/api/v1/meta`, () =>
+          HttpResponse.json({ ...META, minClientVersion: "99.0.0" }),
+        ),
+        http.get(`${API}/api/v1/auth/get-session`, () =>
+          HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+        ),
+      );
+      renderRoot({ path });
+      const gate = await screen.findByRole("heading", { name: "Update required" });
+      await waitFor(() => expect(gate).toHaveFocus());
+      expect(
+        screen.getByText("This app needs an update before you can continue.", { exact: false }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Query Module" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Connection status" })).not.toBeInTheDocument();
+    });
+  }
 });

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserRouter, type RouteObject, RouterProvider } from "react-router";
 import { AppChrome } from "./AppChrome.js";
 import { type BootState, bootstrap } from "./bootstrap.js";
+import { ClientSupportProvider } from "./client-support-context.js";
 import { I18nProvider } from "./i18n-context.js";
 import { appRoutes } from "./routes.js";
 import type { Services } from "./services.js";
@@ -29,7 +30,11 @@ function AppRouter({
     () => createRouter(appRoutes(clientSupported)),
     [createRouter, clientSupported],
   );
-  return <RouterProvider router={router} />;
+  return (
+    <ClientSupportProvider clientSupported={clientSupported}>
+      <RouterProvider router={router} />
+    </ClientSupportProvider>
+  );
 }
 
 function BootGate({
