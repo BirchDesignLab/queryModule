@@ -17,7 +17,10 @@ describe("BR-002 home after sign-in", () => {
   it("shows the signed-in user and focuses the heading", async () => {
     await signIn();
     expect(screen.getByText(`Signed in as ${TEST_USER.email}`)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Query Module" })).toHaveFocus();
+    // Sign-in resolves outside act(), so React commits HomePage and runs its focus effect in a
+    // later task; findByRole can return in between (focus still on body) under a loaded suite.
+    const heading = screen.getByRole("heading", { name: "Query Module" });
+    await waitFor(() => expect(heading).toHaveFocus());
   });
   it("UX-002 switches theme without reload", async () => {
     const { user } = await signIn();

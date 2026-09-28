@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { createHmac } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -124,6 +126,7 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
 // progress-r1-guard-1/2 (round 2): a named type instead of an `any[]` local,
 // so these task-29 tests never need a new noExplicitAny suppression.
 type WorkflowStep = {
+  name?: string;
   run?: string;
   if?: string;
   uses?: string;
@@ -269,5 +272,59 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(upload, "no actions/upload-artifact step in the image job").toBeDefined();
     expect(upload?.if).toBe(pushGate);
     expect(upload?.with?.name).toBe("querymodule-image");
+  });
+});
+
+describe("ci.yml step 12: the M0 Playwright suite against the boot-smoke container (#167)", () => {
+  const step = () =>
+    (jobs.image.steps as WorkflowStep[]).find(
+      (s) => typeof s.name === "string" && s.name.startsWith("12:"),
+    );
+
+  it("runs the whole e2e suite, not one spec, at the container's PUBLIC_ORIGIN", () => {
+    const run = String(step()?.run ?? "");
+    expect(run).toMatch(/playwright test\s*$/m);
+    const origin = readFileSync(resolve(root, "scripts/ci/boot-smoke.sh"), "utf8").match(
+      /-e PUBLIC_ORIGIN=(\S+)/,
+    )?.[1];
+    expect(origin).toBe("http://localhost:3000");
+    expect(run).toContain(`E2E_BASE_URL=${origin} `);
+  });
+
+  it("masks the derived smoke password before exporting it and never echoes it otherwise", () => {
+    const lines = String(step()?.run ?? "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const mask = lines.findIndex((l) => l === 'echo "::add-mask::$pw"');
+    const exported = lines.findIndex((l) => l.includes('E2E_USER_PASSWORD="$pw"'));
+    expect(mask).toBeGreaterThan(-1);
+    expect(exported).toBeGreaterThan(mask);
+    expect(lines.filter((l) => l.includes("$pw") && l.startsWith("echo"))).toHaveLength(1);
+    expect(lines[0]).toMatch(/"\$SEED_PASSWORD_SECRET_FILE" smoke@example\.test\)$/);
+  });
+
+  it("derives derivePassword's value (spec 8.5) from the secret file", () => {
+    const derive = String(step()?.run ?? "")
+      .split("\n")
+      .find((l) => l.trim().startsWith("pw=$("))
+      ?.trim();
+    expect(derive).toBeDefined();
+    const secret = "ci-step-12-test-secret-not-real";
+    const dir = mkdtempSync(join(tmpdir(), "qm-ci-step12-"));
+    try {
+      const file = join(dir, "SEED_PASSWORD_SECRET");
+      writeFileSync(file, `${secret}\n`);
+      const r = spawnSync("bash", ["-c", `${derive}\nprintf %s "$pw"`], {
+        encoding: "utf8",
+        env: { ...process.env, SEED_PASSWORD_SECRET_FILE: file },
+      });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe(
+        createHmac("sha256", secret).update("smoke@example.test").digest("base64url"),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

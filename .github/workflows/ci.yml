@@ -281,10 +281,19 @@ jobs:
       - name: Install Playwright browser
         run: pnpm --filter @querymodule/web exec playwright install --with-deps chromium
 
-      - name: "12: Playwright (harness, axe, CSP)"
-        # QM_BASE_URL and SEED_PASSWORD_SECRET_FILE come from step 11 (boot-smoke.sh
-        # up writes them to $GITHUB_ENV); playwright.config.ts reads E2E_BASE_URL.
-        run: E2E_BASE_URL="$QM_BASE_URL" pnpm --filter @querymodule/web exec playwright test e2e/harness.spec.ts
+      - name: "12: Playwright M0 suite (harness, login, keyboard, themes, heartbeat; axe, CSP)"
+        # SEED_PASSWORD_SECRET_FILE comes from step 11 (boot-smoke.sh up writes it to
+        # $GITHUB_ENV): a throwaway secret for this run's container only. The smoke user's
+        # password is derived from it as smoke.sh does (derivePassword, spec 8.5), masked
+        # before it reaches the environment, never echoed and never on a process argv.
+        # The base URL is the container's PUBLIC_ORIGIN (http://localhost:3000, set by
+        # boot-smoke.sh), not QM_BASE_URL (127.0.0.1): sign-in and the WebSocket upgrade
+        # check the browser's Origin against it.
+        run: |
+          pw=$(node -e 'const c=require("node:crypto"),f=require("node:fs");process.stdout.write(c.createHmac("sha256",f.readFileSync(process.argv[1],"utf8").trim()).update(process.argv[2].toLowerCase()).digest("base64url"))' "$SEED_PASSWORD_SECRET_FILE" smoke@example.test)
+          echo "::add-mask::$pw"
+          export E2E_USER_EMAIL=smoke@example.test E2E_USER_PASSWORD="$pw"
+          E2E_BASE_URL=http://localhost:3000 pnpm --filter @querymodule/web exec playwright test
 
       # C2 (round 1 review): publish must ship the exact bytes steps 10-12
       # just smoke-tested, not a fresh rebuild in a different job. Save the
