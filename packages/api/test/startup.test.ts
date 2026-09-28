@@ -9,7 +9,8 @@ import { readPragmas } from "../src/db/client";
 import { bootstrap, type RunningServer, startServer } from "../src/startup";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
-// Wraps the real AuditService; failAudit makes every record() throw (the configLoaded fail-closed case).
+// Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert, so the
+// fail-closed case proves the transaction rolls the configLoaded row back (A2 review M1).
 const failAudit = vi.hoisted(() => ({ on: false }));
 vi.mock("../src/audit/service", async (importOriginal) => {
   const real = await importOriginal<typeof auditService>();
@@ -17,9 +18,10 @@ vi.mock("../src/audit/service", async (importOriginal) => {
     createAuditService: (...args: Parameters<typeof real.createAuditService>) => {
       const svc = real.createAuditService(...args);
       return {
-        record: (...a: Parameters<typeof svc.record>) => {
+        record: async (...a: Parameters<typeof svc.record>) => {
+          const written = await svc.record(...a);
           if (failAudit.on) throw new Error("audit store unavailable");
-          return svc.record(...a);
+          return written;
         },
       };
     },
@@ -219,12 +221,20 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
     expect(again[1]?.details).toEqual(rows[0]?.details);
   });
 
-  it("configLoaded: an audit failure refuses startup and nothing listens", async () => {
-    const env = await envWith();
+  it("configLoaded: an audit failure refuses startup, commits no row and nothing listens", async () => {
+    const data = tempDir("qm-data-");
+    const env = await envWith({}, data);
     failAudit.on = true;
     await expect(startServer(env, { logSink: () => {} })).rejects.toThrow(
       /audit store unavailable/,
     );
     await expect(fetch(`http://127.0.0.1:${env.PORT}/api/v1/health`)).rejects.toThrow();
+    // The failed start closed its handle and rolled its row back: a clean restart on the same
+    // data dir opens the database and finds exactly its own configLoaded row.
+    failAudit.on = false;
+    const next = await bootstrap(env, { logSink: () => {} });
+    const rows = await configLoadedRows(next);
+    next.db.$client.close();
+    expect(rows.length).toBe(1);
   });
 });
