@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | M0 P1 | paused | 09-27-26 21:45 |
-| Windows 11 | B | M0 P1 | running | 09-27-26 23:46 |
+| Windows 11 | B | M0 P1 | paused | 09-27-26 23:56 |
 | Windows 11 | A offload | M0 P1 | idle | 09-27-26 16:08 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
@@ -57,6 +57,14 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Notes: T15 adds principal: Principal to AppEnv.Variables in http/types.ts; T14 disables Better Auth telemetry and shows its adapter makes no plain-db call inside a transaction (T6 design); follow-ups #189 and #195 open; Track B waits on #120, #121, #122, #132, #139
 
 ### Track B
+
+- Issue: none active; B5 (#202) and B6 (#204) merged, so Tasks 20 to 26 are done
+- Branch / PR: none
+- Last green: `pnpm verify` at 16a901e on feat/b-p1-wave-6 (1313 tests pass); on Windows only the known packages/api EPERM teardown fails (A2 test helper), accepted, fix in OFFLOAD's PR
+- Next step: "### Task 19: Client: preferences sync with `/api/v1/me/preferences` (#159)" once #139's route lands (Linux A4); then "### Task 27: Web: M0 Playwright suite (#167)" once #120, #121, #122, #132 land
+- Blocked by: #139 route (A4) for Task 19; #120, #121, #122, #132 for Task 27
+- Local-only state: none
+- Notes: Task 27 carries B4 and B5 carry-forwards in #167 comments; Task 26 Step 26.7 runs with Track A's web serving; follow-ups #66 (WS half needs the M2 WS client) and #178 (gate tsconfig chore, rides a later B wave PR before M4) stay parked while idle
 
 ### Track D
 
