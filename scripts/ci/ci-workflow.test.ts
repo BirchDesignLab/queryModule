@@ -161,8 +161,10 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   it("main runs never cancel each other; PR branches still do (developer 09-28-26, #231)", () => {
     // Deviation from spec 9.3: every main sha must finish ci (and build its image) so it can be
     // promoted; a newer push to main queues behind the running one instead of cancelling it.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal GitHub Actions expression
     expect(workflow.concurrency.group).toBe("ci-${{ github.ref }}");
     expect(workflow.concurrency["cancel-in-progress"]).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal GitHub Actions expression
       "${{ github.ref != 'refs/heads/main' }}",
     );
   });
