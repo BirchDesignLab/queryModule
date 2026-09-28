@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { grantRole, UnknownUserError } from "../../src/ops/grant-role";
+import {
+  GrantRoleUsageError,
+  grantRole,
+  parseGrantRoleArgs,
+  UnknownUserError,
+} from "../../src/ops/grant-role";
 import { createTestApp } from "../helpers/test-app";
 
 const PW = "correct-horse-battery-1";
@@ -94,5 +99,31 @@ describe("SEC-010 grant-role", () => {
       args: ["clock@example.test"],
     });
     expect(Number(row.rows[0]?.updated_at)).toBeGreaterThan(Date.now() + tenDays - 60_000);
+  });
+});
+
+describe("SEC-010 grant-role CLI arguments", () => {
+  it("parses email, role and --revoke in any position", () => {
+    expect(parseGrantRoleArgs(["officer@example.test", "trainingOfficer"])).toEqual({
+      email: "officer@example.test",
+      role: "trainingOfficer",
+      change: "granted",
+    });
+    expect(parseGrantRoleArgs(["--revoke", "admin@example.test", "admin"])).toEqual({
+      email: "admin@example.test",
+      role: "admin",
+      change: "revoked",
+    });
+  });
+  it("rejects a missing argument, an unknown role, an unknown flag and extra arguments", () => {
+    for (const argv of [
+      [],
+      ["officer@example.test"],
+      ["officer@example.test", "superuser"],
+      ["officer@example.test", "admin", "--force"],
+      ["officer@example.test", "admin", "extra"],
+    ]) {
+      expect(() => parseGrantRoleArgs(argv)).toThrow(GrantRoleUsageError);
+    }
   });
 });

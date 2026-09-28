@@ -229,14 +229,90 @@ jobs:
       - name: Expo export
         run: pnpm --filter @querymodule/mobile export
 
+  # Task 29 (BR-006, SEC-006, NFR-003): builds the runtime image, boots it on
+  # a fresh throwaway volume, runs boot-smoke's ops checks, then a smoke
+  # Playwright pass (axe, CSP) against the running container. Path-scoped
+  # like the other heavy jobs; the down step always runs so a failed build or
+  # smoke pass still stops the container and drains the port.
+  image:
+    name: image
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: "10: set up buildx"
+        uses: docker/setup-buildx-action@v4
+      - name: "10: expose the GHA cache to run: steps"
+        # C1 (round 1 review): a `run:` step never gets ACTIONS_RUNTIME_TOKEN or
+        # the cache URL from setup-buildx alone, so --cache-from/--cache-to
+        # type=gha below silently no-ops without this. This action exports
+        # ACTIONS_CACHE_URL/ACTIONS_RESULTS_URL/ACTIONS_RUNTIME_TOKEN as env
+        # vars for every later step in the job.
+        uses: crazy-max/ghaction-github-runtime@v4
+      - name: "10: docker image build"
+        # A plain buildx invocation, not docker/build-push-action (zizmor
+        # cache-poisoning: that action's own step is what the audit treats as
+        # a runtime-artifact publish site when a job also sets up node/pnpm;
+        # this build only loads a local, untagged-for-push image). The step
+        # above makes the gha cache flags below real, not a silent no-op.
+        run: |
+          docker buildx build --load \
+            --file deploy/Dockerfile \
+            --tag querymodule:ci \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            .
+
+      - name: "11: boot smoke up (health, triggers, seed)"
+        run: bash scripts/ci/boot-smoke.sh up querymodule:ci
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        run: pnpm --filter @querymodule/web exec playwright install --with-deps chromium
+
+      - name: "12: Playwright (harness, axe, CSP)"
+        # QM_BASE_URL and SEED_PASSWORD_SECRET_FILE come from step 11 (boot-smoke.sh
+        # up writes them to $GITHUB_ENV); playwright.config.ts reads E2E_BASE_URL.
+        run: E2E_BASE_URL="$QM_BASE_URL" pnpm --filter @querymodule/web exec playwright test e2e/harness.spec.ts
+
+      # C2 (round 1 review): publish must ship the exact bytes steps 10-12
+      # just smoke-tested, not a fresh rebuild in a different job. Save the
+      # loaded image here, on push to main only, so publish can load and
+      # push it without rebuilding anything.
+      - name: "13: save the smoke-tested image for publish"
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save querymodule:ci -o "$RUNNER_TEMP/querymodule-image.tar"
+      - name: "13: upload the image artifact"
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: querymodule-image
+          path: ${{ runner.temp }}/querymodule-image.tar
+          retention-days: 1
+
+      - name: "11: boot smoke down (SIGTERM, clean exit, no key material in logs)"
+        if: always()
+        run: bash scripts/ci/boot-smoke.sh down querymodule:ci
+
   # ADR-0008: the one required check. Needs every job above (never
-  # sensitive-review, which stays its own required check) and runs regardless
-  # of their outcome. Allowlist: it passes only when every needed job reports
-  # success or skipped (a path-filter skip counts as passed); failure,
-  # cancelled, a missing or unknown result, or no jobs at all fail it.
+  # sensitive-review, which stays its own required check, and never publish,
+  # which runs after ci) and runs regardless of their outcome. Allowlist: it
+  # passes only when every needed job reports success or skipped (a
+  # path-filter skip counts as passed); failure, cancelled, a missing or
+  # unknown result, or no jobs at all fail it.
   ci:
     name: ci
-    needs: [changes, checks, test, web, mobile]
+    needs: [changes, checks, test, web, mobile, image]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -258,6 +334,44 @@ jobs:
             }
             console.log("All needed jobs passed or were skipped.");
           '
+
+  # Task 29 (BR-006, SEC-006, NFR-003): publishes the exact image bytes the
+  # `image` job already built, boot-smoked and ran Playwright against
+  # (C2, round 1 review): it loads the artifact that job uploaded and pushes
+  # it, rebuilding nothing. Push to main only; a PR never has packages: write.
+  publish:
+    name: publish
+    needs: [ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: querymodule-image
+          path: ${{ runner.temp }}
+      - name: "13: load the ci-tested image"
+        run: docker load -i "$RUNNER_TEMP/querymodule-image.tar"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: "13: tag and push the smoke-tested image"
+        env:
+          IMAGE_SHA_TAG: ghcr.io/birchdesignlab/querymodule:sha-${{ github.sha }}
+          IMAGE_LATEST_TAG: ghcr.io/birchdesignlab/querymodule:latest
+        run: |
+          docker tag querymodule:ci "$IMAGE_SHA_TAG"
+          docker tag querymodule:ci "$IMAGE_LATEST_TAG"
+          docker push "$IMAGE_SHA_TAG"
+          docker push "$IMAGE_LATEST_TAG"
 
   sensitive-review:
     name: sensitive-review

@@ -9,7 +9,7 @@ import { buildCsp } from "./security";
 import type { AppEnv } from "./types";
 
 export const injectNonce = (html: string, nonce: string): string =>
-  html.replaceAll("<script", `<script nonce="${nonce}"`);
+  html.replaceAll("__CSP_NONCE__", nonce);
 
 export function mountWeb(app: Hono<AppEnv>, d: AppDeps): void {
   const dist = d.env.webDist;

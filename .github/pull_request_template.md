@@ -16,8 +16,10 @@ Closes #
 
 - [ ] none or exempt: no review artifact
 - [ ] deps (dependency fields, lockfile, `uses:` bumps): the ci job's automated checks only
-- [ ] gate: `docs/reviews/pr-<n>.md` from Opus 5.5 at effort high or above
-- [ ] critical: `docs/reviews/pr-<n>.md` from Opus 5.5 at effort xhigh or max
+- [ ] gate: review artifact from Opus 5.5 at effort medium (#92 cap)
+- [ ] critical: review artifact from Opus 5.5 at effort high (#92 cap; no xhigh or max unless the developer asks)
+
+The artifact is `docs/reviews/<branch>.md` (every "/" to "-"), which can land before the PR exists, or `docs/reviews/pr-<n>.md`. A PR whose gate and critical files change at most 50 lines may use the fast path (one reviewer, `mode: "fast"`).
 
 With an artifact, no gate or critical file this PR changes is changed again after its `reviewedSha` (a `main` merge that touches only `main`-side files is fine).
 
