@@ -22,11 +22,13 @@ function jobNeeds(job: any): string[] {
 }
 
 describe("ci.yml structure (ADR-0008)", () => {
-  it("has an aggregate `ci` job that runs always() and needs every other job except sensitive-review", () => {
+  it("has an aggregate `ci` job that runs always() and needs every other job except sensitive-review and publish", () => {
     const ci = jobs.ci;
     expect(ci).toBeDefined();
     expect(ci.if).toBe("always()");
-    const expected = jobIds.filter((id) => id !== "ci" && id !== "sensitive-review").sort();
+    const expected = jobIds
+      .filter((id) => id !== "ci" && id !== "sensitive-review" && id !== "publish")
+      .sort();
     expect(jobNeeds(ci).sort()).toEqual(expected);
   });
 
@@ -116,5 +118,129 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
   it("`web` and `mobile` fail open when `changes` emits no key (#96 G-M2)", () => {
     expect(jobs.web.if).toBe("needs.changes.outputs.web != 'false'");
     expect(jobs.mobile.if).toBe("needs.changes.outputs.mobile != 'false'");
+  });
+});
+
+// progress-r1-guard-1/2 (round 2): a named type instead of an `any[]` local,
+// so these task-29 tests never need a new noExplicitAny suppression.
+type WorkflowStep = {
+  run?: string;
+  if?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+};
+
+describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-003)", () => {
+  it("`image` job is gated on docs-only like the other gated jobs", () => {
+    expect(jobs.image).toBeDefined();
+    expect(jobNeeds(jobs.image)).toEqual(["changes"]);
+    expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
+  });
+
+  it("`image` job's boot-smoke down step always runs, even if an earlier step failed", () => {
+    const steps = jobs.image.steps as WorkflowStep[];
+    const down = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh down"),
+    );
+    expect(down, "no boot-smoke.sh down step in the image job").toBeDefined();
+    expect(down?.if).toBe("always()");
+  });
+
+  it("`image` job builds and boots the same tag it smoke-tests (querymodule:ci)", () => {
+    const steps = jobs.image.steps as WorkflowStep[];
+    const build = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("docker buildx build"),
+    );
+    expect(build?.run).toContain("--tag querymodule:ci");
+    const up = steps.find((s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh up"));
+    expect(up?.run).toContain("querymodule:ci");
+  });
+
+  it("the aggregate `ci` job needs `image`", () => {
+    expect(jobNeeds(jobs.ci)).toContain("image");
+  });
+
+  it("`publish` needs `ci`, runs only on a push to main, and never on a pull_request", () => {
+    const publish = jobs.publish;
+    expect(publish).toBeDefined();
+    expect(jobNeeds(publish)).toEqual(["ci"]);
+    expect(publish.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
+    // A pull_request event can never satisfy this condition.
+    expect(publish.if.includes("pull_request")).toBe(false);
+  });
+
+  it("`publish` has read-only contents and write packages permissions, and pushes sha- and latest tags of the loaded image (not a rebuild)", () => {
+    const publish = jobs.publish;
+    expect(publish.permissions).toEqual({ contents: "read", packages: "write" });
+    const steps = publish.steps as WorkflowStep[];
+    // C2 (round 1 review): publish must not build the image itself; it loads
+    // and pushes the exact bytes the `image` job already smoke-tested.
+    const build = steps.find((s) => s.uses?.startsWith("docker/build-push-action"));
+    expect(build, "publish must not rebuild the image (fixes C2)").toBeUndefined();
+    const download = steps.find((s) => s.uses?.startsWith("actions/download-artifact"));
+    expect(
+      download,
+      "publish must download the image artifact the `image` job uploaded",
+    ).toBeDefined();
+    expect(download?.with?.name).toBe("querymodule-image");
+    const load = steps.find((s) => typeof s.run === "string" && s.run.includes("docker load"));
+    expect(load, "publish must docker load the downloaded image").toBeDefined();
+    const push = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("docker push") && s.env,
+    );
+    expect(push, "no run step pushes both tags through env vars").toBeDefined();
+    expect(push?.run?.includes("${{")).toBe(false);
+    const envValues = Object.values(push?.env ?? {});
+    expect(
+      envValues.some(
+        (v) =>
+          typeof v === "string" &&
+          v.startsWith("ghcr.io/birchdesignlab/querymodule:sha-") &&
+          v.includes("github.sha"),
+      ),
+    ).toBe(true);
+    expect(envValues.some((v) => typeof v === "string" && v.endsWith(":latest"))).toBe(true);
+  });
+
+  it("every checkout step in `image` and `publish` sets persist-credentials: false", () => {
+    for (const id of ["image", "publish"]) {
+      const steps = jobs[id].steps as WorkflowStep[];
+      const checkout = steps.find((s) => s.uses?.startsWith("actions/checkout"));
+      expect(checkout?.with?.["persist-credentials"], `${id} checkout`).toBe(false);
+    }
+  });
+
+  it("`image` job exposes real GHA cache credentials to the buildx `run:` step (fixes C1)", () => {
+    const steps = jobs.image.steps as WorkflowStep[];
+    const runtimeIndex = steps.findIndex((s) =>
+      s.uses?.startsWith("crazy-max/ghaction-github-runtime"),
+    );
+    const buildIndex = steps.findIndex(
+      (s) => typeof s.run === "string" && s.run.includes("docker buildx build"),
+    );
+    expect(
+      runtimeIndex,
+      "no crazy-max/ghaction-github-runtime step in the image job",
+    ).toBeGreaterThanOrEqual(0);
+    expect(buildIndex).toBeGreaterThanOrEqual(0);
+    expect(runtimeIndex).toBeLessThan(buildIndex);
+  });
+
+  it("`image` job saves and uploads the tested image only on a push to main (fixes C2)", () => {
+    const steps = jobs.image.steps as WorkflowStep[];
+    const pushGate = "github.event_name == 'push' && github.ref == 'refs/heads/main'";
+    const save = steps.find(
+      (s) =>
+        typeof s.run === "string" &&
+        s.run.includes("docker save") &&
+        s.run.includes("querymodule:ci"),
+    );
+    expect(save, "no docker save step in the image job").toBeDefined();
+    expect(save?.if).toBe(pushGate);
+    const upload = steps.find((s) => s.uses?.startsWith("actions/upload-artifact"));
+    expect(upload, "no actions/upload-artifact step in the image job").toBeDefined();
+    expect(upload?.if).toBe(pushGate);
+    expect(upload?.with?.name).toBe("querymodule-image");
   });
 });

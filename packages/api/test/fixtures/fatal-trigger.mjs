@@ -1,0 +1,17 @@
+// Preloaded (node --import) into a child main.ts by main-fatal.test.ts only (#224). Once the test
+// writes QM_FATAL_TRIGGER, this raises QM_FATAL_KIND ("exception" or "rejection") outside any
+// request path, with QM_FATAL_MESSAGE as the error message.
+import { existsSync } from "node:fs";
+
+const file = process.env.QM_FATAL_TRIGGER;
+const kind = process.env.QM_FATAL_KIND;
+const message = process.env.QM_FATAL_MESSAGE ?? "fatal-trigger";
+if (file) {
+  const poll = setInterval(() => {
+    if (!existsSync(file)) return;
+    clearInterval(poll);
+    if (kind === "rejection") void Promise.reject(new Error(message));
+    else throw new Error(message);
+  }, 50);
+  poll.unref();
+}

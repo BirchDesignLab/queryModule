@@ -35,4 +35,12 @@ describe("dependabot (ADR-0001, #96 G-M6)", () => {
     expect(rule?.["update-types"]).toEqual(["version-update:semver-major"]);
     expect(rule?.versions).toBeUndefined();
   });
+
+  it("watches the deploy/Dockerfile base image digest weekly (Task 27, ADR-0001)", () => {
+    const docker = config.updates.find((u) => u["package-ecosystem"] === "docker") as
+      | (Update & { directory?: string; schedule?: { interval?: string } })
+      | undefined;
+    expect(docker?.directory).toBe("/deploy");
+    expect(docker?.schedule?.interval).toBe("weekly");
+  });
 });

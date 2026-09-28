@@ -241,11 +241,13 @@ describe("sensitive-review (spec 9.1)", () => {
 
   it("fails a PR-touched sensitive file changed after review (#206)", () => {
     const r = lateRun(["scripts/ci/x.ts"]);
+    expect(r.ok).toBe(false);
     expect(r.messages[0]).toBe("sensitive files changed after reviewedSha: scripts/ci/x.ts");
   });
 
   it("fails a main merge that changes a sensitive file the PR also touches (#206)", () => {
     const r = lateRun(["scripts/ci/main-only.ts", "scripts/ci/x.ts"]);
+    expect(r.ok).toBe(false);
     expect(r.messages[0]).toBe("sensitive files changed after reviewedSha: scripts/ci/x.ts");
   });
 });
@@ -561,6 +563,78 @@ describe("runSensitiveReview against a real git repo", () => {
     expect(r.code).toBe(1);
     expect(r.messages[0]).toContain("scripts/ci/é.ts");
   });
+});
+
+describe("runSensitiveReview across a main merge in a real git repo (#206, #208 m1)", () => {
+  const git = (cwd: string, args: string[]) => {
+    const r = spawnSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: join(cwd, ".gitcfg") },
+    });
+    if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+    return { status: r.status, stdout: r.stdout ?? null, stderr: r.stderr ?? null };
+  };
+  const who = ["-c", "user.name=Testerson", "-c", "user.email=t@example.test"];
+  // Branch reviewed at R; main then gains scripts/ci/main-only.ts and is merged into the branch.
+  // editInMerge also edits the PR's own sensitive file inside the merge commit.
+  const afterMainMerge = (editInMerge: boolean) => {
+    const dir = mkdtempSync(join(tmpdir(), "sensitive-merge-"));
+    try {
+      const write = (p: string, t: string) => {
+        mkdirSync(dirname(join(dir, p)), { recursive: true });
+        writeFileSync(join(dir, p), t);
+      };
+      const commit = () => {
+        git(dir, ["add", "-A"]);
+        git(dir, [...who, "commit", "-qm", "c"]);
+        return (git(dir, ["rev-parse", "HEAD"]).stdout ?? "").trim();
+      };
+      writeFileSync(join(dir, ".gitcfg"), "");
+      git(dir, ["init", "-q", "-b", "main"]);
+      write(".gitignore", ".gitcfg\n");
+      write(".github/sensitive-paths", "scripts/ci/**\n");
+      write("scripts/ci/x.ts", "export const x = 1;\n");
+      commit();
+      git(dir, ["checkout", "-q", "-b", "feat"]);
+      write("scripts/ci/x.ts", "export const x = 2;\n");
+      const reviewed = commit();
+      git(dir, ["checkout", "-q", "main"]);
+      write("scripts/ci/main-only.ts", "export const m = 1;\n");
+      const mainTip = commit();
+      git(dir, ["checkout", "-q", "feat"]);
+      git(dir, [...who, "merge", "-q", "--no-ff", "--no-commit", "main"]);
+      if (editInMerge) write("scripts/ci/x.ts", "export const x = 3;\n");
+      const head = commit();
+      const review = artifact.replace(sha, reviewed);
+      return runSensitiveReview(
+        { EVENT_NAME: "pull_request", BASE_SHA: mainTip, HEAD_SHA: head, PR_NUMBER: "7" },
+        {
+          runGit: (args) => git(dir, args),
+          readFile: (p) =>
+            p === ".github/sensitive-paths"
+              ? "scripts/ci/**\n"
+              : p === "docs/reviews/pr-7.md"
+                ? review
+                : undefined,
+        },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("passes a main merge after review that brings only main-side sensitive files", () => {
+    const r = afterMainMerge(false);
+    expect(r.code).toBe(0);
+    expect(r.messages).toEqual(["sensitive review recorded for scripts/ci/x.ts"]);
+  }, 30_000);
+
+  it("fails a main merge that also edits a sensitive file the PR changes", () => {
+    const r = afterMainMerge(true);
+    expect(r.code).toBe(1);
+    expect(r.messages[0]).toBe("sensitive files changed after reviewedSha: scripts/ci/x.ts");
+  }, 30_000);
 });
 
 describe("listSensitiveChanges (sensitive label, project-sync)", () => {

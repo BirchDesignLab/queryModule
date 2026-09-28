@@ -1,0 +1,100 @@
+name: promote
+
+# Task 30 (BR-004, SEC-020, NFR-003; closes #67). Manual only: retags an
+# already-ci-succeeded sha- image as :release, optionally cutting a milestone
+# git tag after the story-tag gate and release-notes check pass at that sha.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: full 40-character commit sha on main
+        required: true
+        type: string
+      milestone:
+        description: milestone tag to cut (m0-m4, optional)
+        required: false
+        type: string
+        default: ""
+
+# Least privilege for this job: contents write only to push the milestone
+# tag, packages write only to retag the release image, actions read only to
+# look up the ci run for the sha. No id-token, issues or pull-requests scope.
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: promote
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SHA: ${{ inputs.sha }}
+      MILESTONE: ${{ inputs.milestone }}
+      IMAGE: ghcr.io/birchdesignlab/querymodule
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: sha is on main and ci succeeded for it
+        # GH_TOKEN is scoped to this one step (gh run list), not job-wide:
+        # a job-wide token would also reach pnpm install's lifecycle scripts
+        # and the story-tag gate below.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be 40 lowercase hex"; exit 1; }
+          [[ -z "$MILESTONE" || "$MILESTONE" =~ ^m[0-4]$ ]] || { echo "milestone must be empty or one of m0-m4"; exit 1; }
+          git fetch origin main
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA is not on main"; exit 1; }
+          n=$(gh run list --workflow ci.yml --branch main --commit "$SHA" --status success --json databaseId --jq 'length')
+          [ "$n" -ge 1 ] || { echo "no successful ci run for $SHA on main"; exit 1; }
+      - name: set up pnpm and node for the milestone gate
+        if: inputs.milestone != ''
+        uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        if: inputs.milestone != ''
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: milestone gate (notes file, story tags)
+        if: inputs.milestone != ''
+        run: |
+          test -f "docs/releases/${MILESTONE}.md" || { echo "missing docs/releases/${MILESTONE}.md at $SHA"; exit 1; }
+          pnpm install --frozen-lockfile
+          node scripts/ci/check-story-tags.ts --milestone "$MILESTONE"
+      - name: create local milestone tag (fails if it already exists, before :release moves)
+        if: inputs.milestone != ''
+        # Plain `git tag` (no -f) fails closed if $MILESTONE already exists
+        # (a re-cut, or a retry after a partial run). This runs before the
+        # retag step below, so a duplicate tag fails the job before
+        # :release is touched, instead of after.
+        run: git tag "$MILESTONE" "$SHA"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: retag release by manifest copy (no rebuild)
+        run: |
+          docker buildx imagetools create -t "$IMAGE:release" "$IMAGE:sha-$SHA"
+          docker buildx imagetools inspect "$IMAGE:release" --format '{{json .Manifest}}' | jq -r .digest
+      - name: push milestone git tag
+        if: inputs.milestone != ''
+        # The checkout above has persist-credentials: false, so this step
+        # supplies its own push credential (the workflow's GH_TOKEN) via env,
+        # scoped to this one step, instead of a persisted git credential or a
+        # job-wide GH_TOKEN. The tag itself was already created (and would
+        # already have failed the job) before the retag step ran.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$MILESTONE"

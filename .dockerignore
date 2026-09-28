@@ -1,0 +1,10 @@
+.git
+.dev
+.smoke
+**/node_modules
+**/dist
+**/coverage
+docs
+**/*.test.ts
+**/*.test.tsx
+**/e2e

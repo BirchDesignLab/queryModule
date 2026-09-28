@@ -1,3 +1,4 @@
+import "./zod-config.js";
 import "@querymodule/tokens/tokens.css";
 import "./shell.css";
 import "@querymodule/web-ui/styles.css";
