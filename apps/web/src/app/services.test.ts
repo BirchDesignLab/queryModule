@@ -37,3 +37,24 @@ describe("SEC-006 sign-out clears query cache, announcer and preferences (spec 6
     expect(services.queryClient.getQueryData(["probe"])).toBeUndefined();
   });
 });
+
+describe("FR-056, SEC-006 draft store (spec 6.7)", () => {
+  it("resetAll resets the draft store", () => {
+    const services = testServices();
+    services.drafts.getState().select("VEH");
+    services.drafts.getState().setValue("plate", "ZZ-0001");
+    services.reset.resetAll();
+    expect(services.drafts.getState().queryType).toBeNull();
+    expect(services.drafts.getState().drafts).toEqual({});
+  });
+
+  it("writes nothing to localStorage or sessionStorage across 100 draft writes", () => {
+    const keys = () => [Object.keys(localStorage), Object.keys(sessionStorage)];
+    const services = testServices();
+    const before = keys();
+    services.drafts.getState().select("VEH");
+    for (let i = 0; i < 100; i += 1) services.drafts.getState().setValue(`f${i}`, `v${i}`);
+    expect(keys()).toEqual(before);
+    expect(document.cookie).toBe("");
+  });
+});

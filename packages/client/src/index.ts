@@ -22,6 +22,13 @@ export type { AuthState, AuthStatus, AuthStore } from "./auth/auth-store.js";
 export { createAuthStore } from "./auth/auth-store.js";
 export { ConfigFetchError, clientConfigQuery, fetchClientConfig } from "./config/config-api.js";
 export type {
+  DraftState,
+  DraftStore,
+  DraftValue,
+  QueryDraft,
+} from "./draft/draft-store.js";
+export { createDraftStore } from "./draft/draft-store.js";
+export type {
   HeartbeatProbeOptions,
   HeartbeatResult,
   SocketLike,
