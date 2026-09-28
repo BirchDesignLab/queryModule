@@ -58,6 +58,7 @@ import {
   followUpAdoptionError,
   leafDates,
   matchParent,
+  parentStatus,
   rollUp,
   titleUpdate,
   waveParentStatus,
@@ -282,6 +283,48 @@ for (const mp of MILESTONE_PARENTS) {
     datesByNumber.get(p.number),
   );
   datesByNumber.set(issue.number, { ...rollUp(children), closed: issue.state === "closed" });
+}
+
+// Phase and milestone parent Status (issue #193 items 2 and 5): stop
+// hard-coding it (a manually set live value could never be corrected back
+// down, and a new phase always seeded "Todo" whether or not it had started).
+// parentStatus (board-model.mjs), the same function project-sync's roll-up
+// uses, over the same data-derived child sets as the dates above (Contracts
+// rolls up its P0 wave parents; a milestone rolls up its phase parents; a
+// phase with no wave children in the data yet gets no Status, same as
+// project-sync's "no children, no write"). A parent closed as completed is
+// Done from its own issue state, same rule as everywhere else (closedStatus);
+// `current` is null here since this script only ever seeds an empty live
+// field (the write loop below skips a value the field already holds), so the
+// Blocked-preservation branch of parentStatus never needs to trigger from
+// this caller.
+const statusByNumber = new Map();
+for (const w of WAVES) {
+  const issue = byNumber(w.number);
+  if (issue) statusByNumber.set(issue.number, waveParentStatus(issue, w.state) ?? null);
+}
+for (const phase of PHASES) {
+  const issue = byNumber(phase.number);
+  if (!issue) continue;
+  if (issue.state === "closed") {
+    statusByNumber.set(issue.number, closedStatus(issue) ?? null);
+    continue;
+  }
+  const children =
+    phase.number === CONTRACTS_M0P0 ? WAVES.map((w) => statusByNumber.get(w.number) ?? null) : [];
+  statusByNumber.set(issue.number, parentStatus(children, null));
+}
+for (const mp of MILESTONE_PARENTS) {
+  const issue = mp.number ? byNumber(mp.number) : undefined;
+  if (!issue) continue;
+  if (issue.state === "closed") {
+    statusByNumber.set(issue.number, closedStatus(issue) ?? null);
+    continue;
+  }
+  const children = PHASES.filter((p) => p.milestone === mp.title).map(
+    (p) => statusByNumber.get(p.number) ?? null,
+  );
+  statusByNumber.set(issue.number, parentStatus(children, null));
 }
 
 // Labels
@@ -612,7 +655,10 @@ function desired(issue) {
   const milestoneParent = MILESTONE_PARENTS.find((mp) => mp.number === issue.number);
   if (milestoneParent) {
     v.Level = "Milestone";
-    v.Status = milestoneParent.title === "M0 Skeleton" ? "In Progress" : "Todo";
+    // Status: parentStatus roll-up over its phase parents, or Done from issue
+    // state (statusByNumber above); no hard-coded default (#193 item 5).
+    const status = statusByNumber.get(issue.number);
+    if (status) v.Status = status;
     const dates = datesByNumber.get(issue.number);
     if (dates?.start) v.Start = dates.start;
     if (dates?.finish) v.Finish = dates.finish;
@@ -622,7 +668,11 @@ function desired(issue) {
   if (phase) {
     v.Level = "Phase";
     v.Phase = phase.phase;
-    v.Status = phase.number === CONTRACTS_M0P0 ? "In Progress" : "Todo";
+    // Status: parentStatus roll-up over its wave children (only Contracts has
+    // any in the data), or Done from issue state; no hard-coded default
+    // (#193 item 5).
+    const status = statusByNumber.get(issue.number);
+    if (status) v.Status = status;
     const dates = datesByNumber.get(issue.number);
     if (dates?.start) v.Start = dates.start;
     if (dates?.finish) v.Finish = dates.finish;

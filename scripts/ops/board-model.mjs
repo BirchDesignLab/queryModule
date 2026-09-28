@@ -187,20 +187,71 @@ export function bodyUpdate(existing, desired) {
 }
 
 /**
- * #96 G-M4: a follow-up number in the board data may only adopt a live issue that
- * already carries the `follow-up` label; otherwise --apply would rename and rewrite
- * an unrelated issue. Returns an error naming every offending issue, or null. A
- * number with no live issue is fine (the script creates it).
- * @param {Array<{number: number}>} followUps
+ * #96 G-M4, refined by the #193 checker ruling: a follow-up number in the board
+ * data may only adopt a live issue whose `follow-up` label agrees with the
+ * data's; otherwise --apply would rename and rewrite an unrelated issue, or
+ * silently drop a label the data expects. Refuses only on disagreement (the
+ * data lists `follow-up` and the live issue lacks it, or the live issue
+ * carries it and the data does not list it): both agreeing it is absent (#75)
+ * is fine, since that is simply not a follow-up label the script owns yet.
+ * Returns an error naming every disagreeing issue, or null. A number with no
+ * live issue is fine (the script creates it).
+ * @param {Array<{number: number, labels?: string[]}>} followUps
  * @param {(n: number) => {number: number, labels: Array<{name: string}>} | undefined} byNumber
  * @returns {string | null}
  */
 export function followUpAdoptionError(followUps, byNumber) {
-  const bad = followUps
-    .map((f) => byNumber(f.number))
-    .filter((i) => i !== undefined && !i.labels.some((l) => l.name === "follow-up"))
-    .map((i) => `#${i?.number}`);
+  const bad = [];
+  for (const f of followUps) {
+    const live = byNumber(f.number);
+    if (!live) continue;
+    const dataHas = (f.labels ?? []).includes("follow-up");
+    const liveHas = live.labels.some((l) => l.name === "follow-up");
+    if (dataHas !== liveHas) bad.push(`#${live.number}`);
+  }
   return bad.length === 0
     ? null
-    : `refusing to adopt ${bad.join(", ")} as follow-up issue(s): live labels lack "follow-up"; fix docs/board/board-data.json or label the issue`;
+    : `refusing to adopt ${bad.join(", ")} as follow-up issue(s): data and live labels disagree about "follow-up"; fix docs/board/board-data.json or the issue's labels`;
+}
+
+/**
+ * Status roll-up for a Wave, Phase or Milestone parent item, from its
+ * children's own Status (#193): a parent with no children gets no write
+ * (null). Done when every child's Status is "Done" (a child closed as
+ * completed; a closed-not-planned child never reaches "Done" on its own, so
+ * it never counts here). Otherwise, among children that have started (Status
+ * "Done", "In Review" or "In Progress"): none started is Todo; otherwise, once
+ * the Done children are set aside, In Review only when every remaining
+ * (open, non-Done) started child is In Review, else In Progress. A Milestone
+ * rolls up the same way over its Phase parents' own already-computed Status,
+ * since a nested parent is just another child by the time this runs bottom
+ * up. The existing Blocked rule holds: automation moves a Blocked parent only
+ * to Done or In Review, never to Todo or In Progress.
+ *
+ * The parent issue's own "closed as completed" case is not this function's
+ * concern; that is the existing truth()-from-issue-state rule the caller
+ * applies before falling back to this roll-up.
+ *
+ * @param {Array<string|null|undefined>} children each child's current Status
+ * @param {string|null} current the parent's current Status field value
+ * @returns {string|null} the desired Status, or null to make no write
+ */
+export function parentStatus(children, current) {
+  if (children.length === 0) return null;
+  let next;
+  if (children.every((s) => s === "Done")) {
+    next = "Done";
+  } else {
+    const started = children.filter(
+      (s) => s === "Done" || s === "In Review" || s === "In Progress",
+    );
+    if (started.length === 0) {
+      next = "Todo";
+    } else {
+      const open = started.filter((s) => s !== "Done");
+      next = open.length > 0 && open.every((s) => s === "In Review") ? "In Review" : "In Progress";
+    }
+  }
+  if (current === "Blocked" && next !== "Done" && next !== "In Review") return current;
+  return next;
 }

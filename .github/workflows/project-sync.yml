@@ -4,7 +4,7 @@ name: project-sync
 # branches, PRs and issues. See docs/project-board.md "Automation".
 #
 # The board job reconciles every item of this repository from current truth
-# (issue state, this repository's open PRs, the wave branch) on every run,
+# (issue state and this repository's open PRs that close it) on every run,
 # whatever the event. GitHub keeps one pending run per concurrency group and
 # drops the others in a burst, so any run that survives heals the whole board.
 #
@@ -17,8 +17,6 @@ name: project-sync
 # holds only GITHUB_TOKEN, for same-repository PRs.
 
 on:
-  push:
-    branches: ["feat/p0-wave-*"]
   pull_request:
     # edited: a "Closes #n" line added to the PR body later.
     types: [opened, reopened, ready_for_review, converted_to_draft, synchronize, closed, edited]
@@ -128,36 +126,13 @@ jobs:
               core.info(`#${item.number} ${name} = ${value}`);
             }
 
-            // Wave state from the branch and its open PR.
-            const waveCache = new Map();
-            async function waveStatus(k) {
-              if (waveCache.has(k)) return waveCache.get(k);
-              const { repository } = await github.graphql(
-                `query($o:String!,$r:String!,$b:String!,$q:String!){repository(owner:$o,name:$r){
-                  ref(qualifiedName:$q){name}
-                  pullRequests(headRefName:$b,states:OPEN,first:20){nodes{isDraft headRepository{nameWithOwner}}}}}`,
-                { o: context.repo.owner, r: context.repo.repo, b: `feat/p0-wave-${k}`, q: `refs/heads/feat/p0-wave-${k}` },
-              );
-              // A fork PR from a branch of the same name does not count.
-              const pr = repository.pullRequests.nodes.find((p) => p.headRepository?.nameWithOwner === REPO);
-              const s = pr ? (pr.isDraft ? "In Progress" : "In Review") : repository.ref ? "In Progress" : null;
-              waveCache.set(k, s);
-              return s;
-            }
-            // Wave identity comes from the Wave field (developer decision, #80),
-            // never a title regex: a renamed wave parent (old or new title style)
-            // still maps to its branch, and a task inherits its wave parent's Wave
-            // field through the sub-issue `parent` link when the task carries none
-            // of its own.
-            const waveNumber = (v) => /^W(\d+)$/.exec(v ?? "")?.[1];
-            const waveOf = (item) => {
-              const own = waveNumber(item.values.Wave);
-              if (own) return own;
-              const parent = item.parent ? items.get(item.parent.number) : null;
-              return parent ? waveNumber(parent.values.Wave) : undefined;
-            };
-
-            // Status from truth; null means no PR or wave speaks for the item.
+            // Status from truth; null means no PR speaks for the item (developer
+            // ruling, checker 09-27-26, issue #193: branch detection dropped.
+            // Waves push only after wave-review, so a wave-branch push fires at
+            // the end anyway; a P1+ wave's branch name never matched the old
+            // P0-only pattern besides, so it added no signal). Status now comes
+            // only from the issue's own state and this repository's PRs that
+            // close it, plus their draft state.
             async function truth(item) {
               if (item.state === "CLOSED") return item.stateReason === "COMPLETED" ? "Done" : null;
               // Only this repository's PRs: a fork PR saying "Closes #n" does not steer the board.
@@ -166,8 +141,7 @@ jobs:
               );
               if (prs.some((p) => !p.isDraft)) return "In Review";
               if (prs.length > 0) return "In Progress";
-              const k = waveOf(item);
-              return k ? await waveStatus(k) : null;
+              return null;
             }
 
             async function reconcile(item) {
@@ -199,6 +173,72 @@ jobs:
             // burst) or a closed issue that gets no later event is healed here.
             for (const item of items.values()) await reconcile(item);
 
+            if (!hasLevel) return;
+
+            // Every item's children, by Level (Wave, Phase, Milestone), found via
+            // each child's own `parent` link, any depth (shared by the Status
+            // roll-up below and the Start/Finish roll-up further down).
+            const childrenOf = new Map();
+            for (const it of items.values()) {
+              if (!it.parent) continue;
+              const list = childrenOf.get(it.parent.number) ?? [];
+              list.push(it);
+              childrenOf.set(it.parent.number, list);
+            }
+
+            // Parent Status roll-up beyond P0 (issue #193). A Wave, Phase or
+            // Milestone parent whose own truth() (above) gave no signal (open,
+            // no closing PR of its own, the usual case for a phase or milestone
+            // parent) gets its Status from its children instead, bottom up:
+            // Done once every child's own Status is "Done" (a closed-not-planned
+            // child never reaches Done on its own, so it never counts here);
+            // otherwise Todo when no child has started, else In Progress, or In
+            // Review when every started-but-not-Done child is In Review. A
+            // Milestone rolls up the same way over its Phase parents' own
+            // already-computed Status, since by the time the milestone is
+            // visited its phase children carry the roll-up's answer, not their
+            // pre-run value. A parent with no children gets no write. Blocked
+            // is the developer's; automation moves it only to Done or In
+            // Review, same as any other item (reconcile(), above). Identical
+            // rule in scripts/ops/board-model.mjs's parentStatus, checked by
+            // scripts/ci/project-sync.test.ts's parity tests; this copy exists
+            // because the board job runs no repository code (docs/project-board.md
+            // "Automation"), so the YAML cannot import it.
+            function parentStatus(children, current) {
+              if (children.length === 0) return null;
+              let next;
+              if (children.every((s) => s === "Done")) {
+                next = "Done";
+              } else {
+                const started = children.filter(
+                  (s) => s === "Done" || s === "In Review" || s === "In Progress",
+                );
+                if (started.length === 0) {
+                  next = "Todo";
+                } else {
+                  const open = started.filter((s) => s !== "Done");
+                  next = open.length > 0 && open.every((s) => s === "In Review") ? "In Review" : "In Progress";
+                }
+              }
+              if (current === "Blocked" && next !== "Done" && next !== "In Review") return current;
+              return next;
+            }
+            const statusComputed = new Set();
+            async function computeParentStatus(item) {
+              if (statusComputed.has(item.number)) return;
+              statusComputed.add(item.number);
+              const level = item.values.Level;
+              if (level !== "Wave" && level !== "Phase" && level !== "Milestone") return;
+              const children = childrenOf.get(item.number) ?? [];
+              for (const c of children) await computeParentStatus(c);
+              const next = parentStatus(
+                children.map((c) => c.values.Status ?? null),
+                item.values.Status ?? null,
+              );
+              if (next !== null) await set(item, "Status", next);
+            }
+            for (const item of items.values()) await computeParentStatus(item);
+
             // Start/Finish roll-up (developer decision, #80 requirements 4-6).
             // The project started 2026-09-25: no date before it, clamp up to it.
             // Leaves (Task, Follow-up): Start = created date, Finish = closed
@@ -216,7 +256,6 @@ jobs:
             // in JS for the setup-script backfill; this copy exists because the
             // board job runs no repository code (docs/project-board.md
             // "Automation"), so the YAML cannot import it.
-            if (!hasLevel) return;
             const FLOOR = "2026-09-25";
             const clampToFloor = (date) => {
               const d = date.slice(0, 10);
@@ -238,13 +277,6 @@ jobs:
                 ? dated.map((c) => c.finish).filter(Boolean).sort().at(-1) ?? null
                 : dated.map((c) => c.finish ?? c.start).sort().at(-1) ?? null;
               return { start, finish };
-            }
-            const childrenOf = new Map();
-            for (const it of items.values()) {
-              if (!it.parent) continue;
-              const list = childrenOf.get(it.parent.number) ?? [];
-              list.push(it);
-              childrenOf.set(it.parent.number, list);
             }
             const dateInfo = new Map();
             function dateInfoOf(it) {
