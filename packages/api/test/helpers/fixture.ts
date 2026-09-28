@@ -1,4 +1,5 @@
 import { dirname, resolve } from "node:path";
+import { onTestFinished } from "vitest";
 import type { Clock } from "../../src/clock";
 import { type Db, openDatabase } from "../../src/db/client";
 import { runMigrations } from "../../src/db/migrate";
@@ -44,8 +45,29 @@ export function testEnv(over: NodeJS.ProcessEnv = {}): DeployEnv {
   );
 }
 
+/**
+ * Closes `db` when the running test finishes. Windows cannot delete the temp directory
+ * (helpers/db.ts) while a libSQL file in it is open, so every helper-opened database closes.
+ * Call the helpers inside it() only: onTestFinished needs a running test, so a call from
+ * beforeAll or describe level fails here instead of leaking an open client.
+ */
+export function closeWhenTestFinishes(db: Db, helper: string): void {
+  try {
+    onTestFinished(() => {
+      if (!db.$client.closed) db.$client.close();
+    });
+  } catch (e) {
+    db.$client.close();
+    throw new Error(`${helper}: call inside it() only (it closes its database on test finish)`, {
+      cause: e,
+    });
+  }
+}
+
+/** Opens and migrates a test database, closed when the test finishes. Call inside it() only. */
 export async function migratedDb(env: DeployEnv): Promise<Db> {
   const db = await openDatabase({ file: env.dbFile, encryptionKey: TEST_SECRETS.dbEncryptionKey });
+  closeWhenTestFinishes(db, "migratedDb");
   await runMigrations(db, env.migrationsDir);
   return db;
 }

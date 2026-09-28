@@ -2,8 +2,15 @@ import { createApp } from "../../src/app";
 import { sessionCookieName } from "../../src/auth/auth";
 import { createLocalUser } from "../../src/auth/users";
 import { buildDeps } from "../../src/deps";
-import { createTestClock, TEST_SECRETS, type TestClock, testEnv } from "./fixture";
+import {
+  closeWhenTestFinishes,
+  createTestClock,
+  TEST_SECRETS,
+  type TestClock,
+  testEnv,
+} from "./fixture";
 
+/** The assembled app on a fresh database, closed when the test finishes. Call inside it() only. */
 export async function createTestApp(o: { env?: NodeJS.ProcessEnv; clock?: TestClock } = {}) {
   const env = testEnv(o.env);
   const clock = o.clock ?? createTestClock();
@@ -14,6 +21,7 @@ export async function createTestApp(o: { env?: NodeJS.ProcessEnv; clock?: TestCl
     clock,
     logSink: (l) => logLines.push(l),
   });
+  closeWhenTestFinishes(deps.db, "createTestApp");
   const app = createApp(deps);
   const request = (path: string, init: RequestInit = {}) =>
     Promise.resolve(
