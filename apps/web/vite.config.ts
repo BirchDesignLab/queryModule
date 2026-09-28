@@ -19,7 +19,8 @@ export default defineConfig({
   build: {
     // No inline polyfill script: the API serves index.html with a nonce CSP (spec 5.9).
     modulePreload: { polyfill: false },
-    sourcemap: true,
+    // No source maps in the production build: nothing extra to serve from a CJIS-facing app.
+    sourcemap: false,
   },
   server: {
     port: 5173,
