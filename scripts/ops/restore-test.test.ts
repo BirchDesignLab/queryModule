@@ -22,6 +22,8 @@ cp "$6" "$5"
 `;
 const DOCKER = `#!/usr/bin/env bash
 echo "docker $*" >> "$STUB_LOG"
+# The app container's arguments, one per line, so mounts can be checked exactly.
+if [ "$1 $2" = "run -d" ]; then printf '%s\\n' "$@" > "$STUB_LOG.run-d"; fi
 case "$*" in
   *"audit-stats.js --up-to"*) echo "$STUB_AUDIT" ;;
 esac
@@ -154,5 +156,36 @@ describe("restore-test.sh (spec 8.6, NFR-003, SEC-010)", { timeout: 30_000 }, ()
       'audit mismatch: restored {"auditCount":2,"auditMaxId":7}, manifest {"auditCount":3,"auditMaxId":7}',
     );
     expect(r.calls).toContain("docker rm -f qm-restore-test");
+  });
+
+  it("#135: mounts each app secret file read-only, as compose does, never the secrets directory", () => {
+    // The host secrets dir is root mode 700: uid 10001 cannot enter a directory mount of it,
+    // but a per-file bind mount of a uid 10001 mode 400 file is readable (deploy/compose.yml).
+    const compose = readFileSync(resolve(import.meta.dirname, "../../deploy/compose.yml"), "utf8");
+    const names = compose
+      .match(/^ {4}secrets: \[([^\]]+)\]/m)?.[1]
+      ?.split(",")
+      .map((n) => n.trim());
+    expect(names).toEqual([
+      "DB_ENCRYPTION_KEY",
+      "CREDENTIAL_KEY",
+      "DATA_KEY",
+      "BETTER_AUTH_SECRET",
+      "SEED_PASSWORD_SECRET",
+    ]);
+    backup("20260928T020000Z", 3, 7);
+    const r = run({
+      AGE_IDENTITY: join(dir, "age-key.txt"),
+      STUB_AUDIT: '{"auditCount":3,"auditMaxId":7}',
+    });
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const args = readFileSync(join(dir, "calls.log.run-d"), "utf8").split("\n").filter(Boolean);
+    const mounts = args.filter((_, i) => args[i - 1] === "-v");
+    const secrets = join(dir, "secrets");
+    expect(mounts.filter((m) => m.includes(":/run/secrets")).sort()).toEqual(
+      (names ?? []).map((n) => `${secrets}/${n}:/run/secrets/${n}:ro`).sort(),
+    );
+    expect(mounts.some((m) => m.startsWith(`${secrets}:`))).toBe(false);
+    expect(args.join(" ")).not.toContain("TUNNEL_TOKEN");
   });
 });
