@@ -112,11 +112,32 @@ describe("SEC-005 auth limits and lockout", () => {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: formBody,
     });
-    expect([415, 429]).toContain(r.status);
+    expect(r.status).toBe(400);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("validationFailed");
     expect(await t.auditRows("loginSucceeded")).toEqual(succeededBefore);
     const sessionCount = (await t.deps.db.$client.execute("SELECT count(*) as n FROM session"))
       .rows[0];
     expect(Number(sessionCount?.n)).toBe(0);
+  });
+  it("critic:C1 a form-encoded sign-in is 400 validationFailed, never reaches Better Auth and leaves the lockout counter alone", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    const r = await t.request("/api/v1/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `email=${encodeURIComponent(EMAIL)}&password=${encodeURIComponent(PW)}`,
+    });
+    expect(r.status).toBe(400);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("validationFailed");
+    expect(await t.auditRows("loginSucceeded")).toHaveLength(0);
+    expect(await t.auditRows("loginFailed")).toHaveLength(0);
+    const sessions = (await t.deps.db.$client.execute("SELECT count(*) as n FROM session")).rows[0];
+    expect(Number(sessions?.n)).toBe(0);
+    const acct = await t.deps.db.$client.execute({
+      sql: "SELECT count(*) as n FROM rate_limit WHERE key = ?",
+      args: [`login:acct:${EMAIL}`],
+    });
+    expect(Number(acct.rows[0]?.n)).toBe(0);
   });
   it("critic:C1 rejects a JSON sign-in body with no email, without reaching the handler", async () => {
     const t = await createTestApp();

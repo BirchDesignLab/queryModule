@@ -70,7 +70,7 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
   // and skip the account lock entirely. Reject anything but JSON, and an empty or missing email,
   // before any lookup: never call the Better Auth handler without a normalized email.
   const contentType = (c.req.header("content-type") ?? "").toLowerCase();
-  if (!contentType.startsWith("application/json")) return apiError(c, "unsupportedMediaType");
+  if (!contentType.startsWith("application/json")) return apiError(c, "validationFailed");
   const body = (await c.req.raw
     .clone()
     .json()
