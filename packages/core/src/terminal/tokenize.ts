@@ -48,6 +48,7 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
   let tokenNo = 0; // 1-based value token number
   let seenNamed = false;
   let nonEmptyPositional = 0;
+  let overflow = false; // a non-empty token landed past the last position
   const isTrailingEmpty = (token: string, rest: string | null) =>
     token.trim() === "" && (rest === null || rest.split(d).every((x) => x.trim() === ""));
   const taken = (k: string) =>
@@ -97,13 +98,17 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
     }
     const value = token.trim();
     if (value !== "") nonEmptyPositional += 1;
-    if (p === undefined) continue; // an extra token, counted for tooManyPositions below
+    if (p === undefined) {
+      // an extra token past the last position: never dropped silently
+      if (value !== "") overflow = true;
+      continue;
+    }
     const key = fieldOf(p);
     pos += 1;
     out.userValues[key] = value;
     out.positionedKeys.push(key);
   }
-  if (nonEmptyPositional > cmd.positions.length) {
+  if (overflow) {
     out.errors.push({
       key: "terminal.tooManyPositions",
       params: { expected: cmd.positions.length, got: nonEmptyPositional },

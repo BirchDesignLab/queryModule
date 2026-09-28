@@ -114,6 +114,13 @@ describe("FR-055 unrecognised input", () => {
       [{ key: "terminal.tooManyPositions", params: { expected: 4, got: 5 } }],
     ],
   ])("%j", (input, errors) => expect(t(input).errors).toEqual(errors));
+  it("an extra token after an interior empty position is still tooManyPositions", () => {
+    const r = t("VEH..A.B.C.D");
+    expect(r.errors).toEqual([
+      { key: "terminal.tooManyPositions", params: { expected: 4, got: 4 } },
+    ]);
+    expect(r.userValues).toEqual({ plate: "", state: "A", year: "B", vin: "C" });
+  });
   it("returns the values it could read alongside errors", () => {
     expect(t("VEH.A.TX.26.V1.extra").userValues).toEqual({
       plate: "A",
