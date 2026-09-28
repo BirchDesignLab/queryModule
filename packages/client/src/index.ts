@@ -20,6 +20,7 @@ export type {
 export { AUTH_BASE_PATH, createAuthApi, parseSessionUser } from "./auth/auth-api.js";
 export type { AuthState, AuthStatus, AuthStore } from "./auth/auth-store.js";
 export { createAuthStore } from "./auth/auth-store.js";
+export { ConfigFetchError, clientConfigQuery, fetchClientConfig } from "./config/config-api.js";
 export type {
   HeartbeatProbeOptions,
   HeartbeatResult,
