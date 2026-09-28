@@ -99,4 +99,53 @@ describe("SEC-005 auth limits and lockout", () => {
     const t = await createTestApp({ env: { IDENTITY_MODES: "embedded" } });
     expect((await t.signIn(EMAIL, PW)).status).toBe(404);
   });
+  it("critic:C1 rejects a non-JSON sign-in body before any lookup, even on a locked account", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    for (let i = 0; i < 10; i++)
+      expect((await t.signIn(EMAIL, "wrong-password-000")).status).toBe(401);
+    expect((await t.signIn(EMAIL, PW)).status).toBe(429); // account is now locked
+    const succeededBefore = await t.auditRows("loginSucceeded");
+    const formBody = `email=${encodeURIComponent(EMAIL)}&password=${encodeURIComponent(PW)}`;
+    const r = await t.request("/api/v1/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: formBody,
+    });
+    expect([415, 429]).toContain(r.status);
+    expect(await t.auditRows("loginSucceeded")).toEqual(succeededBefore);
+    const sessionCount = (await t.deps.db.$client.execute("SELECT count(*) as n FROM session"))
+      .rows[0];
+    expect(Number(sessionCount?.n)).toBe(0);
+  });
+  it("critic:C1 rejects a JSON sign-in body with no email, without reaching the handler", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    const r = await t.request("/api/v1/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: PW }),
+    });
+    expect(r.status).toBe(400);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("validationFailed");
+    expect(await t.auditRows("loginFailed")).toHaveLength(0);
+  });
+  it("critic:C3 returns 404 for Better Auth session-revocation and password-change paths", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    const cookie = await t.cookieFor(EMAIL, PW);
+    for (const path of [
+      "/api/v1/auth/revoke-session",
+      "/api/v1/auth/revoke-sessions",
+      "/api/v1/auth/revoke-other-sessions",
+      "/api/v1/auth/change-password",
+    ]) {
+      const r = await t.request(path, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(r.status, path).toBe(404);
+    }
+  });
 });

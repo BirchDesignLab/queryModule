@@ -12,10 +12,21 @@ import { AUTH_LIMITS, clientIp } from "./rate-limit";
 
 type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut";
 
+// The only Better Auth paths this app forwards to (critic:C3): every other Better Auth path
+// (revoke-session, revoke-sessions, revoke-other-sessions, change-password, sign-up, ...) would
+// end or change a session with no sessionRevoked/logout audit row and no eventBus.endSession,
+// breaking spec 5.6/4.7/SEC-010. Add a path here only once it has its own audit and
+// eventBus.endSession wiring, like sign-in/email and sign-out below.
+const ALLOWED_AUTH_PATHS = new Set([
+  "/api/v1/auth/sign-in/email",
+  "/api/v1/auth/sign-out",
+  "/api/v1/auth/get-session",
+]);
+
 export function mountAuthRoutes(app: Hono<AppEnv>, d: AppDeps): void {
   app.all("/api/v1/auth/*", async (c) => {
-    if (c.req.path === "/api/v1/auth/embedded" || !d.env.identityModes.includes("standalone"))
-      return apiError(c, "notFound");
+    if (!d.env.identityModes.includes("standalone")) return apiError(c, "notFound");
+    if (!ALLOWED_AUTH_PATHS.has(c.req.path)) return apiError(c, "notFound");
     const ip = clientIp(c, d.env);
     if (c.req.method === "POST") {
       const gate = await d.limiter.hit(
@@ -54,15 +65,20 @@ async function auditFailure(
 }
 
 async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Response> {
+  // critic:C1 / critic:CV1: Better Auth's sign-in/email also accepts
+  // application/x-www-form-urlencoded (better-call parses both), which would give email "" here
+  // and skip the account lock entirely. Reject anything but JSON, and an empty or missing email,
+  // before any lookup: never call the Better Auth handler without a normalized email.
+  const contentType = (c.req.header("content-type") ?? "").toLowerCase();
+  if (!contentType.startsWith("application/json")) return apiError(c, "unsupportedMediaType");
   const body = (await c.req.raw
     .clone()
     .json()
     .catch(() => null)) as { email?: unknown } | null;
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email) return apiError(c, "validationFailed");
   const key = `login:acct:${email}`;
-  const target = email
-    ? ((await d.db.select().from(user).where(eq(user.email, email)))[0] ?? null)
-    : null;
+  const target = (await d.db.select().from(user).where(eq(user.email, email)))[0] ?? null;
   const locked = await d.limiter.lockedUntil(key);
   if (locked !== null) {
     await auditFailure(d, target?.id ?? null, "lockedOut", ip, null);

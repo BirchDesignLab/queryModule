@@ -25,7 +25,7 @@ describe("NFR-001 ValidationError is a key with params, no prose", () => {
 
 describe("ApiError shape (spec 4.7)", () => {
   it("maps every code to its HTTP status", () => {
-    expect(API_ERROR_CODES).toHaveLength(12);
+    expect(API_ERROR_CODES).toHaveLength(13);
     expect(API_ERROR_HTTP_STATUS).toEqual({
       validationFailed: 400,
       unauthenticated: 401,
@@ -35,6 +35,7 @@ describe("ApiError shape (spec 4.7)", () => {
       notFound: 404,
       configHashMismatch: 409,
       delegationCredentialsMissing: 409,
+      unsupportedMediaType: 415,
       payloadTooLarge: 413,
       rateLimited: 429,
       internal: 500,
