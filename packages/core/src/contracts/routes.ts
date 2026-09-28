@@ -3,7 +3,7 @@ import { ClientSiteConfigSchema } from "../config/client-config";
 import type { FeatureKey } from "../config/features";
 import { LOCALE_PATTERN } from "../config/schema";
 import { ApiErrorSchema } from "./api-error";
-import { Sha256HexSchema } from "./primitives";
+import { SemverSchema, Sha256HexSchema } from "./primitives";
 import { API_BASE_PATH, API_VERSION } from "./version";
 
 export const MILESTONES = ["m0", "m1", "m2", "m3", "m4"] as const;
@@ -42,11 +42,6 @@ export interface RouteDef {
 }
 
 export const HealthResponseSchema = z.strictObject({ status: z.literal("ok") });
-
-/** SemVer 2.0.0 (semver.org), capped at 64 characters; the client's version gate compares these. */
-const SEMVER_PATTERN =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-const SemverSchema = z.string().max(64).regex(SEMVER_PATTERN);
 
 export const MetaResponseSchema = z.strictObject({
   apiVersion: z.literal(API_VERSION),
