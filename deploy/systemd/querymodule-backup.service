@@ -1,0 +1,9 @@
+# deploy/systemd/querymodule-backup.service  (systemd user unit)
+[Unit]
+Description=Query Module nightly encrypted off-box backup
+
+[Service]
+Type=oneshot
+Environment=QM_AGE_RECIPIENT_FILE=/opt/querymodule/backup/age-recipient.txt
+Environment=QM_RCLONE_REMOTE=r2:querymodule-backups
+ExecStart=/usr/bin/bash %h/git/queryModule/scripts/ops/backup.sh
