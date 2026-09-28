@@ -32,10 +32,17 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
     "test/all-on.json",
     "test/flags-off.json",
   ]) {
-    it(`${rel} is clean`, () => {
+    it(`${rel} has no errors and only the known plateType warning`, () => {
       const r = checkConfigFile(cfg(rel), fsIo, { tokenNames: TOKEN_NAMES });
       expect(r.errors).toEqual([]);
-      expect(r.warnings).toEqual([]);
+      expect(r.warnings).toEqual([
+        {
+          level: "warning",
+          path: "/queryTypes/0/rules/1/field",
+          key: "config.conditionallyRequiredWithoutPosition",
+          params: { field: "plateType", command: "VEH" },
+        },
+      ]);
     });
   }
 

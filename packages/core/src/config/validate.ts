@@ -5,6 +5,8 @@ import { FEATURES } from "./features";
 import { type QueryType, SEVERITIES, type SiteConfig } from "./schema";
 import { type Condition, ORDERED_DATA_TYPES, ORDERING_OPS } from "./schema-fields";
 import { SHORTCUT_ACTIONS } from "./shortcuts";
+import { type ContrastContext, checkContrast } from "./validate-contrast";
+import { checkLiterals, checkReachability } from "./validate-literals";
 import {
   checkCommands,
   checkFieldDefs,
@@ -14,6 +16,7 @@ import {
   checkWarnings,
 } from "./validate-rules";
 
+export type { ContrastContext } from "./validate-contrast";
 export type LocaleBundles = Readonly<Record<string, Readonly<Record<string, string>>>>;
 export interface ValidateContext {
   tokenNames?: readonly string[];
@@ -21,6 +24,12 @@ export interface ValidateContext {
    *  API passes this at startup, same pattern as tokenNames). Omitted: no check (Controller
    *  ruling W3-1, Task 12). */
   adapterKinds?: readonly string[];
+  /** Token contrast lookups (spec 4.1; the API and CLI pass them from the tokens package). Omitted:
+   *  no contrast diagnostics. */
+  contrast?: ContrastContext;
+  /** Epoch ms for literal checks. Defaults to 0: only century "past" two-digit years depend on
+   *  it, and 0 is safe there because it only fixes two-digit years. */
+  now?: number;
 }
 export interface ValidateResult {
   errors: Diagnostic[];
@@ -43,6 +52,9 @@ export function validateSiteConfig(
   checkShortcuts(config, out);
   checkLimits(config, out);
   checkWarnings(config, out);
+  checkLiterals(config, context.now ?? 0, out);
+  checkReachability(config, out);
+  if (context.contrast) checkContrast(config, context.contrast, out);
   return out.result();
 }
 

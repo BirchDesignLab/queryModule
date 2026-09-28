@@ -1,10 +1,11 @@
 import { TypePicklistCodeSchema } from "../contracts/primitives";
-import { canonicalCondition } from "../rules/canonical-literal";
+import { canonicalCondition, canonicaliseLiteral, literalCodes } from "../rules/canonical-literal";
 import { configuredDefault } from "./defaults";
 import { type DiagnosticSink, pointer } from "./diagnostic";
 import type { SiteConfig } from "./schema";
 import { MAX_ALSO_RUN, MAX_VALUE_LENGTH } from "./schema-fields";
 import { resolveShortcuts, strokesCollide, usLayoutChar } from "./shortcuts";
+import { forEachConditionLiteral } from "./validate-literals";
 
 export const MAX_SOURCES_PER_SUBMIT = 8;
 /** Exactly one printable non-alphanumeric ASCII character, not "=" and not space. */
@@ -280,5 +281,45 @@ export function checkWarnings(config: SiteConfig, out: DiagnosticSink): void {
       out.warn(pointer("queryTypes", q), "config.tooManySourcesPossible", {
         max: MAX_SOURCES_PER_SUBMIT,
       });
+  });
+  checkRequiredWithoutPosition(config, out);
+  checkDisabledCodes(config, out);
+}
+
+/** A field some rule can make required, with no position in a command of its query type. */
+function checkRequiredWithoutPosition(config: SiteConfig, out: DiagnosticSink): void {
+  config.queryTypes.forEach((qt, q) => {
+    qt.rules.forEach((r, i) => {
+      const f = qt.fields.find((x) => x.key === r.field);
+      if (r.effect !== "require" || !f || f.required) return;
+      for (const c of config.commands) {
+        if (c.queryType !== qt.code) continue;
+        const positioned = c.positions.some(
+          (p) => (typeof p === "string" ? p : p.field) === r.field,
+        );
+        if (!positioned) {
+          out.warn(
+            pointer("queryTypes", q, "rules", i, "field"),
+            "config.conditionallyRequiredWithoutPosition",
+            { field: r.field, command: c.code },
+          );
+        }
+      }
+    });
+  });
+}
+
+/** A picklist literal in a condition that names a disabled code (the code is config, not input). */
+function checkDisabledCodes(config: SiteConfig, out: DiagnosticSink): void {
+  forEachConditionLiteral(config, (field, literal, path) => {
+    if (field.dataType !== "picklist") return;
+    const r = canonicaliseLiteral(field, literal, {
+      now: 0,
+      codes: literalCodes(config.picklists, field, "all"),
+    });
+    if (typeof r.value !== "string") return;
+    const enabled = literalCodes(config.picklists, field, "enabled") ?? [];
+    if (!enabled.includes(r.value))
+      out.warn(path, "config.disabledCodeInCondition", { field: field.key, code: r.value });
   });
 }

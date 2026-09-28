@@ -24,6 +24,14 @@ function resolve(rel: string) {
   return SiteConfigSchema.parse(merged.config);
 }
 
+// Spec 4.1 "Command config checks": plateType is required when State is not the default and has no VEH position.
+const PLATE_TYPE_WARNING = {
+  level: "warning",
+  path: "/queryTypes/0/rules/1/field",
+  key: "config.conditionallyRequiredWithoutPosition",
+  params: { field: "plateType", command: "VEH" },
+};
+
 describe("BR-001 shipped sites validate (spec 7)", () => {
   for (const rel of [
     "sites/default.json",
@@ -31,18 +39,18 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
     "test/all-on.json",
     "test/flags-off.json",
   ]) {
-    it(`${rel} has no errors and no warnings`, () => {
+    it(`${rel} has no errors and only the known plateType warning`, () => {
       expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES)).toEqual({
         errors: [],
-        warnings: [],
+        warnings: [PLATE_TYPE_WARNING],
       });
     });
 
-    it(`${rel} has no errors and no warnings with adapterKinds: ["mock"] (ruling W3-1)`, () => {
+    it(`${rel} has no errors and only the known plateType warning with adapterKinds: ["mock"] (ruling W3-1)`, () => {
       expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES, { adapterKinds: ["mock"] })).toEqual(
         {
           errors: [],
-          warnings: [],
+          warnings: [PLATE_TYPE_WARNING],
         },
       );
     });
