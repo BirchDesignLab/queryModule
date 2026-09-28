@@ -70,7 +70,8 @@ have no code yet):
   `packages/api/src/secrets.ts`, `packages/api/src/keys/**`,
   `packages/api/src/db/**` (encryption at rest); audit logging
   `packages/api/src/audit/**`, `packages/api/src/seams.ts`,
-  `packages/api/src/startup.ts`, `packages/api/drizzle/**` (migrations),
+  `packages/api/src/startup.ts`, `packages/api/src/main.ts`,
+  `packages/api/drizzle/**` (migrations),
   `packages/core/src/contracts/audit.ts`, `audit-auth.ts`, `primitives.ts`,
   `identity.ts`; query
   dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
@@ -91,7 +92,8 @@ have no code yet):
   `packages/api/src/log/**`; auth and sessions `packages/api/src/auth/**`,
   `packages/api/src/http/session.ts`, `packages/api/src/ws/**`,
   `packages/api/src/seed/**`, `packages/api/src/ops/**`,
-  `packages/api/src/deps.ts`.
+  `packages/api/src/deps.ts`, `packages/api/src/events/**` (event bus: session end closes
+  sockets, #212).
 - Deps (automated checks only, no artifact): `pnpm-lock.yaml`, and a
   version-only change of an existing package (`package.json`) or action (the
   ref of an existing workflow `uses:` line). `.github/dependabot.yml` is gate.

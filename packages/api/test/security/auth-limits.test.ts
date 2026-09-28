@@ -1,5 +1,5 @@
 import { ApiErrorSchema } from "@querymodule/core/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { sessionCookieName } from "../../src/auth/auth";
 import { createTestApp } from "../helpers/test-app";
 
@@ -195,5 +195,41 @@ describe("SEC-005 session limits over HTTP", () => {
     }
     t.clock.advance(25 * MIN);
     expect((await t.request("/api/v1/config", { headers: { cookie } })).status).toBe(401);
+  });
+  it("#212 G-M2: a Better Auth 401 other than bad credentials is an internal error, not a counted failure", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    vi.spyOn(t.deps.auth, "handler").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "FAILED_TO_CREATE_SESSION", message: "x" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const r = await t.signIn(EMAIL, PW);
+    expect(r.status).toBe(500);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("internal");
+    expect(await t.auditRows("loginFailed")).toHaveLength(0);
+    const acct = await t.deps.db.$client.execute({
+      sql: "SELECT count(*) as n FROM rate_limit WHERE key = ?",
+      args: [`login:acct:${EMAIL}`],
+    });
+    expect(Number(acct.rows[0]?.n)).toBe(0);
+    // A real bad password is still counted and audited.
+    expect((await t.signIn(EMAIL, "wrong-password-000")).status).toBe(401);
+    expect((await t.auditRows("loginFailed"))[0]?.details).toMatchObject({ reason: "badPassword" });
+  });
+  it("#212 G-M1: loginSucceeded audits a null email when the address fails the audit actor schema", async () => {
+    const t = await createTestApp();
+    const label = "b".repeat(60);
+    const long = `${"a".repeat(64)}@${label}.${label}.${label}.example.test`;
+    expect(long.length).toBeGreaterThan(254);
+    const id = await t.createUser(long, PW);
+    expect((await t.signIn(long, PW)).status).toBe(200);
+    const rows = await t.deps.db.$client.execute({
+      sql: "SELECT actor_email FROM audit_event WHERE type = 'loginSucceeded' AND actor_user_id = ?",
+      args: [id],
+    });
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]?.actor_email).toBeNull();
   });
 });

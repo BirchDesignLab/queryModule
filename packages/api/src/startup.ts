@@ -1,0 +1,86 @@
+import { once } from "node:events";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { serve } from "@hono/node-server";
+import { createApp } from "./app";
+import type { Clock } from "./clock";
+import { type AppDeps, buildDeps } from "./deps";
+import { readDeployEnv } from "./env";
+import { loadSecrets } from "./secrets";
+import { attachWebSocket } from "./ws/server";
+
+export class StartupRefusedError extends Error {
+  constructor(reason: string) {
+    super(`startup refused: ${reason}`);
+    this.name = "StartupRefusedError";
+  }
+}
+
+/**
+ * Fail closed (spec 8.1): nothing is served until the secrets load, the deploy env parses,
+ * migrations are applied, both audit triggers exist, both key canaries decrypt and the site
+ * config parses. Every failure throws; none returns a partial AppDeps.
+ */
+export async function bootstrap(
+  processEnv: NodeJS.ProcessEnv,
+  o: { clock?: Clock; logSink?: (line: string) => void } = {},
+): Promise<AppDeps> {
+  const env = readDeployEnv(processEnv);
+  const secrets = await loadSecrets(processEnv, env.secretsDir);
+  const deps = await buildDeps({ env, secrets, ...o });
+  // Checker ruling 09-28-26 (T19 spec:CV1): SEC-005 MFA is not enforced anywhere until M3 P1
+  // (#216), so a site that requires it must not start. #216 removes this guard.
+  if (deps.config.siteConfig.auth.mfaRequired !== false) {
+    const reason = "site config auth.mfaRequired is set, but MFA is not enforced until #216";
+    deps.logger.error("startup refused", { reason, site: deps.config.siteConfig.site.id });
+    deps.db.$client.close();
+    throw new StartupRefusedError(reason);
+  }
+  return deps;
+}
+
+export interface RunningServer {
+  port: number;
+  deps: AppDeps;
+  stop(): Promise<void>;
+}
+
+export async function startServer(
+  processEnv: NodeJS.ProcessEnv,
+  o: { clock?: Clock; logSink?: (line: string) => void } = {},
+): Promise<RunningServer> {
+  const deps = await bootstrap(processEnv, o);
+  const server = serve({
+    fetch: createApp(deps).fetch,
+    port: deps.env.port,
+    hostname: "0.0.0.0",
+  }) as Server;
+  try {
+    // once() rejects on 'error', so a taken port refuses startup instead of crashing later
+    if (!server.listening) await once(server, "listening");
+  } catch (e) {
+    deps.db.$client.close();
+    throw e;
+  }
+  const ws = attachWebSocket(server, deps);
+  const port = (server.address() as AddressInfo).port;
+  deps.logger.info("listening", {
+    port,
+    site: deps.config.siteConfig.site.id,
+    configHash: deps.config.configHash,
+  });
+  return {
+    port,
+    deps,
+    async stop() {
+      ws.stopAccepting();
+      await ws.close();
+      await new Promise<void>((r) => {
+        server.close(() => r());
+        server.closeIdleConnections();
+      });
+      deps.db.$client.close();
+      deps.logger.info("stopped");
+    },
+  };
+}
