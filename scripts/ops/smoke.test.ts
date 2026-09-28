@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -64,6 +64,96 @@ function smoke(url: string): Promise<{ code: number | null; out: string }> {
     p.on("close", (code) => done({ code, out }));
   });
 }
+
+/**
+ * Runs smoke.sh with fake commands first on PATH. Each stub is a bash script body; it can call
+ * the real binaries through $REAL_NODE and $REAL_CURL, and log to $STUB_DIR.
+ */
+function smokeWithStubs(
+  url: string,
+  stubs: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<{ code: number | null; out: string }> {
+  const stubDir = join(dir, "bin");
+  mkdirSync(stubDir, { recursive: true });
+  for (const [name, body] of Object.entries(stubs))
+    writeFileSync(join(stubDir, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+  const script =
+    'export REAL_NODE="$(command -v node)" REAL_CURL="$(command -v curl)"; ' +
+    'export PATH="$(cd "$STUB_DIR" && pwd):$PATH"; exec bash "$SCRIPT" "$URL"';
+  return new Promise((done) => {
+    const merged: NodeJS.ProcessEnv = {
+      ...process.env,
+      STUB_DIR: stubDir,
+      SCRIPT: resolve(here, "smoke.sh"),
+      URL: url,
+    };
+    for (const [k, v] of Object.entries(env)) {
+      if (v === undefined) delete merged[k];
+      else merged[k] = v;
+    }
+    const p = spawn("bash", ["-c", script], { env: merged });
+    let out = "";
+    p.stdout.on("data", (d) => {
+      out += d;
+    });
+    p.stderr.on("data", (d) => {
+      out += d;
+    });
+    p.on("close", (code) => done({ code, out }));
+  });
+}
+
+const derivedPassword = () => createHmac("sha256", secret).update(email).digest("base64url");
+
+describe("smoke.sh keeps secrets off argv (G-I2, #167)", { timeout: 30_000 }, () => {
+  it("never passes the seed secret, the password or the session cookie as an argument", async () => {
+    // node and curl log their full argv, then run the real binary.
+    const log = 'printf "%s\\n" "$(basename "$0") $*" >> "$STUB_DIR/argv.log"';
+    const r = await smokeWithStubs(
+      base,
+      {
+        node: `${log}\nexec "$REAL_NODE" "$@"`,
+        curl: `${log}\nexec "$REAL_CURL" "$@"`,
+      },
+      { SEED_PASSWORD_SECRET_FILE: join(dir, "SEED_PASSWORD_SECRET") },
+    );
+    expect(r.out).toMatch(/2 ok: login as smoke/);
+    const argv = readFileSync(join(dir, "bin", "argv.log"), "utf8");
+    expect(argv).toMatch(/^node /m);
+    expect(argv).toMatch(/^curl .*sign-in\/email/m);
+    expect(argv).not.toContain(derivedPassword());
+    expect(argv).not.toContain(secret);
+    expect(argv).not.toContain("abc123");
+  });
+});
+
+describe("smoke.sh on the deploy host (G-I3, #167)", { timeout: 30_000 }, () => {
+  it("derives the password inside the app container from /run/secrets", async () => {
+    // A fake docker that checks the exec shape, then runs the same node -e script on the host
+    // with the test's secret file standing in for the container's /run/secrets file.
+    const docker = [
+      'printf "%s\\n" "$*" >> "$STUB_DIR/docker.log"',
+      '[ "$1 $2" = "compose -f" ] || exit 97',
+      '[ "$4 $5 $6 $7 $8" = "exec -T app node -e" ] || exit 97',
+      'SCRIPT_E=$9; shift 9; [ "$1" = /run/secrets/SEED_PASSWORD_SECRET ] || exit 98',
+      'exec "$REAL_NODE" -e "$SCRIPT_E" "$STUB_SECRET_FILE" "$2"',
+    ].join("\n");
+    const r = await smokeWithStubs(
+      base,
+      { docker },
+      {
+        SEED_PASSWORD_SECRET_FILE: undefined,
+        STUB_SECRET_FILE: join(dir, "SEED_PASSWORD_SECRET"),
+      },
+    );
+    expect(r.out).toMatch(/2 ok: login as smoke/);
+    expect(JSON.parse(signInBody ?? "{}")).toEqual({ email, password: derivedPassword() });
+    const call = readFileSync(join(dir, "bin", "docker.log"), "utf8").trim();
+    expect(call.split(" ")[2]).toMatch(/deploy\/compose\.yml$/);
+    expect(call).not.toContain(secret);
+  });
+});
 
 describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
   it("logs in as smoke with derivePassword's password, sent on stdin (G-I2, G-I3)", async () => {
