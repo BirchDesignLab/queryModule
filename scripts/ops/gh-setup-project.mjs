@@ -600,6 +600,10 @@ const followUps = new Map();
 for (const f of FOLLOW_UPS) {
   const issue = ensureIssue(f);
   followUps.set(f.number, issue);
+  // #231: `parent` is optional (board-data-schema.mjs). A follow-up without one stays on the
+  // project with its fields but is not linked (the M0 P1 phase parent is at GitHub's 100
+  // sub-issue cap). A declared parent that is missing still throws in ensureChild.
+  if (f.parent === undefined) continue;
   const parent = phaseIssue.get(f.parent) ?? waveIssue.get(f.parent);
   ensureChild(parent, issue, `"${f.title}"`);
 }
