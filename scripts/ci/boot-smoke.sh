@@ -205,7 +205,10 @@ down() {
   checked=0
   while IFS=$'\t' read -r _ _ pw; do
     [ -n "$pw" ] || continue
-    if grep -qF "$pw" "$work/container.log"; then echo "container log contains a seeded demo password"; exit 1; fi
+    # -e: a base64url password can start with "-". grep exits 2 on an error, which must fail too.
+    rc=0; grep -qF -e "$pw" "$work/container.log" || rc=$?
+    [ "$rc" != "0" ] || { echo "container log contains a seeded demo password"; exit 1; }
+    [ "$rc" = "1" ] || { echo "password log check failed (grep exit $rc)"; exit 1; }
     checked=$((checked + 1))
   done < <(tail -n +2 "$work/seed-output.txt" | tr -d '\r')
   [ "$checked" -gt 0 ] || { echo "no seeded demo passwords to check in $work/seed-output.txt"; exit 1; }
