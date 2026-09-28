@@ -160,4 +160,60 @@ describe("toBetterAuthLogger (A3 T14 CV2)", () => {
     // under); reduced to its name, so the sink's message text is just "Error".
     expect(parsed.msg).toBe("Error");
   });
+
+  it("replaces a string message carrying a Drizzle 'Failed query ... params:' text with a fixed 'database error' (wave review G-G-m1)", () => {
+    // Better Auth 1.7.6 dist/api/index.mjs:206-208 logs `ctx.logger.error(e.message)` for an
+    // uncaught error whose message mentions a table/column/relation, so a DrizzleQueryError's
+    // message arrives here as the *string* message, with its params (user id, email, token).
+    const lines: string[] = [];
+    const logger = createLogger({
+      sink: (l) => lines.push(l),
+      secretValues: [TEST_SECRETS.dbEncryptionKey],
+    });
+    const bal = toBetterAuthLogger(logger);
+    const tokenLike = "sess_tok_abcdefghijklmnopqrstuvwxyz012345";
+    const email = "tester-table@example.test";
+
+    bal.log(
+      "error",
+      `Failed query: insert into "session" ("token", "user_agent") values (?, ?)\nparams: ${tokenLike},${email}`,
+    );
+    bal.log("error", `something about table x\nparams: ${tokenLike}`);
+
+    const parsed = lines.map((l) => JSON.parse(l) as { msg?: string });
+    const all = lines.join("\n");
+    expect(all).not.toContain(tokenLike);
+    expect(all).not.toContain(email);
+    expect(all).not.toContain("Failed query");
+    expect(parsed.map((p) => p.msg)).toEqual(["database error", "database error"]);
+  });
+
+  it("maps a plain object with a string name (e.g. a user record) to its typeof, never to errorName (wave review G-G-m2)", () => {
+    const lines: string[] = [];
+    const logger = createLogger({ sink: (l) => lines.push(l) });
+    const bal = toBetterAuthLogger(logger);
+    const displayName = "Casey Placeholder-Name";
+
+    bal.log("warn", "user lookup", { id: "u1", name: displayName, email: "c@example.test" });
+    bal.log("warn", { id: "u1", name: displayName });
+
+    const all = lines.join("\n");
+    expect(all).not.toContain(displayName);
+    expect(all).not.toContain("errorName");
+    const parsed = lines.map((l) => JSON.parse(l) as { msg?: string; args?: unknown[] });
+    expect(parsed[0]?.args).toEqual(["object"]);
+    expect(parsed[1]?.msg).toBe("object");
+  });
+
+  it("still maps an error-shaped non-Error object (string name plus message) to errorName (wave review G-G-m2)", () => {
+    const lines: string[] = [];
+    const logger = createLogger({ sink: (l) => lines.push(l) });
+    const bal = toBetterAuthLogger(logger);
+
+    bal.log("error", "x", { name: "DrizzleQueryError", message: "Failed query: params: secret" });
+
+    const all = lines.join("\n");
+    expect(all).toContain("DrizzleQueryError");
+    expect(all).not.toContain("Failed query");
+  });
 });

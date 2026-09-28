@@ -78,16 +78,30 @@ function isTelemetryEnvTruthy(value: string | undefined): boolean {
  * that free text entirely rather than trying to pattern-match what might be inside it.
  */
 function toBetterAuthLoggerArg(a: unknown): unknown {
-  if (
-    a !== null &&
-    typeof a === "object" &&
-    "name" in a &&
-    typeof (a as { name?: unknown }).name === "string"
-  ) {
-    return { errorName: (a as { name: string }).name };
-  }
   if (a === null || typeof a !== "object") return a;
+  // Only an Error (or an error-shaped object: a string name plus a string message or stack)
+  // reduces to its name. Any other object with a string `name`, such as a Better Auth user
+  // record, would put a person's display name in a log line (spec 5.9, GDPR; wave review
+  // G-G-m2), so it reduces to its typeof like every other object.
+  const o = a as { name?: unknown; message?: unknown; stack?: unknown };
+  const errorShaped =
+    a instanceof Error ||
+    (typeof o.name === "string" && (typeof o.message === "string" || typeof o.stack === "string"));
+  if (errorShaped && typeof o.name === "string") return { errorName: o.name };
   return typeof a;
+}
+
+/**
+ * Better Auth 1.7.6 (dist/api/index.mjs:206-208) logs `ctx.logger.error(e.message)` for an
+ * uncaught error whose message mentions a column, table or relation. A DrizzleQueryError message
+ * ("Failed query: <sql>\nparams: <values>") would then arrive as a plain string carrying query
+ * params (user id, email, session token), past the fixed `secretValues` scrub. Such a message is
+ * replaced with a fixed text (spec 5.9; wave review G-G-m1).
+ */
+function toBetterAuthLoggerMessage(message: string): string {
+  return message.includes("Failed query") || message.includes("\nparams:")
+    ? "database error"
+    : message;
 }
 
 /**
@@ -124,7 +138,7 @@ export function toBetterAuthLogger(log: Logger) {
       const mapped = args.map(toBetterAuthLoggerArg);
       const msg =
         typeof message === "string"
-          ? message
+          ? toBetterAuthLoggerMessage(message)
           : (() => {
               const reduced = toBetterAuthLoggerArg(message);
               return reduced !== null && typeof reduced === "object" && "errorName" in reduced

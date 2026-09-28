@@ -106,6 +106,8 @@ describe("sensitive-review (spec 9.1)", () => {
       "packages/api/src/keys/canary.ts",
       "packages/api/src/seams.ts",
       "packages/api/src/startup.ts",
+      // Wave 4b review C-I1: main.ts owns the spec 8.1 fail-closed exit.
+      "packages/api/src/main.ts",
     ])
       expect(c(f), f).toBe("critical");
     for (const f of [

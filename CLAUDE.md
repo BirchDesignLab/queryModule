@@ -70,7 +70,8 @@ have no code yet):
   `packages/api/src/secrets.ts`, `packages/api/src/keys/**`,
   `packages/api/src/db/**` (encryption at rest); audit logging
   `packages/api/src/audit/**`, `packages/api/src/seams.ts`,
-  `packages/api/src/startup.ts`, `packages/api/drizzle/**` (migrations),
+  `packages/api/src/startup.ts`, `packages/api/src/main.ts`,
+  `packages/api/drizzle/**` (migrations),
   `packages/core/src/contracts/audit.ts`, `audit-auth.ts`, `primitives.ts`,
   `identity.ts`; query
   dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
