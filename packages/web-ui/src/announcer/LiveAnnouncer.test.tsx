@@ -33,4 +33,17 @@ describe("FR-005 live regions present from first render (spec 6.6)", () => {
     });
     expect(screen.getByTestId("announcer-polite").textContent).not.toBe(first);
   });
+  it("critic:C1 a repeated polite message still remounts after an intervening assertive announcement", () => {
+    // The client announcer shares one id counter across politeness levels, so a text-alternation
+    // parity trick can land on the same phase twice (id 1 then id 3, both odd). The polite region
+    // must still change in the DOM so assistive tech re-announces it (spec 6.6).
+    const announcer = createAnnouncer();
+    render(<LiveAnnouncer announcer={announcer} />);
+    act(() => announcer.announce("same"));
+    const politeRegion = screen.getByTestId("announcer-polite");
+    const firstNode = politeRegion.firstChild;
+    act(() => announcer.announce("x", "assertive"));
+    act(() => announcer.announce("same"));
+    expect(politeRegion.firstChild).not.toBe(firstNode);
+  });
 });
