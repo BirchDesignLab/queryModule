@@ -25,7 +25,11 @@ const qt = QueryTypeSchema.parse({
   sources: [{ sourceId: "mock", selectedByDefault: true }],
 });
 const f = new Map(qt.fields.map((x) => [x.key, x]));
-const field = (k: string) => f.get(k)!;
+const field = (k: string) => {
+  const def = f.get(k);
+  if (def === undefined) throw new Error(`fixture has ${k}`);
+  return def;
+};
 const now = Date.UTC(2026, 8, 28);
 
 describe("FR-031 literal canonicalisation with errors (spec 4.2)", () => {
