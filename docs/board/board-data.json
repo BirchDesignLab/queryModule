@@ -734,6 +734,58 @@
       "priority": "Low",
       "reqIds": "",
       "body": "Follow-up from A-offload wave 2 (feat/a-offload-wave-2; Track A plan Tasks 26, 31, 34, 24 lib only). The sdd-wave ruled these minors deferred; none blocked the wave.\n\n**Notable minors**\n- [ ] T34: the guard-table check in `recoverLostKey` runs on `db.$client` outside the `withTransaction` that rewrites the canary. If the protected table (`state_credential` / `request_key`) is created between the check and the write, the canary is rewritten although the runbook should refuse. Move the check inside the transaction. File: `packages/api/src/ops/lost-key.ts` (gate tier).\n- [ ] T34: the `PRAGMA wal_checkpoint(TRUNCATE)` result is ignored. A busy checkpoint returns `busy=1` without an error, so the runbook reports success without truncating the WAL. Check the result and fail or retry. File: `packages/api/src/ops/lost-key.ts` (gate tier).\n- [ ] T24: no-op changes are still audited: a grant of a role already held, a revoke when the role is `user`, and a grant of `user` that demotes an admin recorded as change `granted`. Reject or skip no-ops so the `roleChanged` trail stays accurate (SEC-010). File: `packages/api/src/ops/grant-role.ts` (gate tier); test `packages/api/test/ops/grant-role.test.ts` (ordinary).\n- [ ] T24: `user.updatedAt` is set with `new Date()` (wall clock) instead of the injected `Clock` used by every other timestamp write in `packages/api/src`. File: `packages/api/src/ops/grant-role.ts` (gate tier).\n\n**The other 18 deferred minors** are listed per task in the wave ledger, `.superpowers/sdd/2026-09-25-track-a-p1/progress.md` on the A-offload machine (Wave a-offload-2 block, Tasks 26, 31, 34, 24), and summarized in the wave PR body.\n\nTier: gate (packages/api/src/ops/**); tests under packages/api/test/ops are ordinary.\n"
+    },
+    {
+      "number": 220,
+      "title": "A-offload wave 3 deferred minors",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Low",
+      "reqIds": "",
+      "body": "Follow-up from A-offload wave 3 (feat/a-offload-wave-3, #74 verify-gate CLI tidy-ups via sdd-task). The wave deferred these 10 minors; none blocked it. Tiers from `.github/sensitive-paths`: everything under `scripts/ci/**` is gate.\n\n**Open, in priority order**\n- [ ] **M2, main() guard fail-open (remaining CLIs).** The guard `import.meta.url === pathToFileURL(process.argv[1]).href` is false for a symlinked checkout or a drive-letter or case difference on Windows, so a gate CLI skips `main()` and exits 0 with no output. This PR fixed it for the three CLIs it introduced the guard in (config-validate, config-migrate, check-licences) with `isMainModule` in `scripts/ci/cli-io.ts` (realpath-resolved, case-insensitive on win32). Still on the old idiom, predating this PR: `scripts/ci/changed-paths.mjs:120`, `scripts/ci/check-schema-writes.ts:190`, `scripts/ci/lockfile-guard.mjs:90` (all gate), and `scripts/ci/check-audit-migrations.ts:168` (critical, reserved; owned by Linux A4b, change it only after A4b merges). Switch each to `isMainModule` (the .mjs files need a JS import path) with a test.\n- [ ] **M1.** `scripts/ci/config-migrate.ts`: `writeFileSync` is unguarded, so a write error still prints a raw stack trace. Wrap it and print `<path>: cannot write file`, exit 1 (gate).\n- [ ] **M3.** `scripts/ci/config-validate.ts`: a literal `--` and the spec's documented `--diff` flag (spec 7 / 9.5) now exit 2 as unknown options; before, they were silently ignored. Decide: accept `--` as end of options, and implement or explicitly reject `--diff` per spec (gate).\n- [ ] **M4.** `scripts/ci/check-licences.test.ts:91-123` spawns tsx three times under vitest's default 5 s timeout, a known source of Windows flakiness. Give the test an explicit timeout or test the pure helpers instead (gate).\n- [ ] **r1-a.** `scripts/ci/strip-comments.ts`: the `//` line-comment branch still false-matches inside a regex literal like `/a\\//`, which can hide a same-line tagged test from `hasTaggedTest`. Pre-existing in the scanner's first version (gate).\n- [ ] **r1-b.** Verify that core's `validateSiteConfig` pointer for `config.missingLocale` matches the filter in `scripts/ci/config-files.ts` that swaps it for `config.invalidJson`; today only config-files.test.ts assertions cover it (gate; do not edit packages/core without a ruling).\n\n**Resolved or informational (listed for completeness)**\n- [x] **Q2.** `toPosixRel` duplicated in three files: resolved in fix round 1 (single definition in `scripts/ci/cli-io.ts`).\n- [x] Implementer note: `check-licences.ts`, `config-validate.ts` and `config-migrate.ts` moved top-level side effects into `main()` so their helpers are unit-testable; the guard for that is the M2 item above.\n- [x] Implementer note: task report created fresh (gitignored workspace file); no code impact.\n- [x] Implementer note: base sha verified before starting; no code impact.\n"
+    },
+    {
+      "number": 222,
+      "title": "sdd workflows: read head and precondition shas from git, never from agent output",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "",
+      "body": "Found in the A4b sdd-wave run (09-28-26), Task 21. Tier: ordinary (`.claude/workflows/**`).\n\n**What happened.** The T21 round-1 fixer returned `head: 2e31c7761aecdcf5d0f0a1e0a3f9e1a5f6c5e6a1`. That is not a git object: the real commit is `2e31c77c6d9b971f6afc69a7ff4a714fb5315268`, and only the 7-character prefix matches. `sdd-task` used the agent's value as `expectedHead` for gate-r1, so the gate's precondition failed on a clean, correct branch. A controller answer naming the real sha was then refused by the gate agent, which treated it as untrusted task text. The task could not finish inside the run. The controller ran the gate by hand (`pnpm verify`, `pnpm audit --prod`).\n\n**Fix.**\n- [ ] Every head and precondition value that `sdd-task.js`, `sdd-wave.js` and `wave-review.js` compare or pass on (`expectedHead`, `reviewHead`, `head`, `base` between tasks, `reviewedSha`) must come from git, never from an agent's JSON. Either resolve and verify with `git rev-parse` in a dedicated step, or have the agent echo raw `git rev-parse HEAD` stdout that the script verifies as a 40-hex sha that exists (`git cat-file -e`) before use.\n- [ ] Reject an agent-reported sha that fails that check (log it, then re-read with git) instead of propagating it.\n- [ ] A test in `scripts/sdd/workflow-harness.mjs` (or its tests): a fixer that returns a fabricated sha with the correct prefix leads to the real head being used, not a precondition stop.\n"
+    },
+    {
+      "number": 224,
+      "title": "main.ts: fail-closed exit on unhandledRejection and uncaughtException",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "High",
+      "reqIds": "SEC-006",
+      "body": "From the A4b wave-review (`docs/reviews/feat-a-p1-wave-4b.md`, PR #223), a declined-to-judge item. Checker ruling 09-28-26: Windows A takes this in wave 5's critical slice. Tier: critical (`packages/api/src/main.ts`).\n\n`packages/api/src/main.ts` installs no `process.on(\"unhandledRejection\")` or `process.on(\"uncaughtException\")` handler. An error that escapes the request path (a listener, a timer, a stream) then gets Node's default behaviour: a printed stack, which can carry request or DB values, and an exit that does not go through the fail-closed path of spec 8.1.\n\n- [ ] Handle both events in `main.ts`: write one fatal JSON line (error name and a redacted message, never a stack, secret, token or query value), drain or close the server and the DB if possible, and exit non-zero.\n- [ ] Tests: a child process that triggers each event exits non-zero, writes exactly one fatal line, and that line contains no seeded secret value and no stack frame.\n"
+    },
+    {
+      "number": 225,
+      "title": "WS upgrade: rate limit per IP and no DB lookup before the Origin check",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "SEC-005, SEC-014",
+      "body": "From the A4b wave-review (`docs/reviews/feat-a-p1-wave-4b.md`, PR #223), a declined-to-judge item. Checker ruling 09-28-26. Tier: gate (`packages/api/src/ws/**`). Priority: Medium.\n\nThe WebSocket upgrade on `/api/v1/ws` (`packages/api/src/ws/server.ts`) has no rate limit. Every upgrade, authenticated or not, runs `identity.resolve`, which costs a DB round trip before the Origin check rejects it. An unauthenticated client can therefore drive DB load with a stream of upgrades.\n\n- [ ] Rate-limit upgrades per client IP (reuse `RateLimiter` and `clientIp()`, with a limit stated in the PR and the spec reference), answering 429 before any `identity.resolve`.\n- [ ] Reject a disallowed Origin before `identity.resolve`, where that doesn't break the Origin-less bearer path, so a cross-origin upgrade costs no DB lookup.\n- [ ] Tests: upgrades over the limit get 429 without calling `identity.resolve` (spy on it); a disallowed Origin never calls `identity.resolve`; a signed-bearer upgrade with no Origin still works.\n"
     }
   ]
 }
