@@ -799,6 +799,54 @@
       "priority": "High",
       "reqIds": "BR-004, NFR-003",
       "body": "**Blocks M0 exit promote.**\n\nFrom the wave 5 review (`docs/reviews/feat-a-p1-wave-5.md`, PR #229). Tier: gate (`.github/workflows/ci.yml`, `scripts/ci/ci-workflow.test.ts`).\n\n## Problem\n\nOn a docs-only push to `main`, the `image` job is skipped (docs_only gate), so it uploads no `querymodule-image` artifact. `publish` then fails at `download-artifact`: `ci` shows red on `main` and no `ghcr.io/birchdesignlab/querymodule:sha-<sha>` image exists for that commit.\n\n`promote.yml` with `milestone: m0` needs, at the same sha: a successful `ci` run on `main`, `docs/releases/m0.md`, and the `sha-<sha>` image. The M0 exit PR is docs-only (release notes), so the m0 promote cannot pass. Skipping `publish` when `image` is skipped makes `ci` green but still leaves no image at that sha.\n\n## Fix (decided)\n\nBuild the image on every push to `main`: the `image` job's docs_only gate applies to pull requests only, so every commit on `main` gets a smoke-tested `sha-<sha>` image and `promote` keeps its invariant (the promoted sha is exactly the image that was built and smoke-tested at that sha). Rejected alternative: promote resolving the image of the nearest ancestor with one, which would promote bytes not built from the named sha and weaken the sha/image equality that rollback relies on.\n\n- [ ] `image` job: `if:` runs on `push` to `main` regardless of docs_only; unchanged for pull requests.\n- [ ] `ci-workflow.test.ts`: tests first for both cases (PR docs-only skips `image`; push to main never skips it; `publish` always finds the artifact on main).\n- [ ] actionlint and zizmor clean.\n\nGoes in one gate PR with the wave 5 minors issue, after #229 merges and before the M0 exit PR, with its own wave-review (gate Opus 5.5 medium).\n"
+    },
+    {
+      "number": 231,
+      "title": "Wave 5 review minors: image needs checks, promote cache, seed passwords in boot-smoke log check, main-fatal exit 1 and drain tests",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "SEC-020, NFR-003",
+      "body": "Deferred minors from the wave 5 review (`docs/reviews/feat-a-p1-wave-5.md`, PR #229). Tier: gate (`.github/workflows/ci.yml`, `.github/workflows/promote.yml`, `scripts/ci/boot-smoke.sh`); `packages/api/test/main-fatal.test.ts` is ordinary. Goes in one gate PR with the docs-only publish issue, after #229 merges and before the M0 exit PR.\n\n- [ ] **G-M1** `.github/workflows/ci.yml:236`: the `image` job needs only `changes`, so its `pnpm install` and the Dockerfile install run before the pre-install lockfile guard in `checks` has passed, and `ghaction-github-runtime` exposes `ACTIONS_RUNTIME_TOKEN` to later steps. Fix: `needs: [changes, checks]`; update the `ci-workflow.test.ts` expectation.\n- [ ] **G-M2** `.github/workflows/promote.yml:63-67`: `setup-node` uses `cache: pnpm` in a workflow holding `contents: write` and `packages: write`; a poisoned main-scope pnpm store cache would feed the milestone-gate install. Fix: drop `cache: pnpm`.\n- [ ] **G-M3** `scripts/ci/boot-smoke.sh:193-195`: `down` greps the container log only for the five key files, not the derived demo passwords in `$work/seed-output.txt`, so spec 8.5 \"never to the service log\" is not asserted. Fix: also grep for each password column and fail on a match.\n- [ ] **C-m1** `packages/api/test/main-fatal.test.ts:93-94`: asserts exit code not 0 and not null; #224 promises exit 1 (an exit 7 from a throw in the handler would pass). Fix: `expect(code).toBe(1)`.\n- [ ] **C-m2** `packages/api/test/main-fatal.test.ts:85-103`: no test for a second fatal event during the drain (`main.ts`: exit at once, no second line) or SIGTERM during a fatal drain (exit 1). Fix: fixture variants for both, asserting exactly one fatal line and exit 1.\n"
+    },
+    {
+      "number": 235,
+      "title": "Web: a failed sign-out looks like success and leaves the server session valid (SEC-006, spec 5.6, 6.7)",
+      "labels": ["web", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "track": "Web (B)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "High",
+      "reqIds": "SEC-006",
+      "body": "From the Step 27.7 critic, wave B9 (finding K1, Important). Needs a design decision, and touches packages/client, so it is out of the B9 PR.\n\n**Problem**\n- `packages/client/src/auth/auth-api.ts:78-84`: `signOut` swallows network errors and ignores a non-2xx response.\n- `packages/client/src/session/session-controller.ts:54-61`: `finally adopt(null)` wipes local state anyway.\n- Scenario: on a shared console, Sign out while POST `/api/v1/auth/sign-out` fails (network drop or 5xx). The UI shows the sign-in page, but the session cookie is still valid on the server. The next person reloads, bootstrap calls `getSession`, and they are signed in as the previous user.\n- `apps/web/src/home/HomePage.tsx:20-29`: its `catch` (the sign-out error text) can never run with the real controller. If it did run, `adopt(null)` would already have unmounted HomePage.\n- `apps/web/src/home/HomePage.test.tsx`: the test passes only because it stubs `session.signOut` to reject, which no real code path does.\n\n**Decision needed**\nShould the client wipe locally when the server sign-out fails, and where should the error render (probably the sign-in page, since that is where the user lands)?\n\n**Suggested fix**\n- `authApi.signOut` throws on a network error or `!response.ok`.\n- The controller keeps the local wipe, then rethrows.\n- The sign-in page shows a one-shot \"server sign-out failed, retry\" message.\n- Replace the HomePage test with one where MSW fails `/sign-out`. About 25 to 35 lines.\n\nIDs: SEC-006; spec 5.6 (logout ends the server session), 6.7 (logout resets)."
+    },
+    {
+      "number": 236,
+      "title": "Web: the version gate only blocks sign-in; a client with a session runs below minClientVersion (NFR-001, spec 5.1, 6.7)",
+      "labels": ["web", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "track": "Web (B)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "High",
+      "reqIds": "NFR-001",
+      "body": "From the Step 27.7 critic, wave B9 (finding K2, Important). Needs a small design choice (a hard gate, or a notice plus a flag), so it is out of the B9 PR.\n\n**Problem**\n- `apps/web/src/app/routes.tsx:9-16` passes `clientSupported` only to LoginPage. `RequireAuth.tsx:5-10` ignores it, and `LoginPage.tsx:46` redirects a signed-in user to `/`.\n- Scenario: an outdated client or an open tab has a valid session cookie. Bootstrap returns `clientSupported: false` with status `signedIn`. `/` renders HomePage with no \"update required\" notice, and the only screen that shows the notice can't be reached.\n- Nothing exposes the flag where the M1 query panel's submit could read it, so the next wave inherits the gap.\n\n**Suggested fix**\n- Put `clientSupported` in context.\n- Render an update-required gate (or at least a persistent notice plus an `aria-disabled` flag for later submit controls) for the protected routes.\n- Add a Root test: an unsupported client with an existing session shows the notice.\n- About 20 to 30 lines, all in apps/web.\n\nIDs: NFR-001; spec 5.1 (\"client refuses to run below `minClientVersion`\"), 6.7."
+    },
+    {
+      "number": 237,
+      "title": "Wave 9 review minors: e2e and smoke test hardening",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "NFR-003",
+      "body": "From the wave B9 gate review (artifact `docs/reviews/feat-b-p1-wave-9.md`, reviewed sha 2b56aa3). The fixes change gate files, so they ride a later gate PR.\n\n1. **G-m2 (the one that matters)** `scripts/ci/ci-workflow.test.ts:292-303`: the step 12 no-echo guard only counts lines that start with `echo`. `printf \"$pw\"`, `set -x` (xtrace) or a printf to `$GITHUB_ENV` would pass it. Fix: reject any xtrace, and any line that references `$pw` other than the mask line and the export line.\n2. **G-m1** `scripts/ci/ci-workflow.test.ts:323-325` and `scripts/ops/smoke.test.ts:108`: the expected value is a hand-copied HMAC, not `derivePassword` (`packages/api/src/seed/password.ts:4`), so a change to its normalisation (spec 8.5) would not fail either test. Fix: import `derivePassword` and compare against it.\n3. **G-m3** `scripts/ops/smoke.test.ts:156`: `call.split(\" \")[2]` assumes the checkout path has no spaces. Fix: match `/-f (.*deploy\\/compose\\.yml) exec/`.\n4. **boot-smoke `QM_BASE_URL`** `scripts/ci/boot-smoke.sh:191` exports `QM_BASE_URL=http://127.0.0.1:3000`, but the container's `PUBLIC_ORIGIN` is `http://localhost:3000`. A browser at 127.0.0.1 fails sign-in and the WS upgrade (Origin check), so CI step 12 uses localhost directly. Fix: export `http://localhost:3000`, then step 12 can use `$QM_BASE_URL` again. **boot-smoke.sh is Track A's file.**"
     }
   ]
 }
