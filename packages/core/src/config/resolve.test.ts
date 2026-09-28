@@ -51,9 +51,11 @@ describe("BR-001 config chain (spec 5.8)", () => {
     expect(r.extendsChain).toEqual(["default"]);
     expect(r.config.defaults.state).toBe("OK");
     expect(r.config.terminal.delimiter).toBe("/");
-    const text = JSON.stringify(r.config.queryTypes);
-    expect(text).not.toContain("BOAT");
-    expect(text).toContain("tagSticker");
+    const propertyType = r.config.picklists.find((p) => p.id === "propertyType");
+    expect(propertyType?.values.some((v) => v.code === "BOAT")).toBe(false);
+    expect(propertyType?.values.length).toBeGreaterThan(0);
+    const veh = r.config.queryTypes.find((q) => q.code === "VEH");
+    expect(veh?.fields.some((f) => f.key === "tagSticker")).toBe(true);
   });
 
   it("resolveSiteShape on a base-less site has an empty chain", () => {
@@ -91,12 +93,20 @@ describe("BR-001 config chain (spec 5.8)", () => {
       expect(r.ok ? [] : r.errors).toEqual(expected);
     });
 
+  it("a base with a different id than the site extends is an unknown base", () => {
+    const r = resolveSiteShape(example, { id: "other", file: def });
+    expect(r.ok ? [] : r.errors).toEqual([
+      e("/extends", "config.unknownBase", { extends: "default" }),
+    ]);
+  });
+
   it("a base that itself extends gives the merge error", () => {
     const base = clone(json("sites/default.json")) as Mut;
     base.extends = "other";
     const r = resolveSiteShape(example, { id: "default", file: ok(base) });
-    expect(r.ok).toBe(false);
-    expect(r.ok ? 0 : r.errors.length).toBeGreaterThan(0);
+    expect(r.ok ? [] : r.errors).toEqual([
+      e("/extends", "config.nestedExtends", { extends: "other" }),
+    ]);
   });
 
   it("a newer site gives the migrate error; a newer base too", () => {
@@ -115,7 +125,7 @@ describe("BR-001 config chain (spec 5.8)", () => {
     const r = resolveSiteShape(ok(site));
     if (r.ok) throw new Error("expected failure");
     expect(r.errors.every((d) => d.key === "config.schema")).toBe(true);
-    expect(r.errors.map((d) => d.params.code)).toContain("unrecognized_keys");
+    expect(r.errors).toContainEqual(e("", "config.schema", { code: "unrecognized_keys" }));
     expect(r.merged).toBeDefined();
   });
 
@@ -143,6 +153,17 @@ describe("BR-001 config chain (spec 5.8)", () => {
       const c = shape();
       const noMock = { ...c, sources: c.sources.filter((s) => s.kind !== "mock") };
       expect(checkMockCoverage(noMock, { ok: false }, label)).toEqual([]);
+    });
+
+    it("a non-mock source beside fully covered mock sources adds no diagnostics", () => {
+      const c = shape();
+      const extra = {
+        ...c.sources[0],
+        id: "liveSource",
+        kind: "http",
+      } as (typeof c.sources)[number];
+      const mixed = { ...c, sources: [...c.sources, extra] };
+      expect(checkMockCoverage(mixed, file("mock/default.json"), label)).toEqual([]);
     });
 
     it("invalid JSON points into the mock document and carries the label", () => {
