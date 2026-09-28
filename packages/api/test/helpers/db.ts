@@ -1,7 +1,8 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll } from "vitest";
+import { afterAll, expect } from "vitest";
+import { type Db, openDatabase } from "../../src/db/client";
 
 export const TEST_DB_KEY = "test-db-key-0123456789abcdef0123456789";
 
@@ -14,13 +15,82 @@ export const TEST_DB_KEY = "test-db-key-0123456789abcdef0123456789";
  */
 const TEST_DB_ROOT = existsSync("/dev/shm") ? "/dev/shm" : tmpdir();
 const created: string[] = [];
+const openClients: Client[] = [];
 
+interface Client {
+  closed: boolean;
+  close(): void;
+}
+
+/** Closes every tracked client, then asserts each one actually reports closed. */
+export function closeAll(clients: readonly Client[]): void {
+  for (const client of clients) if (!client.closed) client.close();
+  for (const client of clients) expect(client.closed).toBe(true);
+}
+
+/*
+ * A bare libsql client, closed right after open, can still hold its Windows file handle for
+ * several seconds afterward (observed here: ~4.5-5.5s, Defender exclusion or not — the actual
+ * holder is unclear, could be the native libsql close path itself). No retry budget worth
+ * paying on every test run closes that gap, so on win32 a still-locked dir is left in place
+ * (one summary warning per file) instead of failing it; the next run's sweep below clears it.
+ * Every other platform, and every other rmSync error, still throws. The real leak check is
+ * closeAll's assertion above, which runs everywhere including Linux CI.
+ */
 afterAll(() => {
-  for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
+  closeAll(openClients.splice(0));
+  const dirs = created.splice(0);
+  let stuck = 0;
+  for (const dir of dirs) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch (e) {
+      if (process.platform !== "win32") throw e;
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EPERM" && code !== "EBUSY") throw e;
+      stuck++;
+    }
+  }
+  if (stuck > 0) {
+    console.warn(`[test/helpers/db] ${stuck} temp dir(s) left for the next run's sweep`);
+  }
 });
+
+/** Removes qm-db-* dirs under root older than maxAgeMs. Best-effort: failures are ignored. */
+export function sweepStaleTempDirs(root: string, maxAgeMs: number, now = Date.now()): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!name.startsWith("qm-db-")) continue;
+    const dir = join(root, name);
+    try {
+      if (now - statSync(dir).mtimeMs > maxAgeMs) rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // still locked or already gone; leave it for a later run
+    }
+  }
+}
+
+// A prior Windows run may have left qm-db-* dirs behind (see the afterAll comment above); sweep
+// anything older than 10 minutes so TEST_DB_ROOT does not pile up. Never on the critical path.
+sweepStaleTempDirs(TEST_DB_ROOT, 10 * 60 * 1000);
 
 export function tempDbFile(): string {
   const dir = mkdtempSync(join(TEST_DB_ROOT, "qm-db-"));
   created.push(dir);
   return join(dir, "querymodule.db");
+}
+
+/** Opens a database on a fresh tempDbFile() and closes it automatically in afterAll. */
+export async function openTempDatabase(o?: { file?: string; encryptionKey?: string }): Promise<Db> {
+  const db = await openDatabase({
+    file: o?.file ?? tempDbFile(),
+    encryptionKey: o?.encryptionKey ?? TEST_DB_KEY,
+  });
+  openClients.push(db.$client);
+  return db;
 }
