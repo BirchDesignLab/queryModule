@@ -74,6 +74,20 @@ const samples = {
   },
   logout: { sessionId: "0199a0b0-0000-7000-8000-0000000000e1" },
   roleChanged: { targetUserId: "u1", role: "admin", change: "granted", via: "grant-role" },
+  configLoaded: {
+    siteId: "example-ok",
+    configHash: HASH,
+    configSchemaVersion: 1,
+    coreVersion: "0.1.0",
+    extendsChain: ["default"],
+  },
+  retentionPurged: {
+    scope: "payload",
+    reason: "retention",
+    olderThan: 1_790_000_000_000,
+    requestCount: 12,
+    keysDeleted: 0,
+  },
 } as const;
 
 /** The six query types frozen in M0 P0; the auth types (M0 P1) have their own envelope. */
@@ -88,13 +102,15 @@ const QUERY_EVENT_TYPES = [
 type QueryEventType = (typeof QUERY_EVENT_TYPES)[number];
 
 describe("SEC-010 audit catalogue (spec 4.7 query events, spec 5.6 auth events)", () => {
-  it("lists the six query event types frozen in M0 P0, then the four M0 P1 auth types", () => {
+  it("lists the six query event types frozen in M0 P0, the four M0 P1 auth types, then the two M1 P2 system types (D-A2)", () => {
     expect([...AUDIT_EVENT_TYPES]).toEqual([
       ...QUERY_EVENT_TYPES,
       "loginSucceeded",
       "loginFailed",
       "logout",
       "roleChanged",
+      "configLoaded",
+      "retentionPurged",
     ]);
     expect(Object.keys(AUDIT_DETAILS_SCHEMAS).sort()).toEqual([...AUDIT_EVENT_TYPES].sort());
   });
@@ -630,4 +646,135 @@ describe("FR-043 C-M3 sourceResponded status follows SourceStatus (#98)", () => 
   it("offers exactly SourceStatus minus pending and interrupted, in order", () => {
     expect(AUDIT_DETAILS_SCHEMAS.sourceResponded.shape.status.options).toEqual(recorded);
   });
+});
+
+describe("SEC-011 credential owner on request-level rows (#98 C-M8)", () => {
+  const actor = { id: "user1", email: "one@example.test", role: "user" } as const;
+  const cid = "01890a5d-ac96-774b-bcce-b302099a8057";
+  const base = { actor, identitySource: "local", correlationId: cid } as const;
+  const submitted = {
+    ...base,
+    type: "submitted",
+    partId: 0,
+    details: {
+      partId: 0,
+      parentPartId: null,
+      origin: "primary",
+      queryType: "VEH",
+      typeValues: {},
+      selectedSourceIds: ["stateSource"],
+      dispatchedSourceIds: ["stateSource"],
+      droppedSourceIds: [],
+      plateOnly: false,
+      configHash: "a".repeat(64),
+    },
+  } as const;
+  const acknowledged = {
+    ...base,
+    type: "acknowledged",
+    details: { acknowledgedAt: 1_790_000_000_000, ackLatencyMs: 12, partCount: 1 },
+  } as const;
+  const partSkipped = {
+    ...base,
+    type: "partSkipped",
+    partId: 1,
+    details: {
+      partId: 1,
+      parentPartId: 0,
+      queryType: "WNT",
+      typeValues: {},
+      reasons: [{ key: "plan.nestedNoSources" }],
+    },
+  } as const;
+  const interrupted = {
+    ...base,
+    type: "interrupted",
+    partId: 0,
+    details: { partId: 0, sourceId: "stateSource", resultId: cid, reason: "processRestart" },
+  } as const;
+
+  it.each([submitted, acknowledged, partSkipped])(
+    "$type rejects an envelope credentialUserId",
+    (e) => {
+      expect(AuditEventSchema.safeParse(e).success).toBe(true);
+      expect(AuditEventSchema.safeParse({ ...e, credentialUserId: "officer1" }).success).toBe(
+        false,
+      );
+    },
+  );
+  it("interrupted accepts the pending row's credential owner or none", () => {
+    expect(AuditEventSchema.safeParse(interrupted).success).toBe(true);
+    expect(
+      AuditEventSchema.safeParse({ ...interrupted, credentialUserId: "officer1" }).success,
+    ).toBe(true);
+  });
+});
+
+describe("SEC-010 configLoaded (spec 4.7, 5.8 step 7)", () => {
+  const row = {
+    type: "configLoaded",
+    actor: SYSTEM_ACTOR,
+    identitySource: "system",
+    details: {
+      siteId: "example-ok",
+      configHash: "b".repeat(64),
+      configSchemaVersion: 1,
+      coreVersion: "0.1.0",
+      extendsChain: ["default"],
+    },
+  } as const;
+  const user = { id: "user1", email: "one@example.test", role: "user" } as const;
+
+  it("is an audit event type", () => expect(AUDIT_EVENT_TYPES).toContain("configLoaded"));
+  it("parses a system row", () => expect(AuditEventSchema.safeParse(row).success).toBe(true));
+  it.each([
+    ["a user actor", { ...row, actor: user, identitySource: "local" }],
+    ["a correlationId", { ...row, correlationId: "01890a5d-ac96-774b-bcce-b302099a8057" }],
+    ["a partId", { ...row, partId: 0 }],
+    ["a credentialUserId", { ...row, credentialUserId: "officer1" }],
+    ["two overlay levels", { ...row, details: { ...row.details, extendsChain: ["a", "b"] } }],
+    ["an extra details key", { ...row, details: { ...row.details, extra: 1 } }],
+    ["a non-semver coreVersion", { ...row, details: { ...row.details, coreVersion: "1.0" } }],
+  ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
+});
+
+describe("SEC-021 retentionPurged", () => {
+  const row = {
+    type: "retentionPurged",
+    actor: SYSTEM_ACTOR,
+    identitySource: "system",
+    details: {
+      scope: "values",
+      reason: "keyLost",
+      olderThan: null,
+      requestCount: 3,
+      keysDeleted: 3,
+    },
+  } as const;
+  const user = { id: "user1", email: "one@example.test", role: "user" } as const;
+
+  it("is an audit event type", () => expect(AUDIT_EVENT_TYPES).toContain("retentionPurged"));
+  it("parses a keyLost system row and a retention row with a cutoff", () => {
+    expect(AuditEventSchema.safeParse(row).success).toBe(true);
+    const retention = {
+      ...row,
+      details: {
+        ...row.details,
+        scope: "payload",
+        reason: "retention",
+        olderThan: 1_790_000_000_000,
+      },
+    };
+    expect(AuditEventSchema.safeParse(retention).success).toBe(true);
+  });
+  it.each([
+    [
+      "keyLost with a cutoff",
+      { ...row, details: { ...row.details, olderThan: 1_790_000_000_000 } },
+    ],
+    ["retention with no cutoff", { ...row, details: { ...row.details, reason: "retention" } }],
+    ["a user actor", { ...row, actor: user, identitySource: "local" }],
+    ["a correlationId", { ...row, correlationId: "01890a5d-ac96-774b-bcce-b302099a8057" }],
+    ["a negative count", { ...row, details: { ...row.details, keysDeleted: -1 } }],
+  ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
 });
