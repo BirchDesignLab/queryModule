@@ -35,7 +35,9 @@ export function mountWeb(app: Hono<AppEnv>, d: AppDeps): void {
     }),
   );
   app.get("*", (c) => {
-    if (c.req.path.startsWith("/api/")) return apiError(c, "notFound");
+    if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/assets/")) {
+      return apiError(c, "notFound");
+    }
     const nonce = randomBytes(16).toString("base64");
     c.header("Content-Security-Policy", buildCsp(d.env, nonce));
     c.header("Cache-Control", "no-store");
