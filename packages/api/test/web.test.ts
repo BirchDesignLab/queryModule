@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { injectNonce } from "../src/http/web";
 import { createTestApp } from "./helpers/test-app";
 
 function dist(): string {
@@ -9,7 +10,7 @@ function dist(): string {
   mkdirSync(join(d, "assets"));
   writeFileSync(
     join(d, "index.html"),
-    '<!doctype html><html><head><script type="module" src="/assets/app-1a2b.js"></script></head><body></body></html>',
+    '<!doctype html><html><head><script type="module" nonce="__CSP_NONCE__" src="/assets/app-1a2b.js"></script></head><body></body></html>',
   );
   writeFileSync(join(d, "assets/app-1a2b.js"), "export {};");
   return d;
@@ -24,7 +25,7 @@ describe("SEC-006 web build serving", () => {
     const nonceB = /'nonce-([^']+)'/.exec(b.headers.get("content-security-policy") ?? "")?.[1];
     expect(nonceA).toBeDefined();
     expect(nonceA).not.toBe(nonceB);
-    expect(await a.text()).toContain(`<script nonce="${nonceA}" type="module"`);
+    expect(await a.text()).toContain(`<script type="module" nonce="${nonceA}"`);
     expect(a.headers.get("cache-control")).toBe("no-store");
   });
   it("hashed assets are immutable; unknown /api paths stay JSON 404", async () => {
@@ -42,5 +43,17 @@ describe("SEC-006 web build serving", () => {
     expect(r.status).toBe(404);
     expect(r.headers.get("cache-control")).not.toBe("public, max-age=31536000, immutable");
     expect(r.headers.get("content-type")).toMatch(/json/);
+  });
+});
+
+describe("IC1 injectNonce replaces vite's __CSP_NONCE__ placeholder", () => {
+  it("stamps exactly one nonce attribute and leaves no placeholder behind", () => {
+    const built = '<script type="module" nonce="__CSP_NONCE__" src="/assets/app-1a2b.js"></script>';
+    const out = injectNonce(built, "fresh-value");
+    expect(out).toBe(
+      '<script type="module" nonce="fresh-value" src="/assets/app-1a2b.js"></script>',
+    );
+    expect((out.match(/nonce="/g) ?? []).length).toBe(1);
+    expect(out).not.toContain("__CSP_NONCE__");
   });
 });
