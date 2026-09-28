@@ -68,6 +68,7 @@ scripts/ops/**
 **/biome.json
 .gitignore
 **/vitest.config.ts
+**/vite.config.ts
 package.json
 pnpm-workspace.yaml
 tsconfig.base.json

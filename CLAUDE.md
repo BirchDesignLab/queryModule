@@ -85,7 +85,8 @@ have no code yet):
   directories named in `.github/sensitive-paths`.
 - Gate (Opus 5.5 `medium` artifact, #92): the verify gate and merge path
   `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
-  `.gitignore`, `**/vitest.config.ts`, `package.json`, `pnpm-workspace.yaml`,
+  `.gitignore`, `**/vitest.config.ts`, `**/vite.config.ts`,
+  `package.json`, `pnpm-workspace.yaml`,
   `tsconfig.base.json`, `**/tsconfig.json`; log redaction
   `packages/api/src/log/**`; auth and sessions `packages/api/src/auth/**`,
   `packages/api/src/http/session.ts`, `packages/api/src/ws/**`,
