@@ -5,9 +5,14 @@
     "outDir": "dist",
     "types": ["node"],
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "allowImportingTsExtensions": true
   },
   "include": ["**/*.ts", "**/*.mjs"],
   "exclude": ["dist"],
-  "references": [{ "path": "../packages/core" }, { "path": "../packages/tokens" }]
+  "references": [
+    { "path": "../packages/core" },
+    { "path": "../packages/tokens" },
+    { "path": "../packages/api" }
+  ]
 }

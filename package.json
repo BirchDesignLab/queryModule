@@ -15,7 +15,10 @@
     "gen:check": "tsx scripts/ci/check-generated.ts",
     "config:validate": "tsx scripts/ci/config-validate.ts",
     "config:migrate": "tsx scripts/ci/config-migrate.ts",
+    "dev": "node scripts/dev/dev.ts",
+    "dev:api": "node scripts/dev/dev.ts --api-only",
     "dev:web": "pnpm --filter @querymodule/web dev",
+    "e2e": "node scripts/dev/e2e.ts",
     "image:smoke": "bash scripts/ci/boot-smoke.sh all querymodule:local --build",
     "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm config:validate && pnpm gen:check"
   },
