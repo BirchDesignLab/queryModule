@@ -4,13 +4,12 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 import { createAuditService } from "../../src/audit/service";
-import { openDatabase } from "../../src/db/client";
 import { runMigrations } from "../../src/db/migrate";
 import { type Tx, withTransaction } from "../../src/db/tx";
-import { TEST_DB_KEY, tempDbFile } from "../helpers/db";
+import { openTempDatabase } from "../helpers/db";
 
 async function fresh() {
-  const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
+  const db = await openTempDatabase();
   await runMigrations(db, resolve(import.meta.dirname, "../../drizzle"));
   return db;
 }
