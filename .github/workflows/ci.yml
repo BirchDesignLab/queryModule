@@ -9,8 +9,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Spec 9.3: concurrency is cancelled per ref (PR branches and main alike).
-  cancel-in-progress: true
+  # Spec 9.3 cancels per ref; deviation (developer 09-28-26): PR branches still cancel, but main
+  # runs queue, because every main sha must finish ci (and publish its image) so it can be promoted.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read

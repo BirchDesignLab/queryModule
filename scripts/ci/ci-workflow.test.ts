@@ -158,6 +158,15 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(up?.run).toContain("querymodule:ci");
   });
 
+  it("main runs never cancel each other; PR branches still do (developer 09-28-26, #231)", () => {
+    // Deviation from spec 9.3: every main sha must finish ci (and build its image) so it can be
+    // promoted; a newer push to main queues behind the running one instead of cancelling it.
+    expect(workflow.concurrency.group).toBe("ci-${{ github.ref }}");
+    expect(workflow.concurrency["cancel-in-progress"]).toBe(
+      "${{ github.ref != 'refs/heads/main' }}",
+    );
+  });
+
   it("a push to main always builds the image, so every main sha gets a sha- image (#230)", async () => {
     // image skips only on docs_only, and changed-paths fails closed to docs_only=false on any
     // push (a docs-only merge to main still builds, smoke-tests and publishes its image).
