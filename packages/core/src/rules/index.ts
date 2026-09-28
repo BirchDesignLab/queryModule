@@ -1,3 +1,4 @@
+export { canonicalCondition, canonicaliseLiteral, literalCodes } from "./canonical-literal.js";
 export type { CanonContext, CanonResult } from "./canonicalise.js";
 export { canonicalise, ISO_DATE_FORMAT, isRawEmpty, rawText } from "./canonicalise.js";
 export type {
