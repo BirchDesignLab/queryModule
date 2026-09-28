@@ -1,19 +1,38 @@
 import { execFileSync } from "node:child_process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { derivePassword } from "../../src/seed/password";
-import { SeedRefusedError, seedUsers } from "../../src/seed/seed";
+import { SeedPartialFailureError, SeedRefusedError, seedUsers } from "../../src/seed/seed";
 import { DEMO_USERS } from "../../src/seed/users";
 import { createTestApp } from "../helpers/test-app";
 
 const SECRET = "test-seed-password-secret-0123456789ab";
+// Probe the same pipeline the test below spawns (bash running openssl), not openssl alone: on a
+// host with openssl on PATH but no bash (or a bash that resolves to a bash without openssl), the
+// separate-probe version threw ENOENT instead of skipping (critic:I1).
 const hasOpenssl = (() => {
   try {
-    execFileSync("openssl", ["version"]);
+    execFileSync("bash", ["-c", "openssl version"]);
     return true;
   } catch {
     return false;
   }
 })();
+
+// critic:I2 — inject a failure partway through seedUsers's loop (after grantRole is attempted for
+// the first non-"user"-role demo account, officer@example.test) so the reported recovery state
+// can be asserted. grantRole is mocked because it is seedUsers's only role-changing call.
+const grantRoleFailure = vi.hoisted(() => ({ failEmail: null as string | null }));
+vi.mock("../../src/ops/grant-role", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/ops/grant-role")>();
+  return {
+    ...actual,
+    grantRole: async (...args: Parameters<typeof actual.grantRole>) => {
+      if (args[1].email === grantRoleFailure.failEmail)
+        throw new Error("injected grantRole failure");
+      return actual.grantRole(...args);
+    },
+  };
+});
 
 describe("SEC-005 seed", () => {
   it("creates every demo user with a derived password and audited roles", async () => {
@@ -31,6 +50,36 @@ describe("SEC-005 seed", () => {
     const t = await createTestApp();
     await seedUsers(t.deps, SECRET);
     await expect(seedUsers(t.deps, SECRET)).rejects.toThrow(SeedRefusedError);
+  });
+  it("reports the demo users already created when a mid-run write fails (critic:I2)", async () => {
+    const t = await createTestApp();
+    grantRoleFailure.failEmail = "officer@example.test";
+    try {
+      let caught: unknown;
+      try {
+        await seedUsers(t.deps, SECRET);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(SeedPartialFailureError);
+      const err = caught as SeedPartialFailureError;
+      // dispatcher, records, mobileunit (role "user", no grantRole call) plus officer itself: its
+      // user row was created before the mocked grantRole threw, so it belongs in the recovery list.
+      expect(err.created.map((u) => u.email)).toEqual([
+        "dispatcher@example.test",
+        "records@example.test",
+        "mobileunit@example.test",
+        "officer@example.test",
+      ]);
+      for (const u of err.created) expect(u.password).toBe(derivePassword(SECRET, u.email));
+      // The error's own message names the failure but never repeats a password (spec 5.9); only
+      // the CLI's stdout is allowed to print them.
+      for (const u of err.created) expect(err.message).not.toContain(u.password);
+      // A rerun is still refused, per the checker's ruling that the refusal contract never relaxes.
+      await expect(seedUsers(t.deps, SECRET)).rejects.toThrow(SeedRefusedError);
+    } finally {
+      grantRoleFailure.failEmail = null;
+    }
   });
   it("derivation is 43 base64url chars and case-insensitive on email", () => {
     expect(derivePassword(SECRET, "Smoke@Example.test")).toBe(

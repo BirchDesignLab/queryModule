@@ -7,8 +7,28 @@ import { readPragmas } from "../src/db/client";
 import { startServer } from "../src/startup";
 
 const created: string[] = [];
+/*
+ * A libsql client closed via deps.db.$client.close() can still hold its Windows file handle for
+ * several seconds afterward (test/helpers/db.ts documents the same observation, ~4.5-5.5s, for
+ * openTempDatabase's own cleanup) — no retry budget worth paying on every run closes that gap.
+ * Mirror that helper's approach: on win32, leave a still-locked dir in place (one warning) rather
+ * than failing a test that actually stopped its server cleanly; every other platform, and every
+ * other rmSync error, still throws.
+ */
 afterAll(() => {
-  for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
+  const dirs = created.splice(0);
+  let stuck = 0;
+  for (const dir of dirs) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch (e) {
+      if (process.platform !== "win32") throw e;
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EPERM" && code !== "EBUSY") throw e;
+      stuck++;
+    }
+  }
+  if (stuck > 0) console.warn(`[test/startup] ${stuck} temp dir(s) left for a later sweep`);
 });
 const tempDir = (prefix: string): string => {
   const dir = mkdtempSync(join(tmpdir(), prefix));
