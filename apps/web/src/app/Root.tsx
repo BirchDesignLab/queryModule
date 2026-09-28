@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@querymodule/client";
 import { LiveAnnouncer } from "@querymodule/web-ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserRouter, type RouteObject, RouterProvider } from "react-router";
 import { AppChrome } from "./AppChrome.js";
 import { type BootState, bootstrap } from "./bootstrap.js";
@@ -61,18 +61,42 @@ function BootGate({
   if (boot === null) return <main aria-busy="true" />;
   if (boot.status === "failed") {
     return (
-      <main className="qm-page">
-        <h1>{boot.message}</h1>
-        <button type="button" className="qm-button" onClick={onRetry}>
-          {boot.translator.t("app.retry")}
-        </button>
-      </main>
+      <BootFailed message={boot.message} retry={boot.translator.t("app.retry")} onRetry={onRetry} />
     );
   }
   return (
     <I18nProvider translator={boot.translator}>
       <AppRouter clientSupported={boot.clientSupported} createRouter={createRouter} />
     </I18nProvider>
+  );
+}
+
+/**
+ * Retry remounts BootGate, which removes the focused button; focusing the heading on mount keeps
+ * focus off body and lets a screen reader hear that a retry failed again (spec 6.4, 10.6).
+ */
+function BootFailed({
+  message,
+  retry,
+  onRetry,
+}: {
+  message: string;
+  retry: string;
+  onRetry(): void;
+}) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+  return (
+    <main className="qm-page">
+      <h1 ref={headingRef} tabIndex={-1}>
+        {message}
+      </h1>
+      <button type="button" className="qm-button" onClick={onRetry}>
+        {retry}
+      </button>
+    </main>
   );
 }
 

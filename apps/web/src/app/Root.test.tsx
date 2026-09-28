@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { API, server } from "../test/msw-server.js";
@@ -30,5 +30,21 @@ describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+  });
+  it("spec 6.4, 10.6: a retry that fails again moves focus to the error heading, not body", async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${API}/api/v1/meta`, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 503 });
+      }),
+    );
+    const { user } = renderRoot();
+    const name = "Service information is unavailable. Try again.";
+    await screen.findByRole("heading", { name });
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(calls).toBe(2));
+    const heading = await screen.findByRole("heading", { name });
+    await waitFor(() => expect(heading).toHaveFocus());
   });
 });
