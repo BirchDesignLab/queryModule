@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { API, PREFERENCES, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
@@ -34,12 +34,44 @@ describe("BR-002 home after sign-in", () => {
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
     expect(services.preferences.getState().themeMode).toBeNull();
   });
-  it("shows an error and stays put when sign-out fails, matching LoginPage's pattern", async () => {
+  it("SEC-006: a server sign-out failure lands on sign-in with a notice and a retry", async () => {
+    server.use(
+      http.post(`${API}/api/v1/auth/sign-out`, () => new HttpResponse(null, { status: 503 }), {
+        once: true,
+      }),
+    );
     const { user, services } = await signIn();
-    services.session.signOut = () => Promise.reject(new Error("network down"));
     await user.click(screen.getByRole("button", { name: "Sign out" }));
-    expect(await screen.findByText("The service is unavailable. Try again.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Query Module" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(services.authStore.getState()).toMatchObject({ status: "signedOut", user: null });
+    const notice = within(screen.getByRole("main")).getByRole("alert");
+    expect(notice).toHaveTextContent("Sign-out failed on the server.");
+    expect(screen.getByRole("button", { name: "Retry sign-out" })).toBeInTheDocument();
+  });
+  it("SEC-006: a retry that fails keeps the notice; one that succeeds clears it", async () => {
+    let failures = 2;
+    server.use(
+      http.post(`${API}/api/v1/auth/sign-out`, () =>
+        failures-- > 0
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json({ success: true }),
+      ),
+    );
+    const { user } = await signIn();
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await user.click(await screen.findByRole("button", { name: "Retry sign-out" }));
+    await waitFor(() => expect(failures).toBe(0));
+    expect(within(screen.getByRole("main")).getByRole("alert")).toHaveTextContent(
+      "Sign-out failed on the server.",
+    );
+    await user.click(screen.getByRole("button", { name: "Retry sign-out" }));
+    await waitFor(() =>
+      expect(within(screen.getByRole("main")).queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: "Retry sign-out" })).not.toBeInTheDocument();
+    // The focused retry button is gone; focus goes to the page heading, not body (spec 6.4).
+    expect(screen.getByRole("heading", { name: "Sign in" })).toHaveFocus();
+    expect(screen.getByTestId("announcer-polite")).toHaveTextContent("Signed out.");
   });
   it("UX-014 loads the saved theme at sign-in", async () => {
     const { services } = await signIn();

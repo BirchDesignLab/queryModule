@@ -34,15 +34,13 @@ export async function bootstrap(
       fetchMeta(services.api),
       fetchLocaleBundle(services.api, locale),
     ]);
+    const clientSupported = isClientSupported(clientVersion, meta.minClientVersion ?? null);
     await services.session.bootstrap();
-    if (services.authStore.getState().status === "signedIn") {
+    // An unsupported client gets the update gate only (spec 5.1), so it loads no user data.
+    if (clientSupported && services.authStore.getState().status === "signedIn") {
       await loadPreferences(services.api, services.preferences).catch(() => undefined);
     }
-    return {
-      status: "ready",
-      translator: createTranslator(locale, bundle),
-      clientSupported: isClientSupported(clientVersion, meta.minClientVersion ?? null),
-    };
+    return { status: "ready", translator: createTranslator(locale, bundle), clientSupported };
   } catch (error) {
     // No bundle is loaded once either fetch has failed, so the message is resolved
     // through FALLBACK_MESSAGES (B4 carry-forward, ruling IC3).

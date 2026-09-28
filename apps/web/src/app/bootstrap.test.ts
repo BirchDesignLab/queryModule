@@ -22,6 +22,24 @@ describe("NFR-001 bootstrap reads /meta and the locale bundle before login (spec
     const state = await bootstrap(testServices(), "0.1.0");
     expect(state.status === "ready" && state.clientSupported).toBe(false);
   });
+  it("NFR-001: an unsupported client with a live session never loads preferences", async () => {
+    let preferenceReads = 0;
+    server.use(
+      http.get(`${API}/api/v1/meta`, () =>
+        HttpResponse.json({ ...META, minClientVersion: "9.0.0" }),
+      ),
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+      ),
+      http.get(`${API}/api/v1/me/preferences`, () => {
+        preferenceReads += 1;
+        return HttpResponse.json(PREFERENCES);
+      }),
+    );
+    const state = await bootstrap(testServices(), "0.1.0");
+    expect(state.status === "ready" && state.clientSupported).toBe(false);
+    expect(preferenceReads).toBe(0);
+  });
   it("fails with the metaUnavailable message when /meta is down", async () => {
     server.use(http.get(`${API}/api/v1/meta`, () => new HttpResponse(null, { status: 503 })));
     const state = await bootstrap(testServices(), "0.1.0");
