@@ -28,10 +28,10 @@ P0 waves (one PR each): [W1](https://github.com/BirchDesignLab/queryModule/issue
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/progress-dark.svg">
-  <img src="docs/assets/progress-light.svg" alt="As of 2026-09-28: 107/162 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).">
+  <img src="docs/assets/progress-light.svg" alt="As of 2026-09-28: 115/166 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).">
 </picture>
 
-As of 2026-09-28: 107/162 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).
+As of 2026-09-28: 115/166 issues closed across 5 milestones. Full dashboard: the image above (or docs/project-board.md).
 
 <!-- progress:end -->
 
