@@ -8,10 +8,12 @@ import {
   createApiClient,
   createAuthApi,
   createAuthStore,
+  createDraftStore,
   createPreferencesStore,
   createQueryClient,
   createResetController,
   createSessionController,
+  type DraftStore,
   type PreferencesStore,
   type ResetController,
   registerQueryCacheReset,
@@ -38,6 +40,7 @@ export interface Services {
   queryClient: ReturnType<typeof createQueryClient>;
   announcer: Announcer;
   preferences: PreferencesStore;
+  drafts: DraftStore;
   reset: ResetController;
   createSocket: (url: string) => SocketLike;
 }
@@ -65,10 +68,12 @@ export function createServices(options: ServicesOptions): Services {
   const queryClient = createQueryClient();
   const announcer = createAnnouncer();
   const preferences = createPreferencesStore();
+  const drafts = createDraftStore();
   registerQueryCacheReset(reset, queryClient);
   reset.register(() => authStore.getState().setSignedOut());
   reset.register(() => announcer.clear());
   reset.register(() => preferences.getState().reset());
+  reset.register(() => drafts.getState().reset());
   return {
     platform: options.platform,
     api,
@@ -78,6 +83,7 @@ export function createServices(options: ServicesOptions): Services {
     queryClient,
     announcer,
     preferences,
+    drafts,
     reset,
     createSocket: options.createSocket ?? createBrowserSocket,
   };

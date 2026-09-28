@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { SiteConfigSchema, toClientSiteConfig } from "@querymodule/core/config";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { EN_BUNDLE } from "./en-bundle.js";
@@ -12,6 +16,17 @@ export const META = {
   configHash: "0000000000000000000000000000000000000000000000000000000000000001",
   minClientVersion: null,
 };
+
+// jsdom's global URL breaks new URL(relative, import.meta.url) here; resolve via node:path (see en-bundle.ts).
+const defaultSitePath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../packages/config/sites/default.json",
+);
+/** ClientSiteConfig of the parsed default site, with a fixed hash. */
+export const CLIENT_CONFIG = toClientSiteConfig(
+  SiteConfigSchema.parse(JSON.parse(readFileSync(defaultSitePath, "utf8"))),
+  META.configHash,
+);
 
 /** The contract shape of GET/PUT /api/v1/me/preferences (openapi.json getMePreferences200). */
 export const PREFERENCES = {
@@ -29,6 +44,7 @@ export function resetMswState(): void {
 /** Stand-in for Track A P1 routes until they merge; shapes per spec 5.1 and Better Auth. */
 export const server = setupServer(
   http.get(`${API}/api/v1/meta`, () => HttpResponse.json(META)),
+  http.get(`${API}/api/v1/config`, () => HttpResponse.json(CLIENT_CONFIG)),
   http.get(`${API}/api/v1/locales/en`, () => HttpResponse.json(EN_BUNDLE)),
   http.get(`${API}/api/v1/auth/get-session`, () =>
     HttpResponse.json(signedIn ? { session: { id: "s1" }, user: TEST_USER } : null),
