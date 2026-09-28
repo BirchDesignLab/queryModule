@@ -75,6 +75,11 @@ ops_checks() {
   docker volume create "$ops_vol" >/dev/null
   docker volume create "$lk_vol" >/dev/null
   mkdir -p "$backup_out"
+  # CI-only throwaway dir: the runner (uid 1001 on GitHub) owns it, and the container stays
+  # uid 10001 to read /data, so the bind mount must be writable by any uid. Docker Desktop
+  # ignores bind-mount ownership, which is why Windows runs passed without this. On the host,
+  # the backup dir belongs to uid 10001 (backup.sh's staging chown).
+  chmod 777 "$backup_out"
 
   # --- existence: every compiled ops CLI is in the image at its documented path ---
   for cli in audit-stats backup check-triggers grant-role lost-data-key lost-key seed; do
