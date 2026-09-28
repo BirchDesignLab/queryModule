@@ -49,10 +49,14 @@ describe("BR-002 standalone sign-in screen (spec 5.6, 6.2)", () => {
     await user.type(screen.getByLabelText(/Password/), "wrong-pass");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     expect(
-      await screen.findByText("Sign-in failed. Check your email and password."),
+      await screen.findByText("Sign-in failed. Check your email and password.", {
+        selector: "#login-error",
+      }),
     ).toHaveAttribute("id", "login-error");
     expect(screen.getByLabelText(/Password/)).toHaveValue("");
-    expect(screen.getByTestId("announcer-polite")).toHaveTextContent("Sign-in failed");
+    expect(screen.getByTestId("announcer-polite")).toHaveTextContent(
+      "Sign-in failed. Check your email and password.",
+    );
   });
 
   it("shows the limiter wait time", async () => {
@@ -67,7 +71,9 @@ describe("BR-002 standalone sign-in screen (spec 5.6, 6.2)", () => {
     await user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     expect(
-      await screen.findByText("Too many attempts. Try again in 60 seconds."),
+      await screen.findByText("Too many attempts. Try again in 60 seconds.", {
+        selector: "#login-error",
+      }),
     ).toBeInTheDocument();
   });
 

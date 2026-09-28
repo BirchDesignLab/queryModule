@@ -19,19 +19,6 @@ function failureKey(result: Failure): { key: string; params?: Record<string, num
   return { key: "login.failed" };
 }
 
-/**
- * The visible form error (#login-error) and the live-region announcement both need to carry
- * the failure, but announcing the identical sentence makes it appear twice in the accessible
- * text tree with nothing to tell the two nodes apart, so a plain text lookup for the full
- * sentence matches both. Announcing only the leading clause keeps the announcement distinct
- * from the visible paragraph while still naming the failure; the full sentence stays reachable
- * through the paragraph itself.
- */
-function announcementFor(message: string): string {
-  const boundary = message.indexOf(". ");
-  return boundary === -1 ? message : message.slice(0, boundary + 1);
-}
-
 export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
   const { session, authStore, announcer, preferences } = useServices();
   const t = useT();
@@ -88,7 +75,7 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
     const message = t(failure.key, failure.params);
     setFormError(message);
     setPassword("");
-    announcer.announce(announcementFor(message));
+    announcer.announce(message);
   }
 
   return (
