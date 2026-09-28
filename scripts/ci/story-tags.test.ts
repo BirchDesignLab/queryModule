@@ -6,6 +6,7 @@ import {
   highestMilestoneTag,
   parseArgs,
   readMilestoneTags,
+  readStoriesFile,
   StoriesFileSchema,
   type StoryRow,
   storiesInScope,
@@ -61,6 +62,15 @@ describe("story-tag gate (spec 10.2)", () => {
     expect(hasTaggedTest('describe.only.skip("[A1]", () => {})', "A1")).toBe(false);
     expect(hasTaggedTest('/* note */ it("[A1] x", () => {})', "A1")).toBe(true);
     expect(hasTaggedTest("// note\nit.each(`[A1] x`, () => {})", "A1")).toBe(true);
+  });
+
+  it("a comment marker inside a string does not swallow a real tagged test (item 7)", () => {
+    const text = [
+      'const glob = "a/*.ts";',
+      'it("[A1] real test", () => {});',
+      'const other = "*/";',
+    ].join("\n");
+    expect(hasTaggedTest(text, "A1")).toBe(true);
   });
 });
 
@@ -145,6 +155,48 @@ describe("stories.json schema (fails closed on empty input)", () => {
   });
   it("accepts distinct stories", () => {
     expect(StoriesFileSchema.safeParse([row, { ...row, story: "A2" }]).success).toBe(true);
+  });
+
+  it.each([["/etc/passwd"], ["C:\\x"], ["C:/x"], ["\\\\server\\share"], ["../x"], ["a/../../b"]])(
+    "rejects a file path escaping the repo: %j (item 6)",
+    (file) => {
+      expect(StoriesFileSchema.safeParse([{ ...row, files: [file] }]).success).toBe(false);
+    },
+  );
+
+  it("accepts ordinary repo-relative paths (item 6)", () => {
+    expect(StoriesFileSchema.safeParse([{ ...row, files: ["a/b.test.ts"] }]).success).toBe(true);
+  });
+});
+
+describe("readStoriesFile (item 8: clean errors, no stack trace or zod dump)", () => {
+  it("reports a missing file cleanly", () => {
+    const err = Object.assign(new Error("boom"), { code: "ENOENT" });
+    const r = readStoriesFile(() => {
+      throw err;
+    }, "docs/testing/stories.json");
+    expect(r).toEqual({ ok: false, message: "docs/testing/stories.json: file not found" });
+  });
+
+  it("reports invalid JSON cleanly, no file excerpt", () => {
+    const r = readStoriesFile(() => "{not json, secretMarker", "docs/testing/stories.json");
+    expect(r).toEqual({ ok: false, message: "docs/testing/stories.json: invalid JSON" });
+  });
+
+  it("reports a schema failure with the first issue's path and message, not the zod dump", () => {
+    const r = readStoriesFile(() => "[]", "docs/testing/stories.json");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.message).toContain("docs/testing/stories.json:");
+      expect(r.message).not.toContain("ZodError");
+      expect(r.message.split("\n").length).toBe(1);
+    }
+  });
+
+  it("returns the parsed rows on success", () => {
+    const validRow = { story: "A1", milestone: "m1", files: ["a1.test.ts"] };
+    const r = readStoriesFile(() => JSON.stringify([validRow]), "docs/testing/stories.json");
+    expect(r).toEqual({ ok: true, rows: [validRow] });
   });
 });
 

@@ -1,10 +1,29 @@
 import { MILESTONES, type Milestone } from "@querymodule/core/contracts";
 import { z } from "zod";
+import { stripComments } from "./strip-comments";
+
+/**
+ * True when `path` stays inside the repo: no POSIX absolute path, no Windows
+ * drive-absolute path (`C:\x` or `C:/x`), no UNC path (`\\server\share`), and
+ * no `..` segment on either separator (item 6).
+ */
+export function isSafeRelativePath(path: string): boolean {
+  if (path.startsWith("/")) return false;
+  if (path.startsWith("\\\\")) return false;
+  if (/^[A-Za-z]:[\\/]/.test(path)) return false;
+  return path.split(/[\\/]/).every((segment) => segment !== "..");
+}
 
 export const StoryRowSchema = z.strictObject({
   story: z.string().regex(/^[ABC]\d$/),
   milestone: z.union([z.enum(MILESTONES), z.literal("later")]),
-  files: z.array(z.string().min(1)).min(1),
+  files: z
+    .array(
+      z.string().min(1).refine(isSafeRelativePath, {
+        message: "path must stay inside the repo (no absolute path or .. segment)",
+      }),
+    )
+    .min(1),
 });
 export type StoryRow = z.infer<typeof StoryRowSchema>;
 /** Non-empty with unique stories, so an emptied or duplicated stories.json fails closed. */
@@ -45,7 +64,7 @@ export function storiesInScope(
  * passed tests carrying the tag instead.
  */
 export function hasTaggedTest(text: string, story: string): boolean {
-  const live = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  const live = stripComments(text);
   const title = new RegExp(
     `\\b(?:it|test|describe)(?:\\.(?!skip\\b|todo\\b|fixme\\b)\\w+)*\\(\\s*["'\`][^"'\`\\n]*\\[${story}\\]`,
   );
@@ -96,6 +115,43 @@ export function readMilestoneTags(runGit: (args: string[]) => GitResult): TagRea
       .map((t) => t.trim())
       .filter((t) => t !== ""),
   };
+}
+
+export type ReadStoriesResult = { ok: true; rows: StoryRow[] } | { ok: false; message: string };
+
+/**
+ * Reads and validates the stories file. Any failure (missing file, invalid
+ * JSON, schema mismatch) becomes one short `<path>: <reason>` line: no raw
+ * stack, no file excerpt (JSON.parse messages can quote file content), and no
+ * zod dump - just the first issue's path and message (item 8).
+ */
+export function readStoriesFile(
+  readFile: (path: string) => string,
+  path: string,
+): ReadStoriesResult {
+  let text: string;
+  try {
+    text = readFile(path);
+  } catch (e) {
+    const reason =
+      (e as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
+        ? "file not found"
+        : "cannot read file";
+    return { ok: false, message: `${path}: ${reason}` };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { ok: false, message: `${path}: invalid JSON` };
+  }
+  const parsed = StoriesFileSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const at = issue && issue.path.length > 0 ? ` at ${issue.path.join(".")}` : "";
+    return { ok: false, message: `${path}: ${issue?.message ?? "invalid stories file"}${at}` };
+  }
+  return { ok: true, rows: parsed.data };
 }
 
 export function checkStoryTags(

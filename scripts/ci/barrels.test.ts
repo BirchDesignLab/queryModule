@@ -32,6 +32,10 @@ describe("coverage-excluded index.ts files are pure re-export barrels (plan amen
     expect(isPureBarrel('export{a};export*from"./b";\n')).toBe(false);
   });
 
+  it("a // inside a specifier string does not comment out the rest of the file (item 7)", () => {
+    expect(isPureBarrel('export * from "./weird//path";\nexport { b } from "./b";\n')).toBe(true);
+  });
+
   it("rejects anything that is not export ... from", () => {
     expect(isPureBarrel('import en from "./en.json";\nexport const X = { en };\n')).toBe(false);
     expect(isPureBarrel('export * from "./a";\nexport const X = 1;\n')).toBe(false);

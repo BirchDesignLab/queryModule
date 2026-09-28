@@ -110,6 +110,58 @@ describe("config:validate failures carry JSON paths", () => {
     ]);
   });
 
+  it("invalid JSON locale bundle is reported as invalidJson, not missingLocale (item 4)", () => {
+    const site = defaultSite();
+    const locale = (site.locales as string[])[0] ?? "en";
+    const localeFile = resolve(root, "packages/config/locales", `${locale}.json`);
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return site;
+        if (p === localeFile) throw new SyntaxError("bad locale json");
+        return fsIo.readJson(p);
+      },
+    };
+    const r = checkConfigFile(broken, io);
+    expect(r.errors).toContainEqual({
+      level: "error",
+      path: "/locales/0",
+      key: "config.invalidJson",
+      params: { locale },
+    });
+    expect(r.errors.some((e) => e.key === "config.missingLocale")).toBe(false);
+  });
+
+  it("mock file invalid JSON points into the mock document, not the site file (item 5)", () => {
+    const site = defaultSite();
+    const mockFile = cfg("mock/default.json");
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return site;
+        if (p === mockFile) throw new SyntaxError("bad mock json");
+        return fsIo.readJson(p);
+      },
+    };
+    const r = checkConfigFile(broken, io);
+    expect(r.errors).toContainEqual({
+      level: "error",
+      path: "/mock",
+      key: "config.invalidJson",
+      params: { siteId: "default" },
+    });
+  });
+
+  it("mock schema issues point into the mock document (item 5)", () => {
+    const mock = structuredClone(fsIo.readJson(cfg("mock/default.json"))) as { siteId: unknown };
+    mock.siteId = 123;
+    const r = checkConfigFile(
+      cfg("sites/default.json"),
+      layered({ [cfg("mock/default.json")]: mock }),
+    );
+    expect(r.errors).toContainEqual(
+      expect.objectContaining({ path: "/mock/siteId", key: "config.mockSchema" }),
+    );
+  });
+
   it("missing mock file for a site with mock sources", () => {
     const site = defaultSite();
     site.site.id = "nomock";
