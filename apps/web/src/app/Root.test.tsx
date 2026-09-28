@@ -24,7 +24,9 @@ describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
     );
     const { user } = renderRoot();
     expect(
-      await screen.findByRole("heading", { name: "The service is unavailable. Try again." }),
+      await screen.findByRole("heading", {
+        name: "Service information is unavailable. Try again.",
+      }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();

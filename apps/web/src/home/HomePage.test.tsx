@@ -30,4 +30,11 @@ describe("BR-002 home after sign-in", () => {
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
     expect(services.preferences.getState().themeMode).toBeNull();
   });
+  it("shows an error and stays put when sign-out fails, matching LoginPage's pattern", async () => {
+    const { user, services } = await signIn();
+    services.session.signOut = () => Promise.reject(new Error("network down"));
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByText("The service is unavailable. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Query Module" })).toBeInTheDocument();
+  });
 });

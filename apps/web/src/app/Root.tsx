@@ -62,7 +62,7 @@ function BootGate({
   if (boot.status === "failed") {
     return (
       <main className="qm-page">
-        <h1>{boot.translator.t("error.unavailable")}</h1>
+        <h1>{boot.message}</h1>
         <button type="button" className="qm-button" onClick={onRetry}>
           {boot.translator.t("app.retry")}
         </button>

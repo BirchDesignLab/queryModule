@@ -1,4 +1,4 @@
-import { type HeartbeatResult, runHeartbeatProbe } from "@querymodule/client";
+import { type HeartbeatResult, runHeartbeatProbe, type SocketLike } from "@querymodule/client";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useT } from "../app/i18n-context.js";
@@ -9,16 +9,24 @@ export function heartbeatUrl(location: { protocol: string; host: string }): stri
 }
 
 export function StatusPage() {
-  const { createSocket, announcer } = useServices();
+  const { createSocket, announcer, reset } = useServices();
   const t = useT();
   const [result, setResult] = useState<HeartbeatResult | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
     let live = true;
+    let socket: SocketLike | null = null;
+    const trackedCreateSocket = (url: string) => {
+      socket = createSocket(url);
+      return socket;
+    };
+    // The status page opens the app's first live WebSocket (T23 carry-forward): register its
+    // close with the ResetController so sign-out, a 401 or a user change closes it in flight.
+    const unregister = reset.register(() => socket?.close());
     void runHeartbeatProbe({
       url: heartbeatUrl(window.location),
-      createSocket,
+      createSocket: trackedCreateSocket,
       timeoutMs: 10_000,
       now: () => performance.now(),
       nonce: crypto.randomUUID(),
@@ -31,8 +39,10 @@ export function StatusPage() {
     });
     return () => {
       live = false;
+      unregister();
+      socket?.close();
     };
-  }, [createSocket]);
+  }, [createSocket, reset]);
 
   let text = t("status.checking");
   if (result !== null) {
