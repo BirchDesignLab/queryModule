@@ -76,8 +76,8 @@ export function sweepStaleTempDirs(root: string, maxAgeMs: number, now = Date.no
 }
 
 // A prior Windows run may have left qm-db-* dirs behind (see the afterAll comment above); sweep
-// anything older than 10 minutes so %TEMP% does not pile up. Never on the critical path.
-sweepStaleTempDirs(tmpdir(), 10 * 60 * 1000);
+// anything older than 10 minutes so TEST_DB_ROOT does not pile up. Never on the critical path.
+sweepStaleTempDirs(TEST_DB_ROOT, 10 * 60 * 1000);
 
 export function tempDbFile(): string {
   const dir = mkdtempSync(join(TEST_DB_ROOT, "qm-db-"));
