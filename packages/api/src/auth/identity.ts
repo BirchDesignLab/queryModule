@@ -19,7 +19,7 @@ export interface AppIdentityService extends IdentityService {
  * AuditActorSchema rejects (for example longer than 254 characters) would fail every audit write,
  * and so every submit, so it is stored as null instead.
  */
-function auditEmail(email: string): string | null {
+export function auditEmail(email: string): string | null {
   const r = AuditActorSchema.shape.email.safeParse(email);
   return r.success ? r.data : null;
 }
