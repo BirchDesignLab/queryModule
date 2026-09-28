@@ -1,9 +1,10 @@
-import type { AuditEvent, Role, WsEvent } from "@querymodule/core/contracts";
+import type { AuditActor, AuditEvent, Role, WsEvent } from "@querymodule/core/contracts";
 import type { Tx } from "./db/tx";
 
 export interface Principal {
   userId: string;
-  email: string;
+  /** Null when the stored address fails AuditActorSchema (see auth/identity.ts). */
+  email: string | null;
   role: Role;
   sessionId: string;
   identitySource: "local" | "host";
@@ -36,7 +37,7 @@ export interface EntityStore {
   ): Promise<void>;
 }
 
-export const actorOf = (p: Principal): { id: string; email: string; role: Role } => ({
+export const actorOf = (p: Principal): AuditActor => ({
   id: p.userId,
   email: p.email,
   role: p.role,
