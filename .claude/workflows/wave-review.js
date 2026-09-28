@@ -65,6 +65,10 @@
  * Returns { verdict: "approve" | "fixes", reviewedSha, artifactWritten, findings, residual,
  * answers, declined, rulings, supersededRulings, fixCommits?, strayArtifact?, answersUnconsumed?,
  * stopped?, problem?, escalated?, questions? }.
+ * Shas (#222): reviewedSha and the fix head come from verifyHead (a Haiku role that runs git
+ * rev-parse and git cat-file -e <sha>^{commit} in repoDir), never from a reviewer, fixer, progress
+ * checker or re-reviewer field; a reported sha that differs is logged. An invalid answer stops the
+ * run (stopped "precondition", stopPoint "precondition:verifyHead"; answer once to re-run it).
  *   verdict "approve" with artifactWritten: commit the artifact (it records reviewedSha, the
  *     reviewed head, so the artifact commit sits on top) and push.
  *   verdict "approve" without artifactWritten: re-run the review; never hand-write the artifact.
@@ -215,8 +219,8 @@ const usingSlices = HAS_SLICES && !FAST_PATH
 // re-runs the failing agent (reviewer or fixer) once. Decisions from all entries apply; a later
 // entry wins for the same item.
 const STOP_POS = { reviewer: 1, ruler: 2, fixer: 3, 're-review': 5 }
-const STOP_POINTS = 'reviewer, precondition (or precondition:<label> from stopPoint), ruler, fixer, re-review'
-const PRECONDITION_AT = /^precondition(?::(reviewer|fixer))?$/
+const STOP_POINTS = 'reviewer, precondition (or precondition:<label> from stopPoint: reviewer, fixer, verifyHead), ruler, fixer, re-review'
+const PRECONDITION_AT = /^precondition(?::(reviewer|fixer|verifyHead))?$/
 let ANSWERS = null
 const CONTROLLER = new Map()
 if (A.answers !== undefined && A.answers !== null) {
@@ -270,6 +274,7 @@ const DEFAULTS_BY_TIER = {
     fixer: { model: 'opus', effort: 'medium' },
     progressChecker: { model: 'sonnet', effort: 'low' },
     reReviewer: { model: 'opus', effort: 'high' },
+    verifyHead: { model: 'haiku' }, // reads shas from git (#222); model only: the API rejects effort on Haiku
   },
   gate: {
     reviewer: { model: 'opus', effort: 'medium' },
@@ -277,6 +282,7 @@ const DEFAULTS_BY_TIER = {
     fixer: { model: 'opus', effort: 'medium' },
     progressChecker: { model: 'sonnet', effort: 'low' },
     reReviewer: { model: 'opus', effort: 'medium' },
+    verifyHead: { model: 'haiku' },
   },
 }
 const DEFAULTS = DEFAULTS_BY_TIER[TIER]
@@ -491,6 +497,53 @@ function rulingsText() {
   if (!list.length) return ''
   return ['Rulings in force (binding; never reverse one):', ...list.map((r) => `* ruling ${r.item}: ${r.decision}${r.source === 'controller' ? ' (controller, final)' : ''}: ${r.reason}`)].join('\n')
 }
+// ---------- verifyHead (#222) ----------
+// The only source of a reviewed or fix-head sha in this script. One Haiku agent reads git
+// (git rev-parse <rev> and git cat-file -e <sha>^{commit}); the script accepts only a 40-hex sha it
+// confirmed exists. agentSha is what a reviewer, fixer or progress checker reported: compared and
+// logged on a difference, never used. rev is A.head for the review (the reviewer resolves
+// reviewedSha with git rev-parse <head>) and HEAD after the fix pass. Returns { head, differs } (differs: agentSha named another commit) or { problem }.
+const SHA40 = /^[0-9a-f]{40}$/
+const VERIFY_HEAD = {
+  type: 'object',
+  properties: {
+    revParse: { type: 'string', description: 'the raw stdout of the rev-parse command, copied exactly' },
+    catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS <sha> or MISSING' },
+  },
+  required: ['revParse', 'catFile'],
+}
+const gitSha = (v) => {
+  const head = String((v && v.revParse) || '').trim()
+  return SHA40.test(head) && String((v && v.catFile) || '').trim() === `EXISTS ${head}` ? head : null
+}
+async function verifyHead(agentSha, label, rev) {
+  const prompt = [
+    `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,
+    `1. git -C "${REPO}" rev-parse ${rev}`,
+    `2. sha=$(git -C "${REPO}" rev-parse ${rev}) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo "EXISTS $sha" || echo MISSING`,
+    'Return revParse (the stdout of command 1) and catFile (the stdout of command 2).',
+    HOUSE,
+  ].join('\n')
+  const run = (p, l) => agent(p, { label: l, phase: 'Review', schema: VERIFY_HEAD, ...role('verifyHead') })
+  let v = await run(prompt, label)
+  let head = gitSha(v)
+  if (!head) {
+    const ans = preconditionAnswers('verifyHead')
+    if (ans) {
+      log(`verifyHead: ${label} returned no valid sha; retrying with the controller answer`)
+      v = await run(`${prompt}\n\n${ans}`, `${label}-retry`)
+      head = gitSha(v)
+    }
+  }
+  if (!head) {
+    const shown = v ? JSON.stringify({ revParse: String(v.revParse).slice(0, 60), catFile: String(v.catFile).slice(0, 20) }) : 'no result'
+    return { problem: `verifyHead: ${label} did not return a 40-hex sha that exists in git (${shown}); check the repository in ${REPO}, then answer at precondition:verifyHead to re-run it once` }
+  }
+  const a = String(agentSha || '').trim().toLowerCase()
+  const differs = !!a && !(a.length >= 7 && head.startsWith(a))
+  if (differs) log(`agent-reported head ${a.slice(0, 16)}... differs from git; using git`)
+  return { head, differs }
+}
 function done(extra) {
   const out = Object.assign({ answers: state.answers, declined: state.declined, rulings: inForce(), supersededRulings: state.superseded }, extra)
   if (ANSWERS) {
@@ -597,7 +650,7 @@ if (usingSlices) {
     }
     if (res.preconditionFailed) {
       log(`review: ${sliceT} slice precondition failed: ${res.preconditionFailed}; stopping before any ruler or fixer`)
-      return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `${sliceT} slice reviewer: ${res.preconditionFailed}`, reviewedSha: res.reviewedSha || null, artifactWritten: false, findings: [], residual: [] })
+      return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `${sliceT} slice reviewer: ${res.preconditionFailed}`, reviewedSha: null, artifactWritten: false, findings: [], residual: [] })
     }
     const prefix = sliceT === 'gate' ? 'G-' : 'C-'
     const findings = res.findings.map((f) => Object.assign({}, f, { id: `${prefix}${f.id}` }))
@@ -662,11 +715,28 @@ if (!review) {
 }
 if (review.preconditionFailed) {
   log(`review: precondition failed: ${review.preconditionFailed}; stopping before any ruler or fixer`)
-  return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `reviewer: ${review.preconditionFailed}`, reviewedSha: review.reviewedSha || null, artifactWritten: false, findings: [], residual: [] })
+  return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:reviewer', problem: `reviewer: ${review.preconditionFailed}`, reviewedSha: null, artifactWritten: false, findings: [], residual: [] })
 }
 // The single-reviewer path never masks its own artifactWritten claim, so rawArtifactWritten (set
 // by the slice path above) mirrors it here rather than being left unset (#92 C1).
 if (review.rawArtifactWritten === undefined) review.rawArtifactWritten = !!review.artifactWritten
+// The reviewed sha is read from git (#222), never taken from the reviewer's JSON.
+let badArtifact = false
+{
+  const vr = await verifyHead(review.reviewedSha, 'verify-head-review', A.head)
+  if (vr.problem) {
+    log(`review: ${vr.problem}; stopping`)
+    return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:verifyHead', problem: vr.problem, reviewedSha: null, artifactWritten: false, findings: [], residual: [], strayArtifact: review.artifactWritten || review.rawArtifactWritten ? ARTIFACT : undefined })
+  }
+  review.reviewedSha = vr.head
+  // K2: an artifact the reviewer wrote records the sha it reported; when that is not git's, the file
+  // vouches for a head that was not reviewed, so it is never returned as the written artifact.
+  if (vr.differs && (review.artifactWritten || review.rawArtifactWritten)) {
+    log('review: the reviewer reported a reviewedSha that differs from git, so the artifact it wrote records the wrong sha; returned as strayArtifact, re-run the review')
+    review.artifactWritten = false
+    badArtifact = true
+  }
+}
 state.answers = review.answers
 state.declined = review.declined
 const firstBlocking = review.findings.filter(blocking)
@@ -675,7 +745,7 @@ if (review.declined.length) log(`review: ${review.declined.length} declined-to-j
 
 if (review.verdict === 'approve' && firstBlocking.length === 0) {
   if (!review.artifactWritten) log('review: approve but the artifact was not written; re-run the review, never hand-write it')
-  return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)) })
+  return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)), strayArtifact: badArtifact ? ARTIFACT : undefined })
 }
 if (review.verdict === 'approve') log(`review: verdict approve but ${firstBlocking.length} critical/important finding(s); treating as fixes`)
 // rawArtifactWritten catches a write by any slice (not only the last one the merge credits), so a
@@ -797,14 +867,19 @@ if (mustFix.length || minors.length) {
   )
   let problems = []
   if (pc) {
-    fixHead = pc.head
     state.fixCommits = pc.newCommits
     if (!pc.ok) problems = pc.problems.length ? pc.problems : ['progress checker reported not ok but listed no problem']
   } else {
-    fixHead = fx.head
     state.fixCommits = fx.commits
     problems = ['progress checker returned no result; fix pass unchecked']
   }
+  // The fix head is read from git (#222), never taken from the progress checker or the fixer.
+  const vf = await verifyHead(pc ? pc.head : fx.head, 'verify-head-fix', 'HEAD')
+  if (vf.problem) {
+    log(`fix: ${vf.problem}; stopping`)
+    return done({ verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'precondition', stopPoint: 'precondition:verifyHead', problem: vf.problem, findings: review.findings, residual: toFix, fixCommits: state.fixCommits, strayArtifact: stray ? ARTIFACT : undefined })
+  }
+  fixHead = vf.head
   problems.forEach((p, k) => progressFindings.push({ id: `progress-${k + 1}`, severity: 'important', file: '', line: '', summary: `progress check: ${p}`, fix: 'restore the invariant the progress check names', planMandated: false, contests: '' }))
   log(`fix: head ${String(fixHead).slice(0, 7)}, ${state.fixCommits.length} commit(s)${problems.length ? `; ${problems.length} progress problem(s) sent to the re-reviewer as findings` : ''}`)
 } else {
@@ -876,10 +951,24 @@ if (rr.artifactWritten) stray = verdict !== 'approve'
 if (stray) log('re-review: an artifact was written without a final approve; returned as strayArtifact for the controller to delete')
 log(`re-review: ${verdict}, ${residual.length} residual (${residualBlocking.length} critical/important), artifact ${rr.artifactWritten && verdict === 'approve' ? 'written' : 'not written'}; no second fix pass`)
 
+// reviewedSha is the verified fix head, not the re-reviewer's claim (a different claim is logged).
+let rrArtifact = rr.artifactWritten && verdict === 'approve'
+{
+  const c = String(rr.reviewedSha || '').trim().toLowerCase()
+  if (c && !(c.length >= 7 && fixHead.startsWith(c))) {
+    log(`agent-reported head ${c.slice(0, 16)}... differs from git; using git`)
+    // K2: the artifact the re-reviewer wrote records its claimed sha, not git's
+    if (rrArtifact) {
+      log('re-review: the re-reviewer reported a reviewedSha that differs from git, so the artifact it wrote records the wrong sha; returned as strayArtifact')
+      rrArtifact = false
+      stray = true
+    }
+  }
+}
 return done({
   verdict,
-  reviewedSha: rr.reviewedSha,
-  artifactWritten: rr.artifactWritten && verdict === 'approve',
+  reviewedSha: fixHead,
+  artifactWritten: rrArtifact,
   findings: review.findings,
   residual,
   fixCommits: state.fixCommits,

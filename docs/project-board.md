@@ -23,7 +23,7 @@ Every level above is matched by issue number, never by title (`scripts/ops/board
 
 | Field | Values | Meaning |
 |---|---|---|
-| Status | Todo, Ready, In Progress, In Review, Blocked, Done | Todo: not started. Ready: briefed and unblocked. In Progress: a session is on it. In Review: PR open. Blocked: waits on a decision, issue or admin step. Done: merged or closed. |
+| Status | Todo, In Progress, In Review, Blocked, Done | Todo: not started. In Progress: a session is on it. In Review: PR open. Blocked: waits on a decision, issue or admin step. Done: merged or closed. |
 | Level | Milestone, Phase, Wave, Task, Follow-up | What kind of item this is (developer decision, #80); the setup script sets it on every item it owns. Used instead of a title regex to identify parents and drive Start/Finish roll-up. |
 | Track | Platform (A), Web (B), Core, Mobile (D) | Owning track (master plan 3). Same as the track label. |
 | Phase | P0 to P3 | Phase within the milestone. |
@@ -40,7 +40,7 @@ Track (`platform`, `web`, `core`, `mobile`), phase (`p0` to `p3`), `contract`, `
 ## Flow
 
 1. A phase starts: its plan is written, its task issues are created and linked under the phase parent (and wave parents in P0), Status Todo.
-2. A wave starts: its tasks move to Ready, then In Progress.
+2. A wave starts: its tasks move to In Progress.
 3. The wave PR opens with `Closes #n` for each task: tasks move to In Review.
 4. The developer merges: GitHub closes the tasks, Status becomes Done.
 5. Carries and findings from review become `follow-up` issues under the phase that will do them.
@@ -71,14 +71,6 @@ The setup script (`scripts/ops/gh-setup-project.mjs`) only seeds Status and Prio
 ## Board data
 
 The issue content the setup script writes to GitHub (`PHASES`, `CONTRACTS_M0P0`, `MILESTONE_PARENT_NUMBERS`, `WAVES`, `FOLLOW_UPS`: titles, bodies, labels, milestone, parent, track, phase, number and state) lives in `docs/board/board-data.json`, outside `[gate]` (ADR-0007 amendment, issue #92). Editing it, for example to record a milestone parent's issue number or add a follow-up, is an ordinary change with no sensitive-review artifact. `scripts/ops/board-data-schema.mjs` validates the file at every run, before the first gh call or GitHub read, fail closed with a JSON pointer per error; `scripts/ops/board-data.test.ts` checks the shipped file and one failing case per rule. The script itself, `scripts/ops/gh-setup-project.mjs` (and its structural config in `scripts/ops/board-config.mjs`: which repo and project, labels, milestones, fields), stays `[gate]`: a data file edit can add or reword an issue, never delete a label, add a field, or change which repo or project is written.
-
-## SVG dashboard
-
-`scripts/ops/progress-svg.mjs` (`renderDashboard(model, theme)`) is a pure renderer for the README progress image: milestone progress (closed over total issues), phase sub-issue bars, the P0 wave timeline (from the Start/Finish roll-up above, or a merged wave's own span, below), open decisions (label `decision`) and task/follow-up counts by Status. It emits static, accessible SVG only: no `<script>`, no event attributes, no `<foreignObject>`, no external `href` or font URL, every text node escaped, `role="img"` with a `<title>` and `<desc>`, and 4.5:1 text / 3:1 bar contrast in both themes (checked with `@querymodule/tokens`'s `contrastRatio`).
-
-`node scripts/ops/gh-setup-project.mjs --dashboard` reads GitHub live (no writes at all, GitHub or otherwise gated behind `--apply`) and regenerates `docs/assets/progress-light.svg`, `docs/assets/progress-dark.svg` and the README `<picture>` block between the `progress:start`/`progress:end` markers. The controller runs it after a wave merges; the two SVGs in the repo right now are rendered from a fixture model (`scripts/mock-data/render-fixture-dashboard.mjs`) so the README image resolves before the first live regen.
-
-For a wave whose `pr` is recorded and whose PR has merged, the wave timeline uses that PR's own span (start: the first commit's author date; finish: `merged_at`) instead of the Start/Finish roll-up, which would otherwise show every P0 wave on the same day (issue #85). `scripts/ops/board-model.mjs`'s `waveSpan` makes the choice; the two live reads it needs (`repos/{repo}/pulls/{n}` and its `commits`) happen only under `--dashboard`, never during a plain dry run or `--apply` alone. `--apply` alone re-renders the SVGs and README block with roll-up wave dates; run `--dashboard` after any `--apply` and commit that output, not the `--apply` render.
 
 ## Manual steps
 

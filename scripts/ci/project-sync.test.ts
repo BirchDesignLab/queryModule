@@ -240,7 +240,7 @@ describe("project-sync board job", () => {
           status: "Todo",
           prs: [{ state: "OPEN", isDraft: true, repo: REPO }],
         },
-        { number: 3, title: "untouched task", state: "OPEN", status: "Ready" },
+        { number: 3, title: "untouched task", state: "OPEN", status: "In Progress" },
         { number: 4, title: "done task", state: "CLOSED", stateReason: "COMPLETED" },
       ],
       issueEvent,
@@ -299,7 +299,7 @@ describe("project-sync board job", () => {
           level: "Wave",
           sub: { total: 2, completed: 0 },
         },
-        { number: 2, title: "child task", state: "OPEN", status: "Ready", parentNumber: 55 },
+        { number: 2, title: "child task", state: "OPEN", status: "In Progress", parentNumber: 55 },
       ],
       issueEvent,
     );

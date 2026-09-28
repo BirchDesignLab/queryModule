@@ -1,7 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { STATUS_OPTIONS } from "./board-config.mjs";
 
 // gh-setup-project.mjs is network glue and stays out of coverage, but the
 // specific shape of its wave-parent ensureIssue call is a static fact we can
@@ -63,55 +65,6 @@ describe("gh-setup-project: date backfill reuses board-model.mjs (#80 requiremen
   });
 });
 
-describe("gh-setup-project: SVG dashboard, --dashboard flag (#80 requirement 8)", () => {
-  it("recognises --dashboard, rejects it combined with --apply, and never sets APPLY from it", () => {
-    expect(source).toMatch(/const DASHBOARD = argv\.includes\("--dashboard"\);/);
-    expect(source).toMatch(/if \(APPLY && DASHBOARD\)/);
-    expect(source).toMatch(/known = new Set\(\["--apply", "--dashboard", "--as", AS\]\);/);
-  });
-
-  it("gates local file writes (SVGs, README) on APPLY or DASHBOARD, never GitHub writes on DASHBOARD alone", () => {
-    const start = source.indexOf("function writeLocalFile(what, fn) {");
-    const end = source.indexOf("{\n  const model = dashboardModel();");
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const block = source.slice(start, end);
-    expect(block).toMatch(/if \(!\(APPLY \|\| DASHBOARD\)\)/);
-    // The GitHub-write helper stays gated on APPLY alone (unchanged by this task).
-    const writeFn = source.slice(
-      source.indexOf("function write(what, fn) {"),
-      source.indexOf("function writeLocalFile"),
-    );
-    expect(writeFn).toMatch(/if \(!APPLY\)/);
-  });
-
-  it("replaces the Mermaid README block with an SVG <picture> built from renderDashboard", () => {
-    expect(source).toMatch(/import \{ renderDashboard \} from "\.\/progress-svg\.mjs";/);
-    expect(source).toMatch(/<picture>/);
-    expect(source).toMatch(/prefers-color-scheme: dark/);
-    expect(source).not.toMatch(/```mermaid/);
-  });
-});
-
-describe("gh-setup-project: dashboardModel reads post-write field values (r2:new-1)", () => {
-  it("reloads items after the field-value write loop, before dashboardModel() runs", () => {
-    const loopStart = source.indexOf("for (const issue of all) {");
-    const loopEnd = source.indexOf("// README progress block:");
-    const dashboardCallIndex = source.indexOf("const model = dashboardModel();");
-    expect(loopStart).toBeGreaterThan(-1);
-    expect(loopEnd).toBeGreaterThan(loopStart);
-    expect(dashboardCallIndex).toBeGreaterThan(loopEnd);
-    const betweenLoopAndDashboard = source.slice(loopStart, dashboardCallIndex);
-    // Mirrors the deleted progressBlock()'s `APPLY ? loadItems() : items`: a
-    // live --apply run must see the Status/field values this run just wrote,
-    // not the pre-run snapshot captured before the loop.
-    expect(betweenLoopAndDashboard).toMatch(/items = APPLY \? loadItems\(\) : items;/);
-    // `items` must be reassignable for the reload to take effect.
-    expect(source).toMatch(/let items = loadItems\(\);/);
-    expect(source).not.toMatch(/const items = loadItems\(\);/);
-  });
-});
-
 describe("gh-setup-project: refuses to adopt a non-follow-up issue (#96 G-M4)", () => {
   it("checks followUpAdoptionError after loading issues and throws before the first write", () => {
     const load = source.indexOf("const byNumber = ");
@@ -144,27 +97,6 @@ describe("gh-setup-project: board data loads and validates before any gh call (T
     expect(source).toMatch(/const PHASES = boardData\.phases;/);
     expect(source).toMatch(/const WAVES = boardData\.waves;/);
     expect(source).toMatch(/const FOLLOW_UPS = boardData\.followUps;/);
-  });
-});
-
-describe("gh-setup-project: merged-wave PR reads gated on --dashboard (#85, #92 R6)", () => {
-  it("reads a wave's PR and commits only from inside fetchPrSpan/dashboardModel", () => {
-    const start = source.indexOf("function fetchPrSpan(prNumber) {");
-    const end = source.indexOf("// Local file writes");
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
-    const block = source.slice(start, end);
-    expect(block).toMatch(/pulls\/\$\{/);
-    expect(block).toMatch(/DASHBOARD/);
-  });
-
-  it("only calls the PR-span fetch when DASHBOARD is true and the wave has a pr", () => {
-    // fetchPrSpan is the only place `pulls/{n}` (and its commits) are read;
-    // gating this call site is what keeps the live reads out of a plain dry
-    // run or --apply alone (R6: "only in --dashboard mode").
-    expect(source).toMatch(
-      /DASHBOARD\s*&&\s*w\.pr\s*\?\s*waveSpan\(rolled,\s*fetchPrSpan\(w\.pr\)\)\s*:\s*rolled/,
-    );
   });
 });
 
@@ -211,5 +143,36 @@ describe("gh-setup-project: follow-up with no parent (#231 board cap)", () => {
     expect(skip).toBeGreaterThan(-1);
     expect(link).toBeGreaterThan(skip);
     expect(block.indexOf("followUps.set(f.number, issue);")).toBeLessThan(skip);
+  });
+});
+
+describe("gh-setup-project: no README SVG dashboard; the Project board is the view (#244)", () => {
+  it("rejects --dashboard as an unknown option with exit 2 and the usage line", () => {
+    const r = spawnSync(process.execPath, [scriptPath, "--dashboard"], { encoding: "utf8" });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("unknown argument --dashboard");
+    expect(r.stderr).toContain(
+      "usage: node scripts/ops/gh-setup-project.mjs [--apply] [--as <login>]",
+    );
+  });
+
+  it("writes no local file in any mode: no SVG, no README block, no PR span reads", () => {
+    expect(source).not.toMatch(/writeFileSync/);
+    expect(source).not.toMatch(/docs\/assets/);
+    expect(source).not.toMatch(/README\.md/);
+    expect(source).not.toMatch(/progress:start|progress-svg|renderDashboard|DASHBOARD|waveSpan/);
+    expect(source).not.toMatch(/pulls\/\$\{/);
+  });
+});
+
+describe("gh-setup-project: Status options drop the unused Ready column (#244)", () => {
+  it("has no Ready option and keeps Blocked for project-sync's Blocked preservation", () => {
+    const names = STATUS_OPTIONS.map((o) => o.name);
+    expect(names).toEqual(["Todo", "In Progress", "In Review", "Blocked", "Done"]);
+  });
+
+  it("maps a ready wave to Todo when seeding task Status", () => {
+    expect(source).not.toMatch(/ready: "Ready"/);
+    expect(source).toMatch(/\{ review: "In Review", ready: "Todo", todo: "Todo" \}\[w\.state\]/);
   });
 });

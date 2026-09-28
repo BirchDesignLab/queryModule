@@ -10,14 +10,13 @@ import {
   rollUp,
   titleUpdate,
   waveParentStatus,
-  waveSpan,
 } from "./board-model.mjs";
 
 describe("waveParentStatus: wave parent close from issue state only (#79)", () => {
   it("gives no Status write for an open wave parent whose tasks are all closed", () => {
     // waveState reflects the plan data ("ready"), not the (irrelevant) fact that
     // every task issue underneath happens to be closed already.
-    expect(waveParentStatus({ state: "open" }, "ready")).toBe("Ready");
+    expect(waveParentStatus({ state: "open" }, "ready")).toBe("Todo"); // #244: no Ready column
     expect(waveParentStatus({ state: "open" }, "todo")).toBe("Todo");
     expect(waveParentStatus({ state: "open" }, "review")).toBe("In Review");
   });
@@ -222,59 +221,6 @@ describe("matchParent: a recorded number with no live issue fails closed (W5 wav
     expect(() => matchParent({ number: 999, title: "Gone (M9 P9)" }, () => undefined)).toThrow(
       "issue #999 (Gone (M9 P9)) is recorded in the setup-script data but not found",
     );
-  });
-});
-
-describe("waveSpan: merged-wave PR span for the dashboard (#85, #92 R6)", () => {
-  const rolled = { start: "2026-09-25", finish: "2026-09-25" };
-
-  it("uses the PR's first-commit-to-merge span for a merged PR", () => {
-    const pr = {
-      merged: true,
-      merged_at: "2026-10-02T10:00:00Z",
-      commits: [
-        { commit: { author: { date: "2026-09-27T08:00:00Z" } } },
-        { commit: { author: { date: "2026-09-29T08:00:00Z" } } },
-      ],
-    };
-    expect(waveSpan(rolled, pr)).toEqual({ start: "2026-09-27", finish: "2026-10-02" });
-  });
-
-  it("clamps a first-commit date before the project floor (#80 req. 4)", () => {
-    const pr = {
-      merged: true,
-      merged_at: "2026-10-02T10:00:00Z",
-      commits: [{ commit: { author: { date: "2026-09-01T08:00:00Z" } } }],
-    };
-    expect(waveSpan(rolled, pr)).toEqual({ start: "2026-09-25", finish: "2026-10-02" });
-  });
-
-  it("keeps today's roll-up for an open (not yet merged) PR", () => {
-    const pr = {
-      merged: false,
-      merged_at: null,
-      commits: [{ commit: { author: { date: "2026-09-27T08:00:00Z" } } }],
-    };
-    expect(waveSpan(rolled, pr)).toBe(rolled);
-  });
-
-  it("keeps today's roll-up when the wave has no pr set", () => {
-    expect(waveSpan(rolled, null)).toBe(rolled);
-    expect(waveSpan(rolled, undefined)).toBe(rolled);
-  });
-
-  it("keeps today's roll-up for a merged PR whose commits list came back empty", () => {
-    const pr = { merged: true, merged_at: "2026-10-02T10:00:00Z", commits: [] };
-    expect(waveSpan(rolled, pr)).toBe(rolled);
-  });
-
-  it("keeps today's roll-up when the first commit is malformed (no author date)", () => {
-    const pr = {
-      merged: true,
-      merged_at: "2026-10-02T10:00:00Z",
-      commits: [{ commit: {} }],
-    };
-    expect(waveSpan(rolled, pr)).toBe(rolled);
   });
 });
 
