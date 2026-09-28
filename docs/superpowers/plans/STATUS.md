@@ -36,8 +36,9 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
-| Linux laptop | A | M0 P1 | running | 09-27-26 22:04 |
-| Windows 11 | B | M0 P1 | running | 09-28-26 02:24 |
+| Linux laptop | Host lane (host steps only) | M0 P1 | running | 09-28-26 04:40 |
+| Windows 11 | B | M0 P1 | running | 09-28-26 04:40 |
+| Windows 11 | A (Track A code, `C:\git\queryModule-a`) | M0 P1 | running | 09-28-26 04:40 |
 | Windows 11 | A offload | M0 P1 | idle | 09-27-26 16:08 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
