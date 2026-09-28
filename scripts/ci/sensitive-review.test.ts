@@ -121,6 +121,8 @@ describe("sensitive-review (spec 9.1)", () => {
     // Developer decision 09-27-26: the redacting logger (spec 5.9) is the gate-tier
     // control that keeps secrets and query values out of logs.
     for (const f of ["packages/api/src/log/logger.ts"]) expect(c(f), f).toBe("gate");
+    // #212 (checker, A3): the event bus ends sessions and closes their sockets.
+    for (const f of ["packages/api/src/events/bus.ts"]) expect(c(f), f).toBe("gate");
     // B5 review M1: vite configs steer the build and test run like vitest configs.
     for (const f of [
       "vite.config.ts",

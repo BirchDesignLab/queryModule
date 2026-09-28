@@ -82,6 +82,7 @@ packages/api/src/ws/**
 packages/api/src/seed/**
 packages/api/src/ops/**
 packages/api/src/deps.ts
+packages/api/src/events/**
 
 [deps]
 # .github/dependabot.yml stays [gate] (.github/**): no automated check reads it.
