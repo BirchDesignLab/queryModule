@@ -200,3 +200,18 @@ describe("promote.yml structure (task 30, BR-004 SEC-020 NFR-003)", () => {
     expect(Object.keys(perms).sort()).toEqual(["actions", "contents", "packages"]);
   });
 });
+
+describe("promote.yml restores no dependency cache (#231 G-M2)", () => {
+  it("no step restores a cache in a workflow that holds contents and packages write", () => {
+    // A poisoned main-scope pnpm store cache would feed the milestone-gate install.
+    for (const s of steps) {
+      expect(s.with?.cache, `${s.name ?? s.uses} restores a cache`).toBeUndefined();
+      expect(s.uses ?? "", `${s.name ?? s.uses} uses actions/cache`).not.toMatch(/^actions\/cache/);
+    }
+  });
+  it("setup-node turns its automatic package-manager cache off explicitly", () => {
+    // Its default caches only npm today; pinning false keeps a later major from widening it.
+    const nodeSetup = steps.find((s) => s.uses?.startsWith("actions/setup-node"));
+    expect(nodeSetup?.with?.["package-manager-cache"]).toBe(false);
+  });
+});

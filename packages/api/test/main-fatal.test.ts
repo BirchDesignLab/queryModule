@@ -40,7 +40,7 @@ const AUTH_SECRET = k(4);
  * Boots src/main.ts in a child process, waits for "listening", then has the preloaded fixture
  * raise `kind` with a message that embeds a loaded secret. Resolves with the exit code and output.
  */
-async function runFatal(kind: "exception" | "rejection") {
+async function runFatal(kind: "exception" | "rejection" | "double" | "sigterm") {
   const secrets = tempDir("qm-fatal-sec-");
   const files = {
     DB_ENCRYPTION_KEY: k(1),
@@ -90,8 +90,7 @@ describe("#224 main.ts fails closed on an error outside the request path (spec 8
     it(`exits non-zero with exactly one fatal line and no secret or stack on ${event}`, async () => {
       const { code, stdout, stderr } = await runFatal(kind);
       expect(stdout).toContain('"msg":"listening"');
-      expect(code).not.toBe(0);
-      expect(code).not.toBeNull();
+      expect(code).toBe(1);
       const fatal = stderr.split("\n").filter((l) => l.includes('"level":"fatal"'));
       expect(fatal).toHaveLength(1);
       const line = JSON.parse(fatal[0] ?? "{}");
@@ -101,4 +100,24 @@ describe("#224 main.ts fails closed on an error outside the request path (spec 8
       expect(stderr).not.toMatch(/^\s+at /m);
     }, 60_000);
   }
+
+  const fatalLines = (stderr: string) =>
+    stderr.split("\n").filter((l) => l.includes('"level":"fatal"'));
+
+  it("a second fatal event during the drain exits 1 at once without a second line (#231 C-m2)", async () => {
+    const { code, stdout, stderr } = await runFatal("double");
+    expect(stdout).toContain('"msg":"listening"');
+    expect(code).toBe(1);
+    expect(fatalLines(stderr)).toHaveLength(1);
+    expect(`${stdout}${stderr}`).not.toContain(AUTH_SECRET);
+    expect(stderr).not.toMatch(/^\s+at /m);
+  }, 60_000);
+
+  it("SIGTERM during a fatal drain still exits 1, never the clean 0 (#231 C-m2)", async () => {
+    const { code, stdout, stderr } = await runFatal("sigterm");
+    expect(stdout).toContain('"msg":"listening"');
+    expect(code).toBe(1);
+    expect(fatalLines(stderr)).toHaveLength(1);
+    expect(`${stdout}${stderr}`).not.toContain(AUTH_SECRET);
+  }, 60_000);
 });

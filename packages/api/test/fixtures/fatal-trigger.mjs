@@ -1,6 +1,10 @@
-// Preloaded (node --import) into a child main.ts by main-fatal.test.ts only (#224). Once the test
-// writes QM_FATAL_TRIGGER, this raises QM_FATAL_KIND ("exception" or "rejection") outside any
-// request path, with QM_FATAL_MESSAGE as the error message.
+// Preloaded (node --import) into a child main.ts by main-fatal.test.ts only (#224, #231). Once the
+// test writes QM_FATAL_TRIGGER, this raises QM_FATAL_KIND outside any request path, with
+// QM_FATAL_MESSAGE as the error message:
+//   exception  one uncaught exception
+//   rejection  one unhandled rejection
+//   double     two uncaught exceptions, the second mid-drain
+//   sigterm    one uncaught exception, then SIGTERM emitted in-process during the drain
 import { existsSync } from "node:fs";
 
 const file = process.env.QM_FATAL_TRIGGER;
@@ -11,7 +15,16 @@ if (file) {
     if (!existsSync(file)) return;
     clearInterval(poll);
     if (kind === "rejection") void Promise.reject(new Error(message));
-    else throw new Error(message);
+    else if (kind === "double") {
+      // A microtask queued before the throw runs right after the first fatal handler, mid-drain.
+      queueMicrotask(() => {
+        throw new Error(`${message} (second)`);
+      });
+      throw new Error(message);
+    } else if (kind === "sigterm") {
+      queueMicrotask(() => process.emit("SIGTERM"));
+      throw new Error(message);
+    } else throw new Error(message);
   }, 50);
   poll.unref();
 }
