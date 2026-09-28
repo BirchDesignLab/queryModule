@@ -126,6 +126,7 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
 // progress-r1-guard-1/2 (round 2): a named type instead of an `any[]` local,
 // so these task-29 tests never need a new noExplicitAny suppression.
 type WorkflowStep = {
+  name?: string;
   run?: string;
   if?: string;
   uses?: string;
