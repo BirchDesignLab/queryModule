@@ -86,12 +86,18 @@ export function canonicalJson(v: unknown): string {
 }
 
 /** Reads a JSON file into a RawFile: undefined value = missing, ok false = invalid JSON. */
-async function readRaw(file: string): Promise<RawFile> {
+/**
+ * Only a file that does not exist reads as missing; any other read error (EACCES, EISDIR, EMFILE)
+ * fails closed as config.unreadableFile at the pointer that names the file, so the diagnostic is
+ * never misleading. `siteFile` and `path` locate the error; neither carries file content.
+ */
+async function readRaw(file: string, siteFile: string, path: string): Promise<RawFile> {
   let text: string;
   try {
     text = await readFile(file, "utf8");
-  } catch {
-    return { ok: true, value: undefined };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return { ok: true, value: undefined };
+    throw new ConfigLoadError(siteFile, path, "config.unreadableFile");
   }
   try {
     return { ok: true, value: JSON.parse(text) };
@@ -112,20 +118,27 @@ export async function loadSiteConfig(
 ): Promise<LoadedConfig> {
   const file = resolve(siteConfigFile);
   const configDir = resolve(dirname(file), "..");
-  const site = await readRaw(file);
+  const site = await readRaw(file, file, "");
   const ext = extendsOf(site.ok ? site.value : undefined);
   if (!ext.ok) throw firstError(file, ext.errors);
   const base =
     ext.id === null
       ? undefined
-      : { id: ext.id, file: await readRaw(join(configDir, "sites", `${ext.id}.json`)) };
+      : {
+          id: ext.id,
+          file: await readRaw(join(configDir, "sites", `${ext.id}.json`), file, "/extends"),
+        };
   const shape = resolveSiteShape(site, base);
   if (!shape.ok) throw firstError(file, shape.errors);
   const siteConfig = shape.config;
 
   const rawLocales: Record<string, RawFile> = {};
-  for (const locale of siteConfig.locales)
-    rawLocales[locale] = await readRaw(join(configDir, "locales", `${locale}.json`));
+  for (const [i, locale] of siteConfig.locales.entries())
+    rawLocales[locale] = await readRaw(
+      join(configDir, "locales", `${locale}.json`),
+      file,
+      `/locales/${i}`,
+    );
 
   siteConfig.locales.forEach((locale, i) => {
     const v = rawLocales[locale];
@@ -175,7 +188,8 @@ export async function loadSiteConfig(
         "mock sources need ALLOW_MOCK_SOURCES=true",
       );
     const mockPath = join(configDir, "mock", `${siteConfig.site.id}.json`);
-    const mockErrors = checkMockCoverage(siteConfig, await readRaw(mockPath), mockPath);
+    const mockRaw = await readRaw(mockPath, file, `/sources/${mockIndex}/kind`);
+    const mockErrors = checkMockCoverage(siteConfig, mockRaw, mockPath);
     if (mockErrors.length > 0) throw firstError(file, mockErrors);
   }
 

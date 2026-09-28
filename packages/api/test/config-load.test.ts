@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -80,6 +80,33 @@ describe("NFR-001 locale bundles", () => {
     await expect(loadSiteConfig(file)).rejects.toThrow(/config.invalidJson/);
     rmSync(bundleFile);
     await expect(loadSiteConfig(file)).rejects.toThrow(/config.missingLocale/);
+  });
+  it("reports an unreadable bundle as unreadable, not missing (A2 critic M1)", async () => {
+    const d = copy();
+    const file = join(d, "sites/default.json");
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { locales: string[] };
+    const bundleFile = join(d, "locales", `${raw.locales[0]}.json`);
+    rmSync(bundleFile);
+    mkdirSync(bundleFile); // a directory where the bundle should be: EISDIR, not ENOENT
+    const e = await loadSiteConfig(file).then(
+      () => undefined,
+      (x: unknown) => x,
+    );
+    expect(e).toBeInstanceOf(ConfigLoadError);
+    expect((e as ConfigLoadError).path).toBe("/locales/0");
+    expect((e as Error).message).toMatch(/config\.unreadableFile/);
+  });
+  it("reports an unreadable base site as unreadable, not an unknown base", async () => {
+    const d = copy();
+    const base = join(d, "sites/default.json");
+    rmSync(base);
+    mkdirSync(base);
+    const e = await loadSiteConfig(join(d, "sites/example-ok.json")).then(
+      () => undefined,
+      (x: unknown) => x,
+    );
+    expect((e as ConfigLoadError).path).toBe("/extends");
+    expect((e as Error).message).toMatch(/config\.unreadableFile/);
   });
 });
 
