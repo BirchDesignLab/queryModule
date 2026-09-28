@@ -502,25 +502,25 @@ function rulingsText() {
 // (git rev-parse <rev> and git cat-file -e <sha>^{commit}); the script accepts only a 40-hex sha it
 // confirmed exists. agentSha is what a reviewer, fixer or progress checker reported: compared and
 // logged on a difference, never used. rev is A.head for the review (the reviewer resolves
-// reviewedSha with git rev-parse <head>) and HEAD after the fix pass. Returns { head } or { problem }.
+// reviewedSha with git rev-parse <head>) and HEAD after the fix pass. Returns { head, differs } (differs: agentSha named another commit) or { problem }.
 const SHA40 = /^[0-9a-f]{40}$/
 const VERIFY_HEAD = {
   type: 'object',
   properties: {
     revParse: { type: 'string', description: 'the raw stdout of the rev-parse command, copied exactly' },
-    catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS or MISSING' },
+    catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS <sha> or MISSING' },
   },
   required: ['revParse', 'catFile'],
 }
 const gitSha = (v) => {
   const head = String((v && v.revParse) || '').trim()
-  return SHA40.test(head) && String((v && v.catFile) || '').trim() === 'EXISTS' ? head : null
+  return SHA40.test(head) && String((v && v.catFile) || '').trim() === `EXISTS ${head}` ? head : null
 }
 async function verifyHead(agentSha, label, rev) {
   const prompt = [
     `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,
     `1. git -C "${REPO}" rev-parse ${rev}`,
-    `2. sha=$(git -C "${REPO}" rev-parse ${rev}) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo EXISTS || echo MISSING`,
+    `2. sha=$(git -C "${REPO}" rev-parse ${rev}) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo "EXISTS $sha" || echo MISSING`,
     'Return revParse (the stdout of command 1) and catFile (the stdout of command 2).',
     HOUSE,
   ].join('\n')
@@ -540,11 +540,12 @@ async function verifyHead(agentSha, label, rev) {
     return { problem: `verifyHead: ${label} did not return a 40-hex sha that exists in git (${shown}); check the repository in ${REPO}, then answer at precondition:verifyHead to re-run it once` }
   }
   const a = String(agentSha || '').trim().toLowerCase()
-  if (a && !(a.length >= 7 && head.startsWith(a))) log(`agent-reported head ${a.slice(0, 16)}... differs from git; using git`)
-  return { head }
+  const differs = !!a && !(a.length >= 7 && head.startsWith(a))
+  if (differs) log(`agent-reported head ${a.slice(0, 16)}... differs from git; using git`)
+  return { head, differs }
 }
 function done(extra) {
-  const out =Object.assign({ answers: state.answers, declined: state.declined, rulings: inForce(), supersededRulings: state.superseded }, extra)
+  const out = Object.assign({ answers: state.answers, declined: state.declined, rulings: inForce(), supersededRulings: state.superseded }, extra)
   if (ANSWERS) {
     const unused = [...CONTROLLER.keys()].filter((k) => !ANSWERS.decisionsUsed.has(k))
     if (unused.length) log(`answers: decision(s) matched no finding and were not applied: ${unused.join(', ')}`)
@@ -720,6 +721,7 @@ if (review.preconditionFailed) {
 // by the slice path above) mirrors it here rather than being left unset (#92 C1).
 if (review.rawArtifactWritten === undefined) review.rawArtifactWritten = !!review.artifactWritten
 // The reviewed sha is read from git (#222), never taken from the reviewer's JSON.
+let badArtifact = false
 {
   const vr = await verifyHead(review.reviewedSha, 'verify-head-review', A.head)
   if (vr.problem) {
@@ -727,6 +729,13 @@ if (review.rawArtifactWritten === undefined) review.rawArtifactWritten = !!revie
     return done({ verdict: 'fixes', stopped: 'precondition', stopPoint: 'precondition:verifyHead', problem: vr.problem, reviewedSha: null, artifactWritten: false, findings: [], residual: [], strayArtifact: review.artifactWritten || review.rawArtifactWritten ? ARTIFACT : undefined })
   }
   review.reviewedSha = vr.head
+  // K2: an artifact the reviewer wrote records the sha it reported; when that is not git's, the file
+  // vouches for a head that was not reviewed, so it is never returned as the written artifact.
+  if (vr.differs && (review.artifactWritten || review.rawArtifactWritten)) {
+    log('review: the reviewer reported a reviewedSha that differs from git, so the artifact it wrote records the wrong sha; returned as strayArtifact, re-run the review')
+    review.artifactWritten = false
+    badArtifact = true
+  }
 }
 state.answers = review.answers
 state.declined = review.declined
@@ -736,7 +745,7 @@ if (review.declined.length) log(`review: ${review.declined.length} declined-to-j
 
 if (review.verdict === 'approve' && firstBlocking.length === 0) {
   if (!review.artifactWritten) log('review: approve but the artifact was not written; re-run the review, never hand-write it')
-  return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)) })
+  return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)), strayArtifact: badArtifact ? ARTIFACT : undefined })
 }
 if (review.verdict === 'approve') log(`review: verdict approve but ${firstBlocking.length} critical/important finding(s); treating as fixes`)
 // rawArtifactWritten catches a write by any slice (not only the last one the merge credits), so a
@@ -943,14 +952,23 @@ if (stray) log('re-review: an artifact was written without a final approve; retu
 log(`re-review: ${verdict}, ${residual.length} residual (${residualBlocking.length} critical/important), artifact ${rr.artifactWritten && verdict === 'approve' ? 'written' : 'not written'}; no second fix pass`)
 
 // reviewedSha is the verified fix head, not the re-reviewer's claim (a different claim is logged).
+let rrArtifact = rr.artifactWritten && verdict === 'approve'
 {
   const c = String(rr.reviewedSha || '').trim().toLowerCase()
-  if (c && !(c.length >= 7 && fixHead.startsWith(c))) log(`agent-reported head ${c.slice(0, 16)}... differs from git; using git`)
+  if (c && !(c.length >= 7 && fixHead.startsWith(c))) {
+    log(`agent-reported head ${c.slice(0, 16)}... differs from git; using git`)
+    // K2: the artifact the re-reviewer wrote records its claimed sha, not git's
+    if (rrArtifact) {
+      log('re-review: the re-reviewer reported a reviewedSha that differs from git, so the artifact it wrote records the wrong sha; returned as strayArtifact')
+      rrArtifact = false
+      stray = true
+    }
+  }
 }
 return done({
   verdict,
   reviewedSha: fixHead,
-  artifactWritten: rr.artifactWritten && verdict === 'approve',
+  artifactWritten: rrArtifact,
   findings: review.findings,
   residual,
   fixCommits: state.fixCommits,

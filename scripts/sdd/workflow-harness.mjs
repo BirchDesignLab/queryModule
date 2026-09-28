@@ -224,7 +224,7 @@ const hex40 = (h) =>
 // A review-stages-only run (implemented: { head }) has no implementer, so the fixture's git HEAD is
 // the implemented head: gitAt(head) overrides the first verify.
 const gitAt = (h) => ({
-  "verify-head-impl": { revParse: `${hex40(h)}\n`, catFile: "EXISTS\n" },
+  "verify-head-impl": { revParse: `${hex40(h)}\n`, catFile: `EXISTS ${hex40(h)}\n` },
 });
 function sddResponder(over = {}) {
   const ctx = { lastHead: BASE.base };
@@ -272,7 +272,7 @@ function sddBase(over, ctx = { lastHead: BASE.base }) {
       }
     }
     if (label.startsWith("verify-head"))
-      return { revParse: `${hex40(ctx.lastHead)}\n`, catFile: "EXISTS\n" };
+      return { revParse: `${hex40(ctx.lastHead)}\n`, catFile: `EXISTS ${hex40(ctx.lastHead)}\n` };
     if (label === "implementer") return work("h-impl");
     if (label === "implementer-continue") return work("h-cont");
     if (label.startsWith("ruler")) {
@@ -340,7 +340,7 @@ await test("sdd: fabricated-head: a head the fixer and progress checker report i
       "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
       "fixer-r1": () => work(LIE),
       "progress-r1": () => ({ ...progress("progress-r1"), head: LIE }),
-      "verify-head-r1": { revParse: `${GIT}\n`, catFile: "EXISTS\n" },
+      "verify-head-r1": { revParse: `${GIT}\n`, catFile: `EXISTS ${GIT}\n` },
     }),
   );
   const gate = r.find("gate-r1").prompt;
@@ -381,6 +381,21 @@ await test("sdd: bad-sha: a 40-hex sha the role could not find in git stops the 
   assert.equal(r.res.stopped, "precondition");
   assert.ok(/verifyHead/.test(r.res.problem), r.res.problem);
   assert.ok(!r.labels.includes("combined-review"));
+});
+
+await test("sdd: bad-sha: a cat-file answer for a different sha than revParse stops the run (K1)", async () => {
+  const A = "a".repeat(40);
+  const B = "b".repeat(40);
+  const r = await run(
+    sdd,
+    BASE,
+    sddResponder({ "verify-head*": { revParse: `${A}\n`, catFile: `EXISTS ${B}\n` } }),
+  );
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:verifyHead");
+  assert.ok(!r.labels.includes("combined-review"));
+  // the second command prints the sha it checked, and the prompt asks for it
+  assert.ok(r.find("verify-head-impl").prompt.includes('echo "EXISTS $sha"'));
 });
 
 await test("sdd: bad-sha: an answer at precondition:verifyHead re-runs verifyHead once as -retry", async () => {
@@ -968,7 +983,7 @@ function wrInner(over, ctx) {
   return (label, prompt) => {
     if (label in over) return typeof over[label] === "function" ? over[label](prompt) : over[label];
     if (label.startsWith("verify-head"))
-      return { revParse: `${hex40(ctx.lastHead)}\n`, catFile: "EXISTS\n" };
+      return { revParse: `${hex40(ctx.lastHead)}\n`, catFile: `EXISTS ${hex40(ctx.lastHead)}\n` };
     if (label === "fixer") return work("h1");
     if (label === "progress")
       return {
@@ -991,7 +1006,7 @@ function wrInner(over, ctx) {
     if (label === "re-reviewer") {
       return {
         verdict: "approve",
-        reviewedSha: "h1full",
+        reviewedSha: hex40("h1full"),
         verdicts: ids(prompt).map((id) => ({ id, verdict: "ADDRESSED", evidence: "e" })),
         acceptedStands: [],
         newFindings: [],
@@ -1003,7 +1018,7 @@ function wrInner(over, ctx) {
 }
 const reviewWith = (findings) => ({
   verdict: "fixes",
-  reviewedSha: "h0full",
+  reviewedSha: hex40("h0full"),
   preconditionFailed: "",
   findings,
   answers: [],
@@ -1021,7 +1036,7 @@ await test("wr: fabricated-head: the fix head and reviewedSha come from git, not
     wrResponder({
       reviewer: reviewWith([WF("I1", "important")]),
       progress: () => ({ ok: true, problems: [], head: LIE, newCommits: [], testCount: 12 }),
-      "verify-head-fix": { revParse: `${GIT}\n`, catFile: "EXISTS\n" },
+      "verify-head-fix": { revParse: `${GIT}\n`, catFile: `EXISTS ${GIT}\n` },
       "re-reviewer": (p) => ({
         verdict: "approve",
         reviewedSha: LIE,
@@ -1069,6 +1084,73 @@ await test("wr: bad-sha: a verifyHead answer that is not a 40-hex sha stops the 
   );
   assert.equal(a.res.stopped, "precondition");
   assert.equal(a.res.strayArtifact, "docs/reviews/pr-32.md");
+});
+
+await test("wr: bad-sha: a cat-file answer for a different sha than revParse stops the run (K1)", async () => {
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({
+      reviewer: reviewWith([WF("I1", "important")]),
+      "verify-head-review": {
+        revParse: `${"a".repeat(40)}\n`,
+        catFile: `EXISTS ${"b".repeat(40)}\n`,
+      },
+    }),
+  );
+  assert.equal(r.res.stopped, "precondition");
+  assert.equal(r.res.stopPoint, "precondition:verifyHead");
+  assert.ok(r.find("verify-head-review").prompt.includes('echo "EXISTS $sha"'));
+});
+
+// K2: a reviewer that reports a reviewedSha different from git wrote an artifact that records the
+// wrong sha; the script must not return it as the written artifact.
+await test("wr: fabricated-head: an approve whose reviewer reported a sha that differs from git is not artifactWritten (K2)", async () => {
+  const LIE = "2e31c7761aecdcf5d0f0a1e0a3f9e1a5f6c5e6a1";
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({
+      reviewer: { ...reviewWith([]), verdict: "approve", reviewedSha: LIE, artifactWritten: true },
+      // git answers with the real head; the fixture would otherwise follow the reviewer's claim
+      "verify-head-review": {
+        revParse: `${hex40("h0full")}
+`,
+        catFile: `EXISTS ${hex40("h0full")}
+`,
+      },
+    }),
+  );
+  assert.equal(r.res.verdict, "approve");
+  assert.equal(r.res.artifactWritten, false);
+  assert.equal(r.res.strayArtifact, "docs/reviews/pr-32.md");
+  assert.equal(r.res.reviewedSha, hex40("h0full"));
+  assert.ok(
+    r.logs.some((l) => / differs from git; using git$/.test(l)),
+    r.logs.join("\n"),
+  );
+});
+
+await test("wr: fabricated-head: a re-review approve whose re-reviewer reported a sha that differs from git is not artifactWritten (K2)", async () => {
+  const LIE = "2e31c7761aecdcf5d0f0a1e0a3f9e1a5f6c5e6a1";
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({
+      reviewer: reviewWith([WF("I1", "important")]),
+      "re-reviewer": (p) => ({
+        verdict: "approve",
+        reviewedSha: LIE,
+        verdicts: ids(p).map((id) => ({ id, verdict: "ADDRESSED", evidence: "e" })),
+        acceptedStands: [],
+        newFindings: [],
+        artifactWritten: true,
+      }),
+    }),
+  );
+  assert.equal(r.res.verdict, "approve");
+  assert.equal(r.res.artifactWritten, false);
+  assert.equal(r.res.strayArtifact, "docs/reviews/pr-32.md");
 });
 
 await test("wr: bad-sha: an answer at precondition:verifyHead re-runs verifyHead once as -retry", async () => {
@@ -1149,7 +1231,7 @@ await test("wr: progress problems become structured findings the re-reviewer mus
       },
       "re-reviewer": {
         verdict: "approve",
-        reviewedSha: "h1full",
+        reviewedSha: hex40("h1full"),
         verdicts: [{ id: "I1", verdict: "ADDRESSED", evidence: "e" }],
         acceptedStands: [],
         newFindings: [],
@@ -1172,7 +1254,7 @@ await test("wr: re-reviewer STANDS on a critical cannot approve", async () => {
       reviewer: reviewWith([WF("C1", "critical")]),
       "re-reviewer": {
         verdict: "approve",
-        reviewedSha: "h1full",
+        reviewedSha: hex40("h1full"),
         verdicts: [{ id: "C1", verdict: "STANDS", evidence: "e" }],
         acceptedStands: [],
         newFindings: [],
@@ -1193,7 +1275,7 @@ await test("wr: an important accepted as stands must be listed with its ruling i
       ruler: { rulings: [{ item: "I1", decision: "stands", reason: "plan", costIfWrong: "c" }] },
       "re-reviewer": {
         verdict: "approve",
-        reviewedSha: "h1full",
+        reviewedSha: hex40("h1full"),
         verdicts: [
           { id: "I1", verdict: "STANDS", evidence: "e" },
           { id: "I2", verdict: "ADDRESSED", evidence: "e" },
@@ -1213,7 +1295,7 @@ await test("wr: an important accepted as stands must be listed with its ruling i
       ruler: { rulings: [{ item: "I1", decision: "stands", reason: "plan", costIfWrong: "c" }] },
       "re-reviewer": {
         verdict: "approve",
-        reviewedSha: "h1full",
+        reviewedSha: hex40("h1full"),
         verdicts: [
           { id: "I1", verdict: "STANDS", evidence: "e" },
           { id: "I2", verdict: "ADDRESSED", evidence: "e" },
@@ -1281,7 +1363,7 @@ await test("wr N1: a controller stands on a critical is final through the re-rev
       reviewer: reviewWith([WF("C1", "critical", { planMandated: true }), WF("I2", "important")]),
       "re-reviewer": {
         verdict: "approve",
-        reviewedSha: "h1full",
+        reviewedSha: hex40("h1full"),
         verdicts: [
           { id: "C1", verdict: "STANDS", evidence: "controller" },
           { id: "I2", verdict: "ADDRESSED", evidence: "e" },
@@ -2511,7 +2593,7 @@ const WAVE = {
 // in the prompt.
 function waveResponder(over = {}) {
   const taskOf = (p) => (/task-(\d+)-(?:brief|report|review)/.exec(p) || [])[1];
-  const base = sddResponder({ implementer: (p) => work(`h-impl-${taskOf(p)}`) });
+  const base = sddResponder({ implementer: (p) => work(hex40(`h-impl-${taskOf(p)}`)) });
   const self = (label, prompt, calls) => {
     const n = taskOf(prompt);
     const k = `${label}@${n}`;
@@ -2614,18 +2696,25 @@ await test("sdd-wave: fabricated-head: the next base is git's head, and a differ
     r.calls.filter((c) => /^verify-head-t\d+$/.test(c.label)).map((c) => c.label),
     ["verify-head-t17", "verify-head-t18"],
   );
+  // a consistent git: no child head differs from the between-task read (K3)
+  assert.ok(!r.logs.some((l) => /differs from git/.test(l)), r.logs.join(" | "));
+  // one responder per run, so the fixture's git follows the heads the children commit
+  const inner = waveResponder();
   const lied = await run(
     wave,
     WAVE,
     (label, prompt, calls) =>
       label === "verify-head-t17"
-        ? { revParse: `${GIT}\n`, catFile: "EXISTS\n" }
-        : waveResponder()(label, prompt, calls),
+        ? { revParse: `${GIT}\n`, catFile: `EXISTS ${GIT}\n` }
+        : inner(label, prompt, calls),
     sdd,
   );
   assert.equal(lied.childArgs[1].args.base, GIT);
-  assert.ok(
-    lied.logs.some((l) => / differs from git; using git$/.test(l)),
+  const childHead = r.res.tasks[0].head;
+  const diffs = lied.logs.filter((l) => /differs from git/.test(l));
+  assert.deepEqual(
+    diffs,
+    [`agent-reported head ${childHead.slice(0, 16)}... differs from git; using git`],
     lied.logs.join(" | "),
   );
   assert.equal(lied.find("verify-head-t17").model, "haiku");
@@ -2633,13 +2722,25 @@ await test("sdd-wave: fabricated-head: the next base is git's head, and a differ
 });
 
 await test("sdd-wave: bad-sha: a verifyHead answer that is not a 40-hex sha stops the wave", async () => {
+  const inner = waveResponder({
+    "spec-review@17": planMandated,
+    "ruler-review@17": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: "stands",
+        reason: "plan line 9 mandates it",
+        costIfWrong: "c",
+        carryForward: ["Task 18 must bound the email"],
+      })),
+    }),
+  });
   const r = await run(
     wave,
     WAVE,
     (label, prompt, calls) =>
       label === "verify-head-t17"
         ? { revParse: "not-a-sha\n", catFile: "EXISTS\n" }
-        : waveResponder()(label, prompt, calls),
+        : inner(label, prompt, calls),
     sdd,
   );
   assert.equal(r.res.status, "stopped");
@@ -2647,6 +2748,31 @@ await test("sdd-wave: bad-sha: a verifyHead answer that is not a 40-hex sha stop
   assert.equal(r.res.stop.stopPoint, "precondition:verifyHead");
   assert.ok(/verifyHead/.test(r.res.stop.problem), r.res.stop.problem);
   assert.equal(r.childArgs.length, 1, "Task 18 must not start");
+  // Q1: the restart uses the returned carried, so the completed task's obligations are in it
+  assert.ok(
+    r.res.carried.some((l) => l === "- Task 17 carry forward: Task 18 must bound the email"),
+    JSON.stringify(r.res.carried),
+  );
+  assert.ok(
+    r.res.carried.some((l) => l.startsWith("- Task 17 ruling T17/spec:I1 (ruler): stands")),
+    JSON.stringify(r.res.carried),
+  );
+});
+
+await test("sdd-wave: bad-sha: a cat-file answer for a different sha than revParse stops the wave (K1)", async () => {
+  const inner = waveResponder();
+  const r = await run(
+    wave,
+    WAVE,
+    (label, prompt, calls) =>
+      label === "verify-head-t17"
+        ? { revParse: `${"a".repeat(40)}\n`, catFile: `EXISTS ${"b".repeat(40)}\n` }
+        : inner(label, prompt, calls),
+    sdd,
+  );
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stop.stopPoint, "precondition:verifyHead");
+  assert.ok(r.find("verify-head-t17").prompt.includes('echo "EXISTS $sha"'));
 });
 
 await test("sdd-wave: stops at the first task that does not complete; answers[task] resumes, earlier args unchanged", async () => {
@@ -3355,7 +3481,7 @@ await test("#92 R3: slices run gate then critical, in order; each prompt lists o
     wrResponder({
       "reviewer-gate": {
         verdict: "fixes",
-        reviewedSha: "h0full",
+        reviewedSha: hex40("h0full"),
         preconditionFailed: "",
         findings: [WF("G1", "important", { file: "g.ts", planMandated: true })],
         answers: [],
@@ -3364,7 +3490,7 @@ await test("#92 R3: slices run gate then critical, in order; each prompt lists o
       },
       "reviewer-critical": {
         verdict: "approve",
-        reviewedSha: "h0full",
+        reviewedSha: hex40("h0full"),
         preconditionFailed: "",
         findings: [],
         answers: [],
@@ -3411,7 +3537,7 @@ await test("#92 R3: a tier that disagrees with the derived tier throws; both sli
 await test("#92 R3: only the last slice's prompt can write the artifact; it carries the earlier slice's verdict and open-finding count; a slice reviewer returning nothing names the slice", async () => {
   const clean = {
     verdict: "approve",
-    reviewedSha: "h0full",
+    reviewedSha: hex40("h0full"),
     preconditionFailed: "",
     findings: [],
     answers: [],
@@ -3452,7 +3578,7 @@ await test("#92 R3 C1: a critical slice that writes the artifact while the gate 
     wrResponder({
       "reviewer-gate": {
         verdict: "fixes",
-        reviewedSha: "h0full",
+        reviewedSha: hex40("h0full"),
         preconditionFailed: "",
         findings: [WF("G1", "important", { file: "g.ts" })],
         answers: [],
@@ -3461,7 +3587,7 @@ await test("#92 R3 C1: a critical slice that writes the artifact while the gate 
       },
       "reviewer-critical": {
         verdict: "approve",
-        reviewedSha: "h0full",
+        reviewedSha: hex40("h0full"),
         preconditionFailed: "",
         findings: [],
         answers: [],
@@ -3470,7 +3596,7 @@ await test("#92 R3 C1: a critical slice that writes the artifact while the gate 
       },
       "re-reviewer": {
         verdict: "fixes",
-        reviewedSha: "h1full",
+        reviewedSha: hex40("h1full"),
         verdicts: [{ id: "G-G1", verdict: "NOT ADDRESSED", evidence: "e" }],
         acceptedStands: [],
         newFindings: [],
@@ -3608,7 +3734,7 @@ await test("#92 R6: the cross-cutting budget line is in every reviewer prompt (s
 
   const clean = {
     verdict: "approve",
-    reviewedSha: "h0full",
+    reviewedSha: hex40("h0full"),
     preconditionFailed: "",
     findings: [],
     answers: [],

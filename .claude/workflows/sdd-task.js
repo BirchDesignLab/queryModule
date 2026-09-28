@@ -199,7 +199,7 @@ if (MAX_AGENTS < 1) {
 // point that runs. So an agent's prompt holds only the entries for its own stop point, and a
 // later entry never changes an earlier agent's prompt (earlier calls replay from cache).
 // Decisions from all entries become controller rulings; a later entry wins for the same item.
-const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>, verifyHead),ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>, budget'
+const STOP_POINTS = 'implementer, precondition (or precondition:<label> from stopPoint: implementer, gate-0, checker, ruler-review, gate-r<r>, verifyHead), ruler-concerns, fixer-pre, review, ruler-review, fixer-r<r>, gate-0, gate-r<r>, budget'
 function stopPos(at) {
   const fixed = { implementer: 0, 'ruler-concerns': 1, 'fixer-pre': 2, review: 3, 'ruler-review': 4 }
   if (at in fixed) return fixed[at]
@@ -560,7 +560,7 @@ const VERIFY_HEAD = {
   type: 'object',
   properties: {
     revParse: { type: 'string', description: 'the raw stdout of git rev-parse HEAD, copied exactly' },
-    catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS or MISSING' },
+    catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS <sha> or MISSING' },
   },
   required: ['revParse', 'catFile'],
 }
@@ -765,13 +765,13 @@ function build(status, extra) {
 const SHA40 = /^[0-9a-f]{40}$/
 const gitSha = (v) => {
   const head = String((v && v.revParse) || '').trim()
-  return SHA40.test(head) && String((v && v.catFile) || '').trim() === 'EXISTS' ? head : null
+  return SHA40.test(head) && String((v && v.catFile) || '').trim() === `EXISTS ${head}` ? head : null
 }
 async function verifyHead(agentHead, label) {
   const prompt = [
     `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,
     `1. git -C "${REPO}" rev-parse HEAD`,
-    `2. sha=$(git -C "${REPO}" rev-parse HEAD) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo EXISTS || echo MISSING`,
+    `2. sha=$(git -C "${REPO}" rev-parse HEAD) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo "EXISTS $sha" || echo MISSING`,
     'Return revParse (the stdout of command 1) and catFile (the stdout of command 2).',
     HOUSE,
   ].join('\n')

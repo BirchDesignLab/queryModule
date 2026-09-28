@@ -116,7 +116,7 @@ async function verifyHead(childHead, label) {
   const prompt = [
     `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,
     `1. git -C "${REPO}" rev-parse HEAD`,
-    `2. sha=$(git -C "${REPO}" rev-parse HEAD) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo EXISTS || echo MISSING`,
+    `2. sha=$(git -C "${REPO}" rev-parse HEAD) && git -C "${REPO}" cat-file -e "$sha^{commit}" && echo "EXISTS $sha" || echo MISSING`,
     'Return revParse (the stdout of command 1) and catFile (the stdout of command 2).',
     'Rules: never dispatch subagents; finish every command before you reply; never run git push, gh pr, gh api writes or git merge.',
   ].join('\n')
@@ -124,14 +124,14 @@ async function verifyHead(childHead, label) {
     type: 'object',
     properties: {
       revParse: { type: 'string', description: 'the raw stdout of git rev-parse HEAD, copied exactly' },
-      catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS or MISSING' },
+      catFile: { type: 'string', description: 'the raw stdout of the cat-file check: EXISTS <sha> or MISSING' },
     },
     required: ['revParse', 'catFile'],
   }
   verifyCalls++
   const v = await agent(prompt, { label, phase: 'Wave', schema, model: 'haiku' })
   const head = String((v && v.revParse) || '').trim()
-  if (!SHA40.test(head) || String((v && v.catFile) || '').trim() !== 'EXISTS') {
+  if (!SHA40.test(head) || String((v && v.catFile) || '').trim() !== `EXISTS ${head}`) {
     return { problem: `verifyHead: ${label} did not return a 40-hex sha that exists in git (${v ? JSON.stringify({ revParse: String(v.revParse).slice(0, 60), catFile: String(v.catFile).slice(0, 20) }) : 'no result'}); fix the repository in ${REPO}, then start a fresh sdd-wave with base set to git rev-parse HEAD and carried set to the returned carried` }
   }
   const c = String(childHead || '').trim().toLowerCase()
@@ -183,6 +183,13 @@ for (const t of A.tasks) {
     }
     break
   }
+  // the completed task's obligations enter the flow before the verify read, so a verify stop still returns them in carried
+  for (const c of res.carryForward || []) flow.push(`- Task ${t.task} carry forward: ${short(c, 400)}`)
+  for (const r of res.rulings || []) {
+    // checker rulings are verified checks; a fix ruling was settled inside its own task
+    if (r.source === 'checker' || r.decision === 'fix') continue
+    flow.push(`- Task ${t.task} ruling T${t.task}/${r.item} (${r.source}): ${r.decision}: ${short(r.reason, 240)}`)
+  }
   if (t === A.tasks[A.tasks.length - 1]) {
     base = res.head // no later task: nothing to carry the head into
   } else {
@@ -194,12 +201,6 @@ for (const t of A.tasks) {
       break
     }
     base = v.head
-  }
-  for (const c of res.carryForward || []) flow.push(`- Task ${t.task} carry forward: ${short(c, 400)}`)
-  for (const r of res.rulings || []) {
-    // checker rulings are verified checks; a fix ruling was settled inside its own task
-    if (r.source === 'checker' || r.decision === 'fix') continue
-    flow.push(`- Task ${t.task} ruling T${t.task}/${r.item} (${r.source}): ${r.decision}: ${short(r.reason, 240)}`)
   }
 }
 
