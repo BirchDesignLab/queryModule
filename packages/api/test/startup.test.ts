@@ -1,20 +1,28 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { readPragmas } from "../src/db/client";
-import { startServer } from "../src/startup";
+import { type RunningServer, startServer } from "../src/startup";
+import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
+const PREFIXES = ["qm-data-", "qm-sec-", "qm-cfg-"];
+// A prior Windows run may have left dirs behind (see removeTempDirs); sweep ones over 10 minutes old.
+sweepStaleTempDirs(tmpdir(), 10 * 60 * 1000, PREFIXES);
 const created: string[] = [];
-afterAll(() => {
-  for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
+afterAll(() => removeTempDirs(created.splice(0), "test/startup"));
 const tempDir = (prefix: string): string => {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   created.push(dir);
   return dir;
 };
+
+/** Stops a started server and asserts stop() closed its database client, on every platform. */
+async function stop(s: RunningServer): Promise<void> {
+  await s.stop();
+  expect(s.deps.db.$client.closed).toBe(true);
+}
 
 /** readDeployEnv refuses PORT 0 (spec 8.1), so the test asks the OS for a free port first. */
 async function freePort(): Promise<number> {
@@ -70,7 +78,7 @@ describe("SEC-006 startup fails closed", () => {
       busy_timeout: 5000,
       foreign_keys: 1,
     });
-    await s.stop();
+    await stop(s);
     await expect(fetch(`http://127.0.0.1:${s.port}/api/v1/health`)).rejects.toThrow();
   });
   it("refuses without DATA_KEY", async () => {
@@ -81,14 +89,14 @@ describe("SEC-006 startup fails closed", () => {
   it("refuses a mismatched CREDENTIAL_KEY on the second boot", async () => {
     const data = tempDir("qm-data-");
     const first = await startServer(await envWith({}, data), { logSink: () => {} });
-    await first.stop();
+    await stop(first);
     await expect(
       startServer(await envWith({ CREDENTIAL_KEY: k(9) }, data), { logSink: () => {} }),
     ).rejects.toThrow(/CREDENTIAL_KEY/);
   });
   it("refuses a wrong DB_ENCRYPTION_KEY", async () => {
     const data = tempDir("qm-data-");
-    await (await startServer(await envWith({}, data), { logSink: () => {} })).stop();
+    await stop(await startServer(await envWith({}, data), { logSink: () => {} }));
     await expect(
       startServer(await envWith({ DB_ENCRYPTION_KEY: k(8) }, data), { logSink: () => {} }),
     ).rejects.toThrow(/database open failed/);
@@ -97,7 +105,7 @@ describe("SEC-006 startup fails closed", () => {
     const data = tempDir("qm-data-");
     const s = await startServer(await envWith({}, data), { logSink: () => {} });
     await s.deps.db.$client.execute("DROP TRIGGER audit_event_no_update");
-    await s.stop();
+    await stop(s);
     await expect(startServer(await envWith({}, data), { logSink: () => {} })).rejects.toThrow(
       /audit_event triggers missing/,
     );
@@ -144,6 +152,6 @@ describe("SEC-005 startup refuses a site config that requires MFA before MFA exi
     const s = await startServer(env, { logSink: () => {} });
     const r = await fetch(`http://127.0.0.1:${s.port}/api/v1/health`);
     expect(r.status).toBe(200);
-    await s.stop();
+    await stop(s);
   });
 });

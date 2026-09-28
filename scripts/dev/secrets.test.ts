@@ -23,12 +23,16 @@ describe("ensureDevSecrets: generated dev-only secret files (#124)", () => {
     }
   });
 
-  it("restricts the directory and file permissions to the owner", () => {
-    dir = join(mkdtempSync(join(tmpdir(), "qm-dev-secrets-")), "secrets");
-    ensureDevSecrets(dir);
-    expect(statSync(dir).mode & 0o777).toBe(0o700);
-    expect(statSync(join(dir, SECRET_NAMES[0])).mode & 0o777).toBe(0o600);
-  });
+  // POSIX mode bits don't apply on Windows (stat reports 0o666); Linux CI still checks them.
+  it.skipIf(process.platform === "win32")(
+    "restricts the directory and file permissions to the owner",
+    () => {
+      dir = join(mkdtempSync(join(tmpdir(), "qm-dev-secrets-")), "secrets");
+      ensureDevSecrets(dir);
+      expect(statSync(dir).mode & 0o777).toBe(0o700);
+      expect(statSync(join(dir, SECRET_NAMES[0])).mode & 0o777).toBe(0o600);
+    },
+  );
 
   it("never overwrites a secret that already exists (stable across dev restarts)", () => {
     dir = join(mkdtempSync(join(tmpdir(), "qm-dev-secrets-")), "secrets");

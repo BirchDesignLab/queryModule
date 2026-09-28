@@ -1,8 +1,9 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect } from "vitest";
 import { type Db, openDatabase } from "../../src/db/client";
+import { removeTempDirs, sweepStaleTempDirs } from "./temp-dirs";
 
 export const TEST_DB_KEY = "test-db-key-0123456789abcdef0123456789";
 
@@ -28,54 +29,14 @@ export function closeAll(clients: readonly Client[]): void {
   for (const client of clients) expect(client.closed).toBe(true);
 }
 
-/*
- * A bare libsql client, closed right after open, can still hold its Windows file handle for
- * several seconds afterward (observed here: ~4.5-5.5s, Defender exclusion or not — the actual
- * holder is unclear, could be the native libsql close path itself). No retry budget worth
- * paying on every test run closes that gap, so on win32 a still-locked dir is left in place
- * (one summary warning per file) instead of failing it; the next run's sweep below clears it.
- * Every other platform, and every other rmSync error, still throws. The real leak check is
- * closeAll's assertion above, which runs everywhere including Linux CI.
- */
 afterAll(() => {
   closeAll(openClients.splice(0));
-  const dirs = created.splice(0);
-  let stuck = 0;
-  for (const dir of dirs) {
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch (e) {
-      if (process.platform !== "win32") throw e;
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code !== "EPERM" && code !== "EBUSY") throw e;
-      stuck++;
-    }
-  }
-  if (stuck > 0) {
-    console.warn(`[test/helpers/db] ${stuck} temp dir(s) left for the next run's sweep`);
-  }
+  removeTempDirs(created.splice(0), "test/helpers/db");
 });
 
-/** Removes qm-db-* dirs under root older than maxAgeMs. Best-effort: failures are ignored. */
-export function sweepStaleTempDirs(root: string, maxAgeMs: number, now = Date.now()): void {
-  let entries: string[];
-  try {
-    entries = readdirSync(root);
-  } catch {
-    return;
-  }
-  for (const name of entries) {
-    if (!name.startsWith("qm-db-")) continue;
-    const dir = join(root, name);
-    try {
-      if (now - statSync(dir).mtimeMs > maxAgeMs) rmSync(dir, { recursive: true, force: true });
-    } catch {
-      // still locked or already gone; leave it for a later run
-    }
-  }
-}
+export { sweepStaleTempDirs };
 
-// A prior Windows run may have left qm-db-* dirs behind (see the afterAll comment above); sweep
+// A prior Windows run may have left qm-db-* dirs behind (see removeTempDirs in ./temp-dirs); sweep
 // anything older than 10 minutes so TEST_DB_ROOT does not pile up. Never on the critical path.
 sweepStaleTempDirs(TEST_DB_ROOT, 10 * 60 * 1000);
 
