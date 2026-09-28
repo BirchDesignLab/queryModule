@@ -36,4 +36,11 @@ describe("SEC-006 web build serving", () => {
     expect(api.status).toBe(404);
     expect(api.headers.get("content-type")).toMatch(/json/);
   });
+  it("a missing /assets/* path falls through to the SPA shell with no-store, not immutable", async () => {
+    const t = await createTestApp({ env: { WEB_DIST: dist() } });
+    const r = await t.request("/assets/missing-chunk.js");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toBe("no-store");
+    expect(r.headers.get("content-security-policy")).toMatch(/'nonce-[^']+'/);
+  });
 });

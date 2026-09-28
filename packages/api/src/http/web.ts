@@ -18,13 +18,22 @@ export function mountWeb(app: Hono<AppEnv>, d: AppDeps): void {
   // c.header() inside serveStatic's onFound is a no-op here (@hono/node-server 2.1.1: it builds
   // the Response via c.body() before onFound runs, so the mutation lands on a headers copy that
   // is never returned); set the header in a wrapping middleware instead, the same after-next()
-  // pattern securityHeaders and noStore already use.
+  // pattern securityHeaders and noStore already use. Gate on whether serveStatic actually served
+  // a file (onFound sets c.var.assetHit), not on the response status: a missing /assets/* file
+  // falls through to the SPA catch-all below, which also answers 200, and that fallback response
+  // must keep its own Cache-Control: no-store rather than being overwritten as immutable.
   app.use("/assets/*", async (c, next) => {
     await next();
-    if (c.res.status === 200)
+    if (c.get("assetHit"))
       c.res.headers.set("Cache-Control", "public, max-age=31536000, immutable");
   });
-  app.use("/assets/*", serveStatic({ root: relative(process.cwd(), dist) }));
+  app.use(
+    "/assets/*",
+    serveStatic({
+      root: relative(process.cwd(), dist),
+      onFound: (_path, c) => c.set("assetHit", true),
+    }),
+  );
   app.get("*", (c) => {
     if (c.req.path.startsWith("/api/")) return apiError(c, "notFound");
     const nonce = randomBytes(16).toString("base64");
