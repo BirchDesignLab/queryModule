@@ -19,7 +19,7 @@ Closes #
 - [ ] gate: `docs/reviews/pr-<n>.md` from Opus 5.5 at effort high or above
 - [ ] critical: `docs/reviews/pr-<n>.md` from Opus 5.5 at effort xhigh or max
 
-With an artifact, no gate or critical file changes after its `reviewedSha`.
+With an artifact, no gate or critical file this PR changes is changed again after its `reviewedSha` (a `main` merge that touches only `main`-side files is fine).
 
 ## Dependencies
 

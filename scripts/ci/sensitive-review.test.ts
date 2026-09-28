@@ -214,6 +214,29 @@ describe("sensitive-review (spec 9.1)", () => {
     });
     expect(r).toEqual({ ok: true, messages: ["sensitive review recorded for scripts/ci/x.ts"] });
   });
+
+  // #206: late = reviewed-tier files changed after reviewedSha that the PR itself changes.
+  const lateRun = (after: string[]) =>
+    evaluateSensitiveReview({
+      ...base,
+      changedFiles: ["scripts/ci/x.ts"],
+      artifactText: artifact,
+      filesChangedAfterReviewedSha: after,
+    });
+
+  it("passes a main merge after review that brings only main-side sensitive files (#206)", () => {
+    expect(lateRun(["scripts/ci/main-only.ts"]).ok).toBe(true);
+  });
+
+  it("fails a PR-touched sensitive file changed after review (#206)", () => {
+    const r = lateRun(["scripts/ci/x.ts"]);
+    expect(r.messages[0]).toBe("sensitive files changed after reviewedSha: scripts/ci/x.ts");
+  });
+
+  it("fails a main merge that changes a sensitive file the PR also touches (#206)", () => {
+    const r = lateRun(["scripts/ci/main-only.ts", "scripts/ci/x.ts"]);
+    expect(r.messages[0]).toBe("sensitive files changed after reviewedSha: scripts/ci/x.ts");
+  });
 });
 
 describe("runSensitiveReview (spec 9.1, fails closed)", () => {
@@ -661,7 +684,7 @@ describe("sensitive tiers (ADR-0007)", () => {
     expect(
       run(["scripts/ci/x.ts"], artifact, ["pnpm-lock.yaml", ".github/ISSUE_TEMPLATE/a.yml"]).ok,
     ).toBe(true);
-    expect(run(["scripts/ci/x.ts"], artifact, ["scripts/ci/y.ts"]).ok).toBe(false);
+    expect(run(["scripts/ci/x.ts"], artifact, ["scripts/ci/x.ts"]).ok).toBe(false);
   });
 });
 

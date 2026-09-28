@@ -257,7 +257,10 @@ export function evaluateSensitiveReview(input: ReviewInput): { ok: boolean; mess
   }
   if (input.filesChangedAfterReviewedSha === undefined)
     return fail(`${artifactPath}: reviewedSha ${fm.reviewedSha} is not an ancestor of the PR head`);
-  const late = input.filesChangedAfterReviewedSha.filter(reviewed);
+  // Only files the PR itself changes (#206): a main merge after review brings main's files too.
+  const late = input.filesChangedAfterReviewedSha.filter(
+    (f) => reviewed(f) && input.changedFiles.includes(f),
+  );
   if (late.length > 0) return fail(`sensitive files changed after reviewedSha: ${late.join(", ")}`);
   return { ok: true, messages: [`sensitive review recorded for ${touched.join(", ")}`] };
 }
