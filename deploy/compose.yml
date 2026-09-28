@@ -1,0 +1,46 @@
+name: querymodule
+services:
+  app:
+    image: ghcr.io/birchdesignlab/querymodule:release
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      SECRETS_DIR: /run/secrets
+    secrets: [DB_ENCRYPTION_KEY, CREDENTIAL_KEY, DATA_KEY, BETTER_AUTH_SECRET, SEED_PASSWORD_SECRET]
+    volumes:
+      - data:/data
+      - ./adapters:/adapters:ro
+    # no ports: cloudflared is the sole ingress (spec 5.6, 8.3)
+    stop_grace_period: 30s
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+      # The host's willfarrell/autoheal runs with AUTOHEAL_CONTAINER_LABEL=all; opt app out (developer
+      # decision 09-28-26). Task 35 verifies the running autoheal honours this label.
+      autoheal: "false"
+    networks: [internal]
+  cloudflared:
+    image: cloudflare/cloudflared@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token-file /run/secrets/TUNNEL_TOKEN
+    secrets: [TUNNEL_TOKEN]
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [internal]
+networks:
+  internal: {}
+volumes:
+  data: {}
+  # Staging for scripts/ops/backup.sh, which creates it with docker volume create; external so
+  # compose never makes a project-prefixed copy (T31 hand-off, #131).
+  qm-backup-staging:
+    external: true
+    name: qm-backup-staging
+secrets:
+  DB_ENCRYPTION_KEY: { file: /opt/querymodule/secrets/DB_ENCRYPTION_KEY }
+  CREDENTIAL_KEY: { file: /opt/querymodule/secrets/CREDENTIAL_KEY }
+  DATA_KEY: { file: /opt/querymodule/secrets/DATA_KEY }
+  BETTER_AUTH_SECRET: { file: /opt/querymodule/secrets/BETTER_AUTH_SECRET }
+  SEED_PASSWORD_SECRET: { file: /opt/querymodule/secrets/SEED_PASSWORD_SECRET }
+  TUNNEL_TOKEN: { file: /opt/querymodule/secrets/TUNNEL_TOKEN }

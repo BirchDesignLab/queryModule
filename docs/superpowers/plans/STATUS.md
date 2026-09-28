@@ -36,8 +36,9 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
-| Linux laptop | A | M0 P1 | running | 09-27-26 22:04 |
-| Windows 11 | B | M0 P1 | paused | 09-28-26 01:42 |
+| Linux laptop | Host lane (host steps only) | M0 P1 | running | 09-28-26 04:40 |
+| Windows 11 | B | M0 P1 | running | 09-28-26 04:40 |
+| Windows 11 | A (Track A code, `C:\git\queryModule-a`) | M0 P1 | running | 09-28-26 04:40 |
 | Windows 11 | A offload | M0 P1 | idle | 09-27-26 16:08 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
@@ -49,14 +50,6 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track A
 
 ### Track B
-
-- Issue: #167 Web: M0 Playwright suite (Task 27); B7 (Task 19, #159) on feat/b-p1-wave-7, B5 (#202) and B6 (#204) merged
-- Branch / PR: none for Task 27; cut feat/b-p1-wave-8 from main once #122 and #132 merge
-- Last green: `pnpm verify` at 2060b84 on feat/b-p1-wave-7 (1443 tests)
-- Next step: "### Task 27: Web: M0 Playwright suite (#167)"
-- Blocked by: #122 (A4b), #132 (A5)
-- Local-only state: none
-- Notes: B4 and B5 carry-forwards live in #167 comments; Task 26 Step 26.7 runs with Task 27; follow-ups #66 (WS half needs the M2 WS client) and #178 (gate tsconfig chore, rides a later B wave PR before M4) stay parked
 
 ### Track D
 
