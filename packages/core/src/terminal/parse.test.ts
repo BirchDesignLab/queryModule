@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultSite } from "./__fixtures__/sites";
+import * as terminal from "./index";
 import { parseCommand } from "./parse";
 
 const now = Date.UTC(2026, 8, 28);
@@ -121,16 +122,25 @@ describe("spec 4.4 error params never carry the typed value", () => {
     "WNT..PAT.1901-13-01",
   ];
   const exempt = new Set(["terminal.unknownCommand:code", "terminal.unknownField:name"]);
-  const typedValues = (input: string): string[] => {
-    const [, ...tokens] = input.split(".");
-    return (
-      tokens
+  // every token, the command code included (exempt covers unknownCommand:code), and the whole input
+  const typedValues = (input: string): string[] =>
+    [
+      input,
+      ...input
+        .split(".")
         // a named token's key is a field key, not a typed value
-        .flatMap((t) => [t, t.slice(t.indexOf("=") + 1)])
-        .map((t) => t.trim())
-        .filter((t) => t !== "")
+        .flatMap((t) => [t, t.slice(t.indexOf("=") + 1)]),
+    ]
+      .map((t) => t.trim())
+      .filter((t) => t !== "");
+
+  it("the typed list includes the command-code token and the whole trimmed input", () => {
+    const typed = typedValues(" ZZTOP ");
+    expect(typed).toContain("ZZTOP");
+    expect(typedValues("XYZ.ZZ-0001")).toEqual(
+      expect.arrayContaining(["XYZ", "XYZ.ZZ-0001", "ZZ-0001"]),
     );
-  };
+  });
 
   it.each(inputs.map((input, i) => [i + 1, input] as const))("input %i", (_, input) => {
     const r = p(input);
@@ -142,5 +152,11 @@ describe("spec 4.4 error params never carry the typed value", () => {
         expect(typed).not.toContain(String(value));
       }
     }
+  });
+});
+
+describe("terminal index", () => {
+  it("re-exports parseCommand", () => {
+    expect(terminal.parseCommand).toBe(parseCommand);
   });
 });
