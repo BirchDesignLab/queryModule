@@ -11,6 +11,10 @@ import {
   securityHeaders,
 } from "./http/security";
 import type { AppEnv } from "./http/types";
+import { mountWeb } from "./http/web";
+import { mountConfigRoute } from "./routes/config";
+import { mountPreferencesRoute } from "./routes/preferences";
+import { mountPublicRoutes } from "./routes/public";
 
 export function createApp(d: AppDeps): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -43,6 +47,10 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   );
   app.use("/api/v1/*", bodyCap(), requireRequestedWith());
   mountAuthRoutes(app, d);
+  mountPublicRoutes(app, d);
+  mountConfigRoute(app, d);
+  mountPreferencesRoute(app, d);
+  mountWeb(app, d);
   app.notFound((c) => apiError(c, "notFound"));
   app.onError((err, c) => {
     d.logger.error("unhandled", { err, method: c.req.method, path: c.req.path });

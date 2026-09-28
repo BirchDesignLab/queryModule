@@ -13,6 +13,13 @@ export const META = {
   minClientVersion: null,
 };
 
+/** The contract shape of GET/PUT /api/v1/me/preferences (openapi.json getMePreferences200). */
+export const PREFERENCES = {
+  layout: { orientation: "horizontal", terminal: "toggle" },
+  personaOverride: null,
+  themeMode: "night",
+} as const;
+
 let signedIn = false;
 
 export function resetMswState(): void {
@@ -41,4 +48,8 @@ export const server = setupServer(
     signedIn = false;
     return HttpResponse.json({ success: true });
   }),
+  http.get(`${API}/api/v1/me/preferences`, () => HttpResponse.json(PREFERENCES)),
+  http.put(`${API}/api/v1/me/preferences`, async ({ request }) =>
+    HttpResponse.json(await request.json()),
+  ),
 );
