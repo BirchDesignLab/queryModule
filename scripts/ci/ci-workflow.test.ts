@@ -135,9 +135,10 @@ type WorkflowStep = {
 };
 
 describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-003)", () => {
-  it("`image` job is gated on docs-only like the other gated jobs", () => {
+  it("`image` job is gated on docs-only like the other gated jobs and waits for `checks` (#231 G-M1)", () => {
     expect(jobs.image).toBeDefined();
-    expect(jobNeeds(jobs.image)).toEqual(["changes"]);
+    // checks holds the pre-install lockfile guard; image installs, so it runs only after it.
+    expect(jobNeeds(jobs.image)).toEqual(["changes", "checks"]);
     expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
   });
 
@@ -158,6 +159,32 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(build?.run).toContain("--tag querymodule:ci");
     const up = steps.find((s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh up"));
     expect(up?.run).toContain("querymodule:ci");
+  });
+
+  it("main runs never cancel each other; PR branches still do (developer 09-28-26, #231)", () => {
+    // Deviation from spec 9.3: every main sha must finish ci (and build its image) so it can be
+    // promoted; a newer push to main queues behind the running one instead of cancelling it.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal GitHub Actions expression
+    expect(workflow.concurrency.group).toBe("ci-${{ github.ref }}");
+    expect(workflow.concurrency["cancel-in-progress"]).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal GitHub Actions expression
+      "${{ github.ref != 'refs/heads/main' }}",
+    );
+  });
+
+  it("a push to main always builds the image, so every main sha gets a sha- image (#230)", async () => {
+    // image skips only on docs_only, and changed-paths fails closed to docs_only=false on any
+    // push (a docs-only merge to main still builds, smoke-tests and publishes its image).
+    expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
+    expect(jobs.checks.if).toBe("needs.changes.outputs.docs_only != 'true'");
+    const { main } = await import("./changed-paths.mjs");
+    const lines: string[] = [];
+    main({
+      env: { BASE_SHA: "abc", EVENT_NAME: "push" },
+      runGit: () => "",
+      write: (l: string) => lines.push(l),
+    });
+    expect(lines).toContain("docs_only=false");
   });
 
   it("the aggregate `ci` job needs `image`", () => {

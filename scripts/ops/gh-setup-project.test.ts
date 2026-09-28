@@ -194,3 +194,22 @@ describe("gh-setup-project: number:null duplicate guard (#80, critic:C4)", () =>
     expect(block).toMatch(/spec\.number === null && issuesByTitle\.has\(spec\.title\)/);
   });
 });
+
+describe("gh-setup-project: follow-up with no parent (#231 board cap)", () => {
+  // The M0 P1 phase parent is at GitHub's 100 sub-issue cap, and board-data-schema.mjs allows
+  // a follow-up without `parent`. Such a follow-up stays on the project with its fields but is
+  // never linked; a follow-up whose declared parent is missing still reaches ensureChild, which
+  // throws under --apply.
+  it("skips ensureChild only when f.parent is undefined", () => {
+    const start = source.indexOf("const followUps = new Map();");
+    const end = source.indexOf("// Field values");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = source.slice(start, end);
+    const skip = block.search(/if \(f\.parent === undefined\) continue;/);
+    const link = block.indexOf("ensureChild(parent, issue");
+    expect(skip).toBeGreaterThan(-1);
+    expect(link).toBeGreaterThan(skip);
+    expect(block.indexOf("followUps.set(f.number, issue);")).toBeLessThan(skip);
+  });
+});
