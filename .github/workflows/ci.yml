@@ -236,7 +236,7 @@ jobs:
   # smoke pass still stops the container and drains the port.
   image:
     name: image
-    needs: changes
+    needs: [changes, checks]
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
