@@ -12,6 +12,17 @@ updates:
       # ADR-0001: the runtime is Node 24 LTS, so @types/node stays on 24.x.
       - dependency-name: "@types/node"
         versions: [">=25"]
+      # Expo SDK 57 pins react-native 0.86 and its react; upgrade these with the Expo SDK
+      # (npx expo install --fix), not Dependabot (PR #186: RN 0.87.1 broke expo export,
+      # missing rn-get-polyfills). Patches still flow.
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

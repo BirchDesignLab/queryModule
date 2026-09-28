@@ -82,6 +82,10 @@ jobs:
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
+      - name: audit_event migrations are additive-only
+        run: node scripts/ci/check-audit-migrations.ts packages/api/drizzle
+      - name: No schema-table writes in the api source
+        run: node scripts/ci/check-schema-writes.ts packages/api/src
 
       # Step 3: config:validate
       - name: Config validate

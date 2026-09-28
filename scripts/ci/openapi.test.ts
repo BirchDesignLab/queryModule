@@ -14,6 +14,15 @@ function refs(value: unknown, out: string[] = []): string[] {
   return out;
 }
 
+/** Every `<method> <path>` operation in a generated doc, sorted (#172). */
+function operations(doc: { paths: Record<string, Record<string, unknown>> }): string[] {
+  return Object.entries(doc.paths)
+    .flatMap(([path, methods]) => Object.keys(methods).map((m) => `${m} ${path}`))
+    .sort();
+}
+const routeOperations = (routes: readonly RouteDef[]): string[] =>
+  routes.map((r) => `${r.method} ${r.path}`).sort();
+
 describe("BR-007 OpenAPI generated from route contracts (spec 5.1)", () => {
   const doc = buildOpenApiDocument(ROUTES);
 
@@ -23,8 +32,21 @@ describe("BR-007 OpenAPI generated from route contracts (spec 5.1)", () => {
     // Derived from ROUTES so a new route contract needs no edit here; the operation count
     // still fails a generator that drops or merges a route.
     expect(Object.keys(doc.paths)).toEqual([...new Set(ROUTES.map((r) => r.path))]);
-    const ops = Object.values(doc.paths).reduce((n, methods) => n + Object.keys(methods).length, 0);
-    expect(ops).toBe(ROUTES.length);
+    // #172: exact method+path pairs, so an operation emitted under the wrong path fails.
+    expect(operations(doc)).toEqual(routeOperations(ROUTES));
+  });
+
+  it("the method+path comparison catches an operation moved to another existing path (#172)", () => {
+    const paths = structuredClone(doc.paths) as Record<string, Record<string, unknown>>;
+    const [from, to] = Object.keys(paths);
+    if (from === undefined || to === undefined) throw new Error("need two paths");
+    const [method, op] = Object.entries(paths[from] ?? {})[0] ?? [];
+    if (method === undefined) throw new Error("need an operation");
+    delete paths[from]?.[method];
+    const target = paths[to] ?? {};
+    paths[to] = target;
+    target[method === "put" ? "patch" : "put"] = op;
+    expect(operations({ paths })).not.toEqual(routeOperations(ROUTES));
   });
 
   it("declares path parameters", () => {
