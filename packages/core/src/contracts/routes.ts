@@ -3,7 +3,12 @@ import { ClientSiteConfigSchema } from "../config/client-config";
 import type { FeatureKey } from "../config/features";
 import { LOCALE_PATTERN } from "../config/schema";
 import { ApiErrorSchema } from "./api-error";
-import { Sha256HexSchema } from "./primitives";
+import { SemverSchema, Sha256HexSchema } from "./primitives";
+import {
+  IdempotencyKeySchema,
+  SubmitQueryRequestSchema,
+  SubmitQueryResponseSchema,
+} from "./queries";
 import { API_BASE_PATH, API_VERSION } from "./version";
 
 export const MILESTONES = ["m0", "m1", "m2", "m3", "m4"] as const;
@@ -42,11 +47,6 @@ export interface RouteDef {
 }
 
 export const HealthResponseSchema = z.strictObject({ status: z.literal("ok") });
-
-/** SemVer 2.0.0 (semver.org), capped at 64 characters; the client's version gate compares these. */
-const SEMVER_PATTERN =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-const SemverSchema = z.string().max(64).regex(SEMVER_PATTERN);
 
 export const MetaResponseSchema = z.strictObject({
   apiVersion: z.literal(API_VERSION),
@@ -157,6 +157,31 @@ const ROUTE_DEFS = [
       200: { description: "Preferences", schema: UserPreferenceSchema },
       400: error("Malformed preferences body (validationFailed)"),
       401: error("No session"),
+    },
+  },
+  {
+    id: "submitQuery",
+    method: "post",
+    path: `${API_BASE_PATH}/queries`,
+    summary: "Submit a query; answers 202 with the correlation id once the request is recorded",
+    access: "session",
+    since: "m1",
+    status: "planned",
+    requiresRequestedWith: true,
+    request: {
+      headers: z.object({ "idempotency-key": IdempotencyKeySchema }),
+      body: SubmitQueryRequestSchema,
+    },
+    responses: {
+      202: { description: "Acknowledged", schema: SubmitQueryResponseSchema },
+      400: error("Malformed body or failed validation or plan (validationFailed, errors[])"),
+      401: error("No session"),
+      403: error("Query type or source not allowed for the caller (forbidden)"),
+      409: error("Stale config hash (configHashMismatch, currentConfigHash)"),
+      413: error("Body over the size cap (payloadTooLarge)"),
+      429: error("Rate limited (rateLimited, Retry-After)"),
+      500: error("Internal error; nothing was acknowledged (internal)"),
+      503: error("Shutting down or not ready (unavailable)"),
     },
   },
 ] as const satisfies readonly RouteDef[];

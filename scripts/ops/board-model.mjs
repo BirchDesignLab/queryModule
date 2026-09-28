@@ -16,11 +16,13 @@
  *
  * @param {{state: "open"|"closed", state_reason?: string|null}} issue
  * @param {"todo"|"ready"|"review"} waveState
- * @returns {"Done"|"In Review"|"Ready"|"Todo"|undefined}
+ * A ready wave maps to Todo: the board has no Ready column (#244).
+ *
+ * @returns {"Done"|"In Review"|"Todo"|undefined}
  */
 export function waveParentStatus(issue, waveState) {
   if (issue.state === "closed") return closedStatus(issue);
-  return { review: "In Review", ready: "Ready", todo: "Todo" }[waveState];
+  return { review: "In Review", ready: "Todo", todo: "Todo" }[waveState];
 }
 
 /**
@@ -150,30 +152,6 @@ export function rollUp(children) {
         .sort()
         .at(-1) ?? null);
   return { start, finish };
-}
-
-/**
- * A wave's timeline span for the README dashboard (#85, #92 R6). A wave whose
- * `pr` is set and whose PR has merged uses the PR's first-commit-to-merge
- * span instead of today's rolled-up issue dates, so a finished wave shows how
- * long it actually took rather than the one day every P0 wave rolls up to
- * (#85: "every P0 wave shows the same day"). Any other case (no `pr`, an open
- * PR, or a merged PR whose commits list came back empty) keeps `rolled`
- * unchanged, same object, so a caller can tell nothing was recomputed.
- *
- * @param {{start: string|null, finish: string|null}} rolled today's Start/Finish roll-up (rollUp)
- * @param {{merged: boolean, merged_at: string|null,
- *   commits: Array<{commit?: {author?: {date?: string}}}>}|null|undefined} pr
- *   `repos/{repo}/pulls/{n}` merged with its `.../commits` list, or null/undefined
- *   when the wave has no `pr` recorded.
- * @param {string} [floor]
- * @returns {{start: string|null, finish: string|null}}
- */
-export function waveSpan(rolled, pr, floor = FLOOR) {
-  if (!pr?.merged || !pr.merged_at || !pr.commits || pr.commits.length === 0) return rolled;
-  const authorDate = pr.commits[0]?.commit?.author?.date;
-  if (!authorDate) return rolled;
-  return { start: clampToFloor(authorDate, floor), finish: clampToFloor(pr.merged_at, floor) };
 }
 
 export function bodyUpdate(existing, desired) {

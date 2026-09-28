@@ -40,6 +40,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["getConfig", "get", "/api/v1/config", "session", "m1", "planned"],
       ["getMePreferences", "get", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
       ["putMePreferences", "put", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
+      ["submitQuery", "post", "/api/v1/queries", "session", "m1", "planned"],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
@@ -48,7 +49,13 @@ describe("BR-007 route contracts (spec 5.1)", () => {
 
   it("route ids are a closed type and ROUTES cannot be changed at runtime", () => {
     expectTypeOf<RouteId>().toEqualTypeOf<
-      "getHealth" | "getMeta" | "getLocale" | "getConfig" | "getMePreferences" | "putMePreferences"
+      | "getHealth"
+      | "getMeta"
+      | "getLocale"
+      | "getConfig"
+      | "getMePreferences"
+      | "putMePreferences"
+      | "submitQuery"
     >();
     expectTypeOf(findRoute).parameter(0).toEqualTypeOf<RouteId>();
     expect(Object.isFrozen(ROUTES)).toBe(true);
