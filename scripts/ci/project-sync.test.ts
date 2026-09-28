@@ -634,6 +634,116 @@ describe("project-sync board job: parent Status roll-up beyond P0 (#193)", () =>
     expect(writes).toContainEqual({ item: 40, field: "Status", value: "Done" });
     expect(writes).toContainEqual({ item: 90, field: "Status", value: "In Progress" });
   });
+
+  it("keeps a wave parent Done after it auto-closes this run, even with a registered not-planned child (S1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1: Workspace and first contracts (Tasks 1 to 6)",
+          state: "OPEN",
+          level: "Wave",
+          sub: { total: 2, completed: 2 },
+        },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          status: "Done",
+          parentNumber: 55,
+        },
+        {
+          number: 42,
+          title: "task b (not planned)",
+          state: "CLOSED",
+          stateReason: "NOT_PLANNED",
+          status: "Todo",
+          parentNumber: 55,
+        },
+      ],
+      issueEvent,
+    );
+    const statuses = writes.filter((w) => w.item === 55 && w.field === "Status");
+    // The wave-parent close (reconcile, above) already wrote Done from the
+    // issue's own new state; the children-based roll-up must not then
+    // overwrite it with In Progress just because the not-planned child never
+    // reaches Done on its own (S1).
+    expect(statuses).toEqual([{ item: 55, field: "Status", value: "Done" }]);
+  });
+
+  it("does not roll up a closed-not-planned phase parent from its children (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 39,
+          title: "Foundation (M0 P1)",
+          state: "CLOSED",
+          stateReason: "NOT_PLANNED",
+          status: "Todo",
+          level: "Phase",
+        },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        { number: 42, title: "task b", state: "OPEN", status: "Todo", parentNumber: 39 },
+      ],
+      issueEvent,
+    );
+    expect(writes.find((w) => w.item === 39 && w.field === "Status")).toBeUndefined();
+  });
+
+  it("does not override a parent's own open closing PR with the children roll-up (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 39,
+          title: "Foundation (M0 P1)",
+          state: "OPEN",
+          status: "Todo",
+          level: "Phase",
+          prs: [{ state: "OPEN", isDraft: false, repo: REPO }],
+        },
+        { number: 41, title: "task a", state: "OPEN", status: "Todo", parentNumber: 39 },
+      ],
+      issueEvent,
+    );
+    const statuses = writes.filter((w) => w.item === 39 && w.field === "Status");
+    expect(statuses).toEqual([{ item: 39, field: "Status", value: "In Review" }]);
+  });
+
+  it("does not reset an already-Done open parent to Todo before the roll-up runs (I1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        { number: 39, title: "Foundation (M0 P1)", state: "OPEN", status: "Done", level: "Phase" },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        {
+          number: 42,
+          title: "task b",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+      ],
+      issueEvent,
+    );
+    const statuses = writes.filter((w) => w.item === 39 && w.field === "Status");
+    expect(statuses).toEqual([]);
+  });
 });
 
 /**

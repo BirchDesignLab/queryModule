@@ -160,7 +160,18 @@ jobs:
               const s = await truth(item);
               if (!s) {
                 // Reopened, or its PR closed unmerged: Done and In Review no longer hold.
-                if (item.state === "OPEN" && (item.values.Status === "Done" || item.values.Status === "In Review"))
+                // A Wave, Phase or Milestone parent is exempt (issue #193 finding I1):
+                // the Status roll-up below owns those transitions from its children,
+                // so resetting to Todo here would just be overwritten (or, on a
+                // mid-run throw, leave the parent stuck at Todo) for no reason.
+                const isParentLevel =
+                  hasLevel &&
+                  (item.values.Level === "Wave" || item.values.Level === "Phase" || item.values.Level === "Milestone");
+                if (
+                  !isParentLevel &&
+                  item.state === "OPEN" &&
+                  (item.values.Status === "Done" || item.values.Status === "In Review")
+                )
                   await set(item, "Status", "Todo");
                 return;
               }
@@ -189,12 +200,16 @@ jobs:
             // Parent Status roll-up beyond P0 (issue #193). A Wave, Phase or
             // Milestone parent whose own truth() (above) gave no signal (open,
             // no closing PR of its own, the usual case for a phase or milestone
-            // parent) gets its Status from its children instead, bottom up:
+            // parent) gets its Status from its children instead, bottom up.
+            // A parent that is closed (completed or not-planned) or that has
+            // its own open closing PR keeps whatever reconcile() already set
+            // from truth(): the roll-up never overwrites it (issue #193
+            // findings S1/C1). Otherwise:
             // Done once every child's own Status is "Done" (a closed-not-planned
             // child never reaches Done on its own, so it never counts here);
-            // otherwise Todo when no child has started, else In Progress, or In
-            // Review when every started-but-not-Done child is In Review. A
-            // Milestone rolls up the same way over its Phase parents' own
+            // otherwise Todo when no child has started, else In Progress unless
+            // every open (non-Done) child is In Review, in which case In
+            // Review. A Milestone rolls up the same way over its Phase parents' own
             // already-computed Status, since by the time the milestone is
             // visited its phase children carry the roll-up's answer, not their
             // pre-run value. A parent with no children gets no write. Blocked
@@ -210,13 +225,13 @@ jobs:
               if (children.every((s) => s === "Done")) {
                 next = "Done";
               } else {
-                const started = children.filter(
+                const started = children.some(
                   (s) => s === "Done" || s === "In Review" || s === "In Progress",
                 );
-                if (started.length === 0) {
+                if (!started) {
                   next = "Todo";
                 } else {
-                  const open = started.filter((s) => s !== "Done");
+                  const open = children.filter((s) => s !== "Done");
                   next = open.length > 0 && open.every((s) => s === "In Review") ? "In Review" : "In Progress";
                 }
               }
@@ -231,6 +246,9 @@ jobs:
               if (level !== "Wave" && level !== "Phase" && level !== "Milestone") return;
               const children = childrenOf.get(item.number) ?? [];
               for (const c of children) await computeParentStatus(c);
+              // A closed parent, or one with its own open closing PR, is left
+              // to truth()/reconcile() (issue #193 findings S1/C1).
+              if (item.state === "CLOSED" || (await truth(item)) !== null) return;
               const next = parentStatus(
                 children.map((c) => c.values.Status ?? null),
                 item.values.Status ?? null,

@@ -122,7 +122,11 @@ describe("sensitive-review (spec 9.1)", () => {
     // control that keeps secrets and query values out of logs.
     for (const f of ["packages/api/src/log/logger.ts"]) expect(c(f), f).toBe("gate");
     // B5 review M1: vite configs steer the build and test run like vitest configs.
-    for (const f of ["vite.config.ts", "apps/web/vite.config.ts", "packages/web-ui/vitest.config.ts"])
+    for (const f of [
+      "vite.config.ts",
+      "apps/web/vite.config.ts",
+      "packages/web-ui/vitest.config.ts",
+    ])
       expect(c(f), f).toBe("gate");
   });
 

@@ -358,6 +358,17 @@ describe("parentStatus: Wave/Phase/Milestone Status roll-up from children (#193)
     expect(parentStatus(["In Review", "In Progress"], "Todo")).toBe("In Progress");
   });
 
+  it("is In Progress, not In Review, when an In Review child sits alongside a not-yet-started child (I2)", () => {
+    // Brief: "In Progress unless every open child is In Review". A Todo
+    // sibling is an open (non-Done) child that is not In Review, so this
+    // must not read as "every open child is In Review".
+    expect(parentStatus(["In Review", "Todo"], "Todo")).toBe("In Progress");
+  });
+
+  it("is In Progress, not In Review, when an In Review child sits alongside a Blocked child (I2)", () => {
+    expect(parentStatus(["In Review", "Blocked"], "Todo")).toBe("In Progress");
+  });
+
   it("moves a Blocked parent to In Review when every open child is In Review", () => {
     expect(parentStatus(["Done", "In Review"], "Blocked")).toBe("In Review");
   });

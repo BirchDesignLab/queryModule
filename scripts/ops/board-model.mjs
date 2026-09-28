@@ -219,11 +219,10 @@ export function followUpAdoptionError(followUps, byNumber) {
  * children's own Status (#193): a parent with no children gets no write
  * (null). Done when every child's Status is "Done" (a child closed as
  * completed; a closed-not-planned child never reaches "Done" on its own, so
- * it never counts here). Otherwise, among children that have started (Status
- * "Done", "In Review" or "In Progress"): none started is Todo; otherwise, once
- * the Done children are set aside, In Review only when every remaining
- * (open, non-Done) started child is In Review, else In Progress. A Milestone
- * rolls up the same way over its Phase parents' own already-computed Status,
+ * it never counts here). Otherwise: none started (no child "Done", "In
+ * Review" or "In Progress") is Todo; otherwise In Progress unless every open
+ * (non-Done) child, started or not, is "In Review", in which case In Review.
+ * A Milestone rolls up the same way over its Phase parents' own already-computed Status,
  * since a nested parent is just another child by the time this runs bottom
  * up. The existing Blocked rule holds: automation moves a Blocked parent only
  * to Done or In Review, never to Todo or In Progress.
@@ -242,13 +241,11 @@ export function parentStatus(children, current) {
   if (children.every((s) => s === "Done")) {
     next = "Done";
   } else {
-    const started = children.filter(
-      (s) => s === "Done" || s === "In Review" || s === "In Progress",
-    );
-    if (started.length === 0) {
+    const started = children.some((s) => s === "Done" || s === "In Review" || s === "In Progress");
+    if (!started) {
       next = "Todo";
     } else {
-      const open = started.filter((s) => s !== "Done");
+      const open = children.filter((s) => s !== "Done");
       next = open.length > 0 && open.every((s) => s === "In Review") ? "In Review" : "In Progress";
     }
   }
