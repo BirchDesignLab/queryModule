@@ -49,8 +49,18 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
   let seenNamed = false;
   let nonEmptyPositional = 0;
   let overflow = false; // a non-empty token landed past the last position
-  const isTrailingEmpty = (token: string, rest: string | null) =>
-    token.trim() === "" && (rest === null || rest.split(d).every((x) => x.trim() === ""));
+  const restAt = cmd.positions.findIndex(isRest);
+  // Before a rest position, only the tokens up to it are split: the remainder there is one
+  // value (delimiters included), so a delimiter-only rest value is not a trailing empty.
+  const isTrailingEmpty = (token: string, rest: string | null) => {
+    if (token.trim() !== "") return false;
+    if (rest === null) return true;
+    const parts = rest.split(d);
+    const upTo = !seenNamed && restAt > pos ? restAt - pos - 1 : parts.length;
+    return (
+      parts.slice(0, upTo).every((x) => x.trim() === "") && parts.slice(upTo).join(d).trim() === ""
+    );
+  };
   const taken = (k: string) =>
     out.presetKeys.includes(k) || out.positionedKeys.includes(k) || out.namedKeys.includes(k);
   while (remaining !== null) {

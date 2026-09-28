@@ -21,6 +21,7 @@ describe("FR-051 positions fill in order after the command code", () => {
   });
   it("ignores trailing empty tokens", () => {
     expect(t("VEH.ABC123...")).toEqual(t("VEH.ABC123"));
+    expect(t("VEH.ABC123.")).toEqual(t("VEH.ABC123"));
   });
   it("a bare command code is a command with no values", () => {
     expect(t("veh")).toMatchObject({ commandCode: "VEH", userValues: {}, errors: [] });
@@ -53,6 +54,19 @@ describe("FR-052 named tokens and the rest position", () => {
   });
   it("a trailing empty token at the rest position is ignored (spec 4.4)", () => {
     expect(t("PRO.S123.FIREARM. ")).toEqual(t("PRO.S123.FIREARM"));
+  });
+  // Regression: A5 round-trip property, seeds 665939770 and 613251920 (Task 7). Empty tokens
+  // before a rest position are trailing only when the rest remainder is blank too.
+  it("a rest value made only of delimiters after empty positions is kept", () => {
+    expect(t("PRO....")).toMatchObject({
+      userValues: { serial: "", propertyType: "", description: "." },
+      positionedKeys: ["serial", "propertyType", "description"],
+      errors: [],
+    });
+    expect(t("PRO////", exampleOkSite).userValues.description).toBe("/");
+    expect(t("PRO... ")).toEqual(t("PRO"));
+    // After a named token the rest position is no longer read, so all later tokens are split.
+    expect(t("PRO.propertyType=BOAT..")).toEqual(t("PRO.propertyType=BOAT"));
   });
   it("a positional token after a named one is an error", () => {
     expect(t("VEH.ABC123.plateType=PC.26").errors).toEqual([

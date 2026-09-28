@@ -25,7 +25,7 @@ describe("FR-056 draft merge (spec 4.4)", () => {
   });
   it("an omitted or trailing-empty position writes null, rest included", () => {
     const d = { serial: "ZZ-0001", propertyType: "BOAT", description: "old" };
-    expect(merge(d, "PRO.ZZ-0002...")).toEqual({
+    expect(merge(d, "PRO.ZZ-0002..")).toEqual({
       serial: "ZZ-0002",
       propertyType: null,
       description: null,
