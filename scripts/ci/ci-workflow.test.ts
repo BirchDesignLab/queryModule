@@ -162,15 +162,38 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(publish.if.includes("pull_request")).toBe(false);
   });
 
-  it("`publish` has read-only contents and write packages permissions, and pushes sha- and latest tags", () => {
+  it("`publish` has read-only contents and write packages permissions, and pushes sha- and latest tags of the loaded image (not a rebuild)", () => {
     const publish = jobs.publish;
     expect(publish.permissions).toEqual({ contents: "read", packages: "write" });
     // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
     const steps: any[] = publish.steps;
-    const push = steps.find((s) => s.uses?.startsWith("docker/build-push-action"));
-    expect(push?.with?.push).toBe(true);
-    expect(push?.with?.tags).toContain("ghcr.io/birchdesignlab/querymodule:sha-");
-    expect(push?.with?.tags).toContain("ghcr.io/birchdesignlab/querymodule:latest");
+    // C2 (round 1 review): publish must not build the image itself; it loads
+    // and pushes the exact bytes the `image` job already smoke-tested.
+    const build = steps.find((s) => s.uses?.startsWith("docker/build-push-action"));
+    expect(build, "publish must not rebuild the image (fixes C2)").toBeUndefined();
+    const download = steps.find((s) => s.uses?.startsWith("actions/download-artifact"));
+    expect(
+      download,
+      "publish must download the image artifact the `image` job uploaded",
+    ).toBeDefined();
+    expect(download?.with?.name).toBe("querymodule-image");
+    const load = steps.find((s) => typeof s.run === "string" && s.run.includes("docker load"));
+    expect(load, "publish must docker load the downloaded image").toBeDefined();
+    const push = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("docker push") && s.env,
+    );
+    expect(push, "no run step pushes both tags through env vars").toBeDefined();
+    expect(push?.run.includes("${{")).toBe(false);
+    const envValues = Object.values(push?.env ?? {});
+    expect(
+      envValues.some(
+        (v) =>
+          typeof v === "string" &&
+          v.startsWith("ghcr.io/birchdesignlab/querymodule:sha-") &&
+          v.includes("github.sha"),
+      ),
+    ).toBe(true);
+    expect(envValues.some((v) => typeof v === "string" && v.endsWith(":latest"))).toBe(true);
   });
 
   it("every checkout step in `image` and `publish` sets persist-credentials: false", () => {
@@ -180,5 +203,40 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
       const checkout = steps.find((s) => s.uses?.startsWith("actions/checkout"));
       expect(checkout?.with?.["persist-credentials"], `${id} checkout`).toBe(false);
     }
+  });
+
+  it("`image` job exposes real GHA cache credentials to the buildx `run:` step (fixes C1)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+    const steps: any[] = jobs.image.steps;
+    const runtimeIndex = steps.findIndex((s) =>
+      s.uses?.startsWith("crazy-max/ghaction-github-runtime"),
+    );
+    const buildIndex = steps.findIndex(
+      (s) => typeof s.run === "string" && s.run.includes("docker buildx build"),
+    );
+    expect(
+      runtimeIndex,
+      "no crazy-max/ghaction-github-runtime step in the image job",
+    ).toBeGreaterThanOrEqual(0);
+    expect(buildIndex).toBeGreaterThanOrEqual(0);
+    expect(runtimeIndex).toBeLessThan(buildIndex);
+  });
+
+  it("`image` job saves and uploads the tested image only on a push to main (fixes C2)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+    const steps: any[] = jobs.image.steps;
+    const pushGate = "github.event_name == 'push' && github.ref == 'refs/heads/main'";
+    const save = steps.find(
+      (s) =>
+        typeof s.run === "string" &&
+        s.run.includes("docker save") &&
+        s.run.includes("querymodule:ci"),
+    );
+    expect(save, "no docker save step in the image job").toBeDefined();
+    expect(save?.if).toBe(pushGate);
+    const upload = steps.find((s) => s.uses?.startsWith("actions/upload-artifact"));
+    expect(upload, "no actions/upload-artifact step in the image job").toBeDefined();
+    expect(upload?.if).toBe(pushGate);
+    expect(upload?.with?.name).toBe("querymodule-image");
   });
 });
