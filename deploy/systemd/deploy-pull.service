@@ -1,0 +1,7 @@
+[Unit]
+Description=Pull and apply the querymodule release image if it changed
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/git/queryModule/deploy/.env
+ExecStart=/usr/bin/bash %h/git/queryModule/scripts/ops/deploy-pull.sh
