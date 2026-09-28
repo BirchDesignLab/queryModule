@@ -117,17 +117,67 @@ describe("promote.yml structure (task 30, BR-004 SEC-020 NFR-003)", () => {
     expect(buildxBuild, "promote must not run docker buildx build").toBeUndefined();
   });
 
-  it("pushes the milestone git tag only when milestone is set, with the push credential scoped to that one step", () => {
-    const tagStep = steps.find(
-      (s) => typeof s.run === "string" && /\bgit tag\b/.test(s.run) && s.run.includes("git push"),
+  it("creates the local milestone tag before the retag step, so an existing tag fails the job before :release moves (C2)", () => {
+    const createTagStep = steps.find(
+      (s) => typeof s.run === "string" && /\bgit tag\b/.test(s.run) && !s.run.includes("git push"),
     );
-    expect(tagStep, "no combined tag+push step").toBeDefined();
-    expect(tagStep?.if).toBe("inputs.milestone != ''");
+    const retagStep = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("imagetools create"),
+    );
+    const pushStep = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("git push") && !/\bgit tag\b/.test(s.run),
+    );
+    expect(createTagStep, "no tag-create step (must not also push)").toBeDefined();
+    expect(retagStep, "no imagetools create (retag) step").toBeDefined();
+    expect(pushStep, "no tag-push step (must not also create the tag)").toBeDefined();
+    expect(createTagStep?.if).toBe("inputs.milestone != ''");
+    expect(pushStep?.if).toBe("inputs.milestone != ''");
+    const createIndex = steps.indexOf(createTagStep as WorkflowStep);
+    const retagIndex = steps.indexOf(retagStep as WorkflowStep);
+    const pushIndex = steps.indexOf(pushStep as WorkflowStep);
+    // git tag (no -f) fails if $MILESTONE already exists, and it must run
+    // before imagetools create moves :release, so a re-cut tag fails the
+    // job before :release is touched. The push happens only after both.
+    expect(createIndex).toBeLessThan(retagIndex);
+    expect(retagIndex).toBeLessThan(pushIndex);
+  });
+
+  it("pushes the milestone git tag only when milestone is set, with the push credential scoped to that one step", () => {
+    const pushStep = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("git push") && !/\bgit tag\b/.test(s.run),
+    );
+    expect(pushStep, "no tag-push step").toBeDefined();
+    expect(pushStep?.if).toBe("inputs.milestone != ''");
     // The checkout step must not itself carry a push-capable credential.
     const checkout = steps.find((s) => s.uses?.startsWith("actions/checkout"));
     expect(checkout?.with?.["persist-credentials"]).toBe(false);
     // The push step supplies its own credential via env, not via the persisted checkout credential.
-    expect(tagStep?.env, "tag push step must scope its own credential via env").toBeDefined();
+    expect(pushStep?.env, "tag push step must scope its own credential via env").toBeDefined();
+    expect(pushStep?.env?.GH_TOKEN, "tag push step must set GH_TOKEN itself").toBeDefined();
+  });
+
+  it("never sets GH_TOKEN in job-wide env, and no pnpm install step carries it (C1)", () => {
+    expect(job.env?.GH_TOKEN, "GH_TOKEN must not be job-wide").toBeUndefined();
+    const installStep = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("pnpm install"),
+    );
+    expect(installStep, "no pnpm install step").toBeDefined();
+    expect(installStep?.env?.GH_TOKEN, "pnpm install step must not carry GH_TOKEN").toBeUndefined();
+  });
+
+  it("scopes GH_TOKEN only to the steps that need it (gh run list, git push)", () => {
+    const ghRunListStep = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("gh run list"),
+    );
+    const pushStep = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("git push") && !/\bgit tag\b/.test(s.run),
+    );
+    expect(ghRunListStep?.env?.GH_TOKEN, "guard step must set its own GH_TOKEN").toBeDefined();
+    expect(pushStep?.env?.GH_TOKEN, "push step must set its own GH_TOKEN").toBeDefined();
+    for (const s of steps) {
+      if (s === ghRunListStep || s === pushStep) continue;
+      expect(s.env?.GH_TOKEN, `step "${s.name}" must not carry GH_TOKEN`).toBeUndefined();
+    }
   });
 
   it("never interpolates the GitHub expression syntax inside a run: body", () => {

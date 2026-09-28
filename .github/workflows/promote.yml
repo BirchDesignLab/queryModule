@@ -37,7 +37,6 @@ jobs:
       SHA: ${{ inputs.sha }}
       MILESTONE: ${{ inputs.milestone }}
       IMAGE: ghcr.io/birchdesignlab/querymodule
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -45,6 +44,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: sha is on main and ci succeeded for it
+        # GH_TOKEN is scoped to this one step (gh run list), not job-wide:
+        # a job-wide token would also reach pnpm install's lifecycle scripts
+        # and the story-tag gate below.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be 40 lowercase hex"; exit 1; }
           [[ -z "$MILESTONE" || "$MILESTONE" =~ ^m[0-4]$ ]] || { echo "milestone must be empty or one of m0-m4"; exit 1; }
@@ -66,6 +70,13 @@ jobs:
           test -f "docs/releases/${MILESTONE}.md" || { echo "missing docs/releases/${MILESTONE}.md at $SHA"; exit 1; }
           pnpm install --frozen-lockfile
           node scripts/ci/check-story-tags.ts --milestone "$MILESTONE"
+      - name: create local milestone tag (fails if it already exists, before :release moves)
+        if: inputs.milestone != ''
+        # Plain `git tag` (no -f) fails closed if $MILESTONE already exists
+        # (a re-cut, or a retry after a partial run). This runs before the
+        # retag step below, so a duplicate tag fails the job before
+        # :release is touched, instead of after.
+        run: git tag "$MILESTONE" "$SHA"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -80,10 +91,10 @@ jobs:
         if: inputs.milestone != ''
         # The checkout above has persist-credentials: false, so this step
         # supplies its own push credential (the workflow's GH_TOKEN) via env,
-        # scoped to this one step, instead of a persisted git credential.
+        # scoped to this one step, instead of a persisted git credential or a
+        # job-wide GH_TOKEN. The tag itself was already created (and would
+        # already have failed the job) before the retag step ran.
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          git tag "$MILESTONE" "$SHA"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$MILESTONE"
+        run: git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$MILESTONE"
