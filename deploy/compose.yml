@@ -16,8 +16,9 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "false"
       # The host's willfarrell/autoheal runs with AUTOHEAL_CONTAINER_LABEL=all; opt app out (developer
-      # decision 09-28-26). Task 35 verifies the running autoheal honours this label.
-      autoheal: "false"
+      # decision 09-28-26). The value is case-sensitive: autoheal's entrypoint excludes only
+      # select(.Labels["autoheal"] != "False"), so "false" is ignored (verified on the host 09-28-26).
+      autoheal: "False"
     networks: [internal]
   cloudflared:
     image: cloudflare/cloudflared@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
