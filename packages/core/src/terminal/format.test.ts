@@ -54,6 +54,32 @@ describe("FR-056 formatCommand (spec 4.4 toggle)", () => {
       unshownCount: 0,
     });
   });
+  it("a non-rest value that reads as a named token of the query type is terminal.delimiterInValue", () => {
+    expect(f("VEH", { plate: "ZZ-0001", state: "OK", year: "2026", vin: "PLATETYPE=PC" })).toEqual({
+      text: "VEH.ZZ-0001.OK.2026.PLATETYPE=PC",
+      errors: [
+        {
+          key: "terminal.delimiterInValue",
+          params: { field: "vin", labelKey: "field.vin", position: 4 },
+        },
+      ],
+      unshownCount: 0,
+    });
+    expect(f("VEH", { plate: " vin = X" }).errors).toEqual([
+      {
+        key: "terminal.delimiterInValue",
+        params: { field: "plate", labelKey: "field.plate", position: 1 },
+      },
+    ]);
+  });
+  it("an '=' that cannot read as a named token is no error", () => {
+    expect(f("VEH", { plate: "=ZZ" }).errors).toEqual([]);
+    expect(f("VEH", { plate: "ZZ=0001" }).errors).toEqual([]);
+  });
+  it("a named-token look-alike in the rest position is no error", () => {
+    const r = f("PRO", { serial: "ZZ-0001", propertyType: "BOAT", description: "serial=x" });
+    expect(r).toEqual({ text: "PRO.ZZ-0001.BOAT.serial=x", errors: [], unshownCount: 0 });
+  });
   it("a delimiter inside the rest position is no error", () => {
     const r = f("PRO", { serial: "ZZ-0001", propertyType: "BOAT", description: "x. y" });
     expect(r).toEqual({ text: "PRO.ZZ-0001.BOAT.x. y", errors: [], unshownCount: 0 });

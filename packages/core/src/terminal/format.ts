@@ -1,7 +1,7 @@
 import type { CommandDef, FieldDef } from "../config/schema";
 import type { ValidationError } from "../contracts/validation-error";
 import { canonicalise, rawText } from "../rules/canonicalise";
-import { compileQueryType } from "../rules/compile";
+import { compileQueryType, findQueryType } from "../rules/compile";
 import { computeUserValues } from "../rules/effective-values";
 import type { CanonicalValue, EvaluateOptions, RawValue } from "../rules/types";
 import type { Draft, FormatResult, TerminalConfig } from "./types";
@@ -42,7 +42,11 @@ export function formatValue(
   return emit(field, raw, canonicalise(field, raw, options).value);
 }
 
-/** Spec 4.4 toggle: user values only, never effective defaults; interior empties kept, trailing dropped. */
+/**
+ * Spec 4.4 toggle: user values only, never effective defaults; interior empties kept, trailing dropped.
+ * A non-rest value holding the delimiter, or reading as a named token (`key=...`), is
+ * terminal.delimiterInValue: it would not tokenize back into its own position.
+ */
 export function formatCommand(
   config: TerminalConfig,
   commandCode: string,
@@ -62,6 +66,14 @@ export function formatCommand(
   const qt = compileQueryType(config, cmd.queryType, options.now);
   // Canonical values with each picklist's filtered codes, as the form path computes them.
   const canonical = qt === undefined ? undefined : computeUserValues(qt, userValues, options.now);
+  // tokenize reads `name=value` as a named token when name is a field key of the query type.
+  const keys = new Set(
+    findQueryType(config, cmd.queryType)?.fields.map((x) => x.key.toLowerCase()),
+  );
+  const readsAsNamed = (text: string): boolean => {
+    const eq = text.indexOf("=");
+    return eq > 0 && keys.has(text.slice(0, eq).trim().toLowerCase());
+  };
   const errors: ValidationError[] = [];
   const tokens = cmd.positions.map((p, i) => {
     const key = fieldOf(p);
@@ -69,7 +81,7 @@ export function formatCommand(
     const field = qt?.fieldByKey.get(key)?.def;
     const text =
       field === undefined ? rawText(raw) : emit(field, raw, canonical?.userValues.get(key) ?? null);
-    if (!isRest(p) && text.includes(d)) {
+    if (!isRest(p) && (text.includes(d) || readsAsNamed(text))) {
       errors.push({
         key: "terminal.delimiterInValue",
         params: {
