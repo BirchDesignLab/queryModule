@@ -38,7 +38,9 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
     headingRef.current?.focus();
   }, []);
   useEffect(() => {
-    if (invalidAttempt > 0 && formRef.current !== null) focusFirstInvalid(formRef.current);
+    if (invalidAttempt === 0 || formRef.current === null) return;
+    const focused = focusFirstInvalid(formRef.current);
+    if (focused === null) headingRef.current?.focus();
   }, [invalidAttempt]);
 
   if (status === "signedIn") return <Navigate to="/" replace />;
@@ -65,17 +67,25 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
       return;
     }
     setSubmitting(true);
-    const result = await session.signIn(email.trim(), password);
-    setSubmitting(false);
-    if (result.ok) {
-      navigate("/", { replace: true });
-      return;
+    try {
+      const result = await session.signIn(email.trim(), password);
+      if (result.ok) {
+        navigate("/", { replace: true });
+        return;
+      }
+      const failure = failureKey(result);
+      const message = t(failure.key, failure.params);
+      setFormError(message);
+      setPassword("");
+      announcer.announce(message);
+    } catch {
+      const message = t("error.unavailable");
+      setFormError(message);
+      setPassword("");
+      announcer.announce(message);
+    } finally {
+      setSubmitting(false);
     }
-    const failure = failureKey(result);
-    const message = t(failure.key, failure.params);
-    setFormError(message);
-    setPassword("");
-    announcer.announce(message);
   }
 
   return (

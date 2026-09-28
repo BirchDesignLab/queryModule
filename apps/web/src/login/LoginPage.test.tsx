@@ -1,9 +1,15 @@
+import { focusFirstInvalid } from "@querymodule/web-ui";
 import { screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { API, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes } from "../test/render-routes.js";
 import { LoginPage } from "./LoginPage.js";
+
+vi.mock("@querymodule/web-ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@querymodule/web-ui")>();
+  return { ...actual, focusFirstInvalid: vi.fn(actual.focusFirstInvalid) };
+});
 
 function renderLogin(clientSupported = true) {
   return renderRoutes(
@@ -83,9 +89,46 @@ describe("BR-002 standalone sign-in screen (spec 5.6, 6.2)", () => {
     expect(submit).toHaveAttribute("aria-disabled", "true");
     expect(submit).not.toBeDisabled();
     expect(submit).toHaveAccessibleDescription("This app needs an update before you can sign in.");
+    let signInCalls = 0;
+    server.use(
+      http.post(`${API}/api/v1/auth/sign-in/email`, () => {
+        signInCalls += 1;
+        return HttpResponse.json({ redirect: false, token: "t", user: TEST_USER });
+      }),
+    );
     await user.type(screen.getByLabelText(/Email/), TEST_USER.email);
     await user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
     await user.click(submit);
+    await user.type(screen.getByLabelText(/Password/), "{Enter}");
+    expect(signInCalls).toBe(0);
     expect(services.authStore.getState().status).not.toBe("signedIn");
+  });
+
+  it("falls back to focusing the heading when focusFirstInvalid finds nothing to focus", async () => {
+    vi.mocked(focusFirstInvalid).mockReturnValueOnce(null);
+    const { user } = renderLogin();
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByRole("heading", { name: "Sign in" })).toHaveFocus();
+  });
+
+  it("recovers from a rejected sign-in so the form isn't stuck submitting", async () => {
+    server.use(
+      http.post(
+        `${API}/api/v1/auth/sign-in/email`,
+        () => new HttpResponse("not json", { status: 200 }),
+      ),
+    );
+    const { user } = renderLogin();
+    await user.type(screen.getByLabelText(/Email/), TEST_USER.email);
+    await user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(
+      await screen.findByText("The service is unavailable. Try again.", {
+        selector: "#login-error",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Password/)).toHaveValue("");
+    const submit = screen.getByRole("button", { name: "Sign in" });
+    expect(submit).not.toHaveAttribute("aria-disabled", "true");
   });
 });
