@@ -1,4 +1,5 @@
 import { TypePicklistCodeSchema } from "../contracts/primitives";
+import { canonicalCondition } from "../rules/canonical-literal";
 import { configuredDefault } from "./defaults";
 import { type DiagnosticSink, pointer } from "./diagnostic";
 import type { SiteConfig } from "./schema";
@@ -217,12 +218,21 @@ export function checkShortcuts(config: SiteConfig, out: DiagnosticSink): void {
 export function checkLimits(config: SiteConfig, out: DiagnosticSink): void {
   const seen = new Set<string>();
   config.responseMappings.forEach((m, i) => {
-    const k = JSON.stringify([
-      m.queryType,
-      m.sourceId ?? null,
-      m.persona ?? null,
-      m.when !== undefined,
-    ]);
+    // #73: key on the canonical when. now = 0 is safe: only century "past" two-digit years depend
+    // on it, and both sides use the same value. An unknown query type keeps the presence-only key.
+    const qt = config.queryTypes.find((q) => q.code === m.queryType);
+    const when =
+      m.when === undefined
+        ? null
+        : qt === undefined
+          ? true
+          : canonicalCondition(
+              m.when,
+              new Map(qt.fields.map((f) => [f.key, f])),
+              config.picklists,
+              0,
+            );
+    const k = JSON.stringify([m.queryType, m.sourceId ?? null, m.persona ?? null, when]);
     if (seen.has(k))
       out.error(pointer("responseMappings", i), "config.duplicateMapping", { id: m.id });
     seen.add(k);
