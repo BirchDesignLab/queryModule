@@ -4,6 +4,11 @@ import type { FeatureKey } from "../config/features";
 import { LOCALE_PATTERN } from "../config/schema";
 import { ApiErrorSchema } from "./api-error";
 import { SemverSchema, Sha256HexSchema } from "./primitives";
+import {
+  IdempotencyKeySchema,
+  SubmitQueryRequestSchema,
+  SubmitQueryResponseSchema,
+} from "./queries";
 import { API_BASE_PATH, API_VERSION } from "./version";
 
 export const MILESTONES = ["m0", "m1", "m2", "m3", "m4"] as const;
@@ -152,6 +157,31 @@ const ROUTE_DEFS = [
       200: { description: "Preferences", schema: UserPreferenceSchema },
       400: error("Malformed preferences body (validationFailed)"),
       401: error("No session"),
+    },
+  },
+  {
+    id: "submitQuery",
+    method: "post",
+    path: `${API_BASE_PATH}/queries`,
+    summary: "Submit a query; answers 202 with the correlation id once the request is recorded",
+    access: "session",
+    since: "m1",
+    status: "planned",
+    requiresRequestedWith: true,
+    request: {
+      headers: z.object({ "idempotency-key": IdempotencyKeySchema }),
+      body: SubmitQueryRequestSchema,
+    },
+    responses: {
+      202: { description: "Acknowledged", schema: SubmitQueryResponseSchema },
+      400: error("Malformed body or failed validation or plan (validationFailed, errors[])"),
+      401: error("No session"),
+      403: error("Query type or source not allowed for the caller (forbidden)"),
+      409: error("Stale config hash (configHashMismatch, currentConfigHash)"),
+      413: error("Body over the size cap (payloadTooLarge)"),
+      429: error("Rate limited (rateLimited, Retry-After)"),
+      500: error("Internal error; nothing was acknowledged (internal)"),
+      503: error("Shutting down or not ready (unavailable)"),
     },
   },
 ] as const satisfies readonly RouteDef[];

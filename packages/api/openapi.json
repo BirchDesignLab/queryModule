@@ -191,6 +191,125 @@
           }
         }
       }
+    },
+    "/api/v1/queries": {
+      "post": {
+        "operationId": "submitQuery",
+        "summary": "Submit a query; answers 202 with the correlation id once the request is recorded",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/submitQueryBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/submitQuery202"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed body or failed validation or plan (validationFailed, errors[])",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Query type or source not allowed for the caller (forbidden)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stale config hash (configHashMismatch, currentConfigHash)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over the size cap (payloadTooLarge)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (rateLimited, Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error; nothing was acknowledged (internal)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Shutting down or not ready (unavailable)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2016,6 +2135,135 @@
           "themeMode",
           "personaOverride",
           "layout"
+        ],
+        "additionalProperties": false
+      },
+      "submitQuery202": {
+        "type": "object",
+        "properties": {
+          "correlationId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "acknowledgedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "parts": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "partId": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "queryType": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "dispatched",
+                    "skipped"
+                  ]
+                },
+                "sourceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  }
+                },
+                "droppedSourceIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  }
+                }
+              },
+              "required": [
+                "partId",
+                "queryType",
+                "status",
+                "sourceIds",
+                "droppedSourceIds"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "correlationId",
+          "acknowledgedAt",
+          "parts"
+        ],
+        "additionalProperties": false
+      },
+      "submitQueryBody": {
+        "type": "object",
+        "properties": {
+          "queryType": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "values": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}$"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "sourceIds": {
+            "minItems": 1,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "plateOnly"
+            ]
+          },
+          "configHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "queryType",
+          "values",
+          "sourceIds",
+          "mode",
+          "configHash"
         ],
         "additionalProperties": false
       }
