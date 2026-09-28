@@ -464,7 +464,7 @@
     {
       "number": 75,
       "title": "Board and repo settings: the manual steps",
-      "labels": ["documentation", "platform", "p1"],
+      "labels": ["documentation", "platform", "p1", "follow-up"],
       "milestone": "M0 Skeleton",
       "parent": 40,
       "track": null,
@@ -512,7 +512,7 @@
       "size": "M",
       "priority": "Medium",
       "reqIds": "",
-      "body": "Minors from the W6 wave-review (PR #95, `docs/reviews/feat-p0-wave-6.md`), none blocking; each touches a gate or critical file, so they ride the next wave PR (split fixes by tier).\r\n\r\n- [ ] G-M1 `scripts/ci/changed-paths.mjs`: `docs/board/board-data.json` counts as docs-only, so a board-data-only PR skips `checks` and `test` (the schema test never runs; `loadBoardDataOrExit` still fails closed at run time). Treat `docs/board/**` as non-docs.\r\n- [ ] G-M2 `.github/workflows/ci.yml`: `web` and `mobile` run only on `outputs.web == 'true'`; a `changes` job that succeeds without emitting the key skips both and the aggregate passes. Invert to `!= 'false'` or have `ci` assert the outputs exist.\r\n- [ ] G-M3 `scripts/ops/board-data-schema.mjs`: a follow-up `parent` is not checked against phase and wave numbers; a bad parent throws mid `--apply` after earlier writes.\r\n- [ ] G-M4 `scripts/ops/gh-setup-project.mjs`: a follow-up number can point at any live issue the data does not otherwise claim; `--apply` would rename and rewrite it. Consider refusing to adopt an issue whose live labels lack `follow-up`.\r\n- [ ] G-M5 `scripts/ci/core-purity.ts`: misses destructuring (`const { fetch } = globalThis`), chained globals (`globalThis.window.fetch`) and aliases.\r\n- [ ] G-M6 `.github/dependabot.yml`: no ignore rule for `@types/node` majors above 24 (ADR-0001, plan amendment M5).\r\n- [ ] C-M1 `.github/sensitive-paths` (critical): TokenStore globs are case-sensitive kebab-case; `SecureTokenStore.ts` or `tokenStore.ts` would be ordinary. Add a case-insensitive form.\r\n- [ ] C-M2 `scripts/ci/changed-paths.mjs`: `git diff --name-only` without `-z` C-quotes non-ASCII paths, so such a path under `apps/web/` or `apps/mobile/` skips its job.\r\n- [ ] Declined item: `sensitive-review.ts` exits 2 on a legal branch name with `+`, `@`, `#` or non-ASCII even when no sensitive path is touched; fall back to the `pr-<n>` key instead.\r\n- [ ] Track B P1 plan still lists `Delete: apps/web/src/App.tsx` (P0 shipped `shell.tsx`); fix before Track B P1 starts.\r\n- [ ] Tech debt (oasdiff, PR #95): the `api-breaking` label was used to skip a false positive (the #69 rename `getConfig200___schema0` to `Condition`, byte-identical otherwise). The label skips the whole oasdiff step, so a real break in the same PR would pass unseen. Add a rename-aware step (normalise component names, or prove rename-only equivalence against the base) so a component rename never needs the label; and make M0 release notes treat #95 as not breaking.\r\n\r\n**Source:** W6 wave-review 09-27-26 and the #84 plan amendment.\r\n\r\n"
+      "body": "Minors from the W6 wave-review (PR #95, `docs/reviews/feat-p0-wave-6.md`), none blocking; each touches a gate or critical file, so they ride the next wave PR (split fixes by tier).\n\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) G-M1 `scripts/ci/changed-paths.mjs`: `docs/board/board-data.json` counts as docs-only, so a board-data-only PR skips `checks` and `test` (the schema test never runs; `loadBoardDataOrExit` still fails closed at run time). Treat `docs/board/**` as non-docs.\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) G-M2 `.github/workflows/ci.yml`: `web` and `mobile` run only on `outputs.web == 'true'`; a `changes` job that succeeds without emitting the key skips both and the aggregate passes. Invert to `!= 'false'` or have `ci` assert the outputs exist.\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) G-M3 `scripts/ops/board-data-schema.mjs`: a follow-up `parent` is not checked against phase and wave numbers; a bad parent throws mid `--apply` after earlier writes.\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) G-M4 `scripts/ops/gh-setup-project.mjs`: a follow-up number can point at any live issue the data does not otherwise claim; `--apply` would rename and rewrite it. Consider refusing to adopt an issue whose live labels lack `follow-up`.\n- [x] (done in A1, `feat/a-p1-wave-1` c9f6d60) G-M5 `scripts/ci/core-purity.ts`: misses destructuring (`const { fetch } = globalThis`), chained globals (`globalThis.window.fetch`) and aliases.\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) G-M6 `.github/dependabot.yml`: no ignore rule for `@types/node` majors above 24 (ADR-0001, plan amendment M5).\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) C-M1 `.github/sensitive-paths` (critical): TokenStore globs are case-sensitive kebab-case; `SecureTokenStore.ts` or `tokenStore.ts` would be ordinary. Add a case-insensitive form.\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) C-M2 `scripts/ci/changed-paths.mjs`: `git diff --name-only` without `-z` C-quotes non-ASCII paths, so such a path under `apps/web/` or `apps/mobile/` skips its job.\n- [x] (done in A1, `feat/a-p1-wave-1` fc9bf64) Declined item: `sensitive-review.ts` exits 2 on a legal branch name with `+`, `@`, `#` or non-ASCII even when no sensitive path is touched; fall back to the `pr-<n>` key instead.\n- [x] (docs/open-m0-p1) Track B P1 plan still lists `Delete: apps/web/src/App.tsx` (P0 shipped `shell.tsx`); fix before Track B P1 starts.\n- [x] Moved to #171. Tech debt (oasdiff, PR #95): the `api-breaking` label was used to skip a false positive (the #69 rename `getConfig200___schema0` to `Condition`, byte-identical otherwise). The label skips the whole oasdiff step, so a real break in the same PR would pass unseen. Add a rename-aware step (normalise component names, or prove rename-only equivalence against the base) so a component rename never needs the label; and make M0 release notes treat #95 as not breaking.\n- [x] (done in B1, `feat/b-p1-wave-1` commit 2da6ea3) Windows-only timeout (Track B, 09-27-26): `scripts/ci/sensitive-review.test.ts` > \"deps demotion against a real git repo (C1, I1 repros) > classifies every swap and injection repro as gate, with the sensitive label\" runs on vitest's default 5000 ms timeout and takes about 6 s on the Windows machine (slower git process spawns), so `pnpm verify` fails there. Passes on Linux and in CI. Proposed: an explicit per-test timeout of 30000 ms (about 2 lines).\n\n**Source:** W6 wave-review 09-27-26 and the #84 plan amendment.\n\n\n\n\n\n\n"
     },
     {
       "number": 98,
@@ -525,7 +525,137 @@
       "size": "M",
       "priority": "High",
       "reqIds": "SEC-010, SEC-011",
-      "body": "Minors from the M0 P0 whole-phase review (gate Step 8, Opus 5.5 high over the 8 P0 critical-tier files; artifact `docs/reviews/docs-status-a-20260927.md`). None blocks the freeze. Contract changes go through master plan 8 (contract change procedure); all are critical tier.\n\n**Land early in P1, before the first audit writer (M1 P2 T1), while no audit rows exist:**\n- [ ] C-M1 `packages/core/src/contracts/audit.ts:204,130,148`: envelope `credentialUserId` is unconstrained against `details.credentialOwnerUserId` on `sourceDispatched` and `sourceResponded`; one append-only row can name two credential owners, and owner searches on `audit_event(credential_user_id, at)` can miss delegated queries (SEC-011). Require equality in `AuditEventSchema.superRefine`, with tests.\n- [ ] C-M3 `audit.ts:140-146`: `sourceResponded.status` is a hand-written literal list; derive it with `SourceStatusSchema.exclude([\"pending\", \"interrupted\"])` (same JSON) and test that every other terminal status is accepted, so a new SourceStatus value cannot crash the dispatcher's audit write.\n- [ ] C-M5 `primitives.ts:21-22,44-45`: `BOUNDED_ID_MAX_LENGTH` and `HOST_SUBJECT_MAX_LENGTH` are repeated as literals in the regexes; build the patterns from the constants or test the boundary.\n- [ ] C-M7 `.github/sensitive-paths`: `packages/core/src/contracts/version.ts` (WS protocol version) and `packages/core/contracts/ws-events.schema.json` are ordinary tier; list them under [critical] (query dispatch).\n\n**Before M4:**\n- [ ] C-M2 `audit.ts:263-270`: a row with `identitySource: \"host\"` and no `hostSubject` passes; spec 5.6 requires the host subject on host rows (SEC-010). Require it, with a test.\n- [ ] C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8.\n\n**Track A (no contract change):**\n- [ ] C-M6 `audit.ts:192`: `AuditActor.email` uses `z.email()`; the identity layer may accept addresses that fail it, and an audit write failure fails every submit. IdentityService normalises with `AuditActorSchema.shape.email` and stores null on failure, with a test.\n\nDeclined by the reviewer for the developer: whether `packages/api/src/auth/**` should be critical tier (CLAUDE.md does not list authentication as a sensitive area).\n\n**Source:** M0 P0 gate whole-phase review, 09-27-26.\n"
+      "body": "Minors from the M0 P0 whole-phase review (gate Step 8, Opus 5.5 high over the 8 P0 critical-tier files; artifact `docs/reviews/docs-status-a-20260927.md`). None blocks the freeze. Contract changes go through master plan 8 (contract change procedure); all are critical tier.\n\n**Land early in P1, before the first audit writer (M1 P2 T1), while no audit rows exist:**\n- [x] (#103) C-M1 `packages/core/src/contracts/audit.ts:204,130,148`: envelope `credentialUserId` is unconstrained against `details.credentialOwnerUserId` on `sourceDispatched` and `sourceResponded`; one append-only row can name two credential owners, and owner searches on `audit_event(credential_user_id, at)` can miss delegated queries (SEC-011). Require equality in `AuditEventSchema.superRefine`, with tests.\n- [x] (#103) C-M3 `audit.ts:140-146`: `sourceResponded.status` is a hand-written literal list; derive it with `SourceStatusSchema.exclude([\"pending\", \"interrupted\"])` (same JSON) and test that every other terminal status is accepted, so a new SourceStatus value cannot crash the dispatcher's audit write.\n- [x] (#103) C-M5 `primitives.ts:21-22,44-45`: `BOUNDED_ID_MAX_LENGTH` and `HOST_SUBJECT_MAX_LENGTH` are repeated as literals in the regexes; build the patterns from the constants or test the boundary.\n- [x] (#103) C-M7 `.github/sensitive-paths`: `packages/core/src/contracts/version.ts` (WS protocol version) and `packages/core/contracts/ws-events.schema.json` are ordinary tier; list them under [critical] (query dispatch).\n\n**Before M4:**\n- [ ] C-M2 `audit.ts:263-270`: a row with `identitySource: \"host\"` and no `hostSubject` passes; spec 5.6 requires the host subject on host rows (SEC-010). Require it, with a test.\n- [ ] C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8.\n\n**With the Track A P1 audit writer (from the feat/core-98 review, M1):**\n- [ ] C-M8 `audit.ts`: envelope `credentialUserId` stays unconstrained on `submitted`, `acknowledged`, `interrupted` and `partSkipped`; owner searches on `audit_event(credential_user_id, at)` could over- or under-match. Decide whether `interrupted` copies the `source_result` owner and whether the other query types must omit `credentialUserId`; add the refinement with parse and reject tests (master plan 8).\n\n**Track A (no contract change):**\n- [ ] C-M6 `audit.ts:192`: `AuditActor.email` uses `z.email()`; the identity layer may accept addresses that fail it, and an audit write failure fails every submit. IdentityService normalises with `AuditActorSchema.shape.email` and stores null on failure, with a test.\n\nDeclined by the reviewer for the developer: whether `packages/api/src/auth/**` should be critical tier (CLAUDE.md does not list authentication as a sensitive area).\n\n**Source:** M0 P0 gate whole-phase review, 09-27-26.\n\n\n"
+    },
+    {
+      "number": 171,
+      "title": "oasdiff: rename-aware breaking-change step (from #96)",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Low",
+      "reqIds": "",
+      "body": "Moved from #96 (W6 wave-review tech debt, PR #95). Tier: gate (`.github/workflows/ci.yml`, `scripts/ci/**`).\n\nThe `api-breaking` label was used to skip a false positive (the #69 rename `getConfig200___schema0` to `Condition`, byte-identical otherwise). The label skips the whole oasdiff step, so a real break in the same PR would pass unseen.\n\n- [ ] Add a rename-aware step: normalise component names, or prove rename-only equivalence against the base, so a component rename never needs the `api-breaking` label.\n- [ ] M0 release notes (`docs/releases/m0.md`) treat #95 as not breaking.\n\nOpen design question: normalisation versus an equivalence proof; settle it before implementation.\n"
+    },
+    {
+      "number": 172,
+      "title": "openapi.test: assert method+path pairs per ROUTES entry",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "BR-007",
+      "body": "Follow-up from the gate fast-path review of `feat/core-139` (finding M1, `docs/reviews/feat-core-139.md`).\n\n`scripts/ci/openapi.test.ts` (\"is OpenAPI 3.1 for API v1 with one operation per route\") now checks the generated doc's path list against the unique ROUTES paths and the total operation count against `ROUTES.length`. An operation emitted under the wrong existing path (for example a `put` placed on `/api/v1/config`) would still pass.\n\n**Change:** compare the set of `${method} ${path}` operations in the generated doc with the same set built from ROUTES, so a misplaced operation fails.\n\n**Meanwhile:** `packages/api/test/openapi.test.ts` checks exact method+path pairs of the committed `openapi.json`, and the contracts drift check (`pnpm gen:check`) keeps that file in step with the generator.\n\n**Tier:** gate (`scripts/ci/**`). Rides the next Track A gate PR, not A1.\n"
+    },
+    {
+      "number": 175,
+      "title": "Decide: can a site default to auto theme (SiteConfig.theme.defaultMode \"auto\")",
+      "labels": ["core", "p2", "follow-up", "decision"],
+      "milestone": "M1 Forms and terminal",
+      "parent": 41,
+      "track": "Core",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "UX-002",
+      "body": "Raised by the Opus critic on Track B P1 Tasks 11 to 13 (wave B3, `resolveThemeMode` in `packages/tokens/src/theme-mode.ts`).\n\n## Current behaviour (spec 6.5, as implemented)\n\n`SiteConfig.theme` is `{ defaultMode: \"day\" | \"night\" | \"redShift\" (default \"day\"), auto: \"off\" | \"os\" | \"time\" (default \"off\") }` (`packages/core/src/config/schema.ts:134-135`). `resolveThemeMode` follows 6.5 literally:\n\n- an explicit user preference wins;\n- with no site theme loaded (login, all of P1) the OS scheme decides;\n- with a site theme, an **unset** preference takes `defaultMode`;\n- `theme.auto` applies **only** when the user has explicitly chosen \"auto\".\n\nSo a site that sets `auto: \"time\"` or `\"os\"` has no effect on users who never touched the theme picker: they get `defaultMode`, which cannot be `\"auto\"`.\n\n## Use case\n\nMobile units working nights: an agency wants every device to follow time of day (or the OS dark setting) out of the box, without each officer opening the theme picker. Today the site can only pick one fixed default mode.\n\n## Decision needed\n\nCan a site default to auto, e.g. `defaultMode: \"auto\"` (or an equivalent flag), so an unset preference follows `theme.auto`?\n\nA yes is a config contract change under master plan 8: widen the `SiteConfig.theme` schema (and `ClientSiteConfig`), check whether it needs a `CONFIG_SCHEMA_VERSION` bump with a `migrateConfig` step (it is additive, but the check is required), regenerate `site-config.schema.json`, and update `resolveThemeMode` and its tests. This has to land before Track B P2 wires site theme selection from `GET /api/v1/config`. A no keeps today's behaviour and should be recorded in spec 6.5.\n\nIDs: UX-002, UX-011, BR-001 (design spec 6.5).\n"
+    },
+    {
+      "number": 178,
+      "title": "Client tsconfig: split scripts/ so src has no Node globals before apps/mobile",
+      "labels": ["web", "follow-up"],
+      "milestone": "M4 Mobile and host integration",
+      "parent": 52,
+      "track": "Web (B)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "",
+      "body": "From Track B P1 wave B1 (branch `feat/b-p1-wave-1`), Task 1 (#142), ruler ruling critic:G3 (stands, 09-27-26).\n\n`packages/client/tsconfig.json` now sets `types: [\"node\"]` (plan Step 1.2) with `include` covering both `src` and `scripts`, because `scripts/gen-api-types.ts` needs Node types. P0 had `types: []`, which kept Node globals out of client `src`. As it stands, `process`, `Buffer` or `node:` imports in `packages/client/src` would typecheck but break on React Native and in the browser.\n\n- [ ] Before `apps/mobile` consumes `@querymodule/client`: give `packages/client/scripts/` its own tsconfig with `types: [\"node\"]`, and restore `types: []` for `src`.\n- [ ] Until then, `packages/client/src` must not use Node globals (`process`, `Buffer`, `node:` imports). Reviewers check this on client changes.\n\nTier: `packages/client/tsconfig.json` is gate (`**/tsconfig.json` in `.github/sensitive-paths`), so the fix rides a wave PR with a gate review.\n"
+    },
+    {
+      "number": 182,
+      "title": "Drop the client TypeScript 6 pin when openapi-typescript supports TS 7",
+      "labels": ["web", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Web (B)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "",
+      "body": "From Track B P1 wave B4 (`feat/b-p1-wave-4`), Task 14 (#154). Developer decision 09-27-26.\n\n`openapi-typescript` 7.13.0 (latest) needs the classic TypeScript compiler API (peer `typescript ^5.x`). The workspace runs TypeScript 7 (native), which has none, so `pnpm --filter @querymodule/client gen:api` crashed (`ts.factory` undefined). pnpm `overrides` and `packageExtensions` cannot change a peer resolution, so `packages/client` pins `typescript: \"6.0.3\"` as a devDependency; `openapi-typescript` resolves its peer from there.\n\nOnly codegen uses TS 6: the client `typecheck` script runs the root compiler (`pnpm -w exec tsc -b packages/client`, TS 7), and the gate is the root `tsc -b`.\n\n- [ ] When an `openapi-typescript` release supports TypeScript 7 (or its peer range allows `^7`), bump it, remove the `typescript` devDependency from `packages/client/package.json`, regenerate `packages/client/src/api/generated/openapi-types.ts` (expect no diff) and run `pnpm verify`.\n- [ ] Restore the client `typecheck` script to `tsc -b` if nothing else pins TS 6 there.\n\nTier: `packages/client/package.json` ordinary, `pnpm-lock.yaml` deps.\n"
+    },
+    {
+      "number": 183,
+      "title": "logger: bound the redaction walk over shared objects (A1 review rr:N-M1)",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "SEC-006",
+      "body": "From the A1 wave-review (`docs/reviews/feat-a-p1-wave-1.md`, residual rr:N-M1). Tier: gate (`packages/api/src/log/**`, developer decision 09-27-26).\n\nThe G-M2 fix in `packages/api/src/log/logger.ts` replaced the global `seen` set with path-only ancestors and no memoisation. An object graph with heavy sharing (each level holding two references to the next) is walked once per path, which is exponential in depth, so one log call can stall the process or emit a huge line.\n\n- [ ] Bound the redaction walk: memoise already-redacted objects per call (keeping true cycles as `[circular]`), and cap depth and total nodes with a truncation marker.\n- [ ] Test: a shared DAG of depth about 30 logs in bounded time and size; a real cycle still prints `[circular]`; a non-cyclic object referenced twice still prints in full.\n\nPlanned into Track A wave A2 (its review has a gate slice).\n"
+    },
+    {
+      "number": 184,
+      "title": "core-purity: G-M5 deferred minors (window.api false positive, optional-chain links, declarators)",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "",
+      "body": "From #96 G-M5 (A1, `scripts/ci/core-purity.ts`, sdd-task a1-t96, deferred minors). Tier: gate (`scripts/ci/**`). Scope stays within the developer ruling of 09-27-26 (one-level aliases only; deeper alias tracking out of scope).\n\n- [ ] False positive: `const { fetch } = window.api;` is flagged, because the destructuring source is not required to end at the global object (critic:M2).\n- [ ] Missed: an optional-chain index as a chain link, `globalThis?.['window'].fetch` (critic:M1).\n- [ ] Missed: one-level aliases in a non-first declarator (`let a = 1, g = globalThis;`, `const g = globalThis, h = window;`) and with a cast (`const g = globalThis as any;`) (critic:M3, quality:Q3).\n- [ ] Alias detection is whole-file, not scope-aware; note the limit in the code comment or narrow it to the declaring scope (quality:Q2).\n- [ ] Deduplicate the chain-building regex shared by `findGlobalAliases` and `findGlobalMemberAccess` (quality:Q1).\n\nTDD: one failing case per item first. Planned into Track A wave A2.\n"
+    },
+    {
+      "number": 189,
+      "title": "db: block writable_schema and sqlite_master writes on the app connection (A2 T9 critic:CV2)",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "SEC-010",
+      "body": "From A2 Task 9 (#112), critic:CV2, parked after fix round 2 and ruled \"stands as a follow-up\" by the controller (09-27-26). Tier: critical (`packages/api/src/db/**`).\n\nA scratch test against an encrypted libSQL file (same `createClient` options as `openDatabase`) showed `PRAGMA writable_schema=ON` followed by `UPDATE sqlite_master SET sql = ...` succeeds, so code running on the app connection could rewrite an `audit_event` trigger body in place.\n\nCurrent mitigations (detection):\n- `scripts/ci/check-audit-migrations.ts` rejects any migration that mentions `writable_schema`, `sqlite_master` or `sqlite_schema`.\n- `checkAuditTriggers` (`packages/api/src/db/migrate.ts`) pins each trigger's stored SQL text, so a rewritten body counts as missing and startup refuses to serve.\n\nOpen (prevention):\n- [ ] Check whether libSQL / `@libsql/client` exposes `SQLITE_DBCONFIG_DEFENSIVE` (or an equivalent) and enable it on the one connection; if not, reject `writable_schema` and writes to `sqlite_master`/`sqlite_schema` in the `SerializedClient` statement path.\n- [ ] Test: on an encrypted test DB, `PRAGMA writable_schema=ON` plus an `UPDATE sqlite_master` is refused, while migrations and `checkAuditTriggers` still work.\n"
+    },
+    {
+      "number": 190,
+      "title": "biome.json: exclude packages/client/src/api/generated (gate chore)",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "",
+      "body": "From Track B P1 wave B4 (`feat/b-p1-wave-4`), Task 14 (#154) carry-forward, ruling T14/IC1.\n\nToday `biome.json` excludes only `packages/tokens/generated` (`\"!packages/tokens/generated\"` in `files.includes`). The client's generated OpenAPI types (`packages/client/src/api/generated/openapi-types.ts`) are not excluded, so Task 14 formats the generator output with a `pnpm exec biome format` subprocess, both in `packages/client/scripts/gen-api-types.ts` and in the drift test `packages/client/src/api/openapi-types.test.ts`.\n\n- [ ] Add `\"!packages/client/src/api/generated\"` next to the tokens entry in `biome.json`.\n- [ ] Drop the biome subprocess step from `gen-api-types.ts` and from the drift test (the drift test then compares raw generator output), regenerate with `pnpm --filter @querymodule/client gen:api` and run `pnpm verify`.\n\nTier: `biome.json` is gate (`**/biome.json`), so this is a gate chore that rides the next Track A gate PR. The client script and test changes are ordinary.\n"
+    },
+    {
+      "number": 193,
+      "title": "project-sync: roll up phase and milestone parent Status beyond P0; recognise P1+ wave branches",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "",
+      "body": "The board stops tracking progress after P0. Found in the 09-27-26 board audit (checker session).\n\n**Problems**\n1. `.github/workflows/project-sync.yml` only knows P0 wave branches: the push trigger is `feat/p0-wave-*` (line 21) and the wave lookup builds `feat/p0-wave-${k}` (line 139). P1 waves run on `feat/a-p1-wave-<k>`, `feat/b-p1-wave-<k>`, `feat/a-offload-wave-<k>`, so tasks being worked stay **Todo** until their PR opens.\n2. Phase parents have no roll-up outside P0: `scripts/ops/gh-setup-project.mjs` hard-codes Status (line 615: milestone M0 In Progress, others Todo; line 625: \"Contracts (M0 P0)\" In Progress, other phases Todo). \"Foundation (M0 P1)\" (#40) sat at Todo with most P1 tasks done; the checker set it to In Progress by hand on 09-27-26, and the next `gh-setup-project --apply` would reset it.\n\n**Fix (gate tier; Track A)**\n- project-sync: derive phase-parent and milestone-parent Status from their sub-issues on every run: Done when all children closed, In Progress when any child is closed, In Review or In Progress, else Todo (a manual Blocked stays). Same rule for milestone parents over phase parents.\n- project-sync: treat any open branch named `feat/<track>-p<n>-wave-<k>` or `feat/a-offload-wave-<k>` as the branch for the tasks its PR body closes (or drop branch detection and rely on the PR's `Closes` lines plus draft state). Update the push trigger to match.\n- gh-setup-project: stop hard-coding parent Status; leave it to project-sync (or apply the same roll-up).\n- Tests for the roll-up rule in `scripts/ops/board-model.test.ts` (or the project-sync test file), including: a P1 parent with some closed children is In Progress; all closed is Done; a manual Blocked is kept.\n- docs/project-board.md \"Automation\" section updated to match.\n\nRides the next Track A gate wave PR (A3 or later).\n"
     }
   ]
 }
