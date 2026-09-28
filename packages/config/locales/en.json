@@ -49,6 +49,8 @@
   "mapping.status": "Status",
   "app.retry": "Retry",
   "error.unavailable": "The service is unavailable. Try again.",
+  "error.localeUnavailable": "Language data is unavailable. Try again.",
+  "error.metaUnavailable": "Service information is unavailable. Try again.",
   "field.required": "required",
   "validation.required": "{label} is required.",
   "announce.fieldsNeedAttention.one": "{count} field needs attention",

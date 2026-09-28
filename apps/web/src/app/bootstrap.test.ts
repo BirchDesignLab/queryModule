@@ -22,10 +22,26 @@ describe("NFR-001 bootstrap reads /meta and the locale bundle before login (spec
     const state = await bootstrap(testServices(), "0.1.0");
     expect(state.status === "ready" && state.clientSupported).toBe(false);
   });
-  it("fails to the fallback bundle when the API is down", async () => {
+  it("fails with the metaUnavailable message when /meta is down", async () => {
     server.use(http.get(`${API}/api/v1/meta`, () => new HttpResponse(null, { status: 503 })));
     const state = await bootstrap(testServices(), "0.1.0");
     expect(state.status).toBe("failed");
-    expect(state.translator.t("error.unavailable")).toBe("The service is unavailable. Try again.");
+    expect(state.status === "failed" && state.message).toBe(
+      "Service information is unavailable. Try again.",
+    );
+    expect(state.status === "failed" && state.translator.t("error.metaUnavailable")).toBe(
+      "Service information is unavailable. Try again.",
+    );
+  });
+  it("fails with the localeUnavailable message when /locales is down", async () => {
+    server.use(http.get(`${API}/api/v1/locales/en`, () => new HttpResponse(null, { status: 503 })));
+    const state = await bootstrap(testServices(), "0.1.0");
+    expect(state.status).toBe("failed");
+    expect(state.status === "failed" && state.message).toBe(
+      "Language data is unavailable. Try again.",
+    );
+    expect(state.status === "failed" && state.translator.t("error.localeUnavailable")).toBe(
+      "Language data is unavailable. Try again.",
+    );
   });
 });
