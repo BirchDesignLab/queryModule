@@ -67,6 +67,48 @@ describe("FR-002 sections render as fieldsets", () => {
     expect(labels).toEqual(["qf-plate", "qf-year", "qf-vin"]);
     expect(within(groups[0] as HTMLElement).getByLabelText(/State/)).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "More details" })).toBeNull();
+    // Hidden fields are not rendered (spec 4.3, 6.2): plateType is hidden until a non-default state.
+    expect(screen.queryByLabelText(/Plate type/)).toBeNull();
+    const controls = within(groups[0] as HTMLElement)
+      .getAllByRole("textbox")
+      .concat(within(groups[0] as HTMLElement).getAllByRole("combobox"))
+      .map((el) => el.getAttribute("id"));
+    expect(controls).toHaveLength(4);
+  });
+
+  it("groups by section, sorts by order, and omits a visible section with no visible fields", () => {
+    const base = form("VEH", { state: "OK" });
+    const moved: FormState = {
+      ...base,
+      sections: base.sections.map((s) => (s.key === "expanded" ? { ...s, visible: true } : s)),
+      fields: [...base.fields]
+        .reverse()
+        .map((f) => (f.key === "plateType" ? { ...f, section: "expanded" } : f)),
+    };
+    setup(moved, { values: { state: "OK" } });
+    const groups = screen.getAllByRole("group");
+    expect(groups.map((g) => g.querySelector("legend")?.textContent)).toEqual([
+      "Details",
+      "More details",
+    ]);
+    const ids = (g: HTMLElement) =>
+      within(g)
+        .getAllByRole("textbox")
+        .map((el) => el.getAttribute("id"));
+    expect(ids(groups[0] as HTMLElement)).toEqual(["qf-plate", "qf-year", "qf-vin"]);
+    expect(within(groups[1] as HTMLElement).getByLabelText(/Plate type/)).toBeInTheDocument();
+    expect(within(groups[0] as HTMLElement).queryByLabelText(/Plate type/)).toBeNull();
+  });
+
+  it("omits a visible section whose fields are all hidden", () => {
+    const base = form("VEH", { state: "OK" });
+    const emptied: FormState = {
+      ...base,
+      sections: base.sections.map((s) => (s.key === "expanded" ? { ...s, visible: true } : s)),
+      fields: base.fields.map((f) => (f.section === "expanded" ? { ...f, visible: false } : f)),
+    };
+    setup(emptied);
+    expect(screen.queryByRole("group", { name: "More details" })).toBeNull();
   });
 
   // Plan drift: the shipped default site puts plateType in the default section (base), not expanded.
@@ -84,6 +126,23 @@ describe("FR-005 blocked submit shows errors", () => {
     const last = screen.getByLabelText(/Last name/);
     expect(last).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByText("Last name is required.")).toBeInTheDocument();
+  });
+
+  // Chosen representation for a cleared field: "" (empty string), reported by onChange and treated as empty.
+  it("a cleared required field ('') is empty, reports '' and shows required when blocked", async () => {
+    const state = form("PER", { last: "" });
+    expect(state.missingRequired).toContain("last");
+    const { onChange } = setup(state, { showErrors: true, values: { last: "" } });
+    expect(screen.getByLabelText(/Last name/)).toHaveValue("");
+    expect(screen.getByText("Last name is required.")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/Last name/), "A");
+    expect(onChange).toHaveBeenCalledWith("last", "A");
+  });
+
+  it("clearing typed text reports '' through onChange", async () => {
+    const { onChange } = setup(form("PER", { last: "A" }), { values: { last: "A" } });
+    await userEvent.clear(screen.getByLabelText(/Last name/));
+    expect(onChange).toHaveBeenCalledWith("last", "");
   });
 
   it("shows no errors before a blocked submit", () => {
