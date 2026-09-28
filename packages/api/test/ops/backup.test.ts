@@ -1,16 +1,34 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SYSTEM_ACTOR } from "@querymodule/core/contracts";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../../src/db/client";
 import { withTransaction } from "../../src/db/tx";
 import { auditStats } from "../../src/ops/audit-stats";
 import { takeBackup } from "../../src/ops/backup";
 import { TEST_SECRETS } from "../helpers/fixture";
 import { createTestApp } from "../helpers/test-app";
+
+// mkdtempSync backup output dirs, removed once the test that made them finishes (any copy
+// client using the dir must already be closed by then; controller ruling 09-28-26).
+const backupDirs: string[] = [];
+afterEach(() => {
+  for (const dir of backupDirs.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best effort; matches test/helpers/db.ts's tolerance for a still-locked Windows handle
+    }
+  }
+});
+function mkBackupDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "qm-backup-"));
+  backupDirs.push(dir);
+  return dir;
+}
 
 describe("NFR-003 online encrypted backup", () => {
   it("copies an encrypted, consistent database with a matching manifest", async () => {
@@ -25,7 +43,7 @@ describe("NFR-003 online encrypted backup", () => {
         }),
       );
     }
-    const out = mkdtempSync(join(tmpdir(), "qm-backup-"));
+    const out = mkBackupDir();
     const m = await takeBackup(t.deps.db, t.env.dbFile, out, t.clock);
     expect(m).toMatchObject({ auditCount: 4, auditMaxId: 4 });
     for (const f of m.files)
@@ -53,11 +71,53 @@ describe("NFR-003 online encrypted backup", () => {
   });
   it("releases the write lock afterwards", async () => {
     const t = await createTestApp();
-    await takeBackup(t.deps.db, t.env.dbFile, mkdtempSync(join(tmpdir(), "qm-backup-")), t.clock);
+    await takeBackup(t.deps.db, t.env.dbFile, mkBackupDir(), t.clock);
     await expect(
       withTransaction(t.deps.db, async (tx) => {
         await tx.run(sql`INSERT INTO rate_limit (key, window_start, count) VALUES ('after', 1, 1)`);
       }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("takeBackup outDir guard (critic:C1)", () => {
+  it("refuses an outDir equal to the data dir", async () => {
+    const t = await createTestApp();
+    await expect(takeBackup(t.deps.db, t.env.dbFile, t.env.dataDir, t.clock)).rejects.toThrow();
+  });
+
+  it("refuses an outDir that is a subdirectory of the data dir", async () => {
+    const t = await createTestApp();
+    await expect(
+      takeBackup(t.deps.db, t.env.dbFile, join(t.env.dataDir, "sub"), t.clock),
+    ).rejects.toThrow();
+  });
+
+  it("refuses a traversal outDir that resolves back inside the data dir", async () => {
+    const t = await createTestApp();
+    const dataDirName = t.env.dataDir.split(/[\\/]/).pop();
+    const traversal = join(t.env.dataDir, "..", dataDirName ?? "", "x");
+    await expect(takeBackup(t.deps.db, t.env.dbFile, traversal, t.clock)).rejects.toThrow();
+  });
+
+  it("refuses an outDir given with a trailing slash equal to the data dir", async () => {
+    const t = await createTestApp();
+    await expect(
+      takeBackup(t.deps.db, t.env.dbFile, `${t.env.dataDir}/`, t.clock),
+    ).rejects.toThrow();
+  });
+
+  it("accepts a sibling directory of the data dir", async () => {
+    const t = await createTestApp();
+    const out = `${t.env.dataDir}2`;
+    backupDirs.push(out);
+    await expect(takeBackup(t.deps.db, t.env.dbFile, out, t.clock)).resolves.toBeDefined();
+  });
+
+  it("accepts an outDir outside the data dir (existing coverage via mkBackupDir)", async () => {
+    const t = await createTestApp();
+    await expect(
+      takeBackup(t.deps.db, t.env.dbFile, mkBackupDir(), t.clock),
+    ).resolves.toBeDefined();
   });
 });

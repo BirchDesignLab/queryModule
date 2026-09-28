@@ -3,9 +3,11 @@ import { systemClock } from "../../packages/api/src/clock";
 import { openForOps } from "../../packages/api/src/ops/audit-stats";
 import { takeBackup } from "../../packages/api/src/ops/backup";
 
+// The real outDir-outside-data-dir guard lives in takeBackup itself (critic:C1), checked
+// against the resolved data directory rather than a raw argv prefix.
 const out = process.argv[2];
-if (!out || out.startsWith("/data")) {
-  process.stderr.write("usage: backup <outDir outside /data>\n");
+if (!out) {
+  process.stderr.write("usage: backup <outDir outside the data dir>\n");
   process.exit(2);
 }
 const { env, db } = await openForOps(process.env);
