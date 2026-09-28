@@ -656,6 +656,19 @@
       "priority": "Medium",
       "reqIds": "",
       "body": "The board stops tracking progress after P0. Found in the 09-27-26 board audit (checker session).\n\n**Problems**\n1. `.github/workflows/project-sync.yml` only knows P0 wave branches: the push trigger is `feat/p0-wave-*` (line 21) and the wave lookup builds `feat/p0-wave-${k}` (line 139). P1 waves run on `feat/a-p1-wave-<k>`, `feat/b-p1-wave-<k>`, `feat/a-offload-wave-<k>`, so tasks being worked stay **Todo** until their PR opens.\n2. Phase parents have no roll-up outside P0: `scripts/ops/gh-setup-project.mjs` hard-codes Status (line 615: milestone M0 In Progress, others Todo; line 625: \"Contracts (M0 P0)\" In Progress, other phases Todo). \"Foundation (M0 P1)\" (#40) sat at Todo with most P1 tasks done; the checker set it to In Progress by hand on 09-27-26, and the next `gh-setup-project --apply` would reset it.\n\n**Fix (gate tier; Track A)**\n- project-sync: derive phase-parent and milestone-parent Status from their sub-issues on every run: Done when all children closed, In Progress when any child is closed, In Review or In Progress, else Todo (a manual Blocked stays). Same rule for milestone parents over phase parents.\n- project-sync: treat any open branch named `feat/<track>-p<n>-wave-<k>` or `feat/a-offload-wave-<k>` as the branch for the tasks its PR body closes (or drop branch detection and rely on the PR's `Closes` lines plus draft state). Update the push trigger to match.\n- gh-setup-project: stop hard-coding parent Status; leave it to project-sync (or apply the same roll-up).\n- Tests for the roll-up rule in `scripts/ops/board-model.test.ts` (or the project-sync test file), including: a P1 parent with some closed children is In Progress; all closed is Done; a manual Blocked is kept.\n- docs/project-board.md \"Automation\" section updated to match.\n\nRides the next Track A gate wave PR (A3 or later).\n"
+    },
+    {
+      "number": 195,
+      "title": "check-audit-migrations: trigger pin must keep string-literal quotes (A2 review rr:N-M2)",
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "SEC-010",
+      "body": "A2 wave-review residual rr:N-M2 (`docs/reviews/feat-a-p1-wave-2.md`). Tier: critical (`scripts/ci/check-audit-migrations.ts`).\n\nThe migration guard pins the three `audit_event` trigger statements, but compares `codeOf().detect`, which drops string-literal quotes. An in-place edit of `packages/api/drizzle/0001_audit_triggers.sql` to `... WHERE 'id' = NEW.id ...` therefore equals the pinned text and passes CI. In `node:sqlite` that edit disables `audit_event_no_replace`: `INSERT OR REPLACE` replaced row 1.\n\n**Startup still fails closed:** `checkAuditTriggers` (`packages/api/src/db/migrate.ts`) compares the stored trigger SQL exactly (whitespace collapsed, quotes kept) with `AUDIT_TRIGGER_SQL`, so such a database refuses to serve. The gap is CI-only.\n\n- [ ] Compare the trigger statements in the guard with quotes preserved (the `shape`-style form with literals kept, or the raw text with whitespace and comments normalised), matching what `checkAuditTriggers` pins.\n- [ ] Test: the quoted-identifier and string-literal variants of each trigger (`'id'`, `\"id\"`, `[id]`) fail the guard; the committed 0001 passes.\n"
     }
   ]
 }
