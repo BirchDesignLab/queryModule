@@ -1,6 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { API, META, server } from "../test/msw-server.js";
+import { API, META, PREFERENCES, server, TEST_USER } from "../test/msw-server.js";
 import { testServices } from "../test/render-routes.js";
 import { bootstrap } from "./bootstrap.js";
 
@@ -43,5 +43,28 @@ describe("NFR-001 bootstrap reads /meta and the locale bundle before login (spec
     expect(state.status === "failed" && state.translator.t("error.localeUnavailable")).toBe(
       "Language data is unavailable. Try again.",
     );
+  });
+  it("UX-014 loads saved preferences when a session already exists", async () => {
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+      ),
+    );
+    const services = testServices();
+    await bootstrap(services, "0.1.0");
+    expect(services.authStore.getState().status).toBe("signedIn");
+    expect(services.preferences.getState().themeMode).toBe(PREFERENCES.themeMode);
+  });
+  it("UX-014 stays ready when loading preferences fails", async () => {
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+      ),
+      http.get(`${API}/api/v1/me/preferences`, () => HttpResponse.error()),
+    );
+    const services = testServices();
+    const state = await bootstrap(services, "0.1.0");
+    expect(state.status).toBe("ready");
+    expect(services.preferences.getState().themeMode).toBeNull();
   });
 });
