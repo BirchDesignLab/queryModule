@@ -1,4 +1,4 @@
-import { type Role, SYSTEM_ACTOR } from "@querymodule/core/contracts";
+import { ROLES, type Role, SYSTEM_ACTOR } from "@querymodule/core/contracts";
 import { eq } from "drizzle-orm";
 import { user } from "../db/schema";
 import { withTransaction } from "../db/tx";
@@ -7,6 +7,32 @@ import type { AppDeps } from "../deps";
 export type { Role } from "@querymodule/core/contracts";
 // Re-exported so ops scripts import only from packages/api (esbuild resolves @querymodule/core from there, not from scripts/).
 export { ROLES } from "@querymodule/core/contracts";
+
+export class GrantRoleUsageError extends Error {
+  constructor() {
+    super("usage: grant-role <email> <user|trainingOfficer|admin> [--revoke]");
+    this.name = "GrantRoleUsageError";
+  }
+}
+
+/** CLI arguments of scripts/ops/grant-role.ts: exactly an email and a role, plus an optional --revoke. */
+export function parseGrantRoleArgs(argv: readonly string[]): {
+  email: string;
+  role: Role;
+  change: "granted" | "revoked";
+} {
+  const revoke = argv.includes("--revoke");
+  const rest = argv.filter((a) => a !== "--revoke");
+  const [email, role] = rest;
+  if (
+    rest.length !== 2 ||
+    !email ||
+    email.startsWith("-") ||
+    !(ROLES as readonly string[]).includes(role ?? "")
+  )
+    throw new GrantRoleUsageError();
+  return { email, role: role as Role, change: revoke ? "revoked" : "granted" };
+}
 
 export class UnknownUserError extends Error {
   constructor() {
