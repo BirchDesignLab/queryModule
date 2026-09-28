@@ -1,0 +1,159 @@
+import fc from "fast-check";
+import type { CommandDef, FieldDef } from "../../config/index.js";
+import { canonicalise } from "../../rules/canonicalise.js";
+import { compileQueryType, findQueryType } from "../../rules/compile.js";
+import type { Draft, TerminalConfig } from "../types.js";
+
+/** Test-only fast-check arbitraries for the terminal round trip (spec 4.4, 10.1). */
+
+type Position = CommandDef["positions"][number];
+type DraftValue = Draft[string];
+
+const fieldOf = (p: Position): string => (typeof p === "string" ? p : p.field);
+const isRest = (p: Position): boolean => typeof p === "object" && p.rest === true;
+
+const PRINTABLE_ASCII = Array.from({ length: 0x7f - 0x20 }, (_, i) =>
+  String.fromCharCode(0x20 + i),
+);
+/** Synthetic non-ASCII letters for `charset: "printable"` fields. */
+const PRINTABLE_EXTRA = ["é", "ñ", "ß", "Å", "Ω", " "];
+
+/** Picklist codes the value may match, as the form path computes them. */
+export function enabledCodes(config: TerminalConfig, queryType: string, key: string): string[] {
+  const field = compileQueryType(config, queryType, 0)?.fieldByKey.get(key);
+  return field === undefined ? [] : field.enabledValues.map((v) => v.code);
+}
+
+/** A `name=value` token whose name is a field key of the query type reads as named (spec 4.4). */
+function readsAsNamed(config: TerminalConfig, queryType: string, text: string): boolean {
+  const eq = text.indexOf("=");
+  if (eq <= 0) return false;
+  const name = text.slice(0, eq).trim().toLowerCase();
+  return (findQueryType(config, queryType)?.fields ?? []).some((f) => f.key.toLowerCase() === name);
+}
+
+const iso = (d: Date): string => d.toISOString().slice(0, 10);
+
+/**
+ * One canonical, non-empty user value for `field` in a command position: strings from the
+ * field's pattern (or charset alphabet) without the delimiter unless `rest`, then canonicalised;
+ * picklist values from enabled codes; dates 1901-01-01 to 2099-12-31 as ISO; years 1901 to 2099.
+ */
+function canonicalValue(
+  config: TerminalConfig,
+  queryType: string,
+  field: FieldDef,
+  rest: boolean,
+  now: number,
+): fc.Arbitrary<DraftValue> {
+  const d = config.terminal.delimiter;
+  switch (field.dataType) {
+    case "string": {
+      const alphabet = [
+        ...PRINTABLE_ASCII,
+        ...(field.charset === "printable" ? PRINTABLE_EXTRA : []),
+      ].filter((c) => rest || !d.includes(c));
+      const raw =
+        field.pattern !== undefined && !rest
+          ? fc.stringMatching(new RegExp(`^(?:${field.pattern})$`))
+          : fc.string({
+              unit: rest
+                ? fc.oneof(fc.constantFrom(...alphabet), fc.constantFrom(d, "=", " "))
+                : fc.constantFrom(...alphabet),
+              minLength: 1,
+              maxLength: field.maxLength,
+            });
+      return raw
+        .map((s) => canonicalise(field, s, { now }).value)
+        .filter((v): v is string => typeof v === "string" && (rest || !v.includes(d)));
+    }
+    case "picklist":
+      return fc.constantFrom(...enabledCodes(config, queryType, field.key));
+    case "date":
+      return fc
+        .date({
+          min: new Date("1901-01-01T00:00:00Z"),
+          max: new Date("2099-12-31T00:00:00Z"),
+          noInvalidDate: true,
+        })
+        .map(iso);
+    case "year":
+      return fc.integer({ min: 1901, max: 2099 }).chain((y) => fc.constantFrom(y, String(y)));
+    case "boolean":
+      return fc.boolean();
+    case "number":
+      return fc.integer({ min: -1_000_000, max: 1_000_000 });
+  }
+}
+
+/** The empty user values a draft may hold; `undefined` means the key is absent. */
+const emptyValue: fc.Arbitrary<DraftValue | undefined> = fc.constantFrom(null, "", " ", undefined);
+
+/** Unpositioned values are kept by the merge whatever they hold, invalid text included. */
+function unpositionedValue(
+  config: TerminalConfig,
+  queryType: string,
+  field: FieldDef,
+): fc.Arbitrary<DraftValue | undefined> {
+  const valid =
+    field.dataType === "picklist"
+      ? fc.constantFrom(...enabledCodes(config, queryType, field.key))
+      : fc.string({ minLength: 1, maxLength: 8 });
+  return fc.oneof(valid, fc.string({ maxLength: 8 }), emptyValue);
+}
+
+export interface DraftCase {
+  command: CommandDef;
+  draft: Draft;
+  /** Field keys the command positions, in order. */
+  positioned: string[];
+  /** Field keys of the query type the command neither positions nor presets. */
+  unpositioned: string[];
+}
+
+/**
+ * A draft for `command`'s query type: each position holds a canonical value or an empty one
+ * (interior and trailing empties both occur); every other field of the query type may hold any
+ * value. Positioned values that would read as a named token are left out (formatCommand reports
+ * them as terminal.delimiterInValue; spec 4.4 precondition, Task 6).
+ */
+export function draftFor(
+  config: TerminalConfig,
+  command: CommandDef,
+  now: number,
+): fc.Arbitrary<DraftCase> {
+  const qt = findQueryType(config, command.queryType);
+  if (qt === undefined) throw new Error(`no query type ${command.queryType}`);
+  const byKey = new Map(qt.fields.map((f) => [f.key, f]));
+  const positioned = command.positions.map(fieldOf);
+  const preset = new Set(Object.keys(command.presets ?? {}));
+  const unpositioned = qt.fields
+    .map((f) => f.key)
+    .filter((k) => !positioned.includes(k) && !preset.has(k));
+  const slot = (p: Position): fc.Arbitrary<DraftValue | undefined> => {
+    const field = byKey.get(fieldOf(p));
+    if (field === undefined) throw new Error(`no field ${fieldOf(p)}`);
+    const value = canonicalValue(config, command.queryType, field, isRest(p), now).filter(
+      (v) => isRest(p) || !readsAsNamed(config, command.queryType, String(v)),
+    );
+    return fc.oneof({ arbitrary: value, weight: 3 }, { arbitrary: emptyValue, weight: 1 });
+  };
+  const other = (key: string): fc.Arbitrary<DraftValue | undefined> => {
+    const field = byKey.get(key);
+    if (field === undefined) throw new Error(`no field ${key}`);
+    return unpositionedValue(config, command.queryType, field);
+  };
+  return fc
+    .tuple(fc.tuple(...command.positions.map(slot)), fc.tuple(...unpositioned.map(other)))
+    .map(([pos, rest]) => {
+      const draft: Record<string, DraftValue> = {};
+      // Presets in the draft so selectCommand picks this command.
+      for (const [k, v] of Object.entries(command.presets ?? {})) draft[k] = String(v);
+      const put = (key: string, v: DraftValue | undefined) => {
+        if (v !== undefined) draft[key] = v;
+      };
+      for (const [i, k] of positioned.entries()) put(k, pos[i]);
+      for (const [i, k] of unpositioned.entries()) put(k, rest[i]);
+      return { command, draft, positioned, unpositioned };
+    });
+}
