@@ -4,14 +4,14 @@
 <rect width="900" height="932" fill="#ffffff"/>
 <text x="24" y="44" fill="#1f2328" font-size="15" font-weight="700">Milestones</text>
 <rect x="24" y="56" width="320" height="10" fill="#d0d7de"/>
-<rect x="24" y="56" width="216" height="10" fill="#1a7f37"/>
-<text x="354" y="65" fill="#57606a" font-size="12">M0 Skeleton 67% (91/135)</text>
+<rect x="24" y="56" width="233" height="10" fill="#1a7f37"/>
+<text x="354" y="65" fill="#57606a" font-size="12">M0 Skeleton 73% (99/136)</text>
 <rect x="48" y="80" width="320" height="10" fill="#d0d7de"/>
 <rect x="48" y="80" width="320" height="10" fill="#1a7f37"/>
 <text x="378" y="89" fill="#57606a" font-size="12">Contracts (M0 P0) 100% (10/10)</text>
 <rect x="48" y="104" width="320" height="10" fill="#d0d7de"/>
-<rect x="48" y="104" width="175" height="10" fill="#1a7f37"/>
-<text x="378" y="113" fill="#57606a" font-size="12">Foundation (M0 P1) 55% (51/93)</text>
+<rect x="48" y="104" width="201" height="10" fill="#1a7f37"/>
+<text x="378" y="113" fill="#57606a" font-size="12">Foundation (M0 P1) 63% (59/94)</text>
 <rect x="24" y="128" width="320" height="10" fill="#d0d7de"/>
 <rect x="24" y="128" width="53" height="10" fill="#1a7f37"/>
 <text x="354" y="137" fill="#57606a" font-size="12">M1 Forms and terminal 17% (1/6)</text>
@@ -73,8 +73,8 @@
 <text x="24" y="777" fill="#1f2328" font-size="12">#175 Decide: can a site default to auto theme (SiteConfig.theme.defaultMode &quot;auto&quot;)</text>
 <text x="24" y="812" fill="#1f2328" font-size="15" font-weight="700">Tasks and follow-ups by status</text>
 <rect x="24" y="824" width="320" height="10" fill="#d0d7de"/>
-<rect x="24" y="824" width="114" height="10" fill="#57606a"/>
-<rect x="138" y="824" width="206" height="10" fill="#1a7f37"/>
-<text x="24" y="857" fill="#57606a" font-size="12">Todo: 47</text>
-<text x="24" y="881" fill="#57606a" font-size="12">Done: 85</text>
+<rect x="24" y="824" width="96" height="10" fill="#57606a"/>
+<rect x="120" y="824" width="224" height="10" fill="#1a7f37"/>
+<text x="24" y="857" fill="#57606a" font-size="12">Todo: 40</text>
+<text x="24" y="881" fill="#57606a" font-size="12">Done: 93</text>
 </svg>
