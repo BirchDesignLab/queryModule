@@ -229,14 +229,67 @@ jobs:
       - name: Expo export
         run: pnpm --filter @querymodule/mobile export
 
+  # Task 29 (BR-006, SEC-006, NFR-003): builds the runtime image, boots it on
+  # a fresh throwaway volume, runs boot-smoke's ops checks, then a smoke
+  # Playwright pass (axe, CSP) against the running container. Path-scoped
+  # like the other heavy jobs; the down step always runs so a failed build or
+  # smoke pass still stops the container and drains the port.
+  image:
+    name: image
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: "10: set up buildx"
+        uses: docker/setup-buildx-action@v3
+      - name: "10: docker image build"
+        # A plain buildx invocation, not docker/build-push-action (zizmor
+        # cache-poisoning: that action's own step is what the audit treats as
+        # a runtime-artifact publish site when a job also sets up node/pnpm;
+        # this build only loads a local, untagged-for-push image).
+        run: |
+          docker buildx build --load \
+            --file deploy/Dockerfile \
+            --tag querymodule:ci \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            .
+
+      - name: "11: boot smoke up (health, triggers, seed)"
+        run: bash scripts/ci/boot-smoke.sh up querymodule:ci
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        run: pnpm --filter @querymodule/web exec playwright install --with-deps chromium
+
+      - name: "12: Playwright (harness, axe, CSP)"
+        # QM_BASE_URL and SEED_PASSWORD_SECRET_FILE come from step 11 (boot-smoke.sh
+        # up writes them to $GITHUB_ENV); playwright.config.ts reads E2E_BASE_URL.
+        run: E2E_BASE_URL="$QM_BASE_URL" pnpm --filter @querymodule/web exec playwright test e2e/harness.spec.ts
+
+      - name: "11: boot smoke down (SIGTERM, clean exit, no key material in logs)"
+        if: always()
+        run: bash scripts/ci/boot-smoke.sh down querymodule:ci
+
   # ADR-0008: the one required check. Needs every job above (never
-  # sensitive-review, which stays its own required check) and runs regardless
-  # of their outcome. Allowlist: it passes only when every needed job reports
-  # success or skipped (a path-filter skip counts as passed); failure,
-  # cancelled, a missing or unknown result, or no jobs at all fail it.
+  # sensitive-review, which stays its own required check, and never publish,
+  # which runs after ci) and runs regardless of their outcome. Allowlist: it
+  # passes only when every needed job reports success or skipped (a
+  # path-filter skip counts as passed); failure, cancelled, a missing or
+  # unknown result, or no jobs at all fail it.
   ci:
     name: ci
-    needs: [changes, checks, test, web, mobile]
+    needs: [changes, checks, test, web, mobile, image]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -258,6 +311,38 @@ jobs:
             }
             console.log("All needed jobs passed or were skipped.");
           '
+
+  # Task 29 (BR-006, SEC-006, NFR-003): publishes the image `ci` already
+  # built and smoke-tested, reusing its gha layer cache, so this rebuilds
+  # nothing new. Push to main only; a PR never has packages: write.
+  publish:
+    name: publish
+    needs: [ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/birchdesignlab/querymodule:sha-${{ github.sha }}
+            ghcr.io/birchdesignlab/querymodule:latest
+          cache-from: type=gha
 
   sensitive-review:
     name: sensitive-review

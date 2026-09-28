@@ -22,11 +22,13 @@ function jobNeeds(job: any): string[] {
 }
 
 describe("ci.yml structure (ADR-0008)", () => {
-  it("has an aggregate `ci` job that runs always() and needs every other job except sensitive-review", () => {
+  it("has an aggregate `ci` job that runs always() and needs every other job except sensitive-review and publish", () => {
     const ci = jobs.ci;
     expect(ci).toBeDefined();
     expect(ci.if).toBe("always()");
-    const expected = jobIds.filter((id) => id !== "ci" && id !== "sensitive-review").sort();
+    const expected = jobIds
+      .filter((id) => id !== "ci" && id !== "sensitive-review" && id !== "publish")
+      .sort();
     expect(jobNeeds(ci).sort()).toEqual(expected);
   });
 
@@ -116,5 +118,67 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
   it("`web` and `mobile` fail open when `changes` emits no key (#96 G-M2)", () => {
     expect(jobs.web.if).toBe("needs.changes.outputs.web != 'false'");
     expect(jobs.mobile.if).toBe("needs.changes.outputs.mobile != 'false'");
+  });
+});
+
+describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-003)", () => {
+  it("`image` job is gated on docs-only like the other gated jobs", () => {
+    expect(jobs.image).toBeDefined();
+    expect(jobNeeds(jobs.image)).toEqual(["changes"]);
+    expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
+  });
+
+  it("`image` job's boot-smoke down step always runs, even if an earlier step failed", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+    const steps: any[] = jobs.image.steps;
+    const down = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh down"),
+    );
+    expect(down, "no boot-smoke.sh down step in the image job").toBeDefined();
+    expect(down.if).toBe("always()");
+  });
+
+  it("`image` job builds and boots the same tag it smoke-tests (querymodule:ci)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+    const steps: any[] = jobs.image.steps;
+    const build = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("docker buildx build"),
+    );
+    expect(build?.run).toContain("--tag querymodule:ci");
+    const up = steps.find((s) => typeof s.run === "string" && s.run.includes("boot-smoke.sh up"));
+    expect(up?.run).toContain("querymodule:ci");
+  });
+
+  it("the aggregate `ci` job needs `image`", () => {
+    expect(jobNeeds(jobs.ci)).toContain("image");
+  });
+
+  it("`publish` needs `ci`, runs only on a push to main, and never on a pull_request", () => {
+    const publish = jobs.publish;
+    expect(publish).toBeDefined();
+    expect(jobNeeds(publish)).toEqual(["ci"]);
+    expect(publish.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
+    // A pull_request event can never satisfy this condition.
+    expect(publish.if.includes("pull_request")).toBe(false);
+  });
+
+  it("`publish` has read-only contents and write packages permissions, and pushes sha- and latest tags", () => {
+    const publish = jobs.publish;
+    expect(publish.permissions).toEqual({ contents: "read", packages: "write" });
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+    const steps: any[] = publish.steps;
+    const push = steps.find((s) => s.uses?.startsWith("docker/build-push-action"));
+    expect(push?.with?.push).toBe(true);
+    expect(push?.with?.tags).toContain("ghcr.io/birchdesignlab/querymodule:sha-");
+    expect(push?.with?.tags).toContain("ghcr.io/birchdesignlab/querymodule:latest");
+  });
+
+  it("every checkout step in `image` and `publish` sets persist-credentials: false", () => {
+    for (const id of ["image", "publish"]) {
+      // biome-ignore lint/suspicious/noExplicitAny: parsed workflow step
+      const steps: any[] = jobs[id].steps;
+      const checkout = steps.find((s) => s.uses?.startsWith("actions/checkout"));
+      expect(checkout?.with?.["persist-credentials"], `${id} checkout`).toBe(false);
+    }
   });
 });
