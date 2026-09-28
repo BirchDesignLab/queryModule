@@ -1,6 +1,7 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
 import { API, META, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 
@@ -81,5 +82,25 @@ describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
     expect(services.authStore.getState()).toMatchObject({ status: "signedOut", user: null });
+  });
+  it("#242: a failed sign-out from the gate gets the #241 handling: notice, retry and marker", async () => {
+    server.use(
+      http.get(`${API}/api/v1/meta`, () =>
+        HttpResponse.json({ ...META, minClientVersion: "99.0.0" }),
+      ),
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+      ),
+      http.post(`${API}/api/v1/auth/sign-out`, () => new HttpResponse(null, { status: 503 })),
+    );
+    const { user } = renderRoot();
+    await screen.findByRole("heading", { name: "Update required" });
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("alert")).toHaveTextContent(
+      "Sign-out failed on the server.",
+    );
+    expect(screen.getByRole("button", { name: "Retry sign-out" })).toBeInTheDocument();
+    expect(localStorage.getItem(SIGN_OUT_PENDING_KEY)).toBe("1");
   });
 });
