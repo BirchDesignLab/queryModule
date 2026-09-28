@@ -67,4 +67,19 @@ describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
       expect(screen.queryByRole("heading", { name: "Connection status" })).not.toBeInTheDocument();
     });
   }
+  it("#242: sign-out from the update gate ends on the sign-in page", async () => {
+    server.use(
+      http.get(`${API}/api/v1/meta`, () =>
+        HttpResponse.json({ ...META, minClientVersion: "99.0.0" }),
+      ),
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+      ),
+    );
+    const { user, services } = renderRoot();
+    await screen.findByRole("heading", { name: "Update required" });
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(services.authStore.getState()).toMatchObject({ status: "signedOut", user: null });
+  });
 });

@@ -79,6 +79,11 @@ describe("BR-002 standalone login through Better Auth (spec 5.6)", () => {
     server.use(http.post(`${BASE}/api/v1/auth/sign-out`, () => HttpResponse.error()));
     await expect(api.signOut()).rejects.toThrow();
   });
+  it("signOut passes its abort signal to the request (W4)", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(api.signOut({ signal: controller.signal })).rejects.toThrow();
+  });
   it("SEC-006: signOut throws on a non-2xx response", async () => {
     server.use(
       http.post(`${BASE}/api/v1/auth/sign-out`, () => new HttpResponse(null, { status: 503 })),

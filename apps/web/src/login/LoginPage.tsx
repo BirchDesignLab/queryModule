@@ -32,7 +32,8 @@ function SignOutFailedNotice({ onCleared }: { onCleared(): void }) {
     if (retrying) return;
     setRetrying(true);
     try {
-      await session.retrySignOut();
+      // false: a sign-in started meanwhile and this retry was dropped (W4); say nothing.
+      if (!(await session.retrySignOut())) return;
       announcer.announce(t("signOut.done"));
       // This notice (and its focused button) unmounts; move focus before it does (spec 6.4).
       onCleared();
