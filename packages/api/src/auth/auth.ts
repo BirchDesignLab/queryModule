@@ -67,14 +67,41 @@ function isTelemetryEnvTruthy(value: string | undefined): boolean {
 }
 
 /**
+ * Better Auth's own `ctx.context.logger.error(e.status, e)` / `ctx.logger.error(...)` calls
+ * (`better-auth/dist/api/index.mjs`, `.../routes/session.mjs`) pass the raw error object as an
+ * arg. For an adapter failure that error's `message` can be a Drizzle query error such as
+ * `"Failed query: insert ... params: <values>"`, which can hold a session token, user id or
+ * email that is not in the app logger's fixed `secretValues` list and is not under a redacted
+ * key (critic finding CV1, this task). The app logger's field walk only scrubs known secret
+ * values and known key names, so free text inside an Error's `message` would otherwise reach
+ * the sink verbatim. Reducing every Error-like arg to `{ errorName }` before it is logged drops
+ * that free text entirely rather than trying to pattern-match what might be inside it.
+ */
+function toBetterAuthLoggerArg(a: unknown): unknown {
+  if (
+    a !== null &&
+    typeof a === "object" &&
+    "name" in a &&
+    typeof (a as { name?: unknown }).name === "string"
+  ) {
+    return { errorName: (a as { name: string }).name };
+  }
+  if (a === null || typeof a !== "object") return a;
+  return typeof a;
+}
+
+/**
  * Better Auth's own logger option (`@better-auth/core/env` `createLogger`) takes
  * `{ log?(level, message, ...args) }`, where level is "debug" | "info" | "success" | "warn" |
  * "error"; with no `log` function it writes straight to `console.*`, unredacted. Routing it
  * through the app's redacting logger (packages/api/src/log/logger.ts, A3 T14 ruling CV2) keeps
  * every Better Auth line (secret-length and entropy warnings, misconfiguration errors) inside
- * the same scrub-and-redact path as everything else (SEC-006).
+ * the same scrub-and-redact path as everything else (SEC-006). Exported so the log-capture test
+ * can drive it directly: Better Auth's own default log level ("warn") means the scenarios this
+ * test exercises never happen to emit a warn/error line on their own (critic finding C1/S1), so
+ * the redaction and arg-mapping behaviour needs a direct call to be observable at all.
  */
-function toBetterAuthLogger(log: Logger) {
+export function toBetterAuthLogger(log: Logger) {
   return {
     log(
       level: "debug" | "info" | "success" | "warn" | "error",
@@ -82,7 +109,8 @@ function toBetterAuthLogger(log: Logger) {
       ...args: unknown[]
     ) {
       const appLevel = level === "success" ? "info" : level;
-      log[appLevel](message, args.length > 0 ? { args } : undefined);
+      const mapped = args.map(toBetterAuthLoggerArg);
+      log[appLevel](message, { args: mapped });
     },
   };
 }
