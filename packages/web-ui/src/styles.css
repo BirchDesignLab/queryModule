@@ -44,6 +44,32 @@ h1 {
   font: inherit;
 }
 
+.qm-field__input:focus-visible,
+.qm-select:focus-visible,
+.qm-checkbox input:focus-visible {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
+.qm-field__tag {
+  align-self: flex-start;
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+  font-style: italic;
+}
+
+.qm-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  min-height: var(--qm-target-min);
+}
+
+.qm-checkbox input {
+  width: var(--qm-target-min);
+  height: var(--qm-target-min);
+}
+
 .qm-field__input[aria-invalid="true"] {
   border-color: var(--qm-field-required);
 }

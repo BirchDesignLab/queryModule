@@ -1,41 +1,35 @@
 import type { ReactNode, Ref } from "react";
 import { VisuallyHidden } from "../visually-hidden.js";
 
-export interface TextFieldProps {
+export interface SelectFieldProps {
   id: string;
   /** Already resolved from labelKey by the caller (NFR-001). */
   label: string;
-  /** Resolved "required" text for screen readers. */
   requiredText: string;
   required?: boolean;
-  type?: "text" | "email" | "password";
-  autoComplete?: string;
-  inputMode?: "text" | "numeric" | "decimal";
+  options: readonly { code: string; label: string }[];
   value: string;
   onChange(value: string): void;
   error?: string | undefined;
   description?: string | undefined;
-  /** Visible text tag rendered after the input, e.g. "default" (spec 6.2). */
   tag?: ReactNode;
-  ref?: Ref<HTMLInputElement>;
+  ref?: Ref<HTMLSelectElement>;
 }
 
-/** Shared field primitive (spec 6.2 semantics table): label, aria-required, aria-invalid, aria-describedby. */
-export function TextField({
+/** Picklist primitive: a first empty option, then the configured options. */
+export function SelectField({
   id,
   label,
   requiredText,
   required = false,
-  type = "text",
-  autoComplete,
-  inputMode,
+  options,
   value,
   onChange,
   error,
   description,
   tag,
   ref,
-}: TextFieldProps) {
+}: SelectFieldProps) {
   const descriptionId = description === undefined ? undefined : `${id}-description`;
   const errorId = error === undefined ? undefined : `${id}-error`;
   const describedBy = [descriptionId, errorId].filter((x) => x !== undefined).join(" ");
@@ -53,20 +47,24 @@ export function TextField({
           </>
         ) : null}
       </label>
-      <input
+      <select
         ref={ref}
         id={id}
         name={id}
-        type={type}
-        className="qm-field__input"
+        className="qm-select"
         value={value}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
         aria-required={required ? "true" : undefined}
         aria-invalid={error === undefined ? undefined : "true"}
         aria-describedby={describedBy === "" ? undefined : describedBy}
         onChange={(event) => onChange(event.currentTarget.value)}
-      />
+      >
+        <option value="" />
+        {options.map((o) => (
+          <option key={o.code} value={o.code}>
+            {o.label}
+          </option>
+        ))}
+      </select>
       {tag === undefined || tag === null ? null : <span className="qm-field__tag">{tag}</span>}
       {description === undefined ? null : (
         <p id={descriptionId} className="qm-field__description">
