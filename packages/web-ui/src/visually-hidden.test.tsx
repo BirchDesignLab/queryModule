@@ -21,5 +21,6 @@ describe("FR-005 visually hidden text (spec 6.2 required indicator)", () => {
     expect(el.style.position).toBe("absolute");
     expect(el.style.width).toBe("1px");
     expect(el.style.overflow).toBe("hidden");
+    expect(el.style.clipPath).toBe("inset(50%)");
   });
 });
