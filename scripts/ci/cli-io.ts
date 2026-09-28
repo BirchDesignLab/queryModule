@@ -6,6 +6,42 @@
  * (review Q1/C6), matching the pattern already used for strip-comments.ts.
  */
 
+import { realpathSync } from "node:fs";
+import { posix, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * True when this module is the process entry point. Replaces the bare
+ * `import.meta.url === pathToFileURL(process.argv[1]).href` guard, which is
+ * false for a symlinked checkout or a drive-letter/case difference on Windows,
+ * so a gate CLI skipped main() and exited 0 with no output (fail open). Both
+ * sides are realpath-resolved, and compared case-insensitively on win32.
+ */
+export function isMainModule(
+  metaUrl: string,
+  argv1: string | undefined,
+  o: { platform?: NodeJS.Platform; realpath?: (p: string) => string } = {},
+): boolean {
+  if (!argv1) return false;
+  const platform = o.platform ?? process.platform;
+  const isWin = platform === "win32";
+  const path = isWin ? win32 : posix;
+  const real =
+    o.realpath ??
+    ((p: string) => {
+      try {
+        return realpathSync.native(p);
+      } catch {
+        return p;
+      }
+    });
+  const norm = (p: string) => {
+    const r = path.resolve(real(path.resolve(p)));
+    return isWin ? r.toLowerCase() : r;
+  };
+  return norm(fileURLToPath(metaUrl, { windows: isWin })) === norm(argv1);
+}
+
 /** Forward slashes on every platform (item 2), a pure string function so it is
  * testable with either separator style regardless of the host OS. */
 export function toPosixRel(relPath: string): string {

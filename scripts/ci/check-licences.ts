@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { readJsonFile, toPosixRel } from "./cli-io";
+import { fileURLToPath } from "node:url";
+import { isMainModule, readJsonFile, toPosixRel } from "./cli-io";
 import { checkLicences, parseLicenceExceptions, parseLicenceReport } from "./licences";
 
 // Re-exported for existing call sites/tests (item 2/8): the shared
@@ -62,4 +62,4 @@ function main(): void {
   console.log(`licences ok (${count} runtime packages)`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+if (isMainModule(import.meta.url, process.argv[1])) main();

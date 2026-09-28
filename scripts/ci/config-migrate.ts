@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { CONFIG_SCHEMA_VERSION, migrateConfig } from "@querymodule/core/config";
-import { readJsonFile, toPosixRel } from "./cli-io";
+import { isMainModule, readJsonFile, toPosixRel } from "./cli-io";
 
 export type { ReadJsonResult } from "./cli-io";
 // Re-exported for existing call sites/tests (item 2/3): the shared
@@ -41,4 +41,4 @@ function main(): void {
   writeFileSync(path, `${JSON.stringify(result.config, null, 2)}\n`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+if (isMainModule(import.meta.url, process.argv[1])) main();

@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { TOKEN_NAMES } from "@querymodule/tokens";
-import { toPosixRel } from "./cli-io";
+import { isMainModule, toPosixRel } from "./cli-io";
 import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
 
 // Re-exported for existing call sites/tests (item 2): the shared
@@ -77,4 +77,4 @@ function main(): void {
   process.exit(failed ? 1 : 0);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+if (isMainModule(import.meta.url, process.argv[1])) main();
