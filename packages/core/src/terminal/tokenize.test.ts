@@ -127,6 +127,10 @@ describe("FR-055 unrecognised input", () => {
       "VEH.A.TX.26.V1.extra",
       [{ key: "terminal.tooManyPositions", params: { expected: 4, got: 5 } }],
     ],
+    [
+      "VEH.A.TX.26.V1..extra",
+      [{ key: "terminal.tooManyPositions", params: { expected: 4, got: 5 } }],
+    ],
   ])("%j", (input, errors) => expect(t(input).errors).toEqual(errors));
   it("an extra token after an interior empty position is still tooManyPositions", () => {
     const r = t("VEH..A.B.C.D");
@@ -141,6 +145,21 @@ describe("FR-055 unrecognised input", () => {
       state: "TX",
       year: "26",
       vin: "V1",
+    });
+  });
+});
+
+describe("FR-051 a command whose query type is missing from the config", () => {
+  const orphan = {
+    ...defaultSite,
+    commands: [{ code: "Q2", queryType: "NOPE", positions: ["x"] }],
+  };
+  it("reads positions without field lookups; named-looking text stays positional", () => {
+    expect(t("Q2.x=1", orphan)).toMatchObject({
+      queryType: "NOPE",
+      userValues: { x: "x=1" },
+      positionedKeys: ["x"],
+      errors: [],
     });
   });
 });

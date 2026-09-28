@@ -61,6 +61,15 @@ describe("FR-056 draft merge (spec 4.4)", () => {
     const d = { plate: "ZZ-0001" };
     expect(merge(d, "XYZ.1")).toBe(d);
   });
+  it("a command code absent from the config writes only the tokenize keys", () => {
+    const orphan: TerminalConfig = {
+      ...defaultSite,
+      commands: [{ code: "Q2", queryType: "VEH", positions: ["plate", "state"] }],
+    };
+    // tokenized against orphan, merged against defaultSite (no Q2): state is not written.
+    const t2 = tokenize(orphan, "Q2.ZZ-0001");
+    expect(mergeDraft({ state: "TX" }, t2, defaultSite)).toEqual({ state: "TX", plate: "ZZ-0001" });
+  });
   it("is exported from the terminal index", () => {
     expect(terminal.mergeDraft).toBe(mergeDraft);
     expect(terminal.selectCommand).toBe(selectCommand);

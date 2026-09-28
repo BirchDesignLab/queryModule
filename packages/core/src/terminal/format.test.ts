@@ -129,6 +129,17 @@ describe("FR-056 formatCommand (spec 4.4 toggle)", () => {
       unshownCount: 0,
     });
   });
+  it("a command whose query type is missing from the config emits raw text", () => {
+    const orphan: TerminalConfig = {
+      ...defaultSite,
+      commands: [{ code: "Q2", queryType: "NOPE", positions: ["x", "y"] }],
+    };
+    expect(formatCommand(orphan, "Q2", { x: " a ", y: "x=1" }, { now })).toEqual({
+      text: "Q2.a.x=1",
+      errors: [],
+      unshownCount: 0,
+    });
+  });
   it("the command code matches case-insensitively and emits the configured code", () => {
     expect(f("veh", { plate: "ABC123" }).text).toBe("VEH.ABC123");
   });
