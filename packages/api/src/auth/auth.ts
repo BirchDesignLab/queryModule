@@ -6,6 +6,7 @@ import type { Db } from "../db/client";
 import { authSchema } from "../db/schema";
 import type { DeployEnv } from "../env";
 import { uuidv7 } from "../ids";
+import type { Logger } from "../log/logger";
 
 /**
  * bearer()'s own `after` hook (better-auth/dist/plugins/bearer/index.mjs) always copies the
@@ -65,11 +66,33 @@ function isTelemetryEnvTruthy(value: string | undefined): boolean {
   return value !== "0" && value.toLowerCase() !== "false";
 }
 
+/**
+ * Better Auth's own logger option (`@better-auth/core/env` `createLogger`) takes
+ * `{ log?(level, message, ...args) }`, where level is "debug" | "info" | "success" | "warn" |
+ * "error"; with no `log` function it writes straight to `console.*`, unredacted. Routing it
+ * through the app's redacting logger (packages/api/src/log/logger.ts, A3 T14 ruling CV2) keeps
+ * every Better Auth line (secret-length and entropy warnings, misconfiguration errors) inside
+ * the same scrub-and-redact path as everything else (SEC-006).
+ */
+function toBetterAuthLogger(log: Logger) {
+  return {
+    log(
+      level: "debug" | "info" | "success" | "warn" | "error",
+      message: string,
+      ...args: unknown[]
+    ) {
+      const appLevel = level === "success" ? "info" : level;
+      log[appLevel](message, args.length > 0 ? { args } : undefined);
+    },
+  };
+}
+
 export function createAuth(o: {
   db: Db;
   env: DeployEnv;
   secret: string;
   session: { absoluteMinutes: number; idleMinutes: number };
+  log?: Logger;
 }) {
   if (isTelemetryEnvTruthy(process.env.BETTER_AUTH_TELEMETRY)) {
     throw new Error(
@@ -81,6 +104,7 @@ export function createAuth(o: {
     appName: "Query Module",
     baseURL: o.env.publicOrigin,
     basePath: "/api/v1/auth",
+    ...(o.log ? { logger: toBetterAuthLogger(o.log) } : {}),
     secret: o.secret,
     trustedOrigins: o.env.corsOrigins,
     // transaction: false pinned explicitly (plan Task 6 amendment): the sqlite provider path
