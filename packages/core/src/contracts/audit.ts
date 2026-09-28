@@ -219,6 +219,15 @@ const queryEnvelope = { ...envelope, correlationId: Uuid7Schema };
 /** Part-scoped types: envelope partId is required and equals details.partId (ADR-0003). */
 const partEnvelope = { ...queryEnvelope, partId: PartIdSchema };
 /**
+ * Request-level query types (submitted, acknowledged, partSkipped): a submit has no single
+ * credential owner, so credentialUserId stays in the type as never and any value is rejected.
+ * Owner searches on audit_event(credential_user_id, at) then match exactly the per-source rows
+ * (sourceDispatched, sourceResponded, and interrupted, which copies the pending row's owner).
+ * SEC-011 (#98 C-M8, D-A1).
+ */
+const requestEnvelope = { ...queryEnvelope, credentialUserId: z.never().optional() };
+const requestPartEnvelope = { ...partEnvelope, credentialUserId: z.never().optional() };
+/**
  * Auth types (spec 5.6): no query part and no state credential. partId and credentialUserId stay
  * in the type as never, so a consumer reads them off any AuditEvent, and any value is rejected.
  */
@@ -235,12 +244,12 @@ export const AuditEventSchema = z
   .discriminatedUnion("type", [
     z.strictObject({
       type: z.literal("submitted"),
-      ...partEnvelope,
+      ...requestPartEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.submitted,
     }),
     z.strictObject({
       type: z.literal("acknowledged"),
-      ...queryEnvelope,
+      ...requestEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.acknowledged,
     }),
     z.strictObject({
@@ -253,6 +262,7 @@ export const AuditEventSchema = z
       ...partEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.sourceResponded,
     }),
+    // interrupted keeps an optional owner: the startup sweep (M1 P3) copies source_result.credential_user_id.
     z.strictObject({
       type: z.literal("interrupted"),
       ...partEnvelope,
@@ -260,7 +270,7 @@ export const AuditEventSchema = z
     }),
     z.strictObject({
       type: z.literal("partSkipped"),
-      ...partEnvelope,
+      ...requestPartEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.partSkipped,
     }),
     z.strictObject({

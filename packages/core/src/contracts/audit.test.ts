@@ -631,3 +631,65 @@ describe("FR-043 C-M3 sourceResponded status follows SourceStatus (#98)", () => 
     expect(AUDIT_DETAILS_SCHEMAS.sourceResponded.shape.status.options).toEqual(recorded);
   });
 });
+
+describe("SEC-011 credential owner on request-level rows (#98 C-M8)", () => {
+  const actor = { id: "user1", email: "one@example.test", role: "user" } as const;
+  const cid = "01890a5d-ac96-774b-bcce-b302099a8057";
+  const base = { actor, identitySource: "local", correlationId: cid } as const;
+  const submitted = {
+    ...base,
+    type: "submitted",
+    partId: 0,
+    details: {
+      partId: 0,
+      parentPartId: null,
+      origin: "primary",
+      queryType: "VEH",
+      typeValues: {},
+      selectedSourceIds: ["stateSource"],
+      dispatchedSourceIds: ["stateSource"],
+      droppedSourceIds: [],
+      plateOnly: false,
+      configHash: "a".repeat(64),
+    },
+  } as const;
+  const acknowledged = {
+    ...base,
+    type: "acknowledged",
+    details: { acknowledgedAt: 1_790_000_000_000, ackLatencyMs: 12, partCount: 1 },
+  } as const;
+  const partSkipped = {
+    ...base,
+    type: "partSkipped",
+    partId: 1,
+    details: {
+      partId: 1,
+      parentPartId: 0,
+      queryType: "WNT",
+      typeValues: {},
+      reasons: [{ key: "plan.nestedNoSources" }],
+    },
+  } as const;
+  const interrupted = {
+    ...base,
+    type: "interrupted",
+    partId: 0,
+    details: { partId: 0, sourceId: "stateSource", resultId: cid, reason: "processRestart" },
+  } as const;
+
+  it.each([submitted, acknowledged, partSkipped])(
+    "$type rejects an envelope credentialUserId",
+    (e) => {
+      expect(AuditEventSchema.safeParse(e).success).toBe(true);
+      expect(AuditEventSchema.safeParse({ ...e, credentialUserId: "officer1" }).success).toBe(
+        false,
+      );
+    },
+  );
+  it("interrupted accepts the pending row's credential owner or none", () => {
+    expect(AuditEventSchema.safeParse(interrupted).success).toBe(true);
+    expect(
+      AuditEventSchema.safeParse({ ...interrupted, credentialUserId: "officer1" }).success,
+    ).toBe(true);
+  });
+});
