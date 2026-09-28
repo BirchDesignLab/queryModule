@@ -37,7 +37,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop | A | M0 P1 | paused | 09-27-26 21:45 |
-| Windows 11 | B | M0 P1 | paused | 09-27-26 16:08 |
+| Windows 11 | B | M0 P1 | running | 09-27-26 23:23 |
 | Windows 11 | A offload | M0 P1 | idle | 09-27-26 16:08 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
@@ -57,14 +57,6 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Notes: T15 adds principal: Principal to AppEnv.Variables in http/types.ts; T14 disables Better Auth telemetry and shows its adapter makes no plain-db call inside a transaction (T6 design); follow-ups #189 and #195 open; Track B waits on #120, #121, #122, #132, #139
 
 ### Track B
-
-- Issue: #160 Web-ui: LiveAnnouncer and base styles (Task 20); B1 (#179), B2 (#181) and B4 (#191) merged, B3 by the A-offload lane (#176)
-- Branch / PR: none; cut feat/b-p1-wave-5 from main
-- Last green: `pnpm verify` at 3c55573 on main (1153 tests)
-- Next step: "### Task 20: Web-ui: LiveAnnouncer and base styles (#160)", wave B5 Tasks 20 to 25 (#160 to #165), UI, Opus medium critic
-- Blocked by: Task 19 (#159) waits on #139's route in Linux A4; Task 27 (#167) on #120, #121, #122, #132
-- Local-only state: none
-- Notes: Task 23 (#163) and Task 27 (#167) carry B4 carry-forwards in issue comments; follow-ups #178, #182, #190
 
 ### Track D
 
