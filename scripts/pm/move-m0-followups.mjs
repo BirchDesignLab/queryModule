@@ -39,12 +39,18 @@ function gh(args, input) {
 }
 const api = (path, method = "GET", body) =>
   JSON.parse(
-    gh(["api", "-X", method, path, ...(body ? ["--input", "-"] : [])], body ? JSON.stringify(body) : undefined) ||
-      "null",
+    gh(
+      ["api", "-X", method, path, ...(body ? ["--input", "-"] : [])],
+      body ? JSON.stringify(body) : undefined,
+    ) || "null",
   );
 
-const milestones = new Map(api(`repos/${REPO}/milestones?state=all&per_page=100`).map((m) => [m.title, m.number]));
-const oldChildren = new Set(api(`repos/${REPO}/issues/${OLD_PARENT}/sub_issues?per_page=100`).map((s) => s.id));
+const milestones = new Map(
+  api(`repos/${REPO}/milestones?state=all&per_page=100`).map((m) => [m.title, m.number]),
+);
+const oldChildren = new Set(
+  api(`repos/${REPO}/issues/${OLD_PARENT}/sub_issues?per_page=100`).map((s) => s.id),
+);
 
 let planned = 0;
 const step = (what, fn) => {
@@ -65,9 +71,13 @@ for (const m of MOVES) {
     const [from, to] = m.labels;
     const have = new Set(issue.labels.map((l) => l.name));
     if (have.has(from))
-      step(`remove label ${from} from #${m.n}`, () => gh(["api", "-X", "DELETE", `repos/${REPO}/issues/${m.n}/labels/${from}`]));
+      step(`remove label ${from} from #${m.n}`, () =>
+        gh(["api", "-X", "DELETE", `repos/${REPO}/issues/${m.n}/labels/${from}`]),
+      );
     if (!have.has(to))
-      step(`add label ${to} to #${m.n}`, () => api(`repos/${REPO}/issues/${m.n}/labels`, "POST", { labels: [to] }));
+      step(`add label ${to} to #${m.n}`, () =>
+        api(`repos/${REPO}/issues/${m.n}/labels`, "POST", { labels: [to] }),
+      );
   }
   if (oldChildren.has(issue.id))
     step(`unlink #${m.n} from #${OLD_PARENT}`, () =>
