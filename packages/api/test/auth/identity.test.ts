@@ -1,13 +1,19 @@
 import { ApiErrorSchema, AuditActorSchema } from "@querymodule/core/contracts";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { createAuth } from "../../src/auth/auth";
+import { type Auth, createAuth } from "../../src/auth/auth";
 import { createIdentityService } from "../../src/auth/identity";
 import { createLocalUser } from "../../src/auth/users";
 import { requireSession } from "../../src/http/session";
 import type { AppEnv } from "../../src/http/types";
 import { actorOf } from "../../src/seams";
-import { createTestClock, migratedDb, TEST_SECRETS, testEnv } from "../helpers/fixture";
+import {
+  captureLogger,
+  createTestClock,
+  migratedDb,
+  TEST_SECRETS,
+  testEnv,
+} from "../helpers/fixture";
 
 const MIN = 60_000;
 async function setup(email = "dispatcher@example.test") {
@@ -21,7 +27,8 @@ async function setup(email = "dispatcher@example.test") {
     password: "correct-horse-battery-1",
   });
   const clock = createTestClock();
-  const identity = createIdentityService({ db, auth, limits, clock });
+  const log = captureLogger();
+  const identity = createIdentityService({ db, auth, limits, clock, log });
   const r = await auth.handler(
     new Request("http://localhost:3000/api/v1/auth/sign-in/email", {
       method: "POST",
@@ -34,7 +41,7 @@ async function setup(email = "dispatcher@example.test") {
     new Request("http://localhost:3000/api/v1/config", {
       headers: { cookie, ...(bg ? { "x-background": "1" } : {}) },
     });
-  return { db, identity, clock, req, userId: id };
+  return { db, auth, limits, clock, log, identity, req, cookie, userId: id };
 }
 
 describe("SEC-005 session limits", () => {
@@ -86,6 +93,28 @@ describe("SEC-005 session limits", () => {
       args: [userId],
     });
     expect(await identity.resolve(req())).toBeNull();
+  });
+  it("a getSession failure resolves to null and logs a warning without the cookie", async () => {
+    const { db, auth, limits, clock, req, cookie } = await setup();
+    const log = captureLogger();
+    const broken = {
+      ...auth,
+      api: {
+        ...auth.api,
+        getSession: () => Promise.reject(new RangeError("database unavailable")),
+      },
+    } as unknown as Auth;
+    const identity = createIdentityService({ db, auth: broken, limits, clock, log });
+    expect(await identity.resolve(req())).toBeNull();
+    expect(log.entries).toHaveLength(1);
+    expect(log.entries[0]).toMatchObject({
+      level: "warn",
+      msg: "session resolution failed",
+      f: { errorName: "RangeError" },
+    });
+    const cookieValue = cookie.split("=").slice(1).join("=");
+    expect(cookieValue.length).toBeGreaterThan(8);
+    expect(JSON.stringify(log.entries)).not.toContain(cookieValue);
   });
   it("isSessionLive tracks the same limits without refreshing", async () => {
     const { identity, req, clock } = await setup();

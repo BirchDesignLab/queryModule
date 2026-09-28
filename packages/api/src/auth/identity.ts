@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { Clock } from "../clock";
 import type { Db } from "../db/client";
 import { session, user } from "../db/schema";
+import type { Logger } from "../log/logger";
 import type { IdentityService, Principal } from "../seams";
 import type { Auth } from "./auth";
 
@@ -32,6 +33,7 @@ export function createIdentityService(o: {
   auth: Auth;
   limits: { absoluteMinutes: number; idleMinutes: number };
   clock: Clock;
+  log: Logger;
 }): AppIdentityService {
   const abs = o.limits.absoluteMinutes * 60_000;
   const idle = o.limits.idleMinutes * 60_000;
@@ -62,7 +64,15 @@ export function createIdentityService(o: {
     async resolve(req) {
       const s = await o.auth.api
         .getSession({ headers: req.headers, query: { disableRefresh: true } })
-        .catch(() => null);
+        .catch((e: unknown) => {
+          // Fail closed, but leave a trace so an outage is not mistaken for an expired session.
+          // Never log req.headers: they carry the session cookie (spec 5.9).
+          o.log.warn("session resolution failed", {
+            errorName: e instanceof Error ? e.name : typeof e,
+            errorMessage: e instanceof Error ? e.message : undefined,
+          });
+          return null;
+        });
       if (!s) return null;
       const row = await load(s.session.id);
       const now = o.clock.now();
