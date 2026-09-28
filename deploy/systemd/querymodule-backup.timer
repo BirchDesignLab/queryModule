@@ -1,0 +1,11 @@
+# deploy/systemd/querymodule-backup.timer
+[Unit]
+Description=Nightly Query Module backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

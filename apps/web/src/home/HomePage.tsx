@@ -1,4 +1,4 @@
-import { useStore } from "@querymodule/client";
+import { savePreferences, useStore } from "@querymodule/client";
 import { ThemeModeSelect } from "@querymodule/web-ui";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -6,7 +6,7 @@ import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 
 export function HomePage() {
-  const { authStore, session, preferences } = useServices();
+  const { api, authStore, session, preferences } = useServices();
   const t = useT();
   const navigate = useNavigate();
   const user = useStore(authStore, (s) => s.user);
@@ -50,7 +50,10 @@ export function HomePage() {
       <ThemeModeSelect
         id="home-theme"
         value={themeMode}
-        onChange={(mode) => preferences.getState().setThemeMode(mode)}
+        onChange={(mode) => {
+          preferences.getState().setThemeMode(mode);
+          void savePreferences(api, { themeMode: mode }).catch(() => false);
+        }}
         t={t}
       />
     </main>

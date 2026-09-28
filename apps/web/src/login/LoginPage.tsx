@@ -1,4 +1,4 @@
-import { type SignInResult, useStore } from "@querymodule/client";
+import { loadPreferences, type SignInResult, useStore } from "@querymodule/client";
 import type { ValidationError } from "@querymodule/core/contracts";
 import { focusFirstInvalid, TextField, ThemeModeSelect } from "@querymodule/web-ui";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -20,7 +20,7 @@ function failureKey(result: Failure): { key: string; params?: Record<string, num
 }
 
 export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
-  const { session, authStore, announcer, preferences } = useServices();
+  const { api, session, authStore, announcer, preferences } = useServices();
   const t = useT();
   const navigate = useNavigate();
   const status = useStore(authStore, (s) => s.status);
@@ -70,6 +70,7 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
     try {
       const result = await session.signIn(email.trim(), password);
       if (result.ok) {
+        await loadPreferences(api, preferences).catch(() => undefined);
         navigate("/", { replace: true });
         return;
       }

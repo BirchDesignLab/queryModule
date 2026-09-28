@@ -3,6 +3,7 @@ import {
   fetchLocaleBundle,
   fetchMeta,
   isClientSupported,
+  loadPreferences,
   type Translator,
 } from "@querymodule/client";
 import { FALLBACK_MESSAGES } from "./fallback-messages.js";
@@ -34,6 +35,9 @@ export async function bootstrap(
       fetchLocaleBundle(services.api, locale),
     ]);
     await services.session.bootstrap();
+    if (services.authStore.getState().status === "signedIn") {
+      await loadPreferences(services.api, services.preferences).catch(() => undefined);
+    }
     return {
       status: "ready",
       translator: createTranslator(locale, bundle),
