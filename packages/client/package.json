@@ -24,11 +24,11 @@
     "@types/react": "^19.3.0",
     "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",
-    "react": "^19.3.0",
+    "react": "^19.2.8",
     "tsx": "^4.23.15",
     "typescript": "6.0.3"
   },
   "peerDependencies": {
-    "react": "^19.3.0"
+    "react": "^19.2.8"
   }
 }
