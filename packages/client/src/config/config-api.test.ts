@@ -55,6 +55,20 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
     expect("futureFlag" in got.features).toBe(false);
   });
 
+  it("catches an unknown optional enum value from a newer server", async () => {
+    serve(() =>
+      HttpResponse.json({
+        ...CONFIG,
+        queryTypes: CONFIG.queryTypes.map((q) => ({
+          ...q,
+          fields: q.fields.map((fd) => ({ ...fd, role: "futureRole" })),
+        })),
+      }),
+    );
+    const got = await fetchClientConfig(makeApi());
+    expect(got.queryTypes[0]?.fields[0]?.role).toBeUndefined();
+  });
+
   it("a 401 calls onUnauthenticated and rejects with ConfigFetchError", async () => {
     serve(() => HttpResponse.json({ key: "auth.required", params: {} }, { status: 401 }));
     const onUnauthenticated = vi.fn();
