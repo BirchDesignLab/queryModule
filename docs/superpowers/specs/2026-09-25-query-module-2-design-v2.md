@@ -1173,6 +1173,8 @@ Contrast validation runs in `config:validate` and in the tokens package tests, p
 
 Covers UX-002, UX-011, BR-001.
 
+Overridden by ADR-0009.
+
 ### 6.6 Announcements and focus
 
 One announcer. Its queue lives in `packages/client`; web binds it to two live regions present from first render (`role="status"` polite, `role="alert"` assertive); native binds it to `AccessibilityInfo.announceForAccessibility`.

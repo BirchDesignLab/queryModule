@@ -1131,3 +1131,28 @@ describe("FR-060 duplicate mappings (#73)", () => {
     expect(dupes()).toEqual([expect.objectContaining({ path: "/responseMappings/1" })]);
   });
 });
+
+describe("UX-002 site default auto theme (D-B1, #175)", () => {
+  it("accepts defaultMode auto with auto os or time", () => {
+    for (const auto of ["os", "time"] as const) {
+      const { errors } = run((r) => {
+        r.theme = { defaultMode: "auto", auto };
+      });
+      expect(errors).toEqual([]);
+    }
+  });
+  it("rejects defaultMode auto with auto off", () => {
+    const { errors } = run((r) => {
+      r.theme = { defaultMode: "auto", auto: "off" };
+    });
+    expect(errors).toContainEqual(
+      expect.objectContaining({ path: "/theme/defaultMode", key: "config.autoDefaultNeedsAuto" }),
+    );
+  });
+  it("rejects defaultMode auto when auto is left at its default (off)", () => {
+    const { errors } = run((r) => {
+      r.theme = { defaultMode: "auto" };
+    });
+    expect(errors).toContainEqual(expect.objectContaining({ key: "config.autoDefaultNeedsAuto" }));
+  });
+});

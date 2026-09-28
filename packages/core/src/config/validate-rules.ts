@@ -194,6 +194,12 @@ export function checkTerminal(config: SiteConfig, out: DiagnosticSink): void {
   }
 }
 
+/** D-B1 (#175): a site default of "auto" needs an auto source (os or time) to follow. */
+export function checkTheme(config: SiteConfig, out: DiagnosticSink): void {
+  if (config.theme?.defaultMode === "auto" && config.theme.auto === "off")
+    out.error("/theme/defaultMode", "config.autoDefaultNeedsAuto", {});
+}
+
 export function checkShortcuts(config: SiteConfig, out: DiagnosticSink): void {
   const all = Object.entries(resolveShortcuts(config.shortcuts)).flatMap(([action, bs]) =>
     bs.map((b) => ({ action, ...b })),

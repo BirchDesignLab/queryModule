@@ -11,6 +11,7 @@ import {
   checkLimits,
   checkShortcuts,
   checkTerminal,
+  checkTheme,
   checkWarnings,
 } from "./validate-rules";
 
@@ -40,6 +41,7 @@ export function validateSiteConfig(
   checkFieldDefs(config, out);
   checkCommands(config, out);
   checkTerminal(config, out);
+  checkTheme(config, out);
   checkShortcuts(config, out);
   checkLimits(config, out);
   checkWarnings(config, out);

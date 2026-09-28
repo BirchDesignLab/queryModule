@@ -3,7 +3,8 @@ import type { ThemeMode } from "./tokens";
 export type ThemePreference = ThemeMode | "auto";
 
 export interface ThemeSelection {
-  defaultMode: ThemeMode;
+  /** "auto" (D-B1, #175): with no user preference, follow `auto` as if the user chose auto. */
+  defaultMode: ThemeMode | "auto";
   auto: "off" | "os" | "time";
 }
 
@@ -29,13 +30,15 @@ export function resolveThemeMode({
 }: ThemeModeInput): ThemeMode {
   if (preference !== null && preference !== "auto") return preference;
   if (selection === null) return fromOs(osPrefersDark);
-  if (preference === null) return selection.defaultMode;
+  const { defaultMode } = selection;
+  if (preference === null && defaultMode !== "auto") return defaultMode;
   switch (selection.auto) {
     case "os":
       return fromOs(osPrefersDark);
     case "time":
       return localHour >= 19 || localHour < 7 ? "night" : "day";
     case "off":
-      return selection.defaultMode;
+      // defaultMode "auto" with auto "off" fails config validation; the OS is the safe fallback.
+      return defaultMode === "auto" ? fromOs(osPrefersDark) : defaultMode;
   }
 }

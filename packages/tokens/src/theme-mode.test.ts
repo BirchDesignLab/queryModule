@@ -70,3 +70,39 @@ describe("UX-002 theme mode selection (spec 6.5)", () => {
     expect(resolveThemeMode({ ...base, ...patch })).toBe(expected);
   });
 });
+
+describe("UX-002 site default auto (D-B1, #175)", () => {
+  it.each([
+    [
+      "no preference, site default auto, auto os, dark OS",
+      { selection: { defaultMode: "auto", auto: "os" }, osPrefersDark: true },
+      "night",
+    ],
+    [
+      "no preference, site default auto, auto os, light OS",
+      { selection: { defaultMode: "auto", auto: "os" } },
+      "day",
+    ],
+    [
+      "no preference, site default auto, auto time, 20:00",
+      { selection: { defaultMode: "auto", auto: "time" }, localHour: 20 },
+      "night",
+    ],
+    [
+      "explicit preference wins over site default auto",
+      {
+        preference: "redShift",
+        selection: { defaultMode: "auto", auto: "os" },
+        osPrefersDark: true,
+      },
+      "redShift",
+    ],
+    [
+      "site default auto with auto off (rejected by config validation) follows the OS",
+      { selection: { defaultMode: "auto", auto: "off" }, osPrefersDark: true },
+      "night",
+    ],
+  ] as const)("%s", (_name, patch, expected) => {
+    expect(resolveThemeMode({ ...base, ...patch })).toBe(expected);
+  });
+});

@@ -407,7 +407,7 @@ export interface components {
                  * @default day
                  * @enum {string}
                  */
-                defaultMode: "day" | "night" | "redShift";
+                defaultMode: "day" | "night" | "redShift" | "auto";
                 /**
                  * @default off
                  * @enum {string}
