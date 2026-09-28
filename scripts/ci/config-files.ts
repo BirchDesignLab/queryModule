@@ -9,7 +9,12 @@ import {
   validateResolved,
 } from "@querymodule/core/config";
 import { TOKEN_NAMES } from "@querymodule/tokens";
-import { BUILTIN_ADAPTER_KINDS, tokensContrast } from "../../packages/api/src/config/load";
+import {
+  BUILTIN_ADAPTER_KINDS,
+  colourTokenChecks,
+  preResolvedChecks,
+  tokensContrast,
+} from "../../packages/api/src/config/load";
 import { toPosixRel } from "./cli-io";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -75,10 +80,12 @@ export function checkConfigFile(
   try {
     return check(file, io, options);
   } catch (e) {
-    if (!(e instanceof Unreadable)) throw e;
-    const errors: Diagnostic[] = [
-      { level: "error", path: e.at, key: "config.unreadableFile", params: {} },
-    ];
+    // Any other throw is config.schema at the root: never a stack or a message, which can echo a
+    // config value (spec 5.9, #220), and the report for later files goes on (wave review G-I1).
+    const errors: Diagnostic[] =
+      e instanceof Unreadable
+        ? [{ level: "error", path: e.at, key: "config.unreadableFile", params: {} }]
+        : [{ level: "error", path: "", key: "config.schema", params: {} }];
     return { file, errors, warnings: [] };
   }
 }
@@ -101,12 +108,19 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
   config.locales.forEach((code, i) => {
     locales[code] = read(io, resolve(configDir, "locales", `${code}.json`), `/locales/${i}`);
   });
-  const result = validateResolved(config, locales, {
-    tokenNames: options.tokenNames ?? TOKEN_NAMES,
-    adapterKinds: BUILTIN_ADAPTER_KINDS,
-    contrast: tokensContrast,
-    now: options.now ?? Date.now(),
-  });
+  // The loader's own pre- and post-checks, so "ok" here means the server starts (G-I1, G-I2).
+  const pre = preResolvedChecks(config, locales);
+  const result =
+    pre.length > 0
+      ? { errors: pre, warnings: [] }
+      : validateResolved(config, locales, {
+          tokenNames: options.tokenNames ?? TOKEN_NAMES,
+          adapterKinds: BUILTIN_ADAPTER_KINDS,
+          contrast: tokensContrast,
+          now: options.now ?? Date.now(),
+        });
+  if (pre.length === 0 && result.errors.length === 0)
+    result.errors.push(...colourTokenChecks(config));
 
   let mockErrors: Diagnostic[] = [];
   if (config.sources.some((s) => s.kind === "mock")) {

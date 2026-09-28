@@ -59,6 +59,60 @@ export const tokensContrast: ContrastContext = {
       ratio: f.ratio,
     })),
 };
+/**
+ * Checks validateResolved relies on, run by the loader and config:validate alike (spec 4.1, 5.9):
+ * each locale bundle read is a JSON object, and every theme override is #rrggbb (the contrast
+ * check throws on anything else). Keys and pointers only; no config value rides in params.
+ */
+export function preResolvedChecks(
+  config: SiteConfig,
+  rawLocales: Record<string, RawFile>,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  config.locales.forEach((locale, i) => {
+    const v = rawLocales[locale];
+    if (
+      v?.ok &&
+      v.value !== undefined &&
+      (v.value === null || typeof v.value !== "object" || Array.isArray(v.value))
+    )
+      out.push({
+        level: "error",
+        path: `/locales/${i}`,
+        key: "config.invalidJson",
+        params: { locale },
+      });
+  });
+  const groups = Object.values(config.theme?.tokens ?? {});
+  if (groups.some((g) => Object.values(g ?? {}).some((v) => !HEX.test(v))))
+    out.push({
+      level: "error",
+      path: "/theme/tokens",
+      key: "config.invalidTokenValue",
+      params: {},
+    });
+  return out;
+}
+
+/**
+ * A known token that is not a colour (a scale token) cannot be contrast-checked (UX-011). Run
+ * after validateResolved reports no errors (unknown tokens are its config.unknownToken).
+ */
+export function colourTokenChecks(config: SiteConfig): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const [severity, style] of Object.entries(config.keywordSeverityStyles))
+    if (
+      [style.color, style.background].some((t) => tokensContrast.value(t, "day", {}) === undefined)
+    )
+      out.push({
+        level: "error",
+        path: `/keywordSeverityStyles/${severity}`,
+        key: "config.notColourToken",
+        params: {},
+      });
+  return out;
+}
+
 export class ConfigLoadError extends Error {
   constructor(
     readonly file: string,
@@ -140,20 +194,8 @@ export async function loadSiteConfig(
       `/locales/${i}`,
     );
 
-  siteConfig.locales.forEach((locale, i) => {
-    const v = rawLocales[locale];
-    if (
-      v?.ok &&
-      v.value !== undefined &&
-      (v.value === null || typeof v.value !== "object" || Array.isArray(v.value))
-    )
-      throw new ConfigLoadError(file, `/locales/${i}`, "config.invalidJson");
-  });
-  const theme = siteConfig.theme?.tokens;
-  for (const group of Object.values(theme ?? {}))
-    for (const v of Object.values(group ?? {}))
-      if (!HEX.test(v))
-        throw new ConfigLoadError(file, "/theme/tokens", "config.invalidTokenValue");
+  const pre = preResolvedChecks(siteConfig, rawLocales);
+  if (pre.length > 0) throw firstError(file, pre);
 
   let result: ReturnType<typeof validateResolved>;
   try {
@@ -169,15 +211,8 @@ export async function loadSiteConfig(
   }
   const { errors, warnings } = result;
   if (errors.length > 0) throw firstError(file, errors);
-  // A known token that is not a colour (a scale token) cannot be contrast-checked (UX-011).
-  for (const [severity, style] of Object.entries(siteConfig.keywordSeverityStyles))
-    for (const t of [style.color, style.background])
-      if (tokensContrast.value(t, "day", {}) === undefined)
-        throw new ConfigLoadError(
-          file,
-          `/keywordSeverityStyles/${severity}`,
-          "config.notColourToken",
-        );
+  const colour = colourTokenChecks(siteConfig);
+  if (colour.length > 0) throw firstError(file, colour);
 
   const mockIndex = siteConfig.sources.findIndex((s) => s.kind === "mock");
   if (mockIndex >= 0) {

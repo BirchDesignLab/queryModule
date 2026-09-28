@@ -5,8 +5,9 @@ import { join, resolve } from "node:path";
 import { CORE_VERSION } from "@querymodule/core/contracts";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type * as auditService from "../src/audit/service";
+import type * as dbClient from "../src/db/client";
 import { readPragmas } from "../src/db/client";
-import { bootstrap, type RunningServer, startServer } from "../src/startup";
+import { bootstrap, loadDeps, type RunningServer, startServer } from "../src/startup";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
 // Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert, so the
@@ -29,6 +30,21 @@ vi.mock("../src/audit/service", async (importOriginal) => {
 });
 afterEach(() => {
   failAudit.on = false;
+});
+
+// Records every database a start opens, so a failed start can be shown to close its handle
+// (wave review C-m2): openDatabase takes no exclusive lock, so a clean restart cannot prove it.
+const opened = vi.hoisted(() => [] as { $client: { closed: boolean } }[]);
+vi.mock("../src/db/client", async (importOriginal) => {
+  const real = await importOriginal<typeof dbClient>();
+  return {
+    ...real,
+    openDatabase: async (...a: Parameters<typeof real.openDatabase>) => {
+      const db = await real.openDatabase(...a);
+      opened.push(db);
+      return db;
+    },
+  };
 });
 
 const PREFIXES = ["qm-data-", "qm-sec-", "qm-cfg-"];
@@ -221,16 +237,27 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
     expect(again[1]?.details).toEqual(rows[0]?.details);
   });
 
+  it("configLoaded: loadDeps (the ops scripts' entry) loads the config but records no start (wave review C-m1)", async () => {
+    const env = { ...(await envWith()), SITE_CONFIG: exampleOk };
+    const deps = await loadDeps(env, { logSink: () => {} });
+    const rows = await configLoadedRows(deps);
+    deps.db.$client.close();
+    expect(deps.config.siteConfig.site.id).toBe("example-ok");
+    expect(rows).toEqual([]);
+  });
+
   it("configLoaded: an audit failure refuses startup, commits no row and nothing listens", async () => {
     const data = tempDir("qm-data-");
     const env = await envWith({}, data);
     failAudit.on = true;
+    opened.length = 0;
     await expect(startServer(env, { logSink: () => {} })).rejects.toThrow(
       /audit store unavailable/,
     );
     await expect(fetch(`http://127.0.0.1:${env.PORT}/api/v1/health`)).rejects.toThrow();
-    // The failed start closed its handle and rolled its row back: a clean restart on the same
-    // data dir opens the database and finds exactly its own configLoaded row.
+    // The failed start opened exactly one database and closed it.
+    expect(opened.map((db) => db.$client.closed)).toEqual([true]);
+    // It rolled its row back: a clean restart on the same data dir finds exactly its own row.
     failAudit.on = false;
     const next = await bootstrap(env, { logSink: () => {} });
     const rows = await configLoadedRows(next);

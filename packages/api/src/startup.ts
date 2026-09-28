@@ -21,10 +21,10 @@ export class StartupRefusedError extends Error {
 /**
  * Fail closed (spec 8.1): nothing is served until the secrets load, the deploy env parses,
  * migrations are applied, both audit triggers exist, both key canaries decrypt and the site
- * config parses. Every failure throws; none returns a partial AppDeps. The last step writes one
- * configLoaded audit row per start (spec 5.8 step 7, SEC-010); a failed write refuses startup.
+ * config parses. Every failure throws; none returns a partial AppDeps. Records no start: the ops
+ * scripts (seed, grant-role) use this, so configLoaded rows count server starts only (C-m1).
  */
-export async function bootstrap(
+export async function loadDeps(
   processEnv: NodeJS.ProcessEnv,
   o: { clock?: Clock; logSink?: (line: string) => void } = {},
 ): Promise<AppDeps> {
@@ -39,6 +39,18 @@ export async function bootstrap(
     deps.db.$client.close();
     throw new StartupRefusedError(reason);
   }
+  return deps;
+}
+
+/**
+ * The server's startup sequence: loadDeps, then one configLoaded audit row per start (spec 5.8
+ * step 7, SEC-010); a failed write closes the database and refuses startup.
+ */
+export async function bootstrap(
+  processEnv: NodeJS.ProcessEnv,
+  o: { clock?: Clock; logSink?: (line: string) => void } = {},
+): Promise<AppDeps> {
+  const deps = await loadDeps(processEnv, o);
   try {
     const c = deps.config;
     await withTransaction(deps.db, (tx) =>

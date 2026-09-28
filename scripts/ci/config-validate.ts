@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMainModule, toPosixRel } from "./cli-io";
@@ -49,6 +49,28 @@ ${VALIDATE_USAGE}`,
   return { ok: true, resolved, files };
 }
 
+/**
+ * The CLI's file io. Only ENOENT reads as missing; any other read error (EACCES, ENOTDIR, EISDIR,
+ * an invalid path) is ConfigUnreadableError, as in the API loader (Task 7 ruling, wave review G-M1).
+ * Invalid JSON throws a SyntaxError, which the checker reports as config.invalidJson.
+ */
+export function configIo(
+  readText: (path: string) => string = (p) => readFileSync(p, "utf8"),
+): ConfigIo {
+  return {
+    readJson: (p) => {
+      let text: string;
+      try {
+        text = readText(p);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+        throw new ConfigUnreadableError();
+      }
+      return JSON.parse(text);
+    },
+  };
+}
+
 function main(): void {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
   const cwd = process.env.INIT_CWD ?? process.cwd();
@@ -76,18 +98,7 @@ function main(): void {
   }
   const targets = found.targets;
 
-  const io: ConfigIo = {
-    readJson: (p) => {
-      if (!existsSync(p)) return undefined;
-      let text: string;
-      try {
-        text = readFileSync(p, "utf8");
-      } catch {
-        throw new ConfigUnreadableError();
-      }
-      return JSON.parse(text);
-    },
-  };
+  const io = configIo();
 
   let failed = false;
   for (const file of targets) {

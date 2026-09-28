@@ -305,6 +305,63 @@ describe("config:validate contrast and unreadable files (Task 9)", () => {
   });
 });
 
+describe("config:validate runs the loader's pre- and post-checks (wave review G-I1, G-I2)", () => {
+  const broken = cfg("sites/broken.json");
+
+  it.each(["red", "#12"])(
+    "a non-hex theme override %s is config.invalidTokenValue, no throw",
+    (v) => {
+      const site: RawSite = {
+        ...defaultSite(),
+        theme: { tokens: { all: { "color.severity.info.bg": v } } },
+      };
+      const r = checkConfigFile(broken, layered({ [broken]: site }));
+      expect(r.errors).toEqual([
+        { level: "error", path: "/theme/tokens", key: "config.invalidTokenValue", params: {} },
+      ]);
+      expect(JSON.stringify([r.errors, r.warnings])).not.toContain(v);
+    },
+  );
+
+  it("a locale bundle that is not a JSON object is config.invalidJson at its pointer, no throw", () => {
+    const site = defaultSite();
+    const localeFile = cfg(`locales/${(site.locales as string[])[0]}.json`);
+    const r = checkConfigFile(broken, layered({ [broken]: site, [localeFile]: "hello" }));
+    expect(r.errors).toEqual([
+      { level: "error", path: "/locales/0", key: "config.invalidJson", params: { locale: "en" } },
+    ]);
+  });
+
+  it("a severity style naming a known non-colour token is config.notColourToken (UX-011)", () => {
+    const site = defaultSite();
+    site.keywordSeverityStyles.info.color = "space.1";
+    const r = checkConfigFile(broken, layered({ [broken]: site }));
+    expect(r.errors).toEqual([
+      {
+        level: "error",
+        path: "/keywordSeverityStyles/info",
+        key: "config.notColourToken",
+        params: {},
+      },
+    ]);
+  });
+
+  it("any other throw is config.schema at the root, with no message or value", () => {
+    const hostile = new Proxy(defaultSite(), {
+      get(t, p) {
+        if (p === "site") throw new Error("secret-config-value");
+        return Reflect.get(t, p);
+      },
+    });
+    const r = checkConfigFile(broken, layered({ [broken]: hostile }));
+    expect(r).toEqual({
+      file: broken,
+      errors: [{ level: "error", path: "", key: "config.schema", params: {} }],
+      warnings: [],
+    });
+  });
+});
+
 describe("config:validate targets (fails closed on empty input)", () => {
   it("fails when no config file is found in the default directories", () => {
     const r = configTargets([], () => []);

@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type RawFile,
@@ -56,6 +57,68 @@ describe("config:validate arguments (#220 M3)", () => {
     const r = run(["--diff", "v1"]);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("config:validate: --diff arrives with M2 P2 (spec 7, 9.5)");
+  });
+});
+
+describe("config:validate never crashes and matches the loader (wave review G-I1, G-I2)", () => {
+  // A copy of packages/config, so the bad sites resolve their locales and mock file.
+  const withSites = (sites: Record<string, (s: Record<string, unknown>) => void>) => {
+    const dir = mkdtempSync(join(tmpdir(), "qm-cfgcli-"));
+    cpSync(resolve(root, "packages/config"), dir, { recursive: true });
+    const base = readFileSync(join(dir, "sites", "default.json"), "utf8");
+    const files = Object.entries(sites).map(([name, edit]) => {
+      const site = JSON.parse(base) as Record<string, unknown>;
+      edit(site);
+      const file = join(dir, "sites", `${name}.json`);
+      writeFileSync(file, JSON.stringify(site));
+      return file;
+    });
+    return { dir, files };
+  };
+
+  it("a non-hex theme override and a string locale bundle report keys, no stack or value, and later files still report", {
+    timeout: 20000,
+  }, () => {
+    const { dir, files } = withSites({
+      badtheme: (s) => {
+        s.theme = { tokens: { all: { "color.severity.info.bg": "tomato" } } };
+      },
+    });
+    writeFileSync(join(dir, "locales", "xx.json"), JSON.stringify("hello-bundle"));
+    const localeSite = join(dir, "sites", "badlocale.json");
+    const site = JSON.parse(readFileSync(join(dir, "sites", "default.json"), "utf8"));
+    writeFileSync(localeSite, JSON.stringify({ ...site, locales: ["en", "xx"] }));
+    try {
+      const r = run(["--", ...files, localeSite, join(dir, "sites", "default.json")]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(
+        /ERROR \S+badtheme\.json \/theme\/tokens config\.invalidTokenValue \{\}/,
+      );
+      expect(r.stderr).toMatch(/ERROR \S+badlocale\.json \/locales\/1 config\.invalidJson/);
+      expect(r.stderr).not.toMatch(/tomato|hello-bundle|\n\s+at /);
+      expect(r.stdout).toMatch(/ok \S+default\.json/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a severity style naming a non-colour token fails, as the loader does", {
+    timeout: 20000,
+  }, () => {
+    const { dir, files } = withSites({
+      spacecolour: (s) => {
+        (s.keywordSeverityStyles as { info: { color: string } }).info.color = "space.1";
+      },
+    });
+    try {
+      const r = run(["--", ...files]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(
+        /ERROR \S+spacecolour\.json \/keywordSeverityStyles\/info config\.notColourToken \{\}/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

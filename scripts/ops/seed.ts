@@ -2,9 +2,9 @@
 // Prints each demo password once to this command's stdout; never to the service log (spec 8.5).
 import { readSecretFile } from "../../packages/api/src/secrets";
 import { SeedPartialFailureError, seedUsers } from "../../packages/api/src/seed/seed";
-import { bootstrap } from "../../packages/api/src/startup";
+import { loadDeps } from "../../packages/api/src/startup";
 
-const deps = await bootstrap(process.env, { logSink: () => {} });
+const deps = await loadDeps(process.env, { logSink: () => {} });
 try {
   const secret = await readSecretFile(
     "SEED_PASSWORD_SECRET",
