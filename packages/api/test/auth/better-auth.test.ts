@@ -1,5 +1,5 @@
 import { BoundedIdSchema, Uuid7Schema } from "@querymodule/core/contracts";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuth, sessionCookieName } from "../../src/auth/auth";
 import { createLocalUser } from "../../src/auth/users";
 import { migratedDb, TEST_SECRETS, testEnv } from "../helpers/fixture";
@@ -101,33 +101,101 @@ describe("SEC-005 Better Auth", () => {
     expect(auth.options.telemetry?.enabled).toBe(false);
   });
 
-  it("does not hold the database lock via a transaction of its own (plan Task 6 carry-forward)", async () => {
-    // The drizzle adapter never calls db.transaction() itself, so it never trips
-    // NestedTransactionError or holds SerializedClient's single-connection lock across
-    // calls. Two concurrent sign-ins would deadlock (or one would see the other's
-    // uncommitted row) if the adapter opened and held its own transaction; both must
-    // resolve independently, each with its own session row.
+  describe("BETTER_AUTH_TELEMETRY env override (fail closed, plan Task 6 amendment)", () => {
+    const key = "BETTER_AUTH_TELEMETRY";
+    const original = process.env[key];
+    afterEach(() => {
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    });
+
+    it("refuses to start when BETTER_AUTH_TELEMETRY is truthy", async () => {
+      const { db, env } = await setup();
+      process.env[key] = "1";
+      expect(() =>
+        createAuth({
+          db,
+          env,
+          secret: TEST_SECRETS.betterAuthSecret,
+          session: { absoluteMinutes: 720, idleMinutes: 30 },
+        }),
+      ).toThrow(/BETTER_AUTH_TELEMETRY/);
+    });
+  });
+
+  it("never opens its own database transaction, across createLocalUser, sign-in, get-session and sign-out (plan Task 6 carry-forward)", async () => {
+    // The drizzle adapter's own db.transaction() calls are all gated to `provider: "mysql"`
+    // except one behind `config.transaction` (default false); auth.ts now pins
+    // `transaction: false` explicitly. A transaction of its own would trip
+    // NestedTransactionError or hold SerializedClient's single-connection lock; the drizzle
+    // instance passed to the adapter must never be asked to open one.
     const { auth, env, db } = await setup();
+    const transactionSpy = vi.spyOn(db, "transaction");
+
     await createLocalUser(auth, {
       email: "second@example.test",
       name: "Second Dispatcher",
       password: "another-long-password-1",
     });
-    const signInAs = (email: string, password: string) =>
-      auth.handler(
-        new Request("http://localhost:3000/api/v1/auth/sign-in/email", {
-          method: "POST",
-          headers: { "content-type": "application/json", origin: env.publicOrigin },
-          body: JSON.stringify({ email, password }),
+
+    const signInResponse = await auth.handler(
+      new Request("http://localhost:3000/api/v1/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: env.publicOrigin },
+        body: JSON.stringify({
+          email: "dispatcher@example.test",
+          password: "correct-horse-battery-1",
         }),
-      );
-    const [r1, r2] = await Promise.all([
-      signInAs("dispatcher@example.test", "correct-horse-battery-1"),
-      signInAs("second@example.test", "another-long-password-1"),
-    ]);
-    expect(r1.status).toBe(200);
-    expect(r2.status).toBe(200);
-    const rows = (await db.$client.execute("SELECT id FROM session")).rows;
-    expect(rows.length).toBe(2);
+      }),
+    );
+    expect(signInResponse.status).toBe(200);
+    const sessionSetCookie = signInResponse.headers
+      .getSetCookie()
+      .find((c) => c.includes("qm_session="));
+    expect(sessionSetCookie).toBeDefined();
+    const sessionCookie = sessionSetCookie?.split(";")[0] ?? "";
+
+    const getSessionResponse = await auth.handler(
+      new Request("http://localhost:3000/api/v1/auth/get-session", {
+        headers: { cookie: sessionCookie, origin: env.publicOrigin },
+      }),
+    );
+    expect(getSessionResponse.status).toBe(200);
+
+    const signOutResponse = await auth.handler(
+      new Request("http://localhost:3000/api/v1/auth/sign-out", {
+        method: "POST",
+        headers: { cookie: sessionCookie, origin: env.publicOrigin },
+      }),
+    );
+    expect(signOutResponse.status).toBe(200);
+
+    expect(transactionSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not expose set-auth-token to a web (Origin-bearing) sign-in (spec 5.6)", async () => {
+    const { signIn } = await setup();
+    const r = await signIn("correct-horse-battery-1");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("set-auth-token")).toBeNull();
+    const exposed = (r.headers.get("access-control-expose-headers") ?? "").toLowerCase();
+    expect(exposed).not.toContain("set-auth-token");
+  });
+
+  it("rejects an unsigned raw session token presented as Authorization: Bearer (SEC-005)", async () => {
+    const { auth, signIn, db } = await setup();
+    await signIn("correct-horse-battery-1");
+    const row = (await db.$client.execute("SELECT token FROM session")).rows[0];
+    const rawToken = String(row?.token);
+    expect(rawToken).not.toContain("."); // the raw stored token is unsigned
+
+    const r = await auth.handler(
+      new Request("http://localhost:3000/api/v1/auth/get-session", {
+        headers: { authorization: `Bearer ${rawToken}` },
+      }),
+    );
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body).toBeNull();
   });
 });
