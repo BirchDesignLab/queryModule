@@ -1,3 +1,4 @@
+import net from "node:net";
 import { type WsEvent, WsServerMessageSchema } from "@querymodule/core/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
@@ -173,5 +174,98 @@ describe("SEC-014 WebSocket upgrade and heartbeat", () => {
     closers.push(s.close);
     const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
     expect(await closeCode(ws)).toBe(4001);
+  });
+
+  it("rejects a missing Origin with a cookie and an unsigned bearer (401)", async () => {
+    // I2: an unsigned bearer (the raw session id with no "." signature suffix — better-auth's
+    // requireSignature rejects that outright) must not let a forwarded cookie authenticate the
+    // socket when Origin is absent. The cookie value itself is "id.signature"; the unsigned
+    // bearer a client would send is just the "id" part.
+    const { s, cookie } = await setup();
+    const unsignedToken = cookie.split("=").slice(1).join("=").split(".")[0] ?? "";
+    await expect(
+      open(s.wsUrl, { cookie, authorization: `Bearer ${unsignedToken}` }),
+    ).rejects.toThrow("HTTP 401");
+  });
+
+  it("rejects an unsigned bearer on its own (401)", async () => {
+    const { s, cookie } = await setup();
+    const unsignedToken = cookie.split("=").slice(1).join("=").split(".")[0] ?? "";
+    await expect(open(s.wsUrl, { authorization: `Bearer ${unsignedToken}` })).rejects.toThrow(
+      "HTTP 401",
+    );
+  });
+
+  it("closes 4001 when isSessionLive rejects during a ping", async () => {
+    // I1: isSessionLive resolves true for the post-registration race recheck, then rejects on
+    // the ping itself; the socket must fail closed (4001), not crash with an unhandled rejection.
+    const { t, cookie } = await setup();
+    let calls = 0;
+    const flakyDeps = {
+      ...t.deps,
+      identity: {
+        ...t.deps.identity,
+        isSessionLive: async () => {
+          calls += 1;
+          if (calls === 1) return true;
+          throw new Error("db unavailable");
+        },
+      },
+    };
+    const flakyApp = { ...t, deps: flakyDeps } as TestApp;
+    const s = await startTestServer(flakyApp);
+    closers.push(s.close);
+    const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
+    const code = closeCode(ws);
+    ws.send(JSON.stringify(ping("n4")));
+    expect(await code).toBe(4001);
+  });
+
+  it("survives a client resetting the connection during a pending upgrade", async () => {
+    // C1/Q1: nothing listened for 'error' on the raw upgrade socket while identity.resolve()
+    // was pending, so a reset during that window used to crash the whole process. A later,
+    // normal upgrade must still succeed.
+    const { t, cookie } = await setup();
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const original = t.deps.identity.resolve.bind(t.deps.identity);
+    let first = true;
+    const slowDeps = {
+      ...t.deps,
+      identity: {
+        ...t.deps.identity,
+        resolve: async (req: Request) => {
+          if (first) {
+            first = false;
+            await gate;
+          }
+          return original(req);
+        },
+      },
+    };
+    const slowApp = { ...t, deps: slowDeps } as TestApp;
+    const s = await startTestServer(slowApp);
+    closers.push(s.close);
+
+    const port = Number(new URL(s.baseUrl).port);
+    const socket = net.connect(port, "127.0.0.1");
+    await new Promise<void>((r, j) => {
+      socket.once("connect", () => r());
+      socket.once("error", j);
+    });
+    socket.write(
+      `GET /api/v1/ws HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: ${ORIGIN}\r\nCookie: ${cookie}\r\n\r\n`,
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    socket.resetAndDestroy();
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
+    ws.send(JSON.stringify(hello));
+    expect(await nextMsg(ws)).toMatchObject({ type: "welcome" });
+    ws.close();
   });
 });

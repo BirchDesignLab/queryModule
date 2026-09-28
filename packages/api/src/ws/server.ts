@@ -28,7 +28,16 @@ function reject(socket: Duplex, status: number): void {
 }
 function toRequest(req: IncomingMessage, origin: string): Request {
   const headers = new Headers();
+  // When Origin is absent and an Authorization header is present, only a signed bearer token
+  // may authenticate the upgrade (carry-forward A3 T14): forwarding the cookie here would let an
+  // unsigned bearer (which better-auth's requireSignature rejects outright, leaving the cookie
+  // header untouched) silently authenticate through the cookie instead (I2). A cookie forwarded
+  // on its own (no Authorization header at all) is unaffected: it can still resolve a session,
+  // and the Origin check downstream then rejects it with 403, not 401, when Origin is absent.
+  const hasOrigin = typeof req.headers.origin === "string";
+  const dropCookie = !hasOrigin && typeof req.headers.authorization === "string";
   for (const [k, v] of Object.entries(req.headers)) {
+    if (dropCookie && k.toLowerCase() === "cookie") continue;
     if (typeof v === "string") headers.set(k, v);
     else if (Array.isArray(v)) headers.set(k, v.join(", "));
   }
@@ -94,7 +103,18 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
       if (m.data.type === "hello")
         return send({ v: WS_PROTOCOL_VERSION, type: "welcome", latestSeq: 0 });
       if (m.data.type === "ping") {
-        if (!(await d.identity.isSessionLive(p.sessionId))) return endSession();
+        let live: boolean;
+        try {
+          live = await d.identity.isSessionLive(p.sessionId);
+        } catch (err: unknown) {
+          // Fail closed (spec 5.9 security baseline, I1): a DB error mid-ping must not become
+          // an unhandled rejection (ws discards this listener's returned promise).
+          d.logger.error("ws ping liveness check failed", {
+            errorName: err instanceof Error ? err.name : typeof err,
+          });
+          return endSession();
+        }
+        if (!live) return endSession();
         clearTimeout(idle);
         idle = setTimeout(() => ws.close(WS_LOCAL_CLOSE.idle, "no ping"), idleMs);
         return send({
@@ -113,7 +133,12 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     });
   }
 
-  async function handle(req: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+  async function handle(
+    req: IncomingMessage,
+    socket: Duplex,
+    head: Buffer,
+    onErr: (err: unknown) => void,
+  ): Promise<void> {
     const url = new URL(req.url ?? "/", "http://internal");
     if (url.pathname !== WS_PATH) return reject(socket, 404);
     if (!accepting) return reject(socket, 503);
@@ -125,13 +150,30 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     const principal = await d.identity.resolve(toRequest(req, d.env.publicOrigin));
     if (!principal) return reject(socket, 401);
     if (!originOk) return reject(socket, 403);
+    // wss.handleUpgrade attaches its own socket "error" listener once it takes over; remove
+    // ours immediately beforehand (it only removes its own listener, so leaving ours attached
+    // through the handshake would be harmless too, but this keeps ownership unambiguous).
+    socket.off("error", onErr);
     wss.handleUpgrade(req, socket, head, (ws) => {
       bind(ws, principal);
     });
   }
 
   server.on("upgrade", (req, socket, head) => {
-    handle(req, socket, head).catch((err: unknown) => {
+    // C1/Q1: Node removes the HTTP server's own socket-error listener before emitting
+    // "upgrade", so nothing listens for "error" on this raw socket while identity.resolve()
+    // (a real DB round trip) is pending below. Without this, a client that resets the TCP
+    // connection during that window raises an unhandled "error" event and crashes the process,
+    // unauthenticated and remotely triggerable. Left attached through every reject path; removed
+    // just before wss.handleUpgrade takes over (see handle()).
+    const onErr = (err: unknown) => {
+      d.logger.error("ws upgrade socket error", {
+        errorName: err instanceof Error ? err.name : typeof err,
+      });
+      socket.destroy();
+    };
+    socket.on("error", onErr);
+    handle(req, socket, head, onErr).catch((err: unknown) => {
       d.logger.error("ws upgrade failed", {
         errorName: err instanceof Error ? err.name : typeof err,
       });
