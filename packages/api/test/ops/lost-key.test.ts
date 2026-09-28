@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { checkKeyCanaries, KeyCanaryError } from "../../src/keys/canary";
-import { RunbookOutdatedError, recoverLostKey } from "../../src/ops/lost-key";
+import {
+  assertCheckpointComplete,
+  RunbookOutdatedError,
+  recoverLostKey,
+} from "../../src/ops/lost-key";
 import { TEST_SECRETS } from "../helpers/fixture";
 import { createTestApp } from "../helpers/test-app";
 
@@ -33,5 +37,26 @@ describe("SEC-006 lost-key runbooks", () => {
     await expect(
       recoverLostKey(t.deps.db, t.clock, "credential", Buffer.alloc(32, 7)),
     ).rejects.toThrow(RunbookOutdatedError);
+  });
+  it("a refusal writes no canary, for either key (#217)", async () => {
+    const t = await createTestApp();
+    const canaries = async () =>
+      (await t.deps.db.$client.execute("SELECT * FROM key_canary ORDER BY key_name")).rows;
+    const before = await canaries();
+    for (const [name, table] of [
+      ["credential", "state_credential"],
+      ["data", "request_key"],
+    ] as const) {
+      await t.deps.db.$client.execute(`CREATE TABLE ${table} (id TEXT)`);
+      await expect(recoverLostKey(t.deps.db, t.clock, name, Buffer.alloc(32, 9))).rejects.toThrow(
+        RunbookOutdatedError,
+      );
+    }
+    expect(await canaries()).toEqual(before);
+  });
+  it("fails when the WAL checkpoint reports busy (#217)", () => {
+    expect(() => assertCheckpointComplete({ busy: 0, log: 3, checkpointed: 3 })).not.toThrow();
+    expect(() => assertCheckpointComplete({ busy: 1, log: 3, checkpointed: 0 })).toThrow(/busy/);
+    expect(() => assertCheckpointComplete(undefined)).toThrow(/busy/);
   });
 });

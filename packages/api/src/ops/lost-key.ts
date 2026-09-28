@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { Clock } from "../clock";
 import type { Db } from "../db/client";
 import { withTransaction } from "../db/tx";
@@ -11,6 +12,12 @@ export class RunbookOutdatedError extends Error {
   }
 }
 
+/** PRAGMA wal_checkpoint(TRUNCATE) reports busy = 1 without an error when it could not finish. */
+export function assertCheckpointComplete(row: Record<string, unknown> | undefined): void {
+  if (!row || Number(row.busy) !== 0)
+    throw new Error("WAL checkpoint busy: stop other database users and rerun the runbook");
+}
+
 export async function recoverLostKey(
   db: Db,
   clock: Clock,
@@ -18,11 +25,16 @@ export async function recoverLostKey(
   newKey: Buffer,
 ): Promise<void> {
   const table = GUARD_TABLES[keyName];
-  const exists = await db.$client.execute({
-    sql: "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-    args: [table],
+  // The guard check and the canary write share one transaction, so a protected table created
+  // in between cannot slip past the refusal (#217).
+  await withTransaction(db, async (tx) => {
+    const exists = await tx.all(
+      sql`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ${table}`,
+    );
+    if (exists.length > 0) throw new RunbookOutdatedError(table);
+    await writeCanary(tx, newKey, keyName, clock);
   });
-  if (exists.rows.length > 0) throw new RunbookOutdatedError(table);
-  await withTransaction(db, (tx) => writeCanary(tx, newKey, keyName, clock));
-  await db.$client.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+  // The canary write is an upsert, so a rerun after a busy checkpoint is safe.
+  const r = await db.$client.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+  assertCheckpointComplete(r.rows[0]);
 }
