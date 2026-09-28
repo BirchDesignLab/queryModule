@@ -209,4 +209,9 @@ describe("promote.yml restores no dependency cache (#231 G-M2)", () => {
       expect(s.uses ?? "", `${s.name ?? s.uses} uses actions/cache`).not.toMatch(/^actions\/cache/);
     }
   });
+  it("setup-node turns its automatic package-manager cache off explicitly", () => {
+    // Its default caches only npm today; pinning false keeps a later major from widening it.
+    const nodeSetup = steps.find((s) => s.uses?.startsWith("actions/setup-node"));
+    expect(nodeSetup?.with?.["package-manager-cache"]).toBe(false);
+  });
 });

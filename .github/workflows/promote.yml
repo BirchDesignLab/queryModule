@@ -63,6 +63,7 @@ jobs:
         if: inputs.milestone != ''
         with:
           node-version-file: .nvmrc
+          package-manager-cache: false
       - name: milestone gate (notes file, story tags)
         if: inputs.milestone != ''
         run: |
