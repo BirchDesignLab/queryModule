@@ -1,4 +1,5 @@
 import type { Condition, FieldDef, Literal, Picklist, QueryType } from "../config/index.js";
+import { canonicaliseLiteral } from "./canonical-literal.js";
 import { canonicalise } from "./canonicalise.js";
 import type { CanonicalValue, RulesConfig } from "./types.js";
 
@@ -82,7 +83,7 @@ function canonLiteral(
 ): CanonicalValue | null {
   if (field === undefined) return null;
   const codes = scope === "all" ? field.allCodes : field.enabledValues.map((v) => v.code);
-  return canonicalise(field.def, literal, { now, codes }).value;
+  return canonicaliseLiteral(field.def, literal, { now, codes }).value;
 }
 
 export function compileCondition(

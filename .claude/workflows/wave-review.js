@@ -320,7 +320,7 @@ function sliceRole(sliceTier) {
 const tier = (name) => { const r = role(name); return r.effort ? `${r.model}/${r.effort}` : r.model }
 const sliceTierText = (t) => { const r = sliceRole(t); return r.effort ? `${r.model}/${r.effort}` : r.model }
 // Front-matter reviewer and effort follow the role that writes the artifact (defaults give "opus-5.5" / "high").
-const REVIEWER_NAME = { opus: 'opus-5.5', sonnet: 'sonnet-5', haiku: 'haiku-4.5' }
+const REVIEWER_NAME = { opus: 'opus-5.5', sonnet: 'sonnet-5.5', haiku: 'haiku-4.5' }
 function frontMatter(roleObj, sha, mode) {
   const lines = ['---', `reviewer: "${REVIEWER_NAME[roleObj.model]}"`, `effort: "${roleObj.effort || 'n/a'}"`, `reviewedSha: "${sha}"`, 'verdict: "approve"']
   if (mode) lines.push(`mode: "${mode}"`)

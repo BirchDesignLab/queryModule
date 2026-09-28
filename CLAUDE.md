@@ -24,10 +24,10 @@ has burned a month of usage in about ten minutes.
 | Model | Relative cost | Effort levels | Capable of |
 |---|---|---|---|
 | Haiku 4.5 | 1x | None. The API rejects `effort` on Haiku; set `model` only and write `effort: n/a` in the plan so the choice reads as deliberate. | Fast, literal work: listing files, grep sweeps, pulling fields out of JSON or docs, summarizing one file, reformatting. **Not** for judging correctness, multi-file reasoning, or anything touching the sensitive code below. 200K context. |
-| Sonnet 5 | 2x | `low` `medium` `high` `xhigh` `max` | Strong coder. Implements from a precise spec, writes tests, runs routine finders, verifies or refutes a claim against the code. |
+| Sonnet 5.5 | 2x (assumed) | `low` `medium` `high` `xhigh` `max` | Strong coder. Implements from a precise spec, writes tests, runs routine finders, verifies or refutes a claim against the code. |
 | Opus 5.5 | 4x | `low` `medium` `high` `xhigh` `max`. Always thinks; effort is its only cost control. | Hardest reasoning: the sensitive code below, design, synthesis across many reports, whole-branch review. |
 
-Relative cost is per token (API list prices: Haiku $1/$5, Sonnet 5 $2/$10,
+Relative cost is per token (API list prices: Haiku $1/$5, Sonnet 5.5 assumed at Sonnet 5's $2/$10 until confirmed,
 Opus 5.5 $4/$20 per million in/out). Effort multiplies on top of it: higher
 effort means more thinking and more tool calls per task.
 
@@ -110,7 +110,7 @@ itself and fails a mislabelled PR.
 This is CJIS and GDPR territory. There is no money path, but a mistake in
 credential handling or audit logging is a compliance failure, not a bug.
 
-## The effort levels (Sonnet 5 and Opus 5.5)
+## The effort levels (Sonnet 5.5 and Opus 5.5)
 
 - `low`: little thinking, fewest and most consolidated tool calls, terse
   output. For work fully specified in the prompt that has one right answer.
@@ -132,11 +132,11 @@ credential handling or audit logging is a compliance failure, not a bug.
 | Opus 5.5 | `high` | Whole-branch review (`wave-review`) of a PR that touches a critical-tier path, its critical slice and re-reviewer (ADR-0007 as amended by #92). Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. Hard finders, design and judge panels. Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
 | Opus 5.5 | `medium` | Whole-branch review of a gate-tier PR, and the gate slice of a mixed PR. Implementing a critical-tier task from a plan (ruler and re-reviewer on it too). The critic role on a gate-tier or critical-tier task and on a UI-building workflow. Synthesizing several agents' reports into one answer. |
 | Opus 5.5 | `low` | A narrow judgment call that needs Opus-grade reasoning but no exploration ("is this credential-storage change CJIS-safe, given these three lines"). |
-| Sonnet 5 | `max` | Not used. Work that hard goes to Opus. |
-| Sonnet 5 | `xhigh` | Not used by default (#92). Work that long goes to Sonnet `high` in smaller pieces, or to Opus. |
-| Sonnet 5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task; the combined spec and quality reviewer on an ordinary or gate-tier task (and the re-reviewer on a gate-tier task). |
-| Sonnet 5 | `medium` | Implementing one ordinary or gate-tier plan task with its tests (TDD) in one to three files; routine finders over a bounded area; spec-compliance review of one critical-tier task against its FR/UX/SEC IDs. |
-| Sonnet 5 | `low` | Verify or refute one claim against named files; a fully specified mechanical edit (a rename, one function to a given spec); run the suite and report. |
+| Sonnet 5.5 | `max` | Not used. Work that hard goes to Opus. |
+| Sonnet 5.5 | `xhigh` | Not used by default (#92). Work that long goes to Sonnet `high` in smaller pieces, or to Opus. |
+| Sonnet 5.5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task; the combined spec and quality reviewer on an ordinary or gate-tier task (and the re-reviewer on a gate-tier task). |
+| Sonnet 5.5 | `medium` | Implementing one ordinary or gate-tier plan task with its tests (TDD) in one to three files; routine finders over a bounded area; spec-compliance review of one critical-tier task against its FR/UX/SEC IDs. |
+| Sonnet 5.5 | `low` | Verify or refute one claim against named files; a fully specified mechanical edit (a rename, one function to a given spec); run the suite and report. |
 | Haiku 4.5 | n/a | Enumeration and extraction: list, grep, pull fields, summarize one file, pull requirement IDs out of the spec. |
 
 ## Rules
