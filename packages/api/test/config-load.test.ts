@@ -178,3 +178,56 @@ describe("BR-001 config load chain (spec 5.8)", () => {
     expect(e.message).toContain("config.");
   });
 });
+
+describe("SEC-006 startup faults are ConfigLoadError with no config value", () => {
+  interface Theme {
+    theme?: { tokens?: { all?: Record<string, string> } };
+    keywordSeverityStyles: Record<string, { color: string }>;
+    [k: string]: unknown;
+  }
+  function editTheme(d: string, f: (j: Theme) => void): string {
+    const file = join(d, "sites/default.json");
+    const j = JSON.parse(readFileSync(file, "utf8")) as Theme;
+    f(j);
+    writeFileSync(file, JSON.stringify(j));
+    return file;
+  }
+  it("an unknown severity token is config.unknownToken", async () => {
+    const file = editTheme(copy(), (j) => {
+      j.keywordSeverityStyles.critical.color = "nosuch.token";
+    });
+    expect((await fails(file)).message).toContain("config.unknownToken");
+  });
+  it("a non-hex theme override is a keyed ConfigLoadError without the value", async () => {
+    const file = editTheme(copy(), (j) => {
+      j.theme = { ...j.theme, tokens: { all: { "color.text.body": "SECRETVALUE-zz" } } };
+    });
+    const e = await fails(file);
+    expect(e.message).not.toContain("SECRETVALUE");
+    expect(e.message).toContain("/theme/tokens");
+  });
+  it("a scale token used as a severity colour does not throw a raw error", async () => {
+    const file = editTheme(copy(), (j) => {
+      j.keywordSeverityStyles.critical.color = "space.1";
+    });
+    const e = await fails(file);
+    expect(e.message).toContain("config.notColourToken");
+  });
+  it("a prototype-named override token is not read through the prototype", async () => {
+    const file = editTheme(copy(), (j) => {
+      j.keywordSeverityStyles.critical.color = "constructor";
+    });
+    const e = await fails(file);
+    expect(e.message).toContain("config.unknownToken");
+  });
+  it("a locale bundle holding a JSON string is config.invalidJson at its pointer", async () => {
+    const d = copy();
+    const file = join(d, "sites/default.json");
+    const raw = JSON.parse(readFileSync(file, "utf8")) as { locales: string[] };
+    writeFileSync(join(d, "locales", `${raw.locales[0]}.json`), JSON.stringify("SECRETVALUE-zz"));
+    const e = await fails(file);
+    expect(e.message).toContain("config.invalidJson");
+    expect(e.message).toContain("/locales/0");
+    expect(e.message).not.toContain("SECRETVALUE");
+  });
+});

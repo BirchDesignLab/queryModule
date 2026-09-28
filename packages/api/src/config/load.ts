@@ -37,13 +37,19 @@ export interface LoadedConfig {
 /** Adapter kinds this build supports; plugins from ADAPTER_DIR arrive with the registry (M1 P3). */
 export const BUILTIN_ADAPTER_KINDS: readonly string[] = ["mock"];
 
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
 /** Token lookups for the core contrast checks (spec 4.1, UX-011). */
 export const tokensContrast: ContrastContext = {
-  value: (token, mode, overrides) =>
-    overrides[token] ??
-    ((TOKEN_NAMES as readonly string[]).includes(token)
-      ? tokenValue(token as TokenName, mode)
-      : undefined),
+  value: (token, mode, overrides) => {
+    const v = Object.hasOwn(overrides, token)
+      ? overrides[token]
+      : (TOKEN_NAMES as readonly string[]).includes(token)
+        ? tokenValue(token as TokenName, mode)
+        : undefined;
+    // Non-colour values (scale tokens, bad overrides) are skipped, never thrown on.
+    return typeof v === "string" && HEX.test(v) ? v : undefined;
+  },
   ratio: contrastRatio,
   failures: (mode, overrides) =>
     contrastFailures(mode, overrides).map((f) => ({
@@ -121,12 +127,44 @@ export async function loadSiteConfig(
   for (const locale of siteConfig.locales)
     rawLocales[locale] = await readRaw(join(configDir, "locales", `${locale}.json`));
 
-  const { errors, warnings } = validateResolved(siteConfig, rawLocales, {
-    adapterKinds: BUILTIN_ADAPTER_KINDS,
-    contrast: tokensContrast,
-    now: o.now,
+  siteConfig.locales.forEach((locale, i) => {
+    const v = rawLocales[locale];
+    if (
+      v?.ok &&
+      v.value !== undefined &&
+      (v.value === null || typeof v.value !== "object" || Array.isArray(v.value))
+    )
+      throw new ConfigLoadError(file, `/locales/${i}`, "config.invalidJson");
   });
+  const theme = siteConfig.theme?.tokens;
+  for (const group of Object.values(theme ?? {}))
+    for (const v of Object.values(group ?? {}))
+      if (!HEX.test(v))
+        throw new ConfigLoadError(file, "/theme/tokens", "config.invalidTokenValue");
+
+  let result: ReturnType<typeof validateResolved>;
+  try {
+    result = validateResolved(siteConfig, rawLocales, {
+      adapterKinds: BUILTIN_ADAPTER_KINDS,
+      contrast: tokensContrast,
+      tokenNames: TOKEN_NAMES,
+      now: o.now,
+    });
+  } catch {
+    // Never surface a raw error: its message can echo a config value (spec 5.9).
+    throw new ConfigLoadError(file, "", "config.schema");
+  }
+  const { errors, warnings } = result;
   if (errors.length > 0) throw firstError(file, errors);
+  // A known token that is not a colour (a scale token) cannot be contrast-checked (UX-011).
+  for (const [severity, style] of Object.entries(siteConfig.keywordSeverityStyles))
+    for (const t of [style.color, style.background])
+      if (tokensContrast.value(t, "day", {}) === undefined)
+        throw new ConfigLoadError(
+          file,
+          `/keywordSeverityStyles/${severity}`,
+          "config.notColourToken",
+        );
 
   const mockIndex = siteConfig.sources.findIndex((s) => s.kind === "mock");
   if (mockIndex >= 0) {
