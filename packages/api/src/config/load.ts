@@ -188,7 +188,7 @@ export async function loadSiteConfig(
         "mock sources need ALLOW_MOCK_SOURCES=true",
       );
     const mockPath = join(configDir, "mock", `${siteConfig.site.id}.json`);
-    const mockRaw = await readRaw(mockPath, file, `/sources/${mockIndex}/kind`);
+    const mockRaw = await readRaw(mockPath, file, "/mock");
     const mockErrors = checkMockCoverage(siteConfig, mockRaw, mockPath);
     if (mockErrors.length > 0) throw firstError(file, mockErrors);
   }

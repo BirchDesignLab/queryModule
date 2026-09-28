@@ -96,6 +96,18 @@ describe("NFR-001 locale bundles", () => {
     expect((e as ConfigLoadError).path).toBe("/locales/0");
     expect((e as Error).message).toMatch(/config\.unreadableFile/);
   });
+  it("reports an unreadable mock file at /mock, the pointer core and the CLI use", async () => {
+    const d = copy();
+    const mock = join(d, "mock", "default.json");
+    rmSync(mock);
+    mkdirSync(mock);
+    const e = await loadSiteConfig(join(d, "sites/default.json")).then(
+      () => undefined,
+      (x: unknown) => x,
+    );
+    expect((e as ConfigLoadError).path).toBe("/mock");
+    expect((e as Error).message).toMatch(/config.unreadableFile/);
+  });
   it("reports an unreadable base site as unreadable, not an unknown base", async () => {
     const d = copy();
     const base = join(d, "sites/default.json");
