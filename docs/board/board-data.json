@@ -786,6 +786,19 @@
       "priority": "Medium",
       "reqIds": "SEC-005, SEC-014",
       "body": "From the A4b wave-review (`docs/reviews/feat-a-p1-wave-4b.md`, PR #223), a declined-to-judge item. Checker ruling 09-28-26. Tier: gate (`packages/api/src/ws/**`). Priority: Medium.\n\nThe WebSocket upgrade on `/api/v1/ws` (`packages/api/src/ws/server.ts`) has no rate limit. Every upgrade, authenticated or not, runs `identity.resolve`, which costs a DB round trip before the Origin check rejects it. An unauthenticated client can therefore drive DB load with a stream of upgrades.\n\n- [ ] Rate-limit upgrades per client IP (reuse `RateLimiter` and `clientIp()`, with a limit stated in the PR and the spec reference), answering 429 before any `identity.resolve`.\n- [ ] Reject a disallowed Origin before `identity.resolve`, where that doesn't break the Origin-less bearer path, so a cross-origin upgrade costs no DB lookup.\n- [ ] Tests: upgrades over the limit get 429 without calling `identity.resolve` (spy on it); a disallowed Origin never calls `identity.resolve`; a signed-bearer upgrade with no Origin still works.\n"
+    },
+    {
+      "number": 230,
+      "title": "ci: docs-only push to main skips the image, publish fails and no sha image exists (blocks M0 exit promote)",
+      "labels": ["platform", "p1", "sensitive", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "High",
+      "reqIds": "BR-004, NFR-003",
+      "body": "**Blocks M0 exit promote.**\n\nFrom the wave 5 review (`docs/reviews/feat-a-p1-wave-5.md`, PR #229). Tier: gate (`.github/workflows/ci.yml`, `scripts/ci/ci-workflow.test.ts`).\n\n## Problem\n\nOn a docs-only push to `main`, the `image` job is skipped (docs_only gate), so it uploads no `querymodule-image` artifact. `publish` then fails at `download-artifact`: `ci` shows red on `main` and no `ghcr.io/birchdesignlab/querymodule:sha-<sha>` image exists for that commit.\n\n`promote.yml` with `milestone: m0` needs, at the same sha: a successful `ci` run on `main`, `docs/releases/m0.md`, and the `sha-<sha>` image. The M0 exit PR is docs-only (release notes), so the m0 promote cannot pass. Skipping `publish` when `image` is skipped makes `ci` green but still leaves no image at that sha.\n\n## Fix (decided)\n\nBuild the image on every push to `main`: the `image` job's docs_only gate applies to pull requests only, so every commit on `main` gets a smoke-tested `sha-<sha>` image and `promote` keeps its invariant (the promoted sha is exactly the image that was built and smoke-tested at that sha). Rejected alternative: promote resolving the image of the nearest ancestor with one, which would promote bytes not built from the named sha and weaken the sha/image equality that rollback relies on.\n\n- [ ] `image` job: `if:` runs on `push` to `main` regardless of docs_only; unchanged for pull requests.\n- [ ] `ci-workflow.test.ts`: tests first for both cases (PR docs-only skips `image`; push to main never skips it; `publish` always finds the artifact on main).\n- [ ] actionlint and zizmor clean.\n\nGoes in one gate PR with the wave 5 minors issue, after #229 merges and before the M0 exit PR, with its own wave-review (gate Opus 5.5 medium).\n"
     }
   ]
 }
