@@ -2,7 +2,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { TOKEN_NAMES } from "@querymodule/tokens";
+import { toPosixRel } from "./cli-io";
 import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
+
+// Re-exported for existing call sites/tests (item 2): the shared
+// implementation now lives in cli-io.ts (review Q1/C6).
+export { toPosixRel } from "./cli-io";
 
 export const VALIDATE_USAGE = "usage: config:validate [--resolved] [<file> ...]";
 
@@ -23,13 +28,6 @@ export function parseValidateArgs(args: string[]): ParsedValidateArgs {
     files.push(a);
   }
   return { ok: true, resolved, files };
-}
-
-/** Forward slashes on every platform, so PowerShell and Git Bash print byte-identical
- * output (item 2). Takes an already-computed relative path, so it stays a pure string
- * function testable with either separator style regardless of the host OS. */
-export function toPosixRel(relPath: string): string {
-  return relPath.replaceAll("\\", "/");
 }
 
 function main(): void {

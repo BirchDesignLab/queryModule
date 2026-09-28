@@ -1,5 +1,6 @@
 import { MILESTONES, type Milestone } from "@querymodule/core/contracts";
 import { z } from "zod";
+import { readJsonFile } from "./cli-io";
 import { stripComments } from "./strip-comments";
 
 /**
@@ -8,9 +9,14 @@ import { stripComments } from "./strip-comments";
  * no `..` segment on either separator (item 6).
  */
 export function isSafeRelativePath(path: string): boolean {
-  if (path.startsWith("/")) return false;
-  if (path.startsWith("\\\\")) return false;
-  if (/^[A-Za-z]:[\\/]/.test(path)) return false;
+  // Any leading separator (POSIX-absolute `/x`, root-relative `\x`, or UNC
+  // `\\server\share`, which also starts with `\`) is rejected outright
+  // (review C3): a lone leading `\` used to slip through and resolve to
+  // `C:\...` on Windows, bypassing the `/x` rule with the other separator.
+  if (path.startsWith("/") || path.startsWith("\\")) return false;
+  // Any drive prefix, absolute (`C:\x`, `C:/x`) or drive-relative (`C:x`,
+  // which resolves against that drive's current directory, not the repo).
+  if (/^[A-Za-z]:/.test(path)) return false;
   return path.split(/[\\/]/).every((segment) => segment !== "..");
 }
 
@@ -129,23 +135,12 @@ export function readStoriesFile(
   readFile: (path: string) => string,
   path: string,
 ): ReadStoriesResult {
-  let text: string;
-  try {
-    text = readFile(path);
-  } catch (e) {
-    const reason =
-      (e as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
-        ? "file not found"
-        : "cannot read file";
-    return { ok: false, message: `${path}: ${reason}` };
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return { ok: false, message: `${path}: invalid JSON` };
-  }
-  const parsed = StoriesFileSchema.safeParse(raw);
+  // The read-and-parse step (ENOENT-vs-other-error, JSON.parse) is the same
+  // shared helper config-migrate and check-licences use (review Q1/C6);
+  // this function layers its own zod step on top.
+  const read = readJsonFile(readFile, path);
+  if (!read.ok) return { ok: false, message: `${path}: ${read.reason}` };
+  const parsed = StoriesFileSchema.safeParse(read.value);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const at = issue && issue.path.length > 0 ? ` at ${issue.path.join(".")}` : "";

@@ -2,38 +2,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CONFIG_SCHEMA_VERSION, migrateConfig } from "@querymodule/core/config";
+import { readJsonFile, toPosixRel } from "./cli-io";
 
-/** Forward slashes on every platform (item 2), a pure string function so it is
- * testable with either separator style regardless of the host OS. */
-export function toPosixRel(relPath: string): string {
-  return relPath.replaceAll("\\", "/");
-}
-
-export type ReadJsonResult = { ok: true; value: unknown } | { ok: false; reason: string };
-
-/**
- * Reads and JSON-parses `path` via `readFile`, turning fs and JSON errors into
- * a short reason with no raw stack trace and no file excerpt: JSON.parse
- * messages can quote file content, so its message text is never printed
- * (item 3).
- */
-export function readJsonFile(readFile: (path: string) => string, path: string): ReadJsonResult {
-  let text: string;
-  try {
-    text = readFile(path);
-  } catch (e) {
-    const reason =
-      (e as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
-        ? "file not found"
-        : "cannot read file";
-    return { ok: false, reason };
-  }
-  try {
-    return { ok: true, value: JSON.parse(text) };
-  } catch {
-    return { ok: false, reason: "invalid JSON" };
-  }
-}
+export type { ReadJsonResult } from "./cli-io";
+// Re-exported for existing call sites/tests (item 2/3): the shared
+// implementation now lives in cli-io.ts (review Q1/C6) so config-migrate,
+// check-licences and story-tags stop each carrying their own copy.
+export { readJsonFile, toPosixRel } from "./cli-io";
 
 function main(): void {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");

@@ -16,7 +16,12 @@ export function stripComments(source: string): string {
   const n = source.length;
   while (i < n) {
     const c = source[i];
-    if (c === '"' || c === "'" || c === "`") {
+    if (c === '"' || c === "'") {
+      // `'`/`"` string literals cannot legally contain a raw newline in JS,
+      // so bound the scan to the current line: without this, a stray quote
+      // inside a regex literal or JSX text (e.g. `/"/`) flips string parity
+      // for the rest of the file, hiding real code or letting a commented-out
+      // line masquerade as live (review C1, fail-open regression).
       const quote = c;
       let j = i + 1;
       while (j < n) {
@@ -24,7 +29,27 @@ export function stripComments(source: string): string {
           j += 2;
           continue;
         }
+        if (source[j] === "\n") break;
         if (source[j] === quote) {
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      out += source.slice(i, j);
+      i = j;
+      continue;
+    }
+    if (c === "`") {
+      // Template literals legitimately span multiple lines, so this scan is
+      // not newline-bounded like `'`/`"` above.
+      let j = i + 1;
+      while (j < n) {
+        if (source[j] === "\\") {
+          j += 2;
+          continue;
+        }
+        if (source[j] === "`") {
           j += 1;
           break;
         }

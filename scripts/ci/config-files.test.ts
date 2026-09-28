@@ -122,13 +122,15 @@ describe("config:validate failures carry JSON paths", () => {
       },
     };
     const r = checkConfigFile(broken, io);
-    expect(r.errors).toContainEqual({
-      level: "error",
-      path: "/locales/0",
-      key: "config.invalidJson",
-      params: { locale },
-    });
+    // Exactly one diagnostic for this locale (review C2): seeding an empty
+    // `{}` bundle used to make core's checkLabels treat every label key as
+    // missing for this locale, flooding the output with config.missingLabel
+    // on top of the real config.invalidJson fault.
+    expect(r.errors).toEqual([
+      { level: "error", path: "/locales/0", key: "config.invalidJson", params: { locale } },
+    ]);
     expect(r.errors.some((e) => e.key === "config.missingLocale")).toBe(false);
+    expect(r.errors.some((e) => e.key === "config.missingLabel")).toBe(false);
   });
 
   it("mock file invalid JSON points into the mock document, not the site file (item 5)", () => {
@@ -142,15 +144,19 @@ describe("config:validate failures carry JSON paths", () => {
       },
     };
     const r = checkConfigFile(broken, io);
+    // The mock file's own repo-relative posix path travels in params (review
+    // C5) so a reader is actually sent to the mock file, not just told its
+    // site id: `/mock` is a pointer inside the mock document, not a path to
+    // it, and config-validate prints the *site* file's path alongside it.
     expect(r.errors).toContainEqual({
       level: "error",
       path: "/mock",
       key: "config.invalidJson",
-      params: { siteId: "default" },
+      params: { siteId: "default", file: "packages/config/mock/default.json" },
     });
   });
 
-  it("mock schema issues point into the mock document (item 5)", () => {
+  it("mock schema issues point into the mock document and carry the mock file path (item 5, review C5)", () => {
     const mock = structuredClone(fsIo.readJson(cfg("mock/default.json"))) as { siteId: unknown };
     mock.siteId = 123;
     const r = checkConfigFile(
@@ -158,7 +164,11 @@ describe("config:validate failures carry JSON paths", () => {
       layered({ [cfg("mock/default.json")]: mock }),
     );
     expect(r.errors).toContainEqual(
-      expect.objectContaining({ path: "/mock/siteId", key: "config.mockSchema" }),
+      expect.objectContaining({
+        path: "/mock/siteId",
+        key: "config.mockSchema",
+        params: expect.objectContaining({ file: "packages/config/mock/default.json" }),
+      }),
     );
   });
 

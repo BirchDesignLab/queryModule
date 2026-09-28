@@ -1,35 +1,14 @@
 import { readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readJsonFile, toPosixRel } from "./cli-io";
 import { checkLicences, parseLicenceExceptions, parseLicenceReport } from "./licences";
 
-/** Forward slashes on every platform (item 2/8), a pure string function. */
-export function toPosixRel(relPath: string): string {
-  return relPath.replaceAll("\\", "/");
-}
-
-/** A short `<path>: <reason>` with no raw stack and no file excerpt: a JSON.parse
- * message can quote file content, so its own message text is never printed
- * (item 8, same convention as config:migrate's readJsonFile). */
-export function readAndParse(
-  readFile: () => string,
-): { ok: true; value: unknown } | { ok: false; reason: string } {
-  let text: string;
-  try {
-    text = readFile();
-  } catch (e) {
-    const reason =
-      (e as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
-        ? "file not found"
-        : "cannot read file";
-    return { ok: false, reason };
-  }
-  try {
-    return { ok: true, value: JSON.parse(text) };
-  } catch {
-    return { ok: false, reason: "invalid JSON" };
-  }
-}
+// Re-exported for existing call sites/tests (item 2/8): the shared
+// implementation now lives in cli-io.ts (review Q1/C6) instead of a local
+// copy (previously `readAndParse`, same shape as config-migrate's
+// `readJsonFile`, now literally the same function).
+export { toPosixRel } from "./cli-io";
 
 function main(): void {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -43,7 +22,7 @@ function main(): void {
   const reportRel = toPosixRel(relative(root, reportPath));
   const exceptionsRel = toPosixRel(relative(root, exceptionsPath));
 
-  const reportRead = readAndParse(() => readFileSync(reportPath, "utf8"));
+  const reportRead = readJsonFile((p) => readFileSync(p, "utf8"), reportPath);
   if (!reportRead.ok) {
     console.error(`${reportRel}: ${reportRead.reason}`);
     process.exit(1);
@@ -56,7 +35,7 @@ function main(): void {
     process.exit(1);
   }
 
-  const exceptionsRead = readAndParse(() => readFileSync(exceptionsPath, "utf8"));
+  const exceptionsRead = readJsonFile((p) => readFileSync(p, "utf8"), exceptionsPath);
   if (!exceptionsRead.ok) {
     console.error(`${exceptionsRel}: ${exceptionsRead.reason}`);
     process.exit(1);

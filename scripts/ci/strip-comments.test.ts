@@ -26,4 +26,28 @@ describe("stripComments (item 7)", () => {
       'const s = "a\\"// still string";',
     );
   });
+
+  it("bounds an unterminated quote to its own line, so a mis-scan cannot cross a newline (review C1)", () => {
+    // A lone `"` inside a regex literal must not flip string parity for the
+    // rest of the file: without the newline bound, this swallowed the
+    // commented-out tagged test on the next line, making hasTaggedTest
+    // fail-open (report a commented-out test as live).
+    const source = 'const re = /"/;\n// it("[A1] x", () => {})\nconst s = "a";\n';
+    const out = stripComments(source);
+    // The commented line must be recognised and stripped as a comment.
+    expect(out).not.toContain('it("[A1] x"');
+    // Code after the false-quote line survives untouched.
+    expect(out).toContain('const s = "a";');
+  });
+
+  it("a false line-comment match inside a regex literal is bounded to its own line", () => {
+    // `/a\//` is not a string, so it is not quote-scanned; `\/` followed by
+    // `/` is still read as a `//` line-comment start (a known, pre-existing
+    // limitation of a scanner with no regex-literal awareness), but the
+    // mis-scan must stop at the next newline rather than eating the rest of
+    // the file.
+    const source = 'const u = /a\\//; it("[A1] x")\nconst v = "b";\n';
+    const out = stripComments(source);
+    expect(out).toContain('const v = "b";');
+  });
 });

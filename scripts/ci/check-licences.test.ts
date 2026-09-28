@@ -43,4 +43,18 @@ describe("check-licences CLI error output (item 8)", () => {
     expect(r.stderr).not.toContain("secretMarker123");
     expect(r.stderr).not.toContain("\n    at ");
   });
+
+  it("reports a wrong-shape report as one line, not the zod dump (review C4)", () => {
+    dir = mkdtempSync(join(tmpdir(), "licences-"));
+    const bad = join(dir, "report.json");
+    // Valid JSON, wrong shape: `name` must be a string, not a number.
+    writeFileSync(bad, JSON.stringify({ MIT: [{ name: 42 }] }));
+    const r = run([bad]);
+    expect(r.status).toBe(1);
+    const lines = r.stderr.trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("unexpected shape");
+    expect(r.stderr).not.toContain('"code"');
+    expect(r.stderr).not.toContain("\n    at ");
+  });
 });

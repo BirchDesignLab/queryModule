@@ -34,11 +34,20 @@ const licenceExceptionsSchema = z.array(
   }),
 );
 
+/** The first zod issue's path and message, one line: never the full multi-line
+ * dump zod's own `error.message` produces (review C4, item 8). */
+function firstIssue(error: import("zod").ZodError): string {
+  const issue = error.issues[0];
+  if (!issue) return "invalid shape";
+  const at = issue.path.length > 0 ? ` at ${issue.path.join(".")}` : "";
+  return `${issue.message}${at}`;
+}
+
 /** Validates `pnpm licenses list --prod --json` output. Fails closed: throws on a bad shape or zero packages. */
 export function parseLicenceReport(raw: unknown): LicenceReport {
   const result = licenceReportSchema.safeParse(raw);
   if (!result.success) {
-    throw new Error(`licence report has an unexpected shape: ${result.error.message}`);
+    throw new Error(`licence report has an unexpected shape: ${firstIssue(result.error)}`);
   }
   const count = Object.values(result.data).reduce((n, list) => n + list.length, 0);
   if (count === 0) {
@@ -51,7 +60,7 @@ export function parseLicenceReport(raw: unknown): LicenceReport {
 export function parseLicenceExceptions(raw: unknown): LicenceException[] {
   const result = licenceExceptionsSchema.safeParse(raw);
   if (!result.success) {
-    throw new Error(`licence exceptions have an unexpected shape: ${result.error.message}`);
+    throw new Error(`licence exceptions have an unexpected shape: ${firstIssue(result.error)}`);
   }
   return result.data;
 }

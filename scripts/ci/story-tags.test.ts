@@ -157,12 +157,18 @@ describe("stories.json schema (fails closed on empty input)", () => {
     expect(StoriesFileSchema.safeParse([row, { ...row, story: "A2" }]).success).toBe(true);
   });
 
-  it.each([["/etc/passwd"], ["C:\\x"], ["C:/x"], ["\\\\server\\share"], ["../x"], ["a/../../b"]])(
-    "rejects a file path escaping the repo: %j (item 6)",
-    (file) => {
-      expect(StoriesFileSchema.safeParse([{ ...row, files: [file] }]).success).toBe(false);
-    },
-  );
+  it.each([
+    ["/etc/passwd"],
+    ["C:\\x"],
+    ["C:/x"],
+    ["\\\\server\\share"],
+    ["../x"],
+    ["a/../../b"],
+    ["\\etc\\hosts"],
+    ["C:x"],
+  ])("rejects a file path escaping the repo: %j (item 6, review C3)", (file) => {
+    expect(StoriesFileSchema.safeParse([{ ...row, files: [file] }]).success).toBe(false);
+  });
 
   it("accepts ordinary repo-relative paths (item 6)", () => {
     expect(StoriesFileSchema.safeParse([{ ...row, files: ["a/b.test.ts"] }]).success).toBe(true);
