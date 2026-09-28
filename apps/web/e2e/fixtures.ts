@@ -16,9 +16,10 @@ export const test = base.extend<{ cspViolations: string[] }>({
           );
         });
       });
+      // Any console message about the CSP counts, whatever its level (a report-only or
+      // eval violation is not always logged as an error).
       page.on("console", (message) => {
-        if (message.type() === "error" && message.text().includes("Content Security Policy"))
-          violations.push(message.text());
+        if (message.text().includes("Content Security Policy")) violations.push(message.text());
       });
       await use(violations);
       expect(violations, "CSP violations").toEqual([]);

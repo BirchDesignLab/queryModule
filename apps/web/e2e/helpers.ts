@@ -21,7 +21,9 @@ export async function signIn(page: Page, user = e2eUser()): Promise<void> {
   await expect(page.getByRole("heading", { name: "Query Module" })).toBeVisible();
 }
 
+/** "#rrggbb" or the short "#rgb" a minified production stylesheet emits (for example #fff). */
 export function hexToRgb(hex: string): string {
-  const n = Number.parseInt(hex.trim().slice(1), 16);
+  const h = hex.trim().slice(1);
+  const n = Number.parseInt(h.length === 3 ? [...h].map((c) => c + c).join("") : h, 16);
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
 }

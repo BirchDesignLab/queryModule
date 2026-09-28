@@ -7,6 +7,13 @@ a {
   color: var(--qm-color-accent);
 }
 
+/* A standalone navigation link is a target, not inline text (WCAG 2.2 2.5.8, axe target-size). */
+nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--qm-target-min);
+}
+
 h1 {
   font-size: var(--qm-type-heading-size);
 }
