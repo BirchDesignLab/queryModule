@@ -36,7 +36,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
-| Linux laptop | A | M0 P1 | paused | 09-27-26 21:45 |
+| Linux laptop | A | M0 P1 | running | 09-27-26 22:04 |
 | Windows 11 | B | M0 P1 | paused | 09-27-26 16:08 |
 | Windows 11 | A offload | M0 P1 | idle | 09-27-26 16:08 |
 
@@ -47,14 +47,6 @@ From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time a
 Overwrite your track's note at pause using the seven-line format in the master plan 7.1; clear it on resume.
 
 ### Track A
-
-- Issue: #117 Better Auth with session limits and __Host- cookie (Task 14)
-- Branch / PR: none; A3 starts on feat/a-p1-wave-3 from main (Tasks 14 to 17, #117 to #120)
-- Last green: `pnpm verify` at 10d90c0 on main (1259 tests)
-- Next step: "### Task 14: Better Auth with session limits and __Host- cookie (S) (#117)", "- [ ] **Step 1: Write the test helpers.**"; then A3 T14 to T17, A4 T18 to T23 and the #139 route half, A5 T24 to T28, A6 T29 to T35 and T37
-- Blocked by: none (A-offload T12 and T13 merged in #188)
-- Local-only state: none (Linux laptop: node and pnpm symlinked in /usr/local/bin for workflow agents)
-- Notes: T15 adds principal: Principal to AppEnv.Variables in http/types.ts; T14 disables Better Auth telemetry and shows its adapter makes no plain-db call inside a transaction (T6 design); follow-ups #189 and #195 open; Track B waits on #120, #121, #122, #132, #139
 
 ### Track B
 
