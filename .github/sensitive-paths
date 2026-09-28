@@ -21,6 +21,7 @@ packages/api/src/db/**
 packages/api/src/audit/**
 packages/api/src/seams.ts
 packages/api/src/startup.ts
+packages/api/src/main.ts
 packages/core/src/contracts/audit.ts
 packages/core/src/contracts/audit-auth.ts
 packages/core/src/contracts/primitives.ts
@@ -82,6 +83,7 @@ packages/api/src/ws/**
 packages/api/src/seed/**
 packages/api/src/ops/**
 packages/api/src/deps.ts
+packages/api/src/events/**
 
 [deps]
 # .github/dependabot.yml stays [gate] (.github/**): no automated check reads it.

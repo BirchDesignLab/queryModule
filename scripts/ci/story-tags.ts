@@ -1,10 +1,35 @@
 import { MILESTONES, type Milestone } from "@querymodule/core/contracts";
 import { z } from "zod";
+import { readJsonFile } from "./cli-io";
+import { stripComments } from "./strip-comments";
+
+/**
+ * True when `path` stays inside the repo: no POSIX absolute path, no Windows
+ * drive-absolute path (`C:\x` or `C:/x`), no UNC path (`\\server\share`), and
+ * no `..` segment on either separator (item 6).
+ */
+export function isSafeRelativePath(path: string): boolean {
+  // Any leading separator (POSIX-absolute `/x`, root-relative `\x`, or UNC
+  // `\\server\share`, which also starts with `\`) is rejected outright
+  // (review C3): a lone leading `\` used to slip through and resolve to
+  // `C:\...` on Windows, bypassing the `/x` rule with the other separator.
+  if (path.startsWith("/") || path.startsWith("\\")) return false;
+  // Any drive prefix, absolute (`C:\x`, `C:/x`) or drive-relative (`C:x`,
+  // which resolves against that drive's current directory, not the repo).
+  if (/^[A-Za-z]:/.test(path)) return false;
+  return path.split(/[\\/]/).every((segment) => segment !== "..");
+}
 
 export const StoryRowSchema = z.strictObject({
   story: z.string().regex(/^[ABC]\d$/),
   milestone: z.union([z.enum(MILESTONES), z.literal("later")]),
-  files: z.array(z.string().min(1)).min(1),
+  files: z
+    .array(
+      z.string().min(1).refine(isSafeRelativePath, {
+        message: "path must stay inside the repo (no absolute path or .. segment)",
+      }),
+    )
+    .min(1),
 });
 export type StoryRow = z.infer<typeof StoryRowSchema>;
 /** Non-empty with unique stories, so an emptied or duplicated stories.json fails closed. */
@@ -45,7 +70,7 @@ export function storiesInScope(
  * passed tests carrying the tag instead.
  */
 export function hasTaggedTest(text: string, story: string): boolean {
-  const live = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  const live = stripComments(text);
   const title = new RegExp(
     `\\b(?:it|test|describe)(?:\\.(?!skip\\b|todo\\b|fixme\\b)\\w+)*\\(\\s*["'\`][^"'\`\\n]*\\[${story}\\]`,
   );
@@ -96,6 +121,32 @@ export function readMilestoneTags(runGit: (args: string[]) => GitResult): TagRea
       .map((t) => t.trim())
       .filter((t) => t !== ""),
   };
+}
+
+export type ReadStoriesResult = { ok: true; rows: StoryRow[] } | { ok: false; message: string };
+
+/**
+ * Reads and validates the stories file. Any failure (missing file, invalid
+ * JSON, schema mismatch) becomes one short `<path>: <reason>` line: no raw
+ * stack, no file excerpt (JSON.parse messages can quote file content), and no
+ * zod dump - just the first issue's path and message (item 8).
+ */
+export function readStoriesFile(
+  readFile: (path: string) => string,
+  path: string,
+): ReadStoriesResult {
+  // The read-and-parse step (ENOENT-vs-other-error, JSON.parse) is the same
+  // shared helper config-migrate and check-licences use (review Q1/C6);
+  // this function layers its own zod step on top.
+  const read = readJsonFile(readFile, path);
+  if (!read.ok) return { ok: false, message: `${path}: ${read.reason}` };
+  const parsed = StoriesFileSchema.safeParse(read.value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const at = issue && issue.path.length > 0 ? ` at ${issue.path.join(".")}` : "";
+    return { ok: false, message: `${path}: ${issue?.message ?? "invalid stories file"}${at}` };
+  }
+  return { ok: true, rows: parsed.data };
 }
 
 export function checkStoryTags(

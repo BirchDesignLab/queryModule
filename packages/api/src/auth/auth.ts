@@ -6,6 +6,7 @@ import type { Db } from "../db/client";
 import { authSchema } from "../db/schema";
 import type { DeployEnv } from "../env";
 import { uuidv7 } from "../ids";
+import type { Logger } from "../log/logger";
 
 /**
  * bearer()'s own `after` hook (better-auth/dist/plugins/bearer/index.mjs) always copies the
@@ -65,11 +66,96 @@ function isTelemetryEnvTruthy(value: string | undefined): boolean {
   return value !== "0" && value.toLowerCase() !== "false";
 }
 
+/**
+ * Better Auth's own `ctx.context.logger.error(e.status, e)` / `ctx.logger.error(...)` calls
+ * (`better-auth/dist/api/index.mjs`, `.../routes/session.mjs`) pass the raw error object as an
+ * arg. For an adapter failure that error's `message` can be a Drizzle query error such as
+ * `"Failed query: insert ... params: <values>"`, which can hold a session token, user id or
+ * email that is not in the app logger's fixed `secretValues` list and is not under a redacted
+ * key (critic finding CV1, this task). The app logger's field walk only scrubs known secret
+ * values and known key names, so free text inside an Error's `message` would otherwise reach
+ * the sink verbatim. Reducing every Error-like arg to `{ errorName }` before it is logged drops
+ * that free text entirely rather than trying to pattern-match what might be inside it.
+ */
+function toBetterAuthLoggerArg(a: unknown): unknown {
+  if (a === null || typeof a !== "object") return a;
+  // Only an Error (or an error-shaped object: a string name plus a string message or stack)
+  // reduces to its name. Any other object with a string `name`, such as a Better Auth user
+  // record, would put a person's display name in a log line (spec 5.9, GDPR; wave review
+  // G-G-m2), so it reduces to its typeof like every other object.
+  const o = a as { name?: unknown; message?: unknown; stack?: unknown };
+  const errorShaped =
+    a instanceof Error ||
+    (typeof o.name === "string" && (typeof o.message === "string" || typeof o.stack === "string"));
+  if (errorShaped && typeof o.name === "string") return { errorName: o.name };
+  return typeof a;
+}
+
+/**
+ * Better Auth 1.7.6 (dist/api/index.mjs:206-208) logs `ctx.logger.error(e.message)` for an
+ * uncaught error whose message mentions a column, table or relation. A DrizzleQueryError message
+ * ("Failed query: <sql>\nparams: <values>") would then arrive as a plain string carrying query
+ * params (user id, email, session token), past the fixed `secretValues` scrub. Such a message is
+ * replaced with a fixed text (spec 5.9; wave review G-G-m1).
+ */
+function toBetterAuthLoggerMessage(message: string): string {
+  return message.includes("Failed query") || message.includes("\nparams:")
+    ? "database error"
+    : message;
+}
+
+/**
+ * Better Auth's own logger option (`@better-auth/core/env` `createLogger`) takes
+ * `{ log?(level, message, ...args) }`, where level is "debug" | "info" | "success" | "warn" |
+ * "error"; with no `log` function it writes straight to `console.*`, unredacted. Routing it
+ * through the app's redacting logger (packages/api/src/log/logger.ts, A3 T14 ruling CV2) keeps
+ * every Better Auth line (secret-length and entropy warnings, misconfiguration errors) inside
+ * the same scrub-and-redact path as everything else (SEC-006). Exported so the log-capture test
+ * can drive it directly: Better Auth's own default log level ("warn") means the scenarios this
+ * test exercises never happen to emit a warn/error line on their own (critic finding C1/S1), so
+ * the redaction and arg-mapping behaviour needs a direct call to be observable at all.
+ *
+ * Better Auth's own call sites are not consistent about what they pass as `message`: most pass a
+ * string, but some (`better-auth` dist `api/routes/session.mjs:370`, the `/list-sessions`
+ * endpoint's `catch (e) { ctx.context.logger.error(e); }`) pass the raw `Error` itself as the
+ * sole/`message` argument, with no extra `args` at all (re-review r1:CV1-message-gap). The app
+ * logger's `serialise()` only scrubs `head` (the `message` string) against the fixed
+ * `secretValues` list via `String.prototype.split`, which throws a `TypeError` when `message` is
+ * not a string (an object has no `.split`). So an unmapped `message` here would either throw, or
+ * (if it happened to stringify) carry a Drizzle adapter error's free-text query and params
+ * (session tokens, user ids, emails) straight past `secretValues`. `message` is reduced through
+ * the same `toBetterAuthLoggerArg` rule as every other arg before it is ever handed to the app
+ * logger, so it is always a string by the time it reaches `log[appLevel]`.
+ */
+export function toBetterAuthLogger(log: Logger) {
+  return {
+    log(
+      level: "debug" | "info" | "success" | "warn" | "error",
+      message: unknown,
+      ...args: unknown[]
+    ) {
+      const appLevel = level === "success" ? "info" : level;
+      const mapped = args.map(toBetterAuthLoggerArg);
+      const msg =
+        typeof message === "string"
+          ? toBetterAuthLoggerMessage(message)
+          : (() => {
+              const reduced = toBetterAuthLoggerArg(message);
+              return reduced !== null && typeof reduced === "object" && "errorName" in reduced
+                ? (reduced as { errorName: string }).errorName
+                : typeof message;
+            })();
+      log[appLevel](msg, { args: mapped });
+    },
+  };
+}
+
 export function createAuth(o: {
   db: Db;
   env: DeployEnv;
   secret: string;
   session: { absoluteMinutes: number; idleMinutes: number };
+  log?: Logger;
 }) {
   if (isTelemetryEnvTruthy(process.env.BETTER_AUTH_TELEMETRY)) {
     throw new Error(
@@ -81,6 +167,7 @@ export function createAuth(o: {
     appName: "Query Module",
     baseURL: o.env.publicOrigin,
     basePath: "/api/v1/auth",
+    ...(o.log ? { logger: toBetterAuthLogger(o.log) } : {}),
     secret: o.secret,
     trustedOrigins: o.env.corsOrigins,
     // transaction: false pinned explicitly (plan Task 6 amendment): the sqlite provider path

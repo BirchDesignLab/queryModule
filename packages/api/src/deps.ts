@@ -55,7 +55,13 @@ export async function buildDeps(o: {
       ],
     });
     const limits = config.siteConfig.auth.session;
-    const auth = createAuth({ db, env: o.env, secret: s.betterAuthSecret, session: limits });
+    const auth = createAuth({
+      db,
+      env: o.env,
+      secret: s.betterAuthSecret,
+      session: limits,
+      log: logger,
+    });
     return {
       env: o.env,
       db,

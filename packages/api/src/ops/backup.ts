@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Clock } from "../clock";
 import type { Db } from "../db/client";
@@ -38,7 +38,10 @@ export async function takeBackup(
 ): Promise<BackupManifest> {
   const dataDir = resolve(dirname(dbFile));
   const rel = relative(dataDir, resolve(outDir));
-  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
+  // Inside the data dir unless rel climbs out (".." or "../...") or is on another root; a child
+  // named like "..x" is inside, so a bare startsWith("..") test would let it through (#217).
+  const climbsOut = rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+  if (!climbsOut) {
     throw new Error("backup outDir must be outside the data dir");
   }
   mkdirSync(outDir, { recursive: true });

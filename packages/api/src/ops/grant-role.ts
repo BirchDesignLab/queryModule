@@ -22,22 +22,33 @@ export class UnknownUserError extends Error {
  * new role applies on the user's next request.
  */
 export function grantRole(
-  d: Pick<AppDeps, "db" | "audit">,
+  d: Pick<AppDeps, "db" | "audit" | "clock">,
   o: { email: string; role: Role; change: "granted" | "revoked" },
-): Promise<{ userId: string; role: Role }> {
+): Promise<{ userId: string; role: Role; changed: boolean }> {
   return withTransaction(d.db, async (tx) => {
     const u = (await tx.select().from(user).where(eq(user.email, o.email.trim().toLowerCase())))[0];
     if (!u) throw new UnknownUserError();
+    if (o.change === "granted" && o.role === "user")
+      throw new Error("granting user is a demotion: revoke the held role instead");
+    // A no-op (grant of a held role, revoke from a user-role user) writes and audits nothing,
+    // so callers such as the demo-user seed can re-run (#217).
+    if (o.change === "granted" && u.role === o.role)
+      return { userId: u.id, role: u.role, changed: false };
+    if (o.change === "revoked" && u.role === "user")
+      return { userId: u.id, role: u.role, changed: false };
     if (o.change === "revoked" && u.role !== o.role)
       throw new Error(`user does not hold ${o.role}`);
     const next: Role = o.change === "granted" ? o.role : "user";
-    await tx.update(user).set({ role: next, updatedAt: new Date() }).where(eq(user.id, u.id));
+    await tx
+      .update(user)
+      .set({ role: next, updatedAt: new Date(d.clock.now()) })
+      .where(eq(user.id, u.id));
     await d.audit.record(tx, {
       type: "roleChanged",
       actor: SYSTEM_ACTOR,
       identitySource: "system",
       details: { targetUserId: u.id, role: o.role, change: o.change, via: "grant-role" },
     });
-    return { userId: u.id, role: next };
+    return { userId: u.id, role: next, changed: true };
   });
 }

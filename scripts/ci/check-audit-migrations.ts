@@ -12,16 +12,17 @@ import { pathToFileURL } from "node:url";
 // fails whether or not it names audit_event: it can drop or rewrite the triggers.
 
 /**
- * The code of one chunk, in two forms. Comments become a space in both. A quoted
+ * The code of one chunk, in three forms. Comments become a space in `detect` and `shape`. A quoted
  * identifier ("...", `...` or [...]) is one opaque token: it is scanned to its
  * closing delimiter and its text is kept without the quotes, so a comment opener or
  * a quote inside it starts nothing. A string literal keeps its text unquoted in
  * `detect` (SQLite accepts 'audit_event' where a table name goes, so detection must
  * see it) and becomes '' in `shape` (so a keyword or ';' inside a string does not
- * count when matching the allowed statement forms). `pin` keeps every quote and
- * literal as written, only comments become a space: it is the form the trigger pin
- * compares, matching checkAuditTriggers in packages/api/src/db/migrate.ts, so a
- * quote-kind edit (`WHERE 'id' = NEW.id`) differs (#195). Whitespace is collapsed.
+ * count when matching the allowed statement forms). `pin` keeps the chunk as written,
+ * quotes, literals and comments included: it is the form the trigger pin compares, the
+ * same text checkAuditTriggers in packages/api/src/db/migrate.ts reads from sqlite_master,
+ * so a quote-kind edit (`WHERE 'id' = NEW.id`, #195) or a comment inside a pinned trigger
+ * (#212 C-M1) differs here as it does at startup. Whitespace is collapsed.
  */
 function codeOf(raw: string): { detect: string; shape: string; pin: string } {
   let detect = "";
@@ -55,12 +56,14 @@ function codeOf(raw: string): { detect: string; shape: string; pin: string } {
     const c = raw[i] as string;
     if (c === "-" && raw[i + 1] === "-") {
       const nl = raw.indexOf("\n", i);
-      i = nl === -1 ? raw.length : nl;
-      emit(" ");
+      const end = nl === -1 ? raw.length : nl;
+      emit(" ", " ", raw.slice(i, end));
+      i = end;
     } else if (c === "/" && raw[i + 1] === "*") {
       const close = raw.indexOf("*/", i + 2);
-      i = close === -1 ? raw.length : close + 2;
-      emit(" ");
+      const end = close === -1 ? raw.length : close + 2;
+      emit(" ", " ", raw.slice(i, end));
+      i = end;
     } else if (c === "'") {
       const [text, next] = quoted(i, "'", true);
       emit(text, "''", raw.slice(i, next));

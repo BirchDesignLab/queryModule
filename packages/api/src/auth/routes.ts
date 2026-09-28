@@ -7,7 +7,7 @@ import type { AppDeps } from "../deps";
 import { apiError, rateLimited } from "../http/errors";
 import type { AppEnv } from "../http/types";
 import { actorOf } from "../seams";
-import { BACKGROUND_HEADER } from "./identity";
+import { auditEmail, BACKGROUND_HEADER } from "./identity";
 import { AUTH_LIMITS, clientIp } from "./rate-limit";
 
 type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut";
@@ -95,7 +95,7 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     await withTransaction(d.db, (tx) =>
       d.audit.record(tx, {
         type: "loginSucceeded",
-        actor: { id: target.id, email: target.email, role: target.role },
+        actor: { id: target.id, email: auditEmail(target.email), role: target.role },
         identitySource: "local",
         details: { method: "password", sessionId: s.id, clientIp: ip },
       }),
@@ -103,6 +103,21 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     return res;
   }
   if (res.status === 401) {
+    // #212 G-M2: only bad credentials count toward the lockout and audit as badPassword or
+    // unknownAccount. Any other 401 (for example FAILED_TO_CREATE_SESSION after a correct
+    // password) is an internal failure: no lockout increment and no loginFailed row.
+    const code = (
+      (await res
+        .clone()
+        .json()
+        .catch(() => null)) as { code?: unknown } | null
+    )?.code;
+    if (code !== "INVALID_EMAIL_OR_PASSWORD") {
+      d.logger.error("sign-in failed inside Better Auth", {
+        code: typeof code === "string" ? code : "unknown",
+      });
+      return apiError(c, "internal");
+    }
     const { lockedUntil } = await d.limiter.recordFailure(key, AUTH_LIMITS.accountFailures);
     await auditFailure(
       d,

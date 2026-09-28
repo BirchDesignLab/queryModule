@@ -1,7 +1,12 @@
+import { once } from "node:events";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { serve } from "@hono/node-server";
 import { createApp } from "../../src/app";
 import { sessionCookieName } from "../../src/auth/auth";
 import { createLocalUser } from "../../src/auth/users";
 import { buildDeps } from "../../src/deps";
+import { attachWebSocket } from "../../src/ws/server";
 import {
   closeWhenTestFinishes,
   createTestClock,
@@ -68,6 +73,31 @@ export async function createTestApp(o: { env?: NodeJS.ProcessEnv; clock?: TestCl
         details: JSON.parse(String(r.details)) as Record<string, unknown>,
       }));
     },
+    async sessionUpdatedAt(userId: string) {
+      const rows = (
+        await deps.db.$client.execute({
+          sql: "SELECT updated_at FROM session WHERE user_id = ?",
+          args: [userId],
+        })
+      ).rows;
+      return Number(rows[0]?.updated_at ?? 0);
+    },
   };
 }
 export type TestApp = Awaited<ReturnType<typeof createTestApp>>;
+
+/** Serves `t.app` on a real port and attaches the WebSocket handler, for socket-level tests. */
+export async function startTestServer(t: TestApp, o: { idleMs?: number } = {}) {
+  const server = serve({ fetch: t.app.fetch, port: 0, hostname: "127.0.0.1" }) as Server;
+  if (!server.listening) await once(server, "listening");
+  const ws = attachWebSocket(server, t.deps, o);
+  const port = (server.address() as AddressInfo).port;
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    wsUrl: `ws://127.0.0.1:${port}/api/v1/ws`,
+    close: async () => {
+      await ws.close();
+      await new Promise<void>((r) => server.close(() => r()));
+    },
+  };
+}

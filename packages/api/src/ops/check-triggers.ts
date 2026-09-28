@@ -1,3 +1,4 @@
+import type { Db } from "../db/client";
 import { checkAuditTriggers } from "../db/migrate";
 import { openForOps } from "./audit-stats";
 
@@ -15,8 +16,9 @@ export async function runCheckTriggers(
   out: Writable,
   err: Writable,
 ): Promise<number> {
-  const { db } = await openForOps(env);
+  let db: Db | undefined;
   try {
+    ({ db } = await openForOps(env));
     await checkAuditTriggers(db);
     out.write("audit_event triggers present\n");
     return 0;
@@ -24,6 +26,6 @@ export async function runCheckTriggers(
     err.write(`${e instanceof Error ? e.message : "trigger check failed"}\n`);
     return 1;
   } finally {
-    db.$client.close();
+    db?.$client.close();
   }
 }

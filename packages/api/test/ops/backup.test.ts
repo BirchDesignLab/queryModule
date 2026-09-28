@@ -86,6 +86,12 @@ describe("takeBackup outDir guard (critic:C1)", () => {
     await expect(takeBackup(t.deps.db, t.env.dbFile, t.env.dataDir, t.clock)).rejects.toThrow();
   });
 
+  it("refuses a data-dir child whose name starts with two dots (#217 G-m1)", async () => {
+    const t = await createTestApp();
+    await expect(
+      takeBackup(t.deps.db, t.env.dbFile, join(t.env.dataDir, "..x"), t.clock),
+    ).rejects.toThrow(/outside the data dir/);
+  });
   it("refuses an outDir that is a subdirectory of the data dir", async () => {
     const t = await createTestApp();
     await expect(

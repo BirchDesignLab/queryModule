@@ -1,4 +1,5 @@
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   type Diagnostic,
   mergeSiteOverlay,
@@ -10,6 +11,9 @@ import {
   validateSiteConfig,
 } from "@querymodule/core/config";
 import { BOUNDED_ID_PATTERN, MockFileSchema } from "@querymodule/core/contracts";
+import { toPosixRel } from "./cli-io";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 export interface ConfigIo {
   /** undefined when the file does not exist; throws on invalid JSON. */
@@ -103,18 +107,35 @@ export function checkConfigFile(
   const config = parsed.data;
 
   const locales: Record<string, Record<string, string>> = {};
-  for (const code of config.locales) {
+  const localeErrors: Diagnostic[] = [];
+  const invalidLocalePointers = new Set<string>();
+  config.locales.forEach((code, i) => {
     const bundle = read(io, resolve(dirname(file), "..", "locales", `${code}.json`));
-    if (bundle.ok && bundle.value !== undefined)
-      locales[code] = bundle.value as Record<string, string>;
-  }
+    if (!bundle.ok) {
+      // Invalid JSON is a different fault than a missing file (item 4): report
+      // it here. Deliberately leave the locale out of `locales` (an
+      // unreadable bundle is not the same as an empty-but-present one): core's
+      // checkLabels only skips a falsy bundle, so seeding `{}` here would make
+      // every label key in the site emit a spurious config.missingLabel,
+      // flooding the output (review C2). Instead let core's own
+      // config.missingLocale diagnostic fire for this same pointer, and drop
+      // it below so the fault is reported exactly once.
+      localeErrors.push(err(pointer("locales", i), "config.invalidJson", { locale: code }));
+      invalidLocalePointers.add(pointer("locales", i));
+      return;
+    }
+    if (bundle.value !== undefined) locales[code] = bundle.value as Record<string, string>;
+  });
   const context: ValidateContext = {};
   if (options.tokenNames) context.tokenNames = options.tokenNames;
   if (options.adapterKinds) context.adapterKinds = options.adapterKinds;
   const result = validateSiteConfig(config, locales, context);
+  const resultErrors = result.errors.filter(
+    (d) => !(d.key === "config.missingLocale" && invalidLocalePointers.has(d.path)),
+  );
   return {
     file,
-    errors: [...result.errors, ...checkMocks(file, config, io)],
+    errors: [...localeErrors, ...resultErrors, ...checkMocks(file, config, io)],
     warnings: result.warnings,
     resolved: merged,
   };
@@ -122,14 +143,28 @@ export function checkConfigFile(
 
 export function checkMocks(file: string, config: SiteConfig, io: ConfigIo): Diagnostic[] {
   if (!config.sources.some((s) => s.kind === "mock")) return [];
-  const raw = read(io, resolve(dirname(file), "..", "mock", `${config.site.id}.json`));
-  if (!raw.ok) return [err("/site/id", "config.invalidJson", { siteId: config.site.id })];
+  const mockPath = resolve(dirname(file), "..", "mock", `${config.site.id}.json`);
+  // The mock file's own repo-relative posix path, carried in every mock
+  // diagnostic's params (review C5): the CLI prints the site file's path
+  // plus the diagnostic's params, and the "mock" pointer alone is not a
+  // pointer *into* the site document, so a reader following it needs the
+  // mock file's path to know which file to open.
+  const mockFile = toPosixRel(relative(REPO_ROOT, mockPath));
+  const raw = read(io, mockPath);
+  // Invalid JSON here is a fault in the mock file, not the site file: point the
+  // diagnostic into the mock document (the "mock" pointer prefix, same shape as
+  // the mockSchema diagnostics below) so a reader is sent to the right file (item 5).
+  if (!raw.ok)
+    return [err(pointer("mock"), "config.invalidJson", { siteId: config.site.id, file: mockFile })];
   if (raw.value === undefined)
     return [err("/site/id", "config.missingMockFile", { siteId: config.site.id })];
   const parsed = MockFileSchema.safeParse(raw.value);
   if (!parsed.success) {
     return parsed.error.issues.map((i) =>
-      err(pointer("mock", ...i.path.map((s) => String(s))), "config.mockSchema", { code: i.code }),
+      err(pointer("mock", ...i.path.map((s) => String(s))), "config.mockSchema", {
+        code: i.code,
+        file: mockFile,
+      }),
     );
   }
   const out: Diagnostic[] = [];
