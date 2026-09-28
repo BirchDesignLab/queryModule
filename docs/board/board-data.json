@@ -822,6 +822,32 @@
       "priority": "Low",
       "reqIds": "NFR-003",
       "body": "From the wave B9 gate review (artifact `docs/reviews/feat-b-p1-wave-9.md`, reviewed sha 2b56aa3). The fixes change gate files, so they ride a later gate PR.\n\n1. **G-m2 (the one that matters)** `scripts/ci/ci-workflow.test.ts:292-303`: the step 12 no-echo guard only counts lines that start with `echo`. `printf \"$pw\"`, `set -x` (xtrace) or a printf to `$GITHUB_ENV` would pass it. Fix: reject any xtrace, and any line that references `$pw` other than the mask line and the export line.\n2. **G-m1** `scripts/ci/ci-workflow.test.ts:323-325` and `scripts/ops/smoke.test.ts:108`: the expected value is a hand-copied HMAC, not `derivePassword` (`packages/api/src/seed/password.ts:4`), so a change to its normalisation (spec 8.5) would not fail either test. Fix: import `derivePassword` and compare against it.\n3. **G-m3** `scripts/ops/smoke.test.ts:156`: `call.split(\" \")[2]` assumes the checkout path has no spaces. Fix: match `/-f (.*deploy\\/compose\\.yml) exec/`.\n4. **boot-smoke `QM_BASE_URL`** `scripts/ci/boot-smoke.sh:191` exports `QM_BASE_URL=http://127.0.0.1:3000`, but the container's `PUBLIC_ORIGIN` is `http://localhost:3000`. A browser at 127.0.0.1 fails sign-in and the WS upgrade (Origin check), so CI step 12 uses localhost directly. Fix: export `http://localhost:3000`, then step 12 can use `$QM_BASE_URL` again. **boot-smoke.sh is Track A's file.**"
+    },
+    {
+      "number": 244,
+      "title": "Remove the README SVG progress dashboard; the Project board is the view",
+      "labels": ["platform", "p2", "sensitive", "follow-up"],
+      "milestone": "M1 Forms and terminal",
+      "parent": 41,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "body": "Developer 09-28-26: the static SVG progress dashboard in the README adds churn to every board batch and the GitHub Project board already does the job better. Remove it. Tier: gate (`scripts/ops/**`); rides A's first M1 P2 wave PR. Closes the direction of #77 (closed, not planned).\n\n- [ ] `scripts/ops/gh-setup-project.mjs`: drop the `--dashboard` mode and the SVG and README-block writes from `--apply`; update `gh-setup-project.test.ts`.\n- [ ] Delete `scripts/ops/progress-svg.mjs`, `progress-svg.test.ts`, `docs/assets/progress-light.svg`, `docs/assets/progress-dark.svg` (check nothing else imports them).\n- [ ] README: remove the dashboard image block and the sentence about regenerating it; keep the milestone table and live badges.\n- [ ] `docs/project-board.md`: the board chore becomes dry run, `--apply`, `project-sync` (no dashboard step)."
+    },
+    {
+      "number": 246,
+      "title": "Sign-out answers 200 even when the server session row is not deleted (SEC-006, spec 5.6)",
+      "labels": ["platform", "p2", "sensitive", "follow-up"],
+      "milestone": "M1 Forms and terminal",
+      "parent": 41,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "High",
+      "reqIds": "SEC-006",
+      "body": "From the wave B11 UI critic (PR for #241/#242), a server-side finding outside Track B's lane. Tier: gate (`packages/api/src/auth/**`). Checker ruling 09-28-26: M1 P2, Track A.\n\nPOST `/api/v1/auth/sign-out` (Better Auth) answers 200 even when deleting the session row fails. The client (#235, #241) treats 200 as \"server session ended\", so a DB failure during sign-out leaves a valid session cookie behind on a shared console with no signal to the user.\n\n- [ ] Sign-out answers a non-2xx (e.g. 500) when the session row is not deleted, so the client's #235/#241 failure path runs.\n- [ ] Audit: `logout` is recorded only when the session row is actually gone (check the existing `logout` audit write order).\n- [ ] Tests: a sign-out whose session delete fails answers non-2xx and the session still resolves as live afterwards (so the client retry is meaningful); a normal sign-out still answers 200 and the session no longer resolves.\n\nIDs: SEC-006; spec 5.6."
     }
   ]
 }

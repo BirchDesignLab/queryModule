@@ -4,20 +4,20 @@
 <rect width="900" height="932" fill="#ffffff"/>
 <text x="24" y="44" fill="#1f2328" font-size="15" font-weight="700">Milestones</text>
 <rect x="24" y="56" width="320" height="10" fill="#d0d7de"/>
-<rect x="24" y="56" width="290" height="10" fill="#1a7f37"/>
-<text x="354" y="65" fill="#57606a" font-size="12">M0 Skeleton 91% (124/137)</text>
+<rect x="24" y="56" width="320" height="10" fill="#1a7f37"/>
+<text x="354" y="65" fill="#57606a" font-size="12">M0 Skeleton 100% (137/137)</text>
 <rect x="48" y="80" width="320" height="10" fill="#d0d7de"/>
 <rect x="48" y="80" width="320" height="10" fill="#1a7f37"/>
 <text x="378" y="89" fill="#57606a" font-size="12">Contracts (M0 P0) 100% (10/10)</text>
 <rect x="48" y="104" width="320" height="10" fill="#d0d7de"/>
-<rect x="48" y="104" width="295" height="10" fill="#1a7f37"/>
-<text x="378" y="113" fill="#57606a" font-size="12">Foundation (M0 P1) 92% (83/90)</text>
+<rect x="48" y="104" width="320" height="10" fill="#1a7f37"/>
+<text x="378" y="113" fill="#57606a" font-size="12">Foundation (M0 P1) 100% (90/90)</text>
 <rect x="24" y="128" width="320" height="10" fill="#d0d7de"/>
-<rect x="24" y="128" width="25" height="10" fill="#1a7f37"/>
-<text x="354" y="137" fill="#57606a" font-size="12">M1 Forms and terminal 8% (1/13)</text>
+<rect x="24" y="128" width="21" height="10" fill="#1a7f37"/>
+<text x="354" y="137" fill="#57606a" font-size="12">M1 Forms and terminal 7% (1/15)</text>
 <rect x="48" y="152" width="320" height="10" fill="#d0d7de"/>
-<rect x="48" y="152" width="32" height="10" fill="#1a7f37"/>
-<text x="378" y="161" fill="#57606a" font-size="12">Engine (M1 P2) 10% (1/10)</text>
+<rect x="48" y="152" width="27" height="10" fill="#1a7f37"/>
+<text x="378" y="161" fill="#57606a" font-size="12">Engine (M1 P2) 8% (1/12)</text>
 <rect x="48" y="176" width="320" height="10" fill="#d0d7de"/>
 <text x="378" y="185" fill="#57606a" font-size="12">Flow (M1 P3) 0% (0/0)</text>
 <rect x="24" y="200" width="320" height="10" fill="#d0d7de"/>
@@ -73,8 +73,8 @@
 <text x="24" y="777" fill="#1f2328" font-size="12">#175 Decide: can a site default to auto theme (SiteConfig.theme.defaultMode &quot;auto&quot;)</text>
 <text x="24" y="812" fill="#1f2328" font-size="15" font-weight="700">Tasks and follow-ups by status</text>
 <rect x="24" y="824" width="320" height="10" fill="#d0d7de"/>
-<rect x="24" y="824" width="58" height="10" fill="#57606a"/>
-<rect x="82" y="824" width="262" height="10" fill="#1a7f37"/>
-<text x="24" y="857" fill="#57606a" font-size="12">Todo: 26</text>
-<text x="24" y="881" fill="#57606a" font-size="12">Done: 118</text>
+<rect x="24" y="824" width="42" height="10" fill="#57606a"/>
+<rect x="66" y="824" width="278" height="10" fill="#1a7f37"/>
+<text x="24" y="857" fill="#57606a" font-size="12">Todo: 19</text>
+<text x="24" y="881" fill="#57606a" font-size="12">Done: 127</text>
 </svg>
