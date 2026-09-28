@@ -50,6 +50,7 @@ async function envWith(files: Record<string, string> = {}, dataDir = tempDir("qm
     PUBLIC_ORIGIN: "http://localhost:3000",
     DATA_DIR: dataDir,
     SECRETS_DIR: secrets,
+    ALLOW_MOCK_SOURCES: "true",
   };
 }
 
@@ -58,6 +59,7 @@ function siteConfigWithMfa(mfaRequired: unknown): string {
   const configDir = resolve(import.meta.dirname, "../../config");
   const root = tempDir("qm-cfg-");
   cpSync(join(configDir, "locales"), join(root, "locales"), { recursive: true });
+  cpSync(join(configDir, "mock"), join(root, "mock"), { recursive: true });
   mkdirSync(join(root, "sites"));
   const site = JSON.parse(readFileSync(join(configDir, "sites/default.json"), "utf8"));
   site.auth.mfaRequired = mfaRequired;

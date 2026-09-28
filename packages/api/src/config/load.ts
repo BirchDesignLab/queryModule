@@ -3,10 +3,23 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
   type ClientSiteConfig,
+  type ContrastContext,
+  checkMockCoverage,
+  type Diagnostic,
+  extendsOf,
+  type RawFile,
+  resolveSiteShape,
   type SiteConfig,
-  SiteConfigSchema,
   toClientSiteConfig,
+  validateResolved,
 } from "@querymodule/core/config";
+import {
+  contrastFailures,
+  contrastRatio,
+  TOKEN_NAMES,
+  type TokenName,
+  tokenValue,
+} from "@querymodule/tokens";
 
 export interface LoadedConfig {
   siteConfig: SiteConfig;
@@ -15,7 +28,31 @@ export interface LoadedConfig {
   configDir: string;
   fieldKeys: string[];
   locales: Record<string, Record<string, unknown>>;
+  /** Base site ids merged under this site, nearest first (spec 5.8); empty without `extends`. */
+  extendsChain: string[];
+  /** Non-fatal diagnostics (keys, pointers, params only) for the caller to log. */
+  warnings: Diagnostic[];
 }
+
+/** Adapter kinds this build supports; plugins from ADAPTER_DIR arrive with the registry (M1 P3). */
+export const BUILTIN_ADAPTER_KINDS: readonly string[] = ["mock"];
+
+/** Token lookups for the core contrast checks (spec 4.1, UX-011). */
+export const tokensContrast: ContrastContext = {
+  value: (token, mode, overrides) =>
+    overrides[token] ??
+    ((TOKEN_NAMES as readonly string[]).includes(token)
+      ? tokenValue(token as TokenName, mode)
+      : undefined),
+  ratio: contrastRatio,
+  failures: (mode, overrides) =>
+    contrastFailures(mode, overrides).map((f) => ({
+      fg: f.pair.fg,
+      bg: f.pair.bg,
+      min: f.pair.min,
+      ratio: f.ratio,
+    })),
+};
 export class ConfigLoadError extends Error {
   constructor(
     readonly file: string,
@@ -42,47 +79,71 @@ export function canonicalJson(v: unknown): string {
   return JSON.stringify(v);
 }
 
-async function readJson(file: string): Promise<unknown> {
+/** Reads a JSON file into a RawFile: undefined value = missing, ok false = invalid JSON. */
+async function readRaw(file: string): Promise<RawFile> {
+  let text: string;
   try {
-    return JSON.parse(await readFile(file, "utf8"));
-  } catch (e) {
-    throw new ConfigLoadError(
-      file,
-      "",
-      e instanceof SyntaxError ? "invalid JSON" : "file not readable",
-    );
+    text = await readFile(file, "utf8");
+  } catch {
+    return { ok: true, value: undefined };
+  }
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false };
   }
 }
 
-export async function loadSiteConfig(siteConfigFile: string): Promise<LoadedConfig> {
+function firstError(file: string, errors: Diagnostic[]): ConfigLoadError {
+  const d = errors[0];
+  // Keys and pointers only: params can carry config-derived text (spec 5.9).
+  return new ConfigLoadError(file, d?.path ?? "", d?.key ?? "config.schema");
+}
+
+export async function loadSiteConfig(
+  siteConfigFile: string,
+  o: { allowMockSources: boolean; now: number },
+): Promise<LoadedConfig> {
   const file = resolve(siteConfigFile);
-  const raw = await readJson(file);
-  if (raw !== null && typeof raw === "object" && "extends" in raw) {
-    throw new ConfigLoadError(
-      file,
-      "/extends",
-      "extends is loaded from M1 P2 (config load + validate); not supported by this build",
-    );
-  }
-  const parsed = SiteConfigSchema.safeParse(raw);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new ConfigLoadError(
-      file,
-      `/${(issue?.path ?? []).join("/")}`,
-      issue?.message ?? "invalid",
-    );
-  }
-  const siteConfig = parsed.data;
   const configDir = resolve(dirname(file), "..");
-  const locales: Record<string, Record<string, unknown>> = {};
-  for (const locale of siteConfig.locales) {
-    const bundle = await readJson(join(configDir, "locales", `${locale}.json`));
-    if (bundle === null || typeof bundle !== "object" || Array.isArray(bundle)) {
-      throw new ConfigLoadError(file, "/locales", `locale bundle ${locale}.json is not an object`);
-    }
-    locales[locale] = bundle as Record<string, unknown>;
+  const site = await readRaw(file);
+  const ext = extendsOf(site.ok ? site.value : undefined);
+  if (!ext.ok) throw firstError(file, ext.errors);
+  const base =
+    ext.id === null
+      ? undefined
+      : { id: ext.id, file: await readRaw(join(configDir, "sites", `${ext.id}.json`)) };
+  const shape = resolveSiteShape(site, base);
+  if (!shape.ok) throw firstError(file, shape.errors);
+  const siteConfig = shape.config;
+
+  const rawLocales: Record<string, RawFile> = {};
+  for (const locale of siteConfig.locales)
+    rawLocales[locale] = await readRaw(join(configDir, "locales", `${locale}.json`));
+
+  const { errors, warnings } = validateResolved(siteConfig, rawLocales, {
+    adapterKinds: BUILTIN_ADAPTER_KINDS,
+    contrast: tokensContrast,
+    now: o.now,
+  });
+  if (errors.length > 0) throw firstError(file, errors);
+
+  const mockIndex = siteConfig.sources.findIndex((s) => s.kind === "mock");
+  if (mockIndex >= 0) {
+    if (!o.allowMockSources)
+      throw new ConfigLoadError(
+        file,
+        `/sources/${mockIndex}/kind`,
+        "mock sources need ALLOW_MOCK_SOURCES=true",
+      );
+    const mockPath = join(configDir, "mock", `${siteConfig.site.id}.json`);
+    const mockErrors = checkMockCoverage(siteConfig, await readRaw(mockPath), mockPath);
+    if (mockErrors.length > 0) throw firstError(file, mockErrors);
   }
+
+  const locales: Record<string, Record<string, unknown>> = {};
+  for (const [code, raw] of Object.entries(rawLocales))
+    if (raw.ok && raw.value !== undefined) locales[code] = raw.value as Record<string, unknown>;
   const configHash = createHash("sha256").update(canonicalJson(siteConfig)).digest("hex");
   const fieldKeys = [...new Set(siteConfig.queryTypes.flatMap((q) => q.fields.map((f) => f.key)))];
   return {
@@ -92,5 +153,7 @@ export async function loadSiteConfig(siteConfigFile: string): Promise<LoadedConf
     configDir,
     fieldKeys,
     locales,
+    extendsChain: shape.extendsChain,
+    warnings,
   };
 }

@@ -62,6 +62,7 @@ async function runFatal(kind: "exception" | "rejection" | "double" | "sigterm") 
         PUBLIC_ORIGIN: "http://localhost:3000",
         DATA_DIR: tempDir("qm-fatal-data-"),
         SECRETS_DIR: secrets,
+        ALLOW_MOCK_SOURCES: "true",
         QM_FATAL_TRIGGER: trigger,
         QM_FATAL_KIND: kind,
         QM_FATAL_MESSAGE: `boom SELECT * FROM mock_table WHERE key='${AUTH_SECRET}'`,

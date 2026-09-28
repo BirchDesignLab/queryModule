@@ -41,7 +41,10 @@ export async function buildDeps(o: {
     await runMigrations(db, o.env.migrationsDir);
     await checkAuditTriggers(db);
     await checkKeyCanaries(db, o.secrets, clock);
-    const config = await loadSiteConfig(o.env.siteConfigFile);
+    const config = await loadSiteConfig(o.env.siteConfigFile, {
+      allowMockSources: o.env.allowMockSources,
+      now: clock.now(),
+    });
     const s = o.secrets;
     const logger = createLogger({
       ...(o.logSink ? { sink: o.logSink } : {}),
@@ -54,6 +57,7 @@ export async function buildDeps(o: {
         ...(s.seedPasswordSecret ? [s.seedPasswordSecret] : []),
       ],
     });
+    for (const w of config.warnings) logger.warn("config warning", { key: w.key, path: w.path });
     const limits = config.siteConfig.auth.session;
     const auth = createAuth({
       db,
