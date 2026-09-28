@@ -76,3 +76,9 @@ export const NestedPartIdSchema = z.int().min(1).max(MAX_ALSO_RUN);
 /** One nesting level: a nested part's parent is always the primary (spec 4.6 PlanPart). */
 export const ParentPartIdSchema = z.literal(0);
 export type PartId = z.infer<typeof PartIdSchema>;
+
+/** SemVer 2.0.0 (semver.org), capped at 64 characters; the client's version gate and
+ * the configLoaded audit row share this one definition. */
+export const SEMVER_PATTERN =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+export const SemverSchema = z.string().max(64).regex(SEMVER_PATTERN);

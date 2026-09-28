@@ -17,6 +17,7 @@ import {
   NestedPartIdSchema,
   ParentPartIdSchema,
   PartIdSchema,
+  SemverSchema,
   Sha256HexSchema,
   TypeValuesSchema,
   Uuid7Schema,
@@ -49,6 +50,8 @@ export const AUDIT_EVENT_TYPES = [
   "loginFailed",
   "logout",
   "roleChanged",
+  "configLoaded",
+  "retentionPurged",
 ] as const;
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
@@ -185,6 +188,35 @@ export const AUDIT_DETAILS_SCHEMAS = {
   loginFailed: LoginFailedDetailsSchema,
   logout: LogoutDetailsSchema,
   roleChanged: RoleChangedDetailsSchema,
+  /** Spec 4.7 admin and ops table, spec 5.8 step 7: one row per successful config load. One overlay level (spec 4.1). */
+  configLoaded: z.strictObject({
+    siteId: BoundedIdSchema,
+    configHash: Sha256HexSchema,
+    configSchemaVersion: z.int().min(1),
+    coreVersion: SemverSchema,
+    extendsChain: z.array(BoundedIdSchema).max(1),
+  }),
+  /**
+   * Spec 4.7: one row per purged scope. olderThan is the retention cutoff, and null exactly when
+   * the purge is a lost-data-key shred (reason keyLost). SEC-021.
+   */
+  retentionPurged: z
+    .strictObject({
+      scope: z.enum(["payload", "values"]),
+      reason: z.enum(["retention", "keyLost"]),
+      olderThan: EpochMsSchema.nullable(),
+      requestCount: z.int().min(0),
+      keysDeleted: z.int().min(0),
+    })
+    .superRefine((d, ctx) => {
+      if ((d.reason === "keyLost") !== (d.olderThan === null)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["olderThan"],
+          message: "olderThan is null exactly when reason is keyLost",
+        });
+      }
+    }),
 } as const;
 
 export type AuditDetails<T extends AuditEventType> = z.infer<(typeof AUDIT_DETAILS_SCHEMAS)[T]>;
@@ -233,6 +265,18 @@ const requestPartEnvelope = { ...partEnvelope, credentialUserId: z.never().optio
  */
 const authEnvelope = {
   correlationId: envelope.correlationId,
+  partId: z.never().optional(),
+  actor: envelope.actor,
+  credentialUserId: z.never().optional(),
+  identitySource: envelope.identitySource,
+  hostSubject: envelope.hostSubject,
+};
+/**
+ * System types (configLoaded, retentionPurged; spec 4.7): no request, part or state credential.
+ * The three columns stay in the type as never, and the row is written by SYSTEM_ACTOR only.
+ */
+const systemEnvelope = {
+  correlationId: z.never().optional(),
   partId: z.never().optional(),
   actor: envelope.actor,
   credentialUserId: z.never().optional(),
@@ -293,6 +337,16 @@ export const AuditEventSchema = z
       ...authEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.roleChanged,
     }),
+    z.strictObject({
+      type: z.literal("configLoaded"),
+      ...systemEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.configLoaded,
+    }),
+    z.strictObject({
+      type: z.literal("retentionPurged"),
+      ...systemEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.retentionPurged,
+    }),
   ])
   .superRefine((e, ctx) => {
     // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they do.
@@ -319,8 +373,14 @@ export const AuditEventSchema = z
         message: "hostSubject needs identitySource host",
       });
     }
-    // Auth types have neither envelope column (authEnvelope); the checks below are query-only.
+    // Spec 4.7 (D-A2): system types are written by the system actor only.
+    const systemType = e.type === "configLoaded" || e.type === "retentionPurged";
+    if (systemType && !systemRole) {
+      ctx.addIssue({ code: "custom", path: ["actor"], message: "written by the system actor" });
+    }
+    // Auth and system types have neither envelope column; the checks below are query-only.
     if (
+      systemType ||
       e.type === "loginSucceeded" ||
       e.type === "loginFailed" ||
       e.type === "logout" ||

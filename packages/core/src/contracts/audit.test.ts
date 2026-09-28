@@ -74,6 +74,20 @@ const samples = {
   },
   logout: { sessionId: "0199a0b0-0000-7000-8000-0000000000e1" },
   roleChanged: { targetUserId: "u1", role: "admin", change: "granted", via: "grant-role" },
+  configLoaded: {
+    siteId: "example-ok",
+    configHash: HASH,
+    configSchemaVersion: 1,
+    coreVersion: "0.1.0",
+    extendsChain: ["default"],
+  },
+  retentionPurged: {
+    scope: "payload",
+    reason: "retention",
+    olderThan: 1_790_000_000_000,
+    requestCount: 12,
+    keysDeleted: 0,
+  },
 } as const;
 
 /** The six query types frozen in M0 P0; the auth types (M0 P1) have their own envelope. */
@@ -88,13 +102,15 @@ const QUERY_EVENT_TYPES = [
 type QueryEventType = (typeof QUERY_EVENT_TYPES)[number];
 
 describe("SEC-010 audit catalogue (spec 4.7 query events, spec 5.6 auth events)", () => {
-  it("lists the six query event types frozen in M0 P0, then the four M0 P1 auth types", () => {
+  it("lists the six query event types frozen in M0 P0, the four M0 P1 auth types, then the two M1 P2 system types (D-A2)", () => {
     expect([...AUDIT_EVENT_TYPES]).toEqual([
       ...QUERY_EVENT_TYPES,
       "loginSucceeded",
       "loginFailed",
       "logout",
       "roleChanged",
+      "configLoaded",
+      "retentionPurged",
     ]);
     expect(Object.keys(AUDIT_DETAILS_SCHEMAS).sort()).toEqual([...AUDIT_EVENT_TYPES].sort());
   });
@@ -692,4 +708,73 @@ describe("SEC-011 credential owner on request-level rows (#98 C-M8)", () => {
       AuditEventSchema.safeParse({ ...interrupted, credentialUserId: "officer1" }).success,
     ).toBe(true);
   });
+});
+
+describe("SEC-010 configLoaded (spec 4.7, 5.8 step 7)", () => {
+  const row = {
+    type: "configLoaded",
+    actor: SYSTEM_ACTOR,
+    identitySource: "system",
+    details: {
+      siteId: "example-ok",
+      configHash: "b".repeat(64),
+      configSchemaVersion: 1,
+      coreVersion: "0.1.0",
+      extendsChain: ["default"],
+    },
+  } as const;
+  const user = { id: "user1", email: "one@example.test", role: "user" } as const;
+
+  it("is an audit event type", () => expect(AUDIT_EVENT_TYPES).toContain("configLoaded"));
+  it("parses a system row", () => expect(AuditEventSchema.safeParse(row).success).toBe(true));
+  it.each([
+    ["a user actor", { ...row, actor: user, identitySource: "local" }],
+    ["a correlationId", { ...row, correlationId: "01890a5d-ac96-774b-bcce-b302099a8057" }],
+    ["a partId", { ...row, partId: 0 }],
+    ["a credentialUserId", { ...row, credentialUserId: "officer1" }],
+    ["two overlay levels", { ...row, details: { ...row.details, extendsChain: ["a", "b"] } }],
+    ["an extra details key", { ...row, details: { ...row.details, extra: 1 } }],
+    ["a non-semver coreVersion", { ...row, details: { ...row.details, coreVersion: "1.0" } }],
+  ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
+});
+
+describe("SEC-021 retentionPurged", () => {
+  const row = {
+    type: "retentionPurged",
+    actor: SYSTEM_ACTOR,
+    identitySource: "system",
+    details: {
+      scope: "values",
+      reason: "keyLost",
+      olderThan: null,
+      requestCount: 3,
+      keysDeleted: 3,
+    },
+  } as const;
+  const user = { id: "user1", email: "one@example.test", role: "user" } as const;
+
+  it("is an audit event type", () => expect(AUDIT_EVENT_TYPES).toContain("retentionPurged"));
+  it("parses a keyLost system row and a retention row with a cutoff", () => {
+    expect(AuditEventSchema.safeParse(row).success).toBe(true);
+    const retention = {
+      ...row,
+      details: {
+        ...row.details,
+        scope: "payload",
+        reason: "retention",
+        olderThan: 1_790_000_000_000,
+      },
+    };
+    expect(AuditEventSchema.safeParse(retention).success).toBe(true);
+  });
+  it.each([
+    [
+      "keyLost with a cutoff",
+      { ...row, details: { ...row.details, olderThan: 1_790_000_000_000 } },
+    ],
+    ["retention with no cutoff", { ...row, details: { ...row.details, reason: "retention" } }],
+    ["a user actor", { ...row, actor: user, identitySource: "local" }],
+    ["a correlationId", { ...row, correlationId: "01890a5d-ac96-774b-bcce-b302099a8057" }],
+    ["a negative count", { ...row, details: { ...row.details, keysDeleted: -1 } }],
+  ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
 });
