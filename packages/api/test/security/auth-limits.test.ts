@@ -170,3 +170,30 @@ describe("SEC-005 auth limits and lockout", () => {
     }
   });
 });
+
+describe("SEC-005 session limits over HTTP", () => {
+  it("idle 30 min expires; activity refreshes; X-Background does not", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    const cookie = await t.cookieFor(EMAIL, PW);
+    t.clock.advance(20 * MIN);
+    expect((await t.request("/api/v1/config", { headers: { cookie } })).status).toBe(200);
+    t.clock.advance(20 * MIN);
+    expect(
+      (await t.request("/api/v1/config", { headers: { cookie, "x-background": "1" } })).status,
+    ).toBe(200);
+    t.clock.advance(11 * MIN);
+    expect((await t.request("/api/v1/config", { headers: { cookie } })).status).toBe(401);
+  });
+  it("absolute 12 h expires despite activity", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    const cookie = await t.cookieFor(EMAIL, PW);
+    for (let i = 0; i < 24; i++) {
+      t.clock.advance(29 * MIN);
+      expect((await t.request("/api/v1/config", { headers: { cookie } })).status).toBe(200);
+    }
+    t.clock.advance(25 * MIN);
+    expect((await t.request("/api/v1/config", { headers: { cookie } })).status).toBe(401);
+  });
+});
