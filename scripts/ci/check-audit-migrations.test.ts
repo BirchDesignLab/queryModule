@@ -179,24 +179,35 @@ describe("SEC-010 audit_event additive-only migrations", () => {
   // `WHERE 'id' = NEW.id` compares a string literal, so audit_event_no_replace never fires.
   const replaceTrigger = triggers.split("\n--> statement-breakpoint\n")[2] as string;
   const updateTrigger = triggers.split("\n--> statement-breakpoint\n")[0] as string;
+  // #212 C-M2: each case names the check that must catch it, so a pin case proves the pin.
+  const PIN = /trigger differs from migration 0001/;
+  const SHAPE = /statement not allowed on audit_event/;
   it.each([
-    ["string-literal id", replaceTrigger.replace("WHERE id =", "WHERE 'id' =")],
-    ["double-quoted id", replaceTrigger.replace("WHERE id =", 'WHERE "id" =')],
-    ["bracketed id", replaceTrigger.replace("WHERE id =", "WHERE [id] =")],
-    ["backticked id", replaceTrigger.replace("WHERE id =", "WHERE `id` =")],
-    ["double-quoted NEW.id", replaceTrigger.replace("= NEW.id)", '= NEW."id")')],
-    ["double-quoted table", updateTrigger.replace("ON audit_event", 'ON "audit_event"')],
-    ["bracketed table", updateTrigger.replace("ON audit_event", "ON [audit_event]")],
+    ["string-literal id", replaceTrigger.replace("WHERE id =", "WHERE 'id' ="), PIN],
+    ["double-quoted id", replaceTrigger.replace("WHERE id =", 'WHERE "id" ='), PIN],
+    ["bracketed id", replaceTrigger.replace("WHERE id =", "WHERE [id] ="), PIN],
+    ["backticked id", replaceTrigger.replace("WHERE id =", "WHERE `id` ="), PIN],
+    ["double-quoted NEW.id", replaceTrigger.replace("= NEW.id)", '= NEW."id")'), PIN],
+    ["double-quoted table", updateTrigger.replace("ON audit_event", 'ON "audit_event"'), PIN],
+    ["bracketed table", updateTrigger.replace("ON audit_event", "ON [audit_event]"), PIN],
+    // A double-quoted RAISE message is an identifier, not the '' literal the shape expects.
     [
       "double-quoted RAISE message",
       updateTrigger.replace("'audit_event is append-only'", '"audit_event is append-only"'),
+      SHAPE,
     ],
-  ])("rejects a quote-kind edit to a pinned trigger: %s", (_n, sql) => {
+    // #212 C-M1: checkAuditTriggers compares sqlite_master text, which keeps comments.
+    ["block comment inside", updateTrigger.replace("BEGIN", "/* note */ BEGIN"), PIN],
+    ["line comment inside", updateTrigger.replace("\nBEGIN", " -- note\nBEGIN"), PIN],
+  ])("rejects an edit to a pinned trigger: %s", (_n, sql, check) => {
     const errors = checkAuditMigrations([
       { name: "0000_init.sql", sql: create },
       { name: "0001_audit_triggers.sql", sql },
     ]);
-    expect(errors.some((e) => /differs from migration 0001|not allowed/.test(e))).toBe(true);
+    expect(
+      errors.some((e) => check.test(e)),
+      errors.join("\n"),
+    ).toBe(true);
   });
 
   it("accepts the committed migration 0001 unchanged (#195)", () => {
