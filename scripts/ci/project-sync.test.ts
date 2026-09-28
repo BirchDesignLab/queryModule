@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { leafDates, rollUp } from "../ops/board-model.mjs";
+import { leafDates, parentStatus, rollUp } from "../ops/board-model.mjs";
 
 /**
  * Runs the board job's github-script body (.github/workflows/project-sync.yml) against
@@ -40,15 +40,10 @@ interface FakeItem {
   start?: string;
   finish?: string;
 }
-interface WaveBranch {
-  ref: boolean;
-  prs: Array<{ isDraft: boolean; repo: string | null }>;
-}
 
 async function runBoard(
   items: FakeItem[],
   event: { eventName: string; payload: unknown; ref?: string },
-  waves: Record<string, WaveBranch> = {},
   opts: { noLevelField?: boolean; notices?: string[]; closed?: number[] } = {},
 ) {
   const writes: Array<{ item: number; field: string; value: string | null }> = [];
@@ -125,25 +120,6 @@ async function runBoard(
     },
   };
   const github = {
-    graphql: async (q: string, v: Record<string, unknown>) => {
-      if (q.includes("pullRequests(headRefName")) {
-        const k = /feat\/p0-wave-(\d+)/.exec(String(v.b))?.[1] ?? "";
-        const w = waves[k] ?? { ref: false, prs: [] };
-        return {
-          repository: {
-            ref: w.ref ? { name: String(v.b) } : null,
-            pullRequests: {
-              nodes: w.prs.map((p) => ({
-                isDraft: p.isDraft,
-                headRepository: p.repo ? { nameWithOwner: p.repo } : null,
-              })),
-            },
-          },
-        };
-      }
-      // The pre-I2 script's closingIssuesReferences query.
-      return { repository: { pullRequest: { closingIssuesReferences: { nodes: [] } } } };
-    },
     rest: {
       issues: {
         update: async (a: { issue_number: number }) => {
@@ -208,7 +184,7 @@ describe("project-sync board job", () => {
     ]);
   });
 
-  it("ignores fork PRs, by closing reference or by wave branch name (M3)", async () => {
+  it("ignores fork PRs closing an issue (M3)", async () => {
     process.env.PROJECT_TOKEN = "fake";
     const fork = "someone-else/queryModule";
     const writes = await runBoard(
@@ -220,7 +196,6 @@ describe("project-sync board job", () => {
           status: "Todo",
           prs: [{ state: "OPEN", isDraft: false, repo: fork }],
         },
-        { number: 2, title: "wave task", state: "OPEN", status: "Todo", wave: "W9" },
         {
           number: 3,
           title: "own PR",
@@ -230,7 +205,6 @@ describe("project-sync board job", () => {
         },
       ],
       issueEvent,
-      { "9": { ref: false, prs: [{ isDraft: false, repo: fork }] } },
     );
     const statuses = writes.filter((w) => w.field === "Status");
     expect(statuses).toEqual([{ item: 3, field: "Status", value: "In Review" }]);
@@ -238,6 +212,45 @@ describe("project-sync board job", () => {
 
   it("triggers on pull_request edited, for a Closes line added later (M2)", () => {
     expect(readFileSync(workflowPath, "utf8")).toMatch(/types: \[[^\]]*\bedited\b[^\]]*\]/);
+  });
+
+  it("has no push trigger and no P0 wave-branch name anywhere (#193: branch detection dropped)", () => {
+    const text = readFileSync(workflowPath, "utf8");
+    const on = text.slice(text.indexOf("\non:"), text.indexOf("\npermissions:"));
+    expect(on).not.toMatch(/^\s*push:/m);
+    expect(text).not.toMatch(/feat\/p0-wave-/);
+    expect(text).not.toMatch(/waveStatus|waveCache|waveOf|waveNumber/);
+  });
+
+  it("gives a P0 task with an open non-draft closing PR In Review, a draft one In Progress, no PR leaves it as it is, and a closed-completed issue Done (no branch fallback, #193)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 1,
+          title: "reviewed task",
+          state: "OPEN",
+          status: "Todo",
+          prs: [{ state: "OPEN", isDraft: false, repo: REPO }],
+        },
+        {
+          number: 2,
+          title: "drafted task",
+          state: "OPEN",
+          status: "Todo",
+          prs: [{ state: "OPEN", isDraft: true, repo: REPO }],
+        },
+        { number: 3, title: "untouched task", state: "OPEN", status: "Ready" },
+        { number: 4, title: "done task", state: "CLOSED", stateReason: "COMPLETED" },
+      ],
+      issueEvent,
+    );
+    const statuses = writes.filter((w) => w.field === "Status");
+    expect(statuses).toEqual([
+      { item: 1, field: "Status", value: "In Review" },
+      { item: 2, field: "Status", value: "In Progress" },
+      { item: 4, field: "Status", value: "Done" },
+    ]);
   });
 
   it("closes a wave parent identified by the Level field, not a title regex (C1)", async () => {
@@ -275,7 +288,7 @@ describe("project-sync board job", () => {
     expect(writes.find((w) => w.item === 55 && w.field === "Status")).toBeUndefined();
   });
 
-  it("derives a task's wave from its parent's Wave field, not from a title regex, even when the parent has been renamed (C1)", async () => {
+  it("leaves an open task with no closing PR unchanged, even under a renamed wave parent (no branch fallback, C1, #193)", async () => {
     process.env.PROJECT_TOKEN = "fake";
     const writes = await runBoard(
       [
@@ -284,14 +297,13 @@ describe("project-sync board job", () => {
           title: "Wave 9: Renamed wave parent (Tasks 90 to 91)",
           state: "OPEN",
           level: "Wave",
-          wave: "W9",
+          sub: { total: 2, completed: 0 },
         },
-        { number: 2, title: "child task", state: "OPEN", status: "Todo", parentNumber: 55 },
+        { number: 2, title: "child task", state: "OPEN", status: "Ready", parentNumber: 55 },
       ],
       issueEvent,
-      { "9": { ref: true, prs: [] } },
     );
-    expect(writes).toContainEqual({ item: 2, field: "Status", value: "In Progress" });
+    expect(writes.find((w) => w.item === 2 && w.field === "Status")).toBeUndefined();
   });
 });
 
@@ -323,7 +335,6 @@ describe("project-sync board job: Start/Finish roll-up (#80 requirements 4-6)", 
         },
       ],
       issueEvent,
-      {},
       { noLevelField: true, notices, closed },
     );
     expect(closed).toEqual([]);
@@ -355,7 +366,6 @@ describe("project-sync board job: Start/Finish roll-up (#80 requirements 4-6)", 
         },
       ],
       issueEvent,
-      {},
       { closed },
     );
     expect(closed).toEqual([55]);
@@ -450,6 +460,363 @@ describe("project-sync board job: Start/Finish roll-up (#80 requirements 4-6)", 
     expect(writes).toContainEqual({ item: 55, field: "Start", value: "2026-09-25" });
     expect(writes).toContainEqual({ item: 55, field: "Finish", value: "2026-09-27" });
   });
+});
+
+describe("project-sync board job: parent Status roll-up beyond P0 (#193)", () => {
+  const issueEvent = { eventName: "issues", payload: { issue: { number: 1 } } };
+
+  it("gives no Status write for a parent with no children", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [{ number: 39, title: "Foundation (M0 P1)", state: "OPEN", level: "Phase" }],
+      issueEvent,
+    );
+    expect(writes.find((w) => w.item === 39 && w.field === "Status")).toBeUndefined();
+  });
+
+  it("is In Progress for a phase parent with some closed children (issue #193 example)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        { number: 39, title: "Foundation (M0 P1)", state: "OPEN", level: "Phase" },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        { number: 42, title: "task b", state: "OPEN", status: "Todo", parentNumber: 39 },
+      ],
+      issueEvent,
+    );
+    expect(writes).toContainEqual({ item: 39, field: "Status", value: "In Progress" });
+  });
+
+  it("is Done when every child of a phase parent is closed as completed", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        { number: 39, title: "Foundation (M0 P1)", state: "OPEN", level: "Phase" },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        {
+          number: 42,
+          title: "task b",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+      ],
+      issueEvent,
+    );
+    expect(writes).toContainEqual({ item: 39, field: "Status", value: "Done" });
+  });
+
+  it("is Todo when no child of a phase parent has started", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        { number: 39, title: "Foundation (M0 P1)", state: "OPEN", level: "Phase" },
+        { number: 41, title: "task a", state: "OPEN", status: "Todo", parentNumber: 39 },
+      ],
+      issueEvent,
+    );
+    expect(writes).toContainEqual({ item: 39, field: "Status", value: "Todo" });
+  });
+
+  it("keeps a manually set Blocked phase parent even though the roll-up would say In Progress", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 39,
+          title: "Foundation (M0 P1)",
+          state: "OPEN",
+          status: "Blocked",
+          level: "Phase",
+        },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        { number: 42, title: "task b", state: "OPEN", status: "Todo", parentNumber: 39 },
+      ],
+      issueEvent,
+    );
+    expect(writes.find((w) => w.item === 39 && w.field === "Status")).toBeUndefined();
+  });
+
+  it("does not count a closed-not-planned child as done", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        { number: 39, title: "Foundation (M0 P1)", state: "OPEN", level: "Phase" },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        {
+          number: 42,
+          title: "task b (not planned)",
+          state: "CLOSED",
+          stateReason: "NOT_PLANNED",
+          status: "Todo",
+          parentNumber: 39,
+        },
+      ],
+      issueEvent,
+    );
+    // Not every child is Done (the not-planned one stays at its prior Status,
+    // never forced to Done), so this is In Progress, never Done.
+    expect(writes).toContainEqual({ item: 39, field: "Status", value: "In Progress" });
+  });
+
+  it("rolls a milestone up over its phase parents, which have themselves already rolled up over their tasks", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        { number: 90, title: "M0 Skeleton", state: "OPEN", level: "Milestone" },
+        {
+          number: 39,
+          title: "Foundation (M0 P1)",
+          state: "OPEN",
+          level: "Phase",
+          parentNumber: 90,
+        },
+        {
+          number: 40,
+          title: "Contracts (M0 P0)",
+          state: "OPEN",
+          level: "Phase",
+          parentNumber: 90,
+        },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        { number: 42, title: "task b", state: "OPEN", status: "Todo", parentNumber: 39 },
+        {
+          number: 43,
+          title: "task c",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 40,
+        },
+        {
+          number: 44,
+          title: "task d",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 40,
+        },
+      ],
+      issueEvent,
+    );
+    // Phase 39 rolls up to In Progress (one done, one not started); phase 40
+    // rolls up to Done (every child done); the milestone rolls up over those
+    // two computed phase statuses to In Progress.
+    expect(writes).toContainEqual({ item: 39, field: "Status", value: "In Progress" });
+    expect(writes).toContainEqual({ item: 40, field: "Status", value: "Done" });
+    expect(writes).toContainEqual({ item: 90, field: "Status", value: "In Progress" });
+  });
+
+  it("keeps a wave parent Done after it auto-closes this run, even with a registered not-planned child (S1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 55,
+          title: "Wave 1: Workspace and first contracts (Tasks 1 to 6)",
+          state: "OPEN",
+          level: "Wave",
+          sub: { total: 2, completed: 2 },
+        },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          status: "Done",
+          parentNumber: 55,
+        },
+        {
+          number: 42,
+          title: "task b (not planned)",
+          state: "CLOSED",
+          stateReason: "NOT_PLANNED",
+          status: "Todo",
+          parentNumber: 55,
+        },
+      ],
+      issueEvent,
+    );
+    const statuses = writes.filter((w) => w.item === 55 && w.field === "Status");
+    // The wave-parent close (reconcile, above) already wrote Done from the
+    // issue's own new state; the children-based roll-up must not then
+    // overwrite it with In Progress just because the not-planned child never
+    // reaches Done on its own (S1).
+    expect(statuses).toEqual([{ item: 55, field: "Status", value: "Done" }]);
+  });
+
+  it("does not roll up a closed-not-planned phase parent from its children (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 39,
+          title: "Foundation (M0 P1)",
+          state: "CLOSED",
+          stateReason: "NOT_PLANNED",
+          status: "Todo",
+          level: "Phase",
+        },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        { number: 42, title: "task b", state: "OPEN", status: "Todo", parentNumber: 39 },
+      ],
+      issueEvent,
+    );
+    expect(writes.find((w) => w.item === 39 && w.field === "Status")).toBeUndefined();
+  });
+
+  it("does not override a parent's own open closing PR with the children roll-up (C1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        {
+          number: 39,
+          title: "Foundation (M0 P1)",
+          state: "OPEN",
+          status: "Todo",
+          level: "Phase",
+          prs: [{ state: "OPEN", isDraft: false, repo: REPO }],
+        },
+        { number: 41, title: "task a", state: "OPEN", status: "Todo", parentNumber: 39 },
+      ],
+      issueEvent,
+    );
+    const statuses = writes.filter((w) => w.item === 39 && w.field === "Status");
+    expect(statuses).toEqual([{ item: 39, field: "Status", value: "In Review" }]);
+  });
+
+  it("does not reset an already-Done open parent to Todo before the roll-up runs (I1)", async () => {
+    process.env.PROJECT_TOKEN = "fake";
+    const writes = await runBoard(
+      [
+        { number: 39, title: "Foundation (M0 P1)", state: "OPEN", status: "Done", level: "Phase" },
+        {
+          number: 41,
+          title: "task a",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+        {
+          number: 42,
+          title: "task b",
+          state: "CLOSED",
+          stateReason: "COMPLETED",
+          parentNumber: 39,
+        },
+      ],
+      issueEvent,
+    );
+    const statuses = writes.filter((w) => w.item === 39 && w.field === "Status");
+    expect(statuses).toEqual([]);
+  });
+});
+
+/**
+ * Parity (#193, same pattern as the leafDates/rollUp parity below): the board
+ * job's inline copy of the Status roll-up and board-model.mjs's parentStatus
+ * must give the parent the same answer. Each case builds a phase parent (39)
+ * with children whose own Status the job will independently compute to the
+ * listed value, then checks the parent's resulting Status against calling
+ * parentStatus() directly on that same list.
+ */
+describe("project-sync board job: parity with board-model.mjs parentStatus (#193)", () => {
+  const issueEvent = { eventName: "issues", payload: { issue: { number: 1 } } };
+
+  function childFor(status: string, number: number, parentNumber: number): FakeItem {
+    if (status === "Done")
+      return {
+        number,
+        title: `child ${number}`,
+        state: "CLOSED",
+        stateReason: "COMPLETED",
+        parentNumber,
+      };
+    if (status === "In Review")
+      return {
+        number,
+        title: `child ${number}`,
+        state: "OPEN",
+        status: "Todo",
+        prs: [{ state: "OPEN", isDraft: false, repo: REPO }],
+        parentNumber,
+      };
+    if (status === "In Progress")
+      return {
+        number,
+        title: `child ${number}`,
+        state: "OPEN",
+        status: "Todo",
+        prs: [{ state: "OPEN", isDraft: true, repo: REPO }],
+        parentNumber,
+      };
+    return { number, title: `child ${number}`, state: "OPEN", status: "Todo", parentNumber };
+  }
+
+  const cases: Array<[string, string[], string | null]> = [
+    ["no children", [], null],
+    ["some closed, some not", ["Done", "Todo"], null],
+    ["all closed", ["Done", "Done"], null],
+    ["none started", ["Todo", "Todo"], null],
+    ["Blocked kept over In Progress", ["Done", "Todo"], "Blocked"],
+    ["Blocked moved to Done", ["Done", "Done"], "Blocked"],
+    ["every open child In Review", ["Done", "In Review"], null],
+    ["mixed In Review/In Progress", ["In Review", "In Progress"], null],
+  ];
+
+  it.each(cases)(
+    "%s: parent Status matches parentStatus()",
+    async (_name, childStatuses, current) => {
+      process.env.PROJECT_TOKEN = "fake";
+      const parentItem: FakeItem = {
+        number: 39,
+        title: "Foundation (M0 P1)",
+        state: "OPEN",
+        level: "Phase",
+        ...(current ? { status: current } : {}),
+      };
+      const children = childStatuses.map((s, i) => childFor(s, 100 + i, 39));
+      const writes = await runBoard([parentItem, ...children], issueEvent);
+      const last =
+        writes.filter((w) => w.item === 39 && w.field === "Status").at(-1)?.value ?? null;
+      const actual = last ?? current ?? null;
+      expect(actual).toBe(parentStatus(childStatuses, current));
+    },
+  );
 });
 
 /**

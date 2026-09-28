@@ -6,6 +6,7 @@ import {
   followUpAdoptionError,
   leafDates,
   matchParent,
+  parentStatus,
   rollUp,
   titleUpdate,
   waveParentStatus,
@@ -289,7 +290,7 @@ describe("closedStatus: Done only for an issue closed as completed (#79)", () =>
   });
 });
 
-describe("followUpAdoptionError (#96 G-M4)", () => {
+describe("followUpAdoptionError (#96 G-M4, #193 checker ruling)", () => {
   const live = (n: number, labels: string[]) => ({
     number: n,
     labels: labels.map((name) => ({ name })),
@@ -297,18 +298,93 @@ describe("followUpAdoptionError (#96 G-M4)", () => {
   const issues = new Map([
     [61, live(61, ["platform", "follow-up"])],
     [70, live(70, ["platform", "p1"])],
+    [75, live(75, ["platform", "p1"])],
   ]);
   const byNumber = (n: number) => issues.get(n);
 
-  it("is null when every existing follow-up issue carries the follow-up label", () => {
-    expect(followUpAdoptionError([{ number: 61 }], byNumber)).toBeNull();
+  it("is null when the data and the live issue agree the follow-up label is present", () => {
+    expect(followUpAdoptionError([{ number: 61, labels: ["follow-up"] }], byNumber)).toBeNull();
   });
   it("is null for a follow-up number with no live issue yet (it will be created)", () => {
-    expect(followUpAdoptionError([{ number: 999 }], byNumber)).toBeNull();
+    expect(followUpAdoptionError([{ number: 999, labels: ["follow-up"] }], byNumber)).toBeNull();
   });
-  it("names every live issue that lacks the follow-up label", () => {
-    expect(followUpAdoptionError([{ number: 61 }, { number: 70 }], byNumber)).toMatch(
+  it("is null when the data and the live issue agree the follow-up label is absent (#75, issue #193)", () => {
+    expect(followUpAdoptionError([{ number: 75, labels: [] }], byNumber)).toBeNull();
+  });
+  it("refuses when the data lists follow-up but the live issue lacks it", () => {
+    expect(followUpAdoptionError([{ number: 70, labels: ["follow-up"] }], byNumber)).toMatch(
       /#70.*follow-up/,
     );
+  });
+  it("refuses when the live issue carries follow-up but the data does not list it", () => {
+    const withFollowUp = new Map([[80, live(80, ["follow-up"])]]);
+    expect(followUpAdoptionError([{ number: 80, labels: [] }], (n) => withFollowUp.get(n))).toMatch(
+      /#80.*follow-up/,
+    );
+  });
+});
+
+describe("parentStatus: Wave/Phase/Milestone Status roll-up from children (#193)", () => {
+  it("gives no Status write for a parent with no children", () => {
+    expect(parentStatus([], null)).toBeNull();
+  });
+
+  it("is In Progress for a P1 phase parent with some closed children", () => {
+    expect(parentStatus(["Done", "Todo"], "Todo")).toBe("In Progress");
+  });
+
+  it("is Done when every child is closed as completed", () => {
+    expect(parentStatus(["Done", "Done"], "Todo")).toBe("Done");
+  });
+
+  it("is Todo when no child has started", () => {
+    expect(parentStatus(["Todo", "Todo"], "Todo")).toBe("Todo");
+  });
+
+  it("keeps a manual Blocked when the roll-up would say In Progress", () => {
+    expect(parentStatus(["Done", "Todo"], "Blocked")).toBe("Blocked");
+  });
+
+  it("moves a Blocked parent to Done when every child completes (automation may close Blocked)", () => {
+    expect(parentStatus(["Done", "Done"], "Blocked")).toBe("Done");
+  });
+
+  it("is In Review only when every open (non-Done) started child is In Review", () => {
+    expect(parentStatus(["Done", "In Review"], "Todo")).toBe("In Review");
+    expect(parentStatus(["In Review", "In Review"], "Todo")).toBe("In Review");
+  });
+
+  it("is In Progress when a started child is In Progress alongside an In Review one", () => {
+    expect(parentStatus(["In Review", "In Progress"], "Todo")).toBe("In Progress");
+  });
+
+  it("is In Progress, not In Review, when an In Review child sits alongside a not-yet-started child (I2)", () => {
+    // Brief: "In Progress unless every open child is In Review". A Todo
+    // sibling is an open (non-Done) child that is not In Review, so this
+    // must not read as "every open child is In Review".
+    expect(parentStatus(["In Review", "Todo"], "Todo")).toBe("In Progress");
+  });
+
+  it("is In Progress, not In Review, when an In Review child sits alongside a Blocked child (I2)", () => {
+    expect(parentStatus(["In Review", "Blocked"], "Todo")).toBe("In Progress");
+  });
+
+  it("moves a Blocked parent to In Review when every open child is In Review", () => {
+    expect(parentStatus(["Done", "In Review"], "Blocked")).toBe("In Review");
+  });
+
+  it("does not count a closed-not-planned child (status stays whatever it was, never Done) as done", () => {
+    // A closed-not-planned child never gets forced to Done by truth(); its
+    // Status field stays at its prior value (here Todo), so it is neither
+    // "every child done" nor "started".
+    expect(parentStatus(["Done", "Todo"], "Todo")).toBe("In Progress");
+    expect(parentStatus(["Todo", "Todo"], "Todo")).toBe("Todo");
+  });
+
+  it("rolls a milestone up over its phase parents' own already-computed statuses", () => {
+    // A milestone's children are phase parents; parentStatus is applied again
+    // one level up using their Status values, so nesting composes.
+    expect(parentStatus(["In Progress", "Todo"], "Todo")).toBe("In Progress");
+    expect(parentStatus(["Done", "Done"], "Todo")).toBe("Done");
   });
 });

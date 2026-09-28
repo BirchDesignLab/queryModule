@@ -18,14 +18,19 @@ import { pathToFileURL } from "node:url";
  * a quote inside it starts nothing. A string literal keeps its text unquoted in
  * `detect` (SQLite accepts 'audit_event' where a table name goes, so detection must
  * see it) and becomes '' in `shape` (so a keyword or ';' inside a string does not
- * count when matching the allowed statement forms). Whitespace is collapsed.
+ * count when matching the allowed statement forms). `pin` keeps every quote and
+ * literal as written, only comments become a space: it is the form the trigger pin
+ * compares, matching checkAuditTriggers in packages/api/src/db/migrate.ts, so a
+ * quote-kind edit (`WHERE 'id' = NEW.id`) differs (#195). Whitespace is collapsed.
  */
-function codeOf(raw: string): { detect: string; shape: string } {
+function codeOf(raw: string): { detect: string; shape: string; pin: string } {
   let detect = "";
   let shape = "";
-  const emit = (d: string, s = d) => {
+  let pin = "";
+  const emit = (d: string, s = d, p = d) => {
     detect += d;
     shape += s;
+    pin += p;
   };
   // Scans from the opening delimiter at i to its close; a doubled close is an escape.
   const quoted = (i: number, close: string, doubled: boolean): [string, number] => {
@@ -58,11 +63,11 @@ function codeOf(raw: string): { detect: string; shape: string } {
       emit(" ");
     } else if (c === "'") {
       const [text, next] = quoted(i, "'", true);
-      emit(text, "''");
+      emit(text, "''", raw.slice(i, next));
       i = next;
     } else if (c === '"' || c === "`" || c === "[") {
       const [text, next] = quoted(i, c === "[" ? "]" : c, c !== "[");
-      emit(text);
+      emit(text, text, raw.slice(i, next));
       i = next;
     } else {
       emit(c);
@@ -70,7 +75,7 @@ function codeOf(raw: string): { detect: string; shape: string } {
     }
   }
   const tidy = (x: string) => x.replace(/\s+/g, " ").trim();
-  return { detect: tidy(detect), shape: tidy(shape) };
+  return { detect: tidy(detect), shape: tidy(shape), pin: tidy(pin) };
 }
 
 const display = (raw: string) => raw.replace(/\s+/g, " ").trim().slice(0, 120);
@@ -106,7 +111,7 @@ export const AUDIT_TRIGGER_STATEMENTS: Record<string, string> = {
     "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON audit_event WHEN NEW.id IS NOT NULL AND EXISTS (SELECT 1 FROM audit_event WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END",
 };
 const PINNED = Object.fromEntries(
-  Object.entries(AUDIT_TRIGGER_STATEMENTS).map(([n, sql]) => [n, codeOf(sql).detect]),
+  Object.entries(AUDIT_TRIGGER_STATEMENTS).map(([n, sql]) => [n, codeOf(sql).pin]),
 );
 
 const ADD_COLUMN = /^ALTER TABLE audit_event ADD /i;
@@ -121,7 +126,7 @@ export function checkAuditMigrations(files: { name: string; sql: string }[]): st
   const triggers = new Set<string>();
   for (const f of [...files].sort((a, b) => a.name.localeCompare(b.name))) {
     for (const raw of f.sql.split("--> statement-breakpoint")) {
-      const { detect, shape: s } = codeOf(raw);
+      const { detect, shape: s, pin } = codeOf(raw);
       const bad = (why: string) => errors.push(`${f.name}: ${why}: ${display(raw)}`);
       if (SCHEMA_TABLE.test(detect)) {
         bad("statement touches the schema table");
@@ -140,7 +145,7 @@ export function checkAuditMigrations(files: { name: string; sql: string }[]): st
       const t = TRIGGER.exec(s);
       const name = t?.[1]?.toLowerCase();
       if (name && TRIGGER_EVENT[name] === t?.[2]?.toUpperCase()) {
-        if (detect.replace(/;$/, "") !== PINNED[name]) bad("trigger differs from migration 0001");
+        if (pin.replace(/;$/, "") !== PINNED[name]) bad("trigger differs from migration 0001");
         else if (triggers.has(name)) bad("trigger created twice");
         triggers.add(name);
         continue;

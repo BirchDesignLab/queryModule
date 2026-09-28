@@ -168,6 +168,15 @@ describe("gh-setup-project: merged-wave PR reads gated on --dashboard (#85, #92 
   });
 });
 
+describe("gh-setup-project: no hard-coded parent Status (issue #193)", () => {
+  it("no longer hard-codes a milestone or phase Status; both come from parentStatus", () => {
+    expect(source).not.toMatch(/"M0 Skeleton" \? "In Progress" : "Todo"/);
+    expect(source).not.toMatch(/CONTRACTS_M0P0 \? "In Progress" : "Todo"/);
+    expect(source).toMatch(/import \{[^}]*parentStatus[^}]*\} from "\.\/board-model\.mjs";/s);
+    expect(source).toMatch(/parentStatus\(/);
+  });
+});
+
 describe("gh-setup-project: number:null duplicate guard (#80, critic:C4)", () => {
   it("looks up an existing issue by title before POSTing a spec with number: null", () => {
     const start = source.indexOf("function ensureIssue(spec) {");

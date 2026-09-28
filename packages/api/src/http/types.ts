@@ -1,1 +1,3 @@
-export type AppEnv = { Variables: { requestId: string } };
+import type { Principal } from "../seams";
+
+export type AppEnv = { Variables: { requestId: string; principal: Principal } };

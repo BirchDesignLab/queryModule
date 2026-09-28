@@ -175,6 +175,40 @@ describe("SEC-010 audit_event additive-only migrations", () => {
     ).toBeGreaterThan(0);
   });
 
+  // #195 (A2 review rr:N-M2): the pin keeps quotes, as checkAuditTriggers does at startup.
+  // `WHERE 'id' = NEW.id` compares a string literal, so audit_event_no_replace never fires.
+  const replaceTrigger = triggers.split("\n--> statement-breakpoint\n")[2] as string;
+  const updateTrigger = triggers.split("\n--> statement-breakpoint\n")[0] as string;
+  it.each([
+    ["string-literal id", replaceTrigger.replace("WHERE id =", "WHERE 'id' =")],
+    ["double-quoted id", replaceTrigger.replace("WHERE id =", 'WHERE "id" =')],
+    ["bracketed id", replaceTrigger.replace("WHERE id =", "WHERE [id] =")],
+    ["backticked id", replaceTrigger.replace("WHERE id =", "WHERE `id` =")],
+    ["double-quoted NEW.id", replaceTrigger.replace("= NEW.id)", '= NEW."id")')],
+    ["double-quoted table", updateTrigger.replace("ON audit_event", 'ON "audit_event"')],
+    ["bracketed table", updateTrigger.replace("ON audit_event", "ON [audit_event]")],
+    [
+      "double-quoted RAISE message",
+      updateTrigger.replace("'audit_event is append-only'", '"audit_event is append-only"'),
+    ],
+  ])("rejects a quote-kind edit to a pinned trigger: %s", (_n, sql) => {
+    const errors = checkAuditMigrations([
+      { name: "0000_init.sql", sql: create },
+      { name: "0001_audit_triggers.sql", sql },
+    ]);
+    expect(errors.some((e) => /differs from migration 0001|not allowed/.test(e))).toBe(true);
+  });
+
+  it("accepts the committed migration 0001 unchanged (#195)", () => {
+    const sql = readFileSync(resolve(root, "packages/api/drizzle/0001_audit_triggers.sql"), "utf8");
+    expect(
+      checkAuditMigrations([
+        { name: "0000_init.sql", sql: create },
+        { name: "0001_audit_triggers.sql", sql },
+      ]),
+    ).toEqual([]);
+  });
+
   it("pins the same trigger statements as the startup check in migrate.ts (C-M1)", () => {
     const migrate = readFileSync(resolve(root, "packages/api/src/db/migrate.ts"), "utf8");
     expect(Object.keys(AUDIT_TRIGGER_STATEMENTS).sort()).toEqual([

@@ -23,6 +23,11 @@ updates:
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "@types/react"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # packages/client pins typescript 6.0.3 on purpose: openapi-typescript codegen needs the
+      # classic compiler API, which TS 7 lacks. Drop this with the pin (#182); Dependabot tried
+      # to lift it in #199. Minor and patch updates (root TS 7.x) still flow.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
