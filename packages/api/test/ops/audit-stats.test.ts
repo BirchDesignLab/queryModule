@@ -138,6 +138,20 @@ describe("runCheckTriggers", () => {
   });
 });
 
+describe("runCheckTriggers open failure (#217 G-m2)", () => {
+  it("returns 1 instead of throwing when the secrets cannot be read", async () => {
+    const { processEnv } = await setupOpsEnv();
+    const err: string[] = [];
+    const code = await runCheckTriggers(
+      { ...processEnv, SECRETS_DIR: join(tmpdir(), "qm-no-such-secrets-dir") },
+      { write: () => {} },
+      { write: (s: string) => err.push(s) },
+    );
+    expect(code).toBe(1);
+    expect(err.join("")).not.toBe("");
+  });
+});
+
 describe("openForOps", () => {
   it("opens a database whose key canary does not verify, since it runs no canary check", async () => {
     const { processEnv, deployEnv } = await setupOpsEnv();

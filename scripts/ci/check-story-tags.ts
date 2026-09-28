@@ -10,10 +10,11 @@ import { register } from "tsx/esm/api";
 // extensionless TS imports behind ./story-tags and @querymodule/core. Register
 // the tsx loader first, then load them.
 register();
-const { checkStoryTags, highestMilestoneTag, parseArgs, readMilestoneTags, StoriesFileSchema } =
+const { checkStoryTags, highestMilestoneTag, parseArgs, readMilestoneTags, readStoriesFile } =
   await import("./story-tags");
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const STORIES_REL = "docs/testing/stories.json";
 const parsed = parseArgs(process.argv.slice(2));
 if (!parsed.ok) {
   console.error(parsed.message);
@@ -31,9 +32,12 @@ if (!read.ok) {
   );
   process.exit(2);
 }
-const rows = StoriesFileSchema.parse(
-  JSON.parse(readFileSync(resolve(root, "docs/testing/stories.json"), "utf8")),
-);
+const storiesRead = readStoriesFile((p) => readFileSync(resolve(root, p), "utf8"), STORIES_REL);
+if (!storiesRead.ok) {
+  console.error(storiesRead.message);
+  process.exit(1);
+}
+const rows = storiesRead.rows;
 const opts = {
   highestTag: highestMilestoneTag(read.tags),
   ...(parsed.milestone ? { milestone: parsed.milestone } : {}),
