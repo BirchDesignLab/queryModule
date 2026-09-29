@@ -37,7 +37,7 @@ export const SCALE_TOKENS = {
   "space.6": "24px",
   "space.8": "32px",
   "space.12": "48px",
-  // IBM Plex is self-hosted (apps/web/public/fonts, spec 6.5); a system face ends every stack.
+  // IBM Plex is self-hosted (apps/web/src/fonts, bundled under /assets, spec 6.5); a system face ends every stack.
   "type.family": '"IBM Plex Sans", system-ui, sans-serif',
   "type.family.label": '"IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif',
   "type.family.data": '"IBM Plex Mono", ui-monospace, monospace',

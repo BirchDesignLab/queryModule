@@ -75,12 +75,12 @@ async function expectBlocked(page: Page, agree: Locator): Promise<void> {
   expect(messageId).toBeDefined();
   await expect(page.locator(`#${messageId}`)).toHaveText("Confirm subject details is required.");
   await expect(agree).toBeFocused();
-  // The visual cue (styles.css .qm-checkbox input[aria-invalid]): a solid outline in the required token.
+  // The visual cue (styles.css .qm-checkbox input[aria-invalid], E1): a 2 px shadow in the required
+  // token hugging the box; the focus ring is a separate outline further out, so both can show.
   const required = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--qm-field-required"),
   );
-  await expect(agree).toHaveCSS("outline-style", "solid");
-  await expect(agree).toHaveCSS("outline-color", hexToRgb(required));
+  await expect(agree).toHaveCSS("box-shadow", `${hexToRgb(required)} 0px 0px 0px 2px`);
 
   // The form-level error, found the way assistive tech finds it: through the Submit button's
   // aria-describedby, not by class names.

@@ -43,11 +43,16 @@ describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)"
   });
 
   it("officer text is never muted: tags, chip meta and badges use body colour at body size", () => {
-    for (const cls of [".qm-tag", ".qm-chip__meta", ".qm-badge", ".qm-field__tag"]) {
+    for (const cls of [".qm-tag", ".qm-chip__meta", ".qm-field__tag", ".qm-field__description"]) {
       const body = decls(`.qm-layout--mobile-unit ${cls}`);
       expect(body, cls).toMatch(/color:\s*var\(--qm-color-text-body\)/);
       expect(body, cls).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
     }
+    // A badge keeps its own fg/bg pair (severity tokens, 4.5:1) in the layout: size only.
+    const badge = decls(".qm-layout--mobile-unit .qm-badge");
+    expect(badge).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+    expect(badge).not.toMatch(/color:/);
+    expect(badge).not.toMatch(/background/);
   });
 
   it("E1: an invalid control has a 2 px required edge inside (border plus inset shadow)", () => {
@@ -76,12 +81,30 @@ describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)"
     }
   });
 
-  it("E1: no rule removes the ring or the invalid edge when both apply", () => {
-    // A rule for an invalid control that is also focused must not touch outline or border colour.
-    const both = [...css.matchAll(/([^{}]*\[aria-invalid="true"\][^{}]*:focus[^{}]*)\{([^}]*)\}/g)];
-    // ":not(:focus-visible)" guards a rule to the unfocused state, which is what E1 asks for.
-    for (const [, sel, body] of both.filter(([, sel]) => !(sel ?? "").includes(":not(:focus")))
-      expect(body, sel).not.toMatch(/outline|border-color|box-shadow/);
+  it("E1: the ring uses only outline and the invalid cue only border and box-shadow, so both show", () => {
+    const ring = [
+      ".qm-field__input:focus",
+      ".qm-select:focus",
+      ".qm-checkbox input:focus-visible",
+    ].map(decls);
+    for (const body of ring) expect(body).not.toMatch(/border|box-shadow/);
+    const invalid = [
+      '.qm-field__input[aria-invalid="true"]',
+      '.qm-select[aria-invalid="true"]',
+      '.qm-checkbox input[aria-invalid="true"]',
+    ].map(decls);
+    for (const body of invalid) {
+      expect(body).toMatch(/box-shadow|border-color/);
+      expect(body).not.toMatch(/outline/);
+    }
+    // Nothing gates the invalid cue behind "not focused": it stays when the ring appears.
+    expect(css).not.toMatch(/\[aria-invalid="true"\]:not\(:focus/);
+  });
+
+  it("E1: an invalid checkbox draws a 2 px required cue as a shadow hugging the box", () => {
+    expect(decls('.qm-checkbox input[aria-invalid="true"]')).toMatch(
+      /box-shadow:\s*0 0 0 calc\(var\(--qm-border-width\) \* 2\) var\(--qm-field-required\)/,
+    );
   });
 
   it("chips draw one ring: on the label, not on the checkbox inside it", () => {

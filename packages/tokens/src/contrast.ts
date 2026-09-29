@@ -64,6 +64,7 @@ function designSystemPairs(): ContrastPair[] {
       pair("focus.ring", bg, 3, "focus ring (non-text)"),
     ),
     ...READING.map((bg) => pair("field.required", bg, 4.5, "error text, required mark")),
+    pair("field.required", "color.accent.subtle", 4.5, "danger button on hover"),
     ...READING.map((bg) => pair("color.status.ok", bg, 4.5, "connected, acknowledged")),
   ];
 }

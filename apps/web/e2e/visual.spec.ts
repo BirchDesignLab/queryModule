@@ -41,14 +41,23 @@ async function asUser(
   await page.context().clearCookies();
   await signIn(page, seededUser(email));
   await panelReady(page);
-  await setTheme(page, mode);
+  await saveTheme(page, () => setTheme(page, mode));
   try {
     await body();
   } finally {
     await page.goto("/");
     await panelReady(page);
-    await page.getByLabel("Theme").selectOption({ label: "Match system" });
+    await saveTheme(page, () => page.getByLabel("Theme").selectOption({ label: "Match system" }));
   }
+}
+
+/** A signed-in theme change saves the preference in the background: wait for that PUT to land. */
+async function saveTheme(page: Page, choose: () => Promise<unknown>): Promise<void> {
+  const saved = page.waitForResponse(
+    (r) => r.url().includes("/api/v1/me/preferences") && r.request().method() === "PUT" && r.ok(),
+  );
+  await choose();
+  await saved;
 }
 
 async function panelReady(page: Page): Promise<void> {
@@ -185,35 +194,54 @@ test.describe("D0.3 dispatcher density and E1 focus with invalid (1440x900)", ()
   });
 });
 
+/** Elements with text whose colour is exactly `color` (an rgb() string), under `root`. */
+const textInColor = (page: Page, root: string, color: string): Promise<number> =>
+  page.evaluate(
+    ([rootSel, rgbColor]) =>
+      [...document.querySelectorAll(`${rootSel} *`)].filter(
+        (el) =>
+          [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent ?? "").trim() !== "") &&
+          getComputedStyle(el).color === rgbColor,
+      ).length,
+    [root, color] as const,
+  );
+
 test.describe("D0.3 officer touch density (1024x768)", () => {
   test.use({ viewport: { width: 1024, height: 768 } });
 
-  test("controls are 56 px, the header's buttons and selects 48 px, and no muted text", async ({
+  for (const mode of MODES) {
+    test(`${mode}: controls are 56 px, the header's buttons 48 px, and no muted text`, async ({
+      page,
+    }) => {
+      await asUser(page, "officer@example.test", mode, async () => {
+        await expect(page.locator(".qm-layout--mobile-unit")).toHaveCount(1);
+        const sizes = await page.evaluate(() => {
+          const h = (sel: string) =>
+            document.querySelector(sel)?.getBoundingClientRect().height ?? 0;
+          return {
+            input: h(".qm-layout--mobile-unit .qm-field__input"),
+            submit: h(".qm-layout--mobile-unit button[type=submit]"),
+            headerButton: h(".qm-app-header--compact .qm-button"),
+          };
+        });
+        expect(Math.round(sizes.input)).toBeGreaterThanOrEqual(56);
+        expect(Math.round(sizes.submit)).toBeGreaterThanOrEqual(56);
+        expect(Math.round(sizes.headerButton)).toBeGreaterThanOrEqual(48);
+        const muted = rgb(mode, "color.text.muted");
+        expect(
+          await textInColor(page, ".qm-layout--mobile-unit", muted),
+          "officer muted text",
+        ).toBe(0);
+      });
+    });
+  }
+
+  test("the muted check is live: the dispatch layout does show muted text (the Default tag)", async ({
     page,
   }) => {
-    await signIn(page, seededUser("officer@example.test"));
-    await panelReady(page);
-    await expect(page.locator(".qm-layout--mobile-unit")).toHaveCount(1);
-    const sizes = await page.evaluate(() => {
-      const h = (sel: string) => document.querySelector(sel)?.getBoundingClientRect().height ?? 0;
-      const muted = getComputedStyle(document.documentElement)
-        .getPropertyValue("--qm-color-text-muted")
-        .trim();
-      const inLayout = [...document.querySelectorAll(".qm-layout--mobile-unit *")].filter(
-        (el) => el.childNodes.length > 0 && [...el.childNodes].some((n) => n.nodeType === 3),
-      );
-      return {
-        input: h(".qm-layout--mobile-unit .qm-field__input"),
-        submit: h(".qm-layout--mobile-unit button[type=submit]"),
-        headerButton: h(".qm-app-header--compact .qm-button"),
-        mutedTextCount: inLayout.filter((el) => getComputedStyle(el).color === muted).length,
-        mutedHex: muted,
-      };
+    await asUser(page, "dispatcher@example.test", "night", async () => {
+      expect(await textInColor(page, "main", rgb("night", "color.text.muted"))).toBeGreaterThan(0);
     });
-    expect(Math.round(sizes.input)).toBeGreaterThanOrEqual(56);
-    expect(Math.round(sizes.submit)).toBeGreaterThanOrEqual(56);
-    expect(Math.round(sizes.headerButton)).toBeGreaterThanOrEqual(48);
-    expect(sizes.mutedTextCount, "officer text in the muted colour").toBe(0);
   });
 });
 

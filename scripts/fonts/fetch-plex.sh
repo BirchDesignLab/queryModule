@@ -25,7 +25,8 @@ fetch() { # tag zip-name dir-in-zip files...
 }
 
 fetch "$SANS" ibm-plex-sans.zip ibm-plex-sans \
-  IBMPlexSans-Regular-Latin1.woff2 IBMPlexSans-Medium-Latin1.woff2 IBMPlexSans-SemiBold-Latin1.woff2
+  IBMPlexSans-Regular-Latin1.woff2 IBMPlexSans-Italic-Latin1.woff2 \
+  IBMPlexSans-Medium-Latin1.woff2 IBMPlexSans-SemiBold-Latin1.woff2
 fetch "$CONDENSED" ibm-plex-sans-condensed.zip ibm-plex-sans-condensed \
   IBMPlexSansCondensed-SemiBold-Latin1.woff2
 fetch "$MONO" ibm-plex-mono.zip ibm-plex-mono \

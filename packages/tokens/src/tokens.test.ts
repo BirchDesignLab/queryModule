@@ -43,6 +43,7 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
     has("color.accent", "color.accent.subtle", 4.5);
     has("color.text.muted", "color.accent.subtle", 4.5);
     has("color.accent.onFill", "color.accent.fill", 4.5);
+    has("field.required", "color.accent.subtle", 4.5); // danger button on hover
     for (const bg of ["color.surface.base", "color.surface.raised"] as const) {
       has("color.accent", bg, 7);
       has("field.required", bg, 4.5);
