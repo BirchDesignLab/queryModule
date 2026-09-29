@@ -225,3 +225,27 @@ h1 {
 .qm-mode-toggle {
   margin-block-end: var(--qm-space-4);
 }
+
+/* Mobile-unit layout, the officer on a vehicle laptop (spec 6.3, v1 subset pulled forward from
+   M4 P1): single column, quick access first, 16 px text and 48x48 targets. The persona selects
+   the layout only (spec 6.1). */
+.qm-layout--mobile-unit {
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit :is(button, select, input:not([type="checkbox"]):not([type="radio"])) {
+  box-sizing: border-box;
+  min-height: var(--qm-target-min);
+  min-width: var(--qm-target-min);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit input[type="checkbox"],
+.qm-layout--mobile-unit input[type="radio"] {
+  width: var(--qm-target-min);
+  height: var(--qm-target-min);
+}
+
+.qm-layout--mobile-unit .qm-quick-access button {
+  flex: 1 1 calc(50% - var(--qm-space-2));
+}

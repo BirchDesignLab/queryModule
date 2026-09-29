@@ -15,9 +15,10 @@ import {
 } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
 
-function renderPanel() {
+function renderPanel(personaOverride: string | null = null) {
   const services = testServices();
   services.authStore.getState().setSignedIn(TEST_USER);
+  services.preferences.getState().setPersonaOverride(personaOverride);
   // The routes read client support from context; Root provides it in the app.
   const routes = [
     {
@@ -32,8 +33,8 @@ function renderPanel() {
   return renderRoutes(routes, { services });
 }
 
-async function openPanel() {
-  const view = renderPanel();
+async function openPanel(personaOverride: string | null = null) {
+  const view = renderPanel(personaOverride);
   await screen.findByLabelText("Plate");
   return view;
 }
@@ -750,5 +751,36 @@ describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(services.drafts.getState().mode).toBe("form"));
     expect(services.drafts.getState().terminalText).toBe("");
+  });
+});
+
+describe("UX-002 BR-002 officer mobile-unit layout (spec 6.1, 6.3 v1 subset)", () => {
+  const panelRoot = () => document.querySelector("main.qm-query-panel");
+
+  it("a stored mobileUnit override gives the panel the mobile-unit layout and a compact top bar", async () => {
+    await openPanel("mobileUnit");
+    await waitFor(() => expect(panelRoot()).toHaveClass("qm-layout--mobile-unit"));
+    expect(screen.getByRole("banner")).toHaveClass("qm-app-header--compact");
+  });
+
+  it("with no override on a mouse device the dispatch layout is unchanged", async () => {
+    await openPanel();
+    expect(panelRoot()).not.toHaveClass("qm-layout--mobile-unit");
+    expect(screen.getByRole("banner")).not.toHaveClass("qm-app-header--compact");
+  });
+
+  it("the layout comes from the persona's configured layout, not its name (BR-002)", async () => {
+    server.use(
+      http.get(`${API}/api/v1/config`, () =>
+        HttpResponse.json({
+          ...CLIENT_CONFIG,
+          personas: CLIENT_CONFIG.personas.map((p) =>
+            p.key === "records" ? { ...p, layout: "mobileUnit" } : p,
+          ),
+        }),
+      ),
+    );
+    await openPanel("records");
+    await waitFor(() => expect(panelRoot()).toHaveClass("qm-layout--mobile-unit"));
   });
 });

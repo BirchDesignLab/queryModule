@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { usePersonaLayout } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { QueryPanelView } from "./QueryPanelView.js";
@@ -11,13 +12,18 @@ export function QueryPanel() {
   const t = useT();
   const { drafts } = useServices();
   const live = useLiveConfig();
+  const layout = usePersonaLayout();
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
   return (
     <main
-      className="qm-page qm-query-panel"
+      className={
+        layout === "mobileUnit"
+          ? "qm-page qm-query-panel qm-layout--mobile-unit"
+          : "qm-page qm-query-panel"
+      }
       data-shortcut-context="panel"
       aria-busy={live.status === "loading"}
     >
