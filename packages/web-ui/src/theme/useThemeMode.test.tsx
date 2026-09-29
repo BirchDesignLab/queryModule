@@ -39,4 +39,18 @@ describe("UX-002 site default auto follows the clock (D-B1, #175)", () => {
     expect(result.current).toBe("night");
     expect(document.documentElement.dataset.theme).toBe("night");
   });
+  it("reads the current hour as soon as auto time becomes active (sign-in after load)", () => {
+    installMatchMedia({});
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 28, 12, 0));
+    const { result, rerender } = renderHook(
+      ({ selection }: { selection: { defaultMode: "auto"; auto: "time" } | null }) =>
+        useThemeMode({ preference: null, selection }),
+      { initialProps: { selection: null as { defaultMode: "auto"; auto: "time" } | null } },
+    );
+    expect(result.current).toBe("day");
+    vi.setSystemTime(new Date(2026, 8, 28, 20, 0));
+    rerender({ selection: { defaultMode: "auto", auto: "time" } });
+    expect(result.current).toBe("night");
+  });
 });

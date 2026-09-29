@@ -71,11 +71,23 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       }),
     );
     const { user } = renderPanel();
-    expect(await screen.findByText("The service is unavailable. Try again.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("The service is unavailable. Try again.", { selector: "p" }),
+    ).toBeInTheDocument();
+    // Spec 6.6: one announcer, polite; no assertive role="alert" of the panel's own.
+    expect(
+      screen.getByText("The service is unavailable. Try again.", { selector: "p" }),
+    ).not.toHaveAttribute("role");
+    expect(screen.getByTestId("announcer-assertive")).toHaveTextContent("");
+    await waitFor(() =>
+      expect(polite()).toHaveTextContent("The service is unavailable. Try again."),
+    );
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByLabelText("Plate")).toBeInTheDocument();
-    expect(screen.queryByText("The service is unavailable. Try again.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("The service is unavailable. Try again.", { selector: "p" }),
+    ).not.toBeInTheDocument();
   });
 
   it("Retry keeps keyboard focus off body when the retry succeeds (spec 6.4)", async () => {
@@ -175,7 +187,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
   });
 
-  it("FR-003 quick access marks the current type and keeps the other type's draft", async () => {
+  it("FR-007 quick access marks the current type and keeps the other type's draft", async () => {
     const { user } = await openPanel();
     const nav = screen.getByRole("navigation", { name: "Quick access" });
     expect(within(nav).getByRole("button", { name: "Vehicle" })).toHaveAttribute(
@@ -194,7 +206,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-1234");
   });
 
-  it("FR-010 both default sources are checked; unchecking one updates the draft", async () => {
+  it("spec 6.2 both default sources are checked; unchecking one updates the draft", async () => {
     const { user, services } = await openPanel();
     const group = screen.getByRole("group", { name: "Sources" });
     expect(within(group).getByRole("checkbox", { name: "State system" })).toBeChecked();

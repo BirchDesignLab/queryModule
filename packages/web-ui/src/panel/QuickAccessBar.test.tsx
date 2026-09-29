@@ -11,7 +11,7 @@ const LABELS: Record<string, string> = {
 const labelOf = (code: string) => LABELS[code] ?? code;
 const t = (key: string) => LABELS[key] ?? key;
 
-describe("FR-003 quick access bar (spec 6.2)", () => {
+describe("FR-007 quick access bar (spec 6.2)", () => {
   it("is a labelled nav of toggle buttons; only the current type is pressed", () => {
     render(
       <QuickAccessBar

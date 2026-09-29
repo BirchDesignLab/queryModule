@@ -29,7 +29,7 @@ function setup(checked: readonly string[], onChange = vi.fn()) {
   return onChange;
 }
 
-describe("FR-010 source checkboxes (spec 6.2)", () => {
+describe("source checkboxes (spec 6.2)", () => {
   it("is a fieldset with a Sources legend and one checkbox per eligible source", () => {
     setup(["stateSource"]);
     const group = screen.getByRole("group", { name: "Sources" });

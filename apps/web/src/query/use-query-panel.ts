@@ -64,10 +64,13 @@ export function useQueryPanel(): QueryPanelModel {
           if (mounted.current) setLoad({ status: "ready", config });
         },
         () => {
-          if (mounted.current) setLoad({ status: "error" });
+          if (!mounted.current) return;
+          setLoad({ status: "error" });
+          // Spec 6.6: one announcer, polite; the visible text stays for sighted users.
+          announcer.announce(t("error.unavailable"));
         },
       ),
-    [api, queryClient],
+    [api, queryClient, announcer, t],
   );
   useEffect(() => {
     mounted.current = true;

@@ -1,8 +1,8 @@
-import { savePreferences, useStore } from "@querymodule/client";
+import { clientConfigQuery, savePreferences, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { ThemeSelection } from "@querymodule/tokens";
 import { ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
-import { useCallback, useLayoutEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 import { Link, Outlet } from "react-router";
 import { useT } from "./i18n-context.js";
 import { useServices } from "./services-context.js";
@@ -79,6 +79,12 @@ export function AppHeader() {
 
 /** Layout of every signed-in screen that runs the app: the header, then the page. */
 export function AppShell() {
+  const { api, queryClient } = useServices();
+  // Load GET /api/v1/config on every signed-in screen, not only the panel, so SiteConfig.theme
+  // applies after a reload on /status too (spec 6.5); the panel reuses the cached entry.
+  useEffect(() => {
+    void queryClient.prefetchQuery({ ...clientConfigQuery(api), retry: false });
+  }, [api, queryClient]);
   return (
     <>
       <AppHeader />

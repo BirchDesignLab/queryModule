@@ -180,6 +180,21 @@ describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
     await screen.findByLabelText("Query type");
     expect(document.documentElement.dataset.theme).toBe("day");
   });
+  it("a signed-in reload on /status applies the site default without the query panel", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    await signIn();
+    const reloaded = renderRoot({ path: "/status" });
+    await within(reloaded.container).findByRole("heading", { name: "Connection status" });
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+  });
+  it("after sign-out the OS scheme decides again", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    const { user } = await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByRole("heading", { name: "Sign in" });
+    expect(document.documentElement.dataset.theme).toBe("day");
+  });
   it("preference auto with site auto time follows the clock", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 8, 28, 21, 0));

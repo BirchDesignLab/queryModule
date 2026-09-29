@@ -76,7 +76,8 @@ test.describe("panel at 320px (spec 6.2, 6.5, 6.6)", () => {
           });
           return 0.2126 * (c[0] ?? 0) + 0.7152 * (c[1] ?? 0) + 0.0722 * (c[2] ?? 0);
         };
-        let node: Element | null = el;
+        // The offset ring is drawn outside the field, over its parent's surface, not the field's own.
+        let node: Element | null = el.parentElement;
         let bg: [number, number, number, number] = [0, 0, 0, 0];
         while (node !== null) {
           bg = toRgba(getComputedStyle(node).backgroundColor);
@@ -108,12 +109,14 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
     const header = document.querySelector("header");
     const main = document.querySelector("main");
     return {
+      hasHeader: header !== null && main !== null,
       headerFirst:
         focusable.findIndex((el) => main?.contains(el)) >
         focusable.map((el) => header?.contains(el) === true).lastIndexOf(true),
-      headerHasTheme: header?.querySelector("select") !== null,
+      headerHasTheme: header !== null && header.querySelector("select") !== null,
     };
   });
+  expect(order.hasHeader).toBe(true);
   expect(order.headerFirst).toBe(true);
   expect(order.headerHasTheme).toBe(true);
 
@@ -140,6 +143,12 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
   await page.getByLabel("First name").focus();
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Last name")).toHaveAttribute("aria-invalid", "true");
-  await page.waitForTimeout(300);
+  // Sentinel instead of a fixed wait: a later, distinct announcement proves every announcement
+  // from the Enter press has landed before the count is checked.
+  await page.getByLabel("Query type").selectOption("VEH");
+  await page.getByLabel("State", { exact: true }).selectOption("OK");
+  await expect
+    .poll(() => attempts.some((a) => a.includes("Plate type is now shown and required.")))
+    .toBe(true);
   expect(attempts.filter((a) => a.includes("needs attention"))).toHaveLength(1);
 });

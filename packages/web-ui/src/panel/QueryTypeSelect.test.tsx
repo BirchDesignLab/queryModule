@@ -9,7 +9,7 @@ const OPTIONS = [
   { code: "PER", label: "Person" },
 ];
 
-describe("FR-001 query type select (spec 6.2)", () => {
+describe("query type select (spec 6.2)", () => {
   it("is a labelled select of the given options showing the current type", () => {
     render(
       <QueryTypeSelect id="qt" value="PER" options={OPTIONS} onChange={() => undefined} t={t} />,

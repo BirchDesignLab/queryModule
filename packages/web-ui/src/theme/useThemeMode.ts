@@ -14,6 +14,8 @@ function useLocalHour(active: boolean): number {
   const [hour, setHour] = useState(() => new Date().getHours());
   useEffect(() => {
     if (!active) return;
+    // The hour kept since load may be stale when auto time turns on later (sign-in); read it now.
+    setHour(new Date().getHours());
     const id = window.setInterval(() => setHour(new Date().getHours()), 60_000);
     return () => window.clearInterval(id);
   }, [active]);

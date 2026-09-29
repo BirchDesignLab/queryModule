@@ -1,7 +1,7 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
 import { signIn } from "./helpers.js";
 
-test("[A3] a blocked submit names the missing field, focuses it and announces (FR-006, UX-004)", async ({
+test("[A3] a blocked submit names the missing field, focuses it and announces (FR-001, FR-005)", async ({
   page,
 }) => {
   await signIn(page);

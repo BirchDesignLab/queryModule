@@ -1,7 +1,7 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
 import { signIn } from "./helpers.js";
 
-test("[A2] a field revealed by a rule is announced and focus stays put (FR-005, UX-004)", async ({
+test("[A2] a field revealed by a rule is announced and focus stays put (FR-002, FR-003, FR-011, UX-004)", async ({
   page,
 }) => {
   await signIn(page);

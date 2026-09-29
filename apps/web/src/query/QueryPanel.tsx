@@ -102,9 +102,7 @@ export function QueryPanel() {
       {panel.status === "loading" ? <p>{t("status.checking")}</p> : null}
       {panel.status === "error" ? (
         <>
-          <p role="alert" className="qm-form-error">
-            {t("error.unavailable")}
-          </p>
+          <p className="qm-form-error">{t("error.unavailable")}</p>
           <button
             type="button"
             className="qm-button"
