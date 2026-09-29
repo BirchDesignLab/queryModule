@@ -85,13 +85,35 @@ describe("stripComments regex-literal awareness (#220 G-M-a, r1-a)", () => {
     expect(stripComments("const q = (a) / 2; /* c */")).toBe("const q = (a) / 2; ");
   });
 
-  it("fails closed on an unterminated regex-looking slash: a block comment after it is still stripped", () => {
-    const source = ["const r = /'", "/*", 'it("[A1] x", () => {})', "*/", "const s = 1;"].join(
-      "\n",
-    );
+  it("fails closed when a regex candidate closes on a comment opener: plain mode keeps the comment stripped", () => {
+    // The candidate `/'; /` closes on the `/` of `/*`; without plain mode the
+    // stray `'` opens a string that hides the block-comment opener.
+    const source = ["const r = /'; /*", 'it("[A1] x", () => {})', "*/", "const s = 1;"].join("\n");
     const out = stripComments(source);
     expect(out).not.toContain("[A1]");
     expect(out).toContain("const s = 1;");
     expect(hasTaggedTest(source, "A1")).toBe(false);
+  });
+
+  it("does not read a line-leading division slash as a regex (spec:S1)", () => {
+    const source = 'const ratio = a\n  / b; // it("[A1] x", () => {})';
+    expect(hasTaggedTest(source, "A1")).toBe(false);
+  });
+
+  it("does not let JSX self-closing slash swallow a comment opener (critic:C1)", () => {
+    expect(hasTaggedTest('render(<X a={b} />); // it("[A1] x", () => {})', "A1")).toBe(false);
+    const block = ["render(<X a={b} />); /*", 'it("[A1] x", () => {})', "*/"].join("\n");
+    expect(hasTaggedTest(block, "A1")).toBe(false);
+  });
+
+  it("does not let a leading division slash hide a block comment opener (critic:C2)", () => {
+    const source = ["const v = a", "  / 2; /*", 'it("[A1] x", () => {})', "*/"].join("\n");
+    expect(hasTaggedTest(source, "A1")).toBe(false);
+  });
+
+  it("recognises a regex after => and other operators (critic:C3)", () => {
+    const source = ["const f = (s) => /'/.test(s); /*", 'it("[A1] x", () => {})', "*/"].join("\n");
+    expect(hasTaggedTest(source, "A1")).toBe(false);
+    expect(stripComments("const g = x + /'/.source; // c")).toBe("const g = x + /'/.source; ");
   });
 });

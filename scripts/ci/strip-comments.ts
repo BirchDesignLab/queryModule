@@ -40,7 +40,7 @@ function startsRegex(out: string): boolean {
   let k = out.length - 1;
   while (k >= 0 && (out[k] === " " || out[k] === "\t")) k -= 1;
   if (k < 0 || out[k] === "\n" || out[k] === "\r") return true;
-  if ("(,=:[!&|?{};".includes(out[k] as string)) return true;
+  if ("(,=:[!&|?{};<>+-*%~^".includes(out[k] as string)) return true;
   let w = k;
   while (w >= 0 && /[A-Za-z_$]/.test(out[w] as string)) w -= 1;
   return w < k && REGEX_PRECEDING_KEYWORDS.has(out.slice(w + 1, k + 1));
@@ -70,6 +70,14 @@ function scanRegex(source: string, start: number): number {
     j += 1;
   }
   return -1;
+}
+
+/** True when the closing `/` of the regex candidate [start, end) starts `//` or `/*`. */
+function closesOnCommentOpener(source: string, start: number, end: number): boolean {
+  let c = end - 1;
+  while (c > start && /[A-Za-z]/.test(source[c] as string)) c -= 1;
+  const next = source[c + 1];
+  return next === "/" || next === "*";
 }
 
 export function stripComments(source: string): string {
@@ -140,6 +148,10 @@ export function stripComments(source: string): string {
     if (c === "/" && !plain && startsRegex(out)) {
       const end = scanRegex(source, i);
       if (end === -1) {
+        plain = true;
+      } else if (closesOnCommentOpener(source, i, end)) {
+        // The candidate's closing `/` begins a `//` or `/*`: this was really a
+        // division or a JSX `/>`, so the comment opener must stay live.
         plain = true;
       } else {
         out += source.slice(i, end);
