@@ -52,7 +52,7 @@ const command = (t: Opened, code: string) => commands(t).find((c) => c.code === 
 async function openSection(t: Opened, name: string) {
   await t.user.click(await screen.findByText(name, { selector: "summary" }));
 }
-const box = (code: string) => group(document, `Command ${code}`.trim());
+const box = (code: string) => group(document, code === "" ? "Command (new)" : `Command ${code}`);
 
 describe("commands editor (Task 31 part 2, FR-050, FR-051, FR-060, UX-004)", () => {
   it("edits a command's code and query type", async () => {
@@ -194,5 +194,33 @@ describe("quick access editor (Task 31 part 2, FR-060, UX-004)", () => {
     const selects = within(group(document, "Quick access")).getAllByLabelText(/^Quick access \d$/);
     await t.user.selectOptions(selects[0] as HTMLElement, "PRO");
     expect(quick(t)[0]).toBe("PRO");
+  });
+});
+
+describe("PR3a deferrals (#388 M1, M2, M5)", () => {
+  it("M1: a query type change drops positions and presets the new type lacks", async () => {
+    const t = await openBuilder();
+    await openSection(t, "commands");
+    await t.user.selectOptions(within(box("NAM")).getByLabelText("Query type"), "WNT");
+    expect(command(t, "NAM")).toMatchObject({
+      queryType: "WNT",
+      positions: ["last", "first", "dob"],
+    });
+  });
+
+  it("M2: a rest checkbox on a non-last position is invalid and described", async () => {
+    const t = await openBuilder();
+    await openSection(t, "commands");
+    const rest = () => within(group(box("PRO"), "Position 2")).getByLabelText("Rest of line");
+    await t.user.click(rest());
+    await waitFor(() => expect(rest()).toHaveAttribute("aria-invalid", "true"));
+    expect(rest()).toHaveAccessibleDescription(/^Error:/);
+  });
+
+  it("M5: a command without a code is named as new", async () => {
+    const t = await openBuilder();
+    await openSection(t, "commands");
+    await t.user.click(screen.getByRole("button", { name: "Add command" }));
+    expect(group(document, "Command (new)")).toBeTruthy();
   });
 });

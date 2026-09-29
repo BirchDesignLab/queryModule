@@ -1,6 +1,6 @@
 import { useStore } from "@querymodule/client";
 import { useEffect, useRef } from "react";
-import { Link, Navigate, Outlet } from "react-router";
+import { Link, Navigate, useOutlet } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { ConfigBuilder } from "./ConfigBuilder.js";
@@ -16,9 +16,13 @@ export function AdminLayout() {
   const role = useStore(authStore, (s) => s.user?.role);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const allowed = canOpenAdmin(role);
+  // A section page focuses its own heading (SectionHeading); the console title takes focus only on
+  // the bare console, so the two never race on first load (#388).
+  const outlet = useOutlet();
+  const hasSection = outlet !== null;
   useEffect(() => {
-    if (allowed) headingRef.current?.focus();
-  }, [allowed]);
+    if (allowed && !hasSection) headingRef.current?.focus();
+  }, [allowed, hasSection]);
   if (!allowed) return <Navigate to="/" replace />;
   return (
     <main className="qm-admin">
@@ -37,7 +41,7 @@ export function AdminLayout() {
           )}
         </ul>
       </nav>
-      <Outlet />
+      {outlet}
     </main>
   );
 }

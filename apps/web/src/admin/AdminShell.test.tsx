@@ -41,7 +41,9 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     });
     expect(link).toHaveAttribute("href", "/admin");
     await t.user.click(link);
-    const heading = await screen.findByRole("heading", { name: "Admin", level: 1 });
+    // #388: /admin opens its Config section, whose heading takes focus (no h1/h2 race).
+    expect(await screen.findByRole("heading", { name: "Admin", level: 1 })).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { name: "Site config", level: 2 });
     await waitFor(() => expect(heading).toHaveFocus());
     const nav = screen.getByRole("navigation", { name: "Admin sections" });
     expect(within(nav).getByRole("link", { name: "Config" })).toHaveAttribute(

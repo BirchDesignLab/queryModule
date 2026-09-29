@@ -24,9 +24,21 @@ import { OtherKeys } from "./GenericForm.js";
  * 09-29-26: no new condition syntax).
  */
 
-const EFFECTS = ["show", "hide", "require", "setDefault"] as const;
-const OPS = ["eq", "neq", "in", "notIn", "gt", "gte", "lt", "lte", "empty", "notEmpty"] as const;
-const KINDS = ["leaf", "all", "any", "not"] as const;
+export const EFFECTS = ["show", "hide", "require", "setDefault"] as const;
+export const OPS = [
+  "eq",
+  "neq",
+  "in",
+  "notIn",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "empty",
+  "notEmpty",
+] as const;
+export const COMPARES = ["value", "default"] as const;
+export const KINDS = ["leaf", "all", "any", "not"] as const;
 type Kind = (typeof KINDS)[number];
 type OpShape = "scalar" | "list" | "none";
 
@@ -61,13 +73,23 @@ const childrenOf = (cond: Obj): unknown[] => {
 function convertKind(cond: Obj, to: Kind, fallback: Obj): Obj {
   const from = kindOf(cond);
   if (from === to) return cond;
-  const first = childrenOf(cond)[0];
-  const firstLeaf = kindOf(first) === "leaf" && first !== undefined ? (first as Obj) : fallback;
-  if (to === "leaf") return from === "leaf" ? cond : firstLeaf;
-  if (to === "not") return { not: from === "leaf" ? cond : (first ?? fallback) };
-  // to all or any
+  // #388 M3: Not wraps the whole condition and a group keeps its children, so nothing is lost;
+  // only a single field test keeps just one leaf (the first found, depth first).
+  if (to === "leaf") return firstLeafOf(cond) ?? fallback;
+  if (to === "not") return from === "not" ? cond : { not: cond };
   if (from === "all" || from === "any") return { [to]: childrenOf(cond) };
-  return { [to]: [from === "leaf" ? cond : (first ?? fallback)] };
+  return { [to]: [from === "not" ? (cond.not ?? fallback) : cond] };
+}
+
+/** The first field test in a condition, depth first. */
+function firstLeafOf(cond: unknown): Obj | undefined {
+  if (kindOf(cond) === "leaf")
+    return typeof cond === "object" && cond !== null ? (cond as Obj) : undefined;
+  for (const child of childrenOf(cond as Obj)) {
+    const leaf = firstLeafOf(child);
+    if (leaf !== undefined) return leaf;
+  }
+  return undefined;
 }
 
 /** A leaf with another operator, its value reshaped to fit (spec 4.2 operand forms). */
@@ -165,12 +187,15 @@ export function ConditionEditor({
   info,
   idPrefix,
   legend,
+  number = "",
 }: {
   value: unknown;
   path: readonly PathSegment[];
   info: FieldInfo;
   idPrefix: string;
   legend: string;
+  /** This condition's position path ("", "1", "1.2"): nested names stay unique (#388 M5). */
+  number?: string;
 }) {
   const t = useT();
   const { setPath } = useDraftSetters();
@@ -202,10 +227,12 @@ export function ConditionEditor({
           path={[...path, "not"]}
           info={info}
           idPrefix={idPrefix}
-          legend={t("admin.config.condition.child", { n: 1 })}
+          legend={t("admin.config.condition.child", { n: number === "" ? "1" : `${number}.1` })}
+          number={number === "" ? "1" : `${number}.1`}
         />
       ) : (
         <ChildConditions
+          number={number}
           items={childrenOf(cond)}
           path={[...path, kind]}
           info={info}
@@ -218,11 +245,13 @@ export function ConditionEditor({
 }
 
 function ChildConditions({
+  number,
   items,
   path,
   info,
   idPrefix,
 }: {
+  number: string;
   items: readonly unknown[];
   path: readonly PathSegment[];
   info: FieldInfo;
@@ -233,6 +262,7 @@ function ChildConditions({
   const [gen, bump] = useGeneration();
   const focus = useFocusRequest();
   const listOwner = controlId(idPrefix, path);
+  const numberOf = (n: number) => (number === "" ? String(n) : `${number}.${n}`);
   return (
     <>
       {items.map((child, i) => {
@@ -244,7 +274,8 @@ function ChildConditions({
               path={[...path, i]}
               info={info}
               idPrefix={idPrefix}
-              legend={t("admin.config.condition.child", { n })}
+              legend={t("admin.config.condition.child", { n: numberOf(n) })}
+              number={numberOf(n)}
             />
             <button
               type="button"
@@ -258,7 +289,7 @@ function ChildConditions({
                 focus([listOwner, "add"]);
               }}
             >
-              {t("admin.config.condition.removeChild", { n })}
+              {t("admin.config.condition.removeChild", { n: numberOf(n) })}
             </button>
           </div>
         );
@@ -321,7 +352,7 @@ function LeafControls({
             path={[...path, "$compare"]}
             label={t("admin.config.condition.compareWith")}
             value={isDefaultRef(leaf.value) ? "default" : "value"}
-            options={["value", "default"]}
+            options={COMPARES}
             optionLabel={(o) => t(`admin.config.condition.compare.${o}`)}
             onValue={(next) =>
               setPath(

@@ -115,7 +115,8 @@ describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
       within(cond()).getAllByLabelText("Condition type")[0] as HTMLElement,
       "not",
     );
-    expect(rulesOf(t, "VEH")[0]?.when).toEqual({ not: leaf });
+    // #388 M3: Not wraps the whole group.
+    expect(rulesOf(t, "VEH")[0]?.when).toMatchObject({ not: { all: [leaf, { op: "notEmpty" }] } });
     await t.user.selectOptions(
       within(cond()).getAllByLabelText("Condition type")[0] as HTMLElement,
       "leaf",
@@ -262,5 +263,69 @@ describe("PR2 critic fixes", () => {
     expect(within(section()).getByLabelText("Condition type")).toHaveFocus();
     await t.user.click(within(section()).getByRole("button", { name: "Remove condition" }));
     expect(within(section()).getByRole("button", { name: "Add condition" })).toHaveFocus();
+  });
+});
+
+describe("PR2 deferrals (#388 M3, M5, M6)", () => {
+  it("M3: Not wraps a whole group; a single test keeps the first leaf found", async () => {
+    const t = await openBuilder();
+    await openType(t, "VEH");
+    const cond = () => conditionOf(ruleBox(typeBoxOf("VEH"), 1));
+    const kind = () => within(cond()).getAllByLabelText("Condition type")[0] as HTMLElement;
+    const leaf = { field: "state", op: "neq", value: { $default: "state" } };
+    await t.user.selectOptions(kind(), "all");
+    await t.user.click(within(cond()).getByRole("button", { name: "Add condition" }));
+    await t.user.selectOptions(kind(), "not");
+    expect(rulesOf(t, "VEH")[0]?.when).toEqual({
+      not: { all: [leaf, { field: "plate", op: "notEmpty" }] },
+    });
+    await t.user.selectOptions(kind(), "leaf");
+    expect(rulesOf(t, "VEH")[0]?.when).toEqual(leaf);
+  });
+
+  it("M5: nested conditions are named by position path", async () => {
+    const t = await openBuilder();
+    await openType(t, "VEH");
+    const cond = () => conditionOf(ruleBox(typeBoxOf("VEH"), 1));
+    await t.user.selectOptions(
+      within(cond()).getAllByLabelText("Condition type")[0] as HTMLElement,
+      "all",
+    );
+    const child = group(cond(), "Condition 1");
+    await t.user.selectOptions(
+      within(child).getAllByLabelText("Condition type")[0] as HTMLElement,
+      "any",
+    );
+    expect(group(cond(), "Condition 1.1")).toBeTruthy();
+    expect(within(cond()).getByRole("button", { name: "Remove condition 1.1" })).toBeTruthy();
+  });
+
+  it("M6: editor output passes validateSiteConfig with no new errors", async () => {
+    const { validateDraft, flattenBundle } = await import("./draft.js");
+    const { EN_BUNDLE } = await import("../test/en-bundle.js");
+    const t = await openBuilder();
+    const errors = () => {
+      const v = validateDraft(
+        configDraftStore(t.services).getState().doc as never,
+        {},
+        flattenBundle(EN_BUNDLE),
+      );
+      if (!v.ok) throw new Error(JSON.stringify(v.issues));
+      return v.errors.length;
+    };
+    const base = errors();
+    const type = await openType(t, "WNT");
+    await t.user.click(within(type).getByRole("button", { name: "Add rule" }));
+    const cond = () => conditionOf(ruleBox(typeBoxOf("WNT"), 1));
+    await t.user.selectOptions(
+      within(cond()).getAllByLabelText("Condition type")[0] as HTMLElement,
+      "any",
+    );
+    await t.user.click(within(cond()).getByRole("button", { name: "Add condition" }));
+    await t.user.selectOptions(
+      within(ruleBox(typeBoxOf("WNT"), 1)).getByLabelText("Effect"),
+      "require",
+    );
+    expect(errors()).toBe(base);
   });
 });

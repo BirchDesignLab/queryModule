@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
@@ -31,10 +31,16 @@ describe("config builder idle behaviour (Task 33 round 1, Q2/C1)", () => {
     renderRoot({ path: "/admin/config" });
     await screen.findByRole("tab", { name: "Form" });
     await waitFor(() => expect(screen.getByTestId("draft-summary")).toHaveTextContent(/errors/));
-    await new Promise((r) => setTimeout(r, 700));
-    const settled = validateDraftCalls.count;
-    expect(settled).toBeGreaterThan(0);
-    await new Promise((r) => setTimeout(r, 1000));
-    expect(validateDraftCalls.count).toBe(settled);
+    // #388: fake timers instead of 1.7 s of real waiting.
+    vi.useFakeTimers();
+    try {
+      act(() => vi.advanceTimersByTime(700));
+      const settled = validateDraftCalls.count;
+      expect(settled).toBeGreaterThan(0);
+      act(() => vi.advanceTimersByTime(1000));
+      expect(validateDraftCalls.count).toBe(settled);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

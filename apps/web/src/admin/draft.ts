@@ -118,12 +118,14 @@ export function validateDraft(
   doc: JsonObject,
   overlay: LabelOverlay,
   bundle: Readonly<Record<string, string>>,
+  /** Shipped strings of other locales; a locale absent here is checked against `bundle`. */
+  perLocale: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
 ): DraftValidation {
   const built = buildSiteConfig(doc);
   if (!built.ok) return built;
   const locales: Record<string, Record<string, string>> = {};
   for (const locale of built.config.locales) {
-    locales[locale] = { ...bundle, ...overlay[locale] };
+    locales[locale] = { ...(perLocale[locale] ?? bundle), ...overlay[locale] };
   }
   const result = validateSiteConfig(built.config, locales as LocaleBundles);
   return { ok: true, errors: result.errors, warnings: result.warnings };

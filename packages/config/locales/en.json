@@ -395,5 +395,7 @@
   "admin.config.command.addPreset": "Add preset",
   "admin.config.quickAccess.legend": "Quick access",
   "admin.config.quickAccess.item": "Quick access {n}",
-  "admin.config.quickAccess.add": "Add quick access"
+  "admin.config.quickAccess.add": "Add quick access",
+  "admin.config.raw.checksLoading": "Checking the draft…",
+  "admin.config.command.new": "Command (new)"
 }

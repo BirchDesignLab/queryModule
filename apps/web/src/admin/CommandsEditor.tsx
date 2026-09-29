@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useT } from "../app/i18n-context.js";
+import { ChecksContext, isError, issuesFor } from "./checks.js";
 import {
   asObjects,
   controlId,
@@ -73,6 +74,22 @@ export function CommandsEditor({
               label={t("admin.config.command.queryType")}
               value={cmd.queryType}
               options={typeCodes}
+              onValue={(next) => {
+                // #388 M1: positions and presets of fields the new type lacks are dropped.
+                const keys = new Set(fieldInfo(types.find((q) => q.code === next) ?? {}).keys);
+                const { presets, ...rest } = cmd;
+                const kept = Object.entries(
+                  typeof presets === "object" && presets !== null ? (presets as Obj) : {},
+                ).filter(([k]) => keys.has(k));
+                setPath(cmdPath, {
+                  ...rest,
+                  queryType: next ?? "",
+                  positions: (Array.isArray(cmd.positions) ? cmd.positions : []).filter((p) =>
+                    keys.has(positionField(p)),
+                  ),
+                  ...(kept.length > 0 ? { presets: Object.fromEntries(kept) } : {}),
+                });
+              }}
             />
             <PositionsEditor
               positions={Array.isArray(cmd.positions) ? cmd.positions : []}
@@ -140,6 +157,7 @@ function PositionsEditor({
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   const used = new Set(positions.map(positionField));
+  const checks = useContext(ChecksContext);
   const listIssues = useItemIssues(
     idPrefix,
     path,
@@ -154,6 +172,8 @@ function PositionsEditor({
         const field = positionField(pos);
         const rest = isRest(pos);
         const restId = `${controlId(idPrefix, [...path, i])}-rest`;
+        // #388 M2: restNotLast and restNotString sit on the position; the checkbox shares them.
+        const posIssues = issuesFor(checks, [...path, i]);
         return (
           <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
             <legend>{t("admin.config.command.position", { n })}</legend>
@@ -175,6 +195,12 @@ function PositionsEditor({
                 id={restId}
                 type="checkbox"
                 checked={rest}
+                aria-invalid={isError(posIssues)}
+                aria-describedby={
+                  posIssues === undefined
+                    ? undefined
+                    : `${controlId(idPrefix, [...path, i])}-issues`
+                }
                 onChange={(e) =>
                   setPath([...path, i], e.target.checked ? { field, rest: true } : field)
                 }
@@ -449,7 +475,9 @@ function CommandBox({
   const issues = useItemIssues(idPrefix, path, [...COMMAND_KEYS]);
   return (
     <fieldset className="qm-admin__item" aria-describedby={issues.describedBy}>
-      <legend>{t("admin.config.command.legend", { code })}</legend>
+      <legend>
+        {code === "" ? t("admin.config.command.new") : t("admin.config.command.legend", { code })}
+      </legend>
       {issues.messages}
       {children}
     </fieldset>
