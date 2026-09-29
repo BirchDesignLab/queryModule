@@ -699,6 +699,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
                 tabRefs.current[id] = el;
               }}
               type="button"
+              className="qm-button"
               role="tab"
               id={`${uid}-tab-${id}`}
               aria-selected={tab === id}
