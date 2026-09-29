@@ -1000,6 +1000,8 @@ Covers SEC-001, SEC-002, SEC-003, SEC-004, SEC-006, SEC-011.
 
 Covers BR-001, BR-004, NFR-001, PLT-007.
 
+Overridden by ADR-0011.
+
 ### 5.9 Security baseline
 
 **Content Security Policy** on every HTML response. The API serves `index.html` with a fresh nonce per response.
@@ -1671,6 +1673,8 @@ Rules:
 
 The P1 heartbeat socket ships with the 5.3 upgrade checks (Origin, session binding, bearer header only), because it is the first socket. The locales route (5.8) ships in P1 with the login screen, which needs its strings. The `expo export` CI step runs from M0 against a placeholder `apps/mobile` shell (9.3).
 
+Overridden by ADR-0012 (M1 P3 row, Track A cell).
+
 ### 12.3 M2 Results and audit
 
 | Phase | Track A (Linux) | Track B (Windows) | Core | Gate |
@@ -1715,6 +1719,8 @@ Every milestone exits only when all of these hold: its story tests are green and
 | M2 | A6 to A9 | No cross-user events; replay excludes hidden; admin-only audit routes; bearer REST + WS | NVDA + Chrome |
 | M3 | B1 to B5, B7 | Credential responses never contain secret or ciphertext; step-up; delegation wrong code, expired, revoked with audit rows; hide owner-only | NVDA + Chrome |
 | M4 | C1, C2 | Embedded JWT issuer, audience and JWKS rejections; frame-ancestors allowlist | VoiceOver + TalkBack at largest text; manual daylight check |
+
+Overridden by ADR-0012 (M1 row).
 
 ## 13 Traceability
 
