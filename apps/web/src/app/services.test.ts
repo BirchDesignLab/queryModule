@@ -48,6 +48,15 @@ describe("FR-056, SEC-006 draft store (spec 6.7)", () => {
     expect(services.drafts.getState().drafts).toEqual({});
   });
 
+  it("resetAll returns form mode and empty terminal text", () => {
+    const services = testServices();
+    services.drafts.getState().setMode("terminal");
+    services.drafts.getState().setTerminalText("VEH.ZZ-0001");
+    services.reset.resetAll();
+    expect(services.drafts.getState().mode).toBe("form");
+    expect(services.drafts.getState().terminalText).toBe("");
+  });
+
   it("writes nothing to localStorage or sessionStorage across 100 draft writes", () => {
     const keys = () => [Object.keys(localStorage), Object.keys(sessionStorage)];
     const services = testServices();

@@ -38,3 +38,37 @@ describe("NFR-001 every emitted message key has an en string", () => {
     expect(keys.filter((k) => !has(k))).toEqual([]);
   });
 });
+
+describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", () => {
+  const single = [
+    "terminal.label",
+    "terminal.description",
+    "terminal.errorsLabel",
+    "terminal.delimiterInValue",
+    "mode.terminal",
+    "submit.acknowledged",
+    "submit.reference",
+    "submit.copyReference",
+    "submit.referenceCopied",
+    "submit.sentHeading",
+    "submit.configChanged",
+    "submit.rateLimited",
+    "submit.unavailable",
+    "submit.noResponse",
+    "submit.failed",
+    "submit.forbidden",
+    "submit.partSkipped",
+  ];
+  const plural = ["terminal.fieldsNotShown", "terminal.problems"];
+  it("every key exists", () => {
+    expect(single.filter((k) => !(k in en))).toEqual([]);
+  });
+  it("plural keys have .one and .other", () => {
+    const forms = plural.flatMap((k) => [`${k}.one`, `${k}.other`]);
+    expect(forms.filter((k) => !(k in en))).toEqual([]);
+  });
+  it("FR-055 terminal.delimiterInValue names the label, not the delimiter (D-B9)", () => {
+    expect(en["terminal.delimiterInValue"]).toContain("{label}");
+    expect(en["terminal.delimiterInValue"]).not.toContain("{delimiter}");
+  });
+});
