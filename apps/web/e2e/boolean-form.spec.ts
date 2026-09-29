@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SiteConfigSchema, toClientSiteConfig } from "@querymodule/core/config";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { hexToRgb, signIn } from "./helpers.js";
 
 const read = (name: string): unknown =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./sites/${name}`, import.meta.url)), "utf8"));
@@ -31,6 +31,7 @@ test("[FR-006, UX-011] a blocked submit marks the checkbox invalid and announces
   await expect(agree).toHaveAttribute("type", "checkbox");
   await expect(agree).toHaveAttribute("aria-required", "true");
   await expect(agree).not.toHaveAttribute("aria-invalid", "true");
+  await expect(agree).toHaveCSS("outline-style", "none");
 
   // A bad value, then a rule hides its field: the error has no field on screen to sit on.
   await page.getByLabel("Reference code").fill("bad value!");
@@ -45,6 +46,12 @@ test("[FR-006, UX-011] a blocked submit marks the checkbox invalid and announces
   expect(messageId).toBeDefined();
   await expect(page.locator(`#${messageId}`)).toHaveText("Confirm subject details is required.");
   await expect(agree).toBeFocused();
+  // The visual cue (styles.css .qm-checkbox input[aria-invalid]): a solid outline in the required token.
+  const required = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--qm-field-required"),
+  );
+  await expect(agree).toHaveCSS("outline-style", "solid");
+  await expect(agree).toHaveCSS("outline-color", hexToRgb(required));
 
   const formError = page.locator(".qm-form-errors .qm-form-error");
   await expect(formError).toHaveText("Reference code is not in the expected format.");
