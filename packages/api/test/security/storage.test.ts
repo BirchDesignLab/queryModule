@@ -318,6 +318,62 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
       db.$client.close();
     }
   });
+  it("INSERT OR REPLACE on an existing query_request aborts and leaves the row", async () => {
+    const db = await queryDb();
+    try {
+      await expect(
+        db.$client.execute({
+          sql: `INSERT OR REPLACE INTO query_request (correlation_id, part_id, user_id, origin,
+            query_type, type_values, plate_only, selected_source_ids, dropped_source_ids, config_hash,
+            idempotency_key, submitted_at)
+            VALUES (?, 0, 'u2', 'primary', 'person', '{}', 0, '[]', '[]', 'h2', 'idem-2', 9)`,
+          args: [CID],
+        }),
+      ).rejects.toThrow(/query_request is insert-once/);
+      const rows = (await db.$client.execute("SELECT user_id, query_type FROM query_request")).rows;
+      expect(rows.map((r) => [r.user_id, r.query_type])).toEqual([["u1", "vehicle"]]);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it.each([
+    ["the same result_id", "r1"],
+    ["a new result_id on the same (correlation_id, part_id, source_id)", "r9"],
+  ])("INSERT OR REPLACE on source_result with %s aborts and leaves the row", async (_, rid) => {
+    const db = await queryDb();
+    try {
+      expect((await setStatus(db, "pending", "returned")).rowsAffected).toBe(1);
+      await expect(
+        db.$client.execute({
+          sql: `INSERT OR REPLACE INTO source_result (result_id, correlation_id, part_id, source_id,
+            user_id, status, adapter_kind, created_at) VALUES (?, ?, 0, 's1', 'u2', 'failed', 'mock', 1)`,
+          args: [rid, CID],
+        }),
+      ).rejects.toThrow(/source_result rows are never replaced/);
+      const rows = (
+        await db.$client.execute("SELECT result_id, user_id, status FROM source_result")
+      ).rows;
+      expect(rows.map((r) => [r.result_id, r.user_id, r.status])).toEqual([
+        ["r1", "u1", "returned"],
+      ]);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("DELETE of a child-less query_request aborts even with foreign_keys off", async () => {
+    const db = await queryDb();
+    try {
+      await insertQueryRequest(db, 1, null);
+      await db.$client.execute("PRAGMA foreign_keys = OFF");
+      await expect(
+        db.$client.execute("DELETE FROM query_request WHERE part_id = 1"),
+      ).rejects.toThrow(/query_request rows are never deleted/);
+      const n = (await db.$client.execute("SELECT count(*) AS n FROM query_request")).rows[0]?.n;
+      expect(Number(n)).toBe(2);
+    } finally {
+      db.$client.close();
+    }
+  });
   it("a source_result without its query_request fails the foreign key", async () => {
     const db = await migratedDb();
     try {
@@ -349,11 +405,12 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
       db.$client.close();
     }
   });
-  it("pins each query trigger's statement to migration 0004", () => {
-    const file = readFileSync(resolve(MIGRATIONS, "0004_query_triggers.sql"), "utf8");
-    const statements = file
-      .split("--> statement-breakpoint")
-      .map((st) => st.replace(/\s+/g, " ").trim().replace(/;$/, ""));
+  it("pins each query trigger's statement to migrations 0004 and 0005", () => {
+    const statements = ["0004_query_triggers.sql", "0005_query_no_replace.sql"].flatMap((f) =>
+      readFileSync(resolve(MIGRATIONS, f), "utf8")
+        .split("--> statement-breakpoint")
+        .map((st) => st.replace(/\s+/g, " ").trim().replace(/;$/, "")),
+    );
     expect(statements).toEqual(QUERY_TRIGGERS.map((t) => QUERY_TRIGGER_SQL[t]));
   });
   it.each(QUERY_TRIGGERS)("a dropped %s makes the check refuse", async (name) => {

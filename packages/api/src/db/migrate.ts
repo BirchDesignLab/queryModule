@@ -74,17 +74,22 @@ export async function checkAuditTriggers(db: Db): Promise<void> {
 }
 
 /**
- * Every trigger that keeps query_request insert-once and source_result write-once and
- * undeletable (migration 0004, SEC-013, FR-063); all must exist. request_key has none:
+ * Every trigger that keeps query_request insert-once and undeletable and source_result
+ * write-once and undeletable (migrations 0004 and 0005, SEC-013, FR-063); all must exist.
+ * The 0005 BEFORE INSERT triggers close INSERT OR REPLACE, which fires no UPDATE trigger
+ * and no DELETE trigger while recursive_triggers is off. request_key has none:
  * lost-data-key.ts and purge.ts crypto-shred by deleting its rows.
  */
 export const QUERY_TRIGGERS = [
   "query_request_no_update",
   "source_result_write_once",
   "source_result_no_delete",
+  "query_request_no_replace",
+  "source_result_no_replace",
+  "query_request_no_delete",
 ] as const;
 
-/** The statement of each trigger as migration 0004 creates it, whitespace collapsed. */
+/** The statement of each trigger as migration 0004 or 0005 creates it, whitespace collapsed. */
 export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> = {
   query_request_no_update:
     "CREATE TRIGGER query_request_no_update BEFORE UPDATE ON query_request BEGIN SELECT RAISE(ABORT, 'query_request is insert-once'); END",
@@ -92,9 +97,15 @@ export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> 
     "CREATE TRIGGER source_result_write_once BEFORE UPDATE ON source_result WHEN OLD.status <> 'pending' OR NEW.status = 'pending' OR NEW.result_id IS NOT OLD.result_id OR NEW.correlation_id IS NOT OLD.correlation_id OR NEW.part_id IS NOT OLD.part_id OR NEW.source_id IS NOT OLD.source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.credential_user_id IS NOT OLD.credential_user_id OR NEW.delegation_id IS NOT OLD.delegation_id OR NEW.adapter_kind IS NOT OLD.adapter_kind OR NEW.created_at IS NOT OLD.created_at BEGIN SELECT RAISE(ABORT, 'source_result status is write-once from pending'); END",
   source_result_no_delete:
     "CREATE TRIGGER source_result_no_delete BEFORE DELETE ON source_result BEGIN SELECT RAISE(ABORT, 'source_result rows are never deleted'); END",
+  query_request_no_replace:
+    "CREATE TRIGGER query_request_no_replace BEFORE INSERT ON query_request WHEN EXISTS (SELECT 1 FROM query_request WHERE correlation_id = NEW.correlation_id AND part_id = NEW.part_id) BEGIN SELECT RAISE(ABORT, 'query_request is insert-once'); END",
+  source_result_no_replace:
+    "CREATE TRIGGER source_result_no_replace BEFORE INSERT ON source_result WHEN EXISTS (SELECT 1 FROM source_result WHERE result_id = NEW.result_id OR (correlation_id = NEW.correlation_id AND part_id = NEW.part_id AND source_id = NEW.source_id)) BEGIN SELECT RAISE(ABORT, 'source_result rows are never replaced'); END",
+  query_request_no_delete:
+    "CREATE TRIGGER query_request_no_delete BEFORE DELETE ON query_request BEGIN SELECT RAISE(ABORT, 'query_request rows are never deleted'); END",
 };
 
-/** Some query-table trigger is missing (missing) or not the statement migration 0004 made (altered). */
+/** Some query-table trigger is missing (missing) or not the statement migration 0004 or 0005 made (altered). */
 export class QueryTriggerMissingError extends Error {
   constructor(
     readonly missing: string[],
