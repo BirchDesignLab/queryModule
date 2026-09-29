@@ -303,4 +303,76 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(controller.getState().lastAck).toBeNull();
     expect(controller.getState().status).toBe("idle");
   });
+
+  it("#382 C1 the health backoff doubles from 1 s and stops at the 30 s cap", async () => {
+    const delays: number[] = [];
+    server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.error()));
+    serveQueries(() => HttpResponse.error());
+    const { controller } = setup({ random: () => 1, delays });
+    await controller.getState().submit(REQ);
+    for (let i = 0; i < 9; i += 1) await vi.advanceTimersByTimeAsync(30_000);
+    expect(delays.slice(0, 7)).toEqual([1000, 2000, 4000, 8000, 16_000, 30_000, 30_000]);
+    expect(Math.max(...delays)).toBe(30_000);
+  });
+
+  it.each([
+    ["abc", 0],
+    ["-5", 0],
+    ["", 0],
+    ["Infinity", 0],
+  ])("#382 C1 429 with Retry-After %j reads as %i seconds", async (header, seconds) => {
+    serveQueries(() =>
+      HttpResponse.json(err("rateLimited"), { status: 429, headers: { "Retry-After": header } }),
+    );
+    const { controller } = setup();
+    expect(await controller.getState().submit(REQ)).toEqual({
+      kind: "rateLimited",
+      retryAfterSeconds: seconds,
+    });
+  });
+
+  it("#382 C1 429 without Retry-After reads as 0 seconds", async () => {
+    serveQueries(() => HttpResponse.json(err("rateLimited"), { status: 429 }));
+    const { controller } = setup();
+    expect(await controller.getState().submit(REQ)).toEqual({
+      kind: "rateLimited",
+      retryAfterSeconds: 0,
+    });
+  });
+
+  it("#382 C1/B4 a 202 without a usable body is failed, never an acknowledgment", async () => {
+    for (const body of [null, {}, { correlationId: 7, acknowledgedAt: 1, parts: [] }]) {
+      serveQueries(() => HttpResponse.json(body, { status: 202 }));
+      const { controller } = setup();
+      expect(await controller.getState().submit(REQ)).toEqual({ kind: "failed" });
+      expect(controller.getState().lastAck).toBeNull();
+      server.resetHandlers();
+    }
+  });
+
+  it("#382 B4 a 400 whose errors are missing or not a list is failed", async () => {
+    for (const body of [{ error: { code: "invalid", errors: "nope" } }, {}, { error: null }]) {
+      serveQueries(() => HttpResponse.json(body, { status: 400 }));
+      const { controller } = setup();
+      expect(await controller.getState().submit(REQ)).toEqual({ kind: "failed" });
+      server.resetHandlers();
+    }
+  });
+
+  it("#382 W5 reset on an offline platform stays gated and keeps polling health", async () => {
+    const platform = createFakePlatform();
+    let health = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () => {
+        health += 1;
+        return HttpResponse.error();
+      }),
+    );
+    const { controller } = setup({ platform });
+    platform.setOnline(false);
+    controller.getState().reset();
+    expect(controller.getState().status).toBe("noConnection");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(health).toBeGreaterThan(0);
+  });
 });

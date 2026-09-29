@@ -319,9 +319,14 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
 
   const sendChecked = async (request: CheckedRequest): Promise<void> => {
     if (preview) return;
+    // Values kept in the draft for fields a rule now hides are not sent: data minimisation (the
+    // server prunes them anyway, spec 5.2).
+    const hidden = new Set(request.state.hiddenWithValue);
     const outcome = await submit.getState().submit({
       queryType: request.queryType,
-      values: request.values,
+      values: Object.fromEntries(
+        Object.entries(request.values).filter(([key]) => !hidden.has(key)),
+      ),
       sourceIds: request.sourceIds,
       mode: request.state.mode,
       configHash: config.configHash,

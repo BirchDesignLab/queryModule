@@ -353,6 +353,53 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
   });
 
+  it.each([
+    [429, { "Retry-After": "3" }, "Too many queries. Try again in 3 seconds."],
+    [403, {}, "This query is not allowed."],
+    [503, {}, "The server is restarting. Try again shortly."],
+    [500, {}, "The query was not sent. Try again."],
+  ])("#382 C2 a %i is announced politely and keeps the draft", async (status, headers, text) => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json({ error: { code: "x", requestId: "r" } }, { status, headers }),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    await waitFor(() => expect(polite()).toHaveTextContent(text));
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+  });
+
+  it("#382 C2 a request with no answer announces it and gates Submit", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () => HttpResponse.error()),
+      http.get(`${API}/api/v1/health`, () => HttpResponse.error()),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    await waitFor(() => expect(polite()).toHaveTextContent(/did not answer|No connection/));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      ),
+    );
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+  });
+
+  it("#382 A5 values of fields a rule hides are not sent", async () => {
+    const { user } = await openPanel();
+    await user.selectOptions(screen.getByLabelText("State"), "OK");
+    await user.selectOptions(await screen.findByLabelText(/Plate type/), "PC");
+    await user.selectOptions(screen.getByLabelText("State"), "TX");
+    await waitFor(() => expect(screen.queryByLabelText(/Plate type/)).not.toBeInTheDocument());
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+    const body = submitRecorder.calls[0]?.body as { values: Record<string, unknown> };
+    expect(body.values).toMatchObject({ plate: "ZZ-0001" });
+    expect(body.values).not.toHaveProperty("plateType");
+  });
+
   it("FR-064 a 400 merges the server errors into the field and focuses it", async () => {
     server.use(
       http.post(`${API}/api/v1/queries`, () =>
