@@ -36,6 +36,10 @@ packages/core/contracts/ws-events.schema.json
 packages/core/src/planner/**
 # Query routes and the access policy (spec 5.2, SEC-014)
 packages/api/src/queries/**
+# Admin console (ADR-0011 Consequences): config swaps live config and writes audit;
+# the shared top-level admin files (router, policy)
+packages/api/src/admin/config/**
+packages/api/src/admin/*.ts
 # Delegation
 packages/api/src/delegation/**
 # Terminal command parser
@@ -83,17 +87,21 @@ packages/api/src/log/**
 # Auth and sessions (developer decision 09-27-26: gate, not critical)
 packages/api/src/auth/**
 packages/api/src/http/session.ts
-# #338: X-Requested-With CSRF guard, security headers, body cap
-packages/api/src/http/security.ts
-# #338: sets the CSP nonce header on served pages
-packages/api/src/http/web.ts
-# #338: the one place the CSRF, header and body-cap middleware is mounted
-packages/api/src/app.ts
 packages/api/src/ws/**
 packages/api/src/seed/**
 packages/api/src/ops/**
 packages/api/src/deps.ts
 packages/api/src/events/**
+# Admin console floor (ADR-0011 Consequences): admin/users is auth; anything new under
+# admin/ is at least gate
+packages/api/src/admin/**
+# Request guards (#338, checker 09-29-26)
+# X-Requested-With CSRF guard, security headers, body cap
+packages/api/src/http/security.ts
+# sets the CSP nonce header on served pages
+packages/api/src/http/web.ts
+# the one place the CSRF, header and body-cap middleware is mounted
+packages/api/src/app.ts
 
 [deps]
 # .github/dependabot.yml stays [gate] (.github/**): no automated check reads it.

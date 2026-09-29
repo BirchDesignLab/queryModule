@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const ROLES = ["user", "trainingOfficer", "admin"] as const;
+/** ADR-0011 item 6: implementer edits and publishes site config only (FR-060). */
+export const ROLES = ["user", "trainingOfficer", "admin", "implementer"] as const;
 export const RoleSchema = z.enum(ROLES);
 export type Role = z.infer<typeof RoleSchema>;
 

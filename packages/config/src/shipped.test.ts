@@ -25,13 +25,28 @@ function resolve(rel: string) {
   return SiteConfigSchema.parse(merged.config);
 }
 
-// Spec 4.1 "Command config checks": plateType is required when State is not the default and has no VEH position.
-const PLATE_TYPE_WARNING = {
+// Spec 4.1 "Command config checks": a field a rule can require, with no position in a command, warns.
+// VEH plateType is the original case. PRO make, caliber and description (per-type rules, Task 22)
+// have no position in PRO or PROP: they are set by name (make=...) or in the form.
+const required = (path: string, field: string, command: string) => ({
   level: "warning",
-  path: "/queryTypes/0/rules/1/field",
+  path,
   key: "config.conditionallyRequiredWithoutPosition",
-  params: { field: "plateType", command: "VEH" },
-};
+  params: { field, command },
+});
+const KNOWN_WARNINGS = [
+  required("/queryTypes/0/rules/1/field", "plateType", "VEH"),
+  required("/queryTypes/2/rules/1/field", "make", "PRO"),
+  required("/queryTypes/2/rules/1/field", "make", "PROP"),
+  required("/queryTypes/2/rules/3/field", "caliber", "PRO"),
+  required("/queryTypes/2/rules/3/field", "caliber", "PROP"),
+  required("/queryTypes/2/rules/6/field", "description", "PROP"),
+];
+/** example-ok also requires its custom plateColor off the default state (site-only rule, #347). */
+const knownWarnings = (rel: string) =>
+  rel === "sites/example-ok.json"
+    ? KNOWN_WARNINGS.toSpliced(1, 0, required("/queryTypes/0/rules/3/field", "plateColor", "VEH"))
+    : KNOWN_WARNINGS;
 
 describe("BR-001 shipped sites validate (spec 7)", () => {
   for (const rel of [
@@ -40,18 +55,18 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
     "test/all-on.json",
     "test/flags-off.json",
   ]) {
-    it(`${rel} has no errors and only the known plateType warning`, () => {
+    it(`${rel} has no errors and only the known required-without-position warnings`, () => {
       expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES)).toEqual({
         errors: [],
-        warnings: [PLATE_TYPE_WARNING],
+        warnings: knownWarnings(rel),
       });
     });
 
-    it(`${rel} has no errors and only the known plateType warning with adapterKinds: ["mock"] (ruling W3-1)`, () => {
+    it(`${rel} has no errors and only the known required-without-position warnings with adapterKinds: ["mock"] (ruling W3-1)`, () => {
       expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES, { adapterKinds: ["mock"] })).toEqual(
         {
           errors: [],
-          warnings: [PLATE_TYPE_WARNING],
+          warnings: knownWarnings(rel),
         },
       );
     });

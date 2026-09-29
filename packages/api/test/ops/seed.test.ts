@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { user, userPreference } from "../../src/db/schema";
 import { derivePassword } from "../../src/seed/password";
 import { SeedPartialFailureError, SeedRefusedError, seedUsers } from "../../src/seed/seed";
 import { DEMO_USERS } from "../../src/seed/users";
@@ -45,6 +47,18 @@ describe("SEC-005 seed", () => {
     expect((await t.signIn("smoke@example.test", smoke?.password ?? "")).status).toBe(200);
     const changed = await t.auditRows("roleChanged");
     expect(changed.map((r) => r.details.role).sort()).toEqual(["admin", "trainingOfficer"]);
+  });
+  it("UX-012 D-A33: the officer demo accounts get the mobileUnit persona, the others none", async () => {
+    const t = await createTestApp();
+    await seedUsers(t.deps, SECRET);
+    const rows = await t.deps.db
+      .select({ email: user.email, personaOverride: userPreference.personaOverride })
+      .from(userPreference)
+      .innerJoin(user, eq(user.id, userPreference.userId));
+    expect(rows.sort((a, b) => a.email.localeCompare(b.email))).toEqual([
+      { email: "mobileunit@example.test", personaOverride: "mobileUnit" },
+      { email: "officer@example.test", personaOverride: "mobileUnit" },
+    ]);
   });
   it("refuses a non-empty database", async () => {
     const t = await createTestApp();

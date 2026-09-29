@@ -127,6 +127,13 @@ describe("sensitive-review (spec 9.1)", () => {
     ])
       expect(c(f), f).toBe("gate");
     for (const f of ["packages/api/src/env.ts"]) expect(c(f), f).toBeNull();
+    // ADR-0011 Consequences: admin config swaps live config and writes audit (critical), as do
+    // the shared top-level admin files; admin users is auth (gate); anything new under admin/
+    // is at least gate.
+    for (const f of ["packages/api/src/admin/config/store.ts", "packages/api/src/admin/index.ts"])
+      expect(c(f), f).toBe("critical");
+    for (const f of ["packages/api/src/admin/users/routes.ts", "packages/api/src/admin/other/x.ts"])
+      expect(c(f), f).toBe("gate");
     // Developer decision 09-27-26: the redacting logger (spec 5.9) is the gate-tier
     // control that keeps secrets and query values out of logs.
     for (const f of ["packages/api/src/log/logger.ts"]) expect(c(f), f).toBe("gate");

@@ -245,12 +245,21 @@ describe("spec 5.8 step 5, 5.9 config warnings are logged by key and path only",
         key: "config.unusedSiteDefault",
         path: "/defaults/zzUnused",
       },
-      {
+      // The bundled site's required-without-position warnings: VEH plateType, then PRO and PROP
+      // make and caliber and PROP description (#346).
+      ...[
+        "/queryTypes/0/rules/1/field",
+        "/queryTypes/2/rules/1/field",
+        "/queryTypes/2/rules/1/field",
+        "/queryTypes/2/rules/3/field",
+        "/queryTypes/2/rules/3/field",
+        "/queryTypes/2/rules/6/field",
+      ].map((path) => ({
         level: "warn",
         msg: "config warning",
         key: "config.conditionallyRequiredWithoutPosition",
-        path: "/queryTypes/0/rules/1/field",
-      },
+        path,
+      })),
     ]);
     expect(lines.join("\n")).not.toContain("SECRETVALUE");
   });

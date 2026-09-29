@@ -61,6 +61,13 @@
             "status": "NO RECORD"
           },
           "scenarios": []
+        },
+        {
+          "queryType": "DL",
+          "default": {
+            "status": "NO RECORD"
+          },
+          "scenarios": []
         }
       ]
     },
@@ -131,6 +138,13 @@
               }
             }
           ]
+        },
+        {
+          "queryType": "DL",
+          "default": {
+            "status": "NO RECORD"
+          },
+          "scenarios": []
         }
       ]
     }

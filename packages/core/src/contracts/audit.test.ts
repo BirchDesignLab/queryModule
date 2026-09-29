@@ -88,6 +88,23 @@ const samples = {
     requestCount: 12,
     keysDeleted: 0,
   },
+  configPublished: {
+    siteId: "default",
+    versionId: DID,
+    version: 3,
+    configHash: HASH,
+    previousConfigHash: "f".repeat(64),
+    changedPointers: ["/queryTypes/2/fields/4/required", "/commands/-"],
+    rollbackOf: 1,
+  },
+  userCreated: { targetUserId: "u2", role: "implementer" },
+  userDisabled: {
+    targetUserId: "u2",
+    sessionsRevoked: 2,
+    delegationsRevoked: 0,
+    credentialsDeleted: 0,
+  },
+  sessionRevoked: { sessionId: RID, reason: "admin" },
 } as const;
 
 /** The six query types frozen in M0 P0; the auth types (M0 P1) have their own envelope. */
@@ -102,7 +119,7 @@ const QUERY_EVENT_TYPES = [
 type QueryEventType = (typeof QUERY_EVENT_TYPES)[number];
 
 describe("SEC-010 audit catalogue (spec 4.7 query events, spec 5.6 auth events)", () => {
-  it("lists the six query event types frozen in M0 P0, the four M0 P1 auth types, then the two M1 P2 system types (D-A2)", () => {
+  it("lists the six query event types frozen in M0 P0, the four M0 P1 auth types, the two M1 P2 system types (D-A2), then the four M1 P3 admin types (ADR-0011)", () => {
     expect([...AUDIT_EVENT_TYPES]).toEqual([
       ...QUERY_EVENT_TYPES,
       "loginSucceeded",
@@ -111,6 +128,10 @@ describe("SEC-010 audit catalogue (spec 4.7 query events, spec 5.6 auth events)"
       "roleChanged",
       "configLoaded",
       "retentionPurged",
+      "configPublished",
+      "userCreated",
+      "userDisabled",
+      "sessionRevoked",
     ]);
     expect(Object.keys(AUDIT_DETAILS_SCHEMAS).sort()).toEqual([...AUDIT_EVENT_TYPES].sort());
   });
@@ -777,4 +798,182 @@ describe("SEC-021 retentionPurged", () => {
     ["a correlationId", { ...row, correlationId: "01890a5d-ac96-774b-bcce-b302099a8057" }],
     ["a negative count", { ...row, details: { ...row.details, keysDeleted: -1 } }],
   ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
+});
+
+describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => {
+  const admin = { id: "admin1", email: "admin@example.test", role: "admin" } as const;
+  const implementer = { id: "impl1", email: "impl@example.test", role: "implementer" } as const;
+  const row = <T extends AuditEventType>(type: T, actor: typeof admin | typeof implementer) => ({
+    type,
+    actor,
+    identitySource: "local",
+    details: samples[type],
+  });
+
+  it("an implementer or admin publishes config; an admin creates, disables and revokes", () => {
+    for (const e of [
+      row("configPublished", implementer),
+      row("configPublished", admin),
+      row("userCreated", admin),
+      row("userDisabled", admin),
+      row("sessionRevoked", admin),
+    ])
+      expect(AuditEventSchema.safeParse(e).success).toBe(true);
+  });
+
+  it("the sweeper revokes an expired session as the system actor", () => {
+    const e = {
+      type: "sessionRevoked",
+      actor: SYSTEM_ACTOR,
+      identitySource: "system",
+      details: { sessionId: RID, reason: "expired" },
+    };
+    expect(AuditEventSchema.safeParse(e).success).toBe(true);
+  });
+
+  it("configPublished without rollbackOf is a plain publish", () => {
+    const { rollbackOf: _r, ...plain } = samples.configPublished;
+    expect(AUDIT_DETAILS_SCHEMAS.configPublished.safeParse(plain).success).toBe(true);
+  });
+
+  const published = row("configPublished", admin);
+  it.each([
+    [
+      "a changed value instead of a JSON pointer",
+      { ...published, details: { ...published.details, changedPointers: ["plate=ZZ-0001"] } },
+    ],
+    [
+      "a first version with no previous hash shape",
+      { ...published, details: { ...published.details, previousConfigHash: "not-a-hash" } },
+    ],
+    ["version 0", { ...published, details: { ...published.details, version: 0 } }],
+    ["a correlationId", { ...published, correlationId: CID }],
+    ["a partId", { ...published, partId: 0 }],
+    ["a credentialUserId", { ...published, credentialUserId: "officer1" }],
+    [
+      "a password on userCreated",
+      { ...row("userCreated", admin), details: { ...samples.userCreated, password: "x" } },
+    ],
+    [
+      "an unknown session revoke reason",
+      {
+        ...row("sessionRevoked", admin),
+        details: { sessionId: RID, reason: "because" },
+      },
+    ],
+    [
+      "a session token in place of the session row id",
+      {
+        ...row("sessionRevoked", admin),
+        details: { sessionId: "Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z", reason: "admin" },
+      },
+    ],
+    [
+      "a negative count on userDisabled",
+      { ...row("userDisabled", admin), details: { ...samples.userDisabled, sessionsRevoked: -1 } },
+    ],
+  ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
+
+  // C-I1: the actor is bound to the admin type (ADR-0011 items 6 to 8; spec 4.7 sweeper writes expired).
+  const user = { id: "u1", email: "officer@example.test", role: "user" } as const;
+  const sys = <T extends AuditEventType>(type: T, details: object) => ({
+    type,
+    actor: SYSTEM_ACTOR,
+    identitySource: "system",
+    details,
+  });
+  const human = <T extends AuditEventType>(
+    type: T,
+    actor: { id: string; email: string; role: string },
+    details: object,
+  ) => ({ type, actor, identitySource: "local", details });
+  const roleChange = (via: "grant-role" | "adminConsole") => ({
+    targetUserId: "u2",
+    role: "trainingOfficer",
+    change: "granted",
+    via,
+  });
+  it.each([
+    ["userDisabled by the system actor", sys("userDisabled", samples.userDisabled)],
+    ["userCreated by the system actor", sys("userCreated", samples.userCreated)],
+    ["configPublished by the system actor", sys("configPublished", samples.configPublished)],
+    ["userCreated by an implementer", human("userCreated", implementer, samples.userCreated)],
+    ["userDisabled by an implementer", human("userDisabled", implementer, samples.userDisabled)],
+    ["configPublished by role user", human("configPublished", user, samples.configPublished)],
+    ["sessionRevoked admin by the system actor", sys("sessionRevoked", samples.sessionRevoked)],
+    [
+      "sessionRevoked userDisabled by the system actor",
+      sys("sessionRevoked", { sessionId: RID, reason: "userDisabled" }),
+    ],
+    [
+      "sessionRevoked expired by an admin",
+      human("sessionRevoked", admin, { sessionId: RID, reason: "expired" }),
+    ],
+    [
+      "sessionRevoked admin by an implementer",
+      human("sessionRevoked", implementer, samples.sessionRevoked),
+    ],
+    [
+      "roleChanged adminConsole by the system actor",
+      sys("roleChanged", roleChange("adminConsole")),
+    ],
+    ["roleChanged grant-role by an admin", human("roleChanged", admin, roleChange("grant-role"))],
+    [
+      "roleChanged adminConsole by an implementer",
+      human("roleChanged", implementer, roleChange("adminConsole")),
+    ],
+  ])("C-I1 rejects %s", (_n, e) => {
+    const r = AuditEventSchema.safeParse(e);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some((i) => i.path[0] === "actor")).toBe(true);
+  });
+  it.each([
+    ["configPublished by an admin", human("configPublished", admin, samples.configPublished)],
+    [
+      "configPublished by an implementer",
+      human("configPublished", implementer, samples.configPublished),
+    ],
+    ["userCreated by an admin", human("userCreated", admin, samples.userCreated)],
+    ["userDisabled by an admin", human("userDisabled", admin, samples.userDisabled)],
+    ["sessionRevoked admin by an admin", human("sessionRevoked", admin, samples.sessionRevoked)],
+    [
+      "sessionRevoked userDisabled by an admin",
+      human("sessionRevoked", admin, { sessionId: RID, reason: "userDisabled" }),
+    ],
+    [
+      "sessionRevoked expired by the system actor",
+      sys("sessionRevoked", { sessionId: RID, reason: "expired" }),
+    ],
+    ["roleChanged grant-role by the system actor", sys("roleChanged", roleChange("grant-role"))],
+    [
+      "roleChanged adminConsole by an admin",
+      human("roleChanged", admin, roleChange("adminConsole")),
+    ],
+  ])("C-I1 accepts %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(true));
+
+  // C-m2: a rollback republishes an older version (ADR-0011 item 5).
+  it.each([
+    ["the same version", 3],
+    ["a later version", 4],
+  ])("C-m2 rejects a rollback to %s", (_n, rollbackOf) =>
+    expect(
+      AUDIT_DETAILS_SCHEMAS.configPublished.safeParse({ ...samples.configPublished, rollbackOf })
+        .success,
+    ).toBe(false),
+  );
+  it("C-m2 accepts a rollback to an older version", () =>
+    expect(
+      AUDIT_DETAILS_SCHEMAS.configPublished.safeParse({ ...samples.configPublished, rollbackOf: 2 })
+        .success,
+    ).toBe(true));
+
+  it("caps changedPointers so a publish row stays bounded", () => {
+    const many = Array.from({ length: 1001 }, (_, i) => `/picklists/0/values/${i}`);
+    expect(
+      AUDIT_DETAILS_SCHEMAS.configPublished.safeParse({
+        ...samples.configPublished,
+        changedPointers: many,
+      }).success,
+    ).toBe(false);
+  });
 });

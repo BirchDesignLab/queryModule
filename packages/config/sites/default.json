@@ -30,7 +30,7 @@
   },
   "retention": { "payloadDays": null, "valuesDays": null },
   "terminal": { "delimiter": "." },
-  "defaults": { "state": "TX" },
+  "defaults": { "state": "TX", "agency": "EXAMPLEPD" },
   "picklists": [
     {
       "id": "state",
@@ -71,7 +71,17 @@
       "values": [
         { "code": "FIREARM", "labelKey": "picklist.propertyType.FIREARM" },
         { "code": "BOAT", "labelKey": "picklist.propertyType.BOAT" },
-        { "code": "ARTICLE", "labelKey": "picklist.propertyType.ARTICLE" }
+        { "code": "ARTICLE", "labelKey": "picklist.propertyType.ARTICLE" },
+        { "code": "ELECTRONICS", "labelKey": "picklist.propertyType.ELECTRONICS" },
+        { "code": "VEHICLE", "labelKey": "picklist.propertyType.VEHICLE" }
+      ]
+    },
+    {
+      "id": "plateColor",
+      "values": [
+        { "code": "BK", "labelKey": "picklist.plateColor.BK" },
+        { "code": "WH", "labelKey": "picklist.plateColor.WH" },
+        { "code": "BL", "labelKey": "picklist.plateColor.BL" }
       ]
     }
   ],
@@ -129,6 +139,15 @@
           "dataType": "picklist",
           "picklist": "plateType",
           "visible": false
+        },
+        {
+          "key": "plateColor",
+          "labelKey": "field.plateColor",
+          "dataType": "picklist",
+          "picklist": "plateColor",
+          "section": "expanded",
+          "custom": true,
+          "visible": false
         }
       ],
       "rules": [
@@ -141,6 +160,11 @@
           "field": "plateType",
           "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
           "effect": "require"
+        },
+        {
+          "field": "plateColor",
+          "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
+          "effect": "show"
         }
       ],
       "sources": [
@@ -176,9 +200,16 @@
           "inputFormats": ["MMDDYYYY", "MM-DD-YYYY", "YYYY-MM-DD"]
         },
         { "key": "sex", "labelKey": "field.sex", "dataType": "picklist", "picklist": "sex" },
-        { "key": "race", "labelKey": "field.race", "dataType": "picklist", "picklist": "race" }
+        { "key": "race", "labelKey": "field.race", "dataType": "picklist", "picklist": "race" },
+        { "key": "state", "labelKey": "field.state", "dataType": "picklist", "picklist": "state" }
       ],
-      "rules": [],
+      "rules": [
+        {
+          "field": "dob",
+          "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
+          "effect": "require"
+        }
+      ],
       "sources": [
         { "sourceId": "stateSource", "selectedByDefault": true },
         { "sourceId": "nationalSource", "selectedByDefault": true }
@@ -190,7 +221,10 @@
     {
       "code": "PRO",
       "labelKey": "queryType.PRO",
-      "sections": [{ "key": "base", "labelKey": "section.base" }],
+      "sections": [
+        { "key": "base", "labelKey": "section.base" },
+        { "key": "expanded", "labelKey": "section.expanded" }
+      ],
       "fields": [
         { "key": "serial", "labelKey": "field.serial", "dataType": "string", "transform": "upper" },
         {
@@ -207,9 +241,87 @@
           "dataType": "string",
           "maxLength": 200,
           "charset": "printable"
+        },
+        { "key": "state", "labelKey": "field.state", "dataType": "picklist", "picklist": "state" },
+        {
+          "key": "make",
+          "labelKey": "field.make",
+          "dataType": "string",
+          "maxLength": 40,
+          "transform": "upper",
+          "charset": "printable",
+          "visible": false
+        },
+        {
+          "key": "model",
+          "labelKey": "field.model",
+          "dataType": "string",
+          "maxLength": 40,
+          "transform": "upper",
+          "charset": "printable",
+          "visible": false
+        },
+        {
+          "key": "caliber",
+          "labelKey": "field.caliber",
+          "dataType": "string",
+          "maxLength": 20,
+          "transform": "upper",
+          "charset": "printable",
+          "visible": false
+        },
+        {
+          "key": "agency",
+          "labelKey": "field.agency",
+          "dataType": "string",
+          "maxLength": 20,
+          "transform": "upper",
+          "charset": "printable",
+          "section": "expanded"
         }
       ],
-      "rules": [],
+      "rules": [
+        {
+          "field": "make",
+          "when": { "field": "propertyType", "op": "in", "value": ["FIREARM", "ELECTRONICS"] },
+          "effect": "show"
+        },
+        {
+          "field": "make",
+          "when": { "field": "propertyType", "op": "eq", "value": "FIREARM" },
+          "effect": "require"
+        },
+        {
+          "field": "caliber",
+          "when": { "field": "propertyType", "op": "eq", "value": "FIREARM" },
+          "effect": "show"
+        },
+        {
+          "field": "caliber",
+          "when": { "field": "propertyType", "op": "eq", "value": "FIREARM" },
+          "effect": "require"
+        },
+        {
+          "field": "model",
+          "when": { "field": "propertyType", "op": "eq", "value": "ELECTRONICS" },
+          "effect": "show"
+        },
+        {
+          "field": "serial",
+          "when": { "field": "propertyType", "op": "eq", "value": "VEHICLE" },
+          "effect": "require"
+        },
+        {
+          "field": "description",
+          "when": { "field": "propertyType", "op": "eq", "value": "ARTICLE" },
+          "effect": "require"
+        },
+        {
+          "field": "serial",
+          "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
+          "effect": "require"
+        }
+      ],
       "sources": [
         { "sourceId": "stateSource", "selectedByDefault": true },
         { "sourceId": "nationalSource", "selectedByDefault": true }
@@ -245,23 +357,93 @@
       ],
       "rules": [],
       "sources": [{ "sourceId": "nationalSource", "selectedByDefault": true }]
+    },
+    {
+      "code": "DL",
+      "labelKey": "queryType.DL",
+      "sections": [{ "key": "base", "labelKey": "section.base" }],
+      "fields": [
+        {
+          "key": "licenseNumber",
+          "labelKey": "field.licenseNumber",
+          "dataType": "string",
+          "maxLength": 20,
+          "transform": "upper",
+          "pattern": "[A-Z0-9]+"
+        },
+        { "key": "state", "labelKey": "field.state", "dataType": "picklist", "picklist": "state" },
+        {
+          "key": "last",
+          "labelKey": "field.last",
+          "dataType": "string",
+          "transform": "upper",
+          "charset": "printable"
+        },
+        {
+          "key": "first",
+          "labelKey": "field.first",
+          "dataType": "string",
+          "transform": "upper",
+          "charset": "printable"
+        },
+        {
+          "key": "dob",
+          "labelKey": "field.dob",
+          "dataType": "date",
+          "century": "past",
+          "inputFormats": ["MMDDYYYY", "MM-DD-YYYY", "YYYY-MM-DD"]
+        }
+      ],
+      "rules": [
+        {
+          "field": "licenseNumber",
+          "when": { "field": "last", "op": "empty" },
+          "effect": "require"
+        },
+        {
+          "field": "last",
+          "when": { "field": "licenseNumber", "op": "empty" },
+          "effect": "require"
+        },
+        {
+          "field": "dob",
+          "when": { "field": "licenseNumber", "op": "empty" },
+          "effect": "require"
+        }
+      ],
+      "sources": [
+        { "sourceId": "stateSource", "selectedByDefault": true },
+        { "sourceId": "nationalSource", "selectedByDefault": true }
+      ],
+      "alsoRun": [
+        { "queryType": "WNT", "fieldMap": { "last": "last", "first": "first", "dob": "dob" } }
+      ]
     }
   ],
   "commands": [
     { "code": "VEH", "queryType": "VEH", "positions": ["plate", "state", "year", "vin"] },
     { "code": "PER", "queryType": "PER", "positions": ["last", "first", "dob", "sex", "race"] },
+    { "code": "NAM", "queryType": "PER", "positions": ["last", "first", "dob", "sex", "race"] },
     {
       "code": "PRO",
       "queryType": "PRO",
       "positions": ["serial", "propertyType", { "field": "description", "rest": true }]
     },
-    { "code": "WNT", "queryType": "WNT", "positions": ["last", "first", "dob"] }
+    { "code": "WNT", "queryType": "WNT", "positions": ["last", "first", "dob"] },
+    { "code": "PROP", "queryType": "PRO", "positions": ["propertyType", "serial", "state"] },
+    {
+      "code": "DL",
+      "queryType": "DL",
+      "positions": ["licenseNumber", "state", "last", "first", "dob"]
+    }
   ],
   "keywords": [
     { "keyword": "STOLEN", "severity": "critical", "except": ["NOT STOLEN", "RECOVERED STOLEN"] },
     { "keyword": "WANTED", "severity": "critical", "except": ["NOT WANTED"] },
     { "keyword": "EXPIRED", "severity": "warning" },
-    { "keyword": "NO RECORD", "severity": "info" }
+    { "keyword": "NO RECORD", "severity": "info" },
+    { "keyword": "MISSING", "severity": "critical" },
+    { "keyword": "RECOVERED", "severity": "info" }
   ],
   "keywordSeverityStyles": {
     "critical": {
@@ -299,6 +481,55 @@
           "kind": "value",
           "path": "plate",
           "labelKey": "field.plate",
+          "view": "summary",
+          "highlight": false
+        }
+      ]
+    },
+    {
+      "id": "per-summary",
+      "queryType": "PER",
+      "elements": [
+        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" }
+      ]
+    },
+    {
+      "id": "pro-summary",
+      "queryType": "PRO",
+      "elements": [
+        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" },
+        {
+          "kind": "value",
+          "path": "serial",
+          "labelKey": "field.serial",
+          "view": "summary",
+          "highlight": false
+        }
+      ]
+    },
+    {
+      "id": "wnt-summary",
+      "queryType": "WNT",
+      "elements": [
+        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" },
+        {
+          "kind": "value",
+          "path": "subject.last",
+          "labelKey": "field.last",
+          "view": "summary",
+          "highlight": false
+        }
+      ]
+    },
+    {
+      "id": "dl-summary",
+      "queryType": "DL",
+      "elements": [
+        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" },
+        {
+          "kind": "value",
+          "path": "licenseNumber",
+          "labelKey": "field.licenseNumber",
           "view": "summary",
           "highlight": false
         }

@@ -38,11 +38,19 @@ describe("SEC-010 auth audit details", () => {
     expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({ sessionId: SID }).success).toBe(true);
     expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({}).success).toBe(false);
   });
-  it("roleChanged pins via to grant-role", () => {
+  it("roleChanged pins via to grant-role or the admin console (ADR-0011 item 8)", () => {
     const s = AUDIT_DETAILS_SCHEMAS.roleChanged;
     expect(
       s.safeParse({ targetUserId: "u", role: "admin", change: "granted", via: "grant-role" })
         .success,
+    ).toBe(true);
+    expect(
+      s.safeParse({
+        targetUserId: "u",
+        role: "implementer",
+        change: "granted",
+        via: "adminConsole",
+      }).success,
     ).toBe(true);
     expect(
       s.safeParse({ targetUserId: "u", role: "admin", change: "granted", via: "api" }).success,

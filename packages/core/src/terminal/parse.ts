@@ -1,5 +1,5 @@
 import type { ValidationError } from "../contracts/index.js";
-import { type EvaluateOptions, evaluateForm } from "../rules/index.js";
+import { type EvaluateOptions, evaluateForm, type FormState } from "../rules/index.js";
 import { fieldOf } from "./positions.js";
 import { tokenize } from "./tokenize.js";
 import type { ParseResult, TerminalConfig } from "./types.js";
@@ -19,12 +19,36 @@ export function parseCommand(
   if (t.queryType === undefined || cmd === undefined)
     return { userValues: t.userValues, errors: t.errors };
 
-  const positionOf = new Map(cmd.positions.map((p, i) => [fieldOf(p), i + 1]));
   // Draft merge: an omitted or trailing-empty position writes an empty user value.
   const userValues = { ...t.userValues };
-  for (const key of positionOf.keys()) userValues[key] ??= "";
+  for (const p of cmd.positions) userValues[fieldOf(p)] ??= "";
 
   const formState = evaluateForm(config, t.queryType, userValues, options);
+  return {
+    queryType: t.queryType,
+    userValues,
+    formState,
+    errors: [
+      ...t.errors,
+      ...enrichErrors(config, cmd.code, formState, [...t.positionedKeys, ...t.namedKeys]),
+    ],
+  };
+}
+
+/**
+ * Internal (parseCommand and checkTerminalSubmit share it): formState's errors, where a
+ * validation.* error naming a field gains labelKey and, for a command position, its 1-based
+ * position; then terminal.valueForHiddenField for each typed key in hiddenWithValue. Only a key
+ * the user typed (positioned or named) raises it; a preset-only key never does.
+ */
+export function enrichErrors(
+  config: TerminalConfig,
+  commandCode: string,
+  formState: FormState,
+  typedKeys: readonly string[],
+): ValidationError[] {
+  const cmd = config.commands.find((c) => c.code === commandCode);
+  const positionOf = new Map((cmd?.positions ?? []).map((p, i) => [fieldOf(p), i + 1]));
   const labelOf = new Map(formState.fields.map((f) => [f.key, f.labelKey]));
   const fieldParams = (field: string) => {
     const labelKey = labelOf.get(field);
@@ -40,19 +64,9 @@ export function parseCommand(
     if (!e.key.startsWith("validation.") || typeof field !== "string") return e;
     return { key: e.key, params: { ...e.params, ...fieldParams(field) } };
   };
-  // Only a key the user typed (positioned or named) raises it; a preset-only key never does.
-  const typed = new Set([...t.positionedKeys, ...t.namedKeys]);
+  const typed = new Set(typedKeys);
   const hidden: ValidationError[] = formState.hiddenWithValue
     .filter((key) => typed.has(key))
-    .map((key) => ({
-      key: "terminal.valueForHiddenField",
-      params: fieldParams(key),
-    }));
-
-  return {
-    queryType: t.queryType,
-    userValues,
-    formState,
-    errors: [...t.errors, ...formState.errors.map(enrich), ...hidden],
-  };
+    .map((key) => ({ key: "terminal.valueForHiddenField", params: fieldParams(key) }));
+  return [...formState.errors.map(enrich), ...hidden];
 }

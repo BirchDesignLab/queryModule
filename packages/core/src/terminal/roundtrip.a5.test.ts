@@ -67,15 +67,27 @@ function fieldDef(config: TerminalConfig, queryType: string, key: string): Field
   return def;
 }
 
-/** Form to terminal (selectCommand, formatCommand), terminal to draft (tokenize, mergeDraft). */
+/**
+ * Typed-only commands (#346): a second command on a query type that the toggle never produces,
+ * because selectCommand keeps the first preset-free command in config order (PER, PRO). They are
+ * typed in the terminal only; every other shipped command is the toggle's pick for its type.
+ */
+const TYPED_ONLY: ReadonlySet<string> = new Set(["NAM", "PROP"]);
+
+/** Terminal to draft for one command: formatCommand with its own code, tokenize, mergeDraft. */
+function tripWith(config: TerminalConfig, c: DraftCase, code: string) {
+  const formatted = formatCommand(config, code, c.draft, { now });
+  const tokens = tokenize(config, formatted.text);
+  const merged = mergeDraft(c.draft, tokens, config);
+  return { formatted, tokens, merged };
+}
+
+/** Form to terminal through the toggle (selectCommand, formatCommand), then back to a draft. */
 function trip(config: TerminalConfig, c: DraftCase) {
   const selected = selectCommand(config, c.command.queryType, c.draft, { now });
   // #323 C-C-M2: no command selected would format "" and let a property pass vacuously.
   if (selected === undefined) throw new Error(`no command selected for ${c.command.code}`);
-  const formatted = formatCommand(config, selected.code, c.draft, { now });
-  const tokens = tokenize(config, formatted.text);
-  const merged = mergeDraft(c.draft, tokens, config);
-  return { selected, formatted, tokens, merged };
+  return { selected, ...tripWith(config, c, selected.code) };
 }
 
 const isEmpty = (v: Draft[string] | undefined) =>
@@ -122,11 +134,24 @@ describe.each(cases)(
     const qt = command.queryType;
     const arb = draftFor(config, command, now);
 
-    it("[A5] positioned user values survive format then tokenize", () => {
+    it("[A5] the toggle picks this command, or it is typed-only and the toggle's pick round-trips", () => {
       fc.assert(
         fc.property(arb, (c) => {
           const { selected, formatted, tokens, merged } = trip(config, c);
-          expect(selected.code).toBe(command.code);
+          if (TYPED_ONLY.has(command.code)) expect(selected.code).not.toBe(command.code);
+          else expect(selected.code).toBe(command.code);
+          expect(formatted.errors).toEqual([]);
+          expect(tokens.errors).toEqual([]);
+          expect(canonDraft(config, qt, merged)).toEqual(canonDraft(config, qt, c.draft));
+        }),
+        runs,
+      );
+    });
+
+    it("[A5] positioned user values survive format then tokenize", () => {
+      fc.assert(
+        fc.property(arb, (c) => {
+          const { formatted, tokens, merged } = tripWith(config, c, command.code);
           expect(formatted.errors).toEqual([]);
           expect(tokens.errors).toEqual([]);
           const before = canonDraft(config, qt, c.draft);
@@ -146,7 +171,7 @@ describe.each(cases)(
     it("[A5] unpositioned user values are kept", () => {
       fc.assert(
         fc.property(arb, (c) => {
-          const { merged } = trip(config, c);
+          const { merged } = tripWith(config, c, command.code);
           for (const key of c.unpositioned) expect(merged[key]).toBe(c.draft[key]);
         }),
         runs,
@@ -167,7 +192,7 @@ describe.each(cases)(
     it("[A5] canonicalisation is idempotent on terminal-emitted text", () => {
       fc.assert(
         fc.property(arb, (c) => {
-          const { tokens } = trip(config, c);
+          const { tokens } = tripWith(config, c, command.code);
           for (const key of tokens.positionedKeys) {
             const text = tokens.userValues[key] ?? "";
             if (text === "") continue;
