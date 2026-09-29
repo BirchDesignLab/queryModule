@@ -1,7 +1,12 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import config from "../../vitest.config";
 
 // #295: coverage pins for the root vitest config (gate tier).
+// Loaded at run time so tsc does not pull the root config into the scripts project.
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const url = pathToFileURL(resolve(root, "vitest.config.ts")).href;
+const config = (await import(url)).default as { test?: { coverage?: unknown } };
 const coverage = config.test?.coverage as {
   include: string[];
   exclude: string[];
