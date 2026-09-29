@@ -14,14 +14,33 @@ async function signIn() {
   return t;
 }
 
-describe("BR-002 home after sign-in", () => {
-  it("shows the signed-in user and focuses the heading", async () => {
+describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
+  it("shows the signed-in user in the header and focuses the panel heading", async () => {
     await signIn();
     expect(screen.getByText(`Signed in as ${TEST_USER.email}`)).toBeInTheDocument();
-    // Sign-in resolves outside act(), so React commits HomePage and runs its focus effect in a
+    // Sign-in resolves outside act(), so React commits the panel and runs its focus effect in a
     // later task; findByRole can return in between (focus still on body) under a loaded suite.
     const heading = screen.getByRole("heading", { name: "Query Module" });
     await waitFor(() => expect(heading).toHaveFocus());
+  });
+  it("D-B4 the header carries the status link, theme select and sign-out, and the panel is at /", async () => {
+    await signIn();
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("link", { name: "Connection status" })).toHaveAttribute(
+      "href",
+      "/status",
+    );
+    expect(within(header).getByLabelText("Theme")).toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Query type")).toBeInTheDocument();
+  });
+  it("D-B4 the header stays on the status page", async () => {
+    const { user } = await signIn();
+    await user.click(screen.getByRole("link", { name: "Connection status" }));
+    expect(await screen.findByRole("heading", { name: "Connection status" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("banner")).getByRole("button", { name: "Sign out" }),
+    ).toBeInTheDocument();
   });
   it("UX-002 switches theme without reload", async () => {
     const { user } = await signIn();
@@ -74,7 +93,7 @@ describe("BR-002 home after sign-in", () => {
     expect(screen.getByRole("heading", { name: "Sign in" })).toHaveFocus();
     expect(screen.getByTestId("announcer-polite")).toHaveTextContent("Signed out.");
   });
-  it("#241: after a failed sign-out, a reload never shows HomePage for the old user", async () => {
+  it("#241: after a failed sign-out, a reload never shows the panel for the old user", async () => {
     // The server keeps failing, so the old session (cookie) stays valid on the server.
     server.use(
       http.post(`${API}/api/v1/auth/sign-out`, () => new HttpResponse(null, { status: 503 })),

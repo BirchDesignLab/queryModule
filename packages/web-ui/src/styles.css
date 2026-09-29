@@ -103,3 +103,49 @@ h1 {
   border-style: dashed;
   cursor: not-allowed;
 }
+
+/* Query panel (spec 6.2). min-inline-size: 0 lets a fieldset shrink below its widest control at 320px. */
+.qm-query-form__section {
+  min-inline-size: 0;
+  margin: 0 0 var(--qm-space-4);
+  padding: var(--qm-space-3) var(--qm-space-4);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-md);
+}
+
+.qm-query-form__section legend {
+  padding-inline: var(--qm-space-2);
+  font-weight: 600;
+}
+
+.qm-field__input,
+.qm-select {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+}
+
+.qm-quick-access {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+  margin-block-end: var(--qm-space-4);
+}
+
+.qm-quick-access__button {
+  min-height: var(--qm-target-min);
+  min-width: var(--qm-target-min);
+  padding: var(--qm-space-2) var(--qm-space-4);
+  border: var(--qm-border-width) solid var(--qm-color-accent);
+  border-radius: var(--qm-radius-sm);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+  font: inherit;
+  cursor: pointer;
+}
+
+.qm-quick-access__button[aria-pressed="true"] {
+  background: var(--qm-color-accent);
+  color: var(--qm-color-surface-base);
+  font-weight: 600;
+}
