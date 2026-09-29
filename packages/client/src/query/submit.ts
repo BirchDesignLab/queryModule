@@ -126,6 +126,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
   let chain = 0;
   let generation = 0;
   let unsubscribeOnline: () => void = () => undefined;
+  let disposed = false;
   let goOffline: () => void = () => undefined;
 
   const store = createStore<SubmitState>((set, get) => {
@@ -253,9 +254,10 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
         stopPolling();
         set({ status: "idle", lastAck: null });
         // The platform signal outlives a reset (sign-out, user change): still offline stays gated.
-        if (options.online?.current() === false) goOffline();
+        if (!disposed && options.online?.current() === false) goOffline();
       },
       dispose() {
+        disposed = true;
         unsubscribeOnline();
         unsubscribeOnline = () => undefined;
         stopPolling();

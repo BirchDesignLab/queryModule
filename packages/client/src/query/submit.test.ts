@@ -341,6 +341,10 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
   });
 
   it("#382 C1/B4 a 202 without a usable body is failed, never an acknowledgment", async () => {
+    serveQueries(() => HttpResponse.json(ACK, { status: 202 }));
+    const good = setup().controller;
+    expect((await good.getState().submit(REQ)).kind).toBe("acknowledged");
+    server.resetHandlers();
     for (const body of [null, {}, { correlationId: 7, acknowledgedAt: 1, parts: [] }]) {
       serveQueries(() => HttpResponse.json(body, { status: 202 }));
       const { controller } = setup();
@@ -372,7 +376,26 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     platform.setOnline(false);
     controller.getState().reset();
     expect(controller.getState().status).toBe("noConnection");
+    const before = health;
     await vi.advanceTimersByTimeAsync(5_000);
-    expect(health).toBeGreaterThan(0);
+    expect(health).toBeGreaterThan(before);
+  });
+
+  it("#382 W5 reset after dispose starts no polling", async () => {
+    const platform = createFakePlatform();
+    let health = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () => {
+        health += 1;
+        return HttpResponse.error();
+      }),
+    );
+    const { controller } = setup({ platform });
+    controller.getState().dispose();
+    platform.setOnline(false);
+    controller.getState().reset();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(health).toBe(0);
+    expect(controller.getState().status).toBe("idle");
   });
 });

@@ -19,6 +19,7 @@ import {
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
 
@@ -319,14 +320,9 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
 
   const sendChecked = async (request: CheckedRequest): Promise<void> => {
     if (preview) return;
-    // Values kept in the draft for fields a rule now hides are not sent: data minimisation (the
-    // server prunes them anyway, spec 5.2).
-    const hidden = new Set(request.state.hiddenWithValue);
     const outcome = await submit.getState().submit({
       queryType: request.queryType,
-      values: Object.fromEntries(
-        Object.entries(request.values).filter(([key]) => !hidden.has(key)),
-      ),
+      values: valuesToSend(config, request.queryType, request.values, request.state, Date.now()),
       sourceIds: request.sourceIds,
       mode: request.state.mode,
       configHash: config.configHash,
