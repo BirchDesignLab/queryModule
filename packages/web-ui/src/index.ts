@@ -5,12 +5,27 @@ export type { FieldRendererProps } from "./field/FieldRenderer.js";
 export { FieldRenderer } from "./field/FieldRenderer.js";
 export { focusFirstInvalid } from "./field/focus-first-invalid.js";
 export type { QueryFormProps } from "./field/QueryForm.js";
-export { fieldErrors, QueryForm } from "./field/QueryForm.js";
+export {
+  blockedErrorCount,
+  fieldErrors,
+  formErrorsId,
+  formLevelErrors,
+  formLevelMessages,
+  QueryForm,
+} from "./field/QueryForm.js";
 export type { SelectFieldProps } from "./field/SelectField.js";
 export { SelectField } from "./field/SelectField.js";
 export type { TextFieldProps } from "./field/TextField.js";
 export { TextField } from "./field/TextField.js";
 export { useMediaQuery } from "./hooks/useMediaQuery.js";
+export type { QueryTypeSelectProps } from "./panel/QueryTypeSelect.js";
+export { QueryTypeSelect } from "./panel/QueryTypeSelect.js";
+export type { QuickAccessBarProps } from "./panel/QuickAccessBar.js";
+export { QuickAccessBar } from "./panel/QuickAccessBar.js";
+export type { SourceCheckboxesProps } from "./panel/SourceCheckboxes.js";
+export { SourceCheckboxes } from "./panel/SourceCheckboxes.js";
+export type { SubmitBlockReason, SubmitButtonProps } from "./panel/SubmitButton.js";
+export { SubmitButton } from "./panel/SubmitButton.js";
 export { usePersona } from "./persona/usePersona.js";
 export type { ThemeModeSelectProps } from "./theme/ThemeModeSelect.js";
 export { ThemeModeSelect } from "./theme/ThemeModeSelect.js";

@@ -26,3 +26,26 @@ body {
   outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
   outline-offset: var(--qm-focus-ring-offset);
 }
+
+.qm-app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-4);
+  padding: var(--qm-space-3) var(--qm-space-4);
+  background: var(--qm-color-surface-raised);
+  border-bottom: var(--qm-border-width) solid var(--qm-color-border);
+}
+
+.qm-app-header__user {
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.qm-app-header .qm-field {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--qm-space-2);
+  margin-block-end: 0;
+}

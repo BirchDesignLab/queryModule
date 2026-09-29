@@ -15,7 +15,7 @@ export interface FieldRendererProps {
   onChange(key: string, value: DraftValue): void;
   t: Translator["t"];
   idPrefix: string;
-  /** Date fields: shown in the description (spec 6.2 table). */
+  /** Date fields only: shown in the description (spec 6.2 table). A year takes two or four digits. */
   inputFormats?: readonly string[];
   /** Number fields: decimal keypad when "decimal". */
   numberKind?: "integer" | "decimal";
@@ -67,9 +67,7 @@ export function FieldRenderer({
         ? "numeric"
         : undefined;
   const description =
-    (field.dataType === "date" || field.dataType === "year") &&
-    inputFormats !== undefined &&
-    inputFormats.length > 0
+    field.dataType === "date" && inputFormats !== undefined && inputFormats.length > 0
       ? t("form.dateFormats", { formats: inputFormats.join(", ") })
       : undefined;
   return (
