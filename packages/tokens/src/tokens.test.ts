@@ -21,8 +21,67 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
     });
   }
 
+  it("declares the design-system pairs (docs/design/2026-09-29-visual-system.md), each mode checked above", () => {
+    const SURFACES = [
+      "color.surface.sunken",
+      "color.surface.base",
+      "color.surface.raised",
+      "color.surface.overlay",
+    ] as const;
+    const has = (fg: string, bg: string, min: number) =>
+      expect(
+        CONTRAST_PAIRS.some((p) => p.fg === fg && p.bg === bg && p.min === min),
+        `${fg} on ${bg} at ${min}`,
+      ).toBe(true);
+    for (const bg of SURFACES) {
+      has("color.text.body", bg, 7);
+      has("color.text.muted", bg, 4.5);
+      has("color.border", bg, 3);
+      has("focus.ring", bg, 3);
+    }
+    has("color.text.body", "color.accent.subtle", 7);
+    has("color.accent", "color.accent.subtle", 4.5);
+    has("color.text.muted", "color.accent.subtle", 4.5);
+    has("color.accent.onFill", "color.accent.fill", 4.5);
+    for (const bg of ["color.surface.base", "color.surface.raised"] as const) {
+      has("color.accent", bg, 7);
+      has("field.required", bg, 4.5);
+      has("color.status.ok", bg, 4.5);
+    }
+  });
+
+  it("E1: the focus ring never shares a colour with the invalid edge in any mode", () => {
+    for (const mode of THEME_MODES)
+      expect(tokenValue("focus.ring", mode), mode).not.toBe(tokenValue("field.required", mode));
+  });
+
+  it("design system values: night surfaces step up, red shift ring is pale amber, amber night ring", () => {
+    expect(COLOR_TOKENS["color.surface.sunken"].night).toBe("#0a0e13");
+    expect(COLOR_TOKENS["color.surface.base"].night).toBe("#10151c");
+    expect(COLOR_TOKENS["color.surface.overlay"].night).toBe("#1e2733");
+    expect(COLOR_TOKENS["focus.ring"].night).toBe("#ffd24d");
+    expect(COLOR_TOKENS["focus.ring"].redShift).toBe("#ffe0a8");
+    expect(COLOR_TOKENS["color.accent.fill"].night).toBe(COLOR_TOKENS["color.accent"].night);
+  });
+
+  it("the type, space, radius and density scale (px 12 13 14 16 20 24 32; dense 36, touch 56)", () => {
+    const px = (n: Parameters<typeof tokenValue>[0]) => tokenValue(n, "day");
+    expect(
+      (["xs", "sm", "md", "lg", "xl", "2xl", "3xl"] as const).map((k) => px(`type.size.${k}`)),
+    ).toEqual(["12px", "13px", "14px", "16px", "20px", "24px", "32px"]);
+    expect([px("space.5"), px("space.8"), px("space.12")]).toEqual(["20px", "32px", "48px"]);
+    expect([px("radius.control"), px("radius.panel")]).toEqual(["6px", "10px"]);
+    expect([px("control.height.dense"), px("control.height.touch")]).toEqual(["36px", "56px"]);
+    expect(px("focus.ring.width")).toBe("2px");
+    for (const name of ["type.family", "type.family.label", "type.family.data"] as const) {
+      expect(px(name), name).toMatch(/IBM Plex/);
+      // A system fallback ends every stack, so a missing font file never leaves the UI unstyled.
+      expect(px(name), name).toMatch(/(sans-serif|monospace)$/);
+    }
+  });
+
   it("declares every pair with its target: text 7:1, severity 4.5:1, non-text 3:1", () => {
-    expect(CONTRAST_PAIRS.map((p) => [p.fg, p.bg, p.min])).toEqual([
+    expect(CONTRAST_PAIRS.slice(0, 10).map((p) => [p.fg, p.bg, p.min])).toEqual([
       ["color.text.body", "color.surface.base", 7],
       ["color.text.body", "color.surface.raised", 7],
       ["color.accent", "color.surface.base", 7],
@@ -42,7 +101,7 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
 
   it("tokenValue reads colour tokens per mode and scale tokens in any mode", () => {
     expect(tokenValue("color.accent", "night")).toBe(COLOR_TOKENS["color.accent"].night);
-    expect(tokenValue("focus.ring.width", "redShift")).toBe("3px");
+    expect(tokenValue("focus.ring.width", "redShift")).toBe("2px");
     expect(tokenValue("focus.ring.offset", "day")).toBe("2px");
     expect(tokenValue("border.width", "day")).toBe("1px");
   });
@@ -75,7 +134,7 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
   it("builds CSS variables per mode with reduced motion", () => {
     const css = buildCss();
     expect(cssVarName("color.text.body")).toBe("--qm-color-text-body");
-    expect(css).toContain("--qm-color-text-body: #1a1a1a;");
+    expect(css).toContain("--qm-color-text-body: #121820;");
     expect(css).toContain(':root[data-theme="night"] {');
     expect(css).toContain(':root[data-theme="redShift"] {');
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
@@ -83,7 +142,7 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
   });
 
   it("builds a typed theme object for React Native with overrides", () => {
-    expect(buildTheme("night").colors["color.text.body"]).toBe("#e8e8e8");
+    expect(buildTheme("night").colors["color.text.body"]).toBe("#e7ecf2");
     expect(
       buildTheme("day", { "color.surface.base": "#fafafa" }).colors["color.surface.base"],
     ).toBe("#fafafa");
