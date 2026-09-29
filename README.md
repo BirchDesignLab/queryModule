@@ -82,6 +82,8 @@ pnpm 12 notes:
 | `dev:web` | Vite dev server | Task 25 |
 | `dev`, `dev:api`, `e2e`, `image:smoke` | full dev loop, API only, Playwright/axe, image smoke test | Track A M0 P1 |
 
+`pnpm e2e` serves on port 3000; set `E2E_PORT` (for example `E2E_PORT=3100 pnpm e2e`) to run it beside another server on 3000.
+
 Toolchain: Node 24, pnpm 12.6 through corepack, TypeScript 7, Vitest 5, Biome 2.5, zod 4 (`package.json`).
 
 ## How the work is organised
