@@ -187,6 +187,13 @@ main[tabindex="-1"]:focus {
   padding: var(--qm-space-1) var(--qm-space-2);
 }
 
+/* Dispatch controls are the dense 36 px; the officer's bar keeps 48 px targets (spec 6.3). */
+.qm-app-header--compact .qm-button,
+.qm-app-header--compact .qm-select {
+  min-height: var(--qm-target-min);
+  min-width: var(--qm-target-min);
+}
+
 .qm-app-header__status:hover {
   text-decoration: underline;
 }
