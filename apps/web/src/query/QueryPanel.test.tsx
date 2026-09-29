@@ -2,7 +2,7 @@ import { ClientSiteConfigSchema } from "@querymodule/core/config";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { delay, HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { ClientSupportProvider } from "../app/client-support-context.js";
 import { appRoutes } from "../app/routes.js";
 import {
@@ -377,16 +377,29 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   });
 
   it("FR-064 a network error shows the no-connection reason and the retry reuses the Idempotency-Key", async () => {
+    // Worst case of the full-jitter backoff: the first health poll fires at once.
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    onTestFinished(() => random.mockRestore());
+    // Health answers only after the gated state is asserted; otherwise a near-zero jitter lets
+    // the poll clear noConnection before the reason is ever observed (CI run 36554449245).
+    let healthUp: () => void = () => {};
+    const healthGate = new Promise<void>((resolve) => {
+      healthUp = resolve;
+    });
     server.use(
       http.post(`${API}/api/v1/queries`, async ({ request }) => {
         submitRecorder.calls.push({ key: request.headers.get("idempotency-key"), body: null });
         return HttpResponse.error();
       }),
-      http.get(`${API}/api/v1/health`, () => HttpResponse.json({ status: "ok" })),
+      http.get(`${API}/api/v1/health`, async () => {
+        await healthGate;
+        return HttpResponse.json({ status: "ok" });
+      }),
     );
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     expect(await screen.findByText("No connection to server")).toBeInTheDocument();
+    healthUp();
     server.use(
       http.post(`${API}/api/v1/queries`, async ({ request }) => {
         submitRecorder.calls.push({
