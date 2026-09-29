@@ -93,8 +93,11 @@ function ArrayEditor({
       {items.map((item, i) => {
         const itemPath = [...path, i];
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: the path is the identity of an item
-          <div key={i} className="qm-admin__item" data-item-path={pathText(itemPath)}>
+          <div
+            key={pathText(itemPath)}
+            className="qm-admin__item"
+            data-item-path={pathText(itemPath)}
+          >
             <NodeEditor value={item} path={itemPath} idPrefix={idPrefix} onChange={onChange} />
             <button
               type="button"
