@@ -477,6 +477,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
         ),
       );
       const { user, services } = await openPanel();
+      const announce = vi.spyOn(services.announcer, "announce");
       server.use(
         http.get(`${API}/api/v1/config`, () => HttpResponse.json(withExtraField(NEW_HASH))),
       );
@@ -485,6 +486,32 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       await waitFor(() => expect(polite()).toHaveTextContent("The site configuration changed."));
       expect(services.queryClient.getQueryData(["config"])).toMatchObject({ configHash: NEW_HASH });
       expect(polite()).not.toHaveTextContent("updated by your administrator");
+      expect(announce.mock.calls.map(([text]) => String(text))).not.toContain(
+        "The form was updated by your administrator.",
+      );
+    });
+
+    it("a real change inside the quiet window, after the 409's refetch settled, is announced", async () => {
+      let served = withExtraField(NEW_HASH);
+      server.use(
+        http.post(`${API}/api/v1/queries`, () =>
+          HttpResponse.json(
+            { error: { code: "configHashMismatch", currentConfigHash: NEW_HASH } },
+            { status: 409 },
+          ),
+        ),
+      );
+      const { user, services } = await openPanel();
+      server.use(http.get(`${API}/api/v1/config`, () => HttpResponse.json(served)));
+      await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+      expect(await screen.findByLabelText("custom.zzNote")).toBeInTheDocument();
+      // The refetch has settled; wait out the short settle time, then publish a third config.
+      await new Promise((r) => setTimeout(r, 1200));
+      served = withExtraField(`${"0".repeat(63)}8`);
+      act(() => services.queryClient.setQueryData(["config"], served));
+      await waitFor(() =>
+        expect(polite()).toHaveTextContent("The form was updated by your administrator."),
+      );
     });
   });
 

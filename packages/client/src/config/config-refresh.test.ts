@@ -160,6 +160,44 @@ describe("ADR-0011 item 3 live config refresh (#361)", () => {
     refresh.stop();
   });
 
+  it("a 401 that ends the session (onUnauthenticated stops the refresh) leaves no further request", async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/config`, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 401 });
+      }),
+    );
+    const platform = createFakePlatform();
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["config"], configOf(1));
+    // eslint-style forward reference: the app's reset stops the refresh before the 401 answer resolves.
+    const holder: { refresh?: ReturnType<typeof createConfigRefresh> } = {};
+    const api = createApiClient({
+      baseUrl: BASE,
+      platform,
+      onUnauthenticated: () => holder.refresh?.stop(),
+    });
+    holder.refresh = createConfigRefresh({ api, queryClient, platform, intervalMs: 15_000 });
+    holder.refresh.start();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls).toBe(1);
+    expect(cached(queryClient)?.configHash).toBe(hash(1));
+  });
+
+  it("restores a config the query cache dropped (gcTime) with the same hash", async () => {
+    const state = { n: 1 };
+    serveConfig(state);
+    const { queryClient, refresh } = setup(1);
+    queryClient.removeQueries({ queryKey: ["config"] });
+    refresh.start();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(cached(queryClient)?.configHash).toBe(hash(1));
+    refresh.stop();
+  });
+
   it("never runs two requests at once", async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => {

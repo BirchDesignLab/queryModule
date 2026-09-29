@@ -89,6 +89,8 @@ export type LiveConfigModel =
 
 /** After a 409 the refetched config's change is not announced again (its own message stands). */
 const CONFIG_CHANGED_QUIET_MS = 10_000;
+/** How long after the refetch settles the quiet lasts, for the render that applies it. */
+const CONFIG_CHANGED_SETTLE_MS = 1000;
 
 const NO_VALUES: Readonly<Record<string, DraftValue>> = {};
 
@@ -171,7 +173,7 @@ export interface QueryPanelSource {
   drafts: DraftStore;
   mode: PanelViewMode;
   /** Live: the config changed under a submit; the owner refetches it. */
-  onConfigChanged?: () => void;
+  onConfigChanged?: () => void | Promise<void>;
 }
 
 /**
@@ -353,7 +355,13 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       case "configChanged":
         // The controller invalidated the config query; fetching re-evaluates the draft against it.
         quietUntil.current = Date.now() + CONFIG_CHANGED_QUIET_MS;
-        onConfigChanged?.();
+        // Once the refetch has settled its change (if any) is applied, so the quiet ends shortly
+        // after: a later, real change is announced even inside the window.
+        void Promise.resolve(onConfigChanged?.()).finally(() => {
+          globalThis.setTimeout(() => {
+            quietUntil.current = 0;
+          }, CONFIG_CHANGED_SETTLE_MS);
+        });
         announcer.announce(t("submit.configChanged"));
         return;
       case "rateLimited":
