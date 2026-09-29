@@ -85,15 +85,26 @@ export function createRateLimiter(db: Db, clock: Clock): RateLimiter {
  * reach the login audit write and make it throw: it becomes "unknown" instead.
  */
 export function clientIp(c: Context<AppEnv>, env: DeployEnv): string {
-  const candidate = resolveCandidate(c, env);
-  return ClientIpSchema.safeParse(candidate).success ? candidate : "unknown";
+  return trustedClientIp(env, c.req.header("cf-connecting-ip"), () => {
+    try {
+      return getConnInfo(c).remote.address ?? "local";
+    } catch {
+      return "local";
+    }
+  });
 }
 
-function resolveCandidate(c: Context<AppEnv>, env: DeployEnv): string {
-  if (env.nodeEnv === "production") return c.req.header("cf-connecting-ip")?.trim() ?? "unknown";
-  try {
-    return getConnInfo(c).remote.address ?? "local";
-  } catch {
-    return "local";
-  }
+/**
+ * The shared trust rules behind clientIp and the WebSocket upgrade limiter: the CF-Connecting-IP
+ * header counts only in production; otherwise the socket address (lazy, it can throw) is used.
+ * The result is validated against ClientIpSchema and falls back to "unknown".
+ */
+export function trustedClientIp(
+  env: DeployEnv,
+  cfConnectingIp: string | undefined,
+  socketAddress: () => string,
+): string {
+  const candidate =
+    env.nodeEnv === "production" ? (cfConnectingIp?.trim() ?? "unknown") : socketAddress();
+  return ClientIpSchema.safeParse(candidate).success ? candidate : "unknown";
 }

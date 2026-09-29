@@ -9,6 +9,7 @@ const script = resolve(import.meta.dirname, "deploy-pull.sh");
 // A fake docker CLI: logs every call and answers the queries deploy-pull.sh makes.
 const STUB = `#!/usr/bin/env bash
 echo "$*" >> "$STUB_LOG"
+[ "$*" != "$STUB_FAIL" ] || { echo "stub: $* failed" >&2; exit 1; }
 case "$*" in
   "compose config --images app") echo "ghcr.io/example/app:release" ;;
   "image inspect -f {{.Id}} ghcr.io/example/app:release") echo "$STUB_WANT" ;;
@@ -91,5 +92,35 @@ describe("deploy-pull.sh (ADR-0002, spec 8.3)", { timeout: 30_000 }, () => {
     const r = run({ PUBLIC_ORIGIN: "", STUB_WANT: "sha256:bb", STUB_HAVE: "sha256:aa" });
     expect(r.status).not.toBe(0);
     expect(r.calls).not.toContain("compose pull app");
+  });
+
+  it.each([
+    ["pull", "compose pull app"],
+    ["config", "compose config --images app"],
+    ["inspect", "image inspect -f {{.Id}} ghcr.io/example/app:release"],
+    ["ps", "compose ps -q app"],
+    ["inspect-container", "inspect -f {{.Image}} c0ffee"],
+    ["up", "compose up -d app"],
+  ])("logs exactly one FAILED %s line and exits non-zero when that step fails", (step, fail) => {
+    const r = run({
+      PUBLIC_ORIGIN: "http://127.0.0.1:9",
+      STUB_WANT: "sha256:bb",
+      STUB_HAVE: "sha256:aa",
+      STUB_FAIL: fail,
+    });
+    expect(r.status).not.toBe(0);
+    const failed = r.stdout.split("\n").filter((l) => l.includes("deploy-pull: FAILED"));
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatch(new RegExp(`deploy-pull: FAILED ${step}$`));
+  });
+
+  it("logs no FAILED line on a clean run", () => {
+    const r = run({
+      PUBLIC_ORIGIN: "http://127.0.0.1:9",
+      STUB_WANT: "sha256:aa",
+      STUB_HAVE: "sha256:aa",
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain("FAILED");
   });
 });

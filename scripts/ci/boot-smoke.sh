@@ -203,8 +203,10 @@ up() {
   echo "ops check ok: no react-native in /app/node_modules"
   docker exec "$name" node scripts/ops/check-triggers.js
   docker exec "$name" node scripts/ops/seed.js > "$work/seed-output.txt"
+  # The container's PUBLIC_ORIGIN, not 127.0.0.1: sign-in and the WebSocket upgrade check the
+  # browser's Origin against it, so CI step 12 must use this exact value.
   if [ -n "${GITHUB_ENV:-}" ]; then
-    echo "QM_BASE_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
+    echo "QM_BASE_URL=http://localhost:3000" >> "$GITHUB_ENV"
     echo "SEED_PASSWORD_SECRET_FILE=$sec/SEED_PASSWORD_SECRET" >> "$GITHUB_ENV"
   fi
   echo "boot smoke up: health ok, triggers present, users seeded"

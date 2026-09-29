@@ -8,12 +8,15 @@ import {
 } from "@querymodule/core/contracts";
 import { WebSocket, WebSocketServer } from "ws";
 import { BACKGROUND_HEADER } from "../auth/identity";
+import { trustedClientIp } from "../auth/rate-limit";
 import type { AppDeps } from "../deps";
 import { DEV_ORIGINS } from "../env";
 import type { Principal } from "../seams";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
+/** Upgrade attempts per client IP per window (decision D-A9, SEC-014, NFR-003). */
+export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
 export const WS_LOCAL_CLOSE = { idle: 4000, badMessage: 1008, shutdown: 1001 } as const;
 export interface WsHandle {
   stopAccepting(): void;
@@ -24,6 +27,11 @@ export interface WsHandle {
 function reject(socket: Duplex, status: number): void {
   socket.end(
     `HTTP/1.1 ${status} ${STATUS_CODES[status] ?? ""}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`,
+  );
+}
+function rejectLimited(socket: Duplex, retryAfterSeconds: number): void {
+  socket.end(
+    `HTTP/1.1 429 ${STATUS_CODES[429] ?? ""}\r\nRetry-After: ${retryAfterSeconds}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`,
   );
 }
 function toRequest(req: IncomingMessage, origin: string): Request {
@@ -144,12 +152,27 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     if (!accepting) return reject(socket, 503);
     // No token in a query string, ever (spec 4.7, 12.2).
     if (url.search !== "") return reject(socket, 400);
+    // Cheapest checks first, and no session lookup until both pass (SEC-014, NFR-003): the
+    // per-IP limiter (one rate_limit write), then Origin, then identity.resolve.
+    const ip = trustedClientIp(
+      d.env,
+      typeof req.headers["cf-connecting-ip"] === "string"
+        ? req.headers["cf-connecting-ip"]
+        : undefined,
+      () => req.socket.remoteAddress ?? "local",
+    );
+    const hit = await d.limiter.hit(
+      `ws:ip:${ip}`,
+      WS_UPGRADE_LIMIT.limit,
+      WS_UPGRADE_LIMIT.windowMs,
+    );
+    if (!hit.allowed) return rejectLimited(socket, hit.retryAfterSeconds);
     const origin = req.headers.origin;
     const bearer = /^Bearer \S+$/.test(req.headers.authorization ?? "");
     const originOk = origin === undefined ? bearer : allowed.has(origin);
+    if (!originOk) return reject(socket, 403);
     const principal = await d.identity.resolve(toRequest(req, d.env.publicOrigin));
     if (!principal) return reject(socket, 401);
-    if (!originOk) return reject(socket, 403);
     // wss.handleUpgrade attaches its own socket "error" listener once it takes over; remove
     // ours immediately beforehand (it only removes its own listener, so leaving ours attached
     // through the handshake would be harmless too, but this keeps ownership unambiguous).

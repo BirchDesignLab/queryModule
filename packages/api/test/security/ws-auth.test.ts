@@ -1,6 +1,6 @@
 import net from "node:net";
 import { type WsEvent, WsServerMessageSchema } from "@querymodule/core/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { createTestApp, startTestServer, type TestApp } from "../helpers/test-app";
 
@@ -266,6 +266,61 @@ describe("SEC-014 WebSocket upgrade and heartbeat", () => {
     const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
     ws.send(JSON.stringify(hello));
     expect(await nextMsg(ws)).toMatchObject({ type: "welcome" });
+    ws.close();
+  });
+});
+
+describe("SEC-014 upgrade costs no DB lookup before Origin and limit (#225)", () => {
+  it("limits upgrades per IP: the 61st in a minute gets 429 with Retry-After", async () => {
+    const { t, s, cookie } = await setup();
+    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    // Cheap rejected upgrades (foreign Origin) still count against the per-IP limit.
+    for (let i = 0; i < 60; i++)
+      await expect(open(s.wsUrl, { origin: "https://evil.example.test", cookie })).rejects.toThrow(
+        "HTTP 403",
+      );
+    const res = await new Promise<{ status: number; retryAfter: string | undefined }>((ok, rej) => {
+      const ws = new WebSocket(s.wsUrl, { headers: { origin: ORIGIN, cookie } });
+      ws.once("open", () => rej(new Error("upgraded")));
+      ws.once("unexpected-response", (_q, r) =>
+        ok({
+          status: r.statusCode ?? 0,
+          retryAfter: r.headers["retry-after"] as string | undefined,
+        }),
+      );
+      ws.once("error", rej);
+    });
+    expect(res.status).toBe(429);
+    expect(Number(res.retryAfter)).toBeGreaterThan(0);
+    expect(resolve).not.toHaveBeenCalled();
+  }, 30_000);
+  it("a foreign Origin never reaches identity.resolve", async () => {
+    const { t, s, cookie } = await setup();
+    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    await expect(open(s.wsUrl, { origin: "https://evil.example.test", cookie })).rejects.toThrow(
+      "HTTP 403",
+    );
+    expect(resolve).not.toHaveBeenCalled();
+  });
+  it("a missing Origin with only a cookie never reaches identity.resolve", async () => {
+    const { t, s, cookie } = await setup();
+    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    await expect(open(s.wsUrl, { cookie })).rejects.toThrow("HTTP 403");
+    expect(resolve).not.toHaveBeenCalled();
+  });
+  it("a signed-bearer upgrade with no Origin still gets welcome", async () => {
+    const { t, s } = await setup();
+    const r = await t.request("/api/v1/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "" },
+      body: JSON.stringify({ email: EMAIL, password: PW }),
+    });
+    const token = r.headers.get("set-auth-token") ?? "";
+    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    const ws = await open(s.wsUrl, { authorization: `Bearer ${token}` });
+    ws.send(JSON.stringify(hello));
+    expect(await nextMsg(ws)).toMatchObject({ type: "welcome" });
+    expect(resolve).toHaveBeenCalledTimes(1);
     ws.close();
   });
 });
