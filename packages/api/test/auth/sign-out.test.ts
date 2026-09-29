@@ -58,9 +58,28 @@ describe("SEC-006 sign-out ends the server session or says it did not (#246, spe
     );
     const res = await signOut(t, cookie);
     expect(res.ok).toBe(false);
+    expect(clearsSessionCookie(res, t)).toBe(false);
     expect(await t.auditRows("logout")).toHaveLength(0);
     expect((await liveSession(t, cookie))?.session?.id).toBe(sessionId);
     expect(ended).not.toHaveBeenCalled();
+  });
+
+  it("a failed Better Auth response that clears the cookie while the row survives answers 500 internal and keeps the cookie (#288)", async () => {
+    const { t, cookie, sessionId, ended } = await signedIn();
+    vi.spyOn(t.deps.auth, "handler").mockResolvedValueOnce(
+      new Response(null, {
+        status: 500,
+        headers: { "set-cookie": `${sessionCookieName(t.env)}=; Max-Age=0; Path=/` },
+      }),
+    );
+    const res = await signOut(t, cookie);
+    expect(res.status).toBe(500);
+    expect(ApiErrorSchema.parse(await res.json()).error.code).toBe("internal");
+    expect(clearsSessionCookie(res, t)).toBe(false);
+    expect((await liveSession(t, cookie))?.session?.id).toBe(sessionId);
+    expect(await t.auditRows("logout")).toHaveLength(0);
+    expect(ended).not.toHaveBeenCalled();
+    expect(t.logLines.filter((l) => l.includes("sign-out left the session row"))).toHaveLength(1);
   });
 
   it("a retry after the fault clears signs out once and audits one logout", async () => {
