@@ -1,4 +1,4 @@
-import { VisuallyHidden } from "@querymodule/web-ui";
+import { VisuallyHidden, visuallyHiddenStyle } from "@querymodule/web-ui";
 import {
   type KeyboardEvent,
   useCallback,
@@ -19,7 +19,7 @@ import { FormTab } from "./FormTab.js";
 import { parentPointer } from "./issues.js";
 import { BuilderPreview } from "./Preview.js";
 import { type RawState, RawTab } from "./RawTab.js";
-import { issueWords, type Selection, SelectionContext } from "./selection.js";
+import { defaultPointer, issueWords, type Selection, SelectionContext } from "./selection.js";
 import { useCachedClientConfig } from "./use-cached-config.js";
 
 export { configDraftStore } from "./builder-store.js";
@@ -213,6 +213,12 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   const firstIssue = checks.issues.find((i) => i.level === "error") ?? checks.issues[0];
   const panelRef = useRef<HTMLDivElement>(null);
   useMarkSelected(panelRef, selection);
+  // Before any selection the editor shows the first query type (design lead 09-29-26).
+  const fallback = defaultPointer(doc);
+  const shown = useMemo<Selection>(
+    () => ({ ...selection, pointer: selection.pointer ?? fallback, select: onSelect }),
+    [selection, fallback, onSelect],
+  );
   const reasonId = `${uid}-publish-reason`;
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
@@ -280,8 +286,8 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
         </p>
       </div>
       <div className="qm-builder__body">
-        <p>{t("admin.config.serverOnly")}</p>
-        <div data-testid="draft-summary" aria-live="polite">
+        {/* The issue button shows the counts; this stays as the polite announcement (Task 33). */}
+        <div data-testid="draft-summary" aria-live="polite" style={visuallyHiddenStyle}>
           {raw.parseError !== null ? (
             <p>{t("admin.config.raw.notParsed")}</p>
           ) : checks.status === "error" ? (
@@ -293,7 +299,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           )}
         </div>
         <div className="qm-builder__panes">
-          <BuilderTree doc={doc} selected={selection.pointer} onSelect={onSelect} />
+          <BuilderTree doc={doc} selected={shown.pointer} onSelect={onSelect} />
           <div
             ref={panelRef}
             className="qm-builder__editor"
@@ -302,7 +308,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
             aria-labelledby={`${uid}-tab-${tab}`}
           >
             {tab === "form" ? (
-              <SelectionContext.Provider value={selection}>
+              <SelectionContext.Provider value={shown}>
                 <FormTab doc={doc} />
               </SelectionContext.Provider>
             ) : (

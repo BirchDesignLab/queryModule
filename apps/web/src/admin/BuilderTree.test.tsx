@@ -43,7 +43,35 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
       "Labels and translations",
     ])
       expect(item(new RegExp(`^${name}`))).toBeInTheDocument();
-    expect(item(/^terminal$/)).toBeInTheDocument();
+    // Every site item has a plain name with its key in mono; schemaVersion is not a setting.
+    expect(item(/^Terminal settings terminal$/)).toBeInTheDocument();
+    expect(item(/^Keyword styles keywordSeverityStyles$/)).toBeInTheDocument();
+    expect(within(tree()).queryByRole("button", { name: /schemaVersion/ })).toBeNull();
+    expect(within(tree()).getByText(/^Server settings: available after/)).toBeInTheDocument();
+  });
+
+  it("only the selected query type is expanded; the others toggle with aria-expanded", async () => {
+    const t = await openBuilder();
+    const vehicle = within(tree()).getByRole("button", { name: "Vehicle sections and fields" });
+    const person = within(tree()).getByRole("button", { name: "Person sections and fields" });
+    expect(vehicle).toHaveAttribute("aria-expanded", "true");
+    expect(person).toHaveAttribute("aria-expanded", "false");
+    expect(within(tree()).queryByRole("button", { name: /^Last name last/ })).toBeNull();
+    await t.user.click(person);
+    expect(person).toHaveAttribute("aria-expanded", "true");
+    expect(within(tree()).getAllByRole("button", { name: /^Last name last/ })).toHaveLength(1);
+  });
+
+  it("the editor shows only the selected item: the first query type before any selection", async () => {
+    await openBuilder();
+    const form = screen.getByTestId("form-tab");
+    expect(
+      within(form).getByRole("heading", { name: /^Query types queryTypes/, level: 3 }),
+    ).toBeInTheDocument();
+    expect(within(form).getByText("Query type VEH", { selector: "legend" })).toBeInTheDocument();
+    expect(within(form).queryByText("Query type PER", { selector: "legend" })).toBeNull();
+    expect(form.querySelectorAll("h3")).toHaveLength(1);
+    expect(item(/^Vehicle VEH/)).toHaveAttribute("aria-current", "true");
   });
 
   it("comes before the editor in the DOM, so Tab from the tree reaches the editor", async () => {
@@ -65,22 +93,23 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     const legend = await screen.findByText("Field plateType", { selector: "legend" });
     const box = legend.closest("fieldset") as HTMLElement;
     await waitFor(() => expect(box).toHaveAttribute("data-selected", "true"));
-    expect(
-      screen.getByText("Query type VEH", { selector: "summary" }).closest("details"),
-    ).toHaveAttribute("open");
+    expect(screen.getByText("Query type VEH", { selector: "legend" })).toBeInTheDocument();
   });
 
-  it("selecting a site item opens its section; another selection moves the mark", async () => {
+  it("selecting a site item shows just that section, marked", async () => {
     const t = await openBuilder();
     await t.user.click(item(/^Terminal commands/));
-    const commands = screen.getByText("commands", { selector: "summary" }).closest("details");
-    await waitFor(() => expect(commands).toHaveAttribute("open"));
-    await waitFor(() => expect(commands).toHaveAttribute("data-selected", "true"));
-    await t.user.click(item(/^terminal$/));
-    const terminal = screen.getByText("terminal", { selector: "summary" }).closest("details");
-    await waitFor(() => expect(terminal).toHaveAttribute("data-selected", "true"));
-    expect(commands).not.toHaveAttribute("data-selected");
+    const heading = await screen.findByRole("heading", {
+      name: /^Terminal commands commands/,
+      level: 3,
+    });
+    await waitFor(() =>
+      expect(heading.closest("section")).toHaveAttribute("data-selected", "true"),
+    );
+    await t.user.click(item(/^Terminal settings terminal/));
     expect(await screen.findByLabelText("terminal.delimiter")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^Terminal commands/, level: 3 })).toBeNull();
+    expect(screen.queryByText("Query type VEH", { selector: "legend" })).toBeNull();
   });
 
   it("selecting an item from the Raw JSON view returns to the form", async () => {
@@ -88,8 +117,9 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
     await t.user.click(item(/^Sources/));
     expect(screen.getByRole("tab", { name: "Form" })).toHaveAttribute("aria-selected", "true");
-    const sources = screen.getByText("sources", { selector: "summary" }).closest("details");
-    await waitFor(() => expect(sources).toHaveAttribute("open"));
+    expect(
+      await screen.findByRole("heading", { name: /^Sources sources/, level: 3 }),
+    ).toBeInTheDocument();
   });
 
   it("search filters on label and key, keeps ancestors, and says when nothing matches", async () => {
@@ -120,7 +150,7 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     const doc = store.getState().doc as { commands: { code: string }[] };
     const i = doc.commands.findIndex((c) => c.code === "VEH");
     act(() => store.getState().setPath(["commands", i, "code"], "V.EH"));
-    await waitFor(() => expect(item(/^Terminal commands, 1 error/)).toBeInTheDocument());
+    await waitFor(() => expect(item(/^Terminal commands commands, 1 error/)).toBeInTheDocument());
     const badge = item(/^Terminal commands/).querySelector(".qm-tree__issues") as HTMLElement;
     expect(badge).toHaveTextContent(/^1$/);
     expect(badge).toHaveAttribute("aria-hidden", "true");
@@ -151,7 +181,7 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     await waitFor(() => expect(document.activeElement).toHaveValue("V.EH"));
     expect(document.activeElement).toHaveAttribute("aria-invalid", "true");
     expect(
-      screen.getByText("commands", { selector: "summary" }).closest("details"),
-    ).toHaveAttribute("open");
+      screen.getByRole("heading", { name: /^Terminal commands commands/, level: 3 }),
+    ).toBeInTheDocument();
   });
 });

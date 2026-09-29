@@ -1,10 +1,11 @@
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { memo, useContext, useId, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useId, useMemo, useRef, useState } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { ChecksContext } from "./checks.js";
 import { asObjects, str } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
-import { issueWords, LABELS_ITEM } from "./selection.js";
+import { useItemName } from "./FormTab.js";
+import { HIDDEN_KEYS, issueWords, LABELS_ITEM } from "./selection.js";
 
 /** One row of the builder tree: a button that selects `pointer`, and its children. */
 interface TreeNode {
@@ -18,18 +19,9 @@ interface TreeNode {
   warnings: number;
 }
 
-/** Site items with a friendly name (design target); every other top-level key shows its key. */
-const SITE_NAMES: Readonly<Record<string, string>> = {
-  commands: "admin.config.site.commands",
-  quickAccess: "admin.config.site.quickAccess",
-  picklists: "admin.config.site.picklists",
-  sources: "admin.config.site.sources",
-  theme: "admin.config.site.theme",
-};
-
 function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } {
-  const t = useT();
   const translator = useTranslator();
+  const name = useItemName();
   const { issues } = useContext(ChecksContext);
   return useMemo(() => {
     // Issues at or under a pointer. A section's fields live under /fields, not under the section,
@@ -97,15 +89,13 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
             });
       return node(toPointer(["queryTypes", i]), label(type.labelKey, code), code, children);
     });
+    // Every top-level key by its plain name, the key in mono beside it (design lead 09-29-26).
     const site = Object.keys(doc)
-      .filter((k) => k !== "queryTypes")
-      .map((k) => {
-        const name = SITE_NAMES[k];
-        return node(toPointer([k]), name === undefined ? k : t(name), "");
-      });
-    site.push(node(LABELS_ITEM, t("admin.config.site.labels"), ""));
+      .filter((k) => k !== "queryTypes" && !HIDDEN_KEYS.has(k))
+      .map((k) => node(toPointer([k]), name(k), k));
+    site.push(node(LABELS_ITEM, name(LABELS_ITEM), ""));
     return { types, site };
-  }, [doc, issues, t, translator]);
+  }, [doc, issues, name, translator]);
 }
 
 /** Keeps nodes whose label or key contains `q`, with their ancestors; a match keeps its children. */
@@ -145,6 +135,19 @@ export function BuilderTree({
   const q = query.trim().toLowerCase();
   const shownTypes = filterNodes(types, q);
   const shownSite = filterNodes(site, q);
+  // Only the selected type is expanded unless the user toggles one; a search shows every match.
+  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const selectedType =
+    selected === null ? null : (/^\/queryTypes\/[0-9]+/.exec(selected)?.[0] ?? null);
+  const expanded = new Set(
+    shownTypes
+      .map((n) => n.pointer)
+      .filter((p) => q !== "" || (toggled.get(p) ?? p === selectedType)),
+  );
+  const onToggle = useCallback(
+    (pointer: string, open: boolean) => setToggled((m) => new Map(m).set(pointer, open)),
+    [],
+  );
   return (
     <nav className="qm-tree" aria-label={t("admin.tree.label")}>
       <input
@@ -182,6 +185,8 @@ export function BuilderTree({
                 selected={selected}
                 onSelect={onSelect}
                 labelledBy={`${uid}-types`}
+                expanded={expanded}
+                onToggle={onToggle}
               />
             </>
           )}
@@ -196,6 +201,7 @@ export function BuilderTree({
                 onSelect={onSelect}
                 labelledBy={`${uid}-site`}
               />
+              <p className="qm-tree__note">{t("admin.config.serverOnly")}</p>
             </>
           )}
         </>
@@ -209,6 +215,9 @@ interface TreeRowsProps {
   selected: string | null;
   onSelect(pointer: string): void;
   labelledBy?: string;
+  /** Top-level rows that can collapse (query types): the open ones, and the toggle. */
+  expanded?: ReadonlySet<string>;
+  onToggle?(pointer: string, open: boolean): void;
 }
 
 /**
@@ -217,12 +226,24 @@ interface TreeRowsProps {
  * of their time under load (A-D1 verify).
  */
 const TreeRows = memo(
-  function TreeRows({ nodes, selected, onSelect, labelledBy }: TreeRowsProps) {
+  function TreeRows({ nodes, selected, onSelect, labelledBy, expanded, onToggle }: TreeRowsProps) {
     const t = useT();
-    const renderNodes = (list: TreeNode[], by?: string) => (
+    const renderNodes = (list: TreeNode[], by?: string, top = false) => (
       <ul aria-labelledby={by}>
         {list.map((n) => (
-          <li key={n.pointer}>
+          <li
+            key={n.pointer}
+            className={top && expanded !== undefined ? "qm-tree__top" : undefined}
+          >
+            {top && expanded !== undefined && n.children.length > 0 && (
+              <button
+                type="button"
+                className="qm-tree__toggle"
+                aria-expanded={expanded.has(n.pointer)}
+                aria-label={t("admin.tree.expand", { name: n.label })}
+                onClick={() => onToggle?.(n.pointer, !expanded.has(n.pointer))}
+              />
+            )}
             <button
               type="button"
               aria-current={n.pointer === selected ? "true" : undefined}
@@ -247,16 +268,20 @@ const TreeRows = memo(
                 </>
               )}
             </button>
-            {n.children.length > 0 && renderNodes(n.children)}
+            {n.children.length > 0 &&
+              (!top || expanded === undefined || expanded.has(n.pointer)) &&
+              renderNodes(n.children)}
           </li>
         ))}
       </ul>
     );
-    return renderNodes(nodes, labelledBy);
+    return renderNodes(nodes, labelledBy, true);
   },
   (a, b) =>
     a.selected === b.selected &&
     a.onSelect === b.onSelect &&
     a.labelledBy === b.labelledBy &&
+    a.onToggle === b.onToggle &&
+    [...(a.expanded ?? [])].join() === [...(b.expanded ?? [])].join() &&
     JSON.stringify(a.nodes) === JSON.stringify(b.nodes),
 );

@@ -1,5 +1,5 @@
 import { DATA_TYPES, type DataType } from "@querymodule/core/config";
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
@@ -21,7 +21,7 @@ import {
 import { type JsonObject, type PathSegment, toPointer } from "./draft.js";
 import { OtherKeys } from "./GenericForm.js";
 import { RulesEditor, SectionCondition } from "./RulesEditor.js";
-import { useSelectedIndex } from "./selection.js";
+import { SelectionContext, useSelectedIndex } from "./selection.js";
 
 /**
  * Task 31 part 2 (#355): purpose-built editors for query types, their sections and their fields
@@ -81,80 +81,51 @@ function MoreSettings(props: Parameters<typeof OtherKeys>[0]) {
 }
 
 /** Every query type opens on demand: only open types render their controls on each draft edit. */
+/**
+ * The selected query type's editor (A-D1 A2: the tree picks the type; the old list of disclosures
+ * is gone). Adding or removing a type moves the selection, so the editor follows it.
+ */
 export function QueryTypesEditor({ value, idPrefix }: { value: unknown; idPrefix: string }) {
   const t = useT();
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
-  const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
-  const [gen, bump] = useGeneration();
-  // A count change this editor did not make (the raw tab) closes every type: indexes moved (critic M1).
-  const ownCount = useRef<number | null>(null);
+  const { select } = useContext(SelectionContext);
   const types = asObjects(value);
   const path = ["queryTypes"] as const;
-  useEffect(() => {
-    if (ownCount.current !== null && ownCount.current !== types.length) {
-      setOpened(new Set());
-      bump();
-    }
-    ownCount.current = types.length;
-  }, [types.length, bump]);
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
-  const setOpen = (i: number, open: boolean) =>
-    setOpened((s) => {
-      if (s.has(i) === open) return s;
-      const next = new Set(s);
-      if (open) next.add(i);
-      else next.delete(i);
-      return next;
-    });
-  // The builder tree opens the type it selects (A-D1 A2); it never closes one.
-  const selected = useSelectedIndex("queryTypes");
-  useEffect(() => {
-    if (selected !== null) setOpened((s) => (s.has(selected) ? s : new Set([...s, selected])));
-  }, [selected]);
+  // Bumped on remove, so the next type at the same index gets fresh local state (critic I2).
+  const [gen, bump] = useGeneration();
+  // A type count change elsewhere (the raw tab) can leave the index past the end: show the last.
+  const i = Math.min(useSelectedIndex("queryTypes") ?? 0, types.length - 1);
+  const type = types[i];
   return (
     <div>
-      {types.map((type, i) => (
-        <details
+      {type !== undefined && (
+        <QueryTypeEditor
           key={`${owner(i)}:${gen}`}
-          data-path={toPointer([...path, i])}
-          open={opened.has(i)}
-          onToggle={(e) => setOpen(i, e.currentTarget.open)}
-        >
-          <summary data-owner={owner(i)} data-role="summary">
-            {t("admin.config.type.legend", { code: str(type.code) })}
-          </summary>
-          {opened.has(i) && (
-            <QueryTypeEditor
-              type={type}
-              path={[...path, i]}
-              owner={owner(i)}
-              idPrefix={idPrefix}
-              onRemove={() => {
-                const next = types.filter((_, j) => j !== i);
-                ownCount.current = next.length;
-                bump();
-                setPath(path, next);
-                setOpened(
-                  (s) => new Set([...s].filter((j) => j !== i).map((j) => (j > i ? j - 1 : j))),
-                );
-                const k = Math.min(i, next.length - 1);
-                focus([owner(k), "first"], [owner(k), "summary"], [listOwner, "add"]);
-              }}
-            />
-          )}
-        </details>
-      ))}
+          type={type}
+          path={[...path, i]}
+          owner={owner(i)}
+          idPrefix={idPrefix}
+          onRemove={() => {
+            const next = types.filter((_, j) => j !== i);
+            bump();
+            setPath(path, next);
+            const k = Math.min(i, next.length - 1);
+            if (k >= 0) select?.(toPointer([...path, k]));
+            focus([owner(k), "first"], [listOwner, "add"]);
+          }}
+        />
+      )}
       <button
         type="button"
-        className="qm-button"
+        className="qm-button qm-button--secondary"
         data-owner={listOwner}
         data-role="add"
         onClick={() => {
-          ownCount.current = types.length + 1;
           setPath(path, [...types, newType()]);
-          setOpen(types.length, true);
+          select?.(toPointer([...path, types.length]));
           focus([owner(types.length), "first"]);
         }}
       >
@@ -180,7 +151,7 @@ function QueryTypeEditor({
   const t = useT();
   const code = str(type.code);
   return (
-    <fieldset className="qm-admin__item">
+    <fieldset className="qm-admin__item" data-path={toPointer(path)}>
       <legend>{t("admin.config.type.legend", { code })}</legend>
       <TextControl
         idPrefix={idPrefix}

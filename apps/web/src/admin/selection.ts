@@ -6,14 +6,36 @@ import { createContext, useContext } from "react";
  * "/commands"), or LABELS_ITEM for the label overlay. `seq` changes on every selection, so choosing
  * the same item again still opens and scrolls to it.
  */
+export const LABELS_ITEM = "#labels";
+
 export interface Selection {
   pointer: string | null;
   seq: number;
   /** An issue's pointer: after opening, focus the control that shows it (the issue button). */
   focus?: string;
+  /** Selects another item (an editor that adds or removes a query type moves the selection). */
+  select?(pointer: string): void;
 }
 
-export const LABELS_ITEM = "#labels";
+/** Top-level keys that are not settings a user edits: kept out of the tree and the form. */
+export const HIDDEN_KEYS: ReadonlySet<string> = new Set(["schemaVersion"]);
+
+/** The top-level item a pointer belongs to: a config key, or LABELS_ITEM. */
+export function topItem(pointer: string): string {
+  if (pointer === LABELS_ITEM) return LABELS_ITEM;
+  const first = pointer.split("/")[1] ?? "";
+  return first.replaceAll("~1", "/").replaceAll("~0", "~");
+}
+
+/** What the editor shows before any selection: the first query type, else the first setting. */
+export function defaultPointer(doc: Readonly<Record<string, unknown>>): string {
+  const types = doc.queryTypes;
+  if (Array.isArray(types) && types.length > 0) return "/queryTypes/0";
+  const first = Object.keys(doc).find((k) => !HIDDEN_KEYS.has(k) && k !== "queryTypes");
+  return first === undefined
+    ? LABELS_ITEM
+    : `/${first.replaceAll("~", "~0").replaceAll("/", "~1")}`;
+}
 
 export const SelectionContext = createContext<Selection>({ pointer: null, seq: 0 });
 

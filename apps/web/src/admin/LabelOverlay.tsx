@@ -3,8 +3,6 @@ import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { controlId } from "./controls.js";
-import { Section } from "./GenericForm.js";
-import { LABELS_ITEM } from "./selection.js";
 
 export function LabelOverlayEditor({
   locales,
@@ -13,24 +11,21 @@ export function LabelOverlayEditor({
   locales: readonly string[];
   idPrefix: string;
 }) {
-  const t = useT();
   const services = useServices();
   const { labels } = useDraft();
   const store = configDraftStore(services);
   return (
-    <Section name={t("admin.config.labels.title")} pointer={LABELS_ITEM}>
-      {() =>
-        locales.map((locale) => (
-          <LocaleLabels
-            key={locale}
-            locale={locale}
-            idPrefix={idPrefix}
-            entries={labels[locale] ?? {}}
-            onSet={(key, text) => store.getState().setLabel(locale, key, text)}
-          />
-        ))
-      }
-    </Section>
+    <>
+      {locales.map((locale) => (
+        <LocaleLabels
+          key={locale}
+          locale={locale}
+          idPrefix={idPrefix}
+          entries={labels[locale] ?? {}}
+          onSet={(key, text) => store.getState().setLabel(locale, key, text)}
+        />
+      ))}
+    </>
   );
 }
 
