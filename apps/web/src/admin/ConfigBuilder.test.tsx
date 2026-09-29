@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
+import { selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -36,7 +37,7 @@ async function replaceRaw(t: Awaited<ReturnType<typeof openBuilder>>, text: stri
 describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("edits in the generic form change the draft JSON", async () => {
     const t = await openBuilder();
-    await t.user.click(await screen.findByText("terminal", { selector: "summary" }));
+    await selectBuilderItem(t.user, "terminal");
     const input = await screen.findByLabelText("terminal.delimiter");
     await t.user.clear(input);
     await t.user.type(input, ",");
@@ -73,7 +74,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(status).toHaveTextContent("Draft: no changes");
     expect(status).not.toHaveAttribute("aria-live");
     expect(status).not.toHaveAttribute("role");
-    await t.user.click(await screen.findByText("terminal", { selector: "summary" }));
+    await selectBuilderItem(t.user, "terminal");
     const input = await screen.findByLabelText("terminal.delimiter");
     await t.user.clear(input);
     await t.user.type(input, ",");
@@ -115,7 +116,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
 
   it("label text edits go to the locale overlay", async () => {
     const t = await openBuilder();
-    await t.user.click(await screen.findByText("Label text"));
+    await selectBuilderItem(t.user, "Label text");
     await t.user.type(await screen.findByLabelText("Label key (en)"), "site.custom");
     await t.user.type(screen.getByLabelText("Label text (en)"), "Custom");
     await t.user.click(screen.getByRole("button", { name: "Add label (en)" }));
@@ -176,7 +177,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     const doc = { ...draftDoc(t), locales: [{}, 5, "en"] };
     await replaceRaw(t, JSON.stringify(doc));
     await t.user.click(screen.getByRole("tab", { name: "Form" }));
-    await t.user.click(await screen.findByText("Label text"));
+    await selectBuilderItem(t.user, "Label text");
     expect(await screen.findByLabelText("Label key (en)")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Site configuration", level: 2 }),
@@ -185,7 +186,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
 
   it("removing an array item keeps focus in the list; adding focuses the new item (I3)", async () => {
     const t = await openBuilder();
-    await t.user.click(await screen.findByText("sources"));
+    await selectBuilderItem(t.user, "sources");
     const count = () => screen.queryAllByRole("button", { name: /^Remove sources\.\d+$/ }).length;
     const before = count();
     expect(before).toBeGreaterThan(1);
@@ -208,7 +209,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
 
   it("per-source timeoutMs is server-side and read-only in the generic form (CV1)", async () => {
     const t = await openBuilder();
-    await t.user.click(await screen.findByText("sources"));
+    await selectBuilderItem(t.user, "sources");
     const field = await screen.findByLabelText("sources.0.timeoutMs");
     expect(field).toHaveAttribute("readonly");
     const before = JSON.stringify(draftDoc(t)?.sources);

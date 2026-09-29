@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
+import { selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -24,7 +25,7 @@ const errorCount = (): number =>
   Number(/Draft checks: (\d+) errors/.exec(summary().textContent ?? "")?.[1] ?? Number.NaN);
 
 async function breakCommand(t: Awaited<ReturnType<typeof openBuilder>>) {
-  await t.user.click(await screen.findByText("commands"));
+  await selectBuilderItem(t.user, "commands");
   // Task 31 part 2: the commands editor (a code with the site delimiter "." is an error).
   const box = (await screen.findByText("Command VEH", { selector: "legend" })).closest("fieldset");
   const input = within(box as HTMLElement).getByLabelText("Code");
@@ -56,9 +57,13 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
     );
     expect(errorCount()).toBe(base + 1);
     expect(input).toHaveFocus();
-    // the section header carries the count too, so a collapsed section is not silent
-    const header = screen.getAllByText("commands").find((e) => e.tagName === "SUMMARY");
-    expect(header).toHaveTextContent(/Issues: [1-9]/);
+    // the section heading and its tree row carry the count too
+    expect(
+      screen.getByRole("heading", {
+        name: /^Terminal commands commands, [1-9]\d* errors?/,
+        level: 3,
+      }),
+    ).toBeInTheDocument();
 
     await t.user.clear(input);
     await t.user.type(input, "VEH");

@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
+import { selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -26,7 +27,7 @@ type Opened = Awaited<ReturnType<typeof openBuilder>>;
 const doc = (t: Opened) => configDraftStore(t.services).getState().doc as Record<string, never>;
 
 async function openSection(t: Opened, name: string) {
-  await t.user.click(await screen.findByText(name, { selector: "summary" }));
+  if (name !== "queryTypes") await selectBuilderItem(t.user, name);
 }
 
 describe("generic form edge cases (#388, UX-004)", () => {
