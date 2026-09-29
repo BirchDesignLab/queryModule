@@ -22,6 +22,27 @@
       "when": 1790540052704,
       "tag": "0002_user_preference_view_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790644714303,
+      "tag": "0003_query_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790644719511,
+      "tag": "0004_query_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790645533338,
+      "tag": "0005_query_no_replace",
+      "breakpoints": true
     }
   ]
 }

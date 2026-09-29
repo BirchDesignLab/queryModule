@@ -19,16 +19,15 @@ afterEach(() => {
   dir = undefined;
 });
 
-describe("check-licences CLI error output (item 8)", () => {
-  it("prints usage and exits 2 with no report path", { timeout: 30_000 }, () => {
+// Each step spawns a tsx CLI (cold start); the 5s default flakes under full-suite load on Windows.
+describe("check-licences CLI error output (item 8)", { timeout: 20_000 }, () => {
+  it("prints usage and exits 2 with no report path", () => {
     const r = run([]);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("usage:");
   });
 
-  it("reports a missing report file cleanly, no stack trace, repo-relative posix path", {
-    timeout: 30_000,
-  }, () => {
+  it("reports a missing report file cleanly, no stack trace, repo-relative posix path", () => {
     const r = run(["does/not/exist.json"]);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("does/not/exist.json:");
@@ -36,7 +35,7 @@ describe("check-licences CLI error output (item 8)", () => {
     expect(r.stderr).not.toContain("\n    at ");
   });
 
-  it("reports an unparseable report file cleanly, no file excerpt", { timeout: 30_000 }, () => {
+  it("reports an unparseable report file cleanly, no file excerpt", () => {
     dir = mkdtempSync(join(tmpdir(), "licences-"));
     const bad = join(dir, "report.json");
     writeFileSync(bad, "{not json, secretMarker123");
@@ -46,9 +45,7 @@ describe("check-licences CLI error output (item 8)", () => {
     expect(r.stderr).not.toContain("\n    at ");
   });
 
-  it("reports a wrong-shape report as one line, not the zod dump (review C4)", {
-    timeout: 30_000,
-  }, () => {
+  it("reports a wrong-shape report as one line, not the zod dump (review C4)", () => {
     dir = mkdtempSync(join(tmpdir(), "licences-"));
     const bad = join(dir, "report.json");
     // Valid JSON, wrong shape: `name` must be a string, not a number.

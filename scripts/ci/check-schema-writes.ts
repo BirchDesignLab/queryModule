@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { isMainModule } from "./is-main-module.mjs";
 
 // Spec 9.2 and #189 (developer 09-27-26): app code under packages/api/src must never
 // enable PRAGMA writable_schema or write to the schema table, either of which could
@@ -187,7 +187,7 @@ export function scanSchemaWrites(dir: string): string[] {
   return out;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   const dir = resolve(process.argv[2] ?? "packages/api/src");
   const errors = scanSchemaWrites(dir);
   for (const e of errors) console.error(e);

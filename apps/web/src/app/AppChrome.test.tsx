@@ -1,8 +1,15 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
-import { API, PREFERENCES, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
+import {
+  API,
+  CLIENT_CONFIG,
+  PREFERENCES,
+  server,
+  TEST_PASSWORD,
+  TEST_USER,
+} from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 
 async function signIn() {
@@ -14,14 +21,33 @@ async function signIn() {
   return t;
 }
 
-describe("BR-002 home after sign-in", () => {
-  it("shows the signed-in user and focuses the heading", async () => {
+describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
+  it("shows the signed-in user in the header and focuses the panel heading", async () => {
     await signIn();
     expect(screen.getByText(`Signed in as ${TEST_USER.email}`)).toBeInTheDocument();
-    // Sign-in resolves outside act(), so React commits HomePage and runs its focus effect in a
+    // Sign-in resolves outside act(), so React commits the panel and runs its focus effect in a
     // later task; findByRole can return in between (focus still on body) under a loaded suite.
     const heading = screen.getByRole("heading", { name: "Query Module" });
     await waitFor(() => expect(heading).toHaveFocus());
+  });
+  it("D-B4 the header carries the status link, theme select and sign-out, and the panel is at /", async () => {
+    await signIn();
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("link", { name: "Connection status" })).toHaveAttribute(
+      "href",
+      "/status",
+    );
+    expect(within(header).getByLabelText("Theme")).toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Query type")).toBeInTheDocument();
+  });
+  it("D-B4 the header stays on the status page", async () => {
+    const { user } = await signIn();
+    await user.click(screen.getByRole("link", { name: "Connection status" }));
+    expect(await screen.findByRole("heading", { name: "Connection status" })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("banner")).getByRole("button", { name: "Sign out" }),
+    ).toBeInTheDocument();
   });
   it("UX-002 switches theme without reload", async () => {
     const { user } = await signIn();
@@ -74,7 +100,7 @@ describe("BR-002 home after sign-in", () => {
     expect(screen.getByRole("heading", { name: "Sign in" })).toHaveFocus();
     expect(screen.getByTestId("announcer-polite")).toHaveTextContent("Signed out.");
   });
-  it("#241: after a failed sign-out, a reload never shows HomePage for the old user", async () => {
+  it("#241: after a failed sign-out, a reload never shows the panel for the old user", async () => {
     // The server keeps failing, so the old session (cookie) stays valid on the server.
     server.use(
       http.post(`${API}/api/v1/auth/sign-out`, () => new HttpResponse(null, { status: 503 })),
@@ -123,5 +149,64 @@ describe("BR-002 home after sign-in", () => {
     const { user } = await signIn();
     await user.selectOptions(screen.getByLabelText("Theme"), "redShift");
     await waitFor(() => expect(puts).toEqual([{ ...PREFERENCES, themeMode: "redShift" }]));
+  });
+});
+
+describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
+  const withSite = (theme: { defaultMode: string; auto: string }, themeMode: string | null) =>
+    server.use(
+      http.get(`${API}/api/v1/config`, () => HttpResponse.json({ ...CLIENT_CONFIG, theme })),
+      http.get(`${API}/api/v1/me/preferences`, () =>
+        HttpResponse.json({ ...PREFERENCES, themeMode }),
+      ),
+    );
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  it("signed out, the OS scheme decides", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    renderRoot();
+    await screen.findByLabelText(/Email/);
+    expect(document.documentElement.dataset.theme).toBe("day");
+  });
+  it("with no preference the site default applies after sign-in", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+  });
+  it("a user preference wins over the site default", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, "day");
+    await signIn();
+    await screen.findByLabelText("Query type");
+    expect(document.documentElement.dataset.theme).toBe("day");
+  });
+  it("a signed-in reload on /status applies the site default without the query panel", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    await signIn();
+    const reloaded = renderRoot({ path: "/status" });
+    await within(reloaded.container).findByRole("heading", { name: "Connection status" });
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+  });
+  it("after sign-out the OS scheme decides again", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    const { user } = await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByRole("heading", { name: "Sign in" });
+    expect(document.documentElement.dataset.theme).toBe("day");
+  });
+  it("preference auto with site auto time follows the clock", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 28, 21, 0));
+    withSite({ defaultMode: "day", auto: "time" }, "auto");
+    await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+  });
+  it("D-B1: site default auto with auto time and no preference follows the clock", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 28, 21, 0));
+    withSite({ defaultMode: "auto", auto: "time" }, null);
+    await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
   });
 });

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createTranslator } from "@querymodule/client";
 import type { FieldState } from "@querymodule/core/rules";
 import { render, screen } from "@testing-library/react";
@@ -149,9 +152,16 @@ describe("FR-005 data type semantics", () => {
     );
     expect(screen.getByLabelText("Name")).toHaveAttribute("inputmode", "numeric");
   });
-  it("uses a numeric keypad for year and integer number", () => {
+  it("uses a numeric keypad for an integer number", () => {
     setup({ dataType: "number" });
     expect(screen.getByLabelText("Name")).toHaveAttribute("inputmode", "numeric");
+  });
+  it("uses a numeric keypad for a year and shows no date formats", () => {
+    setup({ dataType: "year" }, { inputFormats: ["YY", "YYYY", "MM/DD/YYYY"] });
+    const input = screen.getByLabelText("Name");
+    expect(input).toHaveAttribute("inputmode", "numeric");
+    expect(input).not.toHaveAttribute("aria-describedby");
+    expect(screen.queryByText(/Accepted formats/)).toBeNull();
   });
   it("uses a decimal keypad for decimal numbers", () => {
     setup({ dataType: "number" }, { numberKind: "decimal" });
@@ -174,5 +184,16 @@ describe("BR-001 no per-query-type code", () => {
   it("renders from the field state alone", () => {
     setup({ key: "anything", labelKey: "f.name" });
     expect(screen.getByLabelText("Name")).toHaveAttribute("name", "qf-anything");
+  });
+});
+
+describe("UX-004 a picklist or checkbox in error carries the same border cue as a text input", () => {
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../styles.css"), "utf8");
+  it("styles select and checkbox aria-invalid with the required colour token", () => {
+    const block = css.split("}").find((b) => b.includes(".qm-select[aria-invalid"));
+    expect(block).toBeDefined();
+    expect(block).toContain('.qm-select[aria-invalid="true"]');
+    expect(block).toContain('.qm-checkbox input[aria-invalid="true"]');
+    expect(block).toContain("border-color: var(--qm-field-required)");
   });
 });

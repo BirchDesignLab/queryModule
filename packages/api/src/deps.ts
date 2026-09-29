@@ -7,7 +7,7 @@ import { createRateLimiter, type RateLimiter } from "./auth/rate-limit";
 import { type Clock, systemClock } from "./clock";
 import { type LoadedConfig, loadSiteConfig } from "./config/load";
 import { type Db, openDatabase } from "./db/client";
-import { checkAuditTriggers, runMigrations } from "./db/migrate";
+import { checkAuditTriggers, checkQueryTriggers, runMigrations } from "./db/migrate";
 import type { DeployEnv } from "./env";
 import { type AppEventBus, createEventBus } from "./events/bus";
 import { checkKeyCanaries } from "./keys/canary";
@@ -40,6 +40,7 @@ export async function buildDeps(o: {
   try {
     await runMigrations(db, o.env.migrationsDir);
     await checkAuditTriggers(db);
+    await checkQueryTriggers(db);
     await checkKeyCanaries(db, o.secrets, clock);
     const config = await loadSiteConfig(o.env.siteConfigFile, {
       allowMockSources: o.env.allowMockSources,

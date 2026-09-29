@@ -1,11 +1,16 @@
 import { type ClientSiteConfig, ClientSiteConfigSchema } from "@querymodule/core/config";
 import type { ApiClient } from "../api/create-api-client.js";
 
-/** Carries the HTTP status only, never the response body (spec 5.9). */
+/** network: the request never completed; status: a non-2xx answer; parse: a 2xx body that is not the config. */
+export type ConfigFetchErrorKind = "network" | "status" | "parse";
+
+/** Carries the kind and HTTP status only, never the response body (spec 5.9). */
 export class ConfigFetchError extends Error {
-  constructor(message: string) {
+  readonly kind: ConfigFetchErrorKind;
+  constructor(kind: ConfigFetchErrorKind, message: string) {
     super(message);
     this.name = "ConfigFetchError";
+    this.kind = kind;
   }
 }
 
@@ -17,12 +22,17 @@ export async function fetchClientConfig(api: ApiClient): Promise<ClientSiteConfi
     const result = await api.GET("/api/v1/config");
     status = result.response.status;
     data = result.data;
-  } catch {
-    throw new ConfigFetchError("config fetch failed");
+  } catch (error) {
+    // The client parses the body inside GET, so a non-JSON body surfaces here as a SyntaxError.
+    if (error instanceof SyntaxError)
+      throw new ConfigFetchError("parse", "config response invalid");
+    throw new ConfigFetchError("network", "config fetch failed");
   }
-  if (data === undefined) throw new ConfigFetchError(`config fetch failed: ${status}`);
+  if (data === undefined) {
+    throw new ConfigFetchError("status", `config fetch failed: ${status}`);
+  }
   const parsed = ClientSiteConfigSchema.safeParse(data);
-  if (!parsed.success) throw new ConfigFetchError("config response invalid");
+  if (!parsed.success) throw new ConfigFetchError("parse", "config response invalid");
   return parsed.data;
 }
 
