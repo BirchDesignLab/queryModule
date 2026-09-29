@@ -1,8 +1,9 @@
 import { createDraftStore } from "@querymodule/client";
 import { type ClientSiteConfig, resolveShortcuts } from "@querymodule/core/config";
 import { ShortcutProvider } from "@querymodule/web-ui";
-import { screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, screen, within } from "@testing-library/react";
+import { useState } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLIENT_CONFIG, submitRecorder } from "../test/msw-server.js";
 import { renderRoutes } from "../test/render-routes.js";
 import { QueryPanelView } from "./QueryPanelView.js";
@@ -133,5 +134,102 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
     const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
     expect(dupes).toEqual([]);
     expect(screen.getAllByLabelText("Plate")).toHaveLength(2);
+  });
+});
+
+describe("ADR-0011 the preview shows what dispatchers see (checker ruling M1, M2)", () => {
+  const polite = () => screen.getByTestId("announcer-polite");
+
+  it("M1 preview: Enter with a required field empty shows the errors like live and sends nothing", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    await user.click(await screen.findByRole("button", { name: "Person" }));
+    await user.type(screen.getByLabelText(/First name/), "SAMPLE{Enter}");
+    const last = screen.getByLabelText(/Last name/);
+    expect(last).toHaveAttribute("aria-invalid", "true");
+    expect(last).toHaveFocus();
+    expect(polite()).toHaveTextContent(/field needs attention/);
+    expect(submitRecorder.calls).toEqual([]);
+  });
+
+  it("M1 preview: a valid Enter never calls the submit controller", async () => {
+    const { user, services } = renderView({ config: CLIENT_CONFIG });
+    const submit = vi.spyOn(services.submit.getState(), "submit");
+    await user.type(await screen.findByLabelText("Plate"), "ZZ-1234{Enter}");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(submit).not.toHaveBeenCalled();
+    expect(submitRecorder.calls).toEqual([]);
+  });
+
+  it("M1 preview: a click on Submit validates too and sends nothing", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    await user.click(await screen.findByRole("button", { name: "Person" }));
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
+    expect(submitRecorder.calls).toEqual([]);
+  });
+
+  it("M1 preview: terminal Enter lists command problems like live and sends nothing", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    const command = await screen.findByLabelText("Command");
+    await user.clear(command);
+    await user.type(command, "XYZ.123{Enter}");
+    const list = screen.getByRole("list", { name: "Command problems" });
+    expect(within(list).getByText("Unrecognized command XYZ.")).toBeInTheDocument();
+    await user.clear(command);
+    await user.type(command, "VEH.ZZ-1234{Enter}");
+    expect(submitRecorder.calls).toEqual([]);
+  });
+
+  const TWO: ClientSiteConfig = {
+    ...CUSTOM,
+    queryTypes: [
+      { ...VEH, code: "ZZQ", labelKey: "custom.zzq.label" },
+      { ...VEH, code: "ZZR", labelKey: "custom.zzr.label" },
+    ],
+    quickAccess: ["ZZQ", "ZZR"],
+  };
+  const ZZQ_TYPE = { ...VEH, code: "ZZQ", labelKey: "custom.zzq.label" };
+  let swap: (next: ClientSiteConfig) => void = () => undefined;
+  function Swappable({ drafts }: { drafts: ReturnType<typeof createDraftStore> }) {
+    const [config, setConfig] = useState(TWO);
+    swap = setConfig;
+    return <QueryPanelView config={config} drafts={drafts} mode="preview" idPrefix="sw" />;
+  }
+  const renderSwappable = () => {
+    const drafts = createDraftStore();
+    return { ...renderRoutes([{ path: "/", element: <Swappable drafts={drafts} /> }]), drafts };
+  };
+
+  it("M2 preview: when the selected type is removed it falls back to the first quick-access type", async () => {
+    const { user, drafts } = renderSwappable();
+    await user.click(await screen.findByRole("button", { name: "custom.zzr.label" }));
+    act(() => swap({ ...TWO, queryTypes: [ZZQ_TYPE], quickAccess: ["ZZQ"] }));
+    expect(await screen.findByRole("button", { name: "custom.zzq.label" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(drafts.getState().queryType).toBe("ZZQ");
+    expect(screen.getByLabelText("Plate")).toBeInTheDocument();
+  });
+
+  it("M2 preview: when the selected type is renamed it falls back to the first quick-access type", async () => {
+    const { user } = renderSwappable();
+    await user.click(await screen.findByRole("button", { name: "custom.zzr.label" }));
+    act(() =>
+      swap({
+        ...TWO,
+        queryTypes: [ZZQ_TYPE, { ...VEH, code: "ZZS", labelKey: "custom.zzs.label" }],
+        quickAccess: ["ZZQ", "ZZS"],
+      }),
+    );
+    expect(await screen.findByRole("button", { name: "custom.zzq.label" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "custom.zzs.label" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 });

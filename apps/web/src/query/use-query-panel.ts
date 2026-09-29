@@ -179,10 +179,13 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
 
   const initialType = initialQueryType(config);
   const storeType = useStore(drafts, (s) => s.queryType);
+  // A selected type the config no longer has (removed or renamed, e.g. in the builder preview)
+  // falls back to the first quick-access type, else the first type (ADR-0011).
+  const known = storeType !== null && config.queryTypes.some((q) => q.code === storeType);
   useEffect(() => {
-    if (initialType !== null && storeType === null) drafts.getState().select(initialType);
-  }, [drafts, initialType, storeType]);
-  const queryType = storeType ?? initialType;
+    if (initialType !== null && !known) drafts.getState().select(initialType);
+  }, [drafts, initialType, known]);
+  const queryType = known ? storeType : initialType;
 
   const values = useStore(drafts, (s) =>
     queryType === null ? undefined : s.drafts[queryType]?.values,
@@ -337,8 +340,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   // Ctrl+Enter calls requestSubmit() with no submitter, so the button's aria-disabled guard never
   // runs: while submitting or gated (spec 6.8) re-announce the reason and send nothing.
   const submitGated = (): boolean => {
-    // Preview sends nothing by any path; stopping here covers Enter in a field and the terminal.
-    if (preview) return true;
+    // Preview validates like live (ADR-0011: it shows what dispatchers see); sendChecked stops it.
     if (submitStatus === "idle") return false;
     announcer.announce(t(submitStatus === "submitting" ? "form.submitting" : "form.noConnection"));
     return true;

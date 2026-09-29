@@ -38,7 +38,6 @@ describe("FR-006 submit button (spec 6.2)", () => {
     ["submitting", "Submitting"],
     ["noConnection", "No connection to server"],
     ["updateRequired", "Client update required"],
-    ["preview", "Preview"],
   ] as const) {
     it(`${reason}: aria-disabled (never disabled) with a visible reason, and no submit`, async () => {
       const onSubmit = renderInForm(reason);
@@ -52,4 +51,13 @@ describe("FR-006 submit button (spec 6.2)", () => {
       expect(onSubmit).not.toHaveBeenCalled();
     });
   }
+  it("preview: aria-disabled with the visible reason, but the form still submits so it validates as live (ADR-0011)", async () => {
+    const onSubmit = renderInForm("preview");
+    const button = screen.getByRole("button", { name: "Submit" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveAccessibleDescription("Preview");
+    await userEvent.click(button);
+    await userEvent.type(screen.getByLabelText("Field"), "{Enter}");
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
 });
