@@ -122,6 +122,13 @@ describe("FR-002 sections render as fieldsets", () => {
     setup(form("VEH", { state: "OK" }), { values: { state: "OK" } });
     const base = screen.getByRole("group", { name: "Details" });
     expect(within(base).getByLabelText(/Plate type/)).toHaveAttribute("aria-required", "true");
+    // #346: the site's custom expanded field (FR-008) shows with Plate type.
+    const more = screen.getByRole("group", { name: "More details" });
+    expect(within(more).getByLabelText(/Plate color/)).toBeInTheDocument();
+  });
+
+  it("FR-008 VEH on the default state shows no More details group", () => {
+    setup(form("VEH", { state: "TX" }), { values: { state: "TX" } });
     expect(screen.queryByRole("group", { name: "More details" })).toBeNull();
   });
 });

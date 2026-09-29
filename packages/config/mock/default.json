@@ -29,7 +29,23 @@
           ]
         },
         { "queryType": "PER", "default": { "status": "NO RECORD" }, "scenarios": [] },
-        { "queryType": "PRO", "default": { "status": "NO RECORD" }, "scenarios": [] }
+        {
+          "queryType": "PRO",
+          "default": { "status": "NO RECORD" },
+          "scenarios": [
+            {
+              "when": { "serial": "ZZSTOLEN1" },
+              "respond": {
+                "status": "STOLEN",
+                "serial": "ZZSTOLEN1",
+                "propertyType": "ARTICLE",
+                "description": "SAMPLE ARTICLE",
+                "remarks": "STOLEN PROPERTY"
+              }
+            }
+          ]
+        },
+        { "queryType": "DL", "default": { "status": "NO RECORD" }, "scenarios": [] }
       ]
     },
     "nationalSource": {
@@ -47,7 +63,22 @@
           ]
         },
         { "queryType": "PER", "default": { "status": "NO RECORD" }, "scenarios": [] },
-        { "queryType": "PRO", "default": { "status": "NO RECORD" }, "scenarios": [] },
+        {
+          "queryType": "PRO",
+          "default": { "status": "NO RECORD" },
+          "scenarios": [
+            {
+              "when": { "serial": "ZZSTOLEN1" },
+              "respond": {
+                "status": "STOLEN",
+                "serial": "ZZSTOLEN1",
+                "propertyType": "ARTICLE",
+                "description": "SAMPLE ARTICLE",
+                "remarks": "STOLEN PROPERTY"
+              }
+            }
+          ]
+        },
         {
           "queryType": "WNT",
           "default": { "status": "NO WANTS OR WARRANTS" },
@@ -59,9 +90,18 @@
                 "subject": { "last": "SAMPLEWORTH", "first": "TEST", "dob": "1901-01-01" },
                 "warrants": [{ "offense": "FAILURE TO APPEAR", "issued": "1901-01-02" }]
               }
+            },
+            {
+              "when": { "last": "MISSING" },
+              "respond": {
+                "status": "MISSING PERSON",
+                "subject": { "last": "EXAMPLESON", "first": "TEST", "dob": "1901-01-03" },
+                "remarks": "MISSING PERSON"
+              }
             }
           ]
-        }
+        },
+        { "queryType": "DL", "default": { "status": "NO RECORD" }, "scenarios": [] }
       ]
     }
   }

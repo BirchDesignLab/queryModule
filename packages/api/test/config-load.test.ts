@@ -26,7 +26,7 @@ function copy(): string {
  * step 6), so it changes with packages/config/sites/default.json and with any core schema
  * default; update it deliberately in the change that does that.
  */
-const DEFAULT_CONFIG_HASH = "769f9f3c815f38bc3d11641a5c17d2764354e75e3313a5c7886987f8dcaee57f";
+const DEFAULT_CONFIG_HASH = "e51b838c0e02806ee94bc4572e5a14c32b5e414043be8eb71b055f89a182026d";
 
 /*
  * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
@@ -34,16 +34,25 @@ const DEFAULT_CONFIG_HASH = "769f9f3c815f38bc3d11641a5c17d2764354e75e3313a5c7886
  * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
  * default; update it deliberately in the change that does that.
  */
-const EXAMPLE_OK_CONFIG_HASH = "457bc94d26c1e24fcc941cedbddd7bf9907bd821d56ab4651bc49b420dc3bb3b";
+const EXAMPLE_OK_CONFIG_HASH = "54f1bde4b8ead4c7cfaead8246b76f3add50486b4a77b450b9c41804d73611f8";
 
-/** The bundled sites' own warnings; plateType is conditionally required with no VEH position. */
+/**
+ * The bundled sites' own warnings: fields a rule can require with no position in a command. VEH
+ * plateType; PRO make and caliber, and PROP make, caliber and description (per-type rules, #346).
+ */
+const required = (path: string, field: string, command: string) => ({
+  level: "warning",
+  path,
+  key: "config.conditionallyRequiredWithoutPosition",
+  params: { field, command },
+});
 const BUNDLED_WARNINGS = [
-  {
-    level: "warning",
-    path: "/queryTypes/0/rules/1/field",
-    key: "config.conditionallyRequiredWithoutPosition",
-    params: { field: "plateType", command: "VEH" },
-  },
+  required("/queryTypes/0/rules/1/field", "plateType", "VEH"),
+  required("/queryTypes/2/rules/1/field", "make", "PRO"),
+  required("/queryTypes/2/rules/1/field", "make", "PROP"),
+  required("/queryTypes/2/rules/3/field", "caliber", "PRO"),
+  required("/queryTypes/2/rules/3/field", "caliber", "PROP"),
+  required("/queryTypes/2/rules/6/field", "description", "PROP"),
 ];
 
 describe("BR-001 site config load", () => {
