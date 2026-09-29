@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -31,9 +39,13 @@ if [ "$1 $2" = "run -d" ]; then
     case "$a" in
       type=bind,src=*)
         src=\${a#type=bind,src=}; src=\${src%%,*}
-        [ -e "$src" ] || { echo "docker: bind source path does not exist: $src" >&2; exit 125; } ;;
+        [ -n "\${STUB_NO_BIND_CHECK:-}" ] || [ -e "$src" ] || { echo "docker: bind source path does not exist: $src" >&2; exit 125; } ;;
     esac
   done
+fi
+if [ "$1 $2" = "volume rm" ] && [ -n "\${STUB_VOLRM_FAIL:-}" ]; then
+  echo "Error response from daemon: volume is in use" >&2
+  exit 1
 fi
 case "$*" in
   *"audit-stats.js --up-to"*) echo "$STUB_AUDIT" ;;
@@ -197,6 +209,39 @@ describe("restore-test.sh (spec 8.6, NFR-003, SEC-010)", { timeout: 30_000 }, ()
     expect(rm).toBeGreaterThan(-1);
     expect(create).toBeGreaterThan(rm);
   });
+
+  it("removes a leftover container, then the volume, and aborts before create when volume rm fails (Q1)", () => {
+    backup("20260928T020000Z", 3, 7);
+    const ok = run(okEnv());
+    expect(ok.status, ok.stdout + ok.stderr).toBe(0);
+    const cont = ok.calls.indexOf("docker rm -f qm-restore-test");
+    expect(cont).toBeGreaterThan(-1);
+    expect(cont).toBeLessThan(ok.calls.indexOf("docker volume rm -f qm-restore-test-data"));
+    const r = run({ ...okEnv(), STUB_VOLRM_FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("volume is in use");
+    expect(r.calls.some((c) => c.startsWith("docker volume create"))).toBe(false);
+    expect(r.stdout).not.toContain("restore test ok");
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "mounts SEED_PASSWORD_SECRET when the secrets dir is not searchable by the caller (C1)",
+    () => {
+      backup("20260928T020000Z", 3, 7);
+      const secrets = join(dir, "secrets");
+      chmodSync(secrets, 0o000);
+      try {
+        const r = run({ ...okEnv(), STUB_NO_BIND_CHECK: "1" });
+        expect(r.status, r.stdout + r.stderr).toBe(0);
+        expect(r.stdout + r.stderr).not.toContain("SEED_PASSWORD_SECRET absent");
+        expect(bindMounts(runArgs())).toContain(
+          `type=bind,src=${secrets}/SEED_PASSWORD_SECRET,dst=/run/secrets/SEED_PASSWORD_SECRET,readonly`,
+        );
+      } finally {
+        chmodSync(secrets, 0o700);
+      }
+    },
+  );
 
   it("#135, T32 G-M2: mounts each app secret file read-only, as compose does, never the directory", () => {
     // The host secrets dir is root mode 700: uid 10001 cannot enter a directory mount of it,

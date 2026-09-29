@@ -21,8 +21,11 @@ dir=$(find "$work" -mindepth 1 -maxdepth 1 -type d | head -n1)
 want=$(jq -c '{auditCount, auditMaxId}' "$dir/manifest.json")
 max=$(jq -r '.auditMaxId' "$dir/manifest.json")
 
-# A volume left by a failed earlier cleanup must never be reused.
-docker volume rm -f "$vol" >/dev/null 2>&1 || true
+# A volume left by a failed earlier cleanup must never be reused. A leftover container holds its
+# volume, so remove it first. `volume rm -f` succeeds for a missing volume, so a failure here is
+# real (volume in use): let set -e abort, with docker's error visible, before `volume create`.
+docker rm -f "$name" >/dev/null 2>&1 || true
+docker volume rm -f "$vol" >/dev/null
 docker volume create "$vol" >/dev/null
 docker run --rm -v "$vol:/data" -v "$dir:/src:ro" alpine:3 sh -c 'cp /src/querymodule.db* /data/ && chown -R 10001:10001 /data'
 # One read-only bind mount per app secret, the set deploy/compose.yml gives `app` (#135): the
@@ -33,7 +36,9 @@ docker run --rm -v "$vol:/data" -v "$dir:/src:ro" alpine:3 sh -c 'cp /src/querym
 # with a note when absent. TUNNEL_TOKEN belongs to cloudflared and is not mounted.
 secret_mounts=()
 for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSWORD_SECRET; do
-  if [ "$k" = SEED_PASSWORD_SECRET ] && [ ! -e "$QM_SECRETS_DIR/$k" ]; then
+  # -x guards the skip: a root mode 700 dir hides files from a non-root caller, so -e alone would
+  # skip a secret that exists. Unsearchable dir: mount anyway, Docker's bind-source error decides.
+  if [ "$k" = SEED_PASSWORD_SECRET ] && [ -x "$QM_SECRETS_DIR" ] && [ ! -e "$QM_SECRETS_DIR/$k" ]; then
     echo "restore-test: SEED_PASSWORD_SECRET absent, not mounted"
     continue
   fi
