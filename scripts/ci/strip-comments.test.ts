@@ -116,4 +116,26 @@ describe("stripComments regex-literal awareness (#220 G-M-a, r1-a)", () => {
     expect(hasTaggedTest(source, "A1")).toBe(false);
     expect(stripComments("const g = x + /'/.source; // c")).toBe("const g = x + /'/.source; ");
   });
+
+  it("G-I1: an ambiguous-start division candidate closing inside a string does not hide a comment", () => {
+    const line = ["const x = a", `  / 2; const s = '/'; // it("[A1] x", () => {})`].join("\n");
+    expect(hasTaggedTest(line, "A1")).toBe(false);
+    const block = `const y = i++ / 2; const s = '/'; /* it("[A1] x", () => {}) */`;
+    expect(hasTaggedTest(block, "A1")).toBe(false);
+    const brace = ["if (a) {}", `/ 2; const s = "/"; // it("[A1] x", () => {})`].join("\n");
+    expect(hasTaggedTest(brace, "A1")).toBe(false);
+  });
+
+  it("G-I1: an unambiguous start keeps a quoted regex literal regex-aware", () => {
+    const source = [
+      "const r = (/'/); /*",
+      'it("[A1] x", () => {})',
+      "*/",
+      'it("[A1] live", () => {})',
+    ].join("\n");
+    const out = stripComments(source);
+    expect(out).not.toContain('"[A1] x"');
+    expect(out).toContain('"[A1] live"');
+    expect(stripComments("const r = /'/; // c")).toBe("const r = /'/; ");
+  });
 });

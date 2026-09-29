@@ -12,14 +12,14 @@ docker compose pull app || fail pull
 # report the container's own image, which a pull does not change.
 ref=$(docker compose config --images app) || fail config
 want=$(docker image inspect -f '{{.Id}}' "$ref") || fail inspect
-cid=$(docker compose ps -q app)
+cid=$(docker compose ps -q app) || fail ps
 have=""
-if [ -n "$cid" ]; then have=$(docker inspect -f '{{.Image}}' "$cid"); fi
+if [ -n "$cid" ]; then have=$(docker inspect -f '{{.Image}}' "$cid") || fail inspect-container; fi
 if [ "$have" = "$want" ]; then
   echo "$(date -u +%FT%TZ) deploy-pull: no change"
   exit 0
 fi
-docker compose up -d app
+docker compose up -d app || fail up
 if timeout 60 bash -c 'until [ "$(docker inspect -f "{{.State.Health.Status}}" $(docker compose ps -q app))" = healthy ]; do sleep 2; done' \
   && bash "$here/smoke.sh" "$PUBLIC_ORIGIN"; then
   echo "$(date -u +%FT%TZ) deploy-pull: app -> $want"

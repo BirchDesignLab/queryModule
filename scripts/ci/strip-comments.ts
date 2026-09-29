@@ -9,7 +9,10 @@
  * Regex literals are recognised (a `/` after `(`, `,`, `=`, `:`, `[`, `!`, `&`,
  * `|`, `?`, `{`, `}`, `;`, a keyword such as `return`, or at line start) and
  * copied through to their closing unescaped `/` outside a character class, so
- * a quote or `//` inside one opens nothing (#220 G-M-a, r1-a). When the scanner
+ * a quote or `//` inside one opens nothing (#220 G-M-a, r1-a). After a token
+ * that can also end an expression (line start, `}`, `+`/`-`, `<`/`>`), a
+ * candidate whose body holds a quote may be a division closing inside a
+ * string, so the line falls back to plain mode (#220 G-I1). When the scanner
  * cannot find the closing `/` on the line it fails closed: the rest of that line
  * gets the plain comment strip with no string or regex handling, so a comment
  * opener is never hidden and a tagged test in a block comment never counts.
@@ -35,15 +38,23 @@ const REGEX_PRECEDING_KEYWORDS = new Set([
   "await",
 ]);
 
-/** True when a `/` at the end of `out` starts a regex literal, not a division. */
-function startsRegex(out: string): boolean {
+/**
+ * Whether a `/` at the end of `out` starts a regex literal: "no" (division),
+ * "yes", or "ambiguous" when the preceding token can also end an expression
+ * (line start, `}`, a postfix `++`/`--`, a JSX `>`), so the `/` may be a
+ * division (#220 G-I1). `=>` is an unambiguous start.
+ */
+function regexStart(out: string): "no" | "yes" | "ambiguous" {
   let k = out.length - 1;
   while (k >= 0 && (out[k] === " " || out[k] === "\t")) k -= 1;
-  if (k < 0 || out[k] === "\n" || out[k] === "\r") return true;
-  if ("(,=:[!&|?{};<>+-*%~^".includes(out[k] as string)) return true;
+  if (k < 0 || out[k] === "\n" || out[k] === "\r") return "ambiguous";
+  const prev = out[k] as string;
+  if (prev === ">" && out[k - 1] === "=") return "yes";
+  if ("}+-<>".includes(prev)) return "ambiguous";
+  if ("(,=:[!&|?{;*%~^".includes(prev)) return "yes";
   let w = k;
   while (w >= 0 && /[A-Za-z_$]/.test(out[w] as string)) w -= 1;
-  return w < k && REGEX_PRECEDING_KEYWORDS.has(out.slice(w + 1, k + 1));
+  return w < k && REGEX_PRECEDING_KEYWORDS.has(out.slice(w + 1, k + 1)) ? "yes" : "no";
 }
 
 /** Index just past a regex literal (with flags) starting at `start`, or -1. */
@@ -145,13 +156,21 @@ export function stripComments(source: string): string {
       i = j + 2 <= n ? j + 2 : n;
       continue;
     }
-    if (c === "/" && !plain && startsRegex(out)) {
+    const start = c === "/" && !plain ? regexStart(out) : "no";
+    if (start !== "no") {
       const end = scanRegex(source, i);
       if (end === -1) {
         plain = true;
       } else if (closesOnCommentOpener(source, i, end)) {
         // The candidate's closing `/` begins a `//` or `/*`: this was really a
         // division or a JSX `/>`, so the comment opener must stay live.
+        plain = true;
+      } else if (start === "ambiguous" && /['"`]/.test(source.slice(i + 1, end))) {
+        // A possible division whose candidate body holds a quote may have
+        // closed inside a string (`a\n / 2; s = '/'; // ...`): copying it
+        // would leave the string's closing quote to open a false string that
+        // hides a later comment. Fail closed: plain mode for the rest of the
+        // line (#220 G-I1).
         plain = true;
       } else {
         out += source.slice(i, end);

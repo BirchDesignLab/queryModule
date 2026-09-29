@@ -98,6 +98,9 @@ describe("deploy-pull.sh (ADR-0002, spec 8.3)", { timeout: 30_000 }, () => {
     ["pull", "compose pull app"],
     ["config", "compose config --images app"],
     ["inspect", "image inspect -f {{.Id}} ghcr.io/example/app:release"],
+    ["ps", "compose ps -q app"],
+    ["inspect-container", "inspect -f {{.Image}} c0ffee"],
+    ["up", "compose up -d app"],
   ])("logs exactly one FAILED %s line and exits non-zero when that step fails", (step, fail) => {
     const r = run({
       PUBLIC_ORIGIN: "http://127.0.0.1:9",

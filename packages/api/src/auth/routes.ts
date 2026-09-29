@@ -144,6 +144,13 @@ async function signOut(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
       .from(session)
       .where(eq(session.id, p.sessionId));
     if (left.length > 0) {
+      if (res.status >= 400 && res.status < 500) {
+        // G-M1: Better Auth refused the sign-out (for example its 403 origin check). Pass its
+        // status through without its Set-Cookie, so the cookie stays with the live session.
+        const kept = new Headers(res.headers);
+        kept.delete("set-cookie");
+        return new Response(res.body, { status: res.status, headers: kept });
+      }
       d.logger.error("sign-out left the session row", { sessionId: p.sessionId });
       return apiError(c, "internal");
     }

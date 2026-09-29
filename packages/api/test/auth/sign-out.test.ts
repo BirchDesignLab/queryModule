@@ -82,6 +82,40 @@ describe("SEC-006 sign-out ends the server session or says it did not (#246, spe
     expect(t.logLines.filter((l) => l.includes("sign-out left the session row"))).toHaveLength(1);
   });
 
+  it("a Better Auth 4xx (origin check) with the row surviving passes its status through, cookie kept, no error log (G-M1)", async () => {
+    const { t, cookie, sessionId, ended } = await signedIn();
+    vi.spyOn(t.deps.auth, "handler").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "INVALID_ORIGIN", message: "Invalid origin" }), {
+        status: 403,
+        headers: {
+          "content-type": "application/json",
+          "set-cookie": `${sessionCookieName(t.env)}=; Max-Age=0; Path=/`,
+        },
+      }),
+    );
+    const res = await signOut(t, cookie);
+    expect(res.status).toBe(403);
+    expect(res.headers.getSetCookie()).toHaveLength(0);
+    expect((await liveSession(t, cookie))?.session?.id).toBe(sessionId);
+    expect(await t.auditRows("logout")).toHaveLength(0);
+    expect(ended).not.toHaveBeenCalled();
+    expect(t.logLines.filter((l) => l.includes("sign-out left the session row"))).toHaveLength(0);
+  });
+
+  it("a non-2xx Better Auth answer after the row is gone still audits one logout and ends the session (G-M2)", async () => {
+    const { t, cookie, sessionId, ended } = await signedIn();
+    vi.spyOn(t.deps.auth, "handler").mockImplementationOnce(async () => {
+      await t.deps.db.$client.execute("DELETE FROM session");
+      return new Response(null, { status: 500 });
+    });
+    const res = await signOut(t, cookie);
+    expect(res.status).toBe(500);
+    const rows = await t.auditRows("logout");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.details.sessionId).toBe(sessionId);
+    expect(ended).toHaveBeenCalledTimes(1);
+  });
+
   it("a retry after the fault clears signs out once and audits one logout", async () => {
     const { t, cookie, sessionId, ended } = await signedIn();
     await t.deps.db.$client.execute(
