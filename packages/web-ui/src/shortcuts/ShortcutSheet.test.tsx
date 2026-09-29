@@ -178,12 +178,54 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
     expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
   });
 
-  it("falls back to the code for a code the layout map does not carry, after the map resolved", async () => {
+  it("falls back to the code, never a US character, for a code the layout map does not carry", async () => {
     setKeyboard({ getLayoutMap: () => Promise.resolve(new Map([["KeyQ", "a"]])) });
-    render(sheet());
+    render(
+      <ShortcutSheet
+        open
+        onClose={() => undefined}
+        bindings={{ ...bindings, focusTerminal: [{ keys: "Slash", context: "global" }] }}
+        t={t}
+      />,
+    );
     // The map has resolved once a mapped key shows its layout label (US layout would say "q").
     expect(await screen.findByText("a")).toBeInTheDocument();
+    // #319: Slash has a US character ("/"), so only the code proves the fallback skips US labels.
+    expect(screen.getByText("Slash")).toBeInTheDocument();
+    expect(screen.queryByText("/")).not.toBeInTheDocument();
     expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
-    expect(screen.getByText("KeyG")).toBeInTheDocument();
+  });
+
+  it("with a layout map, Shift+Slash reads 'Shift + /': the map gives the unshifted character", async () => {
+    setKeyboard({ getLayoutMap: () => Promise.resolve(new Map([["Slash", "/"]])) });
+    render(
+      <ShortcutSheet
+        open
+        onClose={() => undefined}
+        bindings={{ openShortcuts: [{ keys: "Shift+Slash", context: "global" }] }}
+        t={t}
+      />,
+    );
+    expect(await screen.findByText("Shift + /")).toBeInTheDocument();
+    expect(screen.queryByText("?")).not.toBeInTheDocument();
+  });
+
+  it("asks for the layout map once per mount, not on every open (#319)", async () => {
+    const getLayoutMap = vi.fn().mockResolvedValue(new Map([["KeyQ", "a"]]));
+    setKeyboard({ getLayoutMap });
+    const props = { onClose: () => undefined, bindings, t };
+    const { rerender } = render(<ShortcutSheet open {...props} />);
+    expect(await screen.findByText("a")).toBeInTheDocument();
+    rerender(<ShortcutSheet open={false} {...props} />);
+    rerender(<ShortcutSheet open {...props} />);
+    expect(await screen.findByText("a")).toBeInTheDocument();
+    expect(getLayoutMap).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask for the layout map while the sheet was never opened", () => {
+    const getLayoutMap = vi.fn().mockResolvedValue(new Map());
+    setKeyboard({ getLayoutMap });
+    render(<ShortcutSheet open={false} onClose={() => undefined} bindings={bindings} t={t} />);
+    expect(getLayoutMap).not.toHaveBeenCalled();
   });
 });

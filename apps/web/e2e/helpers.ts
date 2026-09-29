@@ -18,7 +18,10 @@ export async function signIn(page: Page, user = e2eUser()): Promise<void> {
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Query Module" })).toBeVisible();
+  // Signed-in only: the login panel is gone. Exact name: the login h1 "Query Module 2.0" would
+  // match a substring locator before the session exists (#328 CI).
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeVisible();
 }
 
 /** "#rrggbb" or the short "#rgb" a minified production stylesheet emits (for example #fff). */

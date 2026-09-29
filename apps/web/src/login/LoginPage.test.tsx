@@ -29,6 +29,30 @@ describe("BR-002 standalone sign-in screen (spec 5.6, 6.2)", () => {
     expect(screen.getByLabelText(/Password/)).toHaveAttribute("aria-required", "true");
   });
 
+  it("lays the form out in one panel: product heading, fields, full-width submit, theme last", () => {
+    renderLogin();
+    const panel = screen.getByRole("region", { name: "Query Module 2.0" });
+    expect(panel).toHaveClass("qm-login__panel");
+    const product = screen.getByRole("heading", { level: 1, name: "Query Module 2.0" });
+    expect(panel).toContainElement(product);
+    expect(screen.getByRole("heading", { level: 2, name: "Sign in" })).toBeInTheDocument();
+    const order = [
+      product,
+      screen.getByLabelText(/Email/),
+      screen.getByLabelText(/Password/),
+      screen.getByRole("button", { name: "Sign in" }),
+      screen.getByLabelText("Theme"),
+    ];
+    for (const el of order) expect(panel).toContainElement(el);
+    for (let i = 1; i < order.length; i++) {
+      const prev = order[i - 1] as HTMLElement;
+      const next = order[i] as HTMLElement;
+      expect(prev.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(screen.getByRole("button", { name: "Sign in" })).toHaveClass("qm-button--block");
+    expect(screen.getByLabelText("Theme").closest(".qm-login__secondary")).not.toBeNull();
+  });
+
   it("FR-005 empty submit marks both fields, focuses the first and announces the count", async () => {
     const { user } = renderLogin();
     await user.click(screen.getByRole("button", { name: "Sign in" }));

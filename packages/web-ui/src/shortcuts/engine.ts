@@ -28,8 +28,9 @@ export function strokeOf(e: StrokeInput): string | null {
 
 export interface KeyContext {
   inTextInput: boolean;
-  /** Every region the focus is inside, innermost first, plus "global". A "global" entry is always
-   *  ranked last wherever it sits; regions rank by position (nested tie order, spec 6.4). */
+  /** Every region the focus is inside, innermost first; regions rank by position (nested tie
+   *  order, spec 6.4). Global bindings always apply and always rank last: the engine alone
+   *  enforces that, so callers need not list "global" (#319). */
   contexts: readonly ShortcutContext[];
 }
 
@@ -43,6 +44,8 @@ export interface ShortcutEngine {
   reset(): void;
 }
 
+/** A chord's second stroke must come less than this long after the first: at exactly 1000 ms
+ *  the pending prefix has expired (`>=`), and that stroke starts afresh. */
 export const CHORD_TIMEOUT_MS = 1000;
 
 /** Text-editing combos never fire, even if bound. The engine guards this at runtime; core config validation also rejects them (config.shortcutEditingCombo). One source, in core. */

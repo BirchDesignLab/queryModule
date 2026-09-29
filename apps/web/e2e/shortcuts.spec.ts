@@ -42,7 +42,7 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
     await signIn(page);
     // The panel renders after GET /api/v1/config; keys sent earlier reach no handler.
     await expect(page.getByLabel("Query type")).toBeVisible();
-    await page.getByRole("heading", { name: "Query Module" }).focus();
+    await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
     await page.keyboard.press("Shift+Slash");
     const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
     await expect(dialog).toBeVisible();
@@ -50,14 +50,14 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
 
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Query Module" })).toBeFocused();
+    await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
   });
 
   test("G then Q outside inputs focuses the query-type select", async ({ page }) => {
     await signIn(page);
     // The panel renders after GET /api/v1/config; keys sent earlier reach no handler.
     await expect(page.getByLabel("Query type")).toBeVisible();
-    await page.getByRole("heading", { name: "Query Module" }).focus();
+    await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
     await page.keyboard.press("g");
     await page.keyboard.press("q");
     await expect(page.getByLabel("Query type")).toBeFocused();
