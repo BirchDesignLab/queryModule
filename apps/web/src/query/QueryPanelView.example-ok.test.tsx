@@ -72,10 +72,10 @@ describe("example-ok site through the shared renderer (BR-001)", () => {
   it("PRO: the property type list has no Boat, site-narrowed with $remove (FR-031)", async () => {
     const { user } = renderExampleOk();
     await user.click(await screen.findByRole("button", { name: "Property" }));
-    const type = await screen.findByLabelText(/Property type/);
+    const type = await screen.findByRole("group", { name: /Property type/ });
     const labels = within(type)
-      .getAllByRole("option")
-      .map((o) => o.textContent);
+      .getAllByRole("radio")
+      .map((r) => r.closest("label")?.textContent);
     expect(labels).toContain("Firearm");
     expect(labels).toContain("Article");
     expect(labels).not.toContain("Boat");

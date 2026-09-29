@@ -2,6 +2,7 @@ import type { DraftValue, Translator } from "@querymodule/client";
 import type { FieldState } from "@querymodule/core/rules";
 import type { JSX } from "react";
 import { CheckboxField } from "./CheckboxField.js";
+import { SegField } from "./SegField.js";
 import { SelectField } from "./SelectField.js";
 import { TextField } from "./TextField.js";
 
@@ -19,6 +20,8 @@ export interface FieldRendererProps {
   inputFormats?: readonly string[];
   /** Number fields: decimal keypad when "decimal". */
   numberKind?: "integer" | "decimal";
+  /** Picklists: "seg" draws a short list as a segmented control (the subtype bar); default is a select. */
+  presentation?: "seg";
 }
 
 /** Generic renderer: dataType picks the control; no per-query-type code (BR-001). */
@@ -31,6 +34,7 @@ export function FieldRenderer({
   idPrefix,
   inputFormats,
   numberKind,
+  presentation,
 }: FieldRendererProps): JSX.Element {
   const id = `${idPrefix}-${field.key}`;
   const label = t(field.labelKey);
@@ -47,6 +51,16 @@ export function FieldRenderer({
         {...common}
         checked={shown === true}
         onChange={(checked) => onChange(field.key, checked)}
+      />
+    );
+  }
+  if (field.dataType === "picklist" && presentation === "seg") {
+    return (
+      <SegField
+        {...common}
+        options={(field.options ?? []).map((o) => ({ code: o.code, label: t(o.labelKey) }))}
+        value={typeof shown === "string" ? shown : ""}
+        onChange={(value) => onChange(field.key, value)}
       />
     );
   }

@@ -3,6 +3,14 @@ import type { FieldState } from "@querymodule/core/rules";
 import type { JSX } from "react";
 import { FieldRenderer } from "../field/FieldRenderer.js";
 
+/** A picklist type field with this many options or fewer is drawn as a segmented control. */
+const SEG_MAX_OPTIONS = 6;
+
+function isShort(field: FieldState): boolean {
+  const n = field.options?.length ?? 0;
+  return field.dataType === "picklist" && n > 0 && n <= SEG_MAX_OPTIONS;
+}
+
 export interface TypeFieldBarProps {
   /** The query type's fields; only visible role:"type" ones render, in the order given. */
   fields: readonly FieldState[];
@@ -51,6 +59,7 @@ export function TypeFieldBar({
             idPrefix={idPrefix}
             inputFormats={cfg?.inputFormats}
             numberKind={cfg?.numberKind}
+            presentation={isShort(field) ? "seg" : undefined}
           />
         );
       })}

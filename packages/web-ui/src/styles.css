@@ -246,6 +246,55 @@ h1 {
   font-weight: 600;
 }
 
+/* Subtype segmented control (TypeFieldBar): one radio per option, the label draws the segment. The
+   radio is transparent but keeps its hit area; checked fills with accent.subtle; the ring sits on
+   the segment (E1), the invalid edge on the track. */
+.qm-field--seg {
+  min-inline-size: 0;
+  margin-inline: 0;
+  padding: 0;
+  border: 0;
+}
+
+.qm-seg__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(var(--qm-control-height-dense) - var(--qm-space-2));
+  padding: 0 var(--qm-space-3);
+  border: var(--qm-border-width) solid transparent;
+  border-radius: var(--qm-radius-sm);
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-size-md);
+  cursor: pointer;
+}
+
+.qm-seg__option input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.qm-seg__option:has(input:checked) {
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
+  font-weight: 600;
+}
+
+.qm-seg__option:has(input:focus-visible) {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
+.qm-seg--options:has(input[aria-invalid="true"]) {
+  border-color: var(--qm-field-required);
+  box-shadow: inset 0 0 0 var(--qm-border-width) var(--qm-field-required);
+}
+
 /* Source chips: a checkbox inside a bordered label; checked fills with accent.subtle. One ring, on
    the chip (E1): the checkbox inside draws none. */
 .qm-chip {
@@ -521,6 +570,11 @@ h1 {
 
 .qm-layout--mobile-unit .qm-quick-access__button {
   min-height: var(--qm-control-height-touch);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-seg__option {
+  min-height: var(--qm-target-min);
   font-size: var(--qm-type-body-size);
 }
 

@@ -711,26 +711,28 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     it("Property shows Property type in the type bar, before the form and not in a section", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      const control = await screen.findByLabelText(/Property type/);
+      const control = await screen.findByRole("group", { name: /Property type/ });
       const form = document.querySelector("form") as HTMLFormElement;
       expect(form.contains(control)).toBe(false);
       expect(control.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(control.closest("fieldset")).toBeNull();
+      // A segmented control of radios, in the type bar and not in a form section.
+      expect(control.closest(".qm-type-fields")).not.toBeNull();
+      expect(within(control).getAllByRole("radio").length).toBeGreaterThan(1);
     });
 
     it("choosing a property type changes required fields as the form did", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      await user.selectOptions(await screen.findByLabelText(/Property type/), "BOAT");
-      expect(screen.getByLabelText(/Property type/)).toHaveValue("BOAT");
+      await user.click(await screen.findByRole("radio", { name: "Boat" }));
+      expect(screen.getByRole("radio", { name: "Boat" })).toBeChecked();
       await user.click(screen.getByRole("button", { name: "Submit" }));
-      expect(screen.getByLabelText(/Property type/)).not.toHaveAttribute("aria-invalid");
+      expect(screen.getByRole("radio", { name: "Boat" })).not.toHaveAttribute("aria-invalid");
     });
 
     it("FR-031 a type-bar value reaches the submit body", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      await user.selectOptions(await screen.findByLabelText(/Property type/), "BOAT");
+      await user.click(await screen.findByRole("radio", { name: "Boat" }));
       await user.click(screen.getByRole("button", { name: "Submit" }));
       await screen.findByRole("region", { name: "Last query" });
       expect(submitRecorder.calls.at(-1)?.body).toMatchObject({
@@ -743,14 +745,16 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
       await user.click(screen.getByRole("button", { name: "Submit" }));
-      const control = screen.getByLabelText(/Property type/);
-      expect(control).toHaveAttribute("aria-invalid", "true");
-      expect(control).toHaveFocus();
+      const first = within(screen.getByRole("group", { name: /Property type/ })).getAllByRole(
+        "radio",
+      )[0];
+      expect(first).toHaveAttribute("aria-invalid", "true");
+      expect(first).toHaveFocus();
     });
 
     it("Vehicle shows no type bar", async () => {
       await openPanel();
-      expect(screen.queryByLabelText(/Property type/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: /Property type/ })).not.toBeInTheDocument();
       expect(document.querySelector(".qm-type-fields")).toBeNull();
     });
   });
