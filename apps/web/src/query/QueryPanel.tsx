@@ -69,7 +69,8 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
         run={() => document.getElementById(`${ID_PREFIX}-query-type`)?.focus()}
       />
       <PanelShortcut action="shortcutSheet" run={() => setSheetOpen(true)} />
-      <PanelShortcut action="dismiss" run={() => setSheetOpen(false)} />
+      {/* Only while the sheet is open: a standing dismiss handler would swallow every Escape. */}
+      {sheetOpen ? <PanelShortcut action="dismiss" run={() => setSheetOpen(false)} /> : null}
       <ShortcutSheet
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}

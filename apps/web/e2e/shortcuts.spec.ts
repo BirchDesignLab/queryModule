@@ -1,7 +1,7 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
 import { signIn } from "./helpers.js";
 
-test.describe("keyboard shortcuts on the query panel (FR-006, FR-007, UX-004)", () => {
+test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
   test("Alt+2 selects PER and Ctrl+Enter with Last empty focuses Last and announces", async ({
     page,
   }) => {
@@ -11,7 +11,9 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007, UX-004)", 
     await page.keyboard.press("Alt+Digit2");
     await expect(page.getByLabel("Query type")).toHaveValue("PER");
 
-    await page.getByLabel("First name").focus();
+    // Focus a non-text control: in a text field the browser's implicit submit would pass the test
+    // even with the submit shortcut broken.
+    await page.getByRole("button", { name: "Person", exact: true }).focus();
     await page.keyboard.press("Control+Enter");
 
     const last = page.getByLabel("Last name");

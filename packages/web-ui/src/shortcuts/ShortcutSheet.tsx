@@ -47,7 +47,6 @@ export function ShortcutSheet({ open, onClose, bindings, t }: ShortcutSheetProps
         event.preventDefault();
         onClose();
       }}
-      onClose={onClose}
     >
       <h2 id={TITLE_ID}>{t("shortcut.sheetTitle")}</h2>
       <ul className="qm-shortcut-sheet__list">

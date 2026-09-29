@@ -219,4 +219,18 @@ describe("FR-007 shortcut provider binds the engine to the DOM (spec 6.4)", () =
     fireEvent.keyDown(document.activeElement ?? document.body, { code: "Escape", key: "Escape" });
     expect(dismiss).toHaveBeenCalledTimes(1);
   });
+
+  it("a held key's auto-repeat is prevented but does not run the handler again (no submit burst)", () => {
+    const handler = vi.fn();
+    setup(<Action action="focusTerminal" handler={handler} />);
+    const repeat = new KeyboardEvent("keydown", {
+      code: "Slash",
+      bubbles: true,
+      cancelable: true,
+      repeat: true,
+    });
+    document.body.dispatchEvent(repeat);
+    expect(handler).not.toHaveBeenCalled();
+    expect(repeat.defaultPrevented).toBe(true);
+  });
 });

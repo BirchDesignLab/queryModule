@@ -2,7 +2,7 @@ import { resolveShortcuts } from "@querymodule/core/config";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ShortcutSheet } from "./ShortcutSheet.js";
 
 const MESSAGES: Record<string, string> = {
@@ -92,5 +92,15 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
+  });
+  it("calls onClose exactly once when closed", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <ShortcutSheet open={true} onClose={onClose} bindings={resolveShortcuts()} t={t} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    rerender(<ShortcutSheet open={false} onClose={onClose} bindings={resolveShortcuts()} t={t} />);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

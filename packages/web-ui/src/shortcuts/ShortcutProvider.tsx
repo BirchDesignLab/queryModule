@@ -91,6 +91,8 @@ export function ShortcutProvider({
       const handler = stack?.[stack.length - 1];
       if (handler === undefined) return;
       event.preventDefault();
+      // A held key auto-repeats keydown; run the action once per press (no submit burst).
+      if (event.repeat) return;
       handler.current();
     };
     document.addEventListener("keydown", onKeyDown);

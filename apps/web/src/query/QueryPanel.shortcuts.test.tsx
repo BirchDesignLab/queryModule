@@ -37,7 +37,7 @@ function slash(shiftKey = false): void {
   });
 }
 
-describe("FR-006 FR-007 FR-051 shortcuts on the query panel (spec 6.4)", () => {
+describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
   it("typing a slash in the Plate input types it and fires nothing", async () => {
     const { user } = await openPanel();
     const plate = screen.getByLabelText("Plate");
@@ -103,5 +103,17 @@ describe("FR-006 FR-007 FR-051 shortcuts on the query panel (spec 6.4)", () => {
     fireEvent.keyDown(sheet, { code: "Digit2", key: "2", altKey: true });
     expect(vehicle()).toHaveAttribute("aria-pressed", "true");
     expect(person()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("with the sheet closed, Escape is left to the page (not prevented)", async () => {
+    await openPanel();
+    const event = new KeyboardEvent("keydown", {
+      code: "Escape",
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    document.body.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
   });
 });
