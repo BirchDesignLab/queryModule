@@ -46,6 +46,18 @@ describe("renameToBase", () => {
     expect(renameToBase(base, head).renames).toEqual([]);
   });
 
+  it("never maps a second head component onto a base target claimed in an earlier round", () => {
+    // Round 1 maps B2 -> B and A3 -> A (A3 already refs B). A2 refs B2, so it only equals A
+    // after round 1's rewrite; mapping it onto A too would drop one schema silently.
+    const leaf = { type: "string" };
+    const node = (to: string) => ({ type: "object", properties: { p: ref(to) } });
+    const base = doc({ A: node("B"), B: leaf });
+    const head = doc({ A2: node("B2"), A3: node("B"), B2: leaf });
+    const r = renameToBase(base, head);
+    expect(r.renames.filter(([, to]) => to === "A")).toHaveLength(1);
+    expect(Object.keys(r.doc.components?.schemas ?? {}).sort()).toHaveLength(3);
+  });
+
   it("ignores key order when comparing bodies", () => {
     const base = doc({ A: { type: "object", required: ["a"] } });
     const head = doc({ B: { required: ["a"], type: "object" } });

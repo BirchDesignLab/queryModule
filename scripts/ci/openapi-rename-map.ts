@@ -61,6 +61,7 @@ export function renameToBase(
   }
 
   const map = new Map<string, string>();
+  const claimed = new Set<string>();
   const renames: [string, string][] = [];
   for (let changed = true; changed; ) {
     changed = false;
@@ -68,13 +69,14 @@ export function renameToBase(
     for (const [name, schema] of Object.entries(headSchemas)) {
       if (name in baseSchemas || map.has(name)) continue;
       const hit = baseBodies.get(canonical(rewrite(schema, map)));
-      if (hit?.length !== 1 || hit[0] === undefined) continue;
+      if (hit?.length !== 1 || hit[0] === undefined || claimed.has(hit[0])) continue;
       claims.set(hit[0], [...(claims.get(hit[0]) ?? []), name]);
     }
     for (const [target, names] of claims) {
       const [only] = names;
       if (names.length !== 1 || only === undefined) continue;
       map.set(only, target);
+      claimed.add(target);
       renames.push([only, target]);
       changed = true;
     }

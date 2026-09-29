@@ -63,16 +63,23 @@ describe("ci.yml structure (ADR-0008)", () => {
     expect(step).toBeDefined();
     const run: string = step.run;
     expect(run).toContain("set -euo pipefail");
-    expect(run).toContain('openapi-base.ts "origin/$BASE_REF" base-openapi.json');
+    // On pull_request the checkout is refs/pull/N/merge, so HEAD is the merge commit and its
+    // merge base with the base tip is the tip itself: the PR head sha must be passed (#171).
+    expect(step.env.HEAD_SHA).toBe(["$", "{{ github.event.pull_request.head.sha }}"].join(""));
+    expect(run).toContain(
+      'openapi-base.ts "origin/$BASE_REF" base-openapi.json "$HEAD_SHA" head-openapi.json',
+    );
     expect(run).not.toMatch(/git (show|ls-tree)/);
     // Skip is an explicit exit code 3; exit 0 must leave the file, anything else fails.
     expect(run).toContain("rc=$?");
     expect(run).toMatch(/3\)\s+exit 0/);
-    expect(run).toMatch(/0\)\s+\[ -f base-openapi.json \] \|\| exit 1/);
+    expect(run).toMatch(
+      /0\)\s+\[ -f base-openapi.json \] && \[ -f head-openapi.json \] \|\| exit 1/,
+    );
     expect(run).toMatch(/\*\)\s+exit "\$rc"/);
     expect(run).not.toMatch(/if \[ ! -f base-openapi.json \]/);
     const rename = run.indexOf(
-      "openapi-rename-map.ts base-openapi.json packages/api/openapi.json head-openapi.renamed.json",
+      "openapi-rename-map.ts base-openapi.json head-openapi.json head-openapi.renamed.json",
     );
     const diff = run.indexOf(
       "breaking /work/base-openapi.json /work/head-openapi.renamed.json --fail-on ERR",

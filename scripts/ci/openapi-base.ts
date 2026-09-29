@@ -24,8 +24,8 @@ export type BaseSelection =
   | { kind: "base"; sha: string; content: string }
   | { kind: "fail"; reason: "merge-base" | "ls-tree" | "show" };
 
-export function selectBase(git: Git, baseRef: string): BaseSelection {
-  const mb = git(["merge-base", baseRef, "HEAD"]);
+export function selectBase(git: Git, baseRef: string, headRef = "HEAD"): BaseSelection {
+  const mb = git(["merge-base", baseRef, headRef]);
   const sha = mb.stdout.trim();
   if (mb.status !== 0 || sha === "") return { kind: "fail", reason: "merge-base" };
   const ls = git(["ls-tree", "--name-only", sha, "--", SPEC_PATH]);
@@ -37,16 +37,16 @@ export function selectBase(git: Git, baseRef: string): BaseSelection {
 }
 
 function main(argv: string[]): number {
-  const [baseRef, out] = argv;
-  if (!baseRef || !out) {
-    console.error("usage: openapi-base.ts <base-ref> <out>");
+  const [baseRef, out, headRef, headOut] = argv;
+  if (!baseRef || !out || (headRef !== undefined && !headOut)) {
+    console.error("usage: openapi-base.ts <base-ref> <out> [<head-ref> <head-out>]");
     return 2;
   }
   const git: Git = (args) => {
     const r = spawnSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     return { status: r.error ? null : r.status, stdout: r.stdout ?? "" };
   };
-  const sel = selectBase(git, baseRef);
+  const sel = selectBase(git, baseRef, headRef);
   if (sel.kind === "fail") {
     console.error(`git ${sel.reason} failed; cannot pick the oasdiff base`);
     return 1;
@@ -55,7 +55,17 @@ function main(argv: string[]): number {
     console.log("skip: no openapi.json at the merge base yet; nothing to diff.");
     return EXIT_SKIP;
   }
+  let headContent: string | undefined;
+  if (headRef !== undefined) {
+    const show = git(["show", `${headRef}:${SPEC_PATH}`]);
+    if (show.status !== 0) {
+      console.error("git show failed; cannot read the head openapi.json");
+      return 1;
+    }
+    headContent = show.stdout;
+  }
   writeFileSync(out, sel.content);
+  if (headOut !== undefined && headContent !== undefined) writeFileSync(headOut, headContent);
   console.log(`base: ${sel.sha}`);
   return 0;
 }
