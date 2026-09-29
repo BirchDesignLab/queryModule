@@ -96,6 +96,7 @@
   "form.readyToSubmit": "Ready to submit. Sending queries arrives in the next release.",
   "form.dateFormats": "Accepted formats: {formats}",
   "shortcut.sheetTitle": "Keyboard shortcuts",
+  "shortcut.close": "Close",
   "shortcut.action.focusTerminal": "Go to the command line",
   "shortcut.action.toggleMode": "Switch between form and command line",
   "shortcut.action.quickType1": "Quick access query type 1",

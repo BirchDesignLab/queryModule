@@ -27,6 +27,16 @@ export { SourceCheckboxes } from "./panel/SourceCheckboxes.js";
 export type { SubmitBlockReason, SubmitButtonProps } from "./panel/SubmitButton.js";
 export { SubmitButton } from "./panel/SubmitButton.js";
 export { usePersona } from "./persona/usePersona.js";
+export type { EngineResult, KeyContext, ShortcutEngine, StrokeInput } from "./shortcuts/engine.js";
+export {
+  CHORD_TIMEOUT_MS,
+  createShortcutEngine,
+  EDITING_COMBOS,
+  strokeOf,
+} from "./shortcuts/engine.js";
+export { ShortcutProvider, useShortcutAction } from "./shortcuts/ShortcutProvider.js";
+export type { ShortcutSheetProps } from "./shortcuts/ShortcutSheet.js";
+export { ShortcutSheet } from "./shortcuts/ShortcutSheet.js";
 export type { ThemeModeSelectProps } from "./theme/ThemeModeSelect.js";
 export { ThemeModeSelect } from "./theme/ThemeModeSelect.js";
 export type { UseThemeModeOptions } from "./theme/useThemeMode.js";

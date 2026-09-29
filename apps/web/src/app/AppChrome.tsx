@@ -1,26 +1,31 @@
 import { clientConfigQuery, savePreferences, useStore } from "@querymodule/client";
-import type { ClientSiteConfig } from "@querymodule/core/config";
+import { type ClientSiteConfig, resolveShortcuts } from "@querymodule/core/config";
 import type { ThemeSelection } from "@querymodule/tokens";
-import { ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
-import { useCallback, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
+import { ShortcutProvider, ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
 import { Link, Outlet } from "react-router";
 import { useT } from "./i18n-context.js";
 import { useServices } from "./services-context.js";
 import { useSignOut } from "./use-sign-out.js";
 
-/**
- * SiteConfig.theme from the cached GET /api/v1/config (key ["config"], filled by the query panel),
- * or null before sign-in and after reset, when the OS scheme decides (spec 6.5, #175).
- */
-function useSiteThemeSelection(): ThemeSelection | null {
+/** The cached GET /api/v1/config (key ["config"], filled by the query panel), or undefined before sign-in and after reset. */
+function useCachedConfig(): ClientSiteConfig | undefined {
   const { queryClient } = useServices();
   const subscribe = useCallback(
     (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
     [queryClient],
   );
-  const config = useSyncExternalStore(subscribe, () =>
+  return useSyncExternalStore(subscribe, () =>
     queryClient.getQueryData<ClientSiteConfig>(["config"]),
   );
+}
+
+/**
+ * SiteConfig.theme from the cached config, or null before sign-in and after reset, when the OS
+ * scheme decides (spec 6.5, #175).
+ */
+function useSiteThemeSelection(): ThemeSelection | null {
+  const config = useCachedConfig();
   if (config === undefined) return null;
   return { defaultMode: config.theme?.defaultMode ?? "day", auto: config.theme?.auto ?? "off" };
 }
@@ -85,10 +90,13 @@ export function AppShell() {
   useEffect(() => {
     void queryClient.prefetchQuery({ ...clientConfigQuery(api), retry: false });
   }, [api, queryClient]);
+  // Bindings are the site's overrides over the spec 6.4 defaults; the defaults apply until the config loads.
+  const shortcuts = useCachedConfig()?.shortcuts;
+  const bindings = useMemo(() => resolveShortcuts(shortcuts), [shortcuts]);
   return (
-    <>
+    <ShortcutProvider bindings={bindings}>
       <AppHeader />
       <Outlet />
-    </>
+    </ShortcutProvider>
   );
 }
