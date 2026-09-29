@@ -1,8 +1,15 @@
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { systemClock } from "../src/clock";
 import { runMigrations } from "../src/db/migrate";
-import { CANARY_GUARD_TABLES, checkKeyCanaries, KeyCanaryError } from "../src/keys/canary";
+import { keyCanary } from "../src/db/schema";
+import {
+  CANARY_GUARD_TABLES,
+  checkKeyCanaries,
+  KeyCanaryError,
+  sealCanary,
+} from "../src/keys/canary";
 import { openTempDatabase, tempDbFile } from "./helpers/db";
 
 const keys = { credentialKey: Buffer.alloc(32, 2), dataKey: Buffer.alloc(32, 3) };
@@ -91,5 +98,39 @@ describe("SEC-006 key canaries", () => {
       credential: "created",
       data: "verified",
     });
+  });
+  // #277: canary.ts moved onto the shared AES-GCM helper. The pre-change inline code path
+  // is copied here verbatim so a canary sealed by a P1 database still opens, and a canary
+  // sealed by the new path still opens under the old one (same AAD, same columns).
+  const LEGACY_PLAINTEXT = Buffer.from("querymodule-key-canary-v1", "utf8");
+  const legacyAad = (n: string, v: number) => Buffer.from(`key_canary|${n}|${v}`, "utf8");
+  function legacySeal(key: Buffer, keyName: "credential" | "data", keyVersion: number) {
+    const iv = randomBytes(12);
+    const c = createCipheriv("aes-256-gcm", key, iv).setAAD(legacyAad(keyName, keyVersion));
+    const ciphertext = Buffer.concat([c.update(LEGACY_PLAINTEXT), c.final()]);
+    return { ciphertext, iv, authTag: c.getAuthTag() };
+  }
+  it("verifies canaries sealed by the pre-helper code path", async () => {
+    const db = await fresh();
+    for (const [keyName, key] of [
+      ["credential", keys.credentialKey],
+      ["data", keys.dataKey],
+    ] as const) {
+      await db
+        .insert(keyCanary)
+        .values({ keyName, ...legacySeal(key, keyName, 1), keyVersion: 1, createdAt: 0 });
+    }
+    expect(await checkKeyCanaries(db, keys, systemClock)).toEqual({
+      credential: "verified",
+      data: "verified",
+    });
+    const wrong = { credentialKey: Buffer.alloc(32, 9), dataKey: keys.dataKey };
+    await expect(checkKeyCanaries(db, wrong, systemClock)).rejects.toBeInstanceOf(KeyCanaryError);
+  });
+  it("seals canaries the pre-helper code path can open", () => {
+    const s = sealCanary(keys.dataKey, "data", 1);
+    const d = createDecipheriv("aes-256-gcm", keys.dataKey, s.iv).setAAD(legacyAad("data", 1));
+    d.setAuthTag(s.authTag);
+    expect(Buffer.concat([d.update(s.ciphertext), d.final()]).equals(LEGACY_PLAINTEXT)).toBe(true);
   });
 });

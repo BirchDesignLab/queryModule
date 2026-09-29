@@ -1,9 +1,10 @@
-import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { Clock } from "../clock";
 import type { Db } from "../db/client";
 import { keyCanary } from "../db/schema";
 import { type Tx, withTransaction } from "../db/tx";
+import { open, seal } from "./aead";
 
 export type CanaryKeyName = "credential" | "data";
 export const CURRENT_KEY_VERSION = 1;
@@ -16,7 +17,7 @@ export const CANARY_GUARD_TABLES = {
   data: "request_key",
 } as const satisfies Record<"credential" | "data", string>;
 const PLAINTEXT = Buffer.from("querymodule-key-canary-v1", "utf8");
-const aad = (n: CanaryKeyName, v: number) => Buffer.from(`key_canary|${n}|${v}`, "utf8");
+const aad = (n: CanaryKeyName, v: number) => `key_canary|${n}|${v}`;
 
 export class KeyCanaryError extends Error {
   constructor(readonly keyName: CanaryKeyName) {
@@ -28,17 +29,17 @@ export class KeyCanaryError extends Error {
 }
 
 export function sealCanary(key: Buffer, keyName: CanaryKeyName, keyVersion: number) {
-  const iv = randomBytes(12);
-  const c = createCipheriv("aes-256-gcm", key, iv).setAAD(aad(keyName, keyVersion));
-  const ciphertext = Buffer.concat([c.update(PLAINTEXT), c.final()]);
-  return { ciphertext, iv, authTag: c.getAuthTag() };
+  const { ciphertext, iv, tag } = seal(key, PLAINTEXT, aad(keyName, keyVersion));
+  return { ciphertext, iv, authTag: tag };
 }
 
 function opens(key: Buffer, row: typeof keyCanary.$inferSelect): boolean {
   try {
-    const d = createDecipheriv("aes-256-gcm", key, row.iv).setAAD(aad(row.keyName, row.keyVersion));
-    d.setAuthTag(row.authTag);
-    const pt = Buffer.concat([d.update(row.ciphertext), d.final()]);
+    const pt = open(
+      key,
+      { ciphertext: row.ciphertext, iv: row.iv, tag: row.authTag },
+      aad(row.keyName, row.keyVersion),
+    );
     return pt.length === PLAINTEXT.length && timingSafeEqual(pt, PLAINTEXT);
   } catch {
     return false;
