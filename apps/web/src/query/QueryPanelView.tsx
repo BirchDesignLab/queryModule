@@ -24,6 +24,20 @@ import { useTerminal } from "./use-terminal.js";
 
 const QUICK_TYPE_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 
+/** "Alt+Digit1" as aria-keyshortcuts writes it ("Alt+1"); other keys pass through unchanged. */
+function ariaKeyShortcut(keys: string): string {
+  return keys.replace(/(^|\+)(?:Digit|Key)(?=[0-9A-Z]$)/g, "$1");
+}
+
+/** The aria-keyshortcuts of quick-access button `index`, only where quickType(index+1) is bound. */
+function quickShortcut(
+  bindings: ReturnType<typeof resolveShortcuts>,
+  index: number,
+): string | undefined {
+  const keys = bindings[`quickType${index + 1}`]?.[0]?.keys;
+  return keys === undefined ? undefined : ariaKeyShortcut(keys);
+}
+
 /** Registers one shortcut handler; a component so the nine quickType hooks are not a loop. */
 function PanelShortcut({ action, run }: { action: string; run: () => void }) {
   useShortcutAction(action, run);
@@ -66,6 +80,12 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
     : new Map<string, string>();
   const [sheetOpen, setSheetOpen] = useState(false);
   const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
+  const firstQuick = quickShortcut(bindings, 0);
+  const lastQuick = quickShortcut(bindings, quickCodes.length - 1);
+  const quickHint =
+    preview || firstQuick === undefined || lastQuick === undefined || quickCodes.length < 2
+      ? undefined
+      : t("form.quickAccessHint", { first: firstQuick, last: lastQuick });
   return (
     <>
       {/* Preview registers no global shortcuts and has no sheet: the host page keeps its own. */}
@@ -122,6 +142,8 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
         current={queryType}
         labelOf={labelOfType}
         onSelect={terminal.selectType}
+        shortcutOf={preview ? undefined : (_code, index) => quickShortcut(bindings, index)}
+        hint={quickHint}
         t={t}
       />
       {selectCodes.length === 0 ? null : (

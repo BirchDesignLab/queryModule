@@ -104,17 +104,20 @@ describe("spec 6.4 skip link: the first Tab stop of every signed-in page", () =>
       ),
     );
     const t = renderRoot({ path: "/" });
-    await screen.findByRole("navigation", { name: "Quick access" });
+    await screen.findByRole("group", { name: "Quick access" });
     expect(screen.getByRole("heading", { name: "Query Module" })).not.toHaveFocus();
     await t.user.tab();
     expect(screen.getByRole("link", { name: "Skip to query" })).toHaveFocus();
   });
-  it("right after sign-in the next Tab is the first quick access button, not the header", async () => {
+  it("right after sign-in the next Tab is the panel head's first control (Form mode), not the header", async () => {
     const t = await signIn();
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Query Module" })).toHaveFocus(),
     );
-    await screen.findByRole("navigation", { name: "Quick access" });
+    await screen.findByRole("group", { name: "Quick access" });
+    await t.user.tab();
+    expect(screen.getByRole("button", { name: "Form mode" })).toHaveFocus();
+    await t.user.tab();
     await t.user.tab();
     expect(screen.getByRole("button", { name: "Vehicle" })).toHaveFocus();
   });
@@ -163,7 +166,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     expect(within(nav).getByRole("link", { name: "Queries" })).toHaveAttribute("href", "/");
     // The old temporary "Query panel" link is gone: Queries replaces it.
     expect(within(header).queryByRole("link", { name: "Query panel" })).toBeNull();
-    expect(await screen.findByRole("navigation", { name: "Quick access" })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Quick access" })).toBeInTheDocument();
   });
   it("B1 Queries is the current page on /, Status on /status", async () => {
     const { user } = await signIn();
@@ -182,7 +185,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     expect(within(nav).getByRole("link", { name: "Queries" })).not.toHaveAttribute("aria-current");
     // Queries goes back to the panel.
     await user.click(within(nav).getByRole("link", { name: "Queries" }));
-    expect(await screen.findByRole("navigation", { name: "Quick access" })).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Quick access" })).toBeInTheDocument();
   });
   it("B1 the account disclosure holds the user, role, theme choice and sign-out, closed until opened", async () => {
     const { user } = await signIn();
@@ -387,7 +390,7 @@ describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
   it("a user preference wins over the site default", async () => {
     withSite({ defaultMode: "night", auto: "off" }, "day");
     await signIn();
-    await screen.findByRole("navigation", { name: "Quick access" });
+    await screen.findByRole("group", { name: "Quick access" });
     expect(document.documentElement.dataset.theme).toBe("day");
   });
   it("a signed-in reload on /status applies the site default without the query panel", async () => {

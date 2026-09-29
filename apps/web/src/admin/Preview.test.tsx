@@ -61,7 +61,7 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
     expect(t.preview).toHaveAttribute("aria-busy", "true");
     await waitFor(() => expect(t.preview).not.toHaveAttribute("aria-busy"));
     const buttons = within(t.preview).getAllByRole("button", { name: /^(Person|Vehicle)$/ });
-    expect(buttons.map((b) => b.textContent)).toEqual(["Person", "Vehicle"]);
+    expect(buttons.map((b) => b.lastChild?.textContent)).toEqual(["Person", "Vehicle"]);
   });
 
   it("a builder edit that makes DOB required shows the required error on preview submit, and sends nothing", async () => {

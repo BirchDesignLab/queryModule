@@ -358,30 +358,58 @@ h1 {
   text-transform: uppercase;
 }
 
+/* Quick access: a compact row of quiet buttons, the type code in mono before the label; the
+   current type is pressed (accent.subtle fill, accent edge). A fieldset with a hidden legend, so
+   the group has a name without a visible box. */
 .qm-quick-access {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--qm-space-2);
-  margin-block-end: var(--qm-space-4);
+  align-items: center;
+  gap: var(--qm-space-1);
+  min-inline-size: 0;
+  margin: 0 0 var(--qm-space-3);
+  padding: 0;
+  border: 0;
 }
 
 .qm-quick-access__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
   min-height: var(--qm-control-height-dense);
   min-width: var(--qm-control-height-dense);
-  padding: var(--qm-space-1) var(--qm-space-3);
-  border: var(--qm-border-width) solid var(--qm-color-border);
+  padding: 0 var(--qm-space-3);
+  border: var(--qm-border-width) solid transparent;
   border-radius: var(--qm-radius-control);
-  background: var(--qm-color-surface-raised);
-  color: var(--qm-color-text-body);
+  background: transparent;
+  color: var(--qm-color-text-muted);
   font: inherit;
   font-size: var(--qm-type-size-md);
+  font-weight: 500;
   cursor: pointer;
+}
+
+.qm-quick-access__button:hover {
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
 }
 
 .qm-quick-access__button[aria-pressed="true"] {
   border-color: var(--qm-color-accent);
   background: var(--qm-color-accent-subtle);
-  font-weight: 600;
+  color: var(--qm-color-text-body);
+}
+
+.qm-quick-access__code {
+  color: var(--qm-color-accent);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
+}
+
+.qm-quick-access__hint {
+  margin-inline-start: auto;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
 }
 
 /* Shortcut sheet (spec 6.4, 6.2 dialogs) */
@@ -527,4 +555,15 @@ h1 {
 
 .qm-layout--mobile-unit .qm-quick-access button {
   flex: 1 1 calc(50% - var(--qm-space-2));
+}
+
+/* Nothing the officer reads is muted or small (spec 6.3). */
+.qm-layout--mobile-unit .qm-quick-access__button,
+.qm-layout--mobile-unit .qm-quick-access__hint {
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-quick-access__code {
+  font-size: var(--qm-type-body-size);
 }

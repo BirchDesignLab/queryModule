@@ -259,3 +259,35 @@ describe("design B2 panel head: type heading and the form or terminal switch", (
     expect(form).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("design B2 quick access: codes, shortcuts declared only where bound", () => {
+  it("live: each button declares its Alt+n shortcut and one hint names the range", async () => {
+    renderView({ config: CLIENT_CONFIG, mode: "live" });
+    const group = await screen.findByRole("group", { name: "Quick access" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    buttons.forEach((b, i) => {
+      expect(b).toHaveAttribute("aria-keyshortcuts", `Alt+${i + 1}`);
+    });
+    expect(within(group).getByText(`Alt+1 to Alt+${buttons.length} pick a type`)).toBeVisible();
+    expect(within(group).getByRole("button", { name: "Vehicle" })).toHaveTextContent(/^VEHVehicle/);
+  });
+  it("preview: no shortcut is declared and no hint shows (the preview registers none)", async () => {
+    renderView({ config: CLIENT_CONFIG, mode: "preview" });
+    const group = await screen.findByRole("group", { name: "Quick access" });
+    for (const b of within(group).getAllByRole("button"))
+      expect(b).not.toHaveAttribute("aria-keyshortcuts");
+    expect(within(group).queryByText(/pick a type/)).toBeNull();
+  });
+  it("a site that rebinds quickType1 is reflected on the first button only", async () => {
+    const config: ClientSiteConfig = {
+      ...CLIENT_CONFIG,
+      shortcuts: { quickType1: [{ keys: "Alt+KeyQ", context: "global" }] },
+    };
+    renderView({ config, mode: "live" });
+    const group = await screen.findByRole("group", { name: "Quick access" });
+    const [first, second] = within(group).getAllByRole("button");
+    expect(first).toHaveAttribute("aria-keyshortcuts", "Alt+Q");
+    expect(second).toHaveAttribute("aria-keyshortcuts", "Alt+2");
+  });
+});

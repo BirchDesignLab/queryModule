@@ -113,6 +113,7 @@
   "form.queryType": "Query type",
   "form.otherQueryTypes": "Other query types",
   "form.quickAccess": "Quick access",
+  "form.quickAccessHint": "{first} to {last} pick a type",
   "form.sources": "Sources",
   "form.submit": "Submit",
   "form.submitting": "Submitting",

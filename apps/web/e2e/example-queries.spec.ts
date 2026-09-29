@@ -13,7 +13,7 @@ interface Sent {
 
 async function panelReady(page: Page): Promise<void> {
   await signIn(page);
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
 }
 
 /** Types a terminal command from the keyboard and submits it; returns the POST body and reply. */

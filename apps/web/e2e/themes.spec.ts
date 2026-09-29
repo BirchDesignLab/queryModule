@@ -71,7 +71,7 @@ test.describe("signed in, no preference, OS dark", () => {
   test("follows the OS to night after sign-in", async ({ page }) => {
     await noPreference(page);
     await signIn(page);
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
   });
 });
@@ -81,7 +81,7 @@ test.describe("signed in, no preference, OS light", () => {
   test("follows the OS to day after sign-in", async ({ page }) => {
     await noPreference(page);
     await signIn(page);
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "day");
   });
 });

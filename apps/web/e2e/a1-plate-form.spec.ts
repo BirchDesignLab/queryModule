@@ -5,7 +5,7 @@ test("[A1] the plate form shows Plate, State TX, Year and VIN, and Enter submits
   tag: "@smoke",
 }, async ({ page }) => {
   await signIn(page);
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
 
   // VEH opens with exactly its four fields; State carries the "default" tag (spec 6.2).
   const plate = page.getByLabel("Plate", { exact: true });

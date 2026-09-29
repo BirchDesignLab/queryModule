@@ -204,7 +204,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
 
   it("FR-007 quick access marks the current type and keeps the other type's draft", async () => {
     const { user } = await openPanel();
-    const nav = screen.getByRole("navigation", { name: "Quick access" });
+    const nav = screen.getByRole("group", { name: "Quick access" });
     expect(within(nav).getByRole("button", { name: "Vehicle" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -639,11 +639,11 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   describe("ADR-0010 quick access picks the type; type fields are the subtype control", () => {
     it("the default site shows five buttons and no query type control", async () => {
       await openPanel();
-      const nav = screen.getByRole("navigation", { name: "Quick access" });
+      const nav = screen.getByRole("group", { name: "Quick access" });
       expect(
         within(nav)
           .getAllByRole("button")
-          .map((b) => b.textContent),
+          .map((b) => b.lastChild?.textContent),
       ).toEqual(["Vehicle", "Person", "Property", "Wanted check", "Driver's license"]);
       expect(screen.queryByLabelText("Query type")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Other query types")).not.toBeInTheDocument();
@@ -679,9 +679,9 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       expect(select).toHaveValue("");
       await user.selectOptions(select, "WNT");
       expect(await screen.findByLabelText(/Last name/)).toBeInTheDocument();
-      for (const button of within(
-        screen.getByRole("navigation", { name: "Quick access" }),
-      ).getAllByRole("button")) {
+      for (const button of within(screen.getByRole("group", { name: "Quick access" })).getAllByRole(
+        "button",
+      )) {
         expect(button).toHaveAttribute("aria-pressed", "false");
       }
       expect(select).toHaveValue("WNT");
