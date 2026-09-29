@@ -42,11 +42,14 @@ export function parseCommand(
     if (!e.key.startsWith("validation.") || typeof field !== "string") return e;
     return { key: e.key, params: { ...e.params, ...fieldParams(field) } };
   };
-  // The form input is only this command's values, so every hidden value came from it.
-  const hidden: ValidationError[] = formState.hiddenWithValue.map((key) => ({
-    key: "terminal.valueForHiddenField",
-    params: fieldParams(key),
-  }));
+  // Only a key the user typed (positioned or named) raises it; a preset-only key never does.
+  const typed = new Set([...t.positionedKeys, ...t.namedKeys]);
+  const hidden: ValidationError[] = formState.hiddenWithValue
+    .filter((key) => typed.has(key))
+    .map((key) => ({
+      key: "terminal.valueForHiddenField",
+      params: fieldParams(key),
+    }));
 
   return {
     queryType: t.queryType,

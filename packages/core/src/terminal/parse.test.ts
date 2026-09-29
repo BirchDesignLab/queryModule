@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultSite } from "./__fixtures__/sites";
 import * as terminal from "./index";
 import { parseCommand } from "./parse";
+import type { TerminalConfig } from "./types";
 
 const now = Date.UTC(2026, 8, 28);
 const p = (input: string) => parseCommand(defaultSite, input, { now });
@@ -68,6 +69,35 @@ describe("spec 4.4 terminal.valueForHiddenField", () => {
     ]);
     expect(r.userValues.plateType).toBe("PC");
     expect(r.formState?.hiddenWithValue).toEqual(["plateType"]);
+  });
+  const site: TerminalConfig = {
+    ...defaultSite,
+    commands: [
+      {
+        code: "VPC",
+        queryType: "VEH",
+        presets: { plateType: "PC" },
+        positions: ["plate", "state"],
+      },
+      { code: "VP", queryType: "VEH", positions: ["plate", "plateType"] },
+    ],
+  };
+  it("a typed value for a hidden positioned field carries its position", () => {
+    expect(parseCommand(site, "VP.ZZ-0001.PC", { now }).errors).toEqual([
+      {
+        key: "terminal.valueForHiddenField",
+        params: { field: "plateType", labelKey: "field.plateType", position: 2 },
+      },
+    ]);
+  });
+  it("a preset on a hidden field is no error and stays in userValues", () => {
+    const r = parseCommand(site, "VPC.ZZ-0001", { now });
+    expect(r.errors).toEqual([]);
+    expect(r.userValues).toEqual({ plateType: "PC", plate: "ZZ-0001", state: "" });
+    expect(r.formState?.hiddenWithValue).toEqual(["plateType"]);
+  });
+  it("a preset on a shown field is no error either", () => {
+    expect(parseCommand(site, "VPC.ZZ-0001.OK", { now }).errors).toEqual([]);
   });
 });
 

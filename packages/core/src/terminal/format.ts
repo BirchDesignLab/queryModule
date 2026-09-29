@@ -1,7 +1,7 @@
 import type { CommandDef, FieldDef } from "../config/schema";
 import type { ValidationError } from "../contracts/validation-error";
 import { canonicalise, rawText } from "../rules/canonicalise";
-import { compileQueryType, findQueryType } from "../rules/compile";
+import { type CompiledQueryType, compileQueryType, findQueryType } from "../rules/compile";
 import { computeUserValues } from "../rules/effective-values";
 import type { CanonicalValue, EvaluateOptions, RawValue } from "../rules/types";
 import type { Draft, FormatResult, TerminalConfig } from "./types";
@@ -95,11 +95,47 @@ export function formatCommand(
   });
   while (tokens.length > 0 && tokens[tokens.length - 1] === "") tokens.pop();
 
-  const shown = new Set([...cmd.positions.map(fieldOf), ...Object.keys(cmd.presets ?? {})]);
+  // A preset key is shown only when the merge would not overwrite the draft value with it.
+  const canon = canonFor(qt, options.now);
+  const shown = new Set([
+    ...cmd.positions.map(fieldOf),
+    ...matchingPresetKeys(canon, userValues, canonical?.userValues ?? new Map(), cmd),
+  ]);
   const unshownCount = Object.entries(userValues).filter(
     ([k, v]) => !shown.has(k) && rawText(v) !== "",
   ).length;
   return { text: [cmd.code, ...tokens].join(d), errors, unshownCount };
+}
+
+type Canon = (input: Draft) => ReadonlyMap<string, CanonicalValue | null>;
+
+/** Canonical user values as the form path computes them; none for a missing query type. */
+const canonFor =
+  (qt: CompiledQueryType | undefined, now: number): Canon =>
+  (input) =>
+    qt === undefined ? new Map() : computeUserValues(qt, input, now).userValues;
+
+/**
+ * The command's preset keys whose draft value is non-empty and canonically equal to the preset.
+ * Presets canonicalise as the terminal path reads them: String(literal) as a user value.
+ */
+function matchingPresetKeys(
+  canon: Canon,
+  userValues: Draft,
+  draft: ReadonlyMap<string, CanonicalValue | null>,
+  cmd: CommandDef,
+): string[] {
+  const presets = Object.entries(cmd.presets ?? {});
+  const withPresets = canon({
+    ...userValues,
+    ...Object.fromEntries(presets.map(([k, v]) => [k, String(v)])),
+  });
+  return presets
+    .map(([k]) => k)
+    .filter((k) => {
+      const value = draft.get(k) ?? null;
+      return value !== null && value === (withPresets.get(k) ?? null);
+    });
 }
 
 /**
@@ -112,27 +148,17 @@ export function selectCommand(
   userValues: Draft,
   options: EvaluateOptions,
 ): CommandDef | undefined {
-  const qt = compileQueryType(config, queryType, options.now);
-  const canon = (input: Draft) =>
-    qt === undefined ? new Map() : computeUserValues(qt, input, options.now).userValues;
+  const canon = canonFor(compileQueryType(config, queryType, options.now), options.now);
   const draft = canon(userValues);
   let best: CommandDef | undefined;
   let bestCount = -1;
   for (const cmd of config.commands) {
     if (cmd.queryType !== queryType) continue;
-    const presets = Object.entries(cmd.presets ?? {});
-    // Presets canonicalise as the terminal path reads them: String(literal) as a user value.
-    const withPresets = canon({
-      ...userValues,
-      ...Object.fromEntries(presets.map(([k, v]) => [k, String(v)])),
-    });
-    const matches = presets.every(([k]) => {
-      const value = draft.get(k) ?? null;
-      return value !== null && value === (withPresets.get(k) ?? null);
-    });
-    if (matches && presets.length > bestCount) {
+    const presetCount = Object.keys(cmd.presets ?? {}).length;
+    const matches = matchingPresetKeys(canon, userValues, draft, cmd).length === presetCount;
+    if (matches && presetCount > bestCount) {
       best = cmd;
-      bestCount = presets.length;
+      bestCount = presetCount;
     }
   }
   return best;

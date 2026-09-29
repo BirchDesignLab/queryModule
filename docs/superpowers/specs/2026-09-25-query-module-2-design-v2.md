@@ -419,10 +419,10 @@ FormatResult { text, errors: ValidationError[], unshownCount }
 - `presets` set user values before positions are read. This is how a command selects type-level fields (`role: "type"`, see 4.1); positions may also include type fields.
 - Values are trimmed. Trailing empty tokens are ignored, so `VEH.ABC123...` equals `VEH.ABC123`.
 - An empty interior position leaves the user value empty; the rules engine then fills the field's configured default as its effective value (FR-054, 4.3).
-- More non-empty positional tokens than positions is `terminal.tooManyPositions`.
+- A non-empty positional token past the last position is `terminal.tooManyPositions`. Its `got` counts every positional token read before the first named token, interior empties included; trailing empties are dropped and never counted, so `VEH..A.B.C.D` reports `{ expected: 4, got: 5 }` (#296).
 - Only the last position may be `{ field, rest: true }`, and only for a free-text string field. It takes the remainder of the input verbatim, delimiters included; named tokens are not recognised once a rest position has been reached. A rest remainder that is blank after trimming is a trailing empty token (`PRO.S123.FIREARM. ` equals `PRO.S123.FIREARM`). A remainder made only of delimiters is a value, kept as typed, so the empty positions before it are interior: `PRO....` sets `description` to `.` (developer ruling 09-28-26, #296).
 - There is no escape or quote syntax. A delimiter inside any other value cannot be typed; `formatCommand` reports `terminal.delimiterInValue` for such a value (see below).
-- Trailing named tokens `fieldKey=value` set any field of the query type, for example `VEH.ABC123.OK.plateType=PC`. A token is named when the text before its first `=` matches a field key of the command's query type, case-insensitively; otherwise it is positional. A positional token after a named token is `terminal.positionalAfterNamed`. An unknown key is `terminal.unknownField`. A named token for a field that is also positioned or preset in the same command is `terminal.duplicateField` only when the command sets that field too (a non-empty position or a preset); a named token for a positioned field the command left unfilled is accepted, so `VEH.ABC123.year=26` sets `year` (#296). There is no silent precedence.
+- Trailing named tokens `fieldKey=value` set any field of the query type, for example `VEH.ABC123.OK.plateType=PC`. A token is named when the text before its first `=` matches a field key of the command's query type, case-insensitively; otherwise it is positional. A positional token after a named token is `terminal.positionalAfterNamed`. An empty (whitespace-only) token after a named token is skipped: it sets no value and raises no error. An unknown key is `terminal.unknownField`. A named token for a field that is also positioned or preset in the same command is `terminal.duplicateField` only when the command sets that field too (a non-empty position or a preset); a named token for a positioned field the command left unfilled is accepted, so `VEH.ABC123.year=26` sets `year` (#296). There is no silent precedence.
 
 **Values by dataType.** The terminal produces raw strings; canonicalisation per dataType happens in core before rules on both the form and terminal paths (4.3). The terminal syntax per dataType:
 
@@ -444,11 +444,11 @@ FormatResult { text, errors: ValidationError[], unshownCount }
 | `terminal.emptyInput` | | input is blank |
 | `terminal.missingDelimiter` | `input` length only | no delimiter in the input and the input is not a command code |
 | `terminal.unknownCommand` | `code` | code matches no `CommandDef` (FR-055) |
-| `terminal.tooManyPositions` | `expected`, `got` | more non-empty positional tokens than positions |
+| `terminal.tooManyPositions` | `expected`, `got` | a non-empty positional token lands past the last position; `got` counts every positional token, interior empties included |
 | `terminal.positionalAfterNamed` | `position` | positional token after a named token |
 | `terminal.unknownField` | `name` | named token key is not a field of the query type |
 | `terminal.duplicateField` | `field`, `labelKey` | field set by both position or preset and a named token |
-| `terminal.valueForHiddenField` | `field`, `labelKey`, `position?` | a value lands in a field the rules hide; the value is kept in the draft, not dropped, and blocks submit |
+| `terminal.valueForHiddenField` | `field`, `labelKey`, `position?` | a value lands in a field the rules hide; the value is kept in the draft, not dropped, and blocks submit; raised only when the key is typed (named or positioned), a preset-only key never raises it |
 | `terminal.delimiterInValue` | `field`, `labelKey`, `position` | from `formatCommand`: a non-rest value contains the delimiter |
 | `validation.required` | `field`, `labelKey`, `position?` | required field empty with no default (FR-055); `position` names where to type it, absent when only a named token can set it |
 | `validation.*` keys from 4.3 | `field`, `labelKey`, constraint params | `validation.notInPicklist`, `validation.invalidDate`, `validation.tooShort`, `validation.tooLong`, `validation.patternMismatch`, and so on |

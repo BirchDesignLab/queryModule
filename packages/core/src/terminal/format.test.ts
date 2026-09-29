@@ -143,6 +143,61 @@ describe("FR-056 formatCommand (spec 4.4 toggle)", () => {
   it("the command code matches case-insensitively and emits the configured code", () => {
     expect(f("veh", { plate: "ABC123" }).text).toBe("VEH.ABC123");
   });
+  describe("a preset counts as shown only when the draft value is empty or matches it", () => {
+    const site: TerminalConfig = {
+      ...defaultSite,
+      commands: [
+        {
+          code: "PROF",
+          queryType: "PRO",
+          presets: { propertyType: "FIREARM" },
+          positions: ["serial"],
+        },
+      ],
+    };
+    const fp = (values: Draft) => formatCommand(site, "PROF", values, { now });
+    it("a different draft value would be overwritten on merge, so it is unshown", () => {
+      expect(fp({ serial: "ZZ-0001", propertyType: "BOAT" })).toEqual({
+        text: "PROF.ZZ-0001",
+        errors: [],
+        unshownCount: 1,
+      });
+    });
+    it("a canonically equal draft value is shown", () => {
+      expect(fp({ serial: "ZZ-0001", propertyType: "firearm" }).unshownCount).toBe(0);
+      expect(fp({ serial: "ZZ-0001", propertyType: "FIREARM" }).unshownCount).toBe(0);
+    });
+    it("an empty draft value is shown", () => {
+      expect(fp({ serial: "ZZ-0001", propertyType: null }).unshownCount).toBe(0);
+      expect(fp({ serial: "ZZ-0001", propertyType: "" }).unshownCount).toBe(0);
+      expect(fp({ serial: "ZZ-0001" }).unshownCount).toBe(0);
+    });
+  });
+  it("a date whose outputFormat holds the delimiter is terminal.delimiterInValue", () => {
+    const site: TerminalConfig = {
+      ...defaultSite,
+      queryTypes: defaultSite.queryTypes.map((q) =>
+        q.code !== "PER"
+          ? q
+          : {
+              ...q,
+              fields: q.fields.map((x) =>
+                x.key === "dob" && x.dataType === "date" ? { ...x, outputFormat: "MM.DD.YYYY" } : x,
+              ),
+            },
+      ),
+    };
+    expect(formatCommand(site, "PER", { last: "TESTPERSON", dob: "1901-01-01" }, { now })).toEqual({
+      text: "PER.TESTPERSON..01.01.1901",
+      errors: [
+        {
+          key: "terminal.delimiterInValue",
+          params: { field: "dob", labelKey: "field.dob", position: 3 },
+        },
+      ],
+      unshownCount: 0,
+    });
+  });
   it("is exported from the terminal index", () => {
     expect(terminal.formatCommand).toBe(formatCommand);
     expect(terminal.formatValue).toBe(formatValue);

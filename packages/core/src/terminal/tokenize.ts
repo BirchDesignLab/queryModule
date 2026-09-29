@@ -47,7 +47,7 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
   let pos = 0; // next CommandDef position
   let tokenNo = 0; // 1-based value token number
   let seenNamed = false;
-  let nonEmptyPositional = 0;
+  let positional = 0; // positional tokens before the first named one, interior empties included
   let overflow = false; // a non-empty token landed past the last position
   const restAt = cmd.positions.findIndex(isRest);
   // Before a rest position, only the tokens up to it are split: the remainder there is one
@@ -71,7 +71,7 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
       const value = remaining.trim();
       out.userValues[p.field] = value;
       out.positionedKeys.push(p.field);
-      nonEmptyPositional += 1;
+      positional += 1;
       break;
     }
     const k = remaining.indexOf(d);
@@ -79,6 +79,8 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
     remaining = k === -1 ? null : remaining.slice(k + d.length);
     if (isTrailingEmpty(token, remaining)) break;
     tokenNo += 1;
+    // A blank token after a named token carries no value: skipped, no error (spec 4.4).
+    if (seenNamed && token.trim() === "") continue;
     const eq = token.indexOf("=");
     if (eq > 0) {
       const name = token.slice(0, eq).trim();
@@ -107,7 +109,7 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
       continue;
     }
     const value = token.trim();
-    if (value !== "") nonEmptyPositional += 1;
+    positional += 1;
     if (p === undefined) {
       // an extra token past the last position: never dropped silently
       if (value !== "") overflow = true;
@@ -121,7 +123,7 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
   if (overflow) {
     out.errors.push({
       key: "terminal.tooManyPositions",
-      params: { expected: cmd.positions.length, got: nonEmptyPositional },
+      params: { expected: cmd.positions.length, got: positional },
     });
   }
   return out;
