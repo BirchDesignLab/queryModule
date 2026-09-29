@@ -199,3 +199,22 @@ describe("core purity: IO globals through a global object (#85)", () => {
       expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
   });
 });
+
+describe("core purity override exempts test-only __fixtures__ (#295)", () => {
+  const biome = JSON.parse(readFileSync(resolve(root, "biome.json"), "utf8")) as {
+    overrides: { includes: string[] }[];
+  };
+  const purity = biome.overrides.find((o) => o.includes.includes("packages/core/src/**"));
+
+  it("the purity override excludes **/__fixtures__/** beside the test files", () => {
+    expect(purity?.includes).toEqual(expect.arrayContaining(["!**/__fixtures__/**"]));
+  });
+
+  it("the terminal fixtures need no biome-ignore for their test-only IO", () => {
+    const sites = readFileSync(
+      resolve(root, "packages/core/src/terminal/__fixtures__/sites.ts"),
+      "utf8",
+    );
+    expect(sites).not.toMatch(/biome-ignore/);
+  });
+});
