@@ -271,37 +271,99 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-sm);
 }
 
-/* Admin sections as a nav bar: pills like the header links; the open one is bold and filled
-   (aria-current), so the state is not colour alone. */
-.qm-admin__nav {
+/* Admin console (design target, A1): a left rail beside the section. */
+.qm-admin {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--qm-space-2);
-  margin: 0 0 var(--qm-space-4);
+  align-items: stretch;
+  background: var(--qm-color-surface-sunken);
+}
+
+/* Sidebar pattern: the rail keeps its basis (about 220 px) while the section takes the rest; the
+   rail wraps to full width above the section once both cannot fit. */
+.qm-admin__rail {
+  flex: 1 1 calc(var(--qm-space-12) * 4.5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  padding: var(--qm-space-4) var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border-inline-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__rail ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.qm-admin__nav a {
+.qm-admin__rail a,
+.qm-admin__rail button {
   box-sizing: border-box;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  min-height: var(--qm-target-min);
+  width: 100%;
+  min-height: var(--qm-control-height-dense);
   padding: 0 var(--qm-space-3);
-  border: var(--qm-border-width) solid var(--qm-color-border);
-  border-radius: var(--qm-radius-md);
-  color: var(--qm-color-text-body);
+  border: 0;
+  border-radius: var(--qm-radius-control);
+  background: transparent;
+  color: var(--qm-color-text-muted);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
   text-decoration: none;
+  cursor: pointer;
 }
 
-.qm-admin__nav a:hover {
-  text-decoration: underline;
-}
-
-.qm-admin__nav a[aria-current="page"] {
+.qm-admin__rail a:hover,
+.qm-admin__rail button:hover {
   background: var(--qm-color-surface-raised);
-  border-color: var(--qm-color-text-body);
-  font-weight: 700;
+  color: var(--qm-color-text-body);
+}
+
+/* The open section: filled and body-coloured, with an accent edge, so the state is not colour alone. */
+.qm-admin__rail a[aria-current="page"] {
+  background: var(--qm-color-accent-subtle);
+  box-shadow: inset calc(var(--qm-border-width) * 2) 0 0 var(--qm-color-accent);
+  color: var(--qm-color-text-body);
+  font-weight: 600;
+}
+
+.qm-admin__rail .qm-admin__back {
+  margin-block-end: var(--qm-space-3);
+  color: var(--qm-color-accent);
+}
+
+.qm-admin__rail button[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.qm-admin__group {
+  margin: 0;
+  padding: var(--qm-space-3) var(--qm-space-3) var(--qm-space-1);
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* The audit log's reason, visible under it (spec 6.2). */
+.qm-admin__soon {
+  display: block;
+  padding: 0 var(--qm-space-3) var(--qm-space-1);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-xs);
+}
+
+.qm-admin__main {
+  flex: 999 1 calc(var(--qm-space-12) * 12);
+  min-inline-size: 0;
+  padding: var(--qm-space-4) var(--qm-space-5);
 }
 
 /* Mobile-unit layout: a shorter bar; its controls keep their 48 px targets (spec 6.3 subset). */
@@ -381,11 +443,390 @@ main[tabindex="-1"]:focus {
 
 /* Admin config builder (Task 32): the builder and the dispatcher preview side by side when there
    is room, stacked otherwise. */
-.qm-admin__workspace {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 48ch), 1fr));
+/* Builder toolbar (A2): the section h2 and the bar share one row, which wraps on narrow widths;
+   everything after the bar takes a full row. */
+.qm-builder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--qm-space-3);
+}
+
+.qm-builder > h2 {
+  margin: 0;
+  font-size: var(--qm-type-size-xl);
+  font-weight: 600;
+}
+
+.qm-builder__toolbar {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  min-inline-size: 0;
+}
+
+.qm-builder__status {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* Form or JSON: WAI-ARIA tabs drawn as the segmented control (design lead 09-29-26). */
+.qm-builder__views > button[aria-selected="true"] {
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
+  font-weight: 600;
+}
+
+.qm-builder__reason {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-xs);
+  text-align: end;
+}
+
+.qm-builder__body {
+  flex-basis: 100%;
+  min-inline-size: 0;
+}
+
+/* Three panes (A2): tree, editor, preview. Each keeps a basis and they wrap into rows on narrow
+   viewports, so nothing scrolls sideways. */
+.qm-builder__panes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--qm-space-4);
+  margin-block-start: var(--qm-space-3);
+}
+
+/* At desktop width the panes take the height under the toolbar and scroll on their own, so the
+   preview stays in view; at 1024 and below the second max() term is huge (positive once the
+   viewport is narrower than about 1024 px) and the page flows as one column (design lead). */
+.qm-tree,
+.qm-builder__editor,
+.qm-builder__panes > .qm-admin__preview {
+  max-block-size: max(
+    calc(100dvh - var(--qm-space-12) * 3),
+    calc((var(--qm-space-12) * 21.34 - 100vw) * 1000)
+  );
+  overflow-y: auto;
+}
+
+.qm-tree {
+  flex: 1 1 calc(var(--qm-space-12) * 5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-builder__editor {
+  flex: 3 1 calc(var(--qm-space-12) * 7);
+  min-inline-size: 0;
+}
+
+/* Scroll panes clip what overflows them, focus rings included: keep room for the ring inside the
+   pane on every side, and when scrolling to an item (E1, critic I3). */
+.qm-builder__editor,
+.qm-builder__panes > .qm-admin__preview {
+  box-sizing: border-box;
+  padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+  scroll-padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+}
+
+.qm-tree {
+  scroll-padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+}
+
+.qm-tree__root {
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0 var(--qm-space-2);
+}
+
+.qm-builder__panes > .qm-admin__preview {
+  flex: 2 1 calc(var(--qm-space-12) * 6);
+  min-inline-size: 0;
+}
+
+.qm-tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-tree ul ul {
+  margin-inline-start: var(--qm-space-3);
+  padding-inline-start: var(--qm-space-2);
+  border-inline-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-tree button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  width: 100%;
+  min-height: var(--qm-space-8);
+  padding: 0 var(--qm-space-2);
+  border: 0;
+  border-radius: var(--qm-radius-sm);
+  background: transparent;
+  color: var(--qm-color-text-body);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.qm-tree button:hover {
+  background: var(--qm-color-surface-raised);
+}
+
+/* The selected row: filled, accent edge and heavier text, so the state is not colour alone. */
+.qm-tree button[aria-current="true"] {
+  background: var(--qm-color-accent-subtle);
+  box-shadow: inset calc(var(--qm-border-width) * 2) 0 0 var(--qm-color-accent);
+  font-weight: 600;
+}
+
+.qm-tree__key {
+  margin-inline-start: auto;
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
+}
+
+/* Issue count per row: the number is visual only; the words are visually hidden in the button. */
+.qm-tree__issues {
+  flex: none;
+  min-inline-size: var(--qm-space-4);
+  text-align: center;
+}
+
+.qm-tree__key + .qm-tree__issues {
+  margin-inline-start: 0;
+}
+
+.qm-tree__label + .qm-tree__issues {
+  margin-inline-start: auto;
+}
+
+.qm-tree__root .qm-tree__issues {
+  margin-inline-start: auto;
+}
+
+/* The toolbar's issue count is a button that goes to the first issue. */
+.qm-builder__issues {
+  min-height: var(--qm-space-8);
+  cursor: pointer;
+}
+
+/* A query type row: its expand toggle, then the select button. */
+.qm-tree__top {
+  display: grid;
+  grid-template-columns: var(--qm-space-6) minmax(0, 1fr);
   align-items: start;
+}
+
+.qm-tree .qm-tree__top > ul {
+  grid-column: 1 / -1;
+}
+
+.qm-tree__top > button:only-of-type {
+  grid-column: 2;
+}
+
+.qm-tree button.qm-tree__toggle {
+  justify-content: center;
+  padding: 0;
+  color: var(--qm-color-text-muted);
+}
+
+.qm-tree__toggle::before {
+  content: "+";
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-tree__toggle[aria-expanded="true"]::before {
+  content: "−";
+}
+
+.qm-tree__note {
+  margin: var(--qm-space-3) 0 0;
+  padding: 0 var(--qm-space-2);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-xs);
+}
+
+/* The selected item's heading in the editor: plain name, key in mono, issue count. */
+.qm-editor__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--qm-space-2);
+  margin: 0 0 var(--qm-space-3);
+  font-size: var(--qm-type-size-xl);
+  font-weight: 600;
+}
+
+.qm-editor__title .qm-tree__key {
+  margin-inline-start: 0;
+}
+
+.qm-tree__group {
+  margin: var(--qm-space-2) 0 0;
+  padding: 0 var(--qm-space-2);
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.qm-tree__empty p {
+  margin: 0 0 var(--qm-space-2);
+  color: var(--qm-color-text-muted);
+}
+
+/* The editor item the tree selected: a static accent.subtle fill (design lead 09-29-26). */
+.qm-builder__editor [data-selected="true"] {
+  background: var(--qm-color-accent-subtle);
+}
+
+/* Lighter fieldset rules (A2, CSS only): items are divided by a thin rule instead of boxed and
+   nested borders; ruled sections with a label column come in A3. */
+.qm-admin__form :where(fieldset) {
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--qm-space-3) 0 var(--qm-space-3) var(--qm-space-3);
+  border: 0;
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__form :where(legend) {
+  padding: 0;
+  font-size: var(--qm-type-size-md);
+  font-weight: 600;
+}
+
+.qm-admin__form :where(details) {
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__form :where(summary) {
+  min-height: var(--qm-control-height-dense);
+  padding: var(--qm-space-2) 0;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Editor controls (A-D1, design lead 09-29-26): the D0 control look in every mode, no native white
+   inputs (spec 6.5). CSS only; the editors' markup and legends stay as they are until A3. */
+.qm-builder__editor :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: calc(var(--qm-space-12) * 10);
+  min-height: var(--qm-control-height-dense);
+  padding: var(--qm-space-1) var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-base);
+  color: var(--qm-color-text-body);
+  font: inherit;
+  font-size: var(--qm-type-size-md);
+}
+
+.qm-builder__editor textarea {
+  max-inline-size: none;
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-builder__editor :where(input, select, textarea):hover {
+  border-color: var(--qm-color-text-muted);
+}
+
+/* E1, as D0: the ring outside on focus (programmatic too), the invalid edge inside. */
+.qm-builder__editor :where(input, select, textarea):focus {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
+.qm-builder__editor :where(input:not([type="checkbox"]), select, textarea)[aria-invalid="true"] {
+  border-color: var(--qm-field-required);
+  box-shadow: inset 0 0 0 var(--qm-border-width) var(--qm-field-required);
+}
+
+.qm-builder__editor input[type="checkbox"] {
+  inline-size: var(--qm-space-4);
+  block-size: var(--qm-space-4);
+  margin: 0;
+  accent-color: var(--qm-color-accent);
+}
+
+.qm-builder__editor input[type="checkbox"][aria-invalid="true"] {
+  box-shadow: 0 0 0 calc(var(--qm-border-width) * 2) var(--qm-field-required);
+}
+
+/* A control row: the label stacks above its control; a checkbox sits before its label. */
+.qm-admin__form :where(div):has(> label:first-child) {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--qm-space-1) * 1.5);
+  margin-block: var(--qm-space-3);
+}
+
+.qm-admin__form :where(div):has(> input[type="checkbox"]:first-child) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2);
+  margin-block: var(--qm-space-3);
+}
+
+.qm-admin__form :where(label) {
+  font-size: var(--qm-type-size-sm);
+  font-weight: 500;
+}
+
+/* Editor buttons: Add is secondary, Move is ghost, Remove is danger; no accent fill in the editor
+   (primary stays for Publish). */
+.qm-admin__form .qm-button {
+  border-color: var(--qm-color-border);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+  font-weight: 500;
+}
+
+.qm-admin__form .qm-button:is([data-role="up"], [data-role="down"]) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qm-color-accent);
+}
+
+.qm-admin__form .qm-button:is([data-role="remove"], .qm-button--danger) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qm-field-required);
+}
+
+.qm-admin__form .qm-button:hover {
+  background: var(--qm-color-accent-subtle);
+}
+
+.qm-admin__form .qm-button:disabled {
+  border: var(--qm-border-width) dashed var(--qm-color-border);
+  background: transparent;
+  color: var(--qm-color-text-muted);
 }
 
 /* Builder diagnostics and item controls (issue 388): level text leads each message; errors use the

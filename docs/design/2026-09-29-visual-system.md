@@ -51,7 +51,7 @@ Contrast pairs (checked by the script for every mode; the tokens package tests t
 | Labels | IBM Plex Sans Condensed 600, uppercase, 0.06em tracking | section labels, badges, table headers |
 | Data | IBM Plex Mono 400, 500 | plates, VINs, commands, IDs, keys (separates 0 and O, 1 and I) |
 
-Scale (px): 12, 13, 14, 16, 20, 24, 32. New tokens `type.size.xs` to `type.size.3xl`, `type.family.label`, `type.family.data`. Fonts are OFL: self-host the woff2 files (no CDN at runtime; CJIS networks are often closed). Adding them is a `chore/deps-*` PR if we use `@fontsource`, or committed files under `packages/tokens/fonts/` with no dependency. System fallbacks stay in every stack.
+Scale (px): 12, 13, 14, 16, 20, 24, 32. New tokens `type.size.xs` to `type.size.3xl`, `type.family.label`, `type.family.data`. Fonts are OFL: self-host the woff2 files (no CDN at runtime; CJIS networks are often closed). Adding them is a `chore/deps-*` PR if we use `@fontsource`, or committed files under `apps/web/src/fonts/` with no dependency. System fallbacks stay in every stack.
 
 ### Spacing, radius, density
 
@@ -70,7 +70,7 @@ Density is chosen by the persona layout (spec 6.1), never by width:
 
 - **Inputs and selects**: 1 px `color.border` edge on `surface.base`, 6 px radius; hover lifts the edge to `text.muted`; read-only is dashed on `surface.raised`.
 - **Focus and invalid (E1)**: focus is a 2 px `focus.ring` outline with a 2 px offset, outside the control. Invalid is a 2 px `field.required` edge inside the control (border plus inset shadow), an error icon and a message linked by `aria-describedby`. Both show together. Checkbox chips carry the ring on the chip.
-- **Required**: red asterisk (`aria-hidden`), visually hidden "required", `aria-required` (spec 6.2, UX-004). A site default shows a small "Default" tag.
+- **Required**: red asterisk (`aria-hidden`), visually hidden "required", `aria-required` (spec 6.2, UX-004). A site default shows a small "Default" tag (IBM Plex Sans Condensed 12 px, `type.size.xs`).
 - **Buttons**: primary (accent fill), secondary (raised, bordered), ghost (text only), danger (ghost with error colour). `aria-disabled` buttons stay focusable: dashed edge, muted text, visible reason (spec 6.2). Full-width buttons only on the sign-in panel and the officer's run action.
 - **Segmented control**: a group of `aria-pressed` buttons in a sunken track; used for form or terminal, theme, preview persona, editor view.
 - **Source chips**: a checkbox inside a bordered label; checked fills with `accent.subtle`; each shows its timeout in mono.

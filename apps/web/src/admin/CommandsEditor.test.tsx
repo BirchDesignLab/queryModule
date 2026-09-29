@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
+import { selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -50,7 +51,7 @@ const commands = (t: Opened) => doc(t).commands as Command[];
 const command = (t: Opened, code: string) => commands(t).find((c) => c.code === code) as Command;
 
 async function openSection(t: Opened, name: string) {
-  await t.user.click(await screen.findByText(name, { selector: "summary" }));
+  if (name !== "queryTypes") await selectBuilderItem(t.user, name);
 }
 const box = (code: string) => group(document, code === "" ? "Command (new)" : `Command ${code}`);
 

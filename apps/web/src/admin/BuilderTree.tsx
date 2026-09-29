@@ -1,0 +1,319 @@
+import { VisuallyHidden } from "@querymodule/web-ui";
+import { memo, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useT, useTranslator } from "../app/i18n-context.js";
+import { ChecksContext } from "./checks.js";
+import { asObjects, str } from "./controls.js";
+import { type JsonObject, toPointer } from "./draft.js";
+import { useItemName } from "./FormTab.js";
+import { HIDDEN_KEYS, isRootIssue, issueWords, LABELS_ITEM } from "./selection.js";
+
+/** One row of the builder tree: a button that selects `pointer`, and its children. */
+interface TreeNode {
+  pointer: string;
+  /** Shown text: the label users see, or the key when there is none. */
+  label: string;
+  /** The config key or code beside it, in mono; omitted when it equals the label. */
+  key?: string;
+  children: TreeNode[];
+  errors: number;
+  warnings: number;
+}
+
+function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } {
+  const translator = useTranslator();
+  const name = useItemName();
+  const { issues } = useContext(ChecksContext);
+  return useMemo(() => {
+    // Issues at or under a pointer. A section's fields live under /fields, not under the section,
+    // so a section adds its fields' counts; a type's pointer already covers all of its parts.
+    const under = (pointer: string) => {
+      let errors = 0;
+      let warnings = 0;
+      for (const i of issues)
+        if (i.pointer === pointer || i.pointer.startsWith(`${pointer}/`)) {
+          if (i.level === "error") errors++;
+          else warnings++;
+        }
+      return { errors, warnings };
+    };
+    const label = (labelKey: unknown, fallback: string) => {
+      const k = str(labelKey);
+      return k !== "" && translator.has(k) ? translator.t(k) : fallback;
+    };
+    const node = (
+      pointer: string,
+      text: string,
+      key: string,
+      children: TreeNode[] = [],
+      rollUp = false,
+    ): TreeNode => {
+      const own = under(pointer);
+      const counts = rollUp
+        ? children.reduce(
+            (c, n) => ({ errors: c.errors + n.errors, warnings: c.warnings + n.warnings }),
+            own,
+          )
+        : own;
+      return {
+        pointer,
+        label: text,
+        ...(key !== "" && key !== text ? { key } : {}),
+        children,
+        ...counts,
+      };
+    };
+    const types = asObjects(doc.queryTypes).map((type, i) => {
+      const code = str(type.code);
+      const fields = asObjects(type.fields).map((f, j) => ({ f, j }));
+      const sections = asObjects(type.sections);
+      const fieldNode = ({ f, j }: { f: JsonObject; j: number }) =>
+        node(toPointer(["queryTypes", i, "fields", j]), label(f.labelKey, str(f.key)), str(f.key));
+      // A field without a section renders in the first one (QueryForm), so it is listed there.
+      const firstKey = sections.length > 0 ? str(sections[0]?.key) : null;
+      const children =
+        sections.length === 0
+          ? fields.map(fieldNode)
+          : sections.map((section, k) => {
+              const key = str(section.key);
+              const own = fields.filter(({ f }) => {
+                const s = str(f.section);
+                return s === key || (s === "" && key === firstKey);
+              });
+              return node(
+                toPointer(["queryTypes", i, "sections", k]),
+                label(section.labelKey, key),
+                key,
+                own.map(fieldNode),
+                true,
+              );
+            });
+      return node(toPointer(["queryTypes", i]), label(type.labelKey, code), code, children);
+    });
+    // Every top-level key by its plain name, the key in mono beside it (design lead 09-29-26).
+    const site = Object.keys(doc)
+      .filter((k) => k !== "queryTypes" && !HIDDEN_KEYS.has(k))
+      .map((k) => node(toPointer([k]), name(k), k));
+    site.push(node(LABELS_ITEM, name(LABELS_ITEM), ""));
+    return { types, site };
+  }, [doc, issues, name, translator]);
+}
+
+/** Keeps nodes whose label or key contains `q`, with their ancestors; a match keeps its children. */
+function filterNodes(nodes: TreeNode[], q: string): TreeNode[] {
+  if (q === "") return nodes;
+  const out: TreeNode[] = [];
+  for (const n of nodes) {
+    const hit = `${n.label} ${n.key ?? ""}`.toLowerCase().includes(q);
+    if (hit) out.push(n);
+    else {
+      const children = filterNodes(n.children, q);
+      if (children.length > 0) out.push({ ...n, children });
+    }
+  }
+  return out;
+}
+
+/**
+ * The builder tree (A-D1 A2, design target): query types with their sections and fields, then the
+ * site items. A button selects what the editor shows and scrolls to; focus stays in the tree so a
+ * keyboard user can keep browsing (design lead 09-29-26). Search filters on label and key.
+ */
+export function BuilderTree({
+  doc,
+  selected,
+  onSelect,
+}: {
+  doc: JsonObject;
+  selected: string | null;
+  onSelect(pointer: string): void;
+}) {
+  const t = useT();
+  const uid = useId();
+  const { types, site } = useTreeNodes(doc);
+  // Whole-config issues have no row of their own: one line lists them, so the rows add up to the
+  // toolbar total (critic I1).
+  const { issues } = useContext(ChecksContext);
+  const root = issues.filter((i) => isRootIssue(doc, i.pointer));
+  const rootErrors = root.filter((i) => i.level === "error").length;
+  const rootWarnings = root.length - rootErrors;
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const q = query.trim().toLowerCase();
+  const shownTypes = filterNodes(types, q);
+  const shownSite = filterNodes(site, q);
+  // Only the selected type is expanded unless the user toggles one; a search shows every match.
+  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const selectedType =
+    selected === null ? null : (/^\/queryTypes\/[0-9]+/.exec(selected)?.[0] ?? null);
+  const expanded = new Set(
+    shownTypes
+      .map((n) => n.pointer)
+      .filter((p) => q !== "" || (toggled.get(p) ?? p === selectedType)),
+  );
+  // A changed type count shifts pointers, so the user's toggles no longer name the same types; a
+  // new selection always opens its type (critic m5).
+  const typeCount = types.length;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the type count changes
+  useEffect(() => setToggled(new Map()), [typeCount]);
+  useEffect(() => {
+    if (selectedType !== null)
+      setToggled((m) => {
+        if (!m.has(selectedType)) return m;
+        const next = new Map(m);
+        next.delete(selectedType);
+        return next;
+      });
+  }, [selectedType]);
+  const onToggle = useCallback(
+    (pointer: string, open: boolean) => setToggled((m) => new Map(m).set(pointer, open)),
+    [],
+  );
+  return (
+    <nav className="qm-tree" aria-label={t("admin.tree.label")}>
+      <input
+        ref={searchRef}
+        type="search"
+        className="qm-field__input"
+        aria-label={t("admin.tree.search")}
+        placeholder={t("admin.tree.search")}
+        value={query}
+        onChange={(e) => setQuery(e.currentTarget.value)}
+      />
+      {root.length > 0 && (
+        <p className="qm-tree__root">
+          {t("admin.tree.root")}
+          <span
+            className={`qm-tree__issues qm-badge ${rootErrors > 0 ? "qm-badge--critical" : "qm-badge--warning"}`}
+            aria-hidden="true"
+          >
+            {root.length}
+          </span>
+          <VisuallyHidden>, {issueWords(t, rootErrors, rootWarnings)}</VisuallyHidden>
+        </p>
+      )}
+      {shownTypes.length === 0 && shownSite.length === 0 ? (
+        <div className="qm-tree__empty">
+          <p>{t("admin.tree.noMatches", { text: query.trim() })}</p>
+          <button
+            type="button"
+            className="qm-button qm-button--ghost"
+            onClick={() => {
+              setQuery("");
+              searchRef.current?.focus();
+            }}
+          >
+            {t("admin.tree.clear")}
+          </button>
+        </div>
+      ) : (
+        <>
+          {shownTypes.length > 0 && (
+            <>
+              <p className="qm-tree__group" id={`${uid}-types`}>
+                {t("admin.tree.types")}
+              </p>
+              <TreeRows
+                nodes={shownTypes}
+                selected={selected}
+                onSelect={onSelect}
+                labelledBy={`${uid}-types`}
+                expanded={expanded}
+                onToggle={onToggle}
+              />
+            </>
+          )}
+          {shownSite.length > 0 && (
+            <>
+              <p className="qm-tree__group" id={`${uid}-site`}>
+                {t("admin.tree.site")}
+              </p>
+              <TreeRows
+                nodes={shownSite}
+                selected={selected}
+                onSelect={onSelect}
+                labelledBy={`${uid}-site`}
+              />
+              <p className="qm-tree__note">{t("admin.config.serverOnly")}</p>
+            </>
+          )}
+        </>
+      )}
+    </nav>
+  );
+}
+
+interface TreeRowsProps {
+  nodes: TreeNode[];
+  selected: string | null;
+  onSelect(pointer: string): void;
+  labelledBy?: string;
+  /** Top-level rows that can collapse (query types): the open ones, and the toggle. */
+  expanded?: ReadonlySet<string>;
+  onToggle?(pointer: string, open: boolean): void;
+}
+
+/**
+ * The rows, memoized on their content: a keystroke in the editor rebuilds the nodes but rarely
+ * changes them, and re-rendering every row per keystroke cost the editor tests about a quarter
+ * of their time under load (A-D1 verify).
+ */
+const TreeRows = memo(
+  function TreeRows({ nodes, selected, onSelect, labelledBy, expanded, onToggle }: TreeRowsProps) {
+    const t = useT();
+    const renderNodes = (list: TreeNode[], by?: string, top = false) => (
+      <ul aria-labelledby={by}>
+        {list.map((n) => (
+          <li
+            key={n.pointer}
+            className={top && expanded !== undefined ? "qm-tree__top" : undefined}
+          >
+            {top && expanded !== undefined && n.children.length > 0 && (
+              <button
+                type="button"
+                className="qm-tree__toggle"
+                aria-expanded={expanded.has(n.pointer)}
+                aria-label={t("admin.tree.expand", { name: n.label })}
+                onClick={() => onToggle?.(n.pointer, !expanded.has(n.pointer))}
+              />
+            )}
+            <button
+              type="button"
+              aria-current={n.pointer === selected ? "true" : undefined}
+              onClick={() => onSelect(n.pointer)}
+            >
+              <span className="qm-tree__label">{n.label}</span>
+              {n.key !== undefined && (
+                <>
+                  {" "}
+                  <span className="qm-tree__key">{n.key}</span>
+                </>
+              )}
+              {n.errors + n.warnings > 0 && (
+                <>
+                  <span
+                    className={`qm-tree__issues qm-badge ${n.errors > 0 ? "qm-badge--critical" : "qm-badge--warning"}`}
+                    aria-hidden="true"
+                  >
+                    {n.errors + n.warnings}
+                  </span>
+                  <VisuallyHidden>, {issueWords(t, n.errors, n.warnings)}</VisuallyHidden>
+                </>
+              )}
+            </button>
+            {n.children.length > 0 &&
+              (!top || expanded === undefined || expanded.has(n.pointer)) &&
+              renderNodes(n.children)}
+          </li>
+        ))}
+      </ul>
+    );
+    return renderNodes(nodes, labelledBy, true);
+  },
+  (a, b) =>
+    a.selected === b.selected &&
+    a.onSelect === b.onSelect &&
+    a.labelledBy === b.labelledBy &&
+    a.onToggle === b.onToggle &&
+    [...(a.expanded ?? [])].join() === [...(b.expanded ?? [])].join() &&
+    JSON.stringify(a.nodes) === JSON.stringify(b.nodes),
+);

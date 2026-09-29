@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
+import { selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -30,7 +31,7 @@ const draft = (t: Awaited<ReturnType<typeof openBuilder>>) =>
   configDraftStore(t.services).getState().doc as Record<string, unknown>;
 
 async function openSection(t: Awaited<ReturnType<typeof openBuilder>>, name: string) {
-  await t.user.click(await screen.findByText(name, { selector: "summary" }));
+  if (name !== "queryTypes") await selectBuilderItem(t.user, name);
 }
 
 describe("config builder fixes (Tasks 31, 33; UX-004)", () => {

@@ -436,7 +436,7 @@ function PendingPreset({
         )}
       </div>
       <div className="qm-admin__item-buttons">
-        <button type="button" className="qm-button" onClick={onRemove}>
+        <button type="button" className="qm-button qm-button--danger" onClick={onRemove}>
           {`${t("admin.config.remove")} ${t("admin.config.command.presetName", { n })}`}
         </button>
       </div>
