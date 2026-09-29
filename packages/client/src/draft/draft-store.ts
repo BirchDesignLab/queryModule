@@ -26,6 +26,11 @@ export type DraftStore = StoreApi<DraftState>;
 
 const EMPTY_DRAFT: QueryDraft = { values: {}, sources: null };
 
+/** Own keys only: a type named "constructor" or "toString" must not hit Object.prototype. */
+function draftOf(drafts: Readonly<Record<string, QueryDraft>>, queryType: string): QueryDraft {
+  return Object.hasOwn(drafts, queryType) ? (drafts[queryType] ?? EMPTY_DRAFT) : EMPTY_DRAFT;
+}
+
 /**
  * Holds user-entered values only; effective values and defaults never enter the store
  * (spec 4.3 step 3, 6.7). In memory only: no persist middleware (SEC-006).
@@ -37,12 +42,14 @@ export function createDraftStore(): DraftStore {
     select: (queryType) =>
       set((s) => ({
         queryType,
-        drafts: s.drafts[queryType] ? s.drafts : { ...s.drafts, [queryType]: EMPTY_DRAFT },
+        drafts: Object.hasOwn(s.drafts, queryType)
+          ? s.drafts
+          : { ...s.drafts, [queryType]: EMPTY_DRAFT },
       })),
     setValue: (key, value) =>
       set((s) => {
         if (s.queryType === null) return s;
-        const draft = s.drafts[s.queryType] ?? EMPTY_DRAFT;
+        const draft = draftOf(s.drafts, s.queryType);
         return {
           drafts: {
             ...s.drafts,
@@ -53,12 +60,12 @@ export function createDraftStore(): DraftStore {
     setSources: (sourceIds) =>
       set((s) => {
         if (s.queryType === null) return s;
-        const draft = s.drafts[s.queryType] ?? EMPTY_DRAFT;
+        const draft = draftOf(s.drafts, s.queryType);
         return { drafts: { ...s.drafts, [s.queryType]: { ...draft, sources: [...sourceIds] } } };
       }),
     replaceValues: (queryType, values) =>
       set((s) => {
-        const draft = s.drafts[queryType] ?? EMPTY_DRAFT;
+        const draft = draftOf(s.drafts, queryType);
         return { drafts: { ...s.drafts, [queryType]: { ...draft, values: { ...values } } } };
       }),
     reset: () => set({ queryType: null, drafts: {} }),

@@ -5,7 +5,7 @@ export type { FieldRendererProps } from "./field/FieldRenderer.js";
 export { FieldRenderer } from "./field/FieldRenderer.js";
 export { focusFirstInvalid } from "./field/focus-first-invalid.js";
 export type { QueryFormProps } from "./field/QueryForm.js";
-export { fieldErrors, QueryForm } from "./field/QueryForm.js";
+export { blockedErrorCount, fieldErrors, formLevelErrors, QueryForm } from "./field/QueryForm.js";
 export type { SelectFieldProps } from "./field/SelectField.js";
 export { SelectField } from "./field/SelectField.js";
 export type { TextFieldProps } from "./field/TextField.js";

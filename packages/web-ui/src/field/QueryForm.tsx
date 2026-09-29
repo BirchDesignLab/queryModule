@@ -35,6 +35,54 @@ export function fieldErrors(s: FormState): Map<string, ValidationError> {
   return out;
 }
 
+/** Visible fields in visible sections with at least one visible field: the ones QueryForm renders. */
+function renderedSections(s: FormState) {
+  return s.sections
+    .filter((section) => section.visible)
+    .map((section) => ({
+      section,
+      fields: s.fields
+        .filter((f) => f.visible && f.section === section.key)
+        .sort((a, b) => a.order - b.order),
+    }))
+    .filter(({ fields }) => fields.length > 0);
+}
+
+/**
+ * Errors no rendered field can show: no params.field (modeMismatch), or a field the form did not
+ * render (hidden, unknown, or in a section that is not shown). Never dropped (spec 6.2 blocked submit).
+ */
+export function formLevelErrors(s: FormState): ValidationError[] {
+  const rendered = new Set(renderedSections(s).flatMap(({ fields }) => fields.map((f) => f.key)));
+  const named = (error: ValidationError): string | null => {
+    const field = error.params?.field;
+    return typeof field === "string" ? field : null;
+  };
+  const out: ValidationError[] = [];
+  const seen = new Set<string>();
+  const add = (error: ValidationError): void => {
+    const id = `${error.key}|${named(error) ?? ""}`;
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push(error);
+  };
+  for (const key of s.missingRequired) {
+    if (!rendered.has(key)) add({ key: "validation.required", params: { field: key } });
+  }
+  for (const error of s.errors) {
+    const field = named(error);
+    if (field === null || !rendered.has(field)) add(error);
+  }
+  return out;
+}
+
+/** What a blocked submit announces: one per erroring rendered field, plus each form-level error. */
+export function blockedErrorCount(s: FormState): number {
+  const rendered = new Set(renderedSections(s).flatMap(({ fields }) => fields.map((f) => f.key)));
+  const perField = [...fieldErrors(s).keys()].filter((key) => rendered.has(key)).length;
+  return perField + formLevelErrors(s).length;
+}
+
 /** Renders only from FormState (BR-001): visible sections as fieldsets, visible fields in order (spec 6.2). */
 export function QueryForm({
   formState,
@@ -48,15 +96,12 @@ export function QueryForm({
   children,
 }: QueryFormProps): JSX.Element {
   const errors = showErrors ? fieldErrors(formState) : new Map<string, ValidationError>();
-  const sections = formState.sections
-    .filter((section) => section.visible)
-    .map((section) => ({
-      section,
-      fields: formState.fields
-        .filter((f) => f.visible && f.section === section.key)
-        .sort((a, b) => a.order - b.order),
-    }))
-    .filter(({ fields }) => fields.length > 0);
+  const sections = renderedSections(formState);
+  const formErrors = showErrors ? formLevelErrors(formState) : [];
+  const labelOf = (error: ValidationError): string | undefined => {
+    const field = formState.fields.find((f) => f.key === error.params?.field);
+    return field === undefined ? undefined : t(field.labelKey);
+  };
 
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -91,6 +136,21 @@ export function QueryForm({
           })}
         </fieldset>
       ))}
+      {formErrors.length === 0 ? null : (
+        <ul className="qm-form-errors">
+          {formErrors.map((error) => {
+            const label = labelOf(error);
+            return (
+              <li
+                key={`${error.key}|${String(error.params?.field ?? "")}`}
+                className="qm-form-error"
+              >
+                {t(error.key, label === undefined ? error.params : { ...error.params, label })}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {children}
     </form>
   );

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDraftStore } from "./draft-store.js";
 
 describe("FR-056 draft store keeps user values per query type (spec 4.4, 6.7)", () => {
@@ -84,5 +84,79 @@ describe("FR-056 draft store keeps user values per query type (spec 4.4, 6.7)", 
   it("SEC-006: state has no persist key", () => {
     expect(Object.keys(createDraftStore())).not.toContain("persist");
     expect(Object.keys(createDraftStore().getState())).not.toContain("persist");
+  });
+});
+
+describe("FR-056 inherited Object.prototype names are ordinary query types", () => {
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])(
+    "%s selects, sets values and sources like any other type",
+    (code) => {
+      const store = createDraftStore();
+      store.getState().select(code);
+      expect(Object.hasOwn(store.getState().drafts, code)).toBe(true);
+      expect(store.getState().drafts[code]).toEqual({ values: {}, sources: null });
+      store.getState().setValue("plate", "ZZ-0001");
+      store.getState().setSources(["a"]);
+      store.getState().select("VEH");
+      store.getState().select(code);
+      expect(store.getState().drafts[code]).toEqual({
+        values: { plate: "ZZ-0001" },
+        sources: ["a"],
+      });
+    },
+  );
+
+  it("replaceValues on constructor starts from an empty draft, not Object", () => {
+    const store = createDraftStore();
+    store.getState().replaceValues("constructor", { plate: "ZZ-0002" });
+    expect(store.getState().drafts.constructor).toEqual({
+      values: { plate: "ZZ-0002" },
+      sources: null,
+    });
+  });
+});
+
+describe("FR-056 the store copies what it is given", () => {
+  it("setSources is not affected by a later mutation of the input", () => {
+    const store = createDraftStore();
+    store.getState().select("VEH");
+    const input = ["a", "b"];
+    store.getState().setSources(input);
+    input.push("c");
+    input[0] = "z";
+    expect(store.getState().drafts.VEH?.sources).toEqual(["a", "b"]);
+  });
+
+  it("replaceValues is not affected by a later mutation of the input", () => {
+    const store = createDraftStore();
+    const input: Record<string, string> = { plate: "ZZ-0001" };
+    store.getState().replaceValues("VEH", input);
+    input.plate = "changed";
+    input.extra = "leak";
+    expect(store.getState().drafts.VEH?.values).toEqual({ plate: "ZZ-0001" });
+  });
+});
+
+describe("SEC-006 the store never touches browser storage", () => {
+  it("writes to no storage across every action", () => {
+    const writes: string[] = [];
+    const recorder = () => ({
+      getItem: () => null,
+      setItem: () => writes.push("setItem"),
+      removeItem: () => writes.push("removeItem"),
+    });
+    vi.stubGlobal("localStorage", recorder());
+    vi.stubGlobal("sessionStorage", recorder());
+    try {
+      const store = createDraftStore();
+      store.getState().select("VEH");
+      store.getState().setValue("plate", "ZZ-0001");
+      store.getState().setSources(["a"]);
+      store.getState().replaceValues("PER", { last: "Testcase" });
+      store.getState().reset();
+      expect(writes).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

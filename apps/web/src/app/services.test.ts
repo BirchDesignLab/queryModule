@@ -52,9 +52,11 @@ describe("FR-056, SEC-006 draft store (spec 6.7)", () => {
     const keys = () => [Object.keys(localStorage), Object.keys(sessionStorage)];
     const services = testServices();
     const before = keys();
+    const cookieWrites = vi.spyOn(document, "cookie", "set");
     services.drafts.getState().select("VEH");
     for (let i = 0; i < 100; i += 1) services.drafts.getState().setValue(`f${i}`, `v${i}`);
     expect(keys()).toEqual(before);
-    expect(document.cookie).toBe("");
+    expect(cookieWrites).not.toHaveBeenCalled();
+    cookieWrites.mockRestore();
   });
 });

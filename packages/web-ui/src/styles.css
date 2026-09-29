@@ -74,6 +74,17 @@ h1 {
   border-color: var(--qm-field-required);
 }
 
+.qm-select[aria-invalid="true"],
+.qm-checkbox input[aria-invalid="true"] {
+  border-color: var(--qm-field-required);
+}
+
+/* A native checkbox ignores border-color, so the cue is an outline until it is focused. */
+.qm-checkbox input[aria-invalid="true"]:not(:focus-visible) {
+  outline: var(--qm-border-width) solid var(--qm-field-required);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
 .qm-field__description {
   margin: 0;
   color: var(--qm-color-text-body);
@@ -84,6 +95,11 @@ h1 {
 .qm-form-error {
   margin: 0;
   color: var(--qm-field-required);
+}
+
+.qm-form-errors {
+  margin: 0 0 var(--qm-space-4);
+  padding-inline-start: var(--qm-space-4);
 }
 
 .qm-button {
