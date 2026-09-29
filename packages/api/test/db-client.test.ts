@@ -637,6 +637,36 @@ describe("SEC-013 no writable_schema on the app connection (#189)", () => {
     expect((await db.$client.execute("SELECT 1 AS one")).rows[0]?.one).toBe(1);
   });
 
+  it("matches SQL text only, never bound args", async () => {
+    const db = await migrated();
+    const value = "PRAGMA writable_schema=ON";
+    const one = async (p: Promise<{ rows: ArrayLike<Record<string, unknown>> }>) =>
+      (await p).rows[0]?.v;
+    expect(await one(db.$client.execute("SELECT ? AS v", [value]))).toBe(value);
+    expect(await one(db.$client.execute({ sql: "SELECT ? AS v", args: [value] }))).toBe(value);
+    expect(await one(db.$client.execute({ sql: "SELECT :q AS v", args: { q: value } }))).toBe(
+      value,
+    );
+    const rs = await db.$client.batch(
+      [["SELECT ? AS v", [value]], { sql: "SELECT ? AS v", args: [value] }],
+      "read",
+    );
+    expect(rs.map((r) => r.rows[0]?.v)).toEqual([value, value]);
+    expect(
+      await db.$client
+        .migrate([{ sql: "SELECT ? AS v", args: [value] }])
+        .then((r) => r[0]?.rows[0]?.v),
+    ).toBe(value);
+    const tx = await db.$client.transaction("write");
+    try {
+      expect(await one(tx.execute({ sql: "SELECT ? AS v", args: [value] }))).toBe(value);
+      const txRs = await tx.batch([{ sql: "SELECT ? AS v", args: [value] }]);
+      expect(txRs[0]?.rows[0]?.v).toBe(value);
+    } finally {
+      await tx.rollback();
+    }
+  });
+
   it("names the rule, never the statement", async () => {
     const db = await migrated();
     const err = await db.$client
