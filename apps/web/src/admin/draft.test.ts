@@ -129,6 +129,9 @@ describe("config diagnostic texts (Task 33 round 1, S1/C2, NFR-001)", () => {
       }
     }
     expect(keys.size).toBeGreaterThan(50);
+    // #388: the literal scan is complete only if core never builds a config.* key from a template.
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".ts") && !n.endsWith(".test.ts")))
+      expect(readFileSync(join(dir, f), "utf8"), f).not.toMatch(/`config./);
     expect([...keys].filter((k) => !(k in flattenBundle(EN_BUNDLE)))).toEqual([]);
   });
 });

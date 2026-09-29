@@ -59,8 +59,7 @@ function useControlIssues(idPrefix: string, path: readonly PathSegment[], local?
   // to the parent, which has no messages of its own in the purpose-built editors).
   const pointer = toPointer(path);
   const grouped = issuesFor(checks, path);
-  const exact = checks.issues.filter((i) => i.pointer === pointer);
-  const issues = grouped ?? (exact.length > 0 ? exact : undefined);
+  const issues = grouped ?? checks.byPointer.get(pointer);
   const id = controlId(idPrefix, path);
   const issuesId = `${id}-issues`;
   const localId = `${id}-local`;

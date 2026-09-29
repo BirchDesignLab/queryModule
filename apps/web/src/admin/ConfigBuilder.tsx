@@ -19,7 +19,7 @@ import { useCachedClientConfig } from "./use-cached-config.js";
 
 export { configDraftStore } from "./builder-store.js";
 
-const TABS = ["form", "raw"] as const;
+export const TABS = ["form", "raw"] as const;
 type TabId = (typeof TABS)[number];
 
 /** Config builder part 1 (Task 31, #355): the generic form and the raw JSON tab over one draft. */
@@ -110,10 +110,10 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
             <p>{t("admin.config.raw.notParsed")}</p>
           ) : checks.status === "error" ? (
             <p>{t("admin.config.raw.bundleError")}</p>
+          ) : checks.status === "loading" ? (
+            <p>{t("admin.config.raw.checksLoading")}</p>
           ) : (
-            checks.status === "ready" && (
-              <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
-            )
+            <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
           )}
         </div>
         <div>

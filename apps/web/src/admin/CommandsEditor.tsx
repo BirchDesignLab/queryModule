@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useT } from "../app/i18n-context.js";
+import { ChecksContext, isError, issuesFor } from "./checks.js";
 import {
   asObjects,
   controlId,
@@ -74,6 +75,7 @@ export function CommandsEditor({
               value={cmd.queryType}
               options={typeCodes}
             />
+            <StaleFields command={cmd} path={cmdPath} info={info} />
             <PositionsEditor
               positions={Array.isArray(cmd.positions) ? cmd.positions : []}
               path={[...cmdPath, "positions"]}
@@ -140,6 +142,7 @@ function PositionsEditor({
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   const used = new Set(positions.map(positionField));
+  const checks = useContext(ChecksContext);
   const listIssues = useItemIssues(
     idPrefix,
     path,
@@ -154,6 +157,8 @@ function PositionsEditor({
         const field = positionField(pos);
         const rest = isRest(pos);
         const restId = `${controlId(idPrefix, [...path, i])}-rest`;
+        // #388 M2: restNotLast and restNotString sit on the position; the checkbox shares them.
+        const posIssues = issuesFor(checks, [...path, i]);
         return (
           <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
             <legend>{t("admin.config.command.position", { n })}</legend>
@@ -175,6 +180,12 @@ function PositionsEditor({
                 id={restId}
                 type="checkbox"
                 checked={rest}
+                aria-invalid={isError(posIssues)}
+                aria-describedby={
+                  posIssues === undefined
+                    ? undefined
+                    : `${controlId(idPrefix, [...path, i])}-issues`
+                }
                 onChange={(e) =>
                   setPath([...path, i], e.target.checked ? { field, rest: true } : field)
                 }
@@ -433,6 +444,49 @@ function PendingPreset({
   );
 }
 
+/**
+ * Positions and presets on fields the command's query type lacks (after a type change). They stay
+ * until the user removes them here: arrowing through a closed select fires a change per step, so a
+ * type change never drops data by itself (critic I1; #388 M1).
+ */
+function StaleFields({
+  command,
+  path,
+  info,
+}: {
+  command: Obj;
+  path: readonly PathSegment[];
+  info: FieldInfo;
+}) {
+  const t = useT();
+  const { setPath } = useDraftSetters();
+  const keys = new Set(info.keys);
+  const positions = Array.isArray(command.positions) ? command.positions : [];
+  const presets =
+    typeof command.presets === "object" && command.presets !== null ? (command.presets as Obj) : {};
+  const stale =
+    positions.some((p) => !keys.has(positionField(p))) ||
+    Object.keys(presets).some((k) => !keys.has(k));
+  if (!stale) return null;
+  return (
+    <button
+      type="button"
+      className="qm-button"
+      onClick={() => {
+        const { presets: _old, ...rest } = command;
+        const kept = Object.entries(presets).filter(([k]) => keys.has(k));
+        setPath(path, {
+          ...rest,
+          positions: positions.filter((p) => keys.has(positionField(p))),
+          ...(kept.length > 0 ? { presets: Object.fromEntries(kept) } : {}),
+        });
+      }}
+    >
+      {t("admin.config.command.removeStale", { type: str(command.queryType) })}
+    </button>
+  );
+}
+
 /** One command's fieldset: its own issues (a missing key, a union error) (critic I2). */
 function CommandBox({
   path,
@@ -449,7 +503,9 @@ function CommandBox({
   const issues = useItemIssues(idPrefix, path, [...COMMAND_KEYS]);
   return (
     <fieldset className="qm-admin__item" aria-describedby={issues.describedBy}>
-      <legend>{t("admin.config.command.legend", { code })}</legend>
+      <legend>
+        {code === "" ? t("admin.config.command.new") : t("admin.config.command.legend", { code })}
+      </legend>
       {issues.messages}
       {children}
     </fieldset>

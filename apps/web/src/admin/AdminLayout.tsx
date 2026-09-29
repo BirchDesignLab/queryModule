@@ -1,6 +1,6 @@
 import { useStore } from "@querymodule/client";
 import { useEffect, useRef } from "react";
-import { Link, Navigate, Outlet } from "react-router";
+import { Link, Navigate, useOutlet } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { ConfigBuilder } from "./ConfigBuilder.js";
@@ -14,17 +14,14 @@ export function AdminLayout() {
   const { authStore } = useServices();
   const t = useT();
   const role = useStore(authStore, (s) => s.user?.role);
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const allowed = canOpenAdmin(role);
-  useEffect(() => {
-    if (allowed) headingRef.current?.focus();
-  }, [allowed]);
+  // Every console route opens a section (/admin redirects to Config) and the section focuses its
+  // own heading (SectionHeading); the console title never takes focus, so the two cannot race (#388).
+  const outlet = useOutlet();
   if (!allowed) return <Navigate to="/" replace />;
   return (
     <main className="qm-admin">
-      <h1 ref={headingRef} tabIndex={-1}>
-        {t("admin.title")}
-      </h1>
+      <h1>{t("admin.title")}</h1>
       <nav aria-label={t("admin.navLabel")}>
         <ul className="qm-admin__nav">
           <li>
@@ -37,7 +34,7 @@ export function AdminLayout() {
           )}
         </ul>
       </nav>
-      <Outlet />
+      {outlet}
     </main>
   );
 }

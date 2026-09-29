@@ -34,6 +34,13 @@ export async function bootstrap(
       fetchMeta(services.api),
       fetchLocaleBundle(services.api, locale),
     ]);
+    // The config builder validates label keys against this bundle: cache it, so it is not fetched
+    // again (#388).
+    services.queryClient.setQueryDefaults(["locale"], {
+      staleTime: Number.POSITIVE_INFINITY,
+      gcTime: Number.POSITIVE_INFINITY,
+    });
+    services.queryClient.setQueryData(["locale", locale], bundle);
     const clientSupported = isClientSupported(clientVersion, meta.minClientVersion ?? null);
     await services.session.bootstrap();
     // An unsupported client gets the update gate only (spec 5.1), so it loads no user data.

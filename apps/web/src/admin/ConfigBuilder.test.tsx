@@ -1,7 +1,6 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
-import { EN_BUNDLE } from "../test/en-bundle.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -118,14 +117,18 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   });
 
   it("a failed locale bundle fetch shows a polite message instead of silent no-checks (Q1, I2)", async () => {
-    // the app bootstrap fetches the bundle first (200); the builder's own fetch then fails
-    let calls = 0;
+    // #388: bootstrap caches the bundle; with that cache gone, the builder's own fetch fails.
     server.use(
-      http.get(`${API}/api/v1/locales/en`, () =>
-        ++calls === 1 ? HttpResponse.json(EN_BUNDLE) : new HttpResponse(null, { status: 500 }),
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: { ...TEST_USER, role: "implementer" } }),
       ),
     );
-    const t = await openBuilder();
+    const t = renderRoot({ path: "/" });
+    const admin = await screen.findByRole("link", { name: "Admin" });
+    server.use(http.get(`${API}/api/v1/locales/en`, () => new HttpResponse(null, { status: 500 })));
+    act(() => t.services.queryClient.removeQueries({ queryKey: ["locale", "en"] }));
+    await t.user.click(admin);
+    await screen.findByRole("tab", { name: "Form" });
     await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
     const area = screen.getByRole("textbox", { name: "Draft JSON" });
     const region = document.getElementById(area.getAttribute("aria-describedby") ?? "");

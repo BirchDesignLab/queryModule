@@ -348,3 +348,46 @@ describe("critic fixes (Task 31 part 2 PR1)", () => {
     expect(within(select).getAllByRole("option")[0]).toHaveTextContent("(none)");
   });
 });
+
+describe("focus after remove (#388)", () => {
+  it("removing a field focuses the next field's key; the last field, the previous one", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await openType(t, "WNT");
+    await t.user.click(
+      within(fieldBox("WNT", "first")).getByRole("button", { name: "Remove field first" }),
+    );
+    expect(within(fieldBox("WNT", "dob")).getByLabelText("Key")).toHaveFocus();
+    await t.user.click(
+      within(fieldBox("WNT", "dob")).getByRole("button", { name: "Remove field dob" }),
+    );
+    expect(within(fieldBox("WNT", "last")).getByLabelText("Key")).toHaveFocus();
+  });
+
+  it("removing the only extra section focuses the base section key; removing a value focuses the next", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await openType(t, "PER");
+    await t.user.click(within(typeBox("PER")).getByRole("button", { name: "Add section" }));
+    await t.user.click(within(typeBox("PER")).getByRole("button", { name: "Remove section" }));
+    expect(
+      within(group(typeBox("PER"), "Section base")).getByLabelText("Section key"),
+    ).toHaveFocus();
+    await openSection(t, "picklists");
+    await t.user.click(
+      within(group(picklistBox("sex"), "Value F")).getByRole("button", { name: "Remove value F" }),
+    );
+    const next = picklists(t).find((p) => p.id === "sex")?.values[0]?.code as string;
+    expect(within(group(picklistBox("sex"), `Value ${next}`)).getByLabelText("Code")).toHaveFocus();
+  });
+
+  it("removing a query type focuses the next type's summary", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await openType(t, "PRO");
+    await t.user.click(
+      within(typeBox("PRO")).getByRole("button", { name: "Remove query type PRO" }),
+    );
+    expect(screen.getByText("Query type WNT", { selector: "summary" })).toHaveFocus();
+  });
+});

@@ -16,6 +16,8 @@ export interface DraftChecks {
   status: BundleState["status"];
   issues: readonly DraftIssue[];
   groups: ReadonlyMap<string, readonly DraftIssue[]>;
+  /** Issues by their own pointer, built once per check (#388 M4: controls look up, not filter). */
+  byPointer: ReadonlyMap<string, readonly DraftIssue[]>;
   /** The settled (debounced) draft the issues were computed on; the preview renders this one. */
   doc: JsonObject | null;
   labels: ReturnType<typeof useDraft>["labels"];
@@ -25,6 +27,7 @@ const NO_CHECKS: DraftChecks = {
   status: "loading",
   issues: [],
   groups: new Map(),
+  byPointer: new Map(),
   doc: null,
   labels: {},
 };
@@ -45,15 +48,23 @@ export function useDraftChecks(
   doc: JsonObject,
   labels: ReturnType<typeof useDraft>["labels"],
 ): DraftChecks {
-  const bundleState = useEnglishBundle();
   const settledDoc = useDebounced(doc, CHECK_DEBOUNCE_MS);
+  const locales = Array.isArray(settledDoc.locales)
+    ? settledDoc.locales.filter((l): l is string => typeof l === "string")
+    : [];
+  const bundleState = useLocaleBundles(locales.join(","));
   const settledLabels = useDebounced(labels, CHECK_DEBOUNCE_MS);
   return useMemo(() => {
     const settled = { doc: settledDoc, labels: settledLabels };
     if (bundleState.status !== "ready")
       return { ...NO_CHECKS, ...settled, status: bundleState.status };
-    const issues = draftIssues(validateDraft(settledDoc, settledLabels, bundleState.bundle));
-    return { status: "ready", issues, groups: groupByControl(settledDoc, issues), ...settled };
+    const issues = draftIssues(
+      validateDraft(settledDoc, settledLabels, bundleState.bundle, bundleState.perLocale),
+    );
+    const byPointer = new Map<string, DraftIssue[]>();
+    for (const i of issues) byPointer.set(i.pointer, [...(byPointer.get(i.pointer) ?? []), i]);
+    const groups = groupByControl(settledDoc, issues);
+    return { status: "ready", issues, groups, byPointer, ...settled };
   }, [bundleState, settledDoc, settledLabels]);
 }
 
@@ -92,22 +103,44 @@ export const issuesFor = (checks: DraftChecks, path: readonly PathSegment[]) =>
 type BundleState =
   | { status: "loading" }
   | { status: "error" }
-  | { status: "ready"; bundle: Record<string, string> };
+  | {
+      status: "ready";
+      bundle: Record<string, string>;
+      perLocale: Record<string, Record<string, string>>;
+    };
 
-/** The shipped English strings, for validating label keys; fetched through the query cache. */
-function useEnglishBundle(): BundleState {
+/**
+ * The shipped strings of every draft locale, for validating label keys, fetched through the query
+ * cache (bootstrap already cached the English one, #388). English must load; another locale with
+ * no shipped bundle is checked on its overlay alone, so its missing labels show (#388).
+ */
+function useLocaleBundles(localesKey: string): BundleState {
   const { api, queryClient } = useServices();
   const [state, setState] = useState<BundleState>({ status: "loading" });
   useEffect(() => {
     let live = true;
-    queryClient
-      .fetchQuery({
-        queryKey: ["locale", "en"],
-        queryFn: () => fetchLocaleBundle(api, "en"),
-        staleTime: Number.POSITIVE_INFINITY,
-      })
-      .then((b) => {
-        if (live) setState({ status: "ready", bundle: flattenBundle(b) });
+    const load = (locale: string) =>
+      queryClient
+        .fetchQuery({
+          queryKey: ["locale", locale],
+          queryFn: () => fetchLocaleBundle(api, locale),
+          staleTime: Number.POSITIVE_INFINITY,
+          // A locale with no shipped bundle answers 404: no retry backoff before the checks run.
+          retry: false,
+        })
+        .then(flattenBundle);
+    const others = localesKey.split(",").filter((l) => l !== "" && l !== "en");
+    Promise.all([
+      load("en"),
+      ...others.map((l) =>
+        load(l)
+          .catch(() => ({}))
+          .then((b) => [l, b] as const),
+      ),
+    ])
+      .then(([en, ...rest]) => {
+        const perLocale = Object.fromEntries(rest as (readonly [string, Record<string, string>])[]);
+        if (live) setState({ status: "ready", bundle: en as Record<string, string>, perLocale });
       })
       .catch(() => {
         if (live) setState({ status: "error" });
@@ -115,6 +148,6 @@ function useEnglishBundle(): BundleState {
     return () => {
       live = false;
     };
-  }, [api, queryClient]);
+  }, [api, queryClient, localesKey]);
   return state;
 }
