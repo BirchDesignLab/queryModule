@@ -91,7 +91,7 @@ describe("example-ok site through the shared renderer (BR-001)", () => {
     await user.clear(command);
     await user.type(command, "NAM/TESTERSON/SAMPLE/W/M/01011901");
     // Back to the form: what the command read is merged into the Person draft.
-    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    await user.click(screen.getByRole("button", { name: "Form mode" }));
     expect(await screen.findByLabelText(/Last name/)).toHaveValue("TESTERSON");
     expect(screen.getByLabelText("First name")).toHaveValue("SAMPLE");
     expect(screen.getByLabelText("Race")).toHaveValue("W");

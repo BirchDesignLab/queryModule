@@ -233,3 +233,29 @@ describe("ADR-0011 the preview shows what dispatchers see (checker ruling M1, M2
     );
   });
 });
+
+describe("design B2 panel head: type heading and the form or terminal switch", () => {
+  it("names the current query type in an h2 and follows the type", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    expect(await screen.findByRole("heading", { level: 2, name: "Vehicle query" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    expect(screen.getByRole("heading", { level: 2, name: "Person query" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Vehicle query" })).toBeNull();
+  });
+
+  it("the entry mode is a segmented control: Form mode pressed, Terminal mode switches and back", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    const group = await screen.findByRole("group", { name: "Entry mode" });
+    const form = within(group).getByRole("button", { name: "Form mode" });
+    const terminal = within(group).getByRole("button", { name: "Terminal mode" });
+    expect(form).toHaveAttribute("aria-pressed", "true");
+    expect(terminal).toHaveAttribute("aria-pressed", "false");
+    await user.click(terminal);
+    expect(await screen.findByRole("textbox", { name: "Command" })).toBeInTheDocument();
+    expect(terminal).toHaveAttribute("aria-pressed", "true");
+    expect(form).toHaveAttribute("aria-pressed", "false");
+    await user.click(form);
+    expect(await screen.findByLabelText("Plate")).toBeInTheDocument();
+    expect(form).toHaveAttribute("aria-pressed", "true");
+  });
+});

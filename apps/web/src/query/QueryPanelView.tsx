@@ -6,7 +6,7 @@ import {
   fieldErrorMessages,
   formErrorsId,
   formLevelErrors,
-  ModeToggle,
+  ModeSeg,
   QueryForm,
   QueryTypeSelect,
   QuickAccessBar,
@@ -107,6 +107,16 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
           />
         </>
       )}
+      <div className="qm-panel-head">
+        <h2>{t("panel.title", { type: labelOfType(queryType) })}</h2>
+        <ModeSeg
+          legend={t("mode.label")}
+          formLabel={t("mode.form")}
+          terminalLabel={t("mode.terminal")}
+          terminal={terminal.mode === "terminal"}
+          onSelect={() => terminal.toggle()}
+        />
+      </div>
       <QuickAccessBar
         codes={quickCodes}
         current={queryType}
@@ -128,11 +138,6 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
           t={t}
         />
       )}
-      <ModeToggle
-        pressed={terminal.mode === "terminal"}
-        label={t("mode.terminal")}
-        onToggle={() => terminal.toggle()}
-      />
       <div ref={panel.formContainerRef}>
         {terminal.mode === "terminal" ? (
           <TerminalInput

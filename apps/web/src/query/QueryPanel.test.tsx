@@ -757,7 +757,10 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
 });
 
 describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
-  const toggle = () => screen.getByRole("button", { name: "Terminal mode" });
+  /** The button that switches mode: the unpressed one of the Form mode / Terminal mode pair. */
+  const toggle = () =>
+    screen.getByRole("button", { name: /^(Form|Terminal) mode$/, pressed: false });
+  const terminalButton = () => screen.getByRole("button", { name: "Terminal mode" });
   const terminal = () => screen.getByLabelText("Command");
 
   it("[A5] toggling writes the command and counts the fields it cannot show; editing and toggling back merges", async () => {
@@ -765,16 +768,16 @@ describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
     await user.selectOptions(screen.getByLabelText("State"), "OK");
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
     await user.selectOptions(screen.getByLabelText(/Plate type/), "PC");
-    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(terminalButton()).toHaveAttribute("aria-pressed", "false");
     await user.click(toggle());
-    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(terminalButton()).toHaveAttribute("aria-pressed", "true");
     expect(terminal()).toHaveValue("VEH.ZZ-0001.OK");
     expect(screen.getByText("1 field not shown")).toBeInTheDocument();
     expect(screen.queryByLabelText("Plate")).not.toBeInTheDocument();
     await user.clear(terminal());
     await user.type(terminal(), "VEH.ZZ-0002.OK..");
     await user.click(toggle());
-    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(terminalButton()).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0002");
     expect(screen.getByLabelText(/Plate type/)).toHaveValue("PC");
   });
@@ -816,7 +819,8 @@ describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
 });
 
 describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
-  const toggle = () => screen.getByRole("button", { name: "Terminal mode" });
+  const toggle = () =>
+    screen.getByRole("button", { name: /^(Form|Terminal) mode$/, pressed: false });
   const terminal = () => screen.getByLabelText("Command");
 
   it("[A4] VEH.ABC123..26 then Enter posts the typed values, announces the ack and the form shows them", async () => {

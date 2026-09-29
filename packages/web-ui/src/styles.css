@@ -443,8 +443,20 @@ h1 {
   padding-inline-start: var(--qm-space-4);
 }
 
-.qm-mode-toggle {
-  margin-block-end: var(--qm-space-4);
+/* The panel head: the query type's heading at the start, the form or terminal switch at the end. */
+.qm-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  margin-block-end: var(--qm-space-3);
+}
+
+.qm-panel-head h2 {
+  margin: 0;
+  font-size: var(--qm-type-size-lg);
+  font-weight: 600;
 }
 
 /* Mobile-unit layout, the officer on a vehicle laptop (spec 6.3, v1 subset pulled forward from
