@@ -74,7 +74,8 @@ have no code yet):
   `packages/api/drizzle/**` (migrations),
   `packages/core/src/contracts/audit.ts`, `audit-auth.ts`, `primitives.ts`,
   `identity.ts`; query
-  dispatch `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
+  dispatch `packages/api/src/queries/**` (submit and access policy, #318),
+  `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
   `packages/core/contracts/ws-events.schema.json`; the
   sensitive-review gate itself `.github/sensitive-paths`,
   `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`;
