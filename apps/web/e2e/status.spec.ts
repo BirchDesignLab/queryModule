@@ -5,7 +5,7 @@ test("NFR-003 authenticated WebSocket heartbeat on the status page (spec 9.3 ste
   tag: "@smoke",
 }, async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Connection status" }).click();
+  await page.getByRole("link", { name: "Status" }).click();
   await expect(page.getByRole("main").getByText(/^Connected\. Heartbeat round trip/)).toBeVisible({
     timeout: 15_000,
   });

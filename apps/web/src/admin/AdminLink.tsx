@@ -1,5 +1,5 @@
 import { useStore } from "@querymodule/client";
-import { Link } from "react-router";
+import { NavLink } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { canOpenAdmin } from "./roles.js";
@@ -11,8 +11,8 @@ export function AdminLink() {
   const role = useStore(authStore, (s) => s.user?.role);
   if (!canOpenAdmin(role)) return null;
   return (
-    <Link className="qm-app-header__status" to="/admin">
+    <NavLink className="qm-app-header__link" to="/admin">
       {t("admin.link")}
-    </Link>
+    </NavLink>
   );
 }

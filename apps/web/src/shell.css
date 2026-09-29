@@ -108,22 +108,93 @@ main[tabindex="-1"]:focus {
   outline: none;
 }
 
+/* The app bar (visual system, app shell): a 52 px row (dense control height plus 2 x space-2) on
+   surface.base with a subtle rule below. Product mark and name, site name, Main nav, then the
+   account disclosure pushed to the end. Everything wraps: the narrowest viewport keeps every
+   control, no horizontal scroll. */
 .qm-app-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--qm-space-2) var(--qm-space-4);
-  padding: var(--qm-space-3) var(--qm-space-4);
-  background: var(--qm-color-surface-raised);
-  border-bottom: var(--qm-border-width) solid var(--qm-color-border);
+  box-sizing: border-box;
+  min-height: calc(var(--qm-control-height-dense) + var(--qm-space-4));
+  /* The bottom rule is part of the 52 px: take its width off the bottom padding. */
+  padding: var(--qm-space-2) var(--qm-space-4) calc(var(--qm-space-2) - var(--qm-border-width));
+  background: var(--qm-color-surface-base);
+  border-bottom: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
-/* One top bar: product name at the start, everything else pushed to the end; both groups wrap
-   (the narrowest viewport keeps every control, no horizontal scroll). */
 .qm-app-header__product {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
   margin: 0;
-  margin-inline-end: auto;
+  font-size: var(--qm-type-size-lg);
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.qm-app-header__mark {
+  flex: none;
+  inline-size: var(--qm-space-6);
+  block-size: var(--qm-space-6);
+  color: var(--qm-color-accent-fill);
+}
+
+.qm-app-header__mark rect {
+  fill: currentColor;
+}
+
+.qm-app-header__mark path {
+  fill: none;
+  stroke: var(--qm-color-accent-onFill);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qm-app-header__site {
+  margin: 0;
+  padding-inline-start: var(--qm-space-4);
+  border-inline-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+  max-inline-size: 32ch;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qm-app-header__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-1);
+}
+
+/* Nav link: quiet text on the bar; the current page (aria-current, set by the router) gets the
+   raised fill and body colour, so the state is not colour alone. */
+.qm-app-header__link {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--qm-control-height-dense);
+  padding: 0 var(--qm-space-3);
+  border-radius: var(--qm-radius-control);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-md);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.qm-app-header__link:hover {
+  color: var(--qm-color-text-body);
+}
+
+.qm-app-header__link[aria-current="page"] {
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
 }
 
 .qm-app-header__end {
@@ -132,12 +203,7 @@ main[tabindex="-1"]:focus {
   align-items: center;
   gap: var(--qm-space-2) var(--qm-space-4);
   min-inline-size: 0;
-}
-
-.qm-app-header__end nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--qm-space-2);
+  margin-inline-start: auto;
 }
 
 .qm-app-header__user {
@@ -146,15 +212,63 @@ main[tabindex="-1"]:focus {
   overflow-wrap: anywhere;
 }
 
-/* Compact link to /status: a bordered pill, still a full-size touch target. */
-.qm-app-header__status {
-  box-sizing: border-box;
-  min-height: var(--qm-target-min);
-  padding: 0 var(--qm-space-3);
-  border: var(--qm-border-width) solid var(--qm-color-border);
-  border-radius: var(--qm-radius-md);
+/* Account disclosure: a ghost button (avatar initial, email) and a panel on surface.overlay. */
+.qm-account {
+  position: relative;
+}
+
+.qm-account .qm-account__button {
+  gap: var(--qm-space-2);
+  padding-block: 0;
   color: var(--qm-color-text-body);
-  text-decoration: none;
+}
+
+.qm-account__avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: calc(var(--qm-control-height-dense) - var(--qm-space-2));
+  block-size: calc(var(--qm-control-height-dense) - var(--qm-space-2));
+  border-radius: 50%;
+  background: var(--qm-color-accent-subtle);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+}
+
+.qm-account__email {
+  max-inline-size: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qm-account__panel {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + var(--qm-space-2));
+  z-index: 10;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qm-space-3);
+  min-inline-size: 28ch;
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-overlay);
+  margin: 0;
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-account__who,
+.qm-account__role {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.qm-account__role {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
 }
 
 /* Admin console (design target, A1): a left rail beside the section. */
@@ -254,18 +368,15 @@ main[tabindex="-1"]:focus {
 
 /* Mobile-unit layout: a shorter bar; its controls keep their 48 px targets (spec 6.3 subset). */
 .qm-app-header--compact {
-  padding: var(--qm-space-1) var(--qm-space-2);
+  padding: 0 var(--qm-space-2);
 }
 
 /* Dispatch controls are the dense 36 px; the officer's bar keeps 48 px targets (spec 6.3). */
 .qm-app-header--compact .qm-button,
+.qm-app-header--compact .qm-app-header__link,
 .qm-app-header--compact .qm-select {
   min-height: var(--qm-target-min);
   min-width: var(--qm-target-min);
-}
-
-.qm-app-header__status:hover {
-  text-decoration: underline;
 }
 
 .qm-app-header .qm-field {

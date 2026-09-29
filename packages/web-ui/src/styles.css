@@ -218,6 +218,8 @@ h1 {
 /* Segmented control: aria-pressed buttons in a sunken track (form or terminal, theme, persona). */
 .qm-seg {
   display: inline-flex;
+  min-inline-size: 0;
+  margin: 0;
   gap: var(--qm-space-1);
   padding: var(--qm-space-1);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
@@ -234,6 +236,7 @@ h1 {
   color: var(--qm-color-text-body);
   font: inherit;
   font-size: var(--qm-type-size-md);
+  white-space: nowrap;
   cursor: pointer;
 }
 
