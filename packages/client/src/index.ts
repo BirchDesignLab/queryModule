@@ -57,6 +57,17 @@ export {
   THEME_PREFERENCES,
 } from "./preferences/preferences-store.js";
 export { createQueryClient, registerQueryCacheReset } from "./query/query-client.js";
+export type {
+  SubmitController,
+  SubmitControllerOptions,
+  SubmitOutcome,
+  SubmitQueryBody,
+  SubmitQueryResponse,
+  SubmitRequest,
+  SubmitState,
+  ValidationError,
+} from "./query/submit.js";
+export { buildSubmitBody, createSubmitController } from "./query/submit.js";
 export type { ResetController } from "./session/reset.js";
 export { createResetController } from "./session/reset.js";
 export type {
