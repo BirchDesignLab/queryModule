@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ValidationError } from "../contracts/index";
 import { canonicalise } from "../rules/canonicalise";
-import { defaultSite } from "./__fixtures__/sites";
+import { defaultSite, exampleOkSite } from "./__fixtures__/sites";
 import * as terminal from "./index";
 import { parseCommand } from "./parse";
 import type { TerminalConfig } from "./types";
@@ -162,13 +162,24 @@ describe("spec 4.4 error params never carry the typed value", () => {
    * Every token, the command code included, and the whole trimmed input. A named token's key is a
    * field key (config), so only its value is typed.
    */
-  const typedValues = (input: string): string[] =>
-    [input.trim(), ...input.split(".").flatMap((t) => [t, t.slice(t.indexOf("=") + 1)])]
+  const typedValues = (input: string): string[] => {
+    const tokens = input.split(".");
+    // Every suffix join too: a rest position keeps its delimiters (PRO...a.b.c gives "a.b.c").
+    const suffixes = tokens.map((_, i) => tokens.slice(i).join("."));
+    return [input.trim(), ...tokens.flatMap((t) => [t, t.slice(t.indexOf("=") + 1)]), ...suffixes]
       .map((t) => t.trim())
       .filter((t) => t !== "");
-  // Config strings: a recognised code such as PRO is a substring of field.propertyType, so these
-  // params skip the substring check only; an exact or case-insensitive echo still fails (#323).
+  };
+  // Config strings: a recognised code such as PRO is a substring of field.propertyType, so a
+  // field or labelKey param skips the substring check, but only when its value is one of the
+  // config's own field keys or labelKeys; an exact or case-insensitive echo always fails (#323, #329).
   const configParams = new Set(["field", "labelKey"]);
+  const configStrings = new Set(
+    [defaultSite, exampleOkSite]
+      .flatMap((s) => s.queryTypes.flatMap((q) => q.fields))
+      .flatMap((f) => [f.key, f.labelKey])
+      .map((s) => s.toLowerCase()),
+  );
   // Canonicalised echoes: years (26 to 2026) and typed dates (to ISO YYYY-MM-DD).
   const echoFields = defaultSite.queryTypes
     .flatMap((q) => q.fields)
@@ -190,7 +201,7 @@ describe("spec 4.4 error params never carry the typed value", () => {
       .map((t) => t.toLowerCase());
     const echoed = (name: string, value: unknown) => {
       const text = String(value).toLowerCase();
-      const substring = !configParams.has(name);
+      const substring = !(configParams.has(name) && configStrings.has(text));
       return typed.some((t) => text === t || (substring && t.length >= 3 && text.includes(t)));
     };
     return errors.flatMap((e) =>
@@ -232,6 +243,19 @@ describe("spec 4.4 error params never carry the typed value", () => {
     expect(leaks("pro.ZZ-0001", [{ key: "x", params: { field: "PRO" } }])).toEqual(["x:field"]);
     expect(leaks("VEH.ZZ-0001", [{ key: "x", params: { labelKey: "zz-0001" } }])).toEqual([
       "x:labelKey",
+    ]);
+  });
+
+  it("a field or labelKey param skips the substring check only when it is a known config string (#329)", () => {
+    // Built from typed text, not config: the substring echo is caught despite the param name.
+    const built = { field: "x-zz-0001", labelKey: "field.zz-0001" };
+    expect(leaks("VEH.ZZ-0001", [{ key: "x", params: built }])).toEqual(["x:field", "x:labelKey"]);
+  });
+
+  it("a rest remainder with delimiters is a typed value (#329)", () => {
+    expect(typedValues("PRO.ZZ-0001.NOPE.a.b.c")).toEqual(expect.arrayContaining(["a.b.c"]));
+    expect(leaks("PRO.ZZ-0001.NOPE.a.b.c", [{ key: "x", params: { echo: "was a.b.c" } }])).toEqual([
+      "x:echo",
     ]);
   });
 
