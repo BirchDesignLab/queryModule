@@ -1,18 +1,28 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@libsql/client";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { systemClock } from "../../src/clock";
-import { DatabaseOpenError, openDatabase } from "../../src/db/client";
+import { DatabaseOpenError, type Db, openDatabase } from "../../src/db/client";
 import {
   AUDIT_TRIGGER_SQL,
   AUDIT_TRIGGERS,
   AuditTriggerMissingError,
   checkAuditTriggers,
+  checkQueryTriggers,
+  QUERY_TRIGGER_SQL,
+  QUERY_TRIGGERS,
+  QueryTriggerMissingError,
   runMigrations,
 } from "../../src/db/migrate";
+import { requestKey } from "../../src/db/schema";
+import { buildDeps } from "../../src/deps";
+import { AeadError } from "../../src/keys/aead";
 import { checkKeyCanaries, KeyCanaryError } from "../../src/keys/canary";
+import { createRequestKeys, unwrapRequestKey } from "../../src/keys/request-keys";
 import { openTempDatabase, TEST_DB_KEY, tempDbFile } from "../helpers/db";
+import { migratedDb as migratedEnvDb, TEST_SECRETS, testEnv } from "../helpers/fixture";
 
 const MIGRATIONS = resolve(import.meta.dirname, "../../drizzle");
 
@@ -183,5 +193,203 @@ describe("storage: key canaries", () => {
       systemClock,
     ).catch((e: unknown) => e);
     expect((err as KeyCanaryError).keyName).toBe("data");
+  });
+});
+
+describe("storage: DATA_KEY and request_key (SEC-006, spec 10.3)", () => {
+  it("a request_key row written under DATA_KEY A fails to unwrap under B; the credential canary still opens", async () => {
+    const keysA = { credentialKey: Buffer.alloc(32, 2), dataKey: Buffer.alloc(32, 3) };
+    const dataKeyB = Buffer.alloc(32, 9);
+    const db = await openTempDatabase();
+    await runMigrations(db, MIGRATIONS);
+    await checkKeyCanaries(db, keysA, systemClock);
+    const cid = "01890a5d-ac96-774b-bcce-b302099a8057";
+    const { rows, deks } = createRequestKeys(keysA.dataKey, cid, 1_790_000_000_000);
+    await db.insert(requestKey).values(rows);
+    const stored = await db.select().from(requestKey).where(eq(requestKey.correlationId, cid));
+    expect(stored).toHaveLength(2);
+    for (const row of stored) {
+      expect(unwrapRequestKey(keysA.dataKey, row).equals(deks[row.scope])).toBe(true);
+      expect(() => unwrapRequestKey(dataKeyB, row)).toThrow(AeadError);
+    }
+    // The credential canary is checked first and opens; only DATA_KEY is refused.
+    const err = await checkKeyCanaries(db, { ...keysA, dataKey: dataKeyB }, systemClock).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(KeyCanaryError);
+    expect((err as KeyCanaryError).keyName).toBe("data");
+  });
+});
+
+const CID = "01890a5d-ac96-774b-bcce-b302099a8057";
+async function insertQueryRequest(
+  db: Db,
+  partId: number,
+  idempotencyKey: string | null,
+  cid = CID,
+) {
+  await db.$client.execute({
+    sql: `INSERT INTO query_request (correlation_id, part_id, user_id, origin, query_type, type_values,
+      plate_only, selected_source_ids, dropped_source_ids, config_hash, idempotency_key, submitted_at)
+      VALUES (?, ?, 'u1', ?, 'vehicle', '{}', 0, '["s1"]', '[]', 'h1', ?, 1)`,
+    args: [cid, partId, partId === 0 ? "primary" : "alsoRun", idempotencyKey],
+  });
+}
+async function insertPendingResult(db: Db, resultId: string, partId = 0) {
+  await db.$client.execute({
+    sql: `INSERT INTO source_result (result_id, correlation_id, part_id, source_id, user_id, status,
+      adapter_kind, created_at) VALUES (?, ?, ?, 's1', 'u1', 'pending', 'mock', 1)`,
+    args: [resultId, CID, partId],
+  });
+}
+async function queryDb() {
+  const db = await migratedDb();
+  await insertQueryRequest(db, 0, "idem-1");
+  await insertPendingResult(db, "r1");
+  return db;
+}
+const setStatus = (db: Db, from: string, to: string) =>
+  db.$client.execute({
+    sql: "UPDATE source_result SET status = ?, received_at = 2 WHERE result_id = 'r1' AND status = ?",
+    args: [to, from],
+  });
+
+describe("SEC-013 query rows are insert-once and write-once", () => {
+  it("UPDATE query_request aborts", async () => {
+    const db = await queryDb();
+    try {
+      await expect(db.$client.execute("UPDATE query_request SET query_type = 'x'")).rejects.toThrow(
+        /query_request is insert-once/,
+      );
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("DELETE FROM source_result aborts", async () => {
+    const db = await queryDb();
+    try {
+      await expect(db.$client.execute("DELETE FROM source_result")).rejects.toThrow(
+        /never deleted/,
+      );
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("pending -> returned succeeds once, then returned -> failed aborts", async () => {
+    const db = await queryDb();
+    try {
+      expect((await setStatus(db, "pending", "returned")).rowsAffected).toBe(1);
+      await expect(
+        db.$client.execute("UPDATE source_result SET status = 'failed' WHERE result_id = 'r1'"),
+      ).rejects.toThrow(/write-once from pending/);
+      const row = (await db.$client.execute("SELECT status FROM source_result")).rows[0];
+      expect(row?.status).toBe("returned");
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("pending -> pending aborts", async () => {
+    const db = await queryDb();
+    try {
+      await expect(setStatus(db, "pending", "pending")).rejects.toThrow(/write-once from pending/);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it.each([
+    ["result_id", "'r2'"],
+    ["correlation_id", "'c2'"],
+    ["part_id", "1"],
+    ["source_id", "'s2'"],
+    ["user_id", "'u2'"],
+    ["credential_user_id", "'u2'"],
+    ["delegation_id", "'d1'"],
+    ["adapter_kind", "'other'"],
+    ["created_at", "5"],
+  ])("changing %s on a pending row aborts", async (column, value) => {
+    const db = await queryDb();
+    try {
+      await expect(
+        db.$client.execute(
+          `UPDATE source_result SET status = 'returned', ${column} = ${value} WHERE result_id = 'r1'`,
+        ),
+      ).rejects.toThrow(/write-once from pending/);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("a source_result without its query_request fails the foreign key", async () => {
+    const db = await migratedDb();
+    try {
+      await expect(insertPendingResult(db, "r-orphan")).rejects.toThrow(/FOREIGN KEY/);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("part 0 idempotency keys are unique per user; part rows with a null key coexist", async () => {
+    const db = await queryDb();
+    try {
+      await expect(
+        insertQueryRequest(db, 0, "idem-1", "01890a5d-ac96-774b-bcce-b302099a8058"),
+      ).rejects.toThrow(/UNIQUE constraint failed/);
+      await insertQueryRequest(db, 1, null);
+      await insertQueryRequest(db, 2, null);
+      const n = (await db.$client.execute("SELECT count(*) AS n FROM query_request")).rows[0]?.n;
+      expect(Number(n)).toBe(3);
+    } finally {
+      db.$client.close();
+    }
+  });
+
+  it("migrations leave every query trigger present and unaltered", async () => {
+    const db = await migratedDb();
+    try {
+      await expect(checkQueryTriggers(db)).resolves.toBeUndefined();
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("pins each query trigger's statement to migration 0004", () => {
+    const file = readFileSync(resolve(MIGRATIONS, "0004_query_triggers.sql"), "utf8");
+    const statements = file
+      .split("--> statement-breakpoint")
+      .map((st) => st.replace(/\s+/g, " ").trim().replace(/;$/, ""));
+    expect(statements).toEqual(QUERY_TRIGGERS.map((t) => QUERY_TRIGGER_SQL[t]));
+  });
+  it.each(QUERY_TRIGGERS)("a dropped %s makes the check refuse", async (name) => {
+    const db = await migratedDb();
+    try {
+      await db.$client.execute(`DROP TRIGGER ${name}`);
+      const err = await checkQueryTriggers(db).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QueryTriggerMissingError);
+      expect((err as QueryTriggerMissingError).missing).toEqual([name]);
+      expect((err as QueryTriggerMissingError).message).toContain(name);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("a same-named trigger with a rewritten body makes the check refuse", async () => {
+    const db = await migratedDb();
+    try {
+      await db.$client.execute("DROP TRIGGER source_result_no_delete");
+      await db.$client.execute(
+        "CREATE TRIGGER source_result_no_delete BEFORE DELETE ON source_result BEGIN SELECT 1; END",
+      );
+      const err = await checkQueryTriggers(db).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QueryTriggerMissingError);
+      expect((err as QueryTriggerMissingError).missing).toEqual([]);
+      expect((err as QueryTriggerMissingError).altered).toEqual(["source_result_no_delete"]);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("dropping source_result_write_once makes buildDeps throw QueryTriggerMissingError", async () => {
+    const env = testEnv();
+    const db = await migratedEnvDb(env);
+    await db.$client.execute("DROP TRIGGER source_result_write_once");
+    db.$client.close();
+    const err = await buildDeps({ env, secrets: TEST_SECRETS }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(QueryTriggerMissingError);
+    expect((err as QueryTriggerMissingError).missing).toEqual(["source_result_write_once"]);
   });
 });

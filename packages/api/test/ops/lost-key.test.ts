@@ -25,7 +25,7 @@ describe("SEC-006 lost-key runbooks", () => {
   it("lost DATA_KEY leaves the credential canary alone", async () => {
     const t = await createTestApp();
     const newData = Buffer.alloc(32, 8);
-    await recoverLostKey(t.deps.db, t.clock, "data", newData);
+    await recoverLostKey(t.deps.db, t.clock, "data", newData, t.deps.audit);
     expect(await checkKeyCanaries(t.deps.db, { ...keys, dataKey: newData }, t.clock)).toEqual({
       credential: "verified",
       data: "verified",
@@ -56,15 +56,9 @@ describe("SEC-006 lost-key runbooks", () => {
   });
 });
 
-const REQUEST_KEY_DDL = `CREATE TABLE request_key (
-  correlation_id TEXT NOT NULL, scope TEXT NOT NULL, wrapped_dek BLOB NOT NULL, iv BLOB NOT NULL,
-  auth_tag BLOB NOT NULL, key_version INTEGER NOT NULL, created_at INTEGER NOT NULL,
-  PRIMARY KEY (correlation_id, scope))`;
-
 async function withRequestKeys() {
   const t = await createTestApp();
   const db = t.deps.db;
-  await db.$client.execute(REQUEST_KEY_DDL);
   for (const cid of ["req-a", "req-b"]) {
     for (const scope of ["values", "payload"]) {
       await db.$client.execute({
@@ -135,8 +129,15 @@ describe("SEC-006 lost DATA_KEY shreds request_key (spec 8.7)", () => {
     );
     expect(await count(t, "request_key")).toBe(4);
   });
-  it("still works before request_key exists and reports zero", async () => {
+  it("reports zero when request_key is empty", async () => {
     const t = await createTestApp();
+    expect(
+      await recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), t.deps.audit),
+    ).toEqual({ keysDeleted: 0, requestCount: 0 });
+  });
+  it("still works on a database from before migration 0003 and reports zero", async () => {
+    const t = await createTestApp();
+    await t.deps.db.$client.execute("DROP TABLE request_key");
     expect(
       await recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), t.deps.audit),
     ).toEqual({ keysDeleted: 0, requestCount: 0 });

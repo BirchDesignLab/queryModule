@@ -11,6 +11,9 @@ export const CURRENT_KEY_VERSION = 1;
 /**
  * Tables sealed under each key. A missing canary counts as first boot only
  * while its guard table is absent or empty (spec 5.7, 8.1 fail closed).
+ * request_key exists from migration 0003 on first boot and stays empty until
+ * the first submit, so a missing data canary still counts as first boot until
+ * a request is stored. state_credential lands in M3.
  */
 export const CANARY_GUARD_TABLES = {
   credential: "state_credential",

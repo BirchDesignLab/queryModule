@@ -41,28 +41,42 @@ describe("SEC-006 key canaries", () => {
       "querymodule",
     );
   });
+  // state_credential lands in M3, so its test creates a stand-in; request_key exists from 0003.
   it.each([
-    ["credential", "state_credential"],
-    ["data", "request_key"],
-  ] as const)("refuses to recreate a lost %s canary while %s holds rows", async (name, table) => {
-    expect(CANARY_GUARD_TABLES[name]).toBe(table);
-    const db = await fresh();
-    await checkKeyCanaries(db, keys, systemClock);
-    await db.$client.execute(`CREATE TABLE ${table} (user_id TEXT)`);
-    await db.$client.execute(`INSERT INTO ${table} (user_id) VALUES ('u1')`);
-    await db.$client.execute({
-      sql: "DELETE FROM key_canary WHERE key_name = ?",
-      args: [name],
-    });
-    const err = await checkKeyCanaries(db, keys, systemClock).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(KeyCanaryError);
-    expect((err as KeyCanaryError).keyName).toBe(name);
-    const left = await db.$client.execute({
-      sql: "SELECT count(*) AS n FROM key_canary WHERE key_name = ?",
-      args: [name],
-    });
-    expect(Number(left.rows[0]?.n)).toBe(0);
-  });
+    [
+      "credential",
+      "state_credential",
+      [
+        "CREATE TABLE state_credential (user_id TEXT)",
+        "INSERT INTO state_credential (user_id) VALUES ('u1')",
+      ],
+    ],
+    [
+      "data",
+      "request_key",
+      ["INSERT INTO request_key VALUES ('c1', 'values', x'01', x'02', x'03', 1, 1)"],
+    ],
+  ] as const)(
+    "refuses to recreate a lost %s canary while %s holds rows",
+    async (name, table, seed) => {
+      expect(CANARY_GUARD_TABLES[name]).toBe(table);
+      const db = await fresh();
+      await checkKeyCanaries(db, keys, systemClock);
+      for (const stmt of seed) await db.$client.execute(stmt);
+      await db.$client.execute({
+        sql: "DELETE FROM key_canary WHERE key_name = ?",
+        args: [name],
+      });
+      const err = await checkKeyCanaries(db, keys, systemClock).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(KeyCanaryError);
+      expect((err as KeyCanaryError).keyName).toBe(name);
+      const left = await db.$client.execute({
+        sql: "SELECT count(*) AS n FROM key_canary WHERE key_name = ?",
+        args: [name],
+      });
+      expect(Number(left.rows[0]?.n)).toBe(0);
+    },
+  );
   // A2 review C-M4: a second process on the same file creates the canary between this
   // process's read and its create. The create must not overwrite it; this process then
   // verifies its own key against the stored canary and fails closed.

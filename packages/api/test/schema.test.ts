@@ -78,3 +78,95 @@ describe("user_preference columns (spec 5.5)", () => {
     );
   });
 });
+
+describe("query tables (spec 5.5, SEC-013)", () => {
+  const columns = async (table: string) => {
+    const db = await migrated();
+    return (await db.$client.execute(`PRAGMA table_info(${table})`)).rows.map((r) => r.name);
+  };
+  const indexes = async (table: string) => {
+    const db = await migrated();
+    return (await db.$client.execute(`PRAGMA index_list(${table})`)).rows
+      .filter((r) => !String(r.name).startsWith("sqlite_autoindex_"))
+      .map((r) => ({ name: r.name, unique: Number(r.unique), partial: Number(r.partial) }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  };
+
+  it("query_request has exactly the spec 5.5 columns", async () => {
+    expect(await columns("query_request")).toEqual([
+      "correlation_id",
+      "part_id",
+      "user_id",
+      "parent_part_id",
+      "origin",
+      "query_type",
+      "type_values",
+      "values_ciphertext",
+      "values_iv",
+      "values_tag",
+      "plate_only",
+      "selected_source_ids",
+      "dropped_source_ids",
+      "skipped_reason",
+      "config_hash",
+      "idempotency_key",
+      "submitted_at",
+    ]);
+  });
+  it("source_result has exactly the spec 5.5 columns", async () => {
+    expect(await columns("source_result")).toEqual([
+      "result_id",
+      "correlation_id",
+      "part_id",
+      "source_id",
+      "user_id",
+      "status",
+      "credential_user_id",
+      "delegation_id",
+      "adapter_kind",
+      "payload_ciphertext",
+      "payload_iv",
+      "payload_tag",
+      "error_code",
+      "created_at",
+      "received_at",
+      "timed_out_at",
+    ]);
+  });
+  it("request_key has exactly the spec 5.5 columns", async () => {
+    expect(await columns("request_key")).toEqual([
+      "correlation_id",
+      "scope",
+      "wrapped_dek",
+      "iv",
+      "auth_tag",
+      "key_version",
+      "created_at",
+    ]);
+  });
+  it("query_request indexes: the idempotency index is unique and partial", async () => {
+    expect(await indexes("query_request")).toEqual([
+      { name: "query_request_idempotency_idx", unique: 1, partial: 1 },
+      { name: "query_request_user_submitted_idx", unique: 0, partial: 0 },
+    ]);
+  });
+  it("source_result indexes", async () => {
+    expect(await indexes("source_result")).toEqual([
+      { name: "source_result_credential_created_idx", unique: 0, partial: 0 },
+      { name: "source_result_part_source_idx", unique: 1, partial: 0 },
+      { name: "source_result_status_idx", unique: 0, partial: 0 },
+      { name: "source_result_user_created_idx", unique: 0, partial: 0 },
+    ]);
+  });
+  it("request_key.scope accepts only the scopes lost-key.ts shreds (Task 12 carry)", async () => {
+    const db = await migrated();
+    const put = (scope: string) =>
+      db.$client.execute({
+        sql: "INSERT INTO request_key VALUES ('c1', ?, x'01', x'02', x'03', 1, 1)",
+        args: [scope],
+      });
+    await put("values");
+    await put("payload");
+    await expect(put("other")).rejects.toThrow(/CHECK constraint failed/);
+  });
+});

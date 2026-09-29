@@ -1,4 +1,15 @@
-import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import {
+  blob,
+  check,
+  foreignKey,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 const ms = () => integer({ mode: "timestamp_ms" });
 
@@ -128,3 +139,101 @@ export const userPreference = sqliteTable("user_preference", {
   locale: text(),
   updatedAt: ms().notNull(),
 });
+
+// query_request: insert-once, one row per plan part; trigger in 0004_query_triggers.sql (spec 5.5)
+export const queryRequest = sqliteTable(
+  "query_request",
+  {
+    correlationId: text().notNull(),
+    partId: integer().notNull(),
+    userId: text().notNull(),
+    parentPartId: integer(),
+    origin: text({ enum: ["primary", "alsoRun"] }).notNull(),
+    queryType: text().notNull(),
+    typeValues: text({ mode: "json" }).notNull(),
+    // null for a skipped part (no values persisted); sealed under the request's values DEK
+    valuesCiphertext: blob({ mode: "buffer" }),
+    valuesIv: blob({ mode: "buffer" }),
+    valuesTag: blob({ mode: "buffer" }),
+    plateOnly: integer().notNull(),
+    selectedSourceIds: text({ mode: "json" }).notNull(),
+    droppedSourceIds: text({ mode: "json" }).notNull(),
+    // AuditValidationError[] for a skipped part
+    skippedReason: text({ mode: "json" }),
+    configHash: text().notNull(),
+    // part 0 only
+    idempotencyKey: text(),
+    submittedAt: integer().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.correlationId, t.partId] }),
+    uniqueIndex("query_request_idempotency_idx")
+      .on(t.userId, t.idempotencyKey)
+      .where(sql`part_id = 0`),
+    index("query_request_user_submitted_idx").on(t.userId, t.submittedAt),
+  ],
+);
+
+// source_result: status is write-once from pending and rows are never deleted (0004, FR-063)
+export const sourceResult = sqliteTable(
+  "source_result",
+  {
+    resultId: text().primaryKey(),
+    correlationId: text().notNull(),
+    partId: integer().notNull(),
+    sourceId: text().notNull(),
+    userId: text().notNull(),
+    status: text({
+      enum: [
+        "pending",
+        "returned",
+        "failed",
+        "timedOut",
+        "credentialsMissing",
+        "credentialsRejected",
+        "interrupted",
+      ],
+    }).notNull(),
+    credentialUserId: text(),
+    delegationId: text(),
+    adapterKind: text().notNull(),
+    // sealed under the request's payload DEK
+    payloadCiphertext: blob({ mode: "buffer" }),
+    payloadIv: blob({ mode: "buffer" }),
+    payloadTag: blob({ mode: "buffer" }),
+    errorCode: text(),
+    createdAt: integer().notNull(),
+    receivedAt: integer(),
+    timedOutAt: integer(),
+  },
+  (t) => [
+    uniqueIndex("source_result_part_source_idx").on(t.correlationId, t.partId, t.sourceId),
+    foreignKey({
+      columns: [t.correlationId, t.partId],
+      foreignColumns: [queryRequest.correlationId, queryRequest.partId],
+    }),
+    index("source_result_user_created_idx").on(t.userId, t.createdAt),
+    index("source_result_credential_created_idx").on(t.credentialUserId, t.createdAt),
+    index("source_result_status_idx").on(t.status),
+  ],
+);
+
+// request_key: one DEK per (request, scope) wrapped under DATA_KEY (SEC-006). No trigger:
+// lost-data-key.ts and purge.ts (M3) crypto-shred by deleting rows. The scope CHECK matches
+// REQUEST_KEY_SCOPES and the scopes lost-key.ts audits.
+export const requestKey = sqliteTable(
+  "request_key",
+  {
+    correlationId: text().notNull(),
+    scope: text({ enum: ["values", "payload"] }).notNull(),
+    wrappedDek: blob({ mode: "buffer" }).notNull(),
+    iv: blob({ mode: "buffer" }).notNull(),
+    authTag: blob({ mode: "buffer" }).notNull(),
+    keyVersion: integer().notNull(),
+    createdAt: integer().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.correlationId, t.scope] }),
+    check("request_key_scope_check", sql`${t.scope} IN ('values', 'payload')`),
+  ],
+);

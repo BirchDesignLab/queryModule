@@ -44,18 +44,76 @@ export async function runMigrations(db: Db, migrationsDir: string): Promise<void
   await migrate(db, { migrationsFolder: migrationsDir });
 }
 
+/** Name and collapsed stored sql of every trigger on the given tables. */
+async function storedTriggers(db: Db, tables: readonly string[]): Promise<Map<string, string>> {
+  const rows = await db.$client.execute({
+    sql: `SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name IN (${tables.map(() => "?").join(", ")})`,
+    args: [...tables],
+  });
+  return new Map(rows.rows.map((r) => [String(r.name), collapse(String(r.sql))]));
+}
+
+function diffTriggers<T extends string>(
+  present: Map<string, string>,
+  names: readonly T[],
+  pinned: Record<T, string>,
+): { missing: T[]; altered: T[] } {
+  return {
+    missing: names.filter((t) => !present.has(t)),
+    altered: names.filter((t) => present.has(t) && present.get(t) !== pinned[t]),
+  };
+}
+
 /** Refuses to serve (fails closed) unless every audit_event trigger is present and unaltered. */
 export async function checkAuditTriggers(db: Db): Promise<void> {
-  const rows = await db.$client.execute({
-    sql: "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'audit_event'",
-    args: [],
-  });
-  const present = new Map(rows.rows.map((r) => [String(r.name), collapse(String(r.sql))]));
-  const missing = AUDIT_TRIGGERS.filter((t) => !present.has(t));
-  const altered = AUDIT_TRIGGERS.filter(
-    (t) => present.has(t) && present.get(t) !== AUDIT_TRIGGER_SQL[t],
-  );
+  const present = await storedTriggers(db, ["audit_event"]);
+  const { missing, altered } = diffTriggers(present, AUDIT_TRIGGERS, AUDIT_TRIGGER_SQL);
   if (missing.length > 0 || altered.length > 0) {
     throw new AuditTriggerMissingError(missing, altered);
+  }
+}
+
+/**
+ * Every trigger that keeps query_request insert-once and source_result write-once and
+ * undeletable (migration 0004, SEC-013, FR-063); all must exist. request_key has none:
+ * lost-data-key.ts and purge.ts crypto-shred by deleting its rows.
+ */
+export const QUERY_TRIGGERS = [
+  "query_request_no_update",
+  "source_result_write_once",
+  "source_result_no_delete",
+] as const;
+
+/** The statement of each trigger as migration 0004 creates it, whitespace collapsed. */
+export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> = {
+  query_request_no_update:
+    "CREATE TRIGGER query_request_no_update BEFORE UPDATE ON query_request BEGIN SELECT RAISE(ABORT, 'query_request is insert-once'); END",
+  source_result_write_once:
+    "CREATE TRIGGER source_result_write_once BEFORE UPDATE ON source_result WHEN OLD.status <> 'pending' OR NEW.status = 'pending' OR NEW.result_id IS NOT OLD.result_id OR NEW.correlation_id IS NOT OLD.correlation_id OR NEW.part_id IS NOT OLD.part_id OR NEW.source_id IS NOT OLD.source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.credential_user_id IS NOT OLD.credential_user_id OR NEW.delegation_id IS NOT OLD.delegation_id OR NEW.adapter_kind IS NOT OLD.adapter_kind OR NEW.created_at IS NOT OLD.created_at BEGIN SELECT RAISE(ABORT, 'source_result status is write-once from pending'); END",
+  source_result_no_delete:
+    "CREATE TRIGGER source_result_no_delete BEFORE DELETE ON source_result BEGIN SELECT RAISE(ABORT, 'source_result rows are never deleted'); END",
+};
+
+/** Some query-table trigger is missing (missing) or not the statement migration 0004 made (altered). */
+export class QueryTriggerMissingError extends Error {
+  constructor(
+    readonly missing: string[],
+    readonly altered: string[] = [],
+  ) {
+    const parts = [
+      missing.length > 0 ? `missing: ${missing.join(", ")}` : "",
+      altered.length > 0 ? `altered: ${altered.join(", ")}` : "",
+    ];
+    super(`query table triggers ${parts.filter(Boolean).join("; ")}`);
+    this.name = "QueryTriggerMissingError";
+  }
+}
+
+/** Refuses to serve (fails closed) unless every query-table trigger is present and unaltered. */
+export async function checkQueryTriggers(db: Db): Promise<void> {
+  const present = await storedTriggers(db, ["query_request", "source_result"]);
+  const { missing, altered } = diffTriggers(present, QUERY_TRIGGERS, QUERY_TRIGGER_SQL);
+  if (missing.length > 0 || altered.length > 0) {
+    throw new QueryTriggerMissingError(missing, altered);
   }
 }
