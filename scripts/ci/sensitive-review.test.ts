@@ -475,7 +475,8 @@ describe("runSensitiveReview (spec 9.1, fails closed)", () => {
   });
 });
 
-describe("runSensitiveReview against a real git repo", () => {
+// Each case runs many git subprocesses; the 5s default flakes under full-suite load on Windows.
+describe("runSensitiveReview against a real git repo", { timeout: 20_000 }, () => {
   const git = (cwd: string, args: string[]) => {
     const r = spawnSync("git", args, {
       cwd,
@@ -565,7 +566,10 @@ describe("runSensitiveReview against a real git repo", () => {
   });
 });
 
-describe("runSensitiveReview across a main merge in a real git repo (#206, #208 m1)", () => {
+// Each case runs many git subprocesses; the 5s default flakes under full-suite load on Windows.
+describe("runSensitiveReview across a main merge in a real git repo (#206, #208 m1)", {
+  timeout: 20_000,
+}, () => {
   const git = (cwd: string, args: string[]) => {
     const r = spawnSync("git", args, {
       cwd,
@@ -1001,7 +1005,8 @@ describe("deps demotion wired through git (M7)", () => {
   });
 });
 
-describe("deps demotion against a real git repo (C1, I1 repros)", () => {
+// Each case runs many git subprocesses; the 5s default flakes under full-suite load on Windows.
+describe("deps demotion against a real git repo (C1, I1 repros)", { timeout: 20_000 }, () => {
   type Edit = (p: string, f: (t: string) => string) => void;
   const git = (cwd: string, args: string[]) => {
     const r = spawnSync("git", args, {
