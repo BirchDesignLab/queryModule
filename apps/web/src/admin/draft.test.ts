@@ -10,13 +10,12 @@ import {
   createConfigDraftStore,
   docFromClient,
   flattenBundle,
-  lineOf,
   parseRawDraft,
-  pointerLines,
   registerConfigDraft,
   setAtPath,
   validateDraft,
 } from "./draft.js";
+import { lineOf, pointerLines } from "./issues.js";
 
 describe("config draft (Task 31 part 1, BR-001, FR-060)", () => {
   it("docFromClient drops the hash and keeps the editable sections", () => {
