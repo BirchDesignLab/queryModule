@@ -428,6 +428,9 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       if (submitGated()) return;
       if (formState.valid) {
         void send();
+        // A run that goes out leaves focus on the first field, ready for the next query (design
+        // B2); a blocked one focuses the first invalid field instead.
+        formContainerRef.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
         return;
       }
       announceBlocked(formState);

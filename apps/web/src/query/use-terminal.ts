@@ -199,6 +199,8 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       const values = fromCoreDraft(merged);
       state.replaceValues(queryType, values);
       panel.selectQueryType(queryType);
+      // A run that goes out keeps focus in the command line (a click on Run brings it back).
+      inputRef.current?.focus();
       const sourceIds = resolveCheckedSources(formState, state.drafts[queryType]?.sources ?? null);
       void panel.sendChecked({
         queryType,

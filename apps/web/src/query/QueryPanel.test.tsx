@@ -162,6 +162,28 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(polite()).toHaveTextContent("1 field needs attention.");
   });
 
+  it("B2 a run that goes out leaves focus on the first field: a click on Run, and Enter in a later field", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await screen.findByRole("region", { name: "Last query" });
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+    (screen.getByLabelText("VIN") as HTMLElement).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+  });
+
+  it("B2 a terminal run that goes out keeps focus in the command line", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    const input = screen.getByLabelText("Command");
+    await user.type(input, ".ABC123");
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
+    expect(input).toHaveFocus();
+  });
+
   it("a blocked submit focuses the first invalid field in render order and counts every one", async () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
