@@ -34,7 +34,7 @@ const shapeOf = (op: unknown): OpShape =>
   op === "in" || op === "notIn" ? "list" : op === "empty" || op === "notEmpty" ? "none" : "scalar";
 
 /** Value kinds (as for field defaults): a literal is typed by the field it compares. */
-type ValueKind = "number" | "boolean" | "text";
+export type ValueKind = "number" | "boolean" | "text";
 const kindOfType = (t: unknown): ValueKind =>
   t === "number" || t === "year" ? "number" : t === "boolean" ? "boolean" : "text";
 
@@ -88,12 +88,12 @@ function convertOp(leaf: Obj, op: string): Obj {
   return scalar === undefined ? { ...rest, op } : { ...rest, op, value: scalar };
 }
 
-interface FieldInfo {
+export interface FieldInfo {
   keys: readonly string[];
   kind(key: unknown): ValueKind;
 }
 
-function fieldInfo(type: Obj): FieldInfo {
+export function fieldInfo(type: Obj): FieldInfo {
   const fields = asObjects(type.fields);
   const keys = fields.map((f) => str(f.key)).filter((k) => k !== "");
   const kinds = new Map(fields.map((f) => [str(f.key), kindOfType(f.dataType)]));
@@ -115,7 +115,7 @@ function changeLeafField(leaf: Obj, next: string | undefined, info: FieldInfo): 
 }
 
 /** One literal, typed by the compared field; blank removes it when `optional`. */
-function LiteralControl({
+export function LiteralControl({
   idPrefix,
   path,
   label,

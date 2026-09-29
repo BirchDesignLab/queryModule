@@ -25,9 +25,11 @@ const errorCount = (): number =>
 
 async function breakCommand(t: Awaited<ReturnType<typeof openBuilder>>) {
   await t.user.click(await screen.findByText("commands"));
-  const input = await screen.findByLabelText("commands.0.queryType");
+  // Task 31 part 2: the commands editor (a code with the site delimiter "." is an error).
+  const box = (await screen.findByText("Command VEH", { selector: "legend" })).closest("fieldset");
+  const input = within(box as HTMLElement).getByLabelText("Code");
   await t.user.clear(input);
-  await t.user.type(input, "ZZZ");
+  await t.user.type(input, "V.EH");
   return input;
 }
 
@@ -50,7 +52,7 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
     await waitFor(() =>
       expect(
         document.getElementById(input.getAttribute("aria-describedby") ?? ""),
-      ).toHaveTextContent(/Unknown query type "ZZZ"/),
+      ).toHaveTextContent(/cannot contain the delimiter ./),
     );
     expect(errorCount()).toBe(base + 1);
     expect(input).toHaveFocus();
@@ -72,7 +74,7 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
     await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
     const area = screen.getByRole("textbox", { name: "Draft JSON" }) as HTMLTextAreaElement;
     const lines = area.value.split("\n");
-    const line = lines.findIndex((l) => l.includes('"ZZZ"')) + 1;
+    const line = lines.findIndex((l) => l.includes('"V.EH"')) + 1;
     expect(line).toBeGreaterThan(0);
     const region = document.getElementById(
       area.getAttribute("aria-describedby") ?? "",
