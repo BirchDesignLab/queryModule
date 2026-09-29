@@ -1,4 +1,5 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the cases are JS source text with template holes, scanned as data.
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -126,5 +127,23 @@ describe("the one allowlisted writable_schema guard (#311)", () => {
     const root = join(import.meta.dirname, "../..");
     expect(readFileSync(join(root, CLIENT), "utf8")).toContain(GUARD);
     expect(scanSchemaWrites(join(root, "packages/api/src/db"))).toEqual([]);
+  });
+});
+
+// Task 103 review quality:CV2: the CLI's default directory is the repo's packages/api/src
+// whatever the working directory, like the allowlist paths.
+describe("the check-schema-writes CLI", () => {
+  const root = join(import.meta.dirname, "../..");
+  it.each([
+    ["the repo root", root],
+    ["another directory", join(root, "packages")],
+  ])("passes on the real tree when run from %s", (_label, cwd) => {
+    const r = spawnSync(process.execPath, [join(root, "scripts/ci/check-schema-writes.ts")], {
+      cwd,
+      encoding: "utf8",
+    });
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toContain("no schema-table writes");
+    expect(r.status).toBe(0);
   });
 });

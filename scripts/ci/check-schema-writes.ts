@@ -216,7 +216,9 @@ export function scanSchemaWrites(dir: string): string[] {
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) {
-  const dir = resolve(process.argv[2] ?? "packages/api/src");
+  // No argument: packages/api/src of this repo, whatever the cwd (Task 103 review quality:CV2).
+  const dir =
+    process.argv[2] === undefined ? join(REPO_ROOT, "packages/api/src") : resolve(process.argv[2]);
   const errors = scanSchemaWrites(dir);
   for (const e of errors) console.error(e);
   console.log(errors.length === 0 ? "no schema-table writes" : `${errors.length} violation(s)`);
