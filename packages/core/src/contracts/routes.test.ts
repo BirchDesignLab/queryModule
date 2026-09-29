@@ -32,7 +32,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     }
   });
 
-  it("ships the M0/M1 skeleton; submitQuery is live (D-A3, #285)", () => {
+  it("ships the M0/M1 skeleton; submitQuery is live (D-A3, #285); admin console routes planned (ADR-0011)", () => {
     expect(ROUTES.map((r) => [r.id, r.method, r.path, r.access, r.since, r.status])).toEqual([
       ["getHealth", "get", "/api/v1/health", "public", "m0", "planned"],
       ["getMeta", "get", "/api/v1/meta", "public", "m0", "planned"],
@@ -41,6 +41,68 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["getMePreferences", "get", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
       ["putMePreferences", "put", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
       ["submitQuery", "post", "/api/v1/queries", "session", "m1", "live"],
+      ["getAdminConfig", "get", "/api/v1/admin/config", "configEditor", "m1", "planned"],
+      ["putAdminConfigDraft", "put", "/api/v1/admin/config/draft", "configEditor", "m1", "planned"],
+      [
+        "validateAdminConfig",
+        "post",
+        "/api/v1/admin/config/validate",
+        "configEditor",
+        "m1",
+        "planned",
+      ],
+      [
+        "publishAdminConfig",
+        "post",
+        "/api/v1/admin/config/publish",
+        "configEditor",
+        "m1",
+        "planned",
+      ],
+      [
+        "listAdminConfigVersions",
+        "get",
+        "/api/v1/admin/config/versions",
+        "configEditor",
+        "m1",
+        "planned",
+      ],
+      [
+        "rollbackAdminConfig",
+        "post",
+        "/api/v1/admin/config/versions/{version}/rollback",
+        "configEditor",
+        "m1",
+        "planned",
+      ],
+      [
+        "exportAdminConfigVersion",
+        "get",
+        "/api/v1/admin/config/versions/{version}/export",
+        "configEditor",
+        "m1",
+        "planned",
+      ],
+      ["listAdminUsers", "get", "/api/v1/admin/users", "admin", "m1", "planned"],
+      ["createAdminUser", "post", "/api/v1/admin/users", "admin", "m1", "planned"],
+      ["disableAdminUser", "post", "/api/v1/admin/users/{id}/disable", "admin", "m1", "planned"],
+      ["setAdminUserRole", "put", "/api/v1/admin/users/{id}/role", "admin", "m1", "planned"],
+      [
+        "listAdminUserSessions",
+        "get",
+        "/api/v1/admin/users/{id}/sessions",
+        "admin",
+        "m1",
+        "planned",
+      ],
+      [
+        "revokeAdminSession",
+        "delete",
+        "/api/v1/admin/sessions/{sessionId}",
+        "admin",
+        "m1",
+        "planned",
+      ],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
@@ -56,6 +118,19 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       | "getMePreferences"
       | "putMePreferences"
       | "submitQuery"
+      | "getAdminConfig"
+      | "putAdminConfigDraft"
+      | "validateAdminConfig"
+      | "publishAdminConfig"
+      | "listAdminConfigVersions"
+      | "rollbackAdminConfig"
+      | "exportAdminConfigVersion"
+      | "listAdminUsers"
+      | "createAdminUser"
+      | "disableAdminUser"
+      | "setAdminUserRole"
+      | "listAdminUserSessions"
+      | "revokeAdminSession"
     >();
     expectTypeOf(findRoute).parameter(0).toEqualTypeOf<RouteId>();
     expect(Object.isFrozen(ROUTES)).toBe(true);
