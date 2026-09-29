@@ -85,6 +85,8 @@ export function ShortcutProvider({
         performance.now(),
       );
       if (result.kind !== "action") return;
+      // Spec 6.2: a modal dialog makes the page behind it inert, so only dismiss may fire.
+      if (result.action !== "dismiss" && document.querySelector("dialog[open]") !== null) return;
       const stack = handlers.current.get(result.action);
       const handler = stack?.[stack.length - 1];
       if (handler === undefined) return;

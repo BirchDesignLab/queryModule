@@ -94,4 +94,14 @@ describe("FR-006 FR-007 FR-051 shortcuts on the query panel (spec 6.4)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(vehicle()).toHaveFocus();
   });
+
+  it("spec 6.2: with the sheet open Alt+2 does not change the query type", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByLabelText("Plate"));
+    fireEvent.keyDown(document.body, { code: "Slash", key: "?", shiftKey: true });
+    const sheet = screen.getByRole("dialog");
+    fireEvent.keyDown(sheet, { code: "Digit2", key: "2", altKey: true });
+    expect(vehicle()).toHaveAttribute("aria-pressed", "true");
+    expect(person()).toHaveAttribute("aria-pressed", "false");
+  });
 });

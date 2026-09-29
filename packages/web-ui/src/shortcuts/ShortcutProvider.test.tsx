@@ -192,4 +192,31 @@ describe("FR-007 shortcut provider binds the engine to the DOM (spec 6.4)", () =
     expect(a).not.toHaveBeenCalled();
     expect(b).toHaveBeenCalledTimes(1);
   });
+
+  it("spec 6.2: while a modal dialog is open only dismiss fires; other actions are skipped", () => {
+    const submit = vi.fn();
+    const dismiss = vi.fn();
+    setup(
+      <main data-shortcut-context="panel">
+        <Action action="submit" handler={submit} />
+        <Action action="dismiss" handler={dismiss} />
+        <dialog open aria-label="modal">
+          <button type="button">inside</button>
+        </dialog>
+      </main>,
+    );
+    screen.getByRole("button", { name: "inside" }).focus();
+    const ctrlEnter = new KeyboardEvent("keydown", {
+      code: "Enter",
+      key: "Enter",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.activeElement?.dispatchEvent(ctrlEnter);
+    expect(submit).not.toHaveBeenCalled();
+    expect(ctrlEnter.defaultPrevented).toBe(false);
+    fireEvent.keyDown(document.activeElement ?? document.body, { code: "Escape", key: "Escape" });
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
 });
