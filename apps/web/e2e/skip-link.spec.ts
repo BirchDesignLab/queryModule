@@ -1,25 +1,27 @@
 import { expect, test } from "./fixtures.js";
 import { signIn } from "./helpers.js";
 
+const inMain = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => document.querySelector("main")?.contains(document.activeElement) ?? false);
+
 test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
-  test("after sign-in focus is on the panel heading and the next Tab enters the panel", async ({
+  test("after sign-in focus is on the panel heading and the next Tab is the first quick access button", async ({
     page,
   }) => {
     await signIn(page);
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    const nav = page.getByRole("navigation", { name: "Quick access" });
+    await expect(nav).toBeVisible();
     await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
-    const inMain = await page.evaluate(
-      () => document.querySelector("main")?.contains(document.activeElement) ?? false,
-    );
-    expect(inMain).toBe(true);
+    await expect(nav.getByRole("button").first()).toBeFocused();
   });
 
-  test("Skip to query is the first Tab stop and moves focus to the panel", async ({ page }) => {
+  test("on a fresh load the first Tab is Skip to query; activating it moves focus into the panel", async ({
+    page,
+  }) => {
     await signIn(page);
+    await page.reload();
     await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
-    // Start from the top of the document, as a fresh page load would.
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "Skip to query" });
     await expect(skip).toBeFocused();
@@ -27,9 +29,6 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator("main#qm-main")).toBeFocused();
     await page.keyboard.press("Tab");
-    const inMain = await page.evaluate(
-      () => document.querySelector("main")?.contains(document.activeElement) ?? false,
-    );
-    expect(inMain).toBe(true);
+    expect(await inMain(page)).toBe(true);
   });
 });

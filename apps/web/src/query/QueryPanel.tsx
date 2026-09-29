@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useNavigationType } from "react-router";
 import { usePersonaLayout } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
@@ -15,8 +16,12 @@ export function QueryPanel() {
   const live = useLiveConfig();
   const layout = usePersonaLayout();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // Focus follows a navigation (sign-in, a link back to the panel), spec 6.4. A fresh load (POP)
+  // leaves focus at the top of the page, so the first Tab is the skip link.
+  const navigationType = useNavigationType();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, on mount
   useEffect(() => {
-    headingRef.current?.focus();
+    if (navigationType !== "POP") headingRef.current?.focus();
   }, []);
   return (
     <main

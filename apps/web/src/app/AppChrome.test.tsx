@@ -53,6 +53,27 @@ describe("spec 6.4 skip link: the first Tab stop of every signed-in page", () =>
     expect(main).toHaveAttribute("id", "qm-main");
     expect(main).toHaveAttribute("tabindex", "-1");
   });
+  it("a fresh load of / with a live session leaves focus at the top: the first Tab is the skip link", async () => {
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+      ),
+    );
+    const t = renderRoot({ path: "/" });
+    await screen.findByRole("navigation", { name: "Quick access" });
+    expect(screen.getByRole("heading", { name: "Query Module" })).not.toHaveFocus();
+    await t.user.tab();
+    expect(screen.getByRole("link", { name: "Skip to query" })).toHaveFocus();
+  });
+  it("right after sign-in the next Tab is the first quick access button, not the header", async () => {
+    const t = await signIn();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Query Module" })).toHaveFocus(),
+    );
+    await screen.findByRole("navigation", { name: "Quick access" });
+    await t.user.tab();
+    expect(screen.getByRole("button", { name: "Vehicle" })).toHaveFocus();
+  });
   it("Tab from the panel heading reaches a panel control, not the header's status link", async () => {
     const t = await signIn();
     await waitFor(() =>
