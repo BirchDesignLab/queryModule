@@ -215,3 +215,13 @@ h1 {
   margin: 0 0 var(--qm-space-2);
   overflow-wrap: anywhere;
 }
+
+/* Terminal mode (FR-050, FR-055, spec 6.2) */
+.qm-terminal__errors {
+  margin: 0;
+  padding-inline-start: var(--qm-space-4);
+}
+
+.qm-mode-toggle {
+  margin-block-end: var(--qm-space-4);
+}
