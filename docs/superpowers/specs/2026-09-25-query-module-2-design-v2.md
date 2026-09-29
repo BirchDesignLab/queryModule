@@ -932,6 +932,8 @@ Lockouts are audited: the `loginFailed` row whose failure starts a lockout carri
 
 **Roles.** `user`, `trainingOfficer`, `admin`, stored on the user row in standalone mode and checked by route middleware. Roles change only through `scripts/ops/grant-role.ts`, which writes `roleChanged`. There is no role-editing route. Delegator roles are per purpose (5.7).
 
+Overridden by ADR-0011 (implementer role; roles also change in the admin console).
+
 **Step-up.** Routes marked step-up (credential PUT and DELETE, delegation approval) require: a TOTP code in the request when the user has TOTP enrolled, otherwise a password re-entry at `POST /api/v1/me/step-up` within the last 5 minutes, recorded as `stepUpAt` on the session. A missing step-up is 403 `stepUpRequired` (4.7). Step-up failures count against the account limiter. In embedded mode step-up requires a host token with `iat` at most 5 minutes old, obtained with `identityRequest { reason: "stepUp" }` (6.9).
 
 **User disable.** One transaction: revoke every delegation where the user is trainee or officer (reason `userDisabled`), delete the user's `state_credential` rows, revoke all sessions, set the user disabled, write `userDisabled` (plus `delegationRevoked` and `credentialsDeleted` per affected row). Sockets close after commit. Run by `scripts/ops/disable-user.ts`; there is no admin UI. `audit_event` has no foreign key to `user` and carries an actor snapshot (5.5), so audit survives. A user row may be hard-deleted by ops script any time after disable (5.5, 11).
