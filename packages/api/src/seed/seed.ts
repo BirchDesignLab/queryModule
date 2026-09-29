@@ -1,7 +1,7 @@
 import type { Role } from "@querymodule/core/contracts";
 import { count } from "drizzle-orm";
 import { createLocalUser } from "../auth/users";
-import { user } from "../db/schema";
+import { user, userPreference } from "../db/schema";
 import type { AppDeps } from "../deps";
 import { grantRole } from "../ops/grant-role";
 import { derivePassword } from "./password";
@@ -47,8 +47,9 @@ export async function seedUsers(
   const created: { email: string; role: Role; password: string }[] = [];
   for (const u of DEMO_USERS) {
     const password = derivePassword(secret, u.email);
+    let id: string;
     try {
-      await createLocalUser(d.auth, { email: u.email, name: u.name, password });
+      id = (await createLocalUser(d.auth, { email: u.email, name: u.name, password })).id;
     } catch (e) {
       throw new SeedPartialFailureError(created, e);
     }
@@ -58,6 +59,17 @@ export async function seedUsers(
     if (u.role !== "user") {
       try {
         await grantRole(d, { email: u.email, role: u.role, change: "granted" });
+      } catch (e) {
+        throw new SeedPartialFailureError(created, e);
+      }
+    }
+    if (u.persona !== undefined) {
+      try {
+        await d.db.insert(userPreference).values({
+          userId: id,
+          personaOverride: u.persona,
+          updatedAt: new Date(d.clock.now()),
+        });
       } catch (e) {
         throw new SeedPartialFailureError(created, e);
       }
