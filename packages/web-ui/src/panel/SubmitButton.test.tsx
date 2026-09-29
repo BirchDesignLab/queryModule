@@ -60,4 +60,14 @@ describe("FR-006 submit button (spec 6.2)", () => {
     await userEvent.type(screen.getByLabelText("Field"), "{Enter}");
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });
+  it("shows the key hint aria-hidden, so the accessible name stays the label", () => {
+    render(
+      <form>
+        <SubmitButton id="qp-submit" reason={null} keyHint="Enter" t={t} />
+      </form>,
+    );
+    const button = screen.getByRole("button", { name: "Submit" });
+    expect(button.querySelector("kbd")).toHaveTextContent("Enter");
+    expect(button.querySelector("kbd")).toHaveAttribute("aria-hidden", "true");
+  });
 });

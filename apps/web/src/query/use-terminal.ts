@@ -61,6 +61,8 @@ export interface TerminalModel {
   /** Switches mode; `focus` moves focus to the equivalent control (the keyboard shortcut). */
   toggle(options?: { focus?: boolean }): void;
   focusTerminal(): void;
+  /** Clears the current draft; in terminal mode the command falls back to the bare command; focus goes to the first field or the command line. */
+  clear(): void;
   submitTerminal(): void;
   /**
    * Picks a query type; in terminal mode the text is re-derived from that type's draft. `focus`
@@ -158,6 +160,11 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
         drafts.getState().setMode("form");
       }
       if (options?.focus === true) requestFocus();
+    },
+    clear() {
+      panel.clearValues();
+      if (mode === "terminal") derive(panel.queryType);
+      requestFocus();
     },
     focusTerminal() {
       if (mode === "form") enterTerminal();

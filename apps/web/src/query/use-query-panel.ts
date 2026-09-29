@@ -51,6 +51,8 @@ export interface ReadyQueryPanel {
   /** Wraps the form so a blocked submit can focus the first invalid field. */
   formContainerRef: RefObject<HTMLDivElement | null>;
   selectQueryType(code: string): void;
+  /** Clears the current type's values (not its source choice) and any shown errors. */
+  clearValues(): void;
   setValue(key: string, value: DraftValue): void;
   setSources(sourceIds: readonly string[]): void;
   onSubmitAttempt(): void;
@@ -414,6 +416,10 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     formContainerRef,
     selectQueryType(code) {
       drafts.getState().select(code);
+      setShowErrors(false);
+    },
+    clearValues() {
+      drafts.getState().replaceValues(queryType, {});
       setShowErrors(false);
     },
     setValue: (key, value) => drafts.getState().setValue(key, value),

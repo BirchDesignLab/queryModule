@@ -20,7 +20,7 @@ async function openBuilder() {
   );
   const t = renderRoot({ path: "/admin/config" });
   const preview = await screen.findByRole("region", { name: "Dispatcher preview" });
-  await within(preview).findByRole("button", { name: "Submit" });
+  await within(preview).findByRole("button", { name: "Run query" });
   return { ...t, preview };
 }
 
@@ -48,7 +48,7 @@ afterEach(() => {
 describe("builder live preview (Task 32, BR-001, UX-004)", () => {
   it("renders the dispatcher panel from the draft, submit aria-disabled with the Preview reason", async () => {
     const { preview } = await openBuilder();
-    const submit = within(preview).getByRole("button", { name: "Submit" });
+    const submit = within(preview).getByRole("button", { name: "Run query" });
     expect(submit).toHaveAttribute("aria-disabled", "true");
     expect(submit).toHaveAccessibleDescription("Preview");
     expect(within(preview).getByRole("button", { name: "Vehicle" })).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
     });
     await t.user.click(within(t.preview).getByRole("button", { name: "Person" }));
     await t.user.type(within(t.preview).getByLabelText(/Last name/), "TESTERSON");
-    await t.user.click(within(t.preview).getByRole("button", { name: "Submit" }));
+    await t.user.click(within(t.preview).getByRole("button", { name: "Run query" }));
     expect(await within(t.preview).findByText("Date of birth is required.")).toBeInTheDocument();
     expect(submitRecorder.calls).toHaveLength(0);
   });
@@ -166,7 +166,7 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
     await t.user.click(await screen.findByRole("link", { name: "Admin" }));
     const preview = await screen.findByRole("region", { name: "Dispatcher preview" });
     // The panel shows (from the live site config), not only the paused note.
-    expect(await within(preview).findByRole("button", { name: "Submit" })).toBeInTheDocument();
+    expect(await within(preview).findByRole("button", { name: "Run query" })).toBeInTheDocument();
     expect(within(preview).getByLabelText("Plate")).toBeInTheDocument();
   });
 

@@ -325,6 +325,28 @@ h1 {
   outline: none;
 }
 
+.qm-sources__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+}
+
+/* The label fills the chip so the whole chip is one click target; the timeout sits after it. */
+.qm-chip__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  min-block-size: inherit;
+  cursor: pointer;
+}
+
+.qm-chip__label input {
+  inline-size: var(--qm-space-4);
+  block-size: var(--qm-space-4);
+  margin: 0;
+  accent-color: var(--qm-color-accent-fill);
+}
+
 .qm-chip__meta {
   color: var(--qm-color-text-muted);
   font-family: var(--qm-type-family-data);
@@ -750,6 +772,54 @@ h1 {
 
 .qm-layout--mobile-unit .qm-disclosure-toggle {
   min-height: var(--qm-target-min);
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+/* Action bar: Run query, Clear and the status line, sticky to the bottom of the panel with a
+   subtle rule above, so the actions stay in reach on a long form. */
+.qm-action-bar {
+  position: sticky;
+  inset-block-end: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  margin-block-start: var(--qm-space-4);
+  padding-block: var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-action-bar .qm-field__description {
+  flex-basis: 100%;
+  order: 3;
+  margin: 0;
+}
+
+.qm-action-bar__status {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-button .qm-kbd {
+  margin-inline-start: var(--qm-space-2);
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+}
+
+/* Officer: the run action is 64 px and full width; nothing muted (spec 6.3). */
+.qm-layout--mobile-unit .qm-action-bar > button[type="submit"] {
+  flex: 1 1 100%;
+  min-height: calc(var(--qm-control-height-touch) + var(--qm-space-2));
+  font-size: var(--qm-type-size-xl);
+}
+
+.qm-layout--mobile-unit .qm-action-bar__status {
   color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);
 }

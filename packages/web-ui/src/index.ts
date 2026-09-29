@@ -21,6 +21,8 @@ export { TextField } from "./field/TextField.js";
 export { useMediaQuery } from "./hooks/useMediaQuery.js";
 export type { AckStatusProps, AckView } from "./panel/AckStatus.js";
 export { AckStatus, formatAckTime } from "./panel/AckStatus.js";
+export type { ActionBarProps } from "./panel/ActionBar.js";
+export { ActionBar } from "./panel/ActionBar.js";
 export type { CommandEchoProps } from "./panel/CommandEcho.js";
 export { CommandEcho } from "./panel/CommandEcho.js";
 export type { QueryTypeSelectProps } from "./panel/QueryTypeSelect.js";

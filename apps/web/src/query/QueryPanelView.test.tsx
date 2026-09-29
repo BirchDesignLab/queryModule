@@ -53,7 +53,7 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
 
   it("preview: submit is aria-disabled with the visible reason Preview", async () => {
     renderView();
-    const button = await screen.findByRole("button", { name: "Submit" });
+    const button = await screen.findByRole("button", { name: "Run query" });
     expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button).toHaveAccessibleDescription("Preview");
     expect(screen.getByText("Preview")).toBeVisible();
@@ -62,7 +62,7 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
   it("preview: Enter in a field and a click on Submit send no request", async () => {
     const { user } = renderView();
     await user.type(await screen.findByLabelText("Plate"), "ZZ-1234{Enter}");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(submitRecorder.calls).toEqual([]);
   });
 
@@ -155,7 +155,7 @@ describe("ADR-0011 the preview shows what dispatchers see (checker ruling M1, M2
     const { user, services } = renderView({ config: CLIENT_CONFIG });
     const submit = vi.spyOn(services.submit.getState(), "submit");
     await user.type(await screen.findByLabelText("Plate"), "ZZ-1234{Enter}");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(submit).not.toHaveBeenCalled();
     expect(submitRecorder.calls).toEqual([]);
   });
@@ -163,7 +163,7 @@ describe("ADR-0011 the preview shows what dispatchers see (checker ruling M1, M2
   it("M1 preview: a click on Submit validates too and sends nothing", async () => {
     const { user } = renderView({ config: CLIENT_CONFIG });
     await user.click(await screen.findByRole("button", { name: "Person" }));
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
     expect(submitRecorder.calls).toEqual([]);
   });
@@ -320,5 +320,47 @@ describe("design B2 command echo (signature element, spec 4.4)", () => {
     await screen.findByLabelText("Command preview");
     await user.click(screen.getByRole("button", { name: "Person" }));
     expect(screen.getByLabelText("Command preview")).toHaveTextContent(/^>PER/);
+  });
+});
+
+describe("design B2 sources as chips and the sticky action bar", () => {
+  it("each source is a chip with its timeout in mono; the checkbox keeps the source's name", async () => {
+    renderView({ config: CLIENT_CONFIG });
+    const box = await screen.findByRole("checkbox", { name: "State system" });
+    const chip = box.closest(".qm-chip");
+    const ms = CLIENT_CONFIG.sources.find((s) => s.id === "stateSource")?.timeoutMs ?? 0;
+    expect(chip?.querySelector(".qm-chip__meta")).toHaveTextContent(`${Math.round(ms / 1000)} s`);
+  });
+
+  it("Run query carries the Enter hint aria-hidden; Clear and the status sit in the action bar", async () => {
+    renderView({ config: CLIENT_CONFIG });
+    const run = await screen.findByRole("button", { name: "Run query" });
+    expect(run.querySelector("kbd")).toHaveTextContent("Enter");
+    const bar = run.closest(".qm-action-bar") as HTMLElement;
+    expect(within(bar).getByRole("button", { name: "Clear" })).toBeInTheDocument();
+  });
+
+  it("a blocked run shows the count in the status line; Clear empties the values and the status, and focuses the first field", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    await user.click(await screen.findByRole("button", { name: "Person" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    const bar = screen.getByRole("button", { name: "Run query" }).closest(".qm-action-bar");
+    expect(bar).toHaveTextContent(/needs? attention/);
+    await user.type(screen.getByLabelText(/Last name/), "SMITH");
+    await user.click(within(bar as HTMLElement).getByRole("button", { name: "Clear" }));
+    expect(screen.getByLabelText(/Last name/)).toHaveValue("");
+    expect(bar).not.toHaveTextContent(/needs? attention/);
+    await waitFor(() => expect(screen.getByLabelText(/Last name/)).toHaveFocus());
+  });
+
+  it("Clear in terminal mode resets the command to the bare command and keeps focus in it", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    await user.type(await screen.findByLabelText("Plate"), "ZZ-1234");
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    const input = await screen.findByRole("textbox", { name: "Command" });
+    expect((input as HTMLInputElement).value).toContain("ZZ-1234");
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+    expect((input as HTMLInputElement).value).not.toContain("ZZ-1234");
+    await waitFor(() => expect(input).toHaveFocus());
   });
 });

@@ -38,11 +38,11 @@ describe("blocked submit with only a form-level error", () => {
       { services },
     );
     await screen.findByLabelText("Plate");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     const polite = screen.getByTestId("announcer-polite");
     expect(polite).toHaveTextContent("1 field needs attention.");
     expect(polite).toHaveTextContent("The form changed while submitting.");
-    expect(screen.getByRole("button", { name: "Submit" })).toHaveAccessibleDescription(
+    expect(screen.getByRole("button", { name: "Run query" })).toHaveAccessibleDescription(
       "The form changed while submitting. Check it and submit again.",
     );
   });

@@ -11,7 +11,7 @@ async function blockedVehiclePanel(page: Page, mode: (typeof MODES)[number]): Pr
   await chooseQueryType(page, "VEH");
   await page.getByLabel("State", { exact: true }).selectOption("OK");
   await expect(page.getByLabel("Plate type")).toBeVisible();
-  await page.getByRole("button", { name: "Submit" }).click();
+  await page.getByRole("button", { name: "Run query" }).click();
   await expect(page.getByLabel("Plate type")).toHaveAttribute("aria-invalid", "true");
 }
 
@@ -129,7 +129,7 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
   await page.keyboard.press("Shift+Tab");
   await expect(page.getByRole("link", { name: "Status" })).toBeFocused();
 
-  const submit = page.getByRole("button", { name: "Submit" });
+  const submit = page.getByRole("button", { name: "Run query" });
   await expect(submit).not.toBeDisabled();
   const attempts: string[] = [];
   await page.exposeFunction("__qmAttempt", (text: string) => attempts.push(text));

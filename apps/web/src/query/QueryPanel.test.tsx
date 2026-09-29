@@ -155,7 +155,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.click(screen.getByRole("button", { name: "Person" }));
     const last = screen.getByLabelText(/Last name/);
     expect(last).not.toHaveAttribute("aria-invalid");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(last).toHaveAttribute("aria-invalid", "true");
     expect(last).toHaveAccessibleDescription("Last name is required.");
     expect(last).toHaveFocus();
@@ -166,7 +166,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
     await user.type(screen.getByLabelText(/Date of birth/), "not-a-date");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Last name/)).toHaveFocus();
     expect(screen.getByLabelText(/Date of birth/)).toHaveAttribute("aria-invalid", "true");
     expect(polite()).toHaveTextContent("2 fields need attention.");
@@ -175,7 +175,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   it("a revealed required field that is empty is the focus target of a blocked submit", async () => {
     const { user } = await openPanel();
     await user.selectOptions(screen.getByLabelText("State"), "OK");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Plate type/)).toHaveFocus();
     expect(polite()).toHaveTextContent("1 field needs attention.");
   });
@@ -187,7 +187,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(last, "Z");
     await user.clear(last);
     expect(services.drafts.getState().drafts.PER?.values.last).toBe("");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(last).toHaveAttribute("aria-invalid", "true");
     expect(last).toHaveFocus();
   });
@@ -196,7 +196,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
     expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
     await user.click(screen.getByRole("button", { name: "Property" }));
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
@@ -266,7 +266,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     );
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
-    const button = await screen.findByRole("button", { name: "Submit" });
+    const button = await screen.findByRole("button", { name: "Run query" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
     expect(screen.getByText("Submitting")).toBeInTheDocument();
     await user.keyboard("{Enter}");
@@ -291,7 +291,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user, services } = await openPanel();
     const announce = vi.spyOn(services.announcer, "announce");
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
-    const button = await screen.findByRole("button", { name: "Submit" });
+    const button = await screen.findByRole("button", { name: "Run query" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
     await user.keyboard("{Control>}{Enter}{/Control}");
     release();
@@ -307,7 +307,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
     act(() => services.submit.setState({ status: "noConnection" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute(
+      expect(screen.getByRole("button", { name: "Run query" })).toHaveAttribute(
         "aria-disabled",
         "true",
       ),
@@ -379,7 +379,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     await waitFor(() => expect(polite()).toHaveTextContent(/did not answer|No connection/));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute(
+      expect(screen.getByRole("button", { name: "Run query" })).toHaveAttribute(
         "aria-disabled",
         "true",
       ),
@@ -532,7 +532,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
     await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     const last = await screen.findByLabelText(/Last name/);
     await waitFor(() => expect(last).toHaveAttribute("aria-invalid", "true"));
     expect(last).toHaveFocus();
@@ -575,7 +575,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await waitFor(() => expect(screen.queryByText("No connection to server")).toBeNull(), {
       timeout: 4000,
     });
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     await screen.findByRole("region", { name: "Last query" });
     expect(submitRecorder.calls).toHaveLength(2);
     expect(submitRecorder.calls[1]?.key).toBe(submitRecorder.calls[0]?.key);
@@ -725,7 +725,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       await user.click(screen.getByRole("button", { name: "Property" }));
       await user.click(await screen.findByRole("radio", { name: "Boat" }));
       expect(screen.getByRole("radio", { name: "Boat" })).toBeChecked();
-      await user.click(screen.getByRole("button", { name: "Submit" }));
+      await user.click(screen.getByRole("button", { name: "Run query" }));
       expect(screen.getByRole("radio", { name: "Boat" })).not.toHaveAttribute("aria-invalid");
     });
 
@@ -733,7 +733,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
       await user.click(await screen.findByRole("radio", { name: "Boat" }));
-      await user.click(screen.getByRole("button", { name: "Submit" }));
+      await user.click(screen.getByRole("button", { name: "Run query" }));
       await screen.findByRole("region", { name: "Last query" });
       expect(submitRecorder.calls.at(-1)?.body).toMatchObject({
         queryType: "PRO",
@@ -744,7 +744,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     it("a blocked submit marks an empty Property type and focuses it", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      await user.click(screen.getByRole("button", { name: "Submit" }));
+      await user.click(screen.getByRole("button", { name: "Run query" }));
       const first = within(screen.getByRole("group", { name: /Property type/ })).getAllByRole(
         "radio",
       )[0];
@@ -908,7 +908,10 @@ describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
     await user.type(terminal(), ".ABC123{Enter}");
     await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
     await user.keyboard("{Enter}{Control>}{Enter}{/Control}");
-    expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Run query" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     await waitFor(() => expect(announce).toHaveBeenCalledWith("Submitting"));
     release();
     await screen.findByRole("region", { name: "Last query" });

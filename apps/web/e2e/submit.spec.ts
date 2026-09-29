@@ -73,7 +73,7 @@ test("an aborted request shows No connection, and the retry reuses the Idempoten
   await page.keyboard.press("Enter");
 
   // Focusable, aria-disabled (never disabled), and the visible reason is linked to it.
-  const submit = page.getByRole("button", { name: "Submit" });
+  const submit = page.getByRole("button", { name: "Run query" });
   await expect(submit).toHaveAttribute("aria-disabled", "true");
   await expect(submit).not.toHaveAttribute("disabled", /.*/);
   await expect(page.getByText("No connection to server")).toBeVisible();

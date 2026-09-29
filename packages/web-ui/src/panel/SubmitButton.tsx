@@ -7,6 +7,8 @@ export interface SubmitButtonProps {
   reason: SubmitBlockReason | null;
   /** Extra id to describe the button, e.g. the form-level error list. */
   describedBy?: string;
+  /** The key that runs the query, shown in the button ("Enter"); aria-hidden, the name stays the label. */
+  keyHint?: string;
   t(key: string): string;
 }
 
@@ -16,7 +18,13 @@ export interface SubmitButtonProps {
  * (implicit submission clicks this button). "preview" lets the click through so the form still
  * validates as it would live; the preview never sends (ADR-0011).
  */
-export function SubmitButton({ id, reason, describedBy, t }: SubmitButtonProps): JSX.Element {
+export function SubmitButton({
+  id,
+  reason,
+  describedBy,
+  keyHint,
+  t,
+}: SubmitButtonProps): JSX.Element {
   const reasonId = `${id}-reason`;
   const described = [describedBy, reason === null ? undefined : reasonId].filter(Boolean).join(" ");
   return (
@@ -32,6 +40,11 @@ export function SubmitButton({ id, reason, describedBy, t }: SubmitButtonProps):
         }}
       >
         {t("form.submit")}
+        {keyHint === undefined ? null : (
+          <kbd className="qm-kbd" aria-hidden="true">
+            {keyHint}
+          </kbd>
+        )}
       </button>
       {reason === null ? null : (
         <p id={reasonId} className="qm-field__description">

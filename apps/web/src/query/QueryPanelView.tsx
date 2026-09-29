@@ -3,6 +3,8 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import { resolveShortcuts } from "@querymodule/core/config";
 import {
   AckStatus,
+  ActionBar,
+  blockedErrorCount,
   CommandEcho,
   fieldErrorMessages,
   formErrorsId,
@@ -73,6 +75,12 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
     () => formToTerminal(config, queryType, panel.values, Date.now()).text,
     [config, queryType, panel.values],
   );
+  const timeoutOf = (sourceId: string): string | undefined => {
+    const ms = config.sources.find((x) => x.id === sourceId)?.timeoutMs;
+    return ms === undefined
+      ? undefined
+      : t("form.timeoutSeconds", { seconds: Math.round(ms / 1000) });
+  };
   const typeCodes = config.queryTypes.map((q) => q.code);
   const quickCodes = config.quickAccess.filter((code) => typeCodes.includes(code));
   // Types with a button are picked there; the select lists the rest (ADR-0010). With no buttons it
@@ -84,6 +92,7 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
   const errorMessages = panel.showErrors
     ? fieldErrorMessages(formState, t)
     : new Map<string, string>();
+  const blockedCount = panel.showErrors ? blockedErrorCount(formState) : 0;
   const [sheetOpen, setSheetOpen] = useState(false);
   const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
   const firstQuick = quickShortcut(bindings, 0);
@@ -184,11 +193,27 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
               sources={formState.sources}
               checked={panel.checkedSources}
               labelOf={labelOfSource}
+              timeoutOf={timeoutOf}
               onChange={panel.setSources}
               idPrefix={idPrefix}
               t={t}
             />
-            <SubmitButton id={`${idPrefix}-submit`} reason={panel.submitReason} t={t} />
+            <ActionBar
+              clearLabel={t("form.clear")}
+              onClear={terminal.clear}
+              status={
+                terminal.errors.length > 0
+                  ? t("terminal.problems", { count: terminal.errors.length })
+                  : ""
+              }
+            >
+              <SubmitButton
+                id={`${idPrefix}-submit`}
+                reason={panel.submitReason}
+                keyHint={t("form.submitKey")}
+                t={t}
+              />
+            </ActionBar>
           </TerminalInput>
         ) : (
           <>
@@ -223,20 +248,30 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
                 sources={formState.sources}
                 checked={panel.checkedSources}
                 labelOf={labelOfSource}
+                timeoutOf={timeoutOf}
                 onChange={panel.setSources}
                 idPrefix={idPrefix}
                 t={t}
               />
-              <SubmitButton
-                id={`${idPrefix}-submit`}
-                reason={panel.submitReason}
-                describedBy={
-                  panel.showErrors && formLevelErrors(formState).length > 0
-                    ? formErrorsId(idPrefix)
-                    : undefined
+              <ActionBar
+                clearLabel={t("form.clear")}
+                onClear={terminal.clear}
+                status={
+                  blockedCount > 0 ? t("form.fieldsNeedAttention", { count: blockedCount }) : ""
                 }
-                t={t}
-              />
+              >
+                <SubmitButton
+                  id={`${idPrefix}-submit`}
+                  reason={panel.submitReason}
+                  describedBy={
+                    panel.showErrors && formLevelErrors(formState).length > 0
+                      ? formErrorsId(idPrefix)
+                      : undefined
+                  }
+                  keyHint={t("form.submitKey")}
+                  t={t}
+                />
+              </ActionBar>
             </QueryForm>
           </>
         )}
