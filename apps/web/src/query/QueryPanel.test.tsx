@@ -60,7 +60,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(cached).toEqual(ClientSiteConfigSchema.parse(CLIENT_CONFIG));
     expect(cached).toMatchObject({
       site: { id: "default" },
-      quickAccess: ["VEH", "PER", "PRO", "WNT"],
+      quickAccess: ["VEH", "PER", "PRO", "WNT", "DL"],
     });
   });
 
@@ -445,16 +445,25 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   });
 
   describe("ADR-0010 quick access picks the type; type fields are the subtype control", () => {
-    it("the default site shows four buttons and no query type control", async () => {
+    it("the default site shows five buttons and no query type control", async () => {
       await openPanel();
       const nav = screen.getByRole("navigation", { name: "Quick access" });
       expect(
         within(nav)
           .getAllByRole("button")
           .map((b) => b.textContent),
-      ).toEqual(["Vehicle", "Person", "Property", "Wanted check"]);
+      ).toEqual(["Vehicle", "Person", "Property", "Wanted check", "Driver's license"]);
       expect(screen.queryByLabelText("Query type")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Other query types")).not.toBeInTheDocument();
+    });
+
+    it("Alt+5 selects Driver's license (DL added 09-29-26)", async () => {
+      const { user } = await openPanel();
+      await user.keyboard("{Alt>}5{/Alt}");
+      expect(screen.getByRole("button", { name: "Driver's license" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
     });
 
     it("Alt+4 selects Wanted check", async () => {
@@ -474,7 +483,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
         within(select)
           .getAllByRole("option")
           .map((o) => o.textContent),
-      ).toEqual(["", "Wanted check"]);
+      ).toEqual(["", "Wanted check", "Driver's license"]);
       expect(select).toHaveValue("");
       await user.selectOptions(select, "WNT");
       expect(await screen.findByLabelText(/Last name/)).toBeInTheDocument();
@@ -502,7 +511,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
         within(select)
           .getAllByRole("option")
           .map((o) => o.textContent),
-      ).toEqual(["Vehicle", "Person", "Property", "Wanted check"]);
+      ).toEqual(["Vehicle", "Person", "Property", "Wanted check", "Driver's license"]);
       await user.selectOptions(select, "PER");
       expect(await screen.findByLabelText(/Last name/)).toBeInTheDocument();
     });

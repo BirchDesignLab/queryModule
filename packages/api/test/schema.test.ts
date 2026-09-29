@@ -1,7 +1,9 @@
 import { resolve } from "node:path";
+import { ROLES } from "@querymodule/core/contracts";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import { type Db, openDatabase } from "../src/db/client";
+import { user } from "../src/db/schema";
 import { TEST_DB_KEY, tempDbFile } from "./helpers/db";
 
 async function openMigrated(): Promise<Db> {
@@ -36,6 +38,13 @@ function sharedMigrated(): () => Db {
 }
 const insert =
   "INSERT INTO audit_event (type, at, actor_user_id, actor_role, identity_source, details) VALUES ('logout', 1, 'u', 'user', 'local', '{}')";
+
+describe("user.role enum follows core ROLES (ADR-0011 item 6)", () => {
+  // The Drizzle enum is a literal copy (drizzle-kit loads schema.ts on its own), so pin it here.
+  it("lists exactly the core roles", () => {
+    expect(user.role.enumValues).toEqual([...ROLES]);
+  });
+});
 
 describe("audit_event is append-only (spec 5.5, 9.2)", () => {
   it("creates every P1 table", async () => {

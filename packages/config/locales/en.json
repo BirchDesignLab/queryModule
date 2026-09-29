@@ -175,5 +175,17 @@
   "status.reason.timeout": "no answer in time",
   "status.reason.closed": "the server closed the connection",
   "status.reason.error": "network error",
-  "status.reason.protocol": "unexpected message"
+  "status.reason.protocol": "unexpected message",
+  "queryType.DL": "Driver's license",
+  "field.plateColor": "Plate color",
+  "field.licenseNumber": "License number",
+  "field.agency": "Agency",
+  "field.make": "Make",
+  "field.model": "Model",
+  "field.caliber": "Caliber",
+  "picklist.plateColor.BK": "Black",
+  "picklist.plateColor.WH": "White",
+  "picklist.plateColor.BL": "Blue",
+  "picklist.propertyType.ELECTRONICS": "Electronics",
+  "picklist.propertyType.VEHICLE": "Vehicle"
 }

@@ -36,10 +36,19 @@ export const LoginFailedDetailsSchema = z.strictObject({
 /** SEC-010: a sign-out that ended a session. */
 export const LogoutDetailsSchema = z.strictObject({ sessionId: SessionIdSchema });
 
-/** SEC-010: roles change only through the grant-role ops script (spec 5.6). */
+/**
+ * SEC-010: roles change through the grant-role ops script (spec 5.6) or an admin in the admin
+ * console (ADR-0011 item 8).
+ */
 export const RoleChangedDetailsSchema = z.strictObject({
   targetUserId: BoundedIdSchema,
   role: RoleSchema,
   change: z.enum(["granted", "revoked"]),
-  via: z.literal("grant-role"),
+  via: z.enum(["grant-role", "adminConsole"]),
+});
+
+/** SEC-010: a session ended by an admin, by a user disable, or by the sweeper on expiry (spec 4.7). */
+export const SessionRevokedDetailsSchema = z.strictObject({
+  sessionId: SessionIdSchema,
+  reason: z.enum(["userDisabled", "admin", "expired"]),
 });

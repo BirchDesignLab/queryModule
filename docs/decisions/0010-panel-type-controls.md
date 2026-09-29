@@ -28,6 +28,7 @@ Option (b) (developer, 09-29-26). Option (c) is not ruled: no such subtype exist
 - The bar is hidden with the form in terminal mode: presets and positions set type fields (spec 4.4).
 - `goPanel` (`G Q`) focuses the pressed quick-access button, else the select.
 - `packages/config/sites/default.json` `quickAccess` becomes `["VEH", "PER", "PRO", "WNT"]`; `example-ok` inherits it (arrays replace whole). `Alt+Digit4` (`quickType4`) now selects Wanted check.
+- DL added 09-29-26 (developer): the example-query wave (#379) added the `DL` query type, so `quickAccess` becomes `["VEH", "PER", "PRO", "WNT", "DL"]` and the default panel keeps five buttons and no select; `Alt+Digit5` (`quickType5`) selects Driver's license.
 
 ## Consequences
 

@@ -37,17 +37,28 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
     "test/all-on.json",
     "test/flags-off.json",
   ]) {
-    it(`${rel} has no errors and only the known plateType warning`, () => {
+    it(`${rel} has no errors and only the known required-without-position warnings`, () => {
       const r = checkConfigFile(cfg(rel), fsIo, { tokenNames: TOKEN_NAMES });
       expect(r.errors).toEqual([]);
-      expect(r.warnings).toEqual([
-        {
+      // VEH plateType (and plateColor, example-ok's own rule, #347); PRO and PROP make and
+      // caliber, PROP description (per-type rules, #346).
+      const okOnly = rel === "sites/example-ok.json";
+      expect(r.warnings).toEqual(
+        [
+          ["/queryTypes/0/rules/1/field", "plateType", "VEH"],
+          ...(okOnly ? [["/queryTypes/0/rules/3/field", "plateColor", "VEH"]] : []),
+          ["/queryTypes/2/rules/1/field", "make", "PRO"],
+          ["/queryTypes/2/rules/1/field", "make", "PROP"],
+          ["/queryTypes/2/rules/3/field", "caliber", "PRO"],
+          ["/queryTypes/2/rules/3/field", "caliber", "PROP"],
+          ["/queryTypes/2/rules/6/field", "description", "PROP"],
+        ].map(([path, field, command]) => ({
           level: "warning",
-          path: "/queryTypes/0/rules/1/field",
+          path,
           key: "config.conditionallyRequiredWithoutPosition",
-          params: { field: "plateType", command: "VEH" },
-        },
-      ]);
+          params: { field, command },
+        })),
+      );
     });
   }
 

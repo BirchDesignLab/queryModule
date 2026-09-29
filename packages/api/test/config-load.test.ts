@@ -26,7 +26,7 @@ function copy(): string {
  * step 6), so it changes with packages/config/sites/default.json and with any core schema
  * default; update it deliberately in the change that does that.
  */
-const DEFAULT_CONFIG_HASH = "a3469d75a979ed3abba8d10c9718acce54c58761163f5838a30c7aae6a987ed6";
+const DEFAULT_CONFIG_HASH = "630330d875835f18148bf7465d187dea90cf2d886c6e15c5c165ed8dd34eea40";
 
 /*
  * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
@@ -34,16 +34,27 @@ const DEFAULT_CONFIG_HASH = "a3469d75a979ed3abba8d10c9718acce54c58761163f5838a30
  * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
  * default; update it deliberately in the change that does that.
  */
-const EXAMPLE_OK_CONFIG_HASH = "ae9eb88014dded922d6d624ecc8d18010db6580ac682aca5da43e74184515021";
+const EXAMPLE_OK_CONFIG_HASH = "f53a45cfba6b988458968c8ded1456586d7c0e886a4dac1d8ad95d1782d46797";
 
-/** The bundled sites' own warnings; plateType is conditionally required with no VEH position. */
+/**
+ * example-ok's resolved warnings: fields a rule can require with no position in a command. VEH
+ * plateType, and plateColor (example-ok's own rule, #347); PRO make and caliber, and PROP make,
+ * caliber and description (per-type rules, #346).
+ */
+const required = (path: string, field: string, command: string) => ({
+  level: "warning",
+  path,
+  key: "config.conditionallyRequiredWithoutPosition",
+  params: { field, command },
+});
 const BUNDLED_WARNINGS = [
-  {
-    level: "warning",
-    path: "/queryTypes/0/rules/1/field",
-    key: "config.conditionallyRequiredWithoutPosition",
-    params: { field: "plateType", command: "VEH" },
-  },
+  required("/queryTypes/0/rules/1/field", "plateType", "VEH"),
+  required("/queryTypes/0/rules/3/field", "plateColor", "VEH"),
+  required("/queryTypes/2/rules/1/field", "make", "PRO"),
+  required("/queryTypes/2/rules/1/field", "make", "PROP"),
+  required("/queryTypes/2/rules/3/field", "caliber", "PRO"),
+  required("/queryTypes/2/rules/3/field", "caliber", "PROP"),
+  required("/queryTypes/2/rules/6/field", "description", "PROP"),
 ];
 
 describe("BR-001 site config load", () => {
