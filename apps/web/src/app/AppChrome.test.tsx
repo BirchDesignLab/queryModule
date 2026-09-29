@@ -30,10 +30,12 @@ describe("ADR-0011 item 3 the config refresh runs while signed in (#361)", () =>
     await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
     await t.user.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByRole("heading", { name: "Query Module" });
-    expect(start).toHaveBeenCalledTimes(1);
+    // The heading is committed before the passive effects of the same commit have run (a
+    // findBy can resolve between the two, seen 4 in 300 locally and on CI): wait for the effect.
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
     await t.user.click(screen.getByRole("button", { name: "Sign out" }));
     await screen.findByRole("heading", { name: "Sign in" });
-    expect(stop).toHaveBeenCalled();
+    await waitFor(() => expect(stop).toHaveBeenCalled());
   });
 });
 
