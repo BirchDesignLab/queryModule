@@ -41,6 +41,28 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
     expect(within(header).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(await screen.findByLabelText("Query type")).toBeInTheDocument();
   });
+  it("the header is one top bar: product name first, then status, user, theme, sign out", async () => {
+    await signIn();
+    const header = screen.getByRole("banner");
+    const product = within(header).getByText("Query Module 2.0");
+    expect(product.closest(".qm-app-header__product")).not.toBeNull();
+    expect(within(header).queryByRole("heading")).toBeNull();
+    const end = header.querySelector(".qm-app-header__end");
+    expect(end).not.toBeNull();
+    const order = [
+      product,
+      within(header).getByRole("link", { name: "Connection status" }),
+      within(header).getByText(`Signed in as ${TEST_USER.email}`),
+      within(header).getByLabelText("Theme"),
+      within(header).getByRole("button", { name: "Sign out" }),
+    ];
+    for (const el of order.slice(1)) expect(end?.contains(el)).toBe(true);
+    for (let i = 1; i < order.length; i++) {
+      const prev = order[i - 1] as Element;
+      const next = order[i] as Element;
+      expect(prev.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
   it("D-B4 the header stays on the status page", async () => {
     const { user } = await signIn();
     await user.click(screen.getByRole("link", { name: "Connection status" }));

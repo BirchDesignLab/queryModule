@@ -28,6 +28,9 @@ test.describe("panel at 320px (spec 6.2, 6.5, 6.6)", () => {
         return el === null ? 0 : el.scrollWidth - el.clientWidth;
       });
       expect(overflow).toBeLessThanOrEqual(0);
+      await page
+        .getByRole("banner")
+        .screenshot({ path: test.info().outputPath(`top-bar-320-${mode}.png`) });
 
       const small = await page
         .locator(
@@ -151,4 +154,48 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
     .poll(() => attempts.some((a) => a.includes("Plate type is now shown and required.")))
     .toBe(true);
   expect(attempts.filter((a) => a.includes("needs attention"))).toHaveLength(1);
+});
+
+test.describe("signed-in top bar (spec 6.2, 6.5)", () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: product left, controls right on one row, status focus ring, axe`, async ({
+      page,
+    }) => {
+      await signIn(page);
+      await page.getByLabel("Theme").selectOption(mode);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
+      const header = page.getByRole("banner");
+      const product = header.getByText("Query Module 2.0");
+      const status = header.getByRole("link", { name: "Connection status" });
+      const signOut = header.getByRole("button", { name: "Sign out" });
+      const [h, p, s, o] = await Promise.all(
+        [header, product, status, signOut].map(async (l) => {
+          const box = await l.boundingBox();
+          if (box === null) throw new Error("not rendered");
+          return box;
+        }),
+      );
+      if (!h || !p || !s || !o) throw new Error("not rendered");
+      // One row: every control's vertical centre inside the product line's band.
+      const centre = (b: { y: number; height: number }) => b.y + b.height / 2;
+      expect(Math.abs(centre(s) - centre(p))).toBeLessThan(p.height);
+      expect(Math.abs(centre(o) - centre(p))).toBeLessThan(p.height);
+      // Product at the start, sign out at the end, status between them.
+      expect(p.x - h.x).toBeLessThan(40);
+      expect(h.x + h.width - (o.x + o.width)).toBeLessThan(40);
+      expect(s.x).toBeGreaterThan(p.x + p.width);
+
+      // Reach it by keyboard: :focus-visible does not match a programmatic focus on a link.
+      await status.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(status).toBeFocused();
+      const ring = await status.evaluate((el) => getComputedStyle(el).outlineStyle);
+      expect(ring).not.toBe("none");
+      await page.screenshot({ path: test.info().outputPath(`top-bar-${mode}.png`) });
+      await expectNoSeriousAxeViolations(page);
+    });
+  }
 });
