@@ -23,11 +23,12 @@ describe("UX-002 UX-012 mobile-unit layout, spec 6.3 v1 subset (48x48 targets, 1
   });
 
   it("body text in the layout is at least the 16 px body size", () => {
-    expect(rulesFor(".qm-layout--mobile-unit")).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+    const root = css.match(/^\.qm-layout--mobile-unit\s*\{([^}]*)\}/m)?.[1] ?? "";
+    expect(root).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
   });
 
   it("buttons, selects and text inputs are at least 48x48", () => {
-    const body = rulesFor(".qm-layout--mobile-unit :is(button, select");
+    const body = rulesFor(".qm-layout--mobile-unit :where(button, select");
     expect(body).toMatch(/min-height:\s*var\(--qm-target-min\)/);
     expect(body).toMatch(/min-width:\s*var\(--qm-target-min\)/);
   });

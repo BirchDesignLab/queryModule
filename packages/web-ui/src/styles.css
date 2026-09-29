@@ -233,7 +233,8 @@ h1 {
   font-size: var(--qm-type-body-size);
 }
 
-.qm-layout--mobile-unit :is(button, select, input:not([type="checkbox"]):not([type="radio"])) {
+/* :where() keeps the specificity low, so component rules inside the layout still win. */
+.qm-layout--mobile-unit :where(button, select, input:not([type="checkbox"]):not([type="radio"])) {
   box-sizing: border-box;
   min-height: var(--qm-target-min);
   min-width: var(--qm-target-min);

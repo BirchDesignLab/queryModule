@@ -769,6 +769,12 @@ describe("UX-002 BR-002 officer mobile-unit layout (spec 6.1, 6.3 v1 subset)", (
     expect(screen.getByRole("banner")).not.toHaveClass("qm-app-header--compact");
   });
 
+  it("a persona key the site does not configure falls back to the dispatch layout", async () => {
+    await openPanel("notAPersona");
+    expect(panelRoot()).not.toHaveClass("qm-layout--mobile-unit");
+    expect(screen.getByRole("banner")).not.toHaveClass("qm-app-header--compact");
+  });
+
   it("the layout comes from the persona's configured layout, not its name (BR-002)", async () => {
     server.use(
       http.get(`${API}/api/v1/config`, () =>
