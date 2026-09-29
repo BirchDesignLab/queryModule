@@ -126,6 +126,36 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
     expect(await within(t.preview).findByRole("button", { name: "Car" })).toBeInTheDocument();
   });
 
+  it("critic 5: unparsable raw JSON pauses the preview", async () => {
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    await t.user.click(screen.getByRole("textbox", { name: "Draft JSON" }));
+    await t.user.keyboard("{Control>}{End}{/Control}xx");
+    expect(
+      await within(t.preview).findByText("Preview paused: fix the errors to update it."),
+    ).toBeInTheDocument();
+  });
+
+  it("critic 5: a draft reset clears the preview draft", async () => {
+    const t = await openBuilder();
+    await t.user.type(within(t.preview).getByLabelText("Plate"), "ZZ-1234");
+    act(() => store(t).reset());
+    const preview = await screen.findByRole("region", { name: "Dispatcher preview" });
+    expect(await within(preview).findByLabelText("Plate")).toHaveValue("");
+  });
+
+  it("critic 2: reopening the builder on a draft with errors still shows a preview", async () => {
+    const t = await openBuilder();
+    edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
+    await within(t.preview).findByText("Preview paused: fix the errors to update it.");
+    await t.user.click(screen.getByRole("link", { name: "Connection status" }));
+    await t.user.click(await screen.findByRole("link", { name: "Admin" }));
+    const preview = await screen.findByRole("region", { name: "Dispatcher preview" });
+    // The panel shows (from the live site config), not only the paused note.
+    expect(await within(preview).findByRole("button", { name: "Submit" })).toBeInTheDocument();
+    expect(within(preview).getByLabelText("Plate")).toBeInTheDocument();
+  });
+
   it("the builder summary stays its own live region beside the preview", async () => {
     const t = await openBuilder();
     const summary = screen.getByTestId("draft-summary");

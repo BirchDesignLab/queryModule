@@ -1,9 +1,10 @@
 import { createDraftStore, createTranslator, type Translator } from "@querymodule/client";
 import { type ClientSiteConfig, ClientSiteConfigSchema } from "@querymodule/core/config";
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { I18nProvider, useT, useTranslator } from "../app/i18n-context.js";
 import { QueryPanelView } from "../query/QueryPanelView.js";
 import type { JsonObject } from "./draft.js";
+import { useCachedClientConfig } from "./use-cached-config.js";
 
 /** A fixed hash: the preview never submits, so no server compares it (ADR-0011 item 4). */
 const PREVIEW_HASH = "0".repeat(64);
@@ -50,9 +51,14 @@ export function BuilderPreview({
   const [drafts] = useState(createDraftStore);
   const translator = useOverlayTranslator(labels);
   const candidate = useMemo(() => (blocked ? null : previewConfig(doc)), [blocked, doc]);
-  const lastGood = useRef<ClientSiteConfig | null>(null);
-  if (candidate !== null) lastGood.current = candidate;
-  const config = candidate ?? lastGood.current;
+  // The last good draft config, held in state (no render-phase writes); before there is one, for
+  // example on reopening the builder on a draft with errors, the live site config (critic 1, 2).
+  const [lastGood, setLastGood] = useState<ClientSiteConfig | null>(null);
+  useEffect(() => {
+    if (candidate !== null) setLastGood(candidate);
+  }, [candidate]);
+  const live = useCachedClientConfig();
+  const config = candidate ?? lastGood ?? live ?? null;
   const paused = candidate === null;
   return (
     <section className="qm-admin__preview" aria-labelledby={headingId}>
