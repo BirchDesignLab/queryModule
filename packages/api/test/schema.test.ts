@@ -1,14 +1,38 @@
 import { resolve } from "node:path";
 import { migrate } from "drizzle-orm/libsql/migrator";
-import { describe, expect, it, onTestFinished } from "vitest";
-import { openDatabase } from "../src/db/client";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
+import { type Db, openDatabase } from "../src/db/client";
 import { TEST_DB_KEY, tempDbFile } from "./helpers/db";
 
-async function migrated() {
+async function openMigrated(): Promise<Db> {
   const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
-  onTestFinished(() => db.$client.close());
-  await migrate(db, { migrationsFolder: resolve(import.meta.dirname, "../drizzle") });
+  try {
+    await migrate(db, { migrationsFolder: resolve(import.meta.dirname, "../drizzle") });
+  } catch (e) {
+    db.$client.close();
+    throw e;
+  }
   return db;
+}
+
+/** A fresh migrated database for a test that writes; closed when the test finishes. */
+async function migrated(): Promise<Db> {
+  const db = await openMigrated();
+  onTestFinished(() => db.$client.close());
+  return db;
+}
+
+/** One migrated database shared by a describe whose tests only read the schema (#311). */
+function sharedMigrated(): () => Db {
+  let db: Db | undefined;
+  beforeAll(async () => {
+    db = await openMigrated();
+  });
+  afterAll(() => db?.$client.close());
+  return () => {
+    if (!db) throw new Error("shared database not open");
+    return db;
+  };
 }
 const insert =
   "INSERT INTO audit_event (type, at, actor_user_id, actor_role, identity_source, details) VALUES ('logout', 1, 'u', 'user', 'local', '{}')";
@@ -80,17 +104,14 @@ describe("user_preference columns (spec 5.5)", () => {
 });
 
 describe("query tables (spec 5.5, SEC-013)", () => {
-  const columns = async (table: string) => {
-    const db = await migrated();
-    return (await db.$client.execute(`PRAGMA table_info(${table})`)).rows.map((r) => r.name);
-  };
-  const indexes = async (table: string) => {
-    const db = await migrated();
-    return (await db.$client.execute(`PRAGMA index_list(${table})`)).rows
+  const shared = sharedMigrated();
+  const columns = async (table: string) =>
+    (await shared().$client.execute(`PRAGMA table_info(${table})`)).rows.map((r) => r.name);
+  const indexes = async (table: string) =>
+    (await shared().$client.execute(`PRAGMA index_list(${table})`)).rows
       .filter((r) => !String(r.name).startsWith("sqlite_autoindex_"))
       .map((r) => ({ name: r.name, unique: Number(r.unique), partial: Number(r.partial) }))
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  };
 
   it("query_request has exactly the spec 5.5 columns", async () => {
     expect(await columns("query_request")).toEqual([
