@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { EN_BUNDLE } from "../test/en-bundle.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
@@ -111,5 +112,75 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(draftDoc(t)).not.toBeNull();
     t.services.reset.resetAll();
     expect(draftDoc(t)).toBeNull();
+  });
+
+  it("a failed locale bundle fetch shows a polite message instead of silent no-checks (Q1, I2)", async () => {
+    // the app bootstrap fetches the bundle first (200); the builder's own fetch then fails
+    let calls = 0;
+    server.use(
+      http.get(`${API}/api/v1/locales/en`, () =>
+        ++calls === 1 ? HttpResponse.json(EN_BUNDLE) : new HttpResponse(null, { status: 500 }),
+      ),
+    );
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const area = screen.getByRole("textbox", { name: "Draft JSON" });
+    const region = document.getElementById(area.getAttribute("aria-describedby") ?? "");
+    expect(await screen.findByText(/draft checks are unavailable/i)).toBeInTheDocument();
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveTextContent(/unavailable/i);
+    expect(screen.queryByText(/Draft checks: \d+ errors/)).not.toBeInTheDocument();
+    expect(area).not.toHaveFocus();
+  });
+
+  it("shows a loading message until the bundle arrives, then the counts (I2)", async () => {
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    expect(await screen.findByText(/Draft checks: \d+ errors/)).toBeInTheDocument();
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("non-string locales pasted in the raw tab do not crash the form (I1)", async () => {
+    const t = await openBuilder();
+    const doc = { ...draftDoc(t), locales: [{}, 5, "en"] };
+    await replaceRaw(t, JSON.stringify(doc));
+    await t.user.click(screen.getByRole("tab", { name: "Form" }));
+    await t.user.click(await screen.findByText("Label text"));
+    expect(await screen.findByLabelText("Label key (en)")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Site config", level: 2 })).toBeInTheDocument();
+  });
+
+  it("removing an array item keeps focus in the list; adding focuses the new item (I3)", async () => {
+    const t = await openBuilder();
+    await t.user.click(await screen.findByText("sources"));
+    const count = () => screen.queryAllByRole("button", { name: /^Remove sources\.\d+$/ }).length;
+    const before = count();
+    expect(before).toBeGreaterThan(1);
+    await t.user.click(screen.getByRole("button", { name: "Remove sources.0" }));
+    expect(count()).toBe(before - 1);
+    const active = document.activeElement as HTMLElement;
+    expect(active).not.toBe(document.body);
+    expect(active.closest(".qm-admin__item")).not.toBeNull();
+    // remove down to the last: focus falls to the Add button
+    while (count() > 0) {
+      await t.user.click(screen.getByRole("button", { name: "Remove sources.0" }));
+    }
+    expect(screen.getByRole("button", { name: "Add item sources" })).toHaveFocus();
+    await t.user.click(screen.getByRole("button", { name: "Add item sources" }));
+    expect(document.activeElement).not.toBe(document.body);
+    expect((document.activeElement as HTMLElement).closest(".qm-admin__item")).not.toBeNull();
+    await t.user.click(screen.getByRole("button", { name: "Add item sources" }));
+    const items = document.querySelectorAll(".qm-admin__item[data-item-path='sources.1']");
+    expect(items[0]?.contains(document.activeElement)).toBe(true);
+  });
+
+  it("per-source timeoutMs is server-side and read-only in the generic form (CV1)", async () => {
+    const t = await openBuilder();
+    await t.user.click(await screen.findByText("sources"));
+    const field = await screen.findByLabelText("sources.0.timeoutMs");
+    expect(field).toHaveAttribute("readonly");
+    const before = JSON.stringify(draftDoc(t)?.sources);
+    await t.user.type(field, "9");
+    expect(JSON.stringify(draftDoc(t)?.sources)).toBe(before);
   });
 });

@@ -202,6 +202,7 @@
   "admin.config.raw.parseError": "Invalid JSON: {message}",
   "admin.config.raw.shapeIssues": "The draft does not match the config schema:",
   "admin.config.raw.counts": "Draft checks: {errors} errors, {warnings} warnings",
+  "admin.config.raw.bundleError": "Label text could not be loaded, so draft checks are unavailable",
   "admin.config.serverOnly": "Server settings: available after the config store lands (auth, retention, role claims, source server settings)",
   "admin.config.publish": "Publish",
   "admin.config.history": "History",

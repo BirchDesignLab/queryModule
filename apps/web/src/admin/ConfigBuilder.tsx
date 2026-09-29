@@ -54,48 +54,85 @@ interface NodeEditorProps {
 
 const pathText = (path: readonly PathSegment[]): string => path.join(".");
 
+/** Per-source timeoutMs is a server-side setting: shown in the client view, not editable here. */
+const isServerSideLeaf = (path: readonly PathSegment[]): boolean =>
+  path.length === 3 && path[0] === "sources" && path[2] === "timeoutMs";
+
+type PendingFocus = { kind: "item"; index: number } | { kind: "add" };
+
+/** Array editor; keeps keyboard focus inside the list after an add or a remove (UX-004). */
+function ArrayEditor({
+  items,
+  path,
+  idPrefix,
+  onChange,
+}: Omit<NodeEditorProps, "value"> & { items: readonly unknown[] }) {
+  const t = useT();
+  const text = pathText(path);
+  const root = useRef<HTMLFieldSetElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const [want, setWant] = useState<PendingFocus | null>(null);
+  useEffect(() => {
+    if (want === null) return;
+    setWant(null);
+    if (want.kind === "item") {
+      const item = root.current?.querySelector<HTMLElement>(
+        `:scope > [data-item-path="${pathText([...path, want.index])}"]`,
+      );
+      const control = item?.querySelector<HTMLElement>("input, select, textarea, button");
+      if (control !== undefined && control !== null) {
+        control.focus();
+        return;
+      }
+    }
+    addRef.current?.focus();
+  }, [want, path]);
+  return (
+    <fieldset ref={root}>
+      <legend>{text}</legend>
+      {items.map((item, i) => {
+        const itemPath = [...path, i];
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: the path is the identity of an item
+          <div key={i} className="qm-admin__item" data-item-path={pathText(itemPath)}>
+            <NodeEditor value={item} path={itemPath} idPrefix={idPrefix} onChange={onChange} />
+            <button
+              type="button"
+              className="qm-button"
+              aria-label={`${t("admin.config.remove")} ${pathText(itemPath)}`}
+              onClick={() => {
+                const next = items.filter((_, j) => j !== i);
+                setWant(i < next.length ? { kind: "item", index: i } : { kind: "add" });
+                onChange(path, next);
+              }}
+            >
+              {t("admin.config.remove")}
+            </button>
+          </div>
+        );
+      })}
+      <button
+        ref={addRef}
+        type="button"
+        className="qm-button"
+        aria-label={`${t("admin.config.add")} ${text}`}
+        onClick={() => {
+          setWant({ kind: "item", index: items.length });
+          onChange(path, [...items, structuredClone(items[items.length - 1] ?? "")]);
+        }}
+      >
+        {t("admin.config.add")}
+      </button>
+    </fieldset>
+  );
+}
+
 /** The generic schema-driven form: one control per JSON leaf, labelled with its path. */
 function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps) {
-  const t = useT();
   const text = pathText(path);
   const id = `${idPrefix}-${text}`;
   if (Array.isArray(value)) {
-    const items = value as unknown[];
-    return (
-      <fieldset>
-        <legend>{text}</legend>
-        {items.map((item, i) => {
-          const itemPath = [...path, i];
-          return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: the path is the identity of an item
-            <div key={i} className="qm-admin__item">
-              <NodeEditor value={item} path={itemPath} idPrefix={idPrefix} onChange={onChange} />
-              <button
-                type="button"
-                className="qm-button"
-                aria-label={`${t("admin.config.remove")} ${pathText(itemPath)}`}
-                onClick={() =>
-                  onChange(
-                    path,
-                    items.filter((_, j) => j !== i),
-                  )
-                }
-              >
-                {t("admin.config.remove")}
-              </button>
-            </div>
-          );
-        })}
-        <button
-          type="button"
-          className="qm-button"
-          aria-label={`${t("admin.config.add")} ${text}`}
-          onClick={() => onChange(path, [...items, structuredClone(items[items.length - 1] ?? "")])}
-        >
-          {t("admin.config.add")}
-        </button>
-      </fieldset>
-    );
+    return <ArrayEditor items={value} path={path} idPrefix={idPrefix} onChange={onChange} />;
   }
   if (typeof value === "object" && value !== null) {
     return (
@@ -134,6 +171,7 @@ function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps) {
           id={id}
           type="number"
           value={value}
+          readOnly={isServerSideLeaf(path)}
           onChange={(e) => {
             const n = e.target.valueAsNumber;
             if (Number.isFinite(n)) onChange(path, n);
@@ -254,7 +292,10 @@ function FormTab({ doc }: { doc: JsonObject }) {
     (path: readonly PathSegment[], value: unknown) => store.getState().setPath(path, value),
     [store],
   );
-  const locales = Array.isArray(doc.locales) ? (doc.locales as string[]) : ["en"];
+  const strings = Array.isArray(doc.locales)
+    ? doc.locales.filter((l): l is string => typeof l === "string")
+    : [];
+  const locales = strings.length > 0 ? strings : ["en"];
   return (
     <div>
       {Object.entries(doc).map(([name, value]) => (
@@ -267,10 +308,15 @@ function FormTab({ doc }: { doc: JsonObject }) {
   );
 }
 
+type BundleState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; bundle: Record<string, string> };
+
 /** The shipped English strings, for validating label keys; fetched through the query cache. */
-function useEnglishBundle(): Record<string, string> | null {
+function useEnglishBundle(): BundleState {
   const { api, queryClient } = useServices();
-  const [bundle, setBundle] = useState<Record<string, string> | null>(null);
+  const [state, setState] = useState<BundleState>({ status: "loading" });
   useEffect(() => {
     let live = true;
     queryClient
@@ -280,14 +326,16 @@ function useEnglishBundle(): Record<string, string> | null {
         staleTime: Number.POSITIVE_INFINITY,
       })
       .then((b) => {
-        if (live) setBundle(flattenBundle(b));
+        if (live) setState({ status: "ready", bundle: flattenBundle(b) });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (live) setState({ status: "error" });
+      });
     return () => {
       live = false;
     };
   }, [api, queryClient]);
-  return bundle;
+  return state;
 }
 
 function RawTab({ doc }: { doc: JsonObject }) {
@@ -298,11 +346,14 @@ function RawTab({ doc }: { doc: JsonObject }) {
   const uid = useId();
   const [text, setText] = useState(() => JSON.stringify(doc, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
-  const bundle = useEnglishBundle();
+  const bundleState = useEnglishBundle();
   const errorId = `${uid}-error`;
   const validation = useMemo(
-    () => (parseError === null && bundle !== null ? validateDraft(doc, labels, bundle) : null),
-    [parseError, bundle, doc, labels],
+    () =>
+      parseError === null && bundleState.status === "ready"
+        ? validateDraft(doc, labels, bundleState.bundle)
+        : null,
+    [parseError, bundleState, doc, labels],
   );
   const onEdit = (next: string) => {
     setText(next);
@@ -329,6 +380,12 @@ function RawTab({ doc }: { doc: JsonObject }) {
       />
       <div id={errorId} aria-live="polite">
         {parseError !== null && <p>{t("admin.config.raw.parseError", { message: parseError })}</p>}
+        {parseError === null && bundleState.status === "loading" && (
+          <p>{t("admin.config.labels.loading")}</p>
+        )}
+        {parseError === null && bundleState.status === "error" && (
+          <p>{t("admin.config.raw.bundleError")}</p>
+        )}
         {validation?.ok === false && (
           <div>
             <p>{t("admin.config.raw.shapeIssues")}</p>
