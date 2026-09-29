@@ -39,6 +39,38 @@ describe("ADR-0011 item 3 the config refresh runs while signed in (#361)", () =>
   });
 });
 
+describe("spec 6.4 skip link: the first Tab stop of every signed-in page", () => {
+  it("is the first link in the document, before the header, and links to the main landmark", async () => {
+    await signIn();
+    const skip = screen.getByRole("link", { name: "Skip to query" });
+    const header = screen.getByRole("banner");
+    // Document order: the skip link precedes the header's controls.
+    expect(skip.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(header.contains(skip)).toBe(false);
+    // A real fragment link to the main landmark (the browser moves focus there: see the e2e).
+    expect(skip).toHaveAttribute("href", "#qm-main");
+    const main = screen.getByRole("main");
+    expect(main).toHaveAttribute("id", "qm-main");
+    expect(main).toHaveAttribute("tabindex", "-1");
+  });
+  it("Tab from the panel heading reaches a panel control, not the header's status link", async () => {
+    const t = await signIn();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Query Module" })).toHaveFocus(),
+    );
+    await t.user.tab();
+    const focused = document.activeElement as HTMLElement;
+    expect(screen.getByRole("main").contains(focused)).toBe(true);
+  });
+  it("on /status it reads Skip to main content and targets that page's main landmark", async () => {
+    const t = await signIn();
+    await t.user.click(screen.getByRole("link", { name: "Connection status" }));
+    const skip = await screen.findByRole("link", { name: "Skip to main content" });
+    expect(skip).toHaveAttribute("href", "#qm-main");
+    expect(screen.getByRole("main")).toHaveAttribute("id", "qm-main");
+  });
+});
+
 describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
   it("shows the signed-in user in the header and focuses the panel heading", async () => {
     await signIn();

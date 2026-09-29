@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { usePersonaLayout } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
+import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { QueryPanelView } from "./QueryPanelView.js";
 import { useLiveConfig } from "./use-query-panel.js";
@@ -24,6 +25,7 @@ export function QueryPanel() {
           ? "qm-page qm-query-panel qm-layout--mobile-unit"
           : "qm-page qm-query-panel"
       }
+      {...MAIN_LANDMARK}
       data-shortcut-context="panel"
       aria-busy={live.status === "loading"}
     >

@@ -1,4 +1,4 @@
-import { fetchLocaleBundle } from "@querymodule/client";
+import { fetchLocaleBundle, LocaleUnavailableError } from "@querymodule/client";
 import { createContext, useEffect, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -112,7 +112,8 @@ type BundleState =
 /**
  * The shipped strings of every draft locale, for validating label keys, fetched through the query
  * cache (bootstrap already cached the English one, #388). English must load; another locale with
- * no shipped bundle is checked on its overlay alone, so its missing labels show (#388).
+ * no shipped bundle (404) is checked on its overlay alone, so its missing labels show (#388); any
+ * other failure is a load error (#404).
  */
 function useLocaleBundles(localesKey: string): BundleState {
   const { api, queryClient } = useServices();
@@ -134,7 +135,13 @@ function useLocaleBundles(localesKey: string): BundleState {
       load("en"),
       ...others.map((l) =>
         load(l)
-          .catch(() => ({}))
+          // Only "no such bundle" (404) means the locale ships nothing; any other failure is a
+          // load error and pauses the checks (#404).
+          .catch((error: unknown) =>
+            error instanceof LocaleUnavailableError && error.status === 404
+              ? {}
+              : Promise.reject(error),
+          )
           .then((b) => [l, b] as const),
       ),
     ])

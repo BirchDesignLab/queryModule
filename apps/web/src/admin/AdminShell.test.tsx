@@ -26,6 +26,36 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     expect(adminLink()).toBeNull();
   });
 
+  it("the header links back to the query panel from /admin, and not on the panel itself", async () => {
+    const t = await openAs("admin", "/admin/config");
+    await screen.findByRole("heading", { name: "Site config", level: 2 });
+    const back = within(screen.getByRole("banner")).getByRole("link", { name: "Query panel" });
+    expect(back).toHaveAttribute("href", "/");
+    await t.user.click(back);
+    expect(await screen.findByRole("heading", { name: /^Query Module$/ })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("banner")).queryByRole("link", { name: "Query panel" }),
+    ).toBeNull();
+  });
+
+  it("the Config and Users links are a nav bar: the open section is aria-current", async () => {
+    const t = await openAs("admin", "/admin/config");
+    await screen.findByRole("heading", { name: "Site config", level: 2 });
+    const nav = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(nav).getByRole("link", { name: "Config" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav).getByRole("link", { name: "Users" })).not.toHaveAttribute("aria-current");
+    await t.user.click(within(nav).getByRole("link", { name: "Users" }));
+    await screen.findByRole("heading", { name: "Users", level: 2 });
+    expect(within(nav).getByRole("link", { name: "Users" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav).getByRole("link", { name: "Config" })).not.toHaveAttribute("aria-current");
+  });
+
   it("a user at /admin gets the query panel, as for any unknown path", async () => {
     await openAs("user", "/admin/config");
     expect(await screen.findByRole("heading", { name: /^Query Module$/ })).toBeInTheDocument();

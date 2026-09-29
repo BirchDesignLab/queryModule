@@ -90,6 +90,25 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
     expect(vehicle()).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("Alt+2 from the page body focuses the first field of the selected type's form", async () => {
+    const { user } = await openPanel();
+    (document.activeElement as HTMLElement).blur();
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(person()).toHaveAttribute("aria-pressed", "true");
+    const first = document.querySelector<HTMLElement>(
+      "[data-shortcut-context='panel'] form input, [data-shortcut-context='panel'] form select",
+    );
+    expect(first).not.toBeNull();
+    expect(first).toHaveFocus();
+  });
+
+  it("Alt+1 on the already selected type still moves focus to its first field", async () => {
+    const { user } = await openPanel();
+    vehicle().focus();
+    await user.keyboard("{Alt>}1{/Alt}");
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+  });
+
   it("a quick type slot with no configured type does nothing", async () => {
     const { user } = await openPanel();
     await user.keyboard("{Alt>}9{/Alt}");

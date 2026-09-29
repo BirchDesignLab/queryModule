@@ -107,5 +107,22 @@ describe("per-locale label checks (#388)", () => {
     const store = configDraftStore(t.services).getState();
     act(() => store.setPath(["locales"], ["en", "fr"]));
     await waitFor(() => expect(count()).toBeGreaterThan(base));
+    // #404 m5: the extra errors are named fr labels, not just a bigger count.
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const raw = screen.getByRole("textbox", { name: "Draft JSON" });
+    const list = document.getElementById(raw.getAttribute("aria-describedby") ?? "");
+    expect(list?.textContent).toMatch(/has no text in locale fr\./);
+    expect(list?.textContent).not.toMatch(/has no text in locale en\./);
+  });
+
+  it("#404 m2: a draft locale whose bundle fails with 500 is a load error, not an unshipped locale", async () => {
+    server.use(http.get(`${API}/api/v1/locales/fr`, () => new HttpResponse(null, { status: 500 })));
+    asImplementer();
+    const t = renderRoot({ path: "/admin/config" });
+    const summary = () => screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary()).toHaveTextContent(/Draft checks: \d+ errors/));
+    const { configDraftStore } = await import("./ConfigBuilder.js");
+    act(() => configDraftStore(t.services).getState().setPath(["locales"], ["en", "fr"]));
+    await waitFor(() => expect(summary()).toHaveTextContent(/draft checks are unavailable/i));
   });
 });

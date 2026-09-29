@@ -62,8 +62,11 @@ export interface TerminalModel {
   toggle(options?: { focus?: boolean }): void;
   focusTerminal(): void;
   submitTerminal(): void;
-  /** Picks a query type; in terminal mode the text is re-derived from that type's draft. */
-  selectType(code: string): void;
+  /**
+   * Picks a query type; in terminal mode the text is re-derived from that type's draft. `focus`
+   * moves focus to the type's first field, or the command line (the Alt+1..9 shortcut, spec 6.4).
+   */
+  selectType(code: string, options?: { focus?: boolean }): void;
   inputRef: RefObject<HTMLInputElement | null>;
 }
 
@@ -160,10 +163,11 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       if (mode === "form") enterTerminal();
       requestFocus();
     },
-    selectType(code) {
+    selectType(code, options) {
       if (mode === "terminal") mergeText();
       panel.selectQueryType(code);
       if (mode === "terminal") derive(code);
+      if (options?.focus === true) requestFocus();
     },
     submitTerminal() {
       if (panel.submitGated()) return;
