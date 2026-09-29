@@ -113,6 +113,7 @@
   "form.submit": "Submit",
   "form.submitting": "Submitting",
   "form.noConnection": "No connection to server",
+  "form.connectionRestored": "Connection restored",
   "form.updateRequired": "Client update required",
   "form.dateFormats": "Accepted formats: {formats}",
   "shortcut.sheetTitle": "Keyboard shortcuts",

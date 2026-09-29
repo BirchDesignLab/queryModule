@@ -282,6 +282,14 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await waitFor(() => expect(polite()).toHaveTextContent("No connection to server"));
   });
 
+  it("spec 6.6 leaving noConnection is announced politely", async () => {
+    const { services } = await openPanel();
+    act(() => services.submit.setState({ status: "noConnection" }));
+    await waitFor(() => expect(polite()).toHaveTextContent("No connection to server"));
+    act(() => services.submit.setState({ status: "idle" }));
+    await waitFor(() => expect(polite()).toHaveTextContent("Connection restored"));
+  });
+
   it("FR-064 a 409 refetches the config, announces it and keeps the draft", async () => {
     let configFetches = 0;
     server.use(

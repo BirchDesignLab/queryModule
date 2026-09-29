@@ -120,8 +120,15 @@ export function useQueryPanel(): QueryPanelModel {
 
   // Spec 6.6: connection changes are announced politely; a screen reader user has no other signal
   // that the submit is held until the server answers again.
+  const wasNoConnection = useRef(false);
   useEffect(() => {
-    if (submitStatus === "noConnection") announcer.announce(t("form.noConnection"));
+    if (submitStatus === "noConnection") {
+      wasNoConnection.current = true;
+      announcer.announce(t("form.noConnection"));
+    } else if (wasNoConnection.current) {
+      wasNoConnection.current = false;
+      if (submitStatus === "idle") announcer.announce(t("form.connectionRestored"));
+    }
   }, [submitStatus, announcer, t]);
 
   // Server validation errors describe the values that were sent; any edit or type change drops them.
