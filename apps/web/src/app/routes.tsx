@@ -16,6 +16,28 @@ export function appRoutes(clientSupported: boolean): RouteObject[] {
           children: [
             { path: "/", element: <QueryPanel /> },
             { path: "/status", element: <StatusPage /> },
+            // ADR-0011 admin console (Task 30): its own lazy chunk, role-gated inside.
+            {
+              path: "/admin",
+              lazy: async () => ({
+                Component: (await import("../admin/AdminLayout.js")).AdminLayout,
+              }),
+              children: [
+                { index: true, element: <Navigate to="/admin/config" replace /> },
+                {
+                  path: "config",
+                  lazy: async () => ({
+                    Component: (await import("../admin/AdminLayout.js")).AdminConfigPage,
+                  }),
+                },
+                {
+                  path: "users",
+                  lazy: async () => ({
+                    Component: (await import("../admin/AdminLayout.js")).AdminUsersPage,
+                  }),
+                },
+              ],
+            },
           ],
         },
       ],
