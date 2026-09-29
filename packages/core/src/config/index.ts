@@ -6,6 +6,7 @@ export * from "./diagnostic";
 export * from "./features";
 export * from "./merge";
 export * from "./migrate";
+export * from "./resolve";
 export * from "./schema";
 export * from "./schema-fields";
 export * from "./schema-mode";

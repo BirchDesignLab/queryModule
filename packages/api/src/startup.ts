@@ -2,8 +2,10 @@ import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
+import { CONFIG_SCHEMA_VERSION, CORE_VERSION, SYSTEM_ACTOR } from "@querymodule/core/contracts";
 import { createApp } from "./app";
 import type { Clock } from "./clock";
+import { withTransaction } from "./db/tx";
 import { type AppDeps, buildDeps } from "./deps";
 import { readDeployEnv } from "./env";
 import { loadSecrets } from "./secrets";
@@ -19,9 +21,10 @@ export class StartupRefusedError extends Error {
 /**
  * Fail closed (spec 8.1): nothing is served until the secrets load, the deploy env parses,
  * migrations are applied, both audit triggers exist, both key canaries decrypt and the site
- * config parses. Every failure throws; none returns a partial AppDeps.
+ * config parses. Every failure throws; none returns a partial AppDeps. Records no start: the ops
+ * scripts (seed, grant-role) use this, so configLoaded rows count server starts only (C-m1).
  */
-export async function bootstrap(
+export async function loadDeps(
   processEnv: NodeJS.ProcessEnv,
   o: { clock?: Clock; logSink?: (line: string) => void } = {},
 ): Promise<AppDeps> {
@@ -35,6 +38,38 @@ export async function bootstrap(
     deps.logger.error("startup refused", { reason, site: deps.config.siteConfig.site.id });
     deps.db.$client.close();
     throw new StartupRefusedError(reason);
+  }
+  return deps;
+}
+
+/**
+ * The server's startup sequence: loadDeps, then one configLoaded audit row per start (spec 5.8
+ * step 7, SEC-010); a failed write closes the database and refuses startup.
+ */
+export async function bootstrap(
+  processEnv: NodeJS.ProcessEnv,
+  o: { clock?: Clock; logSink?: (line: string) => void } = {},
+): Promise<AppDeps> {
+  const deps = await loadDeps(processEnv, o);
+  try {
+    const c = deps.config;
+    await withTransaction(deps.db, (tx) =>
+      deps.audit.record(tx, {
+        type: "configLoaded",
+        actor: SYSTEM_ACTOR,
+        identitySource: "system",
+        details: {
+          siteId: c.siteConfig.site.id,
+          configHash: c.configHash,
+          configSchemaVersion: CONFIG_SCHEMA_VERSION,
+          coreVersion: CORE_VERSION,
+          extendsChain: c.extendsChain,
+        },
+      }),
+    );
+  } catch (e) {
+    deps.db.$client.close();
+    throw e;
   }
   return deps;
 }

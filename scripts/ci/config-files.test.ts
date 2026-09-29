@@ -3,7 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOKEN_NAMES } from "@querymodule/tokens";
 import { describe, expect, it } from "vitest";
-import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
+import {
+  type ConfigIo,
+  ConfigUnreadableError,
+  checkConfigFile,
+  configTargets,
+} from "./config-files";
 
 type Json = Record<string, unknown>;
 /** Raw site JSON, typed only as far as these tests mutate it (ruling S12: no `any`). */
@@ -32,10 +37,17 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
     "test/all-on.json",
     "test/flags-off.json",
   ]) {
-    it(`${rel} is clean`, () => {
+    it(`${rel} has no errors and only the known plateType warning`, () => {
       const r = checkConfigFile(cfg(rel), fsIo, { tokenNames: TOKEN_NAMES });
       expect(r.errors).toEqual([]);
-      expect(r.warnings).toEqual([]);
+      expect(r.warnings).toEqual([
+        {
+          level: "warning",
+          path: "/queryTypes/0/rules/1/field",
+          key: "config.conditionallyRequiredWithoutPosition",
+          params: { field: "plateType", command: "VEH" },
+        },
+      ]);
     });
   }
 
@@ -239,6 +251,114 @@ describe("config:validate failures carry JSON paths", () => {
         key: "config.unknownToken",
       }),
     );
+  });
+});
+
+describe("config:validate contrast and unreadable files (Task 9)", () => {
+  it("resolved example-ok passes the contrast check with the real tokens context", () => {
+    const r = checkConfigFile(cfg("sites/example-ok.json"), fsIo);
+    expect(r.errors.some((e) => e.key === "config.severityContrast")).toBe(false);
+    expect(r.errors).toEqual([]);
+  });
+
+  it("a severity style that fails contrast reports config.severityContrast", () => {
+    const site = defaultSite();
+    site.keywordSeverityStyles.info.color = "color.severity.info.bg";
+    site.keywordSeverityStyles.info.background = "color.severity.info.bg";
+    const broken = cfg("sites/broken.json");
+    const r = checkConfigFile(broken, layered({ [broken]: site }));
+    expect(r.errors).toContainEqual(
+      expect.objectContaining({
+        path: "/keywordSeverityStyles/info",
+        key: "config.severityContrast",
+      }),
+    );
+  });
+
+  it("an unreadable site file is config.unreadableFile, not missing", () => {
+    const broken = cfg("sites/broken.json");
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) throw new ConfigUnreadableError();
+        return fsIo.readJson(p);
+      },
+    };
+    expect(checkConfigFile(broken, io).errors).toEqual([
+      { level: "error", path: "", key: "config.unreadableFile", params: {} },
+    ]);
+  });
+
+  it("an unreadable locale bundle is config.unreadableFile at its pointer", () => {
+    const site = defaultSite();
+    const broken = cfg("sites/broken.json");
+    const localeFile = cfg(`locales/${(site.locales as string[])[0]}.json`);
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return site;
+        if (p === localeFile) throw new ConfigUnreadableError();
+        return fsIo.readJson(p);
+      },
+    };
+    expect(checkConfigFile(broken, io).errors).toEqual([
+      { level: "error", path: "/locales/0", key: "config.unreadableFile", params: {} },
+    ]);
+  });
+});
+
+describe("config:validate runs the loader's pre- and post-checks (wave review G-I1, G-I2)", () => {
+  const broken = cfg("sites/broken.json");
+
+  it.each(["red", "#12"])(
+    "a non-hex theme override %s is config.invalidTokenValue, no throw",
+    (v) => {
+      const site: RawSite = {
+        ...defaultSite(),
+        theme: { tokens: { all: { "color.severity.info.bg": v } } },
+      };
+      const r = checkConfigFile(broken, layered({ [broken]: site }));
+      expect(r.errors).toEqual([
+        { level: "error", path: "/theme/tokens", key: "config.invalidTokenValue", params: {} },
+      ]);
+      expect(JSON.stringify([r.errors, r.warnings])).not.toContain(v);
+    },
+  );
+
+  it("a locale bundle that is not a JSON object is config.invalidJson at its pointer, no throw", () => {
+    const site = defaultSite();
+    const localeFile = cfg(`locales/${(site.locales as string[])[0]}.json`);
+    const r = checkConfigFile(broken, layered({ [broken]: site, [localeFile]: "hello" }));
+    expect(r.errors).toEqual([
+      { level: "error", path: "/locales/0", key: "config.invalidJson", params: { locale: "en" } },
+    ]);
+  });
+
+  it("a severity style naming a known non-colour token is config.notColourToken (UX-011)", () => {
+    const site = defaultSite();
+    site.keywordSeverityStyles.info.color = "space.1";
+    const r = checkConfigFile(broken, layered({ [broken]: site }));
+    expect(r.errors).toEqual([
+      {
+        level: "error",
+        path: "/keywordSeverityStyles/info",
+        key: "config.notColourToken",
+        params: {},
+      },
+    ]);
+  });
+
+  it("any other throw is config.schema at the root, with no message or value", () => {
+    const hostile = new Proxy(defaultSite(), {
+      get(t, p) {
+        if (p === "site") throw new Error("secret-config-value");
+        return Reflect.get(t, p);
+      },
+    });
+    const r = checkConfigFile(broken, layered({ [broken]: hostile }));
+    expect(r).toEqual({
+      file: broken,
+      errors: [{ level: "error", path: "", key: "config.schema", params: {} }],
+      warnings: [],
+    });
   });
 });
 

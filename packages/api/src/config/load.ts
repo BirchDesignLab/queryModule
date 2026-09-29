@@ -3,10 +3,23 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
   type ClientSiteConfig,
+  type ContrastContext,
+  checkMockCoverage,
+  type Diagnostic,
+  extendsOf,
+  type RawFile,
+  resolveSiteShape,
   type SiteConfig,
-  SiteConfigSchema,
   toClientSiteConfig,
+  validateResolved,
 } from "@querymodule/core/config";
+import {
+  contrastFailures,
+  contrastRatio,
+  TOKEN_NAMES,
+  type TokenName,
+  tokenValue,
+} from "@querymodule/tokens";
 
 export interface LoadedConfig {
   siteConfig: SiteConfig;
@@ -15,7 +28,91 @@ export interface LoadedConfig {
   configDir: string;
   fieldKeys: string[];
   locales: Record<string, Record<string, unknown>>;
+  /** Base site ids merged under this site, nearest first (spec 5.8); empty without `extends`. */
+  extendsChain: string[];
+  /** Non-fatal diagnostics (keys, pointers, params only) for the caller to log. */
+  warnings: Diagnostic[];
 }
+
+/** Adapter kinds this build supports; plugins from ADAPTER_DIR arrive with the registry (M1 P3). */
+export const BUILTIN_ADAPTER_KINDS: readonly string[] = ["mock"];
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+/** Token lookups for the core contrast checks (spec 4.1, UX-011). */
+export const tokensContrast: ContrastContext = {
+  value: (token, mode, overrides) => {
+    const v = Object.hasOwn(overrides, token)
+      ? overrides[token]
+      : (TOKEN_NAMES as readonly string[]).includes(token)
+        ? tokenValue(token as TokenName, mode)
+        : undefined;
+    // Non-colour values (scale tokens, bad overrides) are skipped, never thrown on.
+    return typeof v === "string" && HEX.test(v) ? v : undefined;
+  },
+  ratio: contrastRatio,
+  failures: (mode, overrides) =>
+    contrastFailures(mode, overrides).map((f) => ({
+      fg: f.pair.fg,
+      bg: f.pair.bg,
+      min: f.pair.min,
+      ratio: f.ratio,
+    })),
+};
+/**
+ * Checks validateResolved relies on, run by the loader and config:validate alike (spec 4.1, 5.9):
+ * each locale bundle read is a JSON object, and every theme override is #rrggbb (the contrast
+ * check throws on anything else). Keys and pointers only; no config value rides in params.
+ */
+export function preResolvedChecks(
+  config: SiteConfig,
+  rawLocales: Record<string, RawFile>,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  config.locales.forEach((locale, i) => {
+    const v = rawLocales[locale];
+    if (
+      v?.ok &&
+      v.value !== undefined &&
+      (v.value === null || typeof v.value !== "object" || Array.isArray(v.value))
+    )
+      out.push({
+        level: "error",
+        path: `/locales/${i}`,
+        key: "config.invalidJson",
+        params: { locale },
+      });
+  });
+  const groups = Object.values(config.theme?.tokens ?? {});
+  if (groups.some((g) => Object.values(g ?? {}).some((v) => !HEX.test(v))))
+    out.push({
+      level: "error",
+      path: "/theme/tokens",
+      key: "config.invalidTokenValue",
+      params: {},
+    });
+  return out;
+}
+
+/**
+ * A known token that is not a colour (a scale token) cannot be contrast-checked (UX-011). Run
+ * after validateResolved reports no errors (unknown tokens are its config.unknownToken).
+ */
+export function colourTokenChecks(config: SiteConfig): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const [severity, style] of Object.entries(config.keywordSeverityStyles))
+    if (
+      [style.color, style.background].some((t) => tokensContrast.value(t, "day", {}) === undefined)
+    )
+      out.push({
+        level: "error",
+        path: `/keywordSeverityStyles/${severity}`,
+        key: "config.notColourToken",
+        params: {},
+      });
+  return out;
+}
+
 export class ConfigLoadError extends Error {
   constructor(
     readonly file: string,
@@ -42,47 +139,98 @@ export function canonicalJson(v: unknown): string {
   return JSON.stringify(v);
 }
 
-async function readJson(file: string): Promise<unknown> {
+/** Reads a JSON file into a RawFile: undefined value = missing, ok false = invalid JSON. */
+/**
+ * Only a file that does not exist reads as missing; any other read error (EACCES, EISDIR, EMFILE)
+ * fails closed as config.unreadableFile at the pointer that names the file, so the diagnostic is
+ * never misleading. `siteFile` and `path` locate the error; neither carries file content.
+ */
+async function readRaw(file: string, siteFile: string, path: string): Promise<RawFile> {
+  let text: string;
   try {
-    return JSON.parse(await readFile(file, "utf8"));
+    text = await readFile(file, "utf8");
   } catch (e) {
-    throw new ConfigLoadError(
-      file,
-      "",
-      e instanceof SyntaxError ? "invalid JSON" : "file not readable",
-    );
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return { ok: true, value: undefined };
+    throw new ConfigLoadError(siteFile, path, "config.unreadableFile");
+  }
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false };
   }
 }
 
-export async function loadSiteConfig(siteConfigFile: string): Promise<LoadedConfig> {
+function firstError(file: string, errors: Diagnostic[]): ConfigLoadError {
+  const d = errors[0];
+  // Keys and pointers only: params can carry config-derived text (spec 5.9).
+  return new ConfigLoadError(file, d?.path ?? "", d?.key ?? "config.schema");
+}
+
+export async function loadSiteConfig(
+  siteConfigFile: string,
+  o: { allowMockSources: boolean; now: number },
+): Promise<LoadedConfig> {
   const file = resolve(siteConfigFile);
-  const raw = await readJson(file);
-  if (raw !== null && typeof raw === "object" && "extends" in raw) {
-    throw new ConfigLoadError(
-      file,
-      "/extends",
-      "extends is loaded from M1 P2 (config load + validate); not supported by this build",
-    );
-  }
-  const parsed = SiteConfigSchema.safeParse(raw);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new ConfigLoadError(
-      file,
-      `/${(issue?.path ?? []).join("/")}`,
-      issue?.message ?? "invalid",
-    );
-  }
-  const siteConfig = parsed.data;
   const configDir = resolve(dirname(file), "..");
-  const locales: Record<string, Record<string, unknown>> = {};
-  for (const locale of siteConfig.locales) {
-    const bundle = await readJson(join(configDir, "locales", `${locale}.json`));
-    if (bundle === null || typeof bundle !== "object" || Array.isArray(bundle)) {
-      throw new ConfigLoadError(file, "/locales", `locale bundle ${locale}.json is not an object`);
-    }
-    locales[locale] = bundle as Record<string, unknown>;
+  const site = await readRaw(file, file, "");
+  const ext = extendsOf(site.ok ? site.value : undefined);
+  if (!ext.ok) throw firstError(file, ext.errors);
+  const base =
+    ext.id === null
+      ? undefined
+      : {
+          id: ext.id,
+          file: await readRaw(join(configDir, "sites", `${ext.id}.json`), file, "/extends"),
+        };
+  const shape = resolveSiteShape(site, base);
+  if (!shape.ok) throw firstError(file, shape.errors);
+  const siteConfig = shape.config;
+
+  const rawLocales: Record<string, RawFile> = {};
+  for (const [i, locale] of siteConfig.locales.entries())
+    rawLocales[locale] = await readRaw(
+      join(configDir, "locales", `${locale}.json`),
+      file,
+      `/locales/${i}`,
+    );
+
+  const pre = preResolvedChecks(siteConfig, rawLocales);
+  if (pre.length > 0) throw firstError(file, pre);
+
+  let result: ReturnType<typeof validateResolved>;
+  try {
+    result = validateResolved(siteConfig, rawLocales, {
+      adapterKinds: BUILTIN_ADAPTER_KINDS,
+      contrast: tokensContrast,
+      tokenNames: TOKEN_NAMES,
+      now: o.now,
+    });
+  } catch {
+    // Never surface a raw error: its message can echo a config value (spec 5.9).
+    throw new ConfigLoadError(file, "", "config.schema");
   }
+  const { errors, warnings } = result;
+  if (errors.length > 0) throw firstError(file, errors);
+  const colour = colourTokenChecks(siteConfig);
+  if (colour.length > 0) throw firstError(file, colour);
+
+  const mockIndex = siteConfig.sources.findIndex((s) => s.kind === "mock");
+  if (mockIndex >= 0) {
+    if (!o.allowMockSources)
+      throw new ConfigLoadError(
+        file,
+        `/sources/${mockIndex}/kind`,
+        "mock sources need ALLOW_MOCK_SOURCES=true",
+      );
+    const mockPath = join(configDir, "mock", `${siteConfig.site.id}.json`);
+    const mockRaw = await readRaw(mockPath, file, "/mock");
+    const mockErrors = checkMockCoverage(siteConfig, mockRaw, mockPath);
+    if (mockErrors.length > 0) throw firstError(file, mockErrors);
+  }
+
+  const locales: Record<string, Record<string, unknown>> = {};
+  for (const [code, raw] of Object.entries(rawLocales))
+    if (raw.ok && raw.value !== undefined) locales[code] = raw.value as Record<string, unknown>;
   const configHash = createHash("sha256").update(canonicalJson(siteConfig)).digest("hex");
   const fieldKeys = [...new Set(siteConfig.queryTypes.flatMap((q) => q.fields.map((f) => f.key)))];
   return {
@@ -92,5 +240,7 @@ export async function loadSiteConfig(siteConfigFile: string): Promise<LoadedConf
     configDir,
     fieldKeys,
     locales,
+    extendsChain: shape.extendsChain,
+    warnings,
   };
 }

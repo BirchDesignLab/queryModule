@@ -1,33 +1,74 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOKEN_NAMES } from "@querymodule/tokens";
 import { isMainModule, toPosixRel } from "./cli-io";
-import { type ConfigIo, checkConfigFile, configTargets } from "./config-files";
+import {
+  type ConfigIo,
+  ConfigUnreadableError,
+  checkConfigFile,
+  configTargets,
+} from "./config-files";
 
 // Re-exported for existing call sites/tests (item 2): the shared
 // implementation now lives in cli-io.ts (review Q1/C6).
 export { toPosixRel } from "./cli-io";
 
-export const VALIDATE_USAGE = "usage: config:validate [--resolved] [<file> ...]";
+export const VALIDATE_USAGE = "usage: config:validate [--resolved] [--] [<file> ...]";
+export const DIFF_MESSAGE = "config:validate: --diff arrives with M2 P2 (spec 7, 9.5)";
 
 export type ParsedValidateArgs =
   | { ok: true; resolved: boolean; files: string[] }
   | { ok: false; message: string };
 
-/** Strict CLI parse: `--resolved` and bare file args, nothing else (item 1). */
+/**
+ * Strict CLI parse: `--resolved` and file args. `--` ends option parsing, so a file whose
+ * name starts with `--` can be named. `--diff` is an explicit reject until M2 P2 (#220 M3).
+ */
 export function parseValidateArgs(args: string[]): ParsedValidateArgs {
   let resolved = false;
+  let optionsDone = false;
   const files: string[] = [];
   for (const a of args) {
-    if (a === "--resolved") {
+    if (!optionsDone && a === "--") {
+      optionsDone = true;
+      continue;
+    }
+    if (!optionsDone && a === "--resolved") {
       resolved = true;
       continue;
     }
-    if (a.startsWith("--")) return { ok: false, message: `unknown option ${a}\n${VALIDATE_USAGE}` };
+    if (!optionsDone && a === "--diff") return { ok: false, message: DIFF_MESSAGE };
+    if (!optionsDone && a.startsWith("--"))
+      return {
+        ok: false,
+        message: `unknown option ${a}
+${VALIDATE_USAGE}`,
+      };
     files.push(a);
   }
   return { ok: true, resolved, files };
+}
+
+/**
+ * The CLI's file io. Only ENOENT reads as missing; any other read error (EACCES, ENOTDIR, EISDIR,
+ * an invalid path) is ConfigUnreadableError, as in the API loader (Task 7 ruling, wave review G-M1).
+ * Invalid JSON throws a SyntaxError, which the checker reports as config.invalidJson.
+ */
+export function configIo(
+  readText: (path: string) => string = (p) => readFileSync(p, "utf8"),
+): ConfigIo {
+  return {
+    readJson: (p) => {
+      let text: string;
+      try {
+        text = readText(p);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+        throw new ConfigUnreadableError();
+      }
+      return JSON.parse(text);
+    },
+  };
 }
 
 function main(): void {
@@ -57,13 +98,11 @@ function main(): void {
   }
   const targets = found.targets;
 
-  const io: ConfigIo = {
-    readJson: (p) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : undefined),
-  };
+  const io = configIo();
 
   let failed = false;
   for (const file of targets) {
-    const report = checkConfigFile(file, io, { tokenNames: TOKEN_NAMES });
+    const report = checkConfigFile(file, io, { now: Date.now() });
     const rel = toPosixRel(relative(root, file));
     for (const d of report.errors)
       console.error(`ERROR ${rel} ${d.path || "/"} ${d.key} ${JSON.stringify(d.params)}`);

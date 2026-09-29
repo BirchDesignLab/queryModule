@@ -39,6 +39,7 @@ export function testEnv(over: NodeJS.ProcessEnv = {}): DeployEnv {
       PUBLIC_ORIGIN: "http://localhost:3000",
       DATA_DIR: dirname(tempDbFile()),
       WEB_DIST: "",
+      ALLOW_MOCK_SOURCES: "true",
       ...over,
     },
     bundledPaths(resolve(import.meta.dirname, "../../src")),

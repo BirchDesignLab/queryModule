@@ -2,10 +2,50 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "nod
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { CORE_VERSION } from "@querymodule/core/contracts";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import type * as auditService from "../src/audit/service";
+import type * as dbClient from "../src/db/client";
 import { readPragmas } from "../src/db/client";
-import { type RunningServer, startServer } from "../src/startup";
+import { bootstrap, loadDeps, type RunningServer, startServer } from "../src/startup";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
+
+// Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert, so the
+// fail-closed case proves the transaction rolls the configLoaded row back (A2 review M1).
+const failAudit = vi.hoisted(() => ({ on: false }));
+vi.mock("../src/audit/service", async (importOriginal) => {
+  const real = await importOriginal<typeof auditService>();
+  return {
+    createAuditService: (...args: Parameters<typeof real.createAuditService>) => {
+      const svc = real.createAuditService(...args);
+      return {
+        record: async (...a: Parameters<typeof svc.record>) => {
+          const written = await svc.record(...a);
+          if (failAudit.on) throw new Error("audit store unavailable");
+          return written;
+        },
+      };
+    },
+  };
+});
+afterEach(() => {
+  failAudit.on = false;
+});
+
+// Records every database a start opens, so a failed start can be shown to close its handle
+// (wave review C-m2): openDatabase takes no exclusive lock, so a clean restart cannot prove it.
+const opened = vi.hoisted(() => [] as { $client: { closed: boolean } }[]);
+vi.mock("../src/db/client", async (importOriginal) => {
+  const real = await importOriginal<typeof dbClient>();
+  return {
+    ...real,
+    openDatabase: async (...a: Parameters<typeof real.openDatabase>) => {
+      const db = await real.openDatabase(...a);
+      opened.push(db);
+      return db;
+    },
+  };
+});
 
 const PREFIXES = ["qm-data-", "qm-sec-", "qm-cfg-"];
 // A prior Windows run may have left dirs behind (see removeTempDirs); sweep ones over 10 minutes old.
@@ -50,6 +90,7 @@ async function envWith(files: Record<string, string> = {}, dataDir = tempDir("qm
     PUBLIC_ORIGIN: "http://localhost:3000",
     DATA_DIR: dataDir,
     SECRETS_DIR: secrets,
+    ALLOW_MOCK_SOURCES: "true",
   };
 }
 
@@ -58,6 +99,7 @@ function siteConfigWithMfa(mfaRequired: unknown): string {
   const configDir = resolve(import.meta.dirname, "../../config");
   const root = tempDir("qm-cfg-");
   cpSync(join(configDir, "locales"), join(root, "locales"), { recursive: true });
+  cpSync(join(configDir, "mock"), join(root, "mock"), { recursive: true });
   mkdirSync(join(root, "sites"));
   const site = JSON.parse(readFileSync(join(configDir, "sites/default.json"), "utf8"));
   site.auth.mfaRequired = mfaRequired;
@@ -153,5 +195,73 @@ describe("SEC-005 startup refuses a site config that requires MFA before MFA exi
     const r = await fetch(`http://127.0.0.1:${s.port}/api/v1/health`);
     expect(r.status).toBe(200);
     await stop(s);
+  });
+});
+
+const exampleOk = resolve(import.meta.dirname, "../../config/sites/example-ok.json");
+
+describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () => {
+  async function configLoadedRows(deps: Awaited<ReturnType<typeof bootstrap>>) {
+    const r = await deps.db.$client.execute(
+      "SELECT actor_user_id, actor_email, actor_role, identity_source, correlation_id, part_id, credential_user_id, details FROM audit_event WHERE type = 'configLoaded' ORDER BY id",
+    );
+    return r.rows.map((row) => ({ ...row, details: JSON.parse(String(row.details)) }));
+  }
+
+  it("configLoaded: writes one system row per start with the resolved config identity", async () => {
+    const env = { ...(await envWith()), SITE_CONFIG: exampleOk };
+    const first = await bootstrap(env, { logSink: () => {} });
+    const rows = await configLoadedRows(first);
+    first.db.$client.close();
+    expect(rows.length).toBe(1);
+    expect(rows[0]).toEqual({
+      actor_user_id: "system",
+      actor_email: null,
+      actor_role: "system",
+      identity_source: "system",
+      correlation_id: null,
+      part_id: null,
+      credential_user_id: null,
+      details: {
+        siteId: "example-ok",
+        configHash: first.config.configHash,
+        configSchemaVersion: 1,
+        coreVersion: CORE_VERSION,
+        extendsChain: ["default"],
+      },
+    });
+    const second = await bootstrap(env, { logSink: () => {} });
+    const again = await configLoadedRows(second);
+    second.db.$client.close();
+    expect(again.length).toBe(2);
+    expect(again[1]?.details).toEqual(rows[0]?.details);
+  });
+
+  it("configLoaded: loadDeps (the ops scripts' entry) loads the config but records no start (wave review C-m1)", async () => {
+    const env = { ...(await envWith()), SITE_CONFIG: exampleOk };
+    const deps = await loadDeps(env, { logSink: () => {} });
+    const rows = await configLoadedRows(deps);
+    deps.db.$client.close();
+    expect(deps.config.siteConfig.site.id).toBe("example-ok");
+    expect(rows).toEqual([]);
+  });
+
+  it("configLoaded: an audit failure refuses startup, commits no row and nothing listens", async () => {
+    const data = tempDir("qm-data-");
+    const env = await envWith({}, data);
+    failAudit.on = true;
+    opened.length = 0;
+    await expect(startServer(env, { logSink: () => {} })).rejects.toThrow(
+      /audit store unavailable/,
+    );
+    await expect(fetch(`http://127.0.0.1:${env.PORT}/api/v1/health`)).rejects.toThrow();
+    // The failed start opened exactly one database and closed it.
+    expect(opened.map((db) => db.$client.closed)).toEqual([true]);
+    // It rolled its row back: a clean restart on the same data dir finds exactly its own row.
+    failAudit.on = false;
+    const next = await bootstrap(env, { logSink: () => {} });
+    const rows = await configLoadedRows(next);
+    next.db.$client.close();
+    expect(rows.length).toBe(1);
   });
 });
