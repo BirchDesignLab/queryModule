@@ -34,6 +34,9 @@ export {
   EDITING_COMBOS,
   strokeOf,
 } from "./shortcuts/engine.js";
+export { ShortcutProvider, useShortcutAction } from "./shortcuts/ShortcutProvider.js";
+export type { ShortcutSheetProps } from "./shortcuts/ShortcutSheet.js";
+export { ShortcutSheet } from "./shortcuts/ShortcutSheet.js";
 export type { ThemeModeSelectProps } from "./theme/ThemeModeSelect.js";
 export { ThemeModeSelect } from "./theme/ThemeModeSelect.js";
 export type { UseThemeModeOptions } from "./theme/useThemeMode.js";
