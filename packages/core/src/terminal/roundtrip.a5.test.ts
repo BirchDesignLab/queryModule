@@ -126,7 +126,7 @@ describe.each(cases)(
       fc.assert(
         fc.property(arb, (c) => {
           const { selected, formatted, tokens, merged } = trip(config, c);
-          expect(selected?.code).toBe(command.code);
+          expect(selected.code).toBe(command.code);
           expect(formatted.errors).toEqual([]);
           expect(tokens.errors).toEqual([]);
           const before = canonDraft(config, qt, c.draft);
