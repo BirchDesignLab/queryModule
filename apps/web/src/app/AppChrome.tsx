@@ -142,19 +142,19 @@ function SkipLink() {
   );
 }
 
-/** The router location key AppShell first rendered at: the entry the document was loaded on. */
-const FirstLocationKey = createContext<string | null>(null);
+/** True until the router location changes after AppShell mounted: the document is still on its entry. */
+const OnLoadEntry = createContext<{ current: boolean } | null>(null);
 
 /**
- * True when a page mounts on the entry the document was loaded on, by a fresh load or a reload
- * (POP): focus then stays at the top of the page, so the first Tab is the skip link. A page reached
- * by any navigation (sign-in, a link, browser Back) is false: focus follows it (spec 6.4).
+ * True when a page mounts on the entry the document was loaded on (a fresh load or a reload, POP):
+ * focus then stays at the top of the page, so the first Tab is the skip link. A page reached by
+ * any navigation (sign-in, a link, browser Back, even Back to the loaded entry) is false: focus
+ * follows it (spec 6.4).
  */
 export function useIsFreshLoad(): boolean {
-  const first = useContext(FirstLocationKey);
-  const key = useLocation().key;
+  const onLoadEntry = useContext(OnLoadEntry);
   const navigationType = useNavigationType();
-  return key === first && navigationType === "POP";
+  return onLoadEntry?.current === true && navigationType === "POP";
 }
 
 /** Layout of every signed-in screen that runs the app: the header, then the page. */
@@ -174,16 +174,22 @@ export function AppShell() {
     void queryClient.prefetchQuery({ ...clientConfigQuery(api), retry: false });
   }, [api, queryClient]);
   // Bindings are the site's overrides over the spec 6.4 defaults; the defaults apply until the config loads.
-  const firstKey = useRef(useLocation().key);
+  const locationKey = useLocation().key;
+  const firstKey = useRef(locationKey);
+  const onLoadEntry = useRef(true);
+  // The first navigation ends "fresh load" for good: Back to the loaded entry is a navigation too.
+  useEffect(() => {
+    if (locationKey !== firstKey.current) onLoadEntry.current = false;
+  }, [locationKey]);
   const shortcuts = useCachedConfig()?.shortcuts;
   const bindings = useMemo(() => resolveShortcuts(shortcuts), [shortcuts]);
   return (
     <ShortcutProvider bindings={bindings}>
-      <FirstLocationKey.Provider value={firstKey.current}>
+      <OnLoadEntry.Provider value={onLoadEntry}>
         <SkipLink />
         <AppHeader />
         <Outlet />
-      </FirstLocationKey.Provider>
+      </OnLoadEntry.Provider>
     </ShortcutProvider>
   );
 }

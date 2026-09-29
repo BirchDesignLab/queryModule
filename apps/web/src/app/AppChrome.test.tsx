@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
@@ -36,6 +36,36 @@ describe("ADR-0011 item 3 the config refresh runs while signed in (#361)", () =>
     await t.user.click(screen.getByRole("button", { name: "Sign out" }));
     await screen.findByRole("heading", { name: "Sign in" });
     await waitFor(() => expect(stop).toHaveBeenCalled());
+  });
+});
+
+describe("sign-in: a slow preferences load does not pull the user back", () => {
+  it("a page opened while the preferences load is still pending stays open after it lands", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let served = false;
+    server.use(
+      http.get(`${API}/api/v1/me/preferences`, async () => {
+        await gate;
+        served = true;
+        return HttpResponse.json(PREFERENCES);
+      }),
+    );
+    const t = renderRoot();
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await t.user.click(await screen.findByRole("link", { name: "Connection status" }));
+    await screen.findByRole("heading", { name: "Connection status" });
+    release();
+    await waitFor(() => expect(served).toBe(true));
+    // Let the sign-in's continuation run (it used to navigate to "/" here).
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(screen.getByRole("heading", { name: "Connection status" })).toBeInTheDocument();
   });
 });
 
