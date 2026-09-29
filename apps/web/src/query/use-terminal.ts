@@ -118,6 +118,16 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     return merged;
   };
 
+  /** Lists errors under the input, announces the count and keeps focus there (FR-055). */
+  const showProblems = (problems: readonly ValidationError[]): void => {
+    setErrors(
+      problems.map((e) => terminalErrorText(e, { t, delimiter: config.terminal.delimiter })),
+    );
+    announcer.announce(t("terminal.problems", { count: problems.length }));
+    // Enter keeps focus and text; a click on Submit brings focus back to the input.
+    inputRef.current?.focus();
+  };
+
   const requestFocus = (): void => {
     wantFocus.current = true;
     setFocusTick((n) => n + 1);
@@ -169,14 +179,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
         !formState.valid
       ) {
         // An invalid form state with no terminal error still shows its own errors.
-        const problems: readonly ValidationError[] =
-          checked.errors.length > 0 ? checked.errors : (formState?.errors ?? []);
-        setErrors(
-          problems.map((e) => terminalErrorText(e, { t, delimiter: config.terminal.delimiter })),
-        );
-        announcer.announce(t("terminal.problems", { count: problems.length }));
-        // Enter keeps focus and text (FR-055); a click on Submit brings focus back to the input.
-        inputRef.current?.focus();
+        showProblems(checked.errors.length > 0 ? checked.errors : (formState?.errors ?? []));
         return;
       }
       setErrors([]);
@@ -184,7 +187,13 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       state.replaceValues(queryType, values);
       panel.selectQueryType(queryType);
       const sourceIds = resolveCheckedSources(formState, state.drafts[queryType]?.sources ?? null);
-      void panel.sendChecked({ queryType, values, sourceIds, state: formState });
+      void panel.sendChecked({
+        queryType,
+        values,
+        sourceIds,
+        state: formState,
+        onInvalid: (serverErrors) => showProblems(serverErrors),
+      });
     },
   };
 }

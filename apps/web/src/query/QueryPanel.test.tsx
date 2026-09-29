@@ -683,6 +683,27 @@ describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
     expect(polite()).toHaveTextContent("1 problem with the command.");
   });
 
+  it("FR-055 a server 400 on a terminal submit lists its errors under the command and keeps focus there", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          { error: { code: "validationFailed", errors: [{ key: "plan.noPlateOnlySource" }] } },
+          { status: 400 },
+        ),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.click(toggle());
+    await user.type(terminal(), ".ABC123{Enter}");
+    const list = await screen.findByRole("list", { name: "Command problems" });
+    expect(
+      within(list).getByText("None of the selected sources accepts a plate-only query."),
+    ).toBeInTheDocument();
+    expect(terminal()).toHaveAttribute("aria-invalid", "true");
+    expect(terminal()).toHaveFocus();
+    await waitFor(() => expect(polite()).toHaveTextContent("1 problem with the command."));
+  });
+
   it("a value only in the draft counts: plateType set in the form, then VEH.ABC123.OK submits (#297 item 3)", async () => {
     const { user } = await openPanel();
     await user.selectOptions(screen.getByLabelText("State"), "OK");

@@ -59,6 +59,11 @@ export interface CheckedRequest {
   values: Readonly<Record<string, DraftValue>>;
   sourceIds: readonly string[];
   state: FormState;
+  /**
+   * Shows a server 400's errors where the request came from. The terminal lists them under its
+   * input (spec 6.2, FR-055); without it they go to the form fields.
+   */
+  onInvalid?(errors: readonly ValidationError[]): void;
 }
 
 export type QueryPanelModel =
@@ -234,7 +239,8 @@ export function useQueryPanel(): QueryPanelModel {
     return labelKey === undefined ? code : t(labelKey);
   };
 
-  const handleOutcome = (outcome: SubmitOutcome, state: FormState): void => {
+  const handleOutcome = (outcome: SubmitOutcome, request: CheckedRequest): void => {
+    const { state } = request;
     switch (outcome.kind) {
       case "acknowledged":
         announcer.announce(
@@ -247,6 +253,10 @@ export function useQueryPanel(): QueryPanelModel {
         return;
       case "invalid":
         setServerErrors(outcome.errors as ValidationError[]);
+        if (request.onInvalid !== undefined) {
+          request.onInvalid(outcome.errors as ValidationError[]);
+          return;
+        }
         announceBlocked({
           ...state,
           errors: [...state.errors, ...(outcome.errors as ValidationError[])],
@@ -274,7 +284,7 @@ export function useQueryPanel(): QueryPanelModel {
       mode: request.state.mode,
       configHash: config.configHash,
     });
-    if (mounted.current) handleOutcome(outcome, request.state);
+    if (mounted.current) handleOutcome(outcome, request);
   };
 
   const send = (): Promise<void> =>
