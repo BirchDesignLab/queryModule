@@ -14,7 +14,7 @@ import {
   selectCommand,
   tokenize,
 } from "@querymodule/core/terminal";
-import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
