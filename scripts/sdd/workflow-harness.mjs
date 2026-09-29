@@ -2000,6 +2000,214 @@ await test("sdd: a fixer that commits nothing without a noCode answer still rais
   assert.notEqual(r.res.status, "complete");
 });
 
+// ---------- #300: same-source test counts, reasoned no-change fixer rounds, implementer head from git ----------
+
+// (c) B5 Task 17 (run wf_0fbb3b1d-6ea, 09-28-26): the implementer committed 2946979 but reported
+// commits [] and head "pending"; the script stopped on "no commits" although git had moved.
+await test("sdd #300: an implementer that lists no commits while git HEAD moved continues to review", async () => {
+  const r = await run(sdd, BASE, sddResponder({ implementer: work("pending", { commits: [] }) }));
+  assert.equal(r.res.status, "complete", JSON.stringify(r.res.questions));
+  assert.ok(
+    r.labels.includes("spec-review") || r.labels.includes("combined-review"),
+    r.labels.join(","),
+  );
+  assert.ok(
+    r.res.commits.some((c) => c.sha === hex40("pending") && /from git/.test(c.subject)),
+    JSON.stringify(r.res.commits),
+  );
+  assert.ok(
+    r.logs.some((l) => /listed no commits.*git HEAD moved/.test(l)),
+    r.logs.join(" | "),
+  );
+});
+
+await test("sdd #300: an implementer that lists commits while git HEAD is still the base stops", async () => {
+  const b40 = "b".repeat(40);
+  const r = await run(
+    sdd,
+    { ...BASE, base: b40 },
+    sddResponder({
+      implementer: work("h-impl"),
+      "verify-head-impl": { revParse: `${b40}\n`, catFile: `EXISTS ${b40}\n` },
+    }),
+  );
+  assert.equal(r.res.status, "stopped");
+  assert.equal(r.res.stopped, "implementer");
+  assert.ok(
+    r.res.questions.some((q) => /HEAD is still the base/.test(q)),
+    JSON.stringify(r.res.questions),
+  );
+});
+
+// (a) A2 Task 7 (run wf_2d86b480-2fb): the round-1 progress checker compared a pnpm test count with
+// the implementer's coverage summary (a different source) and reported a drop that was not real.
+const oneFinding = (over = {}) =>
+  sddResponder({
+    "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+    implementer: work("h-impl", { testSummary: "coverage 153 files, 2144/2144" }),
+    ...over,
+  });
+
+await test("sdd #300: the first progress check sets a same-source baseline; the implementer summary is context only", async () => {
+  const r = await run(sdd, BASE, oneFinding());
+  const p = r.find("progress-r1").prompt;
+  assert.ok(/same source/i.test(p), p);
+  assert.ok(/baseline/i.test(p), p);
+  assert.ok(/Test Files/.test(p) && /testRaw/.test(p), "asks for the raw vitest summary lines");
+  assert.ok(/context only/i.test(p) && p.includes("coverage 153 files, 2144/2144"), p);
+  assert.ok(
+    !/Prior evidence: coverage 153 files/.test(p),
+    "implementer summary is not the baseline",
+  );
+});
+
+await test("sdd #300: a later progress check compares with the earlier progress counts and their raw lines", async () => {
+  const RAW1 = "Test Files  153 passed (153) / Tests  2144 passed (2144)";
+  let round = 0;
+  const r = await run(
+    sdd,
+    BASE,
+    oneFinding({
+      "progress*": (_p, _calls, label) => ({
+        ...progress(label),
+        testCount: 2144,
+        testFiles: 153,
+        testRaw: RAW1,
+      }),
+      "re-review*": (p) => {
+        round++;
+        return round === 1
+          ? {
+              verdicts: [{ id: "spec:S1", verdict: "NOT ADDRESSED", evidence: "still" }],
+              newFindings: [],
+              outOfScope: [],
+            }
+          : addressAll(p);
+      },
+    }),
+  );
+  const p2 = r.find("progress-r2").prompt;
+  assert.ok(p2.includes(RAW1), p2);
+  assert.ok(/2144 tests in 153 test files/.test(p2), p2);
+  assert.ok(/quote both/i.test(p2), p2);
+});
+
+// (b) A2 Task 7 round 2 and A3 Task 14 (#189): a fixer correctly made no change (a false alarm, or an
+// issue comment only the developer may post) and the no-new-commits rule parked the task.
+const DECLINE_REASON = "false alarm: 153 test files before and after";
+const declineResponder = (kind, rulerDecision = "stands", over = {}) =>
+  oneFinding({
+    "fixer-r1": work("h-impl", {
+      commits: [],
+      declined: [{ id: "spec:S1", kind, reason: DECLINE_REASON }],
+    }),
+    "progress*": (p, _calls, label) =>
+      /Check 1 does not apply/.test(p)
+        ? { ok: true, problems: [], head: "h-impl", newCommits: [], testCount: 10 }
+        : label === "progress-r1"
+          ? {
+              ok: false,
+              problems: ["No new commits since round base"],
+              head: "h-impl",
+              newCommits: [],
+              testCount: 10,
+            }
+          : progress(label),
+    "ruler-r1": (p) => ({
+      rulings: ids(p).map((id) => ({
+        item: id,
+        decision: rulerDecision,
+        reason: "ruler reason",
+        costIfWrong: "c",
+        fixInstruction: rulerDecision === "fix" ? "RULER-FIX-INSTRUCTION" : "",
+      })),
+    }),
+    ...over,
+  });
+
+await test("sdd #300: a fixer round that declines every finding as noChangeNeeded goes to the ruler, not a park", async () => {
+  const r = await run(sdd, BASE, declineResponder("noChangeNeeded"));
+  assert.ok(r.labels.includes("ruler-r1"), r.labels.join(","));
+  assert.ok(!r.labels.includes("re-review-r1"), "declined findings skip the re-reviewer");
+  assert.ok(!r.labels.includes("fixer-r2"), r.labels.join(","));
+  assert.ok(/Check 1 does not apply/.test(r.find("progress-r1").prompt));
+  const rp = r.find("ruler-r1").prompt;
+  assert.ok(rp.includes("[spec:S1]") && rp.includes(DECLINE_REASON), rp);
+  assert.equal(r.res.status, "complete");
+  assert.deepEqual(r.res.controllerActions, []);
+  assert.ok(r.find("fixer-r1").prompt.includes("declined"), "the fixer is told how to decline");
+});
+
+await test("sdd #300: a needsDeveloper decline that stands is listed in controllerActions, never closed silently", async () => {
+  const r = await run(sdd, BASE, declineResponder("needsDeveloper"));
+  assert.equal(r.res.status, "complete");
+  assert.equal(r.res.controllerActions.length, 1);
+  assert.equal(r.res.controllerActions[0].id, "spec:S1");
+  assert.ok(
+    r.res.controllerActions[0].reason.includes(DECLINE_REASON),
+    JSON.stringify(r.res.controllerActions),
+  );
+  assert.ok(
+    r.logs.some((l) => /controller action/.test(l)),
+    r.logs.join(" | "),
+  );
+  assert.ok(
+    r.res.ledgerLines.some(
+      (l) => /developer action: spec:S1/.test(l) && l.includes(DECLINE_REASON),
+    ),
+    r.res.ledgerLines.join(" | "),
+  );
+});
+
+await test("sdd #300: a declined finding the ruler rules fix goes to the next fixer round with the instruction", async () => {
+  const r = await run(sdd, BASE, declineResponder("noChangeNeeded", "fix"));
+  assert.ok(r.labels.includes("fixer-r2"), r.labels.join(","));
+  assert.ok(r.find("fixer-r2").prompt.includes("RULER-FIX-INSTRUCTION"));
+});
+
+await test("sdd #300: a declined finding the ruler escalates is parked", async () => {
+  const r = await run(sdd, BASE, declineResponder("needsDeveloper", "escalate"));
+  assert.equal(r.res.status, "parked");
+  assert.ok(
+    r.res.parked.some((f) => f.id === "spec:S1"),
+    JSON.stringify(r.res.parked),
+  );
+  assert.ok(
+    r.res.controllerActions.some((a) => a.id === "spec:S1"),
+    "a needsDeveloper item is still relayed",
+  );
+});
+
+await test("sdd #300: a mixed round (one declined, one fixed) keeps the new-commits check and re-reviews only the fixed one", async () => {
+  const r = await run(
+    sdd,
+    BASE,
+    oneFinding({
+      "spec-review": {
+        verdict: "fail",
+        findings: [F("S1", "important"), F("S2", "important")],
+        cannotVerify: [],
+      },
+      "fixer-r1": work("h-fix1", {
+        declined: [{ id: "spec:S1", kind: "noChangeNeeded", reason: DECLINE_REASON }],
+      }),
+      "ruler-r1": (p) => ({
+        rulings: ids(p).map((id) => ({
+          item: id,
+          decision: "stands",
+          reason: "r",
+          costIfWrong: "c",
+        })),
+      }),
+    }),
+  );
+  assert.ok(!/Check 1 does not apply/.test(r.find("progress-r1").prompt));
+  const rr = r.find("re-review-r1").prompt;
+  assert.deepEqual(ids(rr), ["spec:S2"], "only the fixed finding is re-reviewed");
+  assert.ok(r.find("ruler-r1").prompt.includes("[spec:S1]"));
+  assert.equal(r.res.status, "complete");
+});
+
 await test("sdd: noCode is only valid on a fixer-r<r> answer with text", async () => {
   await assert.rejects(
     run(sdd, { ...BASE, answers: { at: "review", text: "t", noCode: true } }, sddResponder()),
@@ -2641,7 +2849,12 @@ const WAVE = {
 // in the prompt.
 function waveResponder(over = {}) {
   const taskOf = (p) => (/task-(\d+)-(?:brief|report|review)/.exec(p) || [])[1];
-  const base = sddResponder({ implementer: (p) => work(hex40(`h-impl-${taskOf(p)}`)) });
+  // Each task commits its own head (#300: git decides whether an implementer committed, so two
+  // tasks must never report the same new head).
+  const base = sddResponder({
+    implementer: (p) => work(hex40(`h-impl-${taskOf(p)}`)),
+    "implementer-continue": (p) => work(hex40(`h-cont-${taskOf(p)}`)),
+  });
   const self = (label, prompt, calls) => {
     const n = taskOf(prompt);
     const k = `${label}@${n}`;
