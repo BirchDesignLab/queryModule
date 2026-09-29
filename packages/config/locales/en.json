@@ -377,5 +377,21 @@
   "admin.config.op.lt": "is less than",
   "admin.config.op.lte": "is at most",
   "admin.config.op.empty": "is empty",
-  "admin.config.op.notEmpty": "is not empty"
+  "admin.config.op.notEmpty": "is not empty",
+  "admin.config.command.legend": "Command {code}",
+  "admin.config.command.queryType": "Query type",
+  "admin.config.command.add": "Add command",
+  "admin.config.command.remove": "Remove command",
+  "admin.config.command.positions": "Positions",
+  "admin.config.command.position": "Position {n}",
+  "admin.config.command.positionName": "position {n}",
+  "admin.config.command.rest": "Rest of line",
+  "admin.config.command.addPosition": "Add position",
+  "admin.config.command.presets": "Presets",
+  "admin.config.command.preset": "Preset {n}",
+  "admin.config.command.presetName": "preset {n}",
+  "admin.config.command.addPreset": "Add preset",
+  "admin.config.quickAccess.legend": "Quick access",
+  "admin.config.quickAccess.item": "Quick access {n}",
+  "admin.config.quickAccess.add": "Add quick access"
 }

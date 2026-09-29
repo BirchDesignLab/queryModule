@@ -2,6 +2,7 @@ import { useCallback, useContext, useId } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore } from "./builder-store.js";
+import { CommandsEditor, QuickAccessEditor } from "./CommandsEditor.js";
 import { ChecksContext, IssueMessages } from "./checks.js";
 import type { JsonObject, PathSegment } from "./draft.js";
 import { NodeEditor, Section } from "./GenericForm.js";
@@ -40,6 +41,10 @@ export function FormTab({ doc }: { doc: JsonObject }) {
               <QueryTypesEditor value={value} idPrefix={idPrefix} />
             ) : name === "picklists" ? (
               <PicklistsEditor value={value} idPrefix={idPrefix} />
+            ) : name === "commands" ? (
+              <CommandsEditor value={value} doc={doc} idPrefix={idPrefix} />
+            ) : name === "quickAccess" ? (
+              <QuickAccessEditor value={value} doc={doc} idPrefix={idPrefix} />
             ) : (
               <NodeEditor value={value} path={[name]} idPrefix={idPrefix} onChange={onChange} />
             )
