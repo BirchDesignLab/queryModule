@@ -160,6 +160,10 @@ main[tabindex="-1"]:focus {
   border-inline-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-sm);
+  max-inline-size: 32ch;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
