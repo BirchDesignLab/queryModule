@@ -304,5 +304,5 @@
     }
   ],
   "quickAccess": ["VEH", "PER", "PRO"],
-  "theme": { "defaultMode": "day", "auto": "off" }
+  "theme": { "defaultMode": "auto", "auto": "os" }
 }
