@@ -2,9 +2,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { toBetterAuthLogger } from "../../src/auth/auth";
+import type { RequestDeks } from "../../src/keys/request-keys";
 import { createLogger } from "../../src/log/logger";
 import { TEST_SECRETS } from "../helpers/fixture";
 import { createTestApp, startTestServer } from "../helpers/test-app";
+
+// A pass-through spy on createRequestKeys: T1 zeroes the DEKs when it finishes, so the bytes
+// are copied here as they are made, for the submit case below to look for in every sink.
+const dekCopies = vi.hoisted((): RequestDeks[] => []);
+vi.mock("../../src/keys/request-keys", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../src/keys/request-keys")>();
+  return {
+    ...m,
+    createRequestKeys: (...args: Parameters<typeof m.createRequestKeys>) => {
+      const out = m.createRequestKeys(...args);
+      dekCopies.push({
+        values: Buffer.from(out.deks.values),
+        payload: Buffer.from(out.deks.payload),
+      });
+      return out;
+    },
+  };
+});
 
 const PW = "correct-horse-battery-1";
 const WRONG = "wrong-password-zz9-plural";
@@ -82,6 +101,72 @@ describe("SEC-006 log capture", () => {
       decodedCookieValue,
       rawSessionToken,
     ].filter((f) => f.length > 0);
+    for (const f of forbidden) expect(all.includes(f), `leaked: ${f.slice(0, 6)}...`).toBe(false);
+  });
+});
+
+describe("SEC-006 log capture: POST /api/v1/queries (M1 P2 submit case)", () => {
+  it("no submitted value, DEK byte or DATA_KEY reaches any sink", async () => {
+    dekCopies.length = 0;
+    const t = await createTestApp();
+    await t.createUser("dispatcher@example.test", PW);
+    const cookie = await t.cookieFor("dispatcher@example.test", PW);
+    const { configHash } = (await (
+      await t.request("/api/v1/config", { headers: { cookie } })
+    ).json()) as { configHash: string };
+    const post = (body: Record<string, unknown>) =>
+      t.request("/api/v1/queries", {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          "x-requested-with": "querymodule",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify(body),
+      });
+    const sourceIds = ["stateSource", "nationalSource"];
+    const veh = await post({
+      queryType: "VEH",
+      values: { plate: "ZZ-0001" },
+      sourceIds,
+      mode: "plateOnly",
+      configHash,
+    });
+    expect(veh.status).toBe(202);
+    const per = await post({
+      queryType: "PER",
+      values: { last: "Testerson", dob: "01011901" },
+      sourceIds,
+      mode: "normal",
+      configHash,
+    });
+    expect(per.status).toBe(202);
+    // rejected: posted mode differs from the server's, so the 400 path sees the values too
+    const rejected = await post({
+      queryType: "PER",
+      values: { last: "Testerson", dob: "01011901" },
+      sourceIds,
+      mode: "plateOnly",
+      configHash,
+    });
+    expect(rejected.status).toBe(400);
+
+    expect(dekCopies).toHaveLength(2);
+    const all = [...t.logLines, ...stray].join("\n");
+    expect(t.logLines.length).toBeGreaterThan(0);
+    const forbidden = [
+      "ZZ-0001",
+      "Testerson",
+      "TESTERSON",
+      "01011901",
+      "1901-01-01",
+      TEST_SECRETS.dataKey.toString("base64"),
+      TEST_SECRETS.dataKey.toString("hex"),
+      ...dekCopies.flatMap((d) =>
+        [d.values, d.payload].flatMap((b) => [b.toString("base64"), b.toString("hex")]),
+      ),
+    ];
     for (const f of forbidden) expect(all.includes(f), `leaked: ${f.slice(0, 6)}...`).toBe(false);
   });
 });

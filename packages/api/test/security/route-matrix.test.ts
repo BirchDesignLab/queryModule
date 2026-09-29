@@ -66,4 +66,20 @@ describe("SEC-006 route by caller matrix (P1)", () => {
     expect(r.status).toBe(403);
     expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("forbidden");
   });
+  it("POST /api/v1/queries: signed in without X-Requested-With is 403 forbidden", async () => {
+    const t = await createTestApp();
+    await t.createUser("dispatcher@example.test", "correct-horse-battery-1");
+    const cookie = await t.cookieFor("dispatcher@example.test", "correct-horse-battery-1");
+    const r = await t.request("/api/v1/queries", {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        "idempotency-key": crypto.randomUUID(),
+      },
+      body: "{}",
+    });
+    expect(r.status).toBe(403);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("forbidden");
+  });
 });
