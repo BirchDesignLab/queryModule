@@ -52,7 +52,7 @@ describe("#395 critic 6: a selected tab is visually distinct from an unselected 
     expect(css).toMatch(
       /\.qm-button\[role="tab"\]\[aria-selected="false"\]\s*\{[^}]*background:\s*var\(--qm-color-surface-base\);[^}]*color:\s*var\(--qm-color-accent\);/,
     );
-    expect(css).toMatch(/\.qm-button\s*\{[^}]*border:[^;]*var\(--qm-color-accent\);/);
+    expect(css).toMatch(/\.qm-button\s*\{[^}]*border:[^;]*var\(--qm-color-accent-fill\);/);
   });
 
   it("both tab states meet 4.5:1 in every mode", () => {
