@@ -5,6 +5,10 @@ import { requireSession } from "../http/session";
 import type { AppEnv } from "../http/types";
 import { acknowledge } from "./acknowledge";
 import { admitSubmit, replayResponse } from "./admission";
+import { sanitizeSubmitError } from "./errors";
+
+export { SubmitTransactionError, sanitizeSubmitError } from "./errors";
+
 import { prepareSubmit } from "./prepare";
 
 /**
@@ -20,29 +24,6 @@ export function lostIdempotencyRace(e: unknown): boolean {
     if (x.name !== "DrizzleQueryError" && IDEMPOTENCY_RACE.test(x.message)) return true;
   }
   return false;
-}
-
-/** Driver result codes are fixed tokens such as SQLITE_CONSTRAINT, never data. */
-const DRIVER_CODE = /^SQLITE_[A-Z_]+$/;
-
-/**
- * The only error a failed T1 hands to app.onError (spec 5.9, SEC-006). drizzle's wrapper
- * message quotes every insert param: wrapped DEKs, sealed values, ids and the Idempotency-Key.
- * This keeps just a fixed message and the driver's result code, with no cause.
- */
-export class SubmitTransactionError extends Error {
-  override name = "SubmitTransactionError";
-  constructor(code: string | null) {
-    super(code ? `submit transaction failed (${code})` : "submit transaction failed");
-  }
-}
-
-export function sanitizeSubmitError(e: unknown): SubmitTransactionError {
-  for (let x: unknown = e; x instanceof Error; x = x.cause) {
-    const code: unknown = (x as { code?: unknown }).code;
-    if (typeof code === "string" && DRIVER_CODE.test(code)) return new SubmitTransactionError(code);
-  }
-  return new SubmitTransactionError(null);
 }
 
 /**

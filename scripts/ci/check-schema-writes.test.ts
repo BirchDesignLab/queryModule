@@ -1,4 +1,6 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the cases are JS source text with template holes, scanned as data.
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findSchemaWrites, scanSchemaWrites } from "./check-schema-writes";
@@ -87,5 +89,61 @@ describe("schema-table writes in packages/api/src are refused (spec 9.2, #189)",
 
   it("packages/api/src has no schema-table write", () => {
     expect(scanSchemaWrites(join(import.meta.dirname, "../../packages/api/src"))).toEqual([]);
+  });
+});
+
+// #311 Task 14: client.ts names the pragma it refuses as a plain string, through one exact
+// allowlist entry; the token stays refused everywhere else, in that file too.
+describe("the one allowlisted writable_schema guard (#311)", () => {
+  const CLIENT = "packages/api/src/db/client.ts";
+  const GUARD = 'const SCHEMA_WRITE_PRAGMA = "writable_schema";';
+
+  it("allows exactly the guard statement in packages/api/src/db/client.ts", () => {
+    expect(findSchemaWrites(`import x from "y";\n${GUARD}\nconst z = 1;\n`, CLIENT)).toEqual([]);
+  });
+
+  it("still refuses the guard statement in any other file", () => {
+    for (const file of [
+      undefined,
+      "packages/api/src/db/migrate.ts",
+      "packages/api/src/db/client.mts",
+      "other/packages/api/src/db/client.ts",
+    ])
+      expect(findSchemaWrites(`${GUARD}\n`, file), String(file)).not.toEqual([]);
+  });
+
+  it("still refuses any other use of the token in client.ts", () => {
+    for (const src of [
+      `${GUARD}\nawait c.execute("PRAGMA writable_schema=ON");\n`,
+      `${GUARD}\n${GUARD}\n`,
+      'const SCHEMA_WRITE_PRAGMA = "writable_schema" ;\n',
+      "const SCHEMA_WRITE_PRAGMA = 'writable_schema';\n",
+      `${GUARD}\nconst t = "UPDATE sqlite_master SET sql = 'x'";\n`,
+    ])
+      expect(findSchemaWrites(src, CLIENT), src).not.toEqual([]);
+  });
+
+  it("client.ts carries the guard as that plain string, and the scan of it passes", () => {
+    const root = join(import.meta.dirname, "../..");
+    expect(readFileSync(join(root, CLIENT), "utf8")).toContain(GUARD);
+    expect(scanSchemaWrites(join(root, "packages/api/src/db"))).toEqual([]);
+  });
+});
+
+// Task 103 review quality:CV2: the CLI's default directory is the repo's packages/api/src
+// whatever the working directory, like the allowlist paths.
+describe("the check-schema-writes CLI", () => {
+  const root = join(import.meta.dirname, "../..");
+  it.each([
+    ["the repo root", root],
+    ["another directory", join(root, "packages")],
+  ])("passes on the real tree when run from %s", (_label, cwd) => {
+    const r = spawnSync(process.execPath, [join(root, "scripts/ci/check-schema-writes.ts")], {
+      cwd,
+      encoding: "utf8",
+    });
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toContain("no schema-table writes");
+    expect(r.status).toBe(0);
   });
 });

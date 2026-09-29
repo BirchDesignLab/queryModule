@@ -9,6 +9,21 @@ import { isMainModule } from "./is-main-module.mjs";
 // block. Comments are stripped first so documentation may name the forms it forbids.
 
 const WRITABLE_SCHEMA = /\bwritable_schema\b/i;
+
+const REPO_ROOT = resolve(import.meta.dirname, "../..");
+
+/**
+ * The only allowed uses of the writable_schema token, each an exact statement in one
+ * repo-relative file (#311 Task 14). client.ts names the pragma its connection guard refuses.
+ * A statement is removed from its file's code before the scan only when it occurs there exactly
+ * once, so any other use of the token, in that file or anywhere else, still fails.
+ */
+export const SCHEMA_WRITE_ALLOWLIST: readonly { file: string; statement: string }[] = [
+  {
+    file: "packages/api/src/db/client.ts",
+    statement: 'const SCHEMA_WRITE_PRAGMA = "writable_schema";',
+  },
+];
 const QUOTE = String.raw`["'\x60\[\]]?`;
 // Between two SQL words: whitespace, an escaped newline or tab as written in a JS string,
 // or a SQL comment (A2 review C-M2).
@@ -160,9 +175,20 @@ function stripComments(src: string): string {
   return out;
 }
 
-/** The forbidden forms found in one source text. */
-export function findSchemaWrites(src: string): string[] {
-  const code = stripComments(src);
+/** code without the allowlisted statements of file, each removed only when it occurs once. */
+function withoutAllowed(code: string, file: string | undefined): string {
+  let out = code;
+  for (const a of SCHEMA_WRITE_ALLOWLIST) {
+    if (a.file !== file) continue;
+    const parts = out.split(a.statement);
+    if (parts.length === 2) out = parts.join(" ");
+  }
+  return out;
+}
+
+/** The forbidden forms found in one source text; file is its repo-relative path, "/" separated. */
+export function findSchemaWrites(src: string, file?: string): string[] {
+  const code = withoutAllowed(stripComments(src), file);
   const out: string[] = [];
   const w = code.match(WRITABLE_SCHEMA);
   if (w) out.push(w[0]);
@@ -178,9 +204,11 @@ export function scanSchemaWrites(dir: string): string[] {
     for (const e of readdirSync(d, { withFileTypes: true })) {
       const p = join(d, e.name);
       if (e.isDirectory()) walk(p);
-      else if (/\.(?:m?ts|m?js)$/.test(e.name))
-        for (const m of findSchemaWrites(readFileSync(p, "utf8")))
+      else if (/\.(?:m?ts|m?js)$/.test(e.name)) {
+        const file = relative(REPO_ROOT, p).replaceAll("\\", "/");
+        for (const m of findSchemaWrites(readFileSync(p, "utf8"), file))
           out.push(`${relative(dir, p).replaceAll("\\", "/")}: ${m}`);
+      }
     }
   };
   walk(dir);
@@ -188,7 +216,9 @@ export function scanSchemaWrites(dir: string): string[] {
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) {
-  const dir = resolve(process.argv[2] ?? "packages/api/src");
+  // No argument: packages/api/src of this repo, whatever the cwd (Task 103 review quality:CV2).
+  const dir =
+    process.argv[2] === undefined ? join(REPO_ROOT, "packages/api/src") : resolve(process.argv[2]);
   const errors = scanSchemaWrites(dir);
   for (const e of errors) console.error(e);
   console.log(errors.length === 0 ? "no schema-table writes" : `${errors.length} violation(s)`);

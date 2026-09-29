@@ -66,7 +66,10 @@ describe("SEC-006 log capture", () => {
     ws.send(JSON.stringify({ v: 1, type: "ping", nonce: "n" }));
     await new Promise((r) => ws.once("message", r));
     ws.close();
-    await t.request("/api/v1/auth/sign-out", { method: "POST", headers: { cookie } });
+    await t.request("/api/v1/auth/sign-out", {
+      method: "POST",
+      headers: { cookie, "x-requested-with": "querymodule" },
+    });
     await s.close();
 
     const all = [...t.logLines, ...stray].join("\n");

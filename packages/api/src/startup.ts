@@ -68,6 +68,11 @@ export async function bootstrap(
       }),
     );
   } catch (e) {
+    // Fixed reason, like the MFA guard: the error itself is not logged, so no value can leak.
+    deps.logger.error("startup refused", {
+      reason: "configLoaded audit write failed",
+      site: deps.config.siteConfig.site.id,
+    });
     deps.db.$client.close();
     throw e;
   }

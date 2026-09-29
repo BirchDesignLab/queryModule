@@ -54,6 +54,8 @@ scripts/ci/check-sensitive-review.ts
 scripts/ci/check-audit-migrations.ts
 # Its source layer: no writable_schema or schema-table write in app code (#189, A2 C-M3)
 scripts/ci/check-schema-writes.ts
+# The entry-point guard both checks above start main through; a fail-open there skips them (#311 C-m1)
+scripts/ci/is-main-module.mjs
 # Reserved: TokenStore implementations, bearer token storage (SEC-006, #85); name
 # the file or directory *token-store* (for example the P1 native SecureStore store).
 # The bracket forms match any case and separator (TokenStore, tokenStore,

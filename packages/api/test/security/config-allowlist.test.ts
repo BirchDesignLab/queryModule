@@ -2,7 +2,8 @@ import { cpSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ClientSiteConfigSchema } from "@querymodule/core/config";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+import { removeTempDirs } from "../helpers/temp-dirs";
 import { createTestApp } from "../helpers/test-app";
 
 const bundled = resolve(import.meta.dirname, "../../../config");
@@ -19,8 +20,12 @@ function keysAtAnyDepth(v: unknown, out = new Set<string>()): Set<string> {
   return out;
 }
 
+const created: string[] = [];
+afterAll(() => removeTempDirs(created.splice(0), "test/config-allowlist"));
+
 async function exampleApp() {
   const d = mkdtempSync(join(tmpdir(), "qm-allowlist-"));
+  created.push(d);
   for (const dir of ["sites", "locales", "mock"])
     cpSync(join(bundled, dir), join(d, dir), { recursive: true });
   const t = await createTestApp({ env: { SITE_CONFIG: join(d, "sites/example-ok.json") } });
@@ -30,7 +35,7 @@ async function exampleApp() {
 }
 
 describe("BR-001 GET config serves the resolved overlay (spec 4.1 client view, 10.3)", () => {
-  it("serves the resolved example-ok view, strictly the allowlist (BR-007, SEC-006, UX-011)", async () => {
+  it("serves the resolved example-ok view, strictly the allowlist (UX-011, spec 10.3)", async () => {
     const { t, cookie } = await exampleApp();
     const res = await t.request("/api/v1/config", { headers: { cookie } });
     expect(res.status).toBe(200);

@@ -22,9 +22,14 @@ export const AUDIT_TRIGGER_SQL: Record<(typeof AUDIT_TRIGGERS)[number], string> 
     "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON audit_event WHEN NEW.id IS NOT NULL AND EXISTS (SELECT 1 FROM audit_event WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'audit_event is append-only'); END",
 };
 
-/** Some append-only trigger is missing (missing) or not the statement migration 0001 made (altered). */
-export class AuditTriggerMissingError extends Error {
+/**
+ * Some fail-closed trigger on tables is missing (missing) or not the statement its migration
+ * made (altered). One type for the audit_event and the query-table checks; the message names
+ * the table set, then the trigger names, never any row data.
+ */
+export class TriggerMissingError extends Error {
   constructor(
+    readonly tables: readonly string[],
     readonly missing: string[],
     readonly altered: string[] = [],
   ) {
@@ -32,8 +37,8 @@ export class AuditTriggerMissingError extends Error {
       missing.length > 0 ? `missing: ${missing.join(", ")}` : "",
       altered.length > 0 ? `altered: ${altered.join(", ")}` : "",
     ];
-    super(`audit_event triggers ${parts.filter(Boolean).join("; ")}`);
-    this.name = "AuditTriggerMissingError";
+    super(`${tables.join(", ")} triggers ${parts.filter(Boolean).join("; ")}`);
+    this.name = "TriggerMissingError";
   }
 }
 
@@ -53,29 +58,30 @@ async function storedTriggers(db: Db, tables: readonly string[]): Promise<Map<st
   return new Map(rows.rows.map((r) => [String(r.name), collapse(String(r.sql))]));
 }
 
-function diffTriggers<T extends string>(
-  present: Map<string, string>,
+/** Throws TriggerMissingError unless every pinned trigger on tables is present and unaltered. */
+async function checkTriggers<T extends string>(
+  db: Db,
+  tables: readonly string[],
   names: readonly T[],
   pinned: Record<T, string>,
-): { missing: T[]; altered: T[] } {
-  return {
-    missing: names.filter((t) => !present.has(t)),
-    altered: names.filter((t) => present.has(t) && present.get(t) !== pinned[t]),
-  };
+): Promise<void> {
+  const present = await storedTriggers(db, tables);
+  const missing = names.filter((t) => !present.has(t));
+  const altered = names.filter((t) => present.has(t) && present.get(t) !== pinned[t]);
+  if (missing.length > 0 || altered.length > 0) {
+    throw new TriggerMissingError(tables, missing, altered);
+  }
 }
 
 /** Refuses to serve (fails closed) unless every audit_event trigger is present and unaltered. */
-export async function checkAuditTriggers(db: Db): Promise<void> {
-  const present = await storedTriggers(db, ["audit_event"]);
-  const { missing, altered } = diffTriggers(present, AUDIT_TRIGGERS, AUDIT_TRIGGER_SQL);
-  if (missing.length > 0 || altered.length > 0) {
-    throw new AuditTriggerMissingError(missing, altered);
-  }
+export function checkAuditTriggers(db: Db): Promise<void> {
+  return checkTriggers(db, ["audit_event"], AUDIT_TRIGGERS, AUDIT_TRIGGER_SQL);
 }
 
 /**
  * Every trigger that keeps query_request insert-once and undeletable and source_result
- * write-once and undeletable (migrations 0004 and 0005, SEC-013, FR-063); all must exist.
+ * write-once and undeletable (migrations 0004 and 0005, SEC-013, FR-063), and that keeps
+ * query_request.origin to primary or alsoRun (migration 0006, #311); all must exist.
  * The 0005 BEFORE INSERT triggers close INSERT OR REPLACE, which fires no UPDATE trigger
  * and no DELETE trigger while recursive_triggers is off, through every uniqueness constraint
  * each table has: the primary key, the source_result (correlation_id, part_id, source_id)
@@ -86,7 +92,9 @@ export async function checkAuditTriggers(db: Db): Promise<void> {
  * that changes the rowid, which UPDATE OR REPLACE could use to delete another row (#279 rr:N1). A
  * duplicate idempotency key aborts with 'query_request idempotency key exists', which is how
  * admission detects the idempotency race (spec 5.2 step 1). request_key has none:
- * lost-data-key.ts and purge.ts crypto-shred by deleting its rows.
+ * lost-data-key.ts and purge.ts crypto-shred by deleting its rows. query_request_origin is the
+ * DB enforcement of the origin enum: SQLite cannot add a CHECK to an existing table without a
+ * rebuild, which the insert-once triggers and the append-only rule forbid.
  */
 export const QUERY_TRIGGERS = [
   "query_request_no_update",
@@ -98,9 +106,10 @@ export const QUERY_TRIGGERS = [
   "query_request_no_delete",
   "query_request_positive_rowid",
   "source_result_positive_rowid",
+  "query_request_origin",
 ] as const;
 
-/** The statement of each trigger as migration 0004 or 0005 creates it, whitespace collapsed. */
+/** The statement of each trigger as migration 0004, 0005 or 0006 creates it, whitespace collapsed. */
 export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> = {
   query_request_no_update:
     "CREATE TRIGGER query_request_no_update BEFORE UPDATE ON query_request BEGIN SELECT RAISE(ABORT, 'query_request is insert-once'); END",
@@ -120,28 +129,11 @@ export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> 
     "CREATE TRIGGER query_request_positive_rowid AFTER INSERT ON query_request WHEN NEW.rowid < 1 BEGIN SELECT RAISE(ABORT, 'query_request rowids are positive'); END",
   source_result_positive_rowid:
     "CREATE TRIGGER source_result_positive_rowid AFTER INSERT ON source_result WHEN NEW.rowid < 1 BEGIN SELECT RAISE(ABORT, 'source_result rowids are positive'); END",
+  query_request_origin:
+    "CREATE TRIGGER query_request_origin BEFORE INSERT ON query_request WHEN NEW.origin NOT IN ('primary', 'alsoRun') BEGIN SELECT RAISE(ABORT, 'query_request origin must be primary or alsoRun'); END",
 };
 
-/** Some query-table trigger is missing (missing) or not the statement migration 0004 or 0005 made (altered). */
-export class QueryTriggerMissingError extends Error {
-  constructor(
-    readonly missing: string[],
-    readonly altered: string[] = [],
-  ) {
-    const parts = [
-      missing.length > 0 ? `missing: ${missing.join(", ")}` : "",
-      altered.length > 0 ? `altered: ${altered.join(", ")}` : "",
-    ];
-    super(`query table triggers ${parts.filter(Boolean).join("; ")}`);
-    this.name = "QueryTriggerMissingError";
-  }
-}
-
 /** Refuses to serve (fails closed) unless every query-table trigger is present and unaltered. */
-export async function checkQueryTriggers(db: Db): Promise<void> {
-  const present = await storedTriggers(db, ["query_request", "source_result"]);
-  const { missing, altered } = diffTriggers(present, QUERY_TRIGGERS, QUERY_TRIGGER_SQL);
-  if (missing.length > 0 || altered.length > 0) {
-    throw new QueryTriggerMissingError(missing, altered);
-  }
+export function checkQueryTriggers(db: Db): Promise<void> {
+  return checkTriggers(db, ["query_request", "source_result"], QUERY_TRIGGERS, QUERY_TRIGGER_SQL);
 }

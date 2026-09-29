@@ -54,6 +54,8 @@ describe("sensitive-review (spec 9.1)", () => {
       "scripts/ci/check-audit-migrations.ts",
       // A2 review C-M3: the source layer of the same audit_event immutability guard.
       "scripts/ci/check-schema-writes.ts",
+      // #311 C-m1: the entry-point guard the critical CI checks start main through.
+      "scripts/ci/is-main-module.mjs",
       // #85: TokenStore implementations (bearer token storage, SEC-006), reserved.
       "packages/client/src/token-store.ts",
       "packages/client/src/token-store/secure.ts",
