@@ -1,9 +1,14 @@
+import { createTranslator } from "@querymodule/client";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { Outlet } from "react-router";
+import { createRoot } from "react-dom/client";
+import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { ClientSupportProvider } from "../app/client-support-context.js";
+import { I18nProvider } from "../app/i18n-context.js";
 import { appRoutes } from "../app/routes.js";
+import { ServicesProvider } from "../app/services-context.js";
+import { EN_BUNDLE } from "../test/en-bundle.js";
 import { API, CLIENT_CONFIG, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
 
@@ -48,9 +53,8 @@ function ctrlBackquote(): void {
 }
 
 /**
- * Shift+/ until the sheet opens. The panel and the provider register their key handlers in effects,
- * and findBy can resolve before those effects run when the suite is under load, so a single
- * synchronous press right after openPanel can land before anything listens.
+ * Shift+/ until the sheet opens. Handlers now register in layout effects (#382), so one press
+ * should do; the retry stays as a guard for the sheet's own showModal effect.
  */
 async function openSheet(target?: Element): Promise<HTMLElement> {
   return waitFor(() => {
@@ -194,5 +198,58 @@ describe("FR-054 site terminal settings (example-ok: Ctrl+Slash, / delimiter)", 
     await waitFor(() => expect(command).toHaveFocus());
     expect(command).toHaveValue("VEH/ZZ-0001");
     expect(screen.getByText(/such as VEH\/plate\/state/)).toBeInTheDocument();
+  });
+});
+
+describe("FR-006 a key pressed as soon as the panel is on screen (#382 flake root cause)", () => {
+  it("/ right after the panel first paints, before passive effects, focuses the command line", async () => {
+    // Outside act(), as during Testing Library's waitFor: React paints the panel in one task and runs
+    // its useEffect callbacks in a later one. "/" pressed in between must still end on the command line.
+    const actEnv = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const previous = actEnv.IS_REACT_ACT_ENVIRONMENT;
+    actEnv.IS_REACT_ACT_ENVIRONMENT = false;
+    const services = testServices();
+    services.authStore.getState().setSignedIn(TEST_USER);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      const painted = new Promise<void>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (screen.queryByLabelText("Plate") !== null) {
+            observer.disconnect();
+            resolve();
+          }
+        });
+        observer.observe(host, { childList: true, subtree: true });
+      });
+      const router = createMemoryRouter(
+        [
+          {
+            element: (
+              <ClientSupportProvider clientSupported>
+                <Outlet />
+              </ClientSupportProvider>
+            ),
+            children: appRoutes(true),
+          },
+        ],
+        { initialEntries: ["/"] },
+      );
+      root.render(
+        <ServicesProvider services={services}>
+          <I18nProvider translator={createTranslator("en", EN_BUNDLE)}>
+            <RouterProvider router={router} />
+          </I18nProvider>
+        </ServicesProvider>,
+      );
+      await painted;
+      fireEvent.keyDown(document.body, { code: "Slash", key: "/" });
+      await waitFor(() => expect(screen.getByLabelText("Command")).toHaveFocus());
+    } finally {
+      root.unmount();
+      host.remove();
+      actEnv.IS_REACT_ACT_ENVIRONMENT = previous;
+    }
   });
 });
