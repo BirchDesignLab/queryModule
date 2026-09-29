@@ -1,3 +1,4 @@
+import type { Translator } from "@querymodule/client";
 import { createContext, useContext } from "react";
 
 /**
@@ -8,6 +9,8 @@ import { createContext, useContext } from "react";
 export interface Selection {
   pointer: string | null;
   seq: number;
+  /** An issue's pointer: after opening, focus the control that shows it (the issue button). */
+  focus?: string;
 }
 
 export const LABELS_ITEM = "#labels";
@@ -25,4 +28,16 @@ export function useSelectedIndex(key: string): number | null {
   const { pointer } = useContext(SelectionContext);
   const m = pointer === null ? null : new RegExp(`^/${key}/([0-9]+)(/|$)`).exec(pointer);
   return m === null ? null : Number(m[1]);
+}
+
+/** "1 error, 2 warnings": the parts with a count, joined (no plural rules in the bundle). */
+export function issueWords(t: Translator["t"], errors: number, warnings: number): string {
+  const parts: string[] = [];
+  if (errors > 0)
+    parts.push(t(errors === 1 ? "admin.issues.error" : "admin.issues.errors", { count: errors }));
+  if (warnings > 0)
+    parts.push(
+      t(warnings === 1 ? "admin.issues.warning" : "admin.issues.warnings", { count: warnings }),
+    );
+  return parts.join(", ");
 }

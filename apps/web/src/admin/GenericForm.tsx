@@ -212,10 +212,11 @@ export function Section({
   const checks = useContext(ChecksContext);
   const selection = useContext(SelectionContext);
   const [open, setOpen] = useState(false);
-  const selected = selects(selection, pointer);
+  // Each selection inside this section (a new seq) opens it again, even after the user closed it.
+  const openRequest = selects(selection, pointer) ? selection.seq : 0;
   useEffect(() => {
-    if (selected) setOpen(true);
-  }, [selected, selection.seq]);
+    if (openRequest > 0) setOpen(true);
+  }, [openRequest]);
   const prefix = toPointer([name]);
   const count = checks.issues.filter(
     (i) => i.pointer === prefix || i.pointer.startsWith(`${prefix}/`),

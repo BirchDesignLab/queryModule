@@ -1,8 +1,10 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { VisuallyHidden } from "@querymodule/web-ui";
+import { memo, useContext, useId, useMemo, useRef, useState } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
+import { ChecksContext } from "./checks.js";
 import { asObjects, str } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
-import { LABELS_ITEM } from "./selection.js";
+import { issueWords, LABELS_ITEM } from "./selection.js";
 
 /** One row of the builder tree: a button that selects `pointer`, and its children. */
 interface TreeNode {
@@ -12,6 +14,8 @@ interface TreeNode {
   /** The config key or code beside it, in mono; omitted when it equals the label. */
   key?: string;
   children: TreeNode[];
+  errors: number;
+  warnings: number;
 }
 
 /** Site items with a friendly name (design target); every other top-level key shows its key. */
@@ -26,17 +30,46 @@ const SITE_NAMES: Readonly<Record<string, string>> = {
 function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } {
   const t = useT();
   const translator = useTranslator();
+  const { issues } = useContext(ChecksContext);
   return useMemo(() => {
+    // Issues at or under a pointer. A section's fields live under /fields, not under the section,
+    // so a section adds its fields' counts; a type's pointer already covers all of its parts.
+    const under = (pointer: string) => {
+      let errors = 0;
+      let warnings = 0;
+      for (const i of issues)
+        if (i.pointer === pointer || i.pointer.startsWith(`${pointer}/`)) {
+          if (i.level === "error") errors++;
+          else warnings++;
+        }
+      return { errors, warnings };
+    };
     const label = (labelKey: unknown, fallback: string) => {
       const k = str(labelKey);
       return k !== "" && translator.has(k) ? translator.t(k) : fallback;
     };
-    const node = (pointer: string, text: string, key: string, children: TreeNode[] = []) => ({
-      pointer,
-      label: text,
-      ...(key !== "" && key !== text ? { key } : {}),
-      children,
-    });
+    const node = (
+      pointer: string,
+      text: string,
+      key: string,
+      children: TreeNode[] = [],
+      rollUp = false,
+    ): TreeNode => {
+      const own = under(pointer);
+      const counts = rollUp
+        ? children.reduce(
+            (c, n) => ({ errors: c.errors + n.errors, warnings: c.warnings + n.warnings }),
+            own,
+          )
+        : own;
+      return {
+        pointer,
+        label: text,
+        ...(key !== "" && key !== text ? { key } : {}),
+        children,
+        ...counts,
+      };
+    };
     const types = asObjects(doc.queryTypes).map((type, i) => {
       const code = str(type.code);
       const fields = asObjects(type.fields).map((f, j) => ({ f, j }));
@@ -59,6 +92,7 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
                 label(section.labelKey, key),
                 key,
                 own.map(fieldNode),
+                true,
               );
             });
       return node(toPointer(["queryTypes", i]), label(type.labelKey, code), code, children);
@@ -71,7 +105,7 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
       });
     site.push(node(LABELS_ITEM, t("admin.config.site.labels"), ""));
     return { types, site };
-  }, [doc, t, translator]);
+  }, [doc, issues, t, translator]);
 }
 
 /** Keeps nodes whose label or key contains `q`, with their ancestors; a match keeps its children. */
@@ -111,28 +145,6 @@ export function BuilderTree({
   const q = query.trim().toLowerCase();
   const shownTypes = filterNodes(types, q);
   const shownSite = filterNodes(site, q);
-  const renderNodes = (nodes: TreeNode[]) => (
-    <ul>
-      {nodes.map((n) => (
-        <li key={n.pointer}>
-          <button
-            type="button"
-            aria-current={n.pointer === selected ? "true" : undefined}
-            onClick={() => onSelect(n.pointer)}
-          >
-            <span className="qm-tree__label">{n.label}</span>
-            {n.key !== undefined && (
-              <>
-                {" "}
-                <span className="qm-tree__key">{n.key}</span>
-              </>
-            )}
-          </button>
-          {n.children.length > 0 && renderNodes(n.children)}
-        </li>
-      ))}
-    </ul>
-  );
   return (
     <nav className="qm-tree" aria-label={t("admin.tree.label")}>
       <input
@@ -165,9 +177,12 @@ export function BuilderTree({
               <p className="qm-tree__group" id={`${uid}-types`}>
                 {t("admin.tree.types")}
               </p>
-              <div aria-labelledby={`${uid}-types`} role="group">
-                {renderNodes(shownTypes)}
-              </div>
+              <TreeRows
+                nodes={shownTypes}
+                selected={selected}
+                onSelect={onSelect}
+                labelledBy={`${uid}-types`}
+              />
             </>
           )}
           {shownSite.length > 0 && (
@@ -175,9 +190,12 @@ export function BuilderTree({
               <p className="qm-tree__group" id={`${uid}-site`}>
                 {t("admin.tree.site")}
               </p>
-              <div aria-labelledby={`${uid}-site`} role="group">
-                {renderNodes(shownSite)}
-              </div>
+              <TreeRows
+                nodes={shownSite}
+                selected={selected}
+                onSelect={onSelect}
+                labelledBy={`${uid}-site`}
+              />
             </>
           )}
         </>
@@ -185,3 +203,60 @@ export function BuilderTree({
     </nav>
   );
 }
+
+interface TreeRowsProps {
+  nodes: TreeNode[];
+  selected: string | null;
+  onSelect(pointer: string): void;
+  labelledBy?: string;
+}
+
+/**
+ * The rows, memoized on their content: a keystroke in the editor rebuilds the nodes but rarely
+ * changes them, and re-rendering every row per keystroke cost the editor tests about a quarter
+ * of their time under load (A-D1 verify).
+ */
+const TreeRows = memo(
+  function TreeRows({ nodes, selected, onSelect, labelledBy }: TreeRowsProps) {
+    const t = useT();
+    const renderNodes = (list: TreeNode[], by?: string) => (
+      <ul aria-labelledby={by}>
+        {list.map((n) => (
+          <li key={n.pointer}>
+            <button
+              type="button"
+              aria-current={n.pointer === selected ? "true" : undefined}
+              onClick={() => onSelect(n.pointer)}
+            >
+              <span className="qm-tree__label">{n.label}</span>
+              {n.key !== undefined && (
+                <>
+                  {" "}
+                  <span className="qm-tree__key">{n.key}</span>
+                </>
+              )}
+              {n.errors + n.warnings > 0 && (
+                <>
+                  <span
+                    className={`qm-tree__issues qm-badge ${n.errors > 0 ? "qm-badge--critical" : "qm-badge--warning"}`}
+                    aria-hidden="true"
+                  >
+                    {n.errors + n.warnings}
+                  </span>
+                  <VisuallyHidden>, {issueWords(t, n.errors, n.warnings)}</VisuallyHidden>
+                </>
+              )}
+            </button>
+            {n.children.length > 0 && renderNodes(n.children)}
+          </li>
+        ))}
+      </ul>
+    );
+    return renderNodes(nodes, labelledBy);
+  },
+  (a, b) =>
+    a.selected === b.selected &&
+    a.onSelect === b.onSelect &&
+    a.labelledBy === b.labelledBy &&
+    JSON.stringify(a.nodes) === JSON.stringify(b.nodes),
+);

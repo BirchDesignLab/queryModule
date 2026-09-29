@@ -1,9 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
+import { configDraftStore } from "./ConfigBuilder.js";
 
 beforeAll(preloadAdminRoutes);
 
@@ -109,5 +110,48 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     expect(search).toHaveValue("");
     expect(search).toHaveFocus();
     expect(item(/^Person PER/)).toBeInTheDocument();
+  });
+
+  it("issue marks: a number badge per row, the count in words for screen readers, rolled up", async () => {
+    const t = await openBuilder();
+    const summary = screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary).toHaveTextContent(/Draft checks: \d+ errors/));
+    const store = configDraftStore(t.services);
+    const doc = store.getState().doc as { commands: { code: string }[] };
+    const i = doc.commands.findIndex((c) => c.code === "VEH");
+    act(() => store.getState().setPath(["commands", i, "code"], "V.EH"));
+    await waitFor(() => expect(item(/^Terminal commands, 1 error/)).toBeInTheDocument());
+    const badge = item(/^Terminal commands/).querySelector(".qm-tree__issues") as HTMLElement;
+    expect(badge).toHaveTextContent(/^1$/);
+    expect(badge).toHaveAttribute("aria-hidden", "true");
+    expect(badge).toHaveClass("qm-badge--critical");
+    // The toolbar total is the sum of the top-level rows (types and site items).
+    const [, errors, warnings] =
+      /(\d+) errors, (\d+) warnings/.exec(summary.textContent ?? "") ?? [];
+    const rows = [...tree().querySelectorAll("ul[aria-labelledby] > li > button")] as HTMLElement[];
+    const sum = rows.reduce(
+      (n, b) => n + Number(b.querySelector(".qm-tree__issues")?.textContent ?? 0),
+      0,
+    );
+    expect(sum).toBe(Number(errors) + Number(warnings));
+  });
+
+  it("the issue button goes to the first error: it opens the item and focuses its control", async () => {
+    const t = await openBuilder();
+    const summary = screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary).toHaveTextContent(/Draft checks: 0 errors/));
+    const store = configDraftStore(t.services);
+    const doc = store.getState().doc as { commands: { code: string }[] };
+    const i = doc.commands.findIndex((c) => c.code === "VEH");
+    act(() => store.getState().setPath(["commands", i, "code"], "V.EH"));
+    const button = await screen.findByRole("button", {
+      name: /^1 error, \d+ warnings?\. Go to the first issue\.$/,
+    });
+    await t.user.click(button);
+    await waitFor(() => expect(document.activeElement).toHaveValue("V.EH"));
+    expect(document.activeElement).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByText("commands", { selector: "summary" }).closest("details"),
+    ).toHaveAttribute("open");
   });
 });

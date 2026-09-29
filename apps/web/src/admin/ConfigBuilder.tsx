@@ -1,3 +1,4 @@
+import { VisuallyHidden } from "@querymodule/web-ui";
 import {
   type KeyboardEvent,
   useCallback,
@@ -15,9 +16,10 @@ import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext, useDraftChecks } from "./checks.js";
 import { docFromClient, type JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
+import { parentPointer } from "./issues.js";
 import { BuilderPreview } from "./Preview.js";
 import { type RawState, RawTab } from "./RawTab.js";
-import { type Selection, SelectionContext } from "./selection.js";
+import { issueWords, type Selection, SelectionContext } from "./selection.js";
 import { useCachedClientConfig } from "./use-cached-config.js";
 
 export { configDraftStore } from "./builder-store.js";
@@ -67,9 +69,9 @@ function useConfigLoadFailed(): boolean {
 }
 
 /**
- * Marks the selected item in the editor and scrolls to it (A-D1 A2). The item renders once its
- * section or type has opened, so this retries for a few frames. The mark is a DOM attribute, not
- * React state, so memoized rows do not re-render on every selection.
+ * Marks the selected item in the editor and scrolls to it (A-D1 A2); for the issue button, also
+ * focuses the issue's control. The mark is a DOM attribute, not React state, so memoized rows do
+ * not re-render on every selection.
  */
 function useMarkSelected(panel: React.RefObject<HTMLDivElement | null>, selection: Selection) {
   useEffect(() => {
@@ -77,20 +79,68 @@ function useMarkSelected(panel: React.RefObject<HTMLDivElement | null>, selectio
     const pointer = selection.pointer;
     if (root === null || pointer === null) return;
     for (const el of root.querySelectorAll("[data-selected]")) el.removeAttribute("data-selected");
-    let tries = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const mark = () => {
-      const el = root.querySelector<HTMLElement>(`[data-path="${CSS.escape(pointer)}"]`);
-      if (el === null) {
-        if (tries++ < 20) timer = setTimeout(mark, 16);
-        return;
+    const focus = selection.focus;
+    const find = (p: string) => root.querySelector<HTMLElement>(`[data-path="${CSS.escape(p)}"]`);
+    // Done when the item has rendered and, for the issue button, the issue's message too.
+    const nearest = (from: string | null) => {
+      let el: HTMLElement | null = null;
+      for (let p = from; p !== null && p !== "" && el === null; p = parentPointer(p)) el = find(p);
+      return el;
+    };
+    const ready = () => {
+      if (focus === undefined) {
+        const el = find(pointer);
+        return el === null ? null : { el, message: null };
       }
+      // An issue may sit on a leaf value with no item of its own: once its message has rendered,
+      // mark the nearest item that holds it.
+      const message = root.querySelector(
+        `[data-issue-pointer="${CSS.escape(focus)}"]`,
+      )?.parentElement;
+      const el = message === null || message === undefined ? null : nearest(pointer);
+      return el === null ? null : { el, message };
+    };
+    const apply = (el: HTMLElement, message: Element | null | undefined) => {
       el.setAttribute("data-selected", "true");
       const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? true;
       el.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
+      if (message?.id) {
+        // The control the issue's message describes, or the first control of the item it
+        // describes (an item-level issue).
+        const described = root.querySelector<HTMLElement>(
+          `[aria-describedby~="${CSS.escape(message.id)}"]`,
+        );
+        const control = described?.matches("input, select, textarea, button, summary, [tabindex]")
+          ? described
+          : described?.querySelector<HTMLElement>("input, select, textarea, button");
+        control?.focus();
+      }
     };
-    mark();
-    return () => clearTimeout(timer);
+    const now = ready();
+    if (now !== null) {
+      apply(now.el, now.message);
+      return;
+    }
+    // The section or type opens on this selection, so the item renders after this effect: watch
+    // the editor until it appears. If it never does (an issue on a value with no item of its own),
+    // mark the nearest rendered item above it after a while.
+    const observer = new MutationObserver(() => {
+      const found = ready();
+      if (found === null) return;
+      stop();
+      apply(found.el, found.message);
+    });
+    const fallback = setTimeout(() => {
+      stop();
+      const el = nearest(parentPointer(pointer));
+      if (el !== null) apply(el, undefined);
+    }, 3000);
+    const stop = () => {
+      observer.disconnect();
+      clearTimeout(fallback);
+    };
+    observer.observe(root, { childList: true, subtree: true });
+    return stop;
   }, [panel, selection]);
 }
 
@@ -155,10 +205,12 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
     tabRefs.current[target]?.focus();
   };
   const [selection, setSelection] = useState<Selection>({ pointer: null, seq: 0 });
-  const onSelect = useCallback((pointer: string) => {
+  const onSelect = useCallback((pointer: string, focus?: string) => {
     setTab("form");
-    setSelection((s) => ({ pointer, seq: s.seq + 1 }));
+    setSelection((s) => ({ pointer, seq: s.seq + 1, ...(focus === undefined ? {} : { focus }) }));
   }, []);
+  // Errors outrank warnings: the button goes to the first error, else the first warning.
+  const firstIssue = checks.issues.find((i) => i.level === "error") ?? checks.issues[0];
   const panelRef = useRef<HTMLDivElement>(null);
   useMarkSelected(panelRef, selection);
   const reasonId = `${uid}-publish-reason`;
@@ -172,6 +224,16 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
         <p className="qm-builder__status" data-testid="draft-status">
           {t(changed ? "admin.config.status.changed" : "admin.config.status.unchanged")}
         </p>
+        {checks.status === "ready" && firstIssue !== undefined && raw.parseError === null && (
+          <button
+            type="button"
+            className={`qm-badge ${errorCount > 0 ? "qm-badge--critical" : "qm-badge--warning"} qm-builder__issues`}
+            onClick={() => onSelect(firstIssue.pointer, firstIssue.pointer)}
+          >
+            {issueWords(t, errorCount, warningCount)}
+            <VisuallyHidden>. {t("admin.issues.goTo")}</VisuallyHidden>
+          </button>
+        )}
         <div
           role="tablist"
           aria-label={t("admin.config.tabsLabel")}

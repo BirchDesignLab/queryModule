@@ -461,6 +461,27 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-xs);
 }
 
+/* Issue count per row: the number is visual only; the words are visually hidden in the button. */
+.qm-tree__issues {
+  flex: none;
+  min-inline-size: var(--qm-space-4);
+  text-align: center;
+}
+
+.qm-tree__key + .qm-tree__issues {
+  margin-inline-start: 0;
+}
+
+.qm-tree__label + .qm-tree__issues {
+  margin-inline-start: auto;
+}
+
+/* The toolbar's issue count is a button that goes to the first issue. */
+.qm-builder__issues {
+  min-height: var(--qm-space-8);
+  cursor: pointer;
+}
+
 .qm-tree__group {
   margin: var(--qm-space-2) 0 0;
   padding: 0 var(--qm-space-2);
