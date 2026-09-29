@@ -23,7 +23,15 @@ export function seededUser(email: string): { email: string; password: string } {
   const file =
     process.env.SEED_PASSWORD_SECRET_FILE ??
     fileURLToPath(new NodeURL("../../../.dev/secrets/SEED_PASSWORD_SECRET", import.meta.url));
-  const secret = readFileSync(file, "utf8").trim();
+  let secret: string;
+  try {
+    secret = readFileSync(file, "utf8").trim();
+  } catch {
+    // Name the variable, never the secret.
+    throw new Error(
+      "Seed password secret unreadable: set SEED_PASSWORD_SECRET_FILE or run the dev seed (.dev/secrets)",
+    );
+  }
   return {
     email,
     password: createHmac("sha256", secret).update(email.toLowerCase()).digest("base64url"),

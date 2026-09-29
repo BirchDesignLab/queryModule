@@ -16,6 +16,9 @@ const INTERACTIVE = [
   "main select",
   "main input",
   "main textarea",
+  "[role=button]",
+  "[role=tab]",
+  "summary",
 ].join(", ");
 
 async function panelReady(page: Page): Promise<void> {
@@ -42,10 +45,15 @@ async function headerHeight(page: Page): Promise<number> {
   return page.getByRole("banner").evaluate((el) => el.getBoundingClientRect().height);
 }
 
+/** Horizontal overflow of the page and of main; overflow-x: hidden would hide the first only. */
 async function overflowX(page: Page): Promise<number> {
   return page.evaluate(() => {
     const el = document.scrollingElement;
-    return el === null ? 0 : el.scrollWidth - el.clientWidth;
+    const main = document.querySelector("main");
+    return Math.max(
+      el === null ? 0 : el.scrollWidth - el.clientWidth,
+      main === null ? 0 : main.scrollWidth - main.clientWidth,
+    );
   });
 }
 
@@ -72,13 +80,16 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
 
   test("officer: mobile-unit layout, 48x48 targets, header and themes, keyboard plate query", async ({
     page,
+    browser,
   }) => {
-    // Header height of the dispatch layout at the same viewport, for the compact-bar check.
-    await signIn(page, seededUser("dispatcher@example.test"));
-    await panelReady(page);
-    const dispatchHeader = await headerHeight(page);
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    // Header height of the dispatch layout at the same viewport, for the compact-bar check, from
+    // its own context so no session or stored preference carries over.
+    const dispatchContext = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+    const dispatchPage = await dispatchContext.newPage();
+    await signIn(dispatchPage, seededUser("dispatcher@example.test"));
+    await panelReady(dispatchPage);
+    const dispatchHeader = await headerHeight(dispatchPage);
+    await dispatchContext.close();
 
     await signIn(page, seededUser("officer@example.test"));
     await panelReady(page);
@@ -94,15 +105,21 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
     await expect(theme.locator("option[value='night']")).toHaveCount(1);
     await expect(theme.locator("option[value='redShift']")).toHaveCount(1);
 
-    // Quick access first: the bar precedes the form in the panel.
-    const order = await page.evaluate(() => {
-      const bar = document.querySelector(".qm-quick-access");
+    // Quick access first, laid out (not just in DOM order) above the form, two buttons per row.
+    const layout = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll(".qm-quick-access button")];
+      const tops = buttons.map((b) => Math.round(b.getBoundingClientRect().top));
       const form = document.querySelector("main form");
-      return bar !== null && form !== null
-        ? bar.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING
-        : 0;
+      return {
+        count: buttons.length,
+        tops,
+        formTop: form === null ? -1 : Math.round(form.getBoundingClientRect().top),
+      };
     });
-    expect(order).toBeGreaterThan(0);
+    expect(layout.count).toBeGreaterThanOrEqual(3);
+    expect(layout.tops[1]).toBe(layout.tops[0]);
+    expect(layout.tops[2]).toBeGreaterThan(layout.tops[0] ?? 0);
+    expect(layout.formTop).toBeGreaterThan(Math.max(...layout.tops));
     // Guard against a vacuous pass: header controls, quick access, form fields and Submit.
     expect(await page.locator(INTERACTIVE).count()).toBeGreaterThan(8);
     expect(await undersizedTargets(page, MIN_TARGET)).toEqual([]);
@@ -118,7 +135,9 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
     await expect(page.getByRole("heading", { name: "Last query" })).toBeVisible();
 
     // The Copy reference button only exists after an acknowledgment, so measure again.
-    await expect(page.getByRole("button", { name: "Copy reference" })).toBeVisible();
+    const copyBox = await page.getByRole("button", { name: "Copy reference" }).boundingBox();
+    expect(copyBox?.width ?? 0).toBeGreaterThanOrEqual(MIN_TARGET - 0.5);
+    expect(copyBox?.height ?? 0).toBeGreaterThanOrEqual(MIN_TARGET - 0.5);
     expect(await undersizedTargets(page, MIN_TARGET)).toEqual([]);
     expect(await overflowX(page)).toBeLessThanOrEqual(0);
     await expectNoSeriousAxeViolations(page);
