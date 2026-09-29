@@ -27,7 +27,7 @@ export function docFromClient(config: ClientSiteConfig): JsonObject {
   return structuredClone(rest) as JsonObject;
 }
 
-/** Immutable set at a path; unrelated branches keep their identity. */
+/** Immutable set at a path; unrelated branches keep their identity; undefined removes the key. */
 export function setAtPath<T>(doc: T, path: readonly PathSegment[], value: unknown): T {
   const [head, ...rest] = path;
   if (head === undefined) return value as T;
@@ -37,6 +37,11 @@ export function setAtPath<T>(doc: T, path: readonly PathSegment[], value: unknow
     return copy as T;
   }
   const obj = (doc ?? {}) as JsonObject;
+  if (rest.length === 0 && value === undefined) {
+    // Setting a key to undefined removes it (a blank optional control, a removed condition).
+    const { [head]: _removed, ...others } = obj;
+    return others as T;
+  }
   return { ...obj, [head]: setAtPath(obj[head], rest, value) } as T;
 }
 

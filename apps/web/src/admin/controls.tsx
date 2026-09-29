@@ -3,7 +3,7 @@ import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
-import type { PathSegment } from "./draft.js";
+import { type PathSegment, toPointer } from "./draft.js";
 
 /**
  * Controls shared by the purpose-built editors (Task 31 part 2, #355): each writes one draft path
@@ -55,7 +55,12 @@ interface ControlProps {
 /** Diagnostics for a path plus an optional local message (text that does not parse). */
 function useControlIssues(idPrefix: string, path: readonly PathSegment[], local?: string) {
   const checks = useContext(ChecksContext);
-  const issues = issuesFor(checks, path);
+  // A control also claims issues on its own key while the key is absent (grouping would move them
+  // to the parent, which has no messages of its own in the purpose-built editors).
+  const pointer = toPointer(path);
+  const grouped = issuesFor(checks, path);
+  const exact = checks.issues.filter((i) => i.pointer === pointer);
+  const issues = grouped ?? (exact.length > 0 ? exact : undefined);
   const id = controlId(idPrefix, path);
   const issuesId = `${id}-issues`;
   const localId = `${id}-local`;
@@ -75,6 +80,26 @@ function useControlIssues(idPrefix: string, path: readonly PathSegment[], local?
     </>
   );
   return { id, invalid: isError(issues) || local !== undefined, describedBy, messages };
+}
+
+/**
+ * Issues grouped at an item's own pointer that none of its rendered controls claims (a missing
+ * key, or a union error on the item itself). The fieldset links them by aria-describedby.
+ */
+export function useItemIssues(
+  idPrefix: string,
+  path: readonly PathSegment[],
+  claimed: readonly string[],
+) {
+  const checks = useContext(ChecksContext);
+  const own = new Set(claimed.map((k) => toPointer([...path, k])));
+  const issues = issuesFor(checks, path)?.filter((i) => !own.has(i.pointer));
+  const id = `${controlId(idPrefix, path)}-item-issues`;
+  const shown = issues !== undefined && issues.length > 0 ? issues : undefined;
+  return {
+    describedBy: shown === undefined ? undefined : id,
+    messages: <IssueMessages id={id} issues={shown} />,
+  };
 }
 
 /**
@@ -139,10 +164,16 @@ export function SelectControl({
   options,
   blank,
   onValue,
+  optionLabel,
+  owner,
 }: ControlProps & {
   value: unknown;
   options: readonly string[];
   blank?: string;
+  /** Visible text of an option; the option value itself by default. */
+  optionLabel?(option: string): string;
+  /** As for TextControl: the item's first control, focused when the item is added. */
+  owner?: string;
   onValue?(value: string | undefined): void;
 }) {
   const { setPath } = useDraftSetters();
@@ -155,6 +186,8 @@ export function SelectControl({
       <label htmlFor={id}>{label}</label>{" "}
       <select
         id={id}
+        data-owner={owner}
+        data-role={owner === undefined ? undefined : "first"}
         value={current}
         aria-invalid={invalid}
         aria-describedby={describedBy}
@@ -167,7 +200,7 @@ export function SelectControl({
         {blank !== undefined && <option value="">{blank}</option>}
         {shown.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {optionLabel === undefined ? o : optionLabel(o)}
           </option>
         ))}
       </select>

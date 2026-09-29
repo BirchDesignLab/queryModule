@@ -1,5 +1,5 @@
 import { DATA_TYPES, type DataType } from "@querymodule/core/config";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
@@ -19,7 +19,8 @@ import {
   useGeneration,
 } from "./controls.js";
 import type { JsonObject, PathSegment } from "./draft.js";
-import { NodeEditor } from "./GenericForm.js";
+import { OtherKeys } from "./GenericForm.js";
+import { RulesEditor, SectionCondition } from "./RulesEditor.js";
 
 /**
  * Task 31 part 2 (#355): purpose-built editors for query types, their sections and their fields
@@ -27,7 +28,7 @@ import { NodeEditor } from "./GenericForm.js";
  * editors never hide part of the config.
  */
 
-const TYPE_KEYS = new Set(["code", "labelKey", "allowPlateOnly", "sections", "fields"]);
+const TYPE_KEYS = new Set(["code", "labelKey", "allowPlateOnly", "sections", "fields", "rules"]);
 const FIELD_KEYS = new Set([
   "key",
   "labelKey",
@@ -40,6 +41,7 @@ const FIELD_KEYS = new Set([
   "pattern",
   "section",
 ]);
+const SECTION_KEYS = new Set(["key", "labelKey", "when"]);
 const TRANSFORMS = ["none", "upper"] as const;
 
 const newField = (section: string): Obj => ({
@@ -64,36 +66,6 @@ const newType = (): Obj => ({
 /** Value kinds a default can take; a data type change across kinds drops the default. */
 const kindOf = (t: unknown): "number" | "boolean" | "text" =>
   t === "number" || t === "year" ? "number" : t === "boolean" ? "boolean" : "text";
-
-/** The generic form for the keys an editor does not cover. */
-function OtherKeys({
-  item,
-  path,
-  covered,
-  idPrefix,
-}: {
-  item: Obj;
-  path: readonly PathSegment[];
-  covered: ReadonlySet<string>;
-  idPrefix: string;
-}) {
-  const { setPath } = useDraftSetters();
-  return (
-    <>
-      {Object.entries(item)
-        .filter(([k]) => !covered.has(k))
-        .map(([k, v]) => (
-          <NodeEditor
-            key={k}
-            value={v}
-            path={[...path, k]}
-            idPrefix={idPrefix}
-            onChange={setPath}
-          />
-        ))}
-    </>
-  );
-}
 
 /** Settings without a purpose-built control, rendered when opened. */
 function MoreSettings(props: Parameters<typeof OtherKeys>[0]) {
@@ -224,11 +196,13 @@ function QueryTypeEditor({
         value={type.allowPlateOnly}
       />
       <SectionsEditor
+        type={type}
         sections={asObjects(type.sections)}
         path={[...path, "sections"]}
         idPrefix={idPrefix}
       />
       <FieldsEditor type={type} path={[...path, "fields"]} idPrefix={idPrefix} />
+      <RulesEditor type={type} path={[...path, "rules"]} idPrefix={idPrefix} />
       <OtherKeys item={type} path={path} covered={TYPE_KEYS} idPrefix={idPrefix} />
       <ItemButtons
         owner={owner}
@@ -244,10 +218,12 @@ function QueryTypeEditor({
 }
 
 function SectionsEditor({
+  type,
   sections,
   path,
   idPrefix,
 }: {
+  type: Obj;
   sections: Obj[];
   path: readonly PathSegment[];
   idPrefix: string;
@@ -281,12 +257,8 @@ function SectionsEditor({
               value={section.labelKey}
             />
             <LabelTextControls idPrefix={idPrefix} path={itemPath} labelKey={section.labelKey} />
-            <OtherKeys
-              item={section}
-              path={itemPath}
-              covered={new Set(["key", "labelKey"])}
-              idPrefix={idPrefix}
-            />
+            <SectionCondition section={section} path={itemPath} type={type} idPrefix={idPrefix} />
+            <OtherKeys item={section} path={itemPath} covered={SECTION_KEYS} idPrefix={idPrefix} />
             <ItemButtons
               owner={owner(i)}
               name={key}
@@ -356,7 +328,10 @@ function FieldsEditor({
   const listOwner = controlId(idPrefix, path);
   // Row handlers read the latest list, so memoized rows never act on a stale copy.
   const latest = useRef({ fields, path, owner, listOwner });
-  latest.current = { fields, path, owner, listOwner };
+  // Written after commit (the #392 pattern), so a discarded render never leaks into a handler.
+  useLayoutEffect(() => {
+    latest.current = { fields, path, owner, listOwner };
+  });
   const onMove = useCallback(
     (from: number, to: number) => {
       const { fields: list, path: at, owner: own } = latest.current;

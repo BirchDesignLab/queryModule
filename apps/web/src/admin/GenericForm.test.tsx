@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
@@ -67,5 +67,14 @@ describe("generic form edge cases (#388, UX-004)", () => {
     const input = screen.getByLabelText("odd key");
     expect(input.id).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(input).toHaveValue("Odd");
+  });
+});
+
+describe("#388 root issues", () => {
+  it("issues with no control of their own describe the form", async () => {
+    const t = await openBuilder();
+    act(() => configDraftStore(t.services).getState().setPath(["sources"], undefined));
+    const form = await screen.findByTestId("form-tab");
+    await waitFor(() => expect(form).toHaveAccessibleDescription(/^Error:/));
   });
 });

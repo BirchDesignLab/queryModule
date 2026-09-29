@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
-import { controlId, NumberControl } from "./controls.js";
+import { controlId, NumberControl, useDraftSetters } from "./controls.js";
 import { type PathSegment, toPointer } from "./draft.js";
 
 interface NodeEditorProps {
@@ -213,5 +213,35 @@ export function Section({ name, children }: { name: string; children: () => Reac
       </summary>
       {open && children()}
     </details>
+  );
+}
+
+/** The generic form for the keys an editor does not cover. */
+export function OtherKeys({
+  item,
+  path,
+  covered,
+  idPrefix,
+}: {
+  item: Record<string, unknown>;
+  path: readonly PathSegment[];
+  covered: ReadonlySet<string>;
+  idPrefix: string;
+}) {
+  const { setPath } = useDraftSetters();
+  return (
+    <>
+      {Object.entries(item)
+        .filter(([k]) => !covered.has(k))
+        .map(([k, v]) => (
+          <NodeEditor
+            key={k}
+            value={v}
+            path={[...path, k]}
+            idPrefix={idPrefix}
+            onChange={setPath}
+          />
+        ))}
+    </>
   );
 }

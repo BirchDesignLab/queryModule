@@ -94,10 +94,9 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
     const keywords = draft(t).keywords as { keyword: string }[];
     expect(keywords.at(-1)?.keyword).toBe("");
     expect(keywords.at(-2)?.keyword).not.toBe("");
-    await openSection(t, "queryTypes");
-    // Task 31 part 2: each query type opens on demand.
-    await t.user.click(screen.getByText("Query type WNT", { selector: "summary" }));
-    const add = screen.getByRole("button", { name: "Add item queryTypes.3.rules" });
+    // Task 31 part 2: rules have a purpose-built editor; an emptied generic list shows the rule.
+    act(() => configDraftStore(t.services).getState().setPath(["keywords"], []));
+    const add = screen.getByRole("button", { name: "Add item keywords" });
     expect(add).toBeDisabled();
     expect(document.getElementById(add.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
       "Add the first item in Raw JSON",

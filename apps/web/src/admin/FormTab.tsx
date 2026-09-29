@@ -1,4 +1,5 @@
 import { useCallback, useContext, useId } from "react";
+import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore } from "./builder-store.js";
 import { ChecksContext, IssueMessages } from "./checks.js";
@@ -20,10 +21,18 @@ export function FormTab({ doc }: { doc: JsonObject }) {
     ? doc.locales.filter((l): l is string => typeof l === "string")
     : [];
   const locales = strings.length > 0 ? strings : ["en"];
+  const t = useT();
   const rootIssues = useContext(ChecksContext).groups.get("");
+  const rootId = `${idPrefix}-root-issues`;
+  // #388: issues with no control of their own (a missing top-level key) describe the whole form.
   return (
-    <div>
-      <IssueMessages id={`${idPrefix}-root-issues`} issues={rootIssues} />
+    <fieldset
+      className="qm-admin__form"
+      aria-label={t("admin.config.tab.form")}
+      aria-describedby={rootIssues === undefined ? undefined : rootId}
+      data-testid="form-tab"
+    >
+      <IssueMessages id={rootId} issues={rootIssues} />
       {Object.entries(doc).map(([name, value]) => (
         <Section key={name} name={name}>
           {() =>
@@ -38,6 +47,6 @@ export function FormTab({ doc }: { doc: JsonObject }) {
         </Section>
       ))}
       <LabelOverlayEditor locales={locales} idPrefix={idPrefix} />
-    </div>
+    </fieldset>
   );
 }

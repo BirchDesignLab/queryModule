@@ -75,9 +75,10 @@ export function IssueMessages({
       {issues.map((issue) => (
         <span
           key={`${issue.pointer}:${issue.key}:${JSON.stringify(issue.params)}`}
-          className="qm-admin__issue"
+          className={`qm-admin__issue qm-admin__issue--${issue.level}`}
         >
           {" "}
+          {t(issue.level === "error" ? "admin.config.level.error" : "admin.config.level.warning")}{" "}
           {t(issue.key, issue.params)}
         </span>
       ))}

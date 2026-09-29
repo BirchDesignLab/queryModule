@@ -132,3 +132,14 @@ describe("config diagnostic texts (Task 33 round 1, S1/C2, NFR-001)", () => {
     expect([...keys].filter((k) => !(k in flattenBundle(EN_BUNDLE)))).toEqual([]);
   });
 });
+
+describe("setAtPath removal (Task 31 part 2)", () => {
+  it("setting a key to undefined removes it and keeps sibling identity", () => {
+    const doc = { a: { b: 1, c: { d: 2 } }, e: [1] };
+    const next = setAtPath(doc, ["a", "b"], undefined);
+    expect(next.a).toEqual({ c: { d: 2 } });
+    expect("b" in next.a).toBe(false);
+    expect(next.a.c).toBe(doc.a.c);
+    expect(next.e).toBe(doc.e);
+  });
+});
