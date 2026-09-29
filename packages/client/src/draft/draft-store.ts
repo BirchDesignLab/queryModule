@@ -3,6 +3,9 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 /** User values as entered (spec 6.7). */
 export type DraftValue = string | boolean | null;
 
+/** Form or terminal (spec 6.2 "toggle" layout); one global mode, memory only (D-B10). */
+export type PanelMode = "form" | "terminal";
+
 /** `sources: null` means the FormState defaults. */
 export interface QueryDraft {
   values: Readonly<Record<string, DraftValue>>;
@@ -19,6 +22,12 @@ export interface DraftState {
   setSources(sourceIds: readonly string[]): void;
   /** M1 P3 applies mergeDraft through this. */
   replaceValues(queryType: string, values: Readonly<Record<string, DraftValue>>): void;
+  /** Global, not per query type (D-B10); "form" after reset. */
+  mode: PanelMode;
+  setMode(mode: PanelMode): void;
+  /** The terminal input's text; "" after reset. */
+  terminalText: string;
+  setTerminalText(text: string): void;
   reset(): void;
 }
 
@@ -39,6 +48,8 @@ export function createDraftStore(): DraftStore {
   return createStore<DraftState>()((set) => ({
     queryType: null,
     drafts: {},
+    mode: "form",
+    terminalText: "",
     select: (queryType) =>
       set((s) => ({
         queryType,
@@ -68,6 +79,8 @@ export function createDraftStore(): DraftStore {
         const draft = draftOf(s.drafts, queryType);
         return { drafts: { ...s.drafts, [queryType]: { ...draft, values: { ...values } } } };
       }),
-    reset: () => set({ queryType: null, drafts: {} }),
+    setMode: (mode) => set({ mode }),
+    setTerminalText: (terminalText) => set({ terminalText }),
+    reset: () => set({ queryType: null, drafts: {}, mode: "form", terminalText: "" }),
   }));
 }

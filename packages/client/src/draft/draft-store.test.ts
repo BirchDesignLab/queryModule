@@ -137,6 +137,38 @@ describe("FR-056 the store copies what it is given", () => {
   });
 });
 
+describe("FR-056 panel mode and terminal text (spec 6.7, D-B10)", () => {
+  it("starts in form mode with empty terminal text", () => {
+    const s = createDraftStore().getState();
+    expect(s.mode).toBe("form");
+    expect(s.terminalText).toBe("");
+  });
+
+  it("setMode and setTerminalText store their values", () => {
+    const store = createDraftStore();
+    store.getState().setMode("terminal");
+    store.getState().setTerminalText("VEH.ZZ-0001");
+    expect(store.getState().mode).toBe("terminal");
+    expect(store.getState().terminalText).toBe("VEH.ZZ-0001");
+  });
+
+  it("mode is global: selecting another query type keeps it", () => {
+    const store = createDraftStore();
+    store.getState().setMode("terminal");
+    store.getState().select("PER");
+    expect(store.getState().mode).toBe("terminal");
+  });
+
+  it("reset returns form mode and empty terminal text", () => {
+    const store = createDraftStore();
+    store.getState().setMode("terminal");
+    store.getState().setTerminalText("VEH.ZZ-0001");
+    store.getState().reset();
+    expect(store.getState().mode).toBe("form");
+    expect(store.getState().terminalText).toBe("");
+  });
+});
+
 describe("SEC-006 the store never touches browser storage", () => {
   it("writes to no storage across every action", () => {
     const writes: string[] = [];
@@ -153,6 +185,10 @@ describe("SEC-006 the store never touches browser storage", () => {
       store.getState().setValue("plate", "ZZ-0001");
       store.getState().setSources(["a"]);
       store.getState().replaceValues("PER", { last: "Testcase" });
+      for (let i = 0; i < 100; i += 1) {
+        store.getState().setMode(i % 2 === 0 ? "terminal" : "form");
+        store.getState().setTerminalText(`VEH.ZZ-${String(i).padStart(4, "0")}`);
+      }
       store.getState().reset();
       expect(writes).toEqual([]);
     } finally {
