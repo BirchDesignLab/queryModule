@@ -12,6 +12,7 @@ import {
 } from "./http/security";
 import type { AppEnv } from "./http/types";
 import { mountWeb } from "./http/web";
+import { mountQueriesRoute } from "./queries/route";
 import { mountConfigRoute } from "./routes/config";
 import { mountPreferencesRoute } from "./routes/preferences";
 import { mountPublicRoutes } from "./routes/public";
@@ -49,6 +50,7 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   mountAuthRoutes(app, d);
   mountPublicRoutes(app, d);
   mountConfigRoute(app, d);
+  mountQueriesRoute(app, d);
   mountPreferencesRoute(app, d);
   mountWeb(app, d);
   app.notFound((c) => apiError(c, "notFound"));

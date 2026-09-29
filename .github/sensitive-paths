@@ -34,6 +34,8 @@ packages/core/src/contracts/ws.ts
 packages/core/src/contracts/version.ts
 packages/core/contracts/ws-events.schema.json
 packages/core/src/planner/**
+# Query routes and the access policy (spec 5.2, SEC-014)
+packages/api/src/queries/**
 # Delegation
 packages/api/src/delegation/**
 # Terminal command parser

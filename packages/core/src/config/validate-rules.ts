@@ -8,6 +8,8 @@ import { resolveShortcuts, strokesCollide, usLayoutChar } from "./shortcuts";
 import { forEachConditionLiteral } from "./validate-literals";
 
 export const MAX_SOURCES_PER_SUBMIT = 8;
+/** Spec 5.2 step 2: dispatched (part, source) pairs per submit, across the primary and nested parts. */
+export const MAX_PAIRS_PER_SUBMIT = 8;
 /** Exactly one printable non-alphanumeric ASCII character, not "=" and not space. */
 export const DELIMITER_PATTERN = /^[!-/:-<>-@[-`{-~]$/;
 
@@ -283,9 +285,9 @@ export function checkWarnings(config: SiteConfig, out: DiagnosticSink): void {
     let total = qt.sources.length;
     for (const n of qt.alsoRun ?? [])
       total += config.queryTypes.find((x) => x.code === n.queryType)?.sources.length ?? 0;
-    if (total > MAX_SOURCES_PER_SUBMIT)
+    if (total > MAX_PAIRS_PER_SUBMIT)
       out.warn(pointer("queryTypes", q), "config.tooManySourcesPossible", {
-        max: MAX_SOURCES_PER_SUBMIT,
+        max: MAX_PAIRS_PER_SUBMIT,
       });
   });
   checkRequiredWithoutPosition(config, out);

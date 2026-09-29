@@ -23,12 +23,13 @@ export default defineConfig({
         "packages/core/src/**": { lines: 95, branches: 95 },
         "packages/core/src/terminal/**": { lines: 95, branches: 95 },
         "packages/client/src/**": { lines: 85, branches: 85 },
-        // Spec 10.5: 100% branches in the four sensitive API directories; 85% lines for the rest.
+        // Spec 10.5: 100% branches in the sensitive API directories; 85% lines for the rest.
         // One key per directory; a glob that matches no file yet passes (W1 fix I4).
         "packages/api/src/audit/**": { branches: 100 },
         "packages/api/src/credentials/**": { branches: 100 },
         "packages/api/src/delegation/**": { branches: 100 },
         "packages/api/src/dispatch/**": { branches: 100 },
+        "packages/api/src/queries/**": { branches: 100 },
         "packages/api/src/**": { lines: 85 },
       },
     },

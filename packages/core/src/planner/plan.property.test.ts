@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type SiteConfig, SiteConfigSchema } from "../config/schema";
+import { MAX_PAIRS_PER_SUBMIT } from "../config/validate-rules";
 import { evaluateForm } from "../rules/evaluate-form";
 import type { FormInput } from "../rules/types";
 import { isPlanError, type PlanPart, planRequest } from "./plan";
@@ -49,6 +50,16 @@ const perInput: fc.Arbitrary<FormInput> = fc.record(
   },
   { requiredKeys: [] },
 );
+
+/** A PER input that always passes validation (PER and WNT require only last), so no run returns early. */
+const validPerInput: fc.Arbitrary<FormInput> = fc.record(
+  { last: name, first: name, dob },
+  { requiredKeys: ["last"] },
+);
+/** WNT's default sources in the wide config: the nested part's pairs when PER's last carries over. */
+const wntDefaults =
+  wide.queryTypes.find((q) => q.code === "WNT")?.sources.filter((s) => s.selectedByDefault)
+    .length ?? 0;
 
 function sourceIdsOf(c: SiteConfig, code: string): string[] {
   return c.queryTypes.find((q) => q.code === code)?.sources.map((s) => s.sourceId) ?? [];
@@ -104,24 +115,22 @@ describe("NFR-002 planRequest invariants over random VEH and PER submits (spec 4
             expect(eligible.has(id)).toBe(true);
           for (const key of Object.keys(part.values)) expect(visible.has(key)).toBe(true);
         }
-        expect(total).toBeLessThanOrEqual(8);
+        expect(total).toBeLessThanOrEqual(MAX_PAIRS_PER_SUBMIT);
       }),
       { numRuns: 200 },
     );
   });
-  it("is plan.tooManySources exactly when the planned pairs would exceed 8", () => {
+  it("is plan.tooManySources exactly when the planned pairs would exceed the pair cap", () => {
+    expect(wntDefaults).toBeGreaterThan(0);
     fc.assert(
-      fc.property(perInput, fc.subarray(sourceIdsOf(wide, "PER")), (input, selected) => {
+      fc.property(validPerInput, fc.subarray(sourceIdsOf(wide, "PER")), (input, selected) => {
+        expect(evaluateForm(wide, "PER", input, options).errors).toEqual([]);
         const r = planRequest(wide, "PER", input, selected, options);
-        const primaryErrors = evaluateForm(wide, "PER", input, options).errors;
-        if (primaryErrors.length > 0) {
-          expect(r).toEqual({ errors: primaryErrors });
-          return;
-        }
-        // WNT gets its four defaults whenever PER's last carries over (WNT requires only last).
-        const pairs = selected.length + 4;
-        if (pairs > 8)
-          expect(r).toEqual({ errors: [{ key: "plan.tooManySources", params: { max: 8 } }] });
+        const pairs = selected.length + wntDefaults;
+        if (pairs > MAX_PAIRS_PER_SUBMIT)
+          expect(r).toEqual({
+            errors: [{ key: "plan.tooManySources", params: { max: MAX_PAIRS_PER_SUBMIT } }],
+          });
         else expect(isPlanError(r)).toBe(false);
       }),
       { numRuns: 200 },

@@ -1,9 +1,14 @@
 import type { z } from "zod";
 import type { Condition } from "../config/index";
-import { MAX_SOURCES_PER_SUBMIT } from "../config/validate-rules";
+import { MAX_PAIRS_PER_SUBMIT } from "../config/validate-rules";
 import type { AuditValidationErrorSchema } from "../contracts/audit";
 import type { ValidationError } from "../contracts/validation-error";
-import { compileCondition, compileQueryType, findQueryType } from "../rules/compile";
+import {
+  type CompiledField,
+  compileCondition,
+  compileQueryType,
+  findQueryType,
+} from "../rules/compile";
 import { evaluateCondition } from "../rules/conditions";
 import { evaluateForm } from "../rules/evaluate-form";
 import type {
@@ -90,13 +95,12 @@ function narrow(s: FormState, selected: readonly string[]): { keep: string[]; dr
 
 /** Spec 4.2: a NestedQuery.when reads the primary's submitted values (hidden fields absent). */
 function holds(
-  config: RulesConfig,
+  fieldByKey: ReadonlyMap<string, CompiledField>,
   primary: FormState,
   when: Condition,
-  options: EvaluateOptions,
+  now: number,
 ): boolean {
-  const fieldByKey = compileQueryType(config, primary.queryType, options.now)?.fieldByKey;
-  const compiled = compileCondition(when, fieldByKey ?? new Map(), options.now);
+  const compiled = compileCondition(when, fieldByKey, now);
   return evaluateCondition(compiled, (k) => primary.values[k] ?? null);
 }
 
@@ -108,9 +112,11 @@ export function planRequest(
   selectedSourceIds: readonly string[],
   options: EvaluateOptions,
 ): Plan | PlanError {
-  // Step 1: primary.
+  // Step 1: primary. Compiled once here for every alsoRun condition; an unknown type is
+  // undefined here and evaluateForm reports it as validation.unknownQueryType.
+  const compiled = compileQueryType(config, queryType, options.now);
   const primary = evaluateForm(config, queryType, userValues, options);
-  if (primary.errors.length > 0) return { errors: primary.errors };
+  if (compiled === undefined || primary.errors.length > 0) return { errors: primary.errors };
   // Step 2: eligible sources. Dedupe first (first occurrence wins): the request schema bounds only the
   // length, and a repeated id would plan a duplicate (part, source) pair and count twice toward the cap.
   const selected = [...new Set(selectedSourceIds)];
@@ -139,7 +145,8 @@ export function planRequest(
   // Steps 4 and 5: nested parts, in config order; ids are alsoRun index + 1.
   const alsoRun = findQueryType(config, primary.queryType)?.alsoRun ?? [];
   alsoRun.forEach((nested, index) => {
-    if (nested.when !== undefined && !holds(config, primary, nested.when, options)) return;
+    if (nested.when !== undefined && !holds(compiled.fieldByKey, primary, nested.when, options.now))
+      return;
     const input: Record<string, CanonicalValue> = {};
     for (const [target, source] of Object.entries(nested.fieldMap)) {
       const v = primary.values[source];
@@ -187,7 +194,7 @@ export function planRequest(
   });
   // Spec 5.2 step 2: total dispatched (part, source) pairs capped.
   const total = parts.reduce((t, p) => t + p.sourceIds.length, 0);
-  if (total > MAX_SOURCES_PER_SUBMIT)
-    return { errors: [{ key: "plan.tooManySources", params: { max: MAX_SOURCES_PER_SUBMIT } }] };
-  return { mode: primary.mode, droppedSourceIds: n.dropped, parts };
+  if (total > MAX_PAIRS_PER_SUBMIT)
+    return { errors: [{ key: "plan.tooManySources", params: { max: MAX_PAIRS_PER_SUBMIT } }] };
+  return { mode: primary.mode, droppedSourceIds: [...n.dropped], parts };
 }
