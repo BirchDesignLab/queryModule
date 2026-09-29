@@ -14,6 +14,7 @@ import type { Tx } from "../db/tx";
 import type { AppDeps } from "../deps";
 import { apiError, rateLimited } from "../http/errors";
 import type { AppEnv } from "../http/types";
+import { sanitizeSubmitError } from "./errors";
 
 /** Per-user submit limit, default 30 per minute (spec 5.2 step 1). */
 export const QUERY_LIMIT = { limit: 30, windowMs: 60_000 } as const;
@@ -68,8 +69,30 @@ export async function admitSubmit(c: Context<AppEnv>, d: AppDeps): Promise<Admis
   return { kind: "admit", idempotencyKey: key.data, raw, receivedAt, receivedMono };
 }
 
-/** Rebuilds the original 202 from the part rows, their source_result rows and the acknowledged audit row. */
+/**
+ * Rebuilds the original 202 from the part rows, their source_result rows and the acknowledged audit
+ * row. A throw leaves as a fixed-text ReplayIntegrityError or a sanitized SubmitTransactionError:
+ * drizzle's message quotes the userId and the Idempotency-Key (spec 5.9, #317 C-m1).
+ */
 export async function replayResponse(
+  db: Db | Tx,
+  userId: string,
+  idempotencyKey: string,
+): Promise<SubmitQueryResponse | null> {
+  try {
+    return await readReplay(db, userId, idempotencyKey);
+  } catch (e) {
+    if (e instanceof ReplayIntegrityError) throw e;
+    throw sanitizeSubmitError(e, "replay");
+  }
+}
+
+/** A stored request that cannot be replayed; the message is fixed text, never row contents. */
+export class ReplayIntegrityError extends Error {
+  override name = "ReplayIntegrityError";
+}
+
+async function readReplay(
   db: Db | Tx,
   userId: string,
   idempotencyKey: string,
@@ -106,7 +129,7 @@ export async function replayResponse(
     .select({ details: auditEvent.details })
     .from(auditEvent)
     .where(and(eq(auditEvent.correlationId, correlationId), eq(auditEvent.type, "acknowledged")));
-  if (!ack) throw new Error("replay: acknowledged audit row missing");
+  if (!ack) throw new ReplayIntegrityError("replay: acknowledged audit row missing");
   const { acknowledgedAt } = parseAuditDetails("acknowledged", ack.details);
   return SubmitQueryResponseSchema.parse({
     correlationId,
