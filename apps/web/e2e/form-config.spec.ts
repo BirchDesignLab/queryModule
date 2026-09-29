@@ -27,8 +27,7 @@ test("FR-002 FR-003 FR-011 the panel renders from the live GET /api/v1/config", 
 
   await select.selectOption("VEH");
   const expected = evaluateForm(
-    // biome-ignore lint/suspicious/noExplicitAny: the live payload is the RulesConfig evaluateForm takes; the test compares the two.
-    config as any,
+    config as unknown as Parameters<typeof evaluateForm>[0],
     "VEH",
     {},
     { now: Date.now() },

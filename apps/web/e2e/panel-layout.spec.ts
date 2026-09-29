@@ -56,11 +56,40 @@ test.describe("panel at 320px (spec 6.2, 6.5, 6.6)", () => {
       });
       expect(ring.style).not.toBe("none");
       expect(ring.width).toBeGreaterThan(0);
-      const surface = await plate.evaluate((el) => {
-        const raised = el.closest(".qm-query-panel") ?? el.parentElement;
-        return raised === null ? "" : getComputedStyle(raised).backgroundColor;
+      // Contrast of the ring against the field's own surface (nearest opaque
+      // background), 3:1 minimum (spec 6.5, WCAG 1.4.11). Colours are
+      // normalised through a canvas so any computed colour syntax works.
+      const contrast = await plate.evaluate((el) => {
+        const toRgba = (css: string): [number, number, number, number] => {
+          const ctx = document.createElement("canvas").getContext("2d");
+          if (ctx === null) throw new Error("no 2d context");
+          ctx.clearRect(0, 0, 1, 1);
+          ctx.fillStyle = css;
+          ctx.fillRect(0, 0, 1, 1);
+          const d = ctx.getImageData(0, 0, 1, 1).data;
+          return [d[0] ?? 0, d[1] ?? 0, d[2] ?? 0, d[3] ?? 0];
+        };
+        const lum = ([r, g, b]: [number, number, number, number]): number => {
+          const c = [r, g, b].map((v) => {
+            const x = v / 255;
+            return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * (c[0] ?? 0) + 0.7152 * (c[1] ?? 0) + 0.0722 * (c[2] ?? 0);
+        };
+        let node: Element | null = el;
+        let bg: [number, number, number, number] = [0, 0, 0, 0];
+        while (node !== null) {
+          bg = toRgba(getComputedStyle(node).backgroundColor);
+          if (bg[3] === 255) break;
+          node = node.parentElement;
+        }
+        if (bg[3] !== 255) bg = [255, 255, 255, 255];
+        const ringRgba = toRgba(getComputedStyle(el).outlineColor);
+        const l1 = lum(ringRgba);
+        const l2 = lum(bg);
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
       });
-      expect(ring.color).not.toBe(surface);
+      expect(contrast).toBeGreaterThanOrEqual(3);
 
       await expectNoSeriousAxeViolations(page);
     });
