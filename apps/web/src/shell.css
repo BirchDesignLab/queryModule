@@ -149,3 +149,40 @@ body {
   gap: var(--qm-space-4);
   align-items: start;
 }
+
+/* Builder diagnostics and item controls (issue 388): level text leads each message; errors use the
+   foreground-safe field.required token, warnings the body text; notes are muted. */
+.qm-admin__issues {
+  display: block;
+}
+
+.qm-admin__issue--error {
+  color: var(--qm-field-required);
+}
+
+.qm-admin__issue--warning,
+.qm-admin__note {
+  font-style: italic;
+}
+
+.qm-admin__count {
+  font-weight: bold;
+}
+
+.qm-admin__item-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+  margin-block: var(--qm-space-2);
+}
+
+.qm-admin__condition {
+  border-inline-start: var(--qm-border-width) solid var(--qm-color-accent);
+}
+
+.qm-admin__form {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
