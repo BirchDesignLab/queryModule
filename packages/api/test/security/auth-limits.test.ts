@@ -89,7 +89,10 @@ describe("SEC-005 auth limits and lockout", () => {
     });
     // Carry-forward #104 C-M2: the audited sessionId is the session row id, never the token.
     expect(ok?.details.sessionId).not.toBe(token);
-    const out = await t.request("/api/v1/auth/sign-out", { method: "POST", headers: { cookie } });
+    const out = await t.request("/api/v1/auth/sign-out", {
+      method: "POST",
+      headers: { cookie, "x-requested-with": "querymodule" },
+    });
     expect(out.status).toBe(200);
     const logoutDetails = (await t.auditRows("logout"))[0]?.details;
     expect(logoutDetails).toEqual({ sessionId: ok?.details.sessionId });

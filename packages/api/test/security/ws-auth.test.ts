@@ -97,7 +97,10 @@ describe("SEC-014 WebSocket upgrade and heartbeat", () => {
     const { t, s, cookie } = await setup();
     const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
     const code = closeCode(ws);
-    await t.request("/api/v1/auth/sign-out", { method: "POST", headers: { cookie } });
+    await t.request("/api/v1/auth/sign-out", {
+      method: "POST",
+      headers: { cookie, "x-requested-with": "querymodule" },
+    });
     expect(await code).toBe(4001);
   });
   it("closes 4001 when the session expires while open", async () => {

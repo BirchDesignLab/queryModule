@@ -27,14 +27,17 @@ export const noStore = (): MiddlewareHandler<AppEnv> => async (c, next) => {
   c.res.headers.set("Cache-Control", "no-store");
 };
 
-// Better Auth routes rely on its own origin check (spec 5.9); /auth/embedded is not Better Auth.
-// The embedded check ignores case and covers a trailing slash or sub-path, so no routing option
-// (strict: false, case-insensitive matching) can reach the embedded handler without the header.
-const EMBEDDED = "/api/v1/auth/embedded";
+// Better Auth routes rely on its own origin check (spec 5.9) and are exempt, except two:
+// /auth/embedded is not Better Auth, and sign-out (#289) deletes the session in the app's own
+// transaction before Better Auth runs, so Better Auth's origin check no longer guards that
+// delete and the app's header check must. Both checks ignore case and cover a trailing slash or
+// sub-path, so no routing option (strict: false, case-insensitive matching) can reach either
+// handler without the header.
+const GUARDED_AUTH_PATHS = ["/api/v1/auth/embedded", "/api/v1/auth/sign-out"];
 const isBetterAuthPath = (p: string) => {
   if (!p.startsWith("/api/v1/auth/")) return false;
   const lower = p.toLowerCase();
-  return lower !== EMBEDDED && !lower.startsWith(`${EMBEDDED}/`);
+  return !GUARDED_AUTH_PATHS.some((g) => lower === g || lower.startsWith(`${g}/`));
 };
 
 export const requireRequestedWith = (): MiddlewareHandler<AppEnv> => async (c, next) => {

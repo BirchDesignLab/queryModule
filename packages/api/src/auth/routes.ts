@@ -7,6 +7,7 @@ import type { AppDeps } from "../deps";
 import { apiError, rateLimited } from "../http/errors";
 import type { AppEnv } from "../http/types";
 import { actorOf } from "../seams";
+import { sessionCookieName } from "./auth";
 import { auditEmail, BACKGROUND_HEADER } from "./identity";
 import { AUTH_LIMITS, clientIp } from "./rate-limit";
 
@@ -130,39 +131,74 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
   return res;
 }
 
+type SignOutOutcome = "deleted" | "alreadyGone" | "rowSurvived";
+
+/**
+ * #289 (SEC-010, SEC-012): the app, not Better Auth, deletes the session, in one transaction
+ * with its logout audit row. requireRequestedWith (http/security.ts) has already refused a
+ * header-less sign-out, so Better Auth's origin check no longer has to guard this delete.
+ * - One row deleted: logout is recorded in the same transaction; an audit failure rolls the
+ *   delete back (500 internal, session and cookie kept, Better Auth never called).
+ * - Zero rows and no row left: another sign-out ended it first; answer 200 with no audit row, so
+ *   concurrent sign-outs write at most one logout row.
+ * - Zero rows but the row is still there (#246, a silently skipped delete): 500, cookie kept.
+ * After commit Better Auth's handler clears the cookie; if it fails, the app clears it itself
+ * and still answers 200, because the session is gone.
+ */
 async function signOut(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
   const headers = new Headers(c.req.raw.headers);
   headers.set(BACKGROUND_HEADER, "1");
   const p = await d.identity.resolve(new Request(c.req.url, { headers }));
-  const res = await d.auth.handler(c.req.raw);
-  if (p) {
-    // #246, #288: Better Auth may clear the cookie even when the session row survives (a failed
-    // or skipped delete, on its success or its failure path). Fail closed: keep the cookie so a
-    // retry can end the session, and write logout / end sockets only for a session really gone.
-    const left = await d.db
-      .select({ id: session.id })
-      .from(session)
-      .where(eq(session.id, p.sessionId));
-    if (left.length > 0) {
-      if (res.status >= 400 && res.status < 500) {
-        // G-M1: Better Auth refused the sign-out (for example its 403 origin check). Pass its
-        // status through without its Set-Cookie, so the cookie stays with the live session.
-        const kept = new Headers(res.headers);
-        kept.delete("set-cookie");
-        return new Response(res.body, { status: res.status, headers: kept });
+  if (!p) return d.auth.handler(c.req.raw);
+  let outcome: SignOutOutcome;
+  try {
+    outcome = await withTransaction(d.db, async (tx): Promise<SignOutOutcome> => {
+      const gone = await tx
+        .delete(session)
+        .where(eq(session.id, p.sessionId))
+        .returning({ id: session.id });
+      if (gone.length === 1) {
+        await d.audit.record(tx, {
+          type: "logout",
+          actor: actorOf(p),
+          identitySource: "local",
+          details: { sessionId: p.sessionId },
+        });
+        return "deleted";
       }
-      d.logger.error("sign-out left the session row", { sessionId: p.sessionId });
-      return apiError(c, "internal");
-    }
-    await withTransaction(d.db, (tx) =>
-      d.audit.record(tx, {
-        type: "logout",
-        actor: actorOf(p),
-        identitySource: "local",
-        details: { sessionId: p.sessionId },
-      }),
-    );
-    d.eventBus.endSession(p.sessionId);
+      const left = await tx
+        .select({ id: session.id })
+        .from(session)
+        .where(eq(session.id, p.sessionId));
+      return left.length > 0 ? "rowSurvived" : "alreadyGone";
+    });
+  } catch (e) {
+    // Fixed text and the error's name only: a query error's message can carry its params.
+    d.logger.error("sign-out transaction failed", {
+      sessionId: p.sessionId,
+      errorName: e instanceof Error ? e.name : typeof e,
+    });
+    return apiError(c, "internal");
   }
-  return res;
+  if (outcome === "rowSurvived") {
+    d.logger.error("sign-out left the session row", { sessionId: p.sessionId });
+    return apiError(c, "internal");
+  }
+  if (outcome === "deleted") d.eventBus.endSession(p.sessionId);
+  const res = await d.auth.handler(c.req.raw).catch(() => null);
+  if (res?.ok) return res;
+  d.logger.warn(
+    "sign-out: Better Auth failed after the session delete; cookie cleared by the app",
+    {
+      sessionId: p.sessionId,
+      status: res?.status ?? null,
+    },
+  );
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "set-cookie": `${sessionCookieName(d.env)}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax`,
+    },
+  });
 }
