@@ -93,7 +93,7 @@ Designed at 1024x768 (spec 6.3). Header: unit ID, connection, theme, account; no
 
 ### Admin shell (Track A)
 
-A left rail: "Back to queries" first, then Configure (Site configuration), People (Users and roles), and the audit log shown as coming in M2 (`aria-disabled` with reason). The app header stays, with Admin current. Users and roles: one table, role as an inline select, status badge, last sign-in, row actions (sign out everywhere, disable).
+A left rail: "Back to queries" first, then Configure (Site configuration), People (Users and roles), and the audit log shown as coming in M2 (`aria-disabled` with reason). The app header stays, with Admin current. This rail supersedes the minimal back link and Config/Users bar from Track B's 09-29-26 fix batch; the Track A shell task replaces it and keeps its tests' accessible names where they still fit. Users and roles: one table, role as an inline select, status badge, last sign-in, row actions (sign out everywhere, disable).
 
 ### Builder (Track A)
 
