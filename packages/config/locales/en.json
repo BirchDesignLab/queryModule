@@ -116,6 +116,7 @@
   "form.noConnection": "No connection to server",
   "form.connectionRestored": "Connection restored",
   "form.updateRequired": "Client update required",
+  "form.preview": "Preview",
   "form.dateFormats": "Accepted formats: {formats}",
   "shortcut.sheetTitle": "Keyboard shortcuts",
   "shortcut.close": "Close",

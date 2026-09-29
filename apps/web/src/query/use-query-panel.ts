@@ -1,5 +1,6 @@
 import {
   clientConfigQuery,
+  type DraftStore,
   type DraftValue,
   type SubmitOutcome,
   type SubmitQueryResponse,
@@ -19,6 +20,8 @@ import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 
+export type PanelViewMode = "live" | "preview";
+
 type ConfigLoad =
   | { status: "loading" }
   | { status: "error" }
@@ -26,7 +29,11 @@ type ConfigLoad =
 
 export interface ReadyQueryPanel {
   status: "ready";
+  /** Live sends the query; preview never sends anything (ADR-0011). */
+  mode: PanelViewMode;
   config: ClientSiteConfig;
+  /** The draft store this panel reads and writes: services.drafts live, a private one in preview. */
+  drafts: DraftStore;
   queryType: string;
   formState: FormState;
   values: Readonly<Record<string, DraftValue>>;
@@ -66,10 +73,10 @@ export interface CheckedRequest {
   onInvalid?(errors: readonly ValidationError[]): void;
 }
 
-export type QueryPanelModel =
+export type LiveConfigModel =
   | { status: "loading" }
   | { status: "error"; retry(): void }
-  | ReadyQueryPanel;
+  | { status: "ready"; config: ClientSiteConfig; refetch(): Promise<void> };
 
 const NO_VALUES: Readonly<Record<string, DraftValue>> = {};
 
@@ -92,20 +99,14 @@ export function resolveCheckedSources(
 }
 
 /**
- * Wires the config, the draft store and evaluateForm to the query panel (spec 6.2). The config
- * lives in the query cache only (spec 6.7); drafts live in the draft store, values as entered.
- * Nothing here is per query type (BR-001).
+ * Loads GET /api/v1/config for the live route (spec 6.2). The config lives in the query cache
+ * only (spec 6.7).
  */
-export function useQueryPanel(): QueryPanelModel {
-  const { api, queryClient, drafts, announcer, submit } = useServices();
+export function useLiveConfig(): LiveConfigModel {
+  const { api, queryClient, announcer } = useServices();
   const t = useT();
   const [load, setLoad] = useState<ConfigLoad>({ status: "loading" });
-  const [showErrors, setShowErrors] = useState(false);
-  const [focusTick, setFocusTick] = useState(0);
-  const [serverErrors, setServerErrors] = useState<readonly ValidationError[]>([]);
-  const formContainerRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
-  const seen = useRef<{ queryType: string; visible: ReadonlySet<string> } | null>(null);
 
   // retry: false, the panel has its own Retry button; a second silent attempt would hide the failure.
   const fetchConfig = useCallback(
@@ -131,13 +132,60 @@ export function useQueryPanel(): QueryPanelModel {
     };
   }, [fetchConfig]);
 
-  const config = load.status === "ready" ? load.config : null;
-  const initialType = config === null ? null : initialQueryType(config);
-  const storeType = useStore(drafts, (s) => s.queryType);
+  if (load.status === "ready")
+    return { status: "ready", config: load.config, refetch: fetchConfig };
+  if (load.status === "error") {
+    return {
+      status: "error",
+      retry: () => {
+        setLoad({ status: "loading" });
+        void fetchConfig();
+      },
+    };
+  }
+  return { status: "loading" };
+}
+
+export interface QueryPanelSource {
+  config: ClientSiteConfig;
+  drafts: DraftStore;
+  mode: PanelViewMode;
+  /** Live: the config changed under a submit; the owner refetches it. */
+  onConfigChanged?: () => void;
+}
+
+/**
+ * Wires the injected config, the draft store and evaluateForm to the query panel (spec 6.2).
+ * Drafts live in the draft store, values as entered. In preview nothing is ever sent and the
+ * submit controller is not consulted. Nothing here is per query type (BR-001).
+ */
+export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null {
+  const { announcer, submit } = useServices();
+  const { config, drafts, mode, onConfigChanged } = source;
+  const preview = mode === "preview";
+  const t = useT();
+  const [showErrors, setShowErrors] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
+  const [serverErrors, setServerErrors] = useState<readonly ValidationError[]>([]);
+  const formContainerRef = useRef<HTMLDivElement>(null);
+  const mounted = useRef(false);
+  const seen = useRef<{ queryType: string; visible: ReadonlySet<string> } | null>(null);
   useEffect(() => {
-    if (initialType !== null && storeType === null) drafts.getState().select(initialType);
-  }, [drafts, initialType, storeType]);
-  const queryType = storeType ?? initialType;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const initialType = initialQueryType(config);
+  const storeType = useStore(drafts, (s) => s.queryType);
+  // A selected type the config no longer has (removed or renamed, e.g. in the builder preview)
+  // falls back to the first quick-access type, else the first type (ADR-0011).
+  const known = storeType !== null && config.queryTypes.some((q) => q.code === storeType);
+  useEffect(() => {
+    if (initialType !== null && !known) drafts.getState().select(initialType);
+  }, [drafts, initialType, known]);
+  const queryType = known ? storeType : initialType;
 
   const values = useStore(drafts, (s) =>
     queryType === null ? undefined : s.drafts[queryType]?.values,
@@ -146,8 +194,11 @@ export function useQueryPanel(): QueryPanelModel {
     queryType === null ? null : (s.drafts[queryType]?.sources ?? null),
   );
 
-  const submitStatus = useStore(submit, (s) => s.status);
-  const lastAck = useStore(submit, (s) => s.lastAck);
+  // Preview never reads the submit controller: its state belongs to the live panel.
+  const liveStatus = useStore(submit, (s) => s.status);
+  const liveAck = useStore(submit, (s) => s.lastAck);
+  const submitStatus = preview ? "idle" : liveStatus;
+  const lastAck = preview ? null : liveAck;
 
   // Spec 6.6: connection changes are announced politely; a screen reader user has no other signal
   // that the submit is held until the server answers again.
@@ -168,7 +219,7 @@ export function useQueryPanel(): QueryPanelModel {
 
   const localFormState = useMemo(
     () =>
-      config === null || queryType === null
+      queryType === null
         ? null
         : evaluateForm(config, queryType, values ?? NO_VALUES, { now: Date.now() }),
     [config, queryType, values],
@@ -211,17 +262,7 @@ export function useQueryPanel(): QueryPanelModel {
     }
   }, [focusTick]);
 
-  if (load.status === "loading") return { status: "loading" };
-  if (load.status === "error") {
-    return {
-      status: "error",
-      retry: () => {
-        setLoad({ status: "loading" });
-        void fetchConfig();
-      },
-    };
-  }
-  if (config === null || queryType === null || formState === null) return { status: "loading" };
+  if (queryType === null || formState === null) return null;
 
   const checkedSources = resolveCheckedSources(formState, draftSources);
 
@@ -235,7 +276,7 @@ export function useQueryPanel(): QueryPanelModel {
   };
 
   const typeLabel = (code: string): string => {
-    const labelKey = config?.queryTypes.find((q) => q.code === code)?.labelKey;
+    const labelKey = config.queryTypes.find((q) => q.code === code)?.labelKey;
     return labelKey === undefined ? code : t(labelKey);
   };
 
@@ -265,7 +306,7 @@ export function useQueryPanel(): QueryPanelModel {
         return;
       case "configChanged":
         // The controller invalidated the config query; fetching re-evaluates the draft against it.
-        void fetchConfig();
+        onConfigChanged?.();
         announcer.announce(t("submit.configChanged"));
         return;
       case "rateLimited":
@@ -277,6 +318,7 @@ export function useQueryPanel(): QueryPanelModel {
   };
 
   const sendChecked = async (request: CheckedRequest): Promise<void> => {
+    if (preview) return;
     const outcome = await submit.getState().submit({
       queryType: request.queryType,
       values: request.values,
@@ -298,6 +340,7 @@ export function useQueryPanel(): QueryPanelModel {
   // Ctrl+Enter calls requestSubmit() with no submitter, so the button's aria-disabled guard never
   // runs: while submitting or gated (spec 6.8) re-announce the reason and send nothing.
   const submitGated = (): boolean => {
+    // Preview validates like live (ADR-0011: it shows what dispatchers see); sendChecked stops it.
     if (submitStatus === "idle") return false;
     announcer.announce(t(submitStatus === "submitting" ? "form.submitting" : "form.noConnection"));
     return true;
@@ -305,7 +348,9 @@ export function useQueryPanel(): QueryPanelModel {
 
   return {
     status: "ready",
-    config: load.config,
+    mode,
+    config,
+    drafts,
     queryType,
     formState,
     values: values ?? NO_VALUES,
@@ -328,8 +373,9 @@ export function useQueryPanel(): QueryPanelModel {
     },
     submitGated,
     sendChecked,
-    submitReason:
-      submitStatus === "submitting"
+    submitReason: preview
+      ? "preview"
+      : submitStatus === "submitting"
         ? "submitting"
         : submitStatus === "noConnection"
           ? "noConnection"

@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-export type SubmitBlockReason = "submitting" | "noConnection" | "updateRequired";
+export type SubmitBlockReason = "submitting" | "noConnection" | "updateRequired" | "preview";
 
 export interface SubmitButtonProps {
   id: string;
@@ -13,7 +13,8 @@ export interface SubmitButtonProps {
 /**
  * aria-disabled, never disabled, so it stays focusable and the visible reason is reachable
  * (spec 6.2, 6.6). The click is cancelled while blocked, which also stops Enter in a field
- * (implicit submission clicks this button).
+ * (implicit submission clicks this button). "preview" lets the click through so the form still
+ * validates as it would live; the preview never sends (ADR-0011).
  */
 export function SubmitButton({ id, reason, describedBy, t }: SubmitButtonProps): JSX.Element {
   const reasonId = `${id}-reason`;
@@ -27,7 +28,7 @@ export function SubmitButton({ id, reason, describedBy, t }: SubmitButtonProps):
         aria-disabled={reason === null ? undefined : "true"}
         aria-describedby={described === "" ? undefined : described}
         onClick={(event) => {
-          if (reason !== null) event.preventDefault();
+          if (reason !== null && reason !== "preview") event.preventDefault();
         }}
       >
         {t("form.submit")}

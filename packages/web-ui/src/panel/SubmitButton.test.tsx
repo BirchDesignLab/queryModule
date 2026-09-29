@@ -9,10 +9,11 @@ const LABELS: Record<string, string> = {
   "form.submitting": "Submitting",
   "form.noConnection": "No connection to server",
   "form.updateRequired": "Client update required",
+  "form.preview": "Preview",
 };
 const t = (key: string) => LABELS[key] ?? key;
 
-function renderInForm(reason: "submitting" | "noConnection" | "updateRequired" | null) {
+function renderInForm(reason: "submitting" | "noConnection" | "updateRequired" | "preview" | null) {
   const onSubmit = vi.fn((e: FormEvent) => e.preventDefault());
   render(
     <form onSubmit={onSubmit}>
@@ -50,4 +51,13 @@ describe("FR-006 submit button (spec 6.2)", () => {
       expect(onSubmit).not.toHaveBeenCalled();
     });
   }
+  it("preview: aria-disabled with the visible reason, but the form still submits so it validates as live (ADR-0011)", async () => {
+    const onSubmit = renderInForm("preview");
+    const button = screen.getByRole("button", { name: "Submit" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveAccessibleDescription("Preview");
+    await userEvent.click(button);
+    await userEvent.type(screen.getByLabelText("Field"), "{Enter}");
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
 });
