@@ -4,6 +4,7 @@ import {
   LoginSucceededDetailsSchema,
   LogoutDetailsSchema,
   RoleChangedDetailsSchema,
+  SessionRevokedDetailsSchema,
 } from "./audit-auth";
 import { IdentitySourceSchema, RoleSchema } from "./identity";
 import {
@@ -52,6 +53,10 @@ export const AUDIT_EVENT_TYPES = [
   "roleChanged",
   "configLoaded",
   "retentionPurged",
+  "configPublished",
+  "userCreated",
+  "userDisabled",
+  "sessionRevoked",
 ] as const;
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
@@ -69,6 +74,16 @@ function delegationNeedsOwner(
     });
   }
 }
+
+/**
+ * A JSON pointer (RFC 6901) into a site config document: key and index segments only
+ * (identifier characters, "-" for append, ~0 and ~1 escapes), so no field value fits.
+ */
+const ConfigPointerSchema = z
+  .string()
+  .max(256)
+  .regex(/^(\/([A-Za-z0-9_.$-]|~[01])*)*$/);
+export const MAX_CHANGED_POINTERS = 1000;
 
 /**
  * Details: identifiers, metadata and role:"type" values only. Never other field values,
@@ -217,6 +232,29 @@ export const AUDIT_DETAILS_SCHEMAS = {
         });
       }
     }),
+  /**
+   * ADR-0011 item 7: one row per publish or rollback of a site config version. changedPointers
+   * are JSON pointers into the document (spec 4.1 key and index segments), never values.
+   */
+  configPublished: z.strictObject({
+    siteId: BoundedIdSchema,
+    versionId: Uuid7Schema,
+    version: z.int().min(1),
+    configHash: Sha256HexSchema,
+    previousConfigHash: Sha256HexSchema,
+    changedPointers: z.array(ConfigPointerSchema).max(MAX_CHANGED_POINTERS),
+    rollbackOf: z.int().min(1).optional(),
+  }),
+  /** ADR-0011 item 8: an admin created a user (the one-time password is never audited). */
+  userCreated: z.strictObject({ targetUserId: BoundedIdSchema, role: RoleSchema }),
+  /** Spec 4.7, ADR-0011 item 8: one disable transaction and what it ended (counts only). */
+  userDisabled: z.strictObject({
+    targetUserId: BoundedIdSchema,
+    sessionsRevoked: z.int().min(0),
+    delegationsRevoked: z.int().min(0),
+    credentialsDeleted: z.int().min(0),
+  }),
+  sessionRevoked: SessionRevokedDetailsSchema,
 } as const;
 
 export type AuditDetails<T extends AuditEventType> = z.infer<(typeof AUDIT_DETAILS_SCHEMAS)[T]>;
@@ -284,6 +322,12 @@ const systemEnvelope = {
   hostSubject: envelope.hostSubject,
 };
 
+/**
+ * Admin console types (ADR-0011 item 7): no request, part or state credential, like the system
+ * types, but written by an admin or implementer (and sessionRevoked expired by SYSTEM_ACTOR).
+ */
+const adminEnvelope = systemEnvelope;
+
 export const AuditEventSchema = z
   .discriminatedUnion("type", [
     z.strictObject({
@@ -347,6 +391,27 @@ export const AuditEventSchema = z
       ...systemEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.retentionPurged,
     }),
+    z.strictObject({
+      type: z.literal("configPublished"),
+      ...adminEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.configPublished,
+    }),
+    z.strictObject({
+      type: z.literal("userCreated"),
+      ...adminEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.userCreated,
+    }),
+    z.strictObject({
+      type: z.literal("userDisabled"),
+      ...adminEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.userDisabled,
+    }),
+    // The sweeper writes reason expired as SYSTEM_ACTOR (spec 5.2); an admin writes the others.
+    z.strictObject({
+      type: z.literal("sessionRevoked"),
+      ...adminEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.sessionRevoked,
+    }),
   ])
   .superRefine((e, ctx) => {
     // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they do.
@@ -384,7 +449,11 @@ export const AuditEventSchema = z
       e.type === "loginSucceeded" ||
       e.type === "loginFailed" ||
       e.type === "logout" ||
-      e.type === "roleChanged"
+      e.type === "roleChanged" ||
+      e.type === "configPublished" ||
+      e.type === "userCreated" ||
+      e.type === "userDisabled" ||
+      e.type === "sessionRevoked"
     ) {
       return;
     }
