@@ -1,4 +1,5 @@
 import { canonicaliseLiteral, literalCodes } from "../rules/canonical-literal";
+import type { CanonResult } from "../rules/canonicalise";
 import { isDefaultRef, walkCondition } from "./conditions";
 import { type DiagnosticSink, pointer } from "./diagnostic";
 import type { FieldDef, QueryType, SiteConfig } from "./schema";
@@ -43,7 +44,7 @@ export function forEachConditionLiteral(
           value.forEach((v, i) => {
             visit(def, v, `${p}/value/${i}`);
           });
-        } else if (!isDefaultRef(value)) visit(def, value as Literal, `${p}/value`);
+        } else if (!isDefaultRef(value)) visit(def, value, `${p}/value`);
       });
     }
   });
@@ -52,8 +53,9 @@ export function forEachConditionLiteral(
 /**
  * Spec 4.1: literals that fail canonicalisation, and a defaultValue that violates its own
  * constraints. Defaults, setDefault values and presets are checked against enabled codes;
- * condition values against all codes (a disabled code there is a warning, not an error). The
- * params carry the validation key, never the literal (spec 5.9).
+ * condition values against all codes (a disabled code there is the warning
+ * config.disabledCodeInCondition, not an error; one canonicalisation serves both). The params carry
+ * the validation key, never the literal (spec 5.9).
  */
 export function checkLiterals(config: SiteConfig, now: number, out: DiagnosticSink): void {
   const reported = new Set<string>();
@@ -62,17 +64,20 @@ export function checkLiterals(config: SiteConfig, now: number, out: DiagnosticSi
     literal: Literal,
     path: string,
     scope: "all" | "enabled",
-  ): void => {
+  ): CanonResult => {
     const r = canonicaliseLiteral(field, literal, {
       now,
       codes: literalCodes(config.picklists, field, scope),
     });
     const first = r.errors[0];
-    if (!first) return;
-    const id = `${path}\u0000${field.key}`;
-    if (reported.has(id)) return;
+    if (!first) return r;
+    // A site default is checked once per query type that inherits it: types sharing a field key
+    // may fail differently, so the validation key is part of the dedupe key (#303).
+    const id = `${path}\u0000${field.key}\u0000${first.key}`;
+    if (reported.has(id)) return r;
     reported.add(id);
     out.error(path, "config.invalidLiteral", { field: field.key, key: first.key });
+    return r;
   };
 
   config.queryTypes.forEach((qt, q) => {
@@ -107,7 +112,11 @@ export function checkLiterals(config: SiteConfig, now: number, out: DiagnosticSi
   });
 
   forEachConditionLiteral(config, (f, literal, path) => {
-    check(f, literal, path, "all");
+    const r = check(f, literal, path, "all");
+    if (f.dataType !== "picklist" || typeof r.value !== "string") return;
+    const enabled = literalCodes(config.picklists, f, "enabled") ?? [];
+    if (!enabled.includes(r.value))
+      out.warn(path, "config.disabledCodeInCondition", { field: f.key, code: r.value });
   });
 }
 

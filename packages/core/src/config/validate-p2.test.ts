@@ -422,3 +422,95 @@ describe("roles (closed enum)", () => {
     expect(SiteConfigSchema.safeParse(raw).success).toBe(false);
   });
 });
+
+// #303 Task 6 residuals (wave A2 minors).
+describe("literal checks: #303 residuals", () => {
+  const runAt = (mutate: (raw: SiteConfigInput) => void, now?: number) => {
+    const raw = base();
+    mutate(raw);
+    return validateSiteConfig(SiteConfigSchema.parse(raw), LOCALES, {
+      tokenNames: TEST_TOKEN_NAMES,
+      ...(now === undefined ? {} : { now }),
+    });
+  };
+  const pastDate = (raw: SiteConfigInput) => {
+    vehicle(raw).fields.push({
+      key: "seen",
+      labelKey: "field.note",
+      dataType: "date",
+      century: "past",
+      inputFormats: ["MM-DD-YY"],
+    });
+    vehicle(raw).rules = [
+      { field: "note", when: { field: "seen", op: "eq", value: "02-29-00" }, effect: "hide" },
+    ];
+  };
+
+  it("condition literals use context.now: 02-29-00 with century past is 2000 in 2026", () => {
+    expect(runAt(pastDate, Date.UTC(2026, 8, 29)).errors).toEqual([]);
+  });
+
+  it("without now (epoch 0), 02-29-00 with century past resolves to 1900 and is invalid", () => {
+    expect(runAt(pastDate).errors.map((e) => e.path)).toEqual(["/queryTypes/0/rules/0/when/value"]);
+  });
+
+  it("a site default shadowed by a field default or a query type default is not checked", () => {
+    expect(
+      run((r) => {
+        r.defaults = { ...r.defaults, year: "soon" };
+        field(r, "year").defaultValue = "2026";
+      }).errors,
+    ).toEqual([]);
+    expect(
+      run((r) => {
+        r.defaults = { ...r.defaults, year: "soon" };
+        vehicle(r).defaults = { year: "2026" };
+      }).errors,
+    ).toEqual([]);
+  });
+
+  it("two query types sharing a key each report their own failure of a site default", () => {
+    const { errors } = run((r) => {
+      property(r).fields.push({ key: "note", labelKey: "field.note", dataType: "year" });
+      r.defaults = { ...r.defaults, note: "x".repeat(70) };
+    });
+    expect(errors).toEqual([
+      err("/defaults/note", "config.invalidLiteral", { field: "note", key: "validation.tooLong" }),
+      err("/defaults/note", "config.invalidLiteral", {
+        field: "note",
+        key: "validation.invalidYear",
+      }),
+    ]);
+  });
+
+  it("nested all, any and not conditions point at the failing literal", () => {
+    const { errors } = run((r) => {
+      vehicle(r).rules = [
+        {
+          field: "note",
+          when: {
+            all: [
+              { any: [{ field: "year", op: "gt", value: "soon" }] },
+              { not: { field: "year", op: "eq", value: "later" } },
+            ],
+          },
+          effect: "hide",
+        },
+      ];
+    });
+    expect(errors.map((e) => e.path)).toEqual([
+      "/queryTypes/0/rules/0/when/all/0/any/0/value",
+      "/queryTypes/0/rules/0/when/all/1/not/value",
+    ]);
+  });
+
+  it("a preset on a command with an unknown query type is not literal-checked", () => {
+    const { errors } = run((r) => {
+      r.commands = [
+        ...(r.commands ?? []),
+        { code: "NOP", queryType: "NOPE", positions: [], presets: { year: "soon" } },
+      ];
+    });
+    expect(errors.map((e) => e.key)).toEqual(["config.unknownQueryType"]);
+  });
+});

@@ -28,8 +28,9 @@ export interface ValidateContext {
   /** Token contrast lookups (spec 4.1; the API and CLI pass them from the tokens package). Omitted:
    *  no contrast diagnostics. */
   contrast?: ContrastContext;
-  /** Epoch ms for literal checks. Defaults to 0: only century "past" two-digit years depend on
-   *  it, and 0 is safe there because it only fixes two-digit years. */
+  /** Epoch ms for literal checks. Defaults to 0 (1970): a century "past" two-digit year resolves
+   *  relative to it, so `02-29-00` reads as 1900 (not a leap year) and fails. Callers that load
+   *  real config pass the clock (#303). */
   now?: number;
 }
 export interface ValidateResult {
