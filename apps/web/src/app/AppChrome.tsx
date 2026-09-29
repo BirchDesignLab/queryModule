@@ -91,13 +91,13 @@ function BrandMark() {
   return (
     <svg
       className="qm-app-header__mark"
-      viewBox="0 0 24 24"
+      viewBox="-4 -4 32 32"
       width="24"
       height="24"
       aria-hidden="true"
       focusable="false"
     >
-      <rect width="24" height="24" rx="6" />
+      <rect x="-4" y="-4" width="32" height="32" rx="8" />
       <path d="M6 8l4 4-4 4M12 17h6" />
     </svg>
   );

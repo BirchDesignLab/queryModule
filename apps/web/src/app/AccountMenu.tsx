@@ -1,7 +1,8 @@
 import type { ThemeModePreference } from "@querymodule/client";
 import { ThemeModeSeg, VisuallyHidden } from "@querymodule/web-ui";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "./i18n-context.js";
+import { MAIN_LANDMARK } from "./main-landmark.js";
 
 export interface AccountMenuProps {
   email: string;
@@ -30,6 +31,16 @@ export function AccountMenu({
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
+  // The menu can unmount with focus inside it (the persona layout flips to the compact bar when a
+  // config lands, sign-out): hand focus to the page's main landmark, never to <body> (spec 6.4).
+  useLayoutEffect(
+    () => () => {
+      if (wrapRef.current?.contains(document.activeElement))
+        document.getElementById(MAIN_LANDMARK.id)?.focus();
+    },
+    [],
+  );
+
   // While open: Esc closes and returns focus to the button; a pointer press or focus moving
   // outside closes without touching focus.
   useEffect(() => {
@@ -43,7 +54,6 @@ export function AccountMenu({
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      event.stopPropagation();
       setOpen(false);
       buttonRef.current?.focus();
     };

@@ -68,7 +68,8 @@ export async function openAccountMenu(page: Page) {
 }
 
 /** Signs out through the header: the account disclosure holds the button on the dispatch bar, the
- *  officer's compact bar keeps it inline. */
+ *  officer's compact bar keeps it inline. Call it once the panel has rendered (the persona layout
+ *  can still flip from dispatch to compact while the config loads). */
 export async function signOutFromHeader(page: Page): Promise<void> {
   if ((await page.getByRole("banner").locator(".qm-account__button").count()) > 0)
     await openAccountMenu(page);

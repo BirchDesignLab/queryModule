@@ -231,6 +231,19 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     await user.click(screen.getByRole("main"));
     expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
   });
+  it("B1 focus is not lost when the layout flips to the compact bar while the disclosure is open", async () => {
+    const { user, services } = await signIn();
+    const panel = await openAccount(user);
+    await user.click(within(panel).getByRole("button", { name: "Night" }));
+    expect(within(panel).getByRole("button", { name: "Night" })).toHaveFocus();
+    // The persona changes under the open menu (a config landing, a refresh): the dispatch
+    // account menu unmounts with focus inside it.
+    act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));
+    await waitFor(() => expect(screen.getByRole("banner")).toHaveClass("qm-app-header--compact"));
+    expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
+    // Focus lands on the page's main landmark, not on <body>.
+    expect(screen.getByRole("main")).toHaveFocus();
+  });
   it("D-B4 the header stays on the status page", async () => {
     const { user } = await signIn();
     await user.click(screen.getByRole("link", { name: "Status" }));
