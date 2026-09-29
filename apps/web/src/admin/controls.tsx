@@ -83,6 +83,26 @@ function useControlIssues(idPrefix: string, path: readonly PathSegment[], local?
 }
 
 /**
+ * Issues grouped at an item's own pointer that none of its rendered controls claims (a missing
+ * key, or a union error on the item itself). The fieldset links them by aria-describedby.
+ */
+export function useItemIssues(
+  idPrefix: string,
+  path: readonly PathSegment[],
+  claimed: readonly string[],
+) {
+  const checks = useContext(ChecksContext);
+  const own = new Set(claimed.map((k) => toPointer([...path, k])));
+  const issues = issuesFor(checks, path)?.filter((i) => !own.has(i.pointer));
+  const id = `${controlId(idPrefix, path)}-item-issues`;
+  const shown = issues !== undefined && issues.length > 0 ? issues : undefined;
+  return {
+    describedBy: shown === undefined ? undefined : id,
+    messages: <IssueMessages id={id} issues={shown} />,
+  };
+}
+
+/**
  * A text control; with `optional`, blank text removes the key from the draft. With `owner`, it is
  * the item's first control, which takes focus when the item is added.
  */

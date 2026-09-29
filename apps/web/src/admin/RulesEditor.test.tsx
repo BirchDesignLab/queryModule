@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
@@ -146,7 +146,8 @@ describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
     await openType(t, "VEH");
     const cond = () => conditionOf(ruleBox(typeBoxOf("VEH"), 1));
     await t.user.selectOptions(within(cond()).getByLabelText("Compare with"), "value");
-    expect(rulesOf(t, "VEH")[0]?.when).toEqual({ field: "state", op: "neq", value: "" });
+    // Critic I1: no silent "" literal; the missing value is reported at the control.
+    expect(rulesOf(t, "VEH")[0]?.when).toEqual({ field: "state", op: "neq" });
     await fill(t, within(cond()).getByLabelText("Value"), "TX");
     expect(rulesOf(t, "VEH")[0]?.when).toEqual({ field: "state", op: "neq", value: "TX" });
     await t.user.selectOptions(within(cond()).getByLabelText("Compare with"), "default");
@@ -212,3 +213,54 @@ describe("#388 diagnostics polish", () => {
 function typeBoxOf(code: string) {
   return group(document, `Query type ${code}`);
 }
+
+describe("PR2 critic fixes", () => {
+  it("I1/I2: a leaf re-points its $default on a field change; a number literal is typed", async () => {
+    const t = await openBuilder();
+    await openType(t, "VEH");
+    const cond = () => conditionOf(ruleBox(typeBoxOf("VEH"), 1));
+    await t.user.selectOptions(within(cond()).getByLabelText("Field"), "year");
+    expect(rulesOf(t, "VEH")[0]?.when).toEqual({
+      field: "year",
+      op: "neq",
+      value: { $default: "year" },
+    });
+    await t.user.selectOptions(within(cond()).getByLabelText("Compare with"), "value");
+    await t.user.click(within(cond()).getByLabelText("Value"));
+    await t.user.paste("2020");
+    expect(rulesOf(t, "VEH")[0]?.when).toEqual({ field: "year", op: "neq", value: 2020 });
+  });
+
+  it("I2: a target change to another value kind drops the rule value", async () => {
+    const t = await openBuilder();
+    await openType(t, "VEH");
+    const rule = () => ruleBox(typeBoxOf("VEH"), 1);
+    await t.user.selectOptions(within(rule()).getByLabelText("Effect"), "setDefault");
+    await t.user.click(within(rule()).getByLabelText("Default value"));
+    await t.user.paste("PC");
+    await t.user.selectOptions(within(rule()).getByLabelText("Target field"), "year");
+    expect(rulesOf(t, "VEH")[0]).toMatchObject({ field: "year", effect: "setDefault" });
+    expect("value" in (rulesOf(t, "VEH")[0] as object)).toBe(false);
+  });
+
+  it("I3: a stray value on a non-setDefault rule stays visible with its diagnostic", async () => {
+    const t = await openBuilder();
+    await openType(t, "VEH");
+    act(() =>
+      configDraftStore(t.services).getState().setPath(["queryTypes", 0, "rules", 0, "value"], "X"),
+    );
+    const value = within(ruleBox(typeBoxOf("VEH"), 1)).getByLabelText("Default value");
+    expect(value).toHaveValue("X");
+    await waitFor(() => expect(value).toHaveAttribute("aria-invalid", "true"));
+  });
+
+  it("I4: adding a section condition focuses its type; removing it focuses Add condition", async () => {
+    const t = await openBuilder();
+    await openType(t, "PER");
+    const section = () => group(typeBoxOf("PER"), "Section base");
+    await t.user.click(within(section()).getByRole("button", { name: "Add condition" }));
+    expect(within(section()).getByLabelText("Condition type")).toHaveFocus();
+    await t.user.click(within(section()).getByRole("button", { name: "Remove condition" }));
+    expect(within(section()).getByRole("button", { name: "Add condition" })).toHaveFocus();
+  });
+});

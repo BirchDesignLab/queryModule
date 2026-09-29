@@ -12,8 +12,10 @@ import {
   useDraftSetters,
   useFocusRequest,
   useGeneration,
+  useItemIssues,
 } from "./controls.js";
 import type { PathSegment } from "./draft.js";
+import { OtherKeys } from "./GenericForm.js";
 
 /**
  * Task 31 part 2 PR2 (#355): rules and conditions (spec 4.2). The editors write exactly the
@@ -81,8 +83,9 @@ function convertOp(leaf: Obj, op: string): Obj {
         : [value];
     return { ...rest, op, value: list };
   }
-  const scalar = Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
-  return { ...rest, op, value: scalar };
+  // Critic I1: no invented "" literal; a missing value is reported at its control.
+  const scalar = Array.isArray(value) ? value[0] : value;
+  return scalar === undefined ? { ...rest, op } : { ...rest, op, value: scalar };
 }
 
 interface FieldInfo {
@@ -98,6 +101,18 @@ function fieldInfo(type: Obj): FieldInfo {
 }
 
 const defaultLeaf = (info: FieldInfo): Obj => ({ field: info.keys[0] ?? "", op: "notEmpty" });
+
+const LEAF_KEYS: ReadonlySet<string> = new Set(["field", "op", "value"]);
+const RULE_KEYS: ReadonlySet<string> = new Set(["field", "effect", "value", "when"]);
+
+/** A leaf on another field: a $default follows the field; a literal of another kind is dropped. */
+function changeLeafField(leaf: Obj, next: string | undefined, info: FieldInfo): Obj {
+  const { value, ...rest } = leaf;
+  const field = next ?? "";
+  if (isDefaultRef(value)) return { ...rest, field, value: { $default: field } };
+  if (value === undefined || info.kind(next) !== info.kind(leaf.field)) return { ...rest, field };
+  return { ...rest, field, value };
+}
 
 /** One literal, typed by the compared field; blank removes it when `optional`. */
 function LiteralControl({
@@ -135,7 +150,7 @@ function LiteralControl({
         label={label}
         value={value === undefined ? "" : String(value)}
         options={["true", "false"]}
-        blank={t("admin.config.none")}
+        blank={optional ? t("admin.config.none") : undefined}
         onValue={(next) => setPath(path, next === undefined ? undefined : next === "true")}
       />
     );
@@ -161,11 +176,15 @@ export function ConditionEditor({
   const { setPath } = useDraftSetters();
   const cond = (typeof value === "object" && value !== null ? value : {}) as Obj;
   const kind = kindOf(cond);
+  const covered: ReadonlySet<string> = kind === "leaf" ? LEAF_KEYS : new Set([kind]);
+  const issues = useItemIssues(idPrefix, path, [...covered]);
   return (
-    <fieldset className="qm-admin__condition">
+    <fieldset className="qm-admin__condition" aria-describedby={issues.describedBy}>
       <legend>{legend}</legend>
+      {issues.messages}
       <SelectControl
         idPrefix={idPrefix}
+        owner={controlId(idPrefix, path)}
         path={[...path, "$kind"]}
         label={t("admin.config.condition.type")}
         value={kind}
@@ -193,6 +212,7 @@ export function ConditionEditor({
           idPrefix={idPrefix}
         />
       )}
+      <OtherKeys item={cond} path={path} covered={covered} idPrefix={idPrefix} />
     </fieldset>
   );
 }
@@ -248,7 +268,10 @@ function ChildConditions({
         className="qm-button"
         data-owner={listOwner}
         data-role="add"
-        onClick={() => setPath(path, [...items, defaultLeaf(info)])}
+        onClick={() => {
+          setPath(path, [...items, defaultLeaf(info)]);
+          focus([controlId(idPrefix, [...path, items.length]), "first"]);
+        }}
       >
         {t("admin.config.condition.add")}
       </button>
@@ -280,6 +303,7 @@ function LeafControls({
         label={t("admin.config.condition.field")}
         value={leaf.field}
         options={info.keys}
+        onValue={(next) => setPath(path, changeLeafField(leaf, next, info))}
       />
       <SelectControl
         idPrefix={idPrefix}
@@ -300,7 +324,12 @@ function LeafControls({
             options={["value", "default"]}
             optionLabel={(o) => t(`admin.config.condition.compare.${o}`)}
             onValue={(next) =>
-              setPath(valuePath, next === "default" ? { $default: str(leaf.field) } : "")
+              setPath(
+                valuePath,
+                next === "default"
+                  ? { $default: str(leaf.field) || (info.keys[0] ?? "") }
+                  : undefined,
+              )
             }
           />
           {isDefaultRef(leaf.value) ? (
@@ -318,6 +347,7 @@ function LeafControls({
               label={t("admin.config.condition.value")}
               value={leaf.value}
               kind={valueKind}
+              optional
             />
           )}
         </>
@@ -423,8 +453,7 @@ export function RulesEditor({
         const rulePath = [...path, i];
         const effect = str(rule.effect);
         return (
-          <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
-            <legend>{t("admin.config.rule.legend", { n })}</legend>
+          <RuleBox key={`${owner(i)}:${gen}`} path={rulePath} idPrefix={idPrefix} rule={rule} n={n}>
             <SelectControl
               idPrefix={idPrefix}
               path={[...rulePath, "field"]}
@@ -432,6 +461,15 @@ export function RulesEditor({
               value={rule.field}
               options={info.keys}
               owner={owner(i)}
+              onValue={(next) => {
+                // Critic I2: a value of another kind no longer fits the new target.
+                const { value, ...rest } = rule;
+                const keep = value !== undefined && info.kind(next) === info.kind(rule.field);
+                setPath(
+                  rulePath,
+                  keep ? { ...rest, field: next, value } : { ...rest, field: next },
+                );
+              }}
             />
             <SelectControl
               idPrefix={idPrefix}
@@ -446,7 +484,7 @@ export function RulesEditor({
                 setPath(rulePath, { ...rest, effect: next ?? "show" });
               }}
             />
-            {effect === "setDefault" && (
+            {(effect === "setDefault" || rule.value !== undefined) && (
               <LiteralControl
                 idPrefix={idPrefix}
                 path={[...rulePath, "value"]}
@@ -484,7 +522,7 @@ export function RulesEditor({
                 focus([owner(Math.min(at, next.length - 1)), "first"], [listOwner, "add"]);
               }}
             />
-          </fieldset>
+          </RuleBox>
         );
       })}
       <button
@@ -504,6 +542,32 @@ export function RulesEditor({
   );
 }
 
+/** One rule's fieldset: its own issues (a missing when, say) and keys no control covers (I3). */
+function RuleBox({
+  rule,
+  path,
+  idPrefix,
+  n,
+  children,
+}: {
+  rule: Obj;
+  path: readonly PathSegment[];
+  idPrefix: string;
+  n: number;
+  children: React.ReactNode;
+}) {
+  const t = useT();
+  const issues = useItemIssues(idPrefix, path, [...RULE_KEYS]);
+  return (
+    <fieldset className="qm-admin__item" aria-describedby={issues.describedBy}>
+      <legend>{t("admin.config.rule.legend", { n })}</legend>
+      {issues.messages}
+      {children}
+      <OtherKeys item={rule} path={path} covered={RULE_KEYS} idPrefix={idPrefix} />
+    </fieldset>
+  );
+}
+
 /** A section's optional `when` (spec 4.1 SectionDef): add, edit, remove. */
 export function SectionCondition({
   section,
@@ -518,14 +582,21 @@ export function SectionCondition({
 }) {
   const t = useT();
   const { setPath } = useDraftSetters();
+  const focus = useFocusRequest();
   const info = fieldInfo(type);
   const whenPath = [...path, "when"];
+  const owner = controlId(idPrefix, whenPath);
   if (section.when === undefined)
     return (
       <button
         type="button"
         className="qm-button"
-        onClick={() => setPath(whenPath, defaultLeaf(info))}
+        data-owner={owner}
+        data-role="add"
+        onClick={() => {
+          setPath(whenPath, defaultLeaf(info));
+          focus([owner, "first"]);
+        }}
       >
         {t("admin.config.condition.add")}
       </button>
@@ -539,7 +610,14 @@ export function SectionCondition({
         idPrefix={idPrefix}
         legend={t("admin.config.condition.legend")}
       />
-      <button type="button" className="qm-button" onClick={() => setPath(whenPath, undefined)}>
+      <button
+        type="button"
+        className="qm-button"
+        onClick={() => {
+          setPath(whenPath, undefined);
+          focus([owner, "add"]);
+        }}
+      >
         {t("admin.config.condition.remove")}
       </button>
     </>

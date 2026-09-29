@@ -19,7 +19,7 @@ import {
   useGeneration,
 } from "./controls.js";
 import type { JsonObject, PathSegment } from "./draft.js";
-import { NodeEditor } from "./GenericForm.js";
+import { OtherKeys } from "./GenericForm.js";
 import { RulesEditor, SectionCondition } from "./RulesEditor.js";
 
 /**
@@ -66,36 +66,6 @@ const newType = (): Obj => ({
 /** Value kinds a default can take; a data type change across kinds drops the default. */
 const kindOf = (t: unknown): "number" | "boolean" | "text" =>
   t === "number" || t === "year" ? "number" : t === "boolean" ? "boolean" : "text";
-
-/** The generic form for the keys an editor does not cover. */
-function OtherKeys({
-  item,
-  path,
-  covered,
-  idPrefix,
-}: {
-  item: Obj;
-  path: readonly PathSegment[];
-  covered: ReadonlySet<string>;
-  idPrefix: string;
-}) {
-  const { setPath } = useDraftSetters();
-  return (
-    <>
-      {Object.entries(item)
-        .filter(([k]) => !covered.has(k))
-        .map(([k, v]) => (
-          <NodeEditor
-            key={k}
-            value={v}
-            path={[...path, k]}
-            idPrefix={idPrefix}
-            onChange={setPath}
-          />
-        ))}
-    </>
-  );
-}
 
 /** Settings without a purpose-built control, rendered when opened. */
 function MoreSettings(props: Parameters<typeof OtherKeys>[0]) {
