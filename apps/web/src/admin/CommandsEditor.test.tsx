@@ -198,10 +198,17 @@ describe("quick access editor (Task 31 part 2, FR-060, UX-004)", () => {
 });
 
 describe("PR3a deferrals (#388 M1, M2, M5)", () => {
-  it("M1: a query type change drops positions and presets the new type lacks", async () => {
+  it("M1: after a query type change, fields the new type lacks can be removed", async () => {
     const t = await openBuilder();
     await openSection(t, "commands");
     await t.user.selectOptions(within(box("NAM")).getByLabelText("Query type"), "WNT");
+    // Critic I1: a type change keeps everything (arrowing a select must not lose data)...
+    expect(command(t, "NAM").positions).toHaveLength(5);
+    // ...and an explicit button removes what the new type lacks.
+    await t.user.click(
+      within(box("NAM")).getByRole("button", { name: "Remove fields not in WNT" }),
+    );
+    expect(within(box("NAM")).queryByRole("button", { name: /^Remove fields not in/ })).toBeNull();
     expect(command(t, "NAM")).toMatchObject({
       queryType: "WNT",
       positions: ["last", "first", "dob"],

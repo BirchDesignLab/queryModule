@@ -74,23 +74,8 @@ export function CommandsEditor({
               label={t("admin.config.command.queryType")}
               value={cmd.queryType}
               options={typeCodes}
-              onValue={(next) => {
-                // #388 M1: positions and presets of fields the new type lacks are dropped.
-                const keys = new Set(fieldInfo(types.find((q) => q.code === next) ?? {}).keys);
-                const { presets, ...rest } = cmd;
-                const kept = Object.entries(
-                  typeof presets === "object" && presets !== null ? (presets as Obj) : {},
-                ).filter(([k]) => keys.has(k));
-                setPath(cmdPath, {
-                  ...rest,
-                  queryType: next ?? "",
-                  positions: (Array.isArray(cmd.positions) ? cmd.positions : []).filter((p) =>
-                    keys.has(positionField(p)),
-                  ),
-                  ...(kept.length > 0 ? { presets: Object.fromEntries(kept) } : {}),
-                });
-              }}
             />
+            <StaleFields command={cmd} path={cmdPath} info={info} />
             <PositionsEditor
               positions={Array.isArray(cmd.positions) ? cmd.positions : []}
               path={[...cmdPath, "positions"]}
@@ -456,6 +441,49 @@ function PendingPreset({
         </button>
       </div>
     </fieldset>
+  );
+}
+
+/**
+ * Positions and presets on fields the command's query type lacks (after a type change). They stay
+ * until the user removes them here: arrowing through a closed select fires a change per step, so a
+ * type change never drops data by itself (critic I1; #388 M1).
+ */
+function StaleFields({
+  command,
+  path,
+  info,
+}: {
+  command: Obj;
+  path: readonly PathSegment[];
+  info: FieldInfo;
+}) {
+  const t = useT();
+  const { setPath } = useDraftSetters();
+  const keys = new Set(info.keys);
+  const positions = Array.isArray(command.positions) ? command.positions : [];
+  const presets =
+    typeof command.presets === "object" && command.presets !== null ? (command.presets as Obj) : {};
+  const stale =
+    positions.some((p) => !keys.has(positionField(p))) ||
+    Object.keys(presets).some((k) => !keys.has(k));
+  if (!stale) return null;
+  return (
+    <button
+      type="button"
+      className="qm-button"
+      onClick={() => {
+        const { presets: _old, ...rest } = command;
+        const kept = Object.entries(presets).filter(([k]) => keys.has(k));
+        setPath(path, {
+          ...rest,
+          positions: positions.filter((p) => keys.has(positionField(p))),
+          ...(kept.length > 0 ? { presets: Object.fromEntries(kept) } : {}),
+        });
+      }}
+    >
+      {t("admin.config.command.removeStale", { type: str(command.queryType) })}
+    </button>
   );
 }
 

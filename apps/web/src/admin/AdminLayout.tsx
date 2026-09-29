@@ -14,21 +14,14 @@ export function AdminLayout() {
   const { authStore } = useServices();
   const t = useT();
   const role = useStore(authStore, (s) => s.user?.role);
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const allowed = canOpenAdmin(role);
-  // A section page focuses its own heading (SectionHeading); the console title takes focus only on
-  // the bare console, so the two never race on first load (#388).
+  // Every console route opens a section (/admin redirects to Config) and the section focuses its
+  // own heading (SectionHeading); the console title never takes focus, so the two cannot race (#388).
   const outlet = useOutlet();
-  const hasSection = outlet !== null;
-  useEffect(() => {
-    if (allowed && !hasSection) headingRef.current?.focus();
-  }, [allowed, hasSection]);
   if (!allowed) return <Navigate to="/" replace />;
   return (
     <main className="qm-admin">
-      <h1 ref={headingRef} tabIndex={-1}>
-        {t("admin.title")}
-      </h1>
+      <h1>{t("admin.title")}</h1>
       <nav aria-label={t("admin.navLabel")}>
         <ul className="qm-admin__nav">
           <li>

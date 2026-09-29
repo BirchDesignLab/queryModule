@@ -397,5 +397,6 @@
   "admin.config.quickAccess.item": "Quick access {n}",
   "admin.config.quickAccess.add": "Add quick access",
   "admin.config.raw.checksLoading": "Checking the draft…",
-  "admin.config.command.new": "Command (new)"
+  "admin.config.command.new": "Command (new)",
+  "admin.config.command.removeStale": "Remove fields not in {type}"
 }

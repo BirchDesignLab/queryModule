@@ -78,7 +78,12 @@ function convertKind(cond: Obj, to: Kind, fallback: Obj): Obj {
   if (to === "leaf") return firstLeafOf(cond) ?? fallback;
   if (to === "not") return from === "not" ? cond : { not: cond };
   if (from === "all" || from === "any") return { [to]: childrenOf(cond) };
-  return { [to]: [from === "not" ? (cond.not ?? fallback) : cond] };
+  const inner = from === "not" ? cond.not : cond;
+  // Not around a group back to a group: the inner group's children, no extra level (critic m3).
+  const innerKind = kindOf(inner);
+  if (from === "not" && (innerKind === "all" || innerKind === "any"))
+    return { [to]: childrenOf(inner as Obj) };
+  return { [to]: [inner ?? fallback] };
 }
 
 /** The first field test in a condition, depth first. */

@@ -36,6 +36,10 @@ export async function bootstrap(
     ]);
     // The config builder validates label keys against this bundle: cache it, so it is not fetched
     // again (#388).
+    services.queryClient.setQueryDefaults(["locale"], {
+      staleTime: Number.POSITIVE_INFINITY,
+      gcTime: Number.POSITIVE_INFINITY,
+    });
     services.queryClient.setQueryData(["locale", locale], bundle);
     const clientSupported = isClientSupported(clientVersion, meta.minClientVersion ?? null);
     await services.session.bootstrap();

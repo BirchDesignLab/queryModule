@@ -1,11 +1,14 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 
 beforeAll(preloadAdminRoutes);
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const validateDraftCalls = vi.hoisted(() => ({ count: 0 }));
 
@@ -28,11 +31,11 @@ describe("config builder idle behaviour (Task 33 round 1, Q2/C1)", () => {
         HttpResponse.json({ session: { id: "s1" }, user }),
       ),
     );
+    // Critic I2: fake from the start, so the debounce timers are fake too.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderRoot({ path: "/admin/config" });
     await screen.findByRole("tab", { name: "Form" });
     await waitFor(() => expect(screen.getByTestId("draft-summary")).toHaveTextContent(/errors/));
-    // #388: fake timers instead of 1.7 s of real waiting.
-    vi.useFakeTimers();
     try {
       act(() => vi.advanceTimersByTime(700));
       const settled = validateDraftCalls.count;

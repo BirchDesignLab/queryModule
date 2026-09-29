@@ -329,3 +329,19 @@ describe("PR2 deferrals (#388 M3, M5, M6)", () => {
     expect(errors()).toBe(base);
   });
 });
+
+describe("PR3b critic m3", () => {
+  it("group -> not -> group does not nest deeper", async () => {
+    const t = await openBuilder();
+    await openType(t, "VEH");
+    const kind = () =>
+      within(conditionOf(ruleBox(typeBoxOf("VEH"), 1))).getAllByLabelText(
+        "Condition type",
+      )[0] as HTMLElement;
+    const leaf = { field: "state", op: "neq", value: { $default: "state" } };
+    await t.user.selectOptions(kind(), "all");
+    await t.user.selectOptions(kind(), "not");
+    await t.user.selectOptions(kind(), "any");
+    expect(rulesOf(t, "VEH")[0]?.when).toEqual({ any: [leaf] });
+  });
+});
