@@ -21,7 +21,7 @@
 // Exit 0 clean, 1 offenders, 2 unreadable file.
 
 import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { isMainModule } from "./is-main-module.mjs";
 
 const REGISTRY_RESOLUTION = /^ +resolution: \{integrity: [A-Za-z0-9+/=-]+\}$/;
 const FORBIDDEN_KEY = /(^|[\s{,[?])['"]?(tarball|repo|commit|directory|path|type)['"]?\s*:/;
@@ -87,4 +87,4 @@ function main() {
   console.log(`${path}: pre-install guard ok (registry integrity resolutions only)`);
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();
+if (isMainModule(import.meta.url, process.argv[1])) main();

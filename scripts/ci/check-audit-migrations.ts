@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { isMainModule } from "./is-main-module.mjs";
 
 // Spec 9.2: audit_event is append-only and additive-only across migrations
 // (SEC-010). A statement naming audit_event passes only if it is the first
@@ -168,7 +168,7 @@ export function checkAuditMigrations(files: { name: string; sql: string }[]): st
   return errors;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   const dir = resolve(process.argv[2] ?? "packages/api/drizzle");
   const files = readdirSync(dir)
     .filter((n) => n.endsWith(".sql"))
