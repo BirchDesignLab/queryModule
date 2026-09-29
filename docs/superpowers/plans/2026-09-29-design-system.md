@@ -1,6 +1,6 @@
 # Design system implementation plan (M1 P3 UI polish, both tracks)
 
-Status: draft 09-29-26 for checker review. Design target: `docs/design/2026-09-29-visual-system.md` and the approved mockup (private Artifact https://claude.ai/artifact/9eV85kHA7ZxDeupDfiz9Ys, version 3). Developer rulings 09-29-26: amber night focus ring; IBM Plex self-hosted; dispatcher controls 36 px, officer targets 48 px or more.
+Status: approved 09-29-26 (checker rulings below; developer approved self-hosted IBM Plex). Design target: `docs/design/2026-09-29-visual-system.md` and the approved mockup (private Artifact https://claude.ai/artifact/9eV85kHA7ZxDeupDfiz9Ys, version 3). Developer rulings 09-29-26: amber night focus ring; IBM Plex self-hosted; dispatcher controls 36 px, officer targets 48 px or more.
 
 **Goal:** make the shipped app match the design target without changing behaviour: every existing accessible name, role, keyboard path and test contract stays; the look, layout and density change.
 
@@ -27,7 +27,7 @@ Status: draft 09-29-26 for checker review. Design target: `docs/design/2026-09-2
 | A-D2 | A | A3 editor sections, A4 preview states and issue navigation | A-D1 | `feat/a-design-d2` |
 | A-D3 | A | A5 publish and history UI | A-D2, AC2 (Tasks 27, 33 part 2) | rides AC2's UI PR |
 
-D0 goes to Track B (it owns `packages/web-ui` and the shell, and is free now). Track A starts A-D1 after D0 merges and before AC1 (held for the Thu 10-01 reset); if the reset comes first, AC1 goes first and A-D1 follows.
+D0 goes to Track B (it owns `packages/web-ui` and the shell). Track A starts A-D1 after D0 merges. See "Rulings" for the budget order around the Thu 10-01 reset.
 
 ## Wave D0 (Track B): foundation
 
@@ -125,8 +125,11 @@ Built with AC2 (Tasks 27, 33 part 2), not before: publish review dialog (changes
 
 `pnpm verify` (Git Bash first on PATH), `pnpm audit --prod`, e2e once per PR with the checker's go, one Opus 5.5 `medium` critic (a11y, E1, focus retention, design-target match against the mockup), then the push request with head sha and critic disposition. Visual baselines (D0.4) update only in the PR that changes the look, with the images in the PR.
 
-## Open questions for the checker
+## Rulings (checker, 09-29-26)
 
-1. D0 to Track B (as above), or Track A (fresher design context, but AC1 is next for A)?
-2. D0.4 visual baselines: own spec, or folded into Task 21?
-3. B3 requests list: in M1 P3, or park with M2 results (the mockup shows it; spec 6.2 lists the results list as a Phase 1 screen)?
+1. D0 goes to Track B.
+2. D0.4 visual baselines are their own spec inside D0 (`apps/web/e2e/visual.spec.ts`); Task 21 is already merged. Ask the checker before each e2e run (port 3000).
+3. B3 requests list is in M1 P3: it fills the dispatcher's right pane, and submit already ends at the acknowledgment, so it is phase-true.
+4. Budget order: before the Thu 10-01 2 PM reset only D0, B-D1 and A-D1 run; A-D2 and B-D2 run after it.
+5. Fonts: the developer approved self-hosted IBM Plex, downloaded from the github.com/IBM/plex releases, with its `OFL.txt` shipped beside the woff2 files in `apps/web/public/fonts/` (D0.2 Step 0 is done).
+6. Roles: Track B implements D0, B-D1 and B-D2; a Track A builder session implements A-D1, A-D2 and A-D3; session "M1P3 A W3" is design lead (no implementation): it answers design questions and reviews diffs and screenshots against the target on request.
