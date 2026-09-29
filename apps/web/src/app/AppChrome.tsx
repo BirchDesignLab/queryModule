@@ -1,5 +1,9 @@
 import { clientConfigQuery, savePreferences, useStore } from "@querymodule/client";
-import { type ClientSiteConfig, resolveShortcuts } from "@querymodule/core/config";
+import {
+  type ClientSiteConfig,
+  type PERSONA_LAYOUTS,
+  resolveShortcuts,
+} from "@querymodule/core/config";
 import type { ThemeSelection } from "@querymodule/tokens";
 import { ShortcutProvider, ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
@@ -31,6 +35,20 @@ function useSiteThemeSelection(): ThemeSelection | null {
   return { defaultMode: config.theme?.defaultMode ?? "day", auto: config.theme?.auto ?? "off" };
 }
 
+type PersonaLayout = (typeof PERSONA_LAYOUTS)[number];
+
+/**
+ * The signed-in persona's layout from SiteConfig.personas (spec 6.1: the persona selects the layout
+ * and nothing else), "dispatch" until the config loads (BR-002).
+ */
+export function usePersonaLayout(): PersonaLayout {
+  const { preferences } = useServices();
+  const personaOverride = useStore(preferences, (s) => s.personaOverride);
+  const { persona } = usePersona(null, personaOverride);
+  const config = useCachedConfig();
+  return config?.personas.find((p) => p.key === persona)?.layout ?? "dispatch";
+}
+
 /** Applies theme mode (user preference, then SiteConfig.theme) and persona to <html>. */
 export function AppChrome() {
   const { preferences } = useServices();
@@ -55,8 +73,11 @@ export function AppHeader() {
   const signOut = useSignOut();
   const user = useStore(authStore, (s) => s.user);
   const themeMode = useStore(preferences, (s) => s.themeMode);
+  const layout = usePersonaLayout();
   return (
-    <header className="qm-app-header">
+    <header
+      className={layout === "mobileUnit" ? "qm-app-header qm-app-header--compact" : "qm-app-header"}
+    >
       {/* Product name as plain text: each page owns its h1. */}
       <p className="qm-app-header__product">{t("login.product")}</p>
       <div className="qm-app-header__end">

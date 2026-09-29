@@ -70,6 +70,11 @@ body {
   text-decoration: none;
 }
 
+/* Mobile-unit layout: a shorter bar; its controls keep their 48 px targets (spec 6.3 subset). */
+.qm-app-header--compact {
+  padding: var(--qm-space-1) var(--qm-space-2);
+}
+
 .qm-app-header__status:hover {
   text-decoration: underline;
 }
