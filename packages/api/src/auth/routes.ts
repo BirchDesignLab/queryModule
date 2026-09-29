@@ -135,15 +135,22 @@ async function signOut(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
   headers.set(BACKGROUND_HEADER, "1");
   const p = await d.identity.resolve(new Request(c.req.url, { headers }));
   const res = await d.auth.handler(c.req.raw);
-  if (res.ok && p) {
-    // #246: Better Auth answers 200 and clears the cookie even when the session row survives
-    // (a failed or skipped delete). Fail closed: keep the cookie so a retry can end the session,
-    // and write logout / end sockets only for a session that is really gone.
+  if (p) {
+    // #246, #288: Better Auth may clear the cookie even when the session row survives (a failed
+    // or skipped delete, on its success or its failure path). Fail closed: keep the cookie so a
+    // retry can end the session, and write logout / end sockets only for a session really gone.
     const left = await d.db
       .select({ id: session.id })
       .from(session)
       .where(eq(session.id, p.sessionId));
     if (left.length > 0) {
+      if (res.status >= 400 && res.status < 500) {
+        // G-M1: Better Auth refused the sign-out (for example its 403 origin check). Pass its
+        // status through without its Set-Cookie, so the cookie stays with the live session.
+        const kept = new Headers(res.headers);
+        kept.delete("set-cookie");
+        return new Response(res.body, { status: res.status, headers: kept });
+      }
       d.logger.error("sign-out left the session row", { sessionId: p.sessionId });
       return apiError(c, "internal");
     }

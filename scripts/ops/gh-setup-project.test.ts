@@ -158,6 +158,11 @@ describe("gh-setup-project: no README SVG dashboard; the Project board is the vi
 
   it("writes no local file in any mode: no SVG, no README block, no PR span reads", () => {
     expect(source).not.toMatch(/writeFileSync/);
+    // #288: pin the one fs import, so no other write API (appendFile, createWriteStream,
+    // fs/promises, cpSync, renameSync) can arrive without failing here.
+    const fsImports = source.match(/^import .* from "(node:)?fs(\/promises)?";$/gm) ?? [];
+    expect(fsImports).toEqual(['import { readFileSync } from "node:fs";']);
+    expect(source).not.toMatch(/require\(["'](node:)?fs|import\(["'](node:)?fs/);
     expect(source).not.toMatch(/docs\/assets/);
     expect(source).not.toMatch(/README\.md/);
     expect(source).not.toMatch(/progress:start|progress-svg|renderDashboard|DASHBOARD|waveSpan/);
