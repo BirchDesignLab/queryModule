@@ -5,15 +5,15 @@ const inMain = (page: import("@playwright/test").Page) =>
   page.evaluate(() => document.querySelector("main")?.contains(document.activeElement) ?? false);
 
 test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
-  test("after sign-in focus is on the panel heading and the next Tab is the first quick access button", async ({
+  test("after sign-in focus is on the panel heading and the next Tab is the panel head's Form mode button", async ({
     page,
   }) => {
     await signIn(page);
-    const nav = page.getByRole("navigation", { name: "Quick access" });
+    const nav = page.getByRole("group", { name: "Quick access" });
     await expect(nav).toBeVisible();
     await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(nav.getByRole("button").first()).toBeFocused();
+    await expect(page.getByRole("button", { name: "Form mode" })).toBeFocused();
   });
 
   test("a page opened while the preferences load is still pending is not replaced by the panel", async ({
@@ -53,7 +53,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     await signIn(page);
     // The reload makes "/" the entry AppShell first renders at, with nothing before it.
     await page.reload();
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await page.getByRole("link", { name: "Status" }).click();
     // Wait for the status page itself: Back before it renders leaves the panel mounted, so no
     // navigation to the panel happens at all.
@@ -67,7 +67,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
   }) => {
     await signIn(page);
     await page.reload();
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "Skip to query" });
     await expect(skip).toBeFocused();

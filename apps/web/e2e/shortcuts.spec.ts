@@ -7,7 +7,7 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
   }) => {
     await signIn(page);
     // The panel renders after GET /api/v1/config; keys sent earlier reach no handler.
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await page.keyboard.press("Alt+Digit2");
     await expect(page.getByRole("button", { name: "Person", exact: true })).toHaveAttribute(
       "aria-pressed",
@@ -27,7 +27,7 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
 
   test("Alt+2 puts focus on the first field of the Person form", async ({ page }) => {
     await signIn(page);
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await page.keyboard.press("Alt+Digit2");
     await expect(page.getByRole("button", { name: "Person", exact: true })).toHaveAttribute(
       "aria-pressed",
@@ -39,7 +39,7 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
   test("a slash typed into First name is text, not a shortcut", async ({ page }) => {
     await signIn(page);
     // The panel renders after GET /api/v1/config; keys sent earlier reach no handler.
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await page.keyboard.press("Alt+Digit2");
     const first = page.getByLabel("First name");
     await first.focus();
@@ -55,7 +55,7 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
   }) => {
     await signIn(page);
     // The panel renders after GET /api/v1/config; keys sent earlier reach no handler.
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
     await page.keyboard.press("Shift+Slash");
     const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
@@ -70,7 +70,7 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
   test("G then Q outside inputs focuses the pressed quick-access button", async ({ page }) => {
     await signIn(page);
     // The panel renders after GET /api/v1/config; keys sent earlier reach no handler.
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
     await page.keyboard.press("g");
     await page.keyboard.press("q");

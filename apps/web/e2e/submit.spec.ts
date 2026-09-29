@@ -7,7 +7,7 @@ const QUERIES = "**/api/v1/queries";
 /** Signs in, waits for the panel, types a plate and leaves focus in it (keyboard only from here). */
 async function readyWithPlate(page: Page, plate: string) {
   await signIn(page);
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
   const field = page.getByLabel("Plate", { exact: true });
   await field.focus();
   await page.keyboard.type(plate);
@@ -73,7 +73,7 @@ test("an aborted request shows No connection, and the retry reuses the Idempoten
   await page.keyboard.press("Enter");
 
   // Focusable, aria-disabled (never disabled), and the visible reason is linked to it.
-  const submit = page.getByRole("button", { name: "Submit" });
+  const submit = page.getByRole("button", { name: "Run query" });
   await expect(submit).toHaveAttribute("aria-disabled", "true");
   await expect(submit).not.toHaveAttribute("disabled", /.*/);
   await expect(page.getByText("No connection to server")).toBeVisible();

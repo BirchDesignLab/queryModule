@@ -65,7 +65,7 @@ async function saveTheme(page: Page, choose: () => Promise<unknown>): Promise<vo
 }
 
 async function panelReady(page: Page): Promise<void> {
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
 }
 
 /** Page and main overflow horizontally by this many pixels (0 when neither does). */

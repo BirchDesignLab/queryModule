@@ -123,7 +123,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
 export async function chooseQueryType(page: Page, code: string): Promise<void> {
   const label = TYPE_LABELS[code];
   if (label === undefined) throw new Error(`No label known for query type ${code}`);
-  const nav = page.getByRole("navigation", { name: "Quick access" });
+  const nav = page.getByRole("group", { name: "Quick access" });
   await expect(nav).toBeVisible();
   const button = nav.getByRole("button", { name: label, exact: true });
   if ((await button.count()) > 0) {

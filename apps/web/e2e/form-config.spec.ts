@@ -21,9 +21,12 @@ test("FR-002 FR-003 FR-011 the panel renders from the live GET /api/v1/config", 
   const label = (key: string): string => bundle[key] ?? key;
 
   // ADR-0010: quick-access buttons plus the "Other query types" options cover the live types.
-  const nav = page.getByRole("navigation", { name: "Quick access" });
+  const nav = page.getByRole("group", { name: "Quick access" });
   await expect(nav).toBeVisible();
-  const buttonLabels = await nav.getByRole("button").allTextContents();
+  // Each button is its mono type code, then the label: read the label text node.
+  const buttonLabels = await nav
+    .getByRole("button")
+    .evaluateAll((els) => els.map((el) => el.lastChild?.textContent ?? ""));
   const other = page.getByLabel("Other query types");
   const otherLabels =
     (await other.count()) === 0

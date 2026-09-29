@@ -27,6 +27,7 @@ import {
 } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { firstField } from "./first-field.js";
 import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
@@ -51,6 +52,8 @@ export interface ReadyQueryPanel {
   /** Wraps the form so a blocked submit can focus the first invalid field. */
   formContainerRef: RefObject<HTMLDivElement | null>;
   selectQueryType(code: string): void;
+  /** Clears the current type's values (not its source choice) and any shown errors. */
+  clearValues(): void;
   setValue(key: string, value: DraftValue): void;
   setSources(sourceIds: readonly string[]): void;
   onSubmitAttempt(): void;
@@ -416,12 +419,19 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       drafts.getState().select(code);
       setShowErrors(false);
     },
+    clearValues() {
+      drafts.getState().replaceValues(queryType, {});
+      setShowErrors(false);
+    },
     setValue: (key, value) => drafts.getState().setValue(key, value),
     setSources: (sourceIds) => drafts.getState().setSources(sourceIds),
     onSubmitAttempt() {
       if (submitGated()) return;
       if (formState.valid) {
         void send();
+        // A run that goes out leaves focus on the first field, ready for the next query (design
+        // B2); a blocked one focuses the first invalid field instead.
+        firstField(formContainerRef.current)?.focus();
         return;
       }
       announceBlocked(formState);

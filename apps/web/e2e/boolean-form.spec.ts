@@ -53,7 +53,7 @@ test("[FR-006, FR-005] a blocked submit marks the checkbox invalid and announces
   page,
 }) => {
   const agree = await blockedForm(page);
-  await page.getByRole("button", { name: "Submit" }).click();
+  await page.getByRole("button", { name: "Run query" }).click();
   await expectBlocked(page, agree);
 });
 
@@ -84,7 +84,7 @@ async function expectBlocked(page: Page, agree: Locator): Promise<void> {
 
   // The form-level error, found the way assistive tech finds it: through the Submit button's
   // aria-describedby, not by class names.
-  const submit = page.getByRole("button", { name: "Submit" });
+  const submit = page.getByRole("button", { name: "Run query" });
   const ids = ((await submit.getAttribute("aria-describedby")) ?? "").split(" ").filter(Boolean);
   expect(ids.length).toBeGreaterThan(0);
   await expect(page.locator(ids.map((id) => `#${id}`).join(", "))).toHaveText([

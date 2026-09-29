@@ -3,10 +3,13 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import { resolveShortcuts } from "@querymodule/core/config";
 import {
   AckStatus,
+  ActionBar,
+  blockedErrorCount,
+  CommandEcho,
   fieldErrorMessages,
   formErrorsId,
   formLevelErrors,
-  ModeToggle,
+  ModeSeg,
   QueryForm,
   QueryTypeSelect,
   QuickAccessBar,
@@ -20,9 +23,23 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
-import { useTerminal } from "./use-terminal.js";
+import { formToTerminal, useTerminal } from "./use-terminal.js";
 
 const QUICK_TYPE_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+/** "Alt+Digit1" as aria-keyshortcuts writes it ("Alt+1"); other keys pass through unchanged. */
+function ariaKeyShortcut(keys: string): string {
+  return keys.replace(/(^|\+)(?:Digit|Key)(?=[0-9A-Z]$)/g, "$1");
+}
+
+/** The aria-keyshortcuts of quick-access button `index`, only where quickType(index+1) is bound. */
+function quickShortcut(
+  bindings: ReturnType<typeof resolveShortcuts>,
+  index: number,
+): string | undefined {
+  const keys = bindings[`quickType${index + 1}`]?.[0]?.keys;
+  return keys === undefined ? undefined : ariaKeyShortcut(keys);
+}
 
 /** Registers one shortcut handler; a component so the nine quickType hooks are not a loop. */
 function PanelShortcut({ action, run }: { action: string; run: () => void }) {
@@ -48,11 +65,22 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
       new Map(
         (config.queryTypes.find((q) => q.code === queryType)?.fields ?? []).map((f) => [
           f.key,
-          { inputFormats: f.inputFormats, numberKind: f.numberKind },
+          { inputFormats: f.inputFormats, numberKind: f.numberKind, maxLength: f.maxLength },
         ]),
       ),
     [config, queryType],
   );
+  // The command the form is building, live (spec 4.4): the core formatter over the current draft.
+  const echo = useMemo(
+    () => formToTerminal(config, queryType, panel.values, Date.now()).text,
+    [config, queryType, panel.values],
+  );
+  const timeoutOf = (sourceId: string): string | undefined => {
+    const ms = config.sources.find((x) => x.id === sourceId)?.timeoutMs;
+    return ms === undefined
+      ? undefined
+      : t("form.timeoutSeconds", { seconds: Math.round(ms / 1000) });
+  };
   const typeCodes = config.queryTypes.map((q) => q.code);
   const quickCodes = config.quickAccess.filter((code) => typeCodes.includes(code));
   // Types with a button are picked there; the select lists the rest (ADR-0010). With no buttons it
@@ -64,8 +92,15 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
   const errorMessages = panel.showErrors
     ? fieldErrorMessages(formState, t)
     : new Map<string, string>();
+  const blockedCount = panel.showErrors ? blockedErrorCount(formState) : 0;
   const [sheetOpen, setSheetOpen] = useState(false);
   const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
+  const firstQuick = quickShortcut(bindings, 0);
+  const lastQuick = quickShortcut(bindings, quickCodes.length - 1);
+  const quickHint =
+    preview || firstQuick === undefined || lastQuick === undefined || quickCodes.length < 2
+      ? undefined
+      : t("form.quickAccessHint", { first: firstQuick, last: lastQuick });
   return (
     <>
       {/* Preview registers no global shortcuts and has no sheet: the host page keeps its own. */}
@@ -107,11 +142,23 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
           />
         </>
       )}
+      <div className="qm-panel-head">
+        <h2>{t("panel.title", { type: labelOfType(queryType) })}</h2>
+        <ModeSeg
+          legend={t("mode.label")}
+          formLabel={t("mode.form")}
+          terminalLabel={t("mode.terminal")}
+          terminal={terminal.mode === "terminal"}
+          onSelect={() => terminal.toggle()}
+        />
+      </div>
       <QuickAccessBar
         codes={quickCodes}
         current={queryType}
         labelOf={labelOfType}
         onSelect={terminal.selectType}
+        shortcutOf={preview ? undefined : (_code, index) => quickShortcut(bindings, index)}
+        hint={quickHint}
         t={t}
       />
       {selectCodes.length === 0 ? null : (
@@ -128,11 +175,6 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
           t={t}
         />
       )}
-      <ModeToggle
-        pressed={terminal.mode === "terminal"}
-        label={t("mode.terminal")}
-        onToggle={() => terminal.toggle()}
-      />
       <div ref={panel.formContainerRef}>
         {terminal.mode === "terminal" ? (
           <TerminalInput
@@ -151,11 +193,27 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
               sources={formState.sources}
               checked={panel.checkedSources}
               labelOf={labelOfSource}
+              timeoutOf={timeoutOf}
               onChange={panel.setSources}
               idPrefix={idPrefix}
               t={t}
             />
-            <SubmitButton id={`${idPrefix}-submit`} reason={panel.submitReason} t={t} />
+            <ActionBar
+              clearLabel={t("form.clear")}
+              onClear={terminal.clear}
+              status={
+                terminal.errors.length > 0
+                  ? t("terminal.problems", { count: terminal.errors.length })
+                  : ""
+              }
+            >
+              <SubmitButton
+                id={`${idPrefix}-submit`}
+                reason={panel.submitReason}
+                keyHint={t("form.submitKey")}
+                t={t}
+              />
+            </ActionBar>
           </TerminalInput>
         ) : (
           <>
@@ -169,7 +227,14 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
               t={t}
               idPrefix={idPrefix}
             />
+            <CommandEcho
+              text={echo}
+              label={t("echo.label")}
+              actionLabel={t("echo.edit")}
+              onEdit={() => terminal.toggle({ focus: true })}
+            />
             <QueryForm
+              key={queryType}
               formState={formState}
               values={panel.values}
               fieldConfig={fieldConfig}
@@ -184,20 +249,30 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
                 sources={formState.sources}
                 checked={panel.checkedSources}
                 labelOf={labelOfSource}
+                timeoutOf={timeoutOf}
                 onChange={panel.setSources}
                 idPrefix={idPrefix}
                 t={t}
               />
-              <SubmitButton
-                id={`${idPrefix}-submit`}
-                reason={panel.submitReason}
-                describedBy={
-                  panel.showErrors && formLevelErrors(formState).length > 0
-                    ? formErrorsId(idPrefix)
-                    : undefined
+              <ActionBar
+                clearLabel={t("form.clear")}
+                onClear={terminal.clear}
+                status={
+                  blockedCount > 0 ? t("form.fieldsNeedAttention", { count: blockedCount }) : ""
                 }
-                t={t}
-              />
+              >
+                <SubmitButton
+                  id={`${idPrefix}-submit`}
+                  reason={panel.submitReason}
+                  describedBy={
+                    panel.showErrors && formLevelErrors(formState).length > 0
+                      ? formErrorsId(idPrefix)
+                      : undefined
+                  }
+                  keyHint={t("form.submitKey")}
+                  t={t}
+                />
+              </ActionBar>
             </QueryForm>
           </>
         )}

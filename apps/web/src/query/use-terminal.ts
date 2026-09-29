@@ -17,6 +17,7 @@ import {
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { firstField } from "./first-field.js";
 import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
 
 type Values = Readonly<Record<string, DraftValue>>;
@@ -61,6 +62,8 @@ export interface TerminalModel {
   /** Switches mode; `focus` moves focus to the equivalent control (the keyboard shortcut). */
   toggle(options?: { focus?: boolean }): void;
   focusTerminal(): void;
+  /** Clears the current draft; in terminal mode the command falls back to the bare command; focus goes to the first field or the command line. */
+  clear(): void;
   submitTerminal(): void;
   /**
    * Picks a query type; in terminal mode the text is re-derived from that type's draft. `focus`
@@ -91,10 +94,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     if (!wantFocus.current) return;
     wantFocus.current = false;
     if (mode === "terminal") inputRef.current?.focus();
-    else
-      panel.formContainerRef.current
-        ?.querySelector<HTMLElement>("input, select, textarea")
-        ?.focus();
+    else firstField(panel.formContainerRef.current)?.focus();
   }, [focusTick, mode]);
 
   const derive = useCallback(
@@ -159,6 +159,11 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       }
       if (options?.focus === true) requestFocus();
     },
+    clear() {
+      panel.clearValues();
+      if (mode === "terminal") derive(panel.queryType);
+      requestFocus();
+    },
     focusTerminal() {
       if (mode === "form") enterTerminal();
       requestFocus();
@@ -192,6 +197,8 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       const values = fromCoreDraft(merged);
       state.replaceValues(queryType, values);
       panel.selectQueryType(queryType);
+      // A run that goes out keeps focus in the command line (a click on Run brings it back).
+      inputRef.current?.focus();
       const sourceIds = resolveCheckedSources(formState, state.drafts[queryType]?.sources ?? null);
       void panel.sendChecked({
         queryType,

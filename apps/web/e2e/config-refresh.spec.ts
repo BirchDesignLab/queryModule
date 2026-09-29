@@ -30,7 +30,7 @@ test("[#361] the open form picks up a newer config: new field, one polite announ
   });
   await page.clock.install();
   await signIn(page);
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
   const plate = page.getByLabel("Plate", { exact: true });
   await plate.focus();
   await page.keyboard.type("ZZ-0001");

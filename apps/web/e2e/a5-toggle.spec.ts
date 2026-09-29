@@ -18,7 +18,7 @@ test("[A5] toggling keeps positioned and unpositioned values (FR-056, spec 4.4)"
   page,
 }) => {
   await signIn(page);
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
 
   // Form: State OK reveals Plate type (a value the command cannot carry), then Passenger car.
   const state = page.getByLabel("State", { exact: true });
@@ -60,7 +60,7 @@ test("[A5] the toggle and the command line have a keyboard focus ring and a 24px
   page,
 }) => {
   await signIn(page);
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
   const toggle = page.getByRole("button", { name: "Terminal mode" });
   const box = await toggle.boundingBox();
   expect(box?.width ?? 0).toBeGreaterThanOrEqual(24);
@@ -77,7 +77,11 @@ test("[A5] the toggle and the command line have a keyboard focus ring and a 24px
   await page.keyboard.press("Enter");
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   const input = page.getByRole("textbox", { name: "Command" });
-  await page.keyboard.press("Tab");
+  // The mode control now precedes the quick access buttons: Tab through them to the command line.
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press("Tab");
+    if (await input.evaluate((el) => el === document.activeElement)) break;
+  }
   await expect(input).toBeFocused();
   expect(await hasFocusRing(input)).toBe(true);
 

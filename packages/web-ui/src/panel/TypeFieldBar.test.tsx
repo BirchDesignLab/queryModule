@@ -55,7 +55,7 @@ describe("type fields bar (spec 4.1 Type fields, ADR-0010)", () => {
         ]}
       />,
     );
-    expect(screen.getByLabelText(/field\.propertyType/)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /field\.propertyType/ })).toBeInTheDocument();
     expect(screen.getByLabelText(/field\.other/)).toBeInTheDocument();
   });
 
@@ -68,9 +68,11 @@ describe("type fields bar (spec 4.1 Type fields, ADR-0010)", () => {
         fields={[field()]}
       />,
     );
-    const control = screen.getByLabelText(/field\.propertyType/);
-    expect(control).toHaveAttribute("aria-invalid", "true");
-    expect(control).toHaveAccessibleDescription("Property type is required.");
+    for (const radio of screen.getAllByRole("radio"))
+      expect(radio).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("group", { name: /field\.propertyType/ })).toHaveAccessibleDescription(
+      "Property type is required.",
+    );
   });
 
   it("shows no error before a blocked submit", () => {
@@ -81,6 +83,21 @@ describe("type fields bar (spec 4.1 Type fields, ADR-0010)", () => {
         fields={[field()]}
       />,
     );
-    expect(screen.getByLabelText(/field\.propertyType/)).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByRole("radio")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("a short picklist is a segmented control, a long one stays a select", () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({
+      code: `C${i}`,
+      labelKey: `picklist.many.C${i}`,
+    }));
+    render(
+      <TypeFieldBar
+        {...base}
+        fields={[field(), field({ key: "long", labelKey: "field.long", options: many })]}
+      />,
+    );
+    expect(screen.getByRole("group", { name: /field\.propertyType/ })).toBeInTheDocument();
+    expect(screen.getByLabelText(/field\.long/).tagName).toBe("SELECT");
   });
 });

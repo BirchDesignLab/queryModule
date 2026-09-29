@@ -57,4 +57,39 @@ describe("source checkboxes (spec 6.2)", () => {
     );
     expect(screen.queryByRole("group")).toBeNull();
   });
+  it("draws each source as a chip with its timeout in mono, outside the accessible name", () => {
+    render(
+      <SourceCheckboxes
+        sources={SOURCES}
+        checked={["stateSource"]}
+        labelOf={labelOf}
+        timeoutOf={(id) => (id === "stateSource" ? "10 s" : undefined)}
+        onChange={() => undefined}
+        idPrefix="qp"
+        t={t}
+      />,
+    );
+    const box = screen.getByRole("checkbox", { name: "State system" });
+    const chip = box.closest(".qm-chip");
+    expect(chip).not.toBeNull();
+    const meta = chip?.querySelector(".qm-chip__meta");
+    expect(meta).toHaveTextContent("10 s");
+    expect(meta).toHaveAttribute("aria-hidden", "true");
+    // No timeout, no meta.
+    expect(
+      screen
+        .getByRole("checkbox", { name: "National system" })
+        .closest(".qm-chip")
+        ?.querySelector(".qm-chip__meta"),
+    ).toBeNull();
+  });
+  it("a click on the label text toggles it and the checkbox keeps a stable id", async () => {
+    const onChange = setup(["stateSource"]);
+    await userEvent.click(screen.getByText("National system"));
+    expect(onChange).toHaveBeenCalledWith(["stateSource", "nationalSource"]);
+    expect(screen.getByRole("checkbox", { name: "State system" })).toHaveAttribute(
+      "id",
+      "qp-source-stateSource",
+    );
+  });
 });

@@ -22,7 +22,7 @@ test.describe("B1 app header (dispatch layout)", () => {
     await expect(page).toHaveURL(/\/status$/);
     await expect(nav.getByRole("link", { name: "Status" })).toHaveAttribute("aria-current", "page");
     await nav.getByRole("link", { name: "Queries" }).click();
-    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
   });
 

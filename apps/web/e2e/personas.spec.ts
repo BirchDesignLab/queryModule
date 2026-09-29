@@ -22,7 +22,7 @@ const INTERACTIVE = [
 ].join(", ");
 
 async function panelReady(page: Page): Promise<void> {
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
 }
 
 /** Rendered size of every visible interactive control (a checkbox counts by its own box). */

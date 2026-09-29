@@ -155,18 +155,71 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.click(screen.getByRole("button", { name: "Person" }));
     const last = screen.getByLabelText(/Last name/);
     expect(last).not.toHaveAttribute("aria-invalid");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(last).toHaveAttribute("aria-invalid", "true");
     expect(last).toHaveAccessibleDescription("Last name is required.");
     expect(last).toHaveFocus();
     expect(polite()).toHaveTextContent("1 field needs attention.");
   });
 
+  it("B2 More details starts closed on a type that has nothing required or entered in it, and its state is per type", async () => {
+    const { user } = await openPanel();
+    // Vehicle at the default state shows no More details; Property does (agency), closed.
+    await user.click(screen.getByRole("button", { name: "Property" }));
+    const toggle = await screen.findByRole("button", { name: "More details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "More details" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    // Person has no such section; back on Property it starts closed again, not carried over.
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    await user.click(screen.getByRole("button", { name: "Property" }));
+    expect(await screen.findByRole("button", { name: "More details" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("B2 after a run, focus lands on a checked or non-radio control, never on an unchecked type radio", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Property" }));
+    await user.click(await screen.findByRole("radio", { name: "Article" }));
+    await user.type(screen.getByLabelText(/Description/), "TESTITEM");
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await screen.findByRole("region", { name: "Last query" });
+    const active = document.activeElement as HTMLInputElement;
+    expect(active.type === "radio" ? active.checked : true).toBe(true);
+  });
+
+  it("B2 a run that goes out leaves focus on the first field: a click on Run, and Enter in a later field", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await screen.findByRole("region", { name: "Last query" });
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+    (screen.getByLabelText("VIN") as HTMLElement).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+  });
+
+  it("B2 a terminal run that goes out keeps focus in the command line", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    const input = screen.getByLabelText("Command");
+    await user.type(input, ".ABC123");
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
+    expect(input).toHaveFocus();
+  });
+
   it("a blocked submit focuses the first invalid field in render order and counts every one", async () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
     await user.type(screen.getByLabelText(/Date of birth/), "not-a-date");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Last name/)).toHaveFocus();
     expect(screen.getByLabelText(/Date of birth/)).toHaveAttribute("aria-invalid", "true");
     expect(polite()).toHaveTextContent("2 fields need attention.");
@@ -175,7 +228,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   it("a revealed required field that is empty is the focus target of a blocked submit", async () => {
     const { user } = await openPanel();
     await user.selectOptions(screen.getByLabelText("State"), "OK");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Plate type/)).toHaveFocus();
     expect(polite()).toHaveTextContent("1 field needs attention.");
   });
@@ -187,7 +240,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(last, "Z");
     await user.clear(last);
     expect(services.drafts.getState().drafts.PER?.values.last).toBe("");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(last).toHaveAttribute("aria-invalid", "true");
     expect(last).toHaveFocus();
   });
@@ -196,7 +249,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
     expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
     await user.click(screen.getByRole("button", { name: "Property" }));
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
@@ -204,7 +257,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
 
   it("FR-007 quick access marks the current type and keeps the other type's draft", async () => {
     const { user } = await openPanel();
-    const nav = screen.getByRole("navigation", { name: "Quick access" });
+    const nav = screen.getByRole("group", { name: "Quick access" });
     expect(within(nav).getByRole("button", { name: "Vehicle" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -266,7 +319,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     );
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
-    const button = await screen.findByRole("button", { name: "Submit" });
+    const button = await screen.findByRole("button", { name: "Run query" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
     expect(screen.getByText("Submitting")).toBeInTheDocument();
     await user.keyboard("{Enter}");
@@ -291,7 +344,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user, services } = await openPanel();
     const announce = vi.spyOn(services.announcer, "announce");
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
-    const button = await screen.findByRole("button", { name: "Submit" });
+    const button = await screen.findByRole("button", { name: "Run query" });
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
     await user.keyboard("{Control>}{Enter}{/Control}");
     release();
@@ -307,7 +360,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
     act(() => services.submit.setState({ status: "noConnection" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute(
+      expect(screen.getByRole("button", { name: "Run query" })).toHaveAttribute(
         "aria-disabled",
         "true",
       ),
@@ -379,7 +432,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     await waitFor(() => expect(polite()).toHaveTextContent(/did not answer|No connection/));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute(
+      expect(screen.getByRole("button", { name: "Run query" })).toHaveAttribute(
         "aria-disabled",
         "true",
       ),
@@ -532,7 +585,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
     await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     const last = await screen.findByLabelText(/Last name/);
     await waitFor(() => expect(last).toHaveAttribute("aria-invalid", "true"));
     expect(last).toHaveFocus();
@@ -575,7 +628,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await waitFor(() => expect(screen.queryByText("No connection to server")).toBeNull(), {
       timeout: 4000,
     });
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Run query" }));
     await screen.findByRole("region", { name: "Last query" });
     expect(submitRecorder.calls).toHaveLength(2);
     expect(submitRecorder.calls[1]?.key).toBe(submitRecorder.calls[0]?.key);
@@ -639,11 +692,11 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   describe("ADR-0010 quick access picks the type; type fields are the subtype control", () => {
     it("the default site shows five buttons and no query type control", async () => {
       await openPanel();
-      const nav = screen.getByRole("navigation", { name: "Quick access" });
+      const nav = screen.getByRole("group", { name: "Quick access" });
       expect(
         within(nav)
           .getAllByRole("button")
-          .map((b) => b.textContent),
+          .map((b) => b.lastChild?.textContent),
       ).toEqual(["Vehicle", "Person", "Property", "Wanted check", "Driver's license"]);
       expect(screen.queryByLabelText("Query type")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Other query types")).not.toBeInTheDocument();
@@ -679,9 +732,9 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       expect(select).toHaveValue("");
       await user.selectOptions(select, "WNT");
       expect(await screen.findByLabelText(/Last name/)).toBeInTheDocument();
-      for (const button of within(
-        screen.getByRole("navigation", { name: "Quick access" }),
-      ).getAllByRole("button")) {
+      for (const button of within(screen.getByRole("group", { name: "Quick access" })).getAllByRole(
+        "button",
+      )) {
         expect(button).toHaveAttribute("aria-pressed", "false");
       }
       expect(select).toHaveValue("WNT");
@@ -711,27 +764,29 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     it("Property shows Property type in the type bar, before the form and not in a section", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      const control = await screen.findByLabelText(/Property type/);
+      const control = await screen.findByRole("group", { name: /Property type/ });
       const form = document.querySelector("form") as HTMLFormElement;
       expect(form.contains(control)).toBe(false);
       expect(control.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(control.closest("fieldset")).toBeNull();
+      // A segmented control of radios, in the type bar and not in a form section.
+      expect(control.closest(".qm-type-fields")).not.toBeNull();
+      expect(within(control).getAllByRole("radio").length).toBeGreaterThan(1);
     });
 
     it("choosing a property type changes required fields as the form did", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      await user.selectOptions(await screen.findByLabelText(/Property type/), "BOAT");
-      expect(screen.getByLabelText(/Property type/)).toHaveValue("BOAT");
-      await user.click(screen.getByRole("button", { name: "Submit" }));
-      expect(screen.getByLabelText(/Property type/)).not.toHaveAttribute("aria-invalid");
+      await user.click(await screen.findByRole("radio", { name: "Boat" }));
+      expect(screen.getByRole("radio", { name: "Boat" })).toBeChecked();
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      expect(screen.getByRole("radio", { name: "Boat" })).not.toHaveAttribute("aria-invalid");
     });
 
     it("FR-031 a type-bar value reaches the submit body", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      await user.selectOptions(await screen.findByLabelText(/Property type/), "BOAT");
-      await user.click(screen.getByRole("button", { name: "Submit" }));
+      await user.click(await screen.findByRole("radio", { name: "Boat" }));
+      await user.click(screen.getByRole("button", { name: "Run query" }));
       await screen.findByRole("region", { name: "Last query" });
       expect(submitRecorder.calls.at(-1)?.body).toMatchObject({
         queryType: "PRO",
@@ -742,22 +797,27 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     it("a blocked submit marks an empty Property type and focuses it", async () => {
       const { user } = await openPanel();
       await user.click(screen.getByRole("button", { name: "Property" }));
-      await user.click(screen.getByRole("button", { name: "Submit" }));
-      const control = screen.getByLabelText(/Property type/);
-      expect(control).toHaveAttribute("aria-invalid", "true");
-      expect(control).toHaveFocus();
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      const first = within(screen.getByRole("group", { name: /Property type/ })).getAllByRole(
+        "radio",
+      )[0];
+      expect(first).toHaveAttribute("aria-invalid", "true");
+      expect(first).toHaveFocus();
     });
 
     it("Vehicle shows no type bar", async () => {
       await openPanel();
-      expect(screen.queryByLabelText(/Property type/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: /Property type/ })).not.toBeInTheDocument();
       expect(document.querySelector(".qm-type-fields")).toBeNull();
     });
   });
 });
 
 describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
-  const toggle = () => screen.getByRole("button", { name: "Terminal mode" });
+  /** The button that switches mode: the unpressed one of the Form mode / Terminal mode pair. */
+  const toggle = () =>
+    screen.getByRole("button", { name: /^(Form|Terminal) mode$/, pressed: false });
+  const terminalButton = () => screen.getByRole("button", { name: "Terminal mode" });
   const terminal = () => screen.getByLabelText("Command");
 
   it("[A5] toggling writes the command and counts the fields it cannot show; editing and toggling back merges", async () => {
@@ -765,16 +825,16 @@ describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
     await user.selectOptions(screen.getByLabelText("State"), "OK");
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
     await user.selectOptions(screen.getByLabelText(/Plate type/), "PC");
-    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(terminalButton()).toHaveAttribute("aria-pressed", "false");
     await user.click(toggle());
-    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(terminalButton()).toHaveAttribute("aria-pressed", "true");
     expect(terminal()).toHaveValue("VEH.ZZ-0001.OK");
     expect(screen.getByText("1 field not shown")).toBeInTheDocument();
     expect(screen.queryByLabelText("Plate")).not.toBeInTheDocument();
     await user.clear(terminal());
     await user.type(terminal(), "VEH.ZZ-0002.OK..");
     await user.click(toggle());
-    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(terminalButton()).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0002");
     expect(screen.getByLabelText(/Plate type/)).toHaveValue("PC");
   });
@@ -816,7 +876,8 @@ describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
 });
 
 describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
-  const toggle = () => screen.getByRole("button", { name: "Terminal mode" });
+  const toggle = () =>
+    screen.getByRole("button", { name: /^(Form|Terminal) mode$/, pressed: false });
   const terminal = () => screen.getByLabelText("Command");
 
   it("[A4] VEH.ABC123..26 then Enter posts the typed values, announces the ack and the form shows them", async () => {
@@ -900,7 +961,10 @@ describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
     await user.type(terminal(), ".ABC123{Enter}");
     await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
     await user.keyboard("{Enter}{Control>}{Enter}{/Control}");
-    expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Run query" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     await waitFor(() => expect(announce).toHaveBeenCalledWith("Submitting"));
     release();
     await screen.findByRole("region", { name: "Last query" });

@@ -4,7 +4,7 @@ import { signIn } from "./helpers.js";
 
 async function openTerminal(page: Page) {
   await signIn(page);
-  await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
   // The slash key focuses the terminal from anywhere outside a text input (spec 6.4).
   await expect(page.locator("input:focus, textarea:focus")).toHaveCount(0);
   await page.keyboard.press("Slash");
