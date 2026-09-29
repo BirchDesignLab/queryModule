@@ -247,6 +247,32 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     // Focus lands on the page's main landmark, not on <body>.
     expect(screen.getByRole("main")).toHaveFocus();
   });
+  it("B4 the officer bar: theme as an icon group, the account disclosure without a second theme control", async () => {
+    const { user, services } = await signIn();
+    act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));
+    const banner = await waitFor(() => {
+      const el = screen.getByRole("banner");
+      expect(el).toHaveClass("qm-app-header--compact");
+      return el;
+    });
+    // Theme sits in the bar as icon buttons named by their label; no select, no inline sign-out.
+    const theme = within(banner).getByRole("group", { name: "Theme" });
+    expect(
+      within(theme)
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label")),
+    ).toEqual(["Match system", "Day", "Night", "Red shift"]);
+    expect(within(banner).queryByRole("combobox")).toBeNull();
+    expect(within(banner).queryByRole("button", { name: "Sign out" })).toBeNull();
+    expect(within(banner).queryByText(/Signed in as/)).toBeNull();
+    await user.click(within(theme).getByRole("button", { name: "Red shift" }));
+    expect(document.documentElement.dataset.theme).toBe("redShift");
+    // The disclosure keeps who, role and sign out, but not a second theme control.
+    const panel = await openAccount(user);
+    expect(within(panel).getByText(`Signed in as ${TEST_USER.email}`)).toBeInTheDocument();
+    expect(within(panel).queryByRole("group", { name: "Theme" })).toBeNull();
+    expect(within(panel).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  });
   it("D-B4 the header stays on the status page", async () => {
     const { user } = await signIn();
     await user.click(screen.getByRole("link", { name: "Status" }));

@@ -31,7 +31,8 @@ async function undersizedTargets(page: Page, min: number): Promise<string[]> {
     const label = (el: Element): string =>
       `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 30)}"`;
     return els.flatMap((el) => {
-      const box = el.getBoundingClientRect();
+      // A checkbox inside a chip is clicked through the chip: the chip is its target (spec 6.3).
+      const box = (el.closest(".qm-chip") ?? el).getBoundingClientRect();
       const visible =
         box.width > 0 && box.height > 0 && getComputedStyle(el).visibility !== "hidden";
       if (!visible) return [];
@@ -100,26 +101,30 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
     expect(await headerHeight(page)).toBeLessThanOrEqual(dispatchHeader);
     expect(await overflowX(page)).toBeLessThanOrEqual(0);
 
-    // Night and red shift are one control away: options of the header select.
-    const theme = page.getByRole("banner").getByLabel("Theme");
-    await expect(theme.locator("option[value='night']")).toHaveCount(1);
-    await expect(theme.locator("option[value='redShift']")).toHaveCount(1);
+    // Night and red shift are one control away: icon buttons in the bar, named by their label.
+    const theme = page.getByRole("banner").getByRole("group", { name: "Theme" });
+    await expect(theme.getByRole("button", { name: "Night" })).toBeVisible();
+    await expect(theme.getByRole("button", { name: "Red shift" })).toBeVisible();
 
-    // Quick access first, laid out (not just in DOM order) above the form, two buttons per row.
+    // Quick access first, laid out (not just in DOM order) above the form: one row of 88 px tiles.
     const layout = await page.evaluate(() => {
       const buttons = [...document.querySelectorAll(".qm-quick-access button")];
-      const tops = buttons.map((b) => Math.round(b.getBoundingClientRect().top));
+      const rects = buttons.map((b) => b.getBoundingClientRect());
       const form = document.querySelector("main form");
       return {
         count: buttons.length,
-        tops,
+        tops: rects.map((r) => Math.round(r.top)),
+        heights: rects.map((r) => Math.round(r.height)),
+        bottom: Math.max(...rects.map((r) => r.bottom)),
         formTop: form === null ? -1 : Math.round(form.getBoundingClientRect().top),
       };
     });
     expect(layout.count).toBeGreaterThanOrEqual(3);
-    expect(layout.tops[1]).toBe(layout.tops[0]);
-    expect(layout.tops[2]).toBeGreaterThan(layout.tops[0] ?? 0);
-    expect(layout.formTop).toBeGreaterThan(Math.max(...layout.tops));
+    expect(new Set(layout.tops).size, "one row of tiles at 1024 wide").toBe(1);
+    for (const h of layout.heights) expect(h).toBeGreaterThanOrEqual(88);
+    expect(layout.formTop).toBeGreaterThan(layout.bottom);
+    const run = await page.locator("main button[type=submit]").boundingBox();
+    expect(Math.round(run?.height ?? 0)).toBe(64);
     // Guard against a vacuous pass: header controls, quick access, form fields and Submit.
     expect(await page.locator(INTERACTIVE).count()).toBeGreaterThan(8);
     expect(await undersizedTargets(page, MIN_TARGET)).toEqual([]);

@@ -67,8 +67,7 @@ export async function openAccountMenu(page: Page) {
   return panel;
 }
 
-/** Signs out through the header: the account disclosure holds the button on the dispatch bar, the
- *  officer's compact bar keeps it inline. Call it once the panel has rendered (the persona layout
+/** Signs out through the header: the account disclosure holds the button on both bars. Call it once the panel has rendered (the persona layout
  *  can still flip from dispatch to compact while the config loads). */
 export async function signOutFromHeader(page: Page): Promise<void> {
   if ((await page.getByRole("banner").locator(".qm-account__button").count()) > 0)
@@ -77,9 +76,9 @@ export async function signOutFromHeader(page: Page): Promise<void> {
 }
 
 /**
- * Chooses a theme mode wherever the page offers it: the select on the login page and on the
- * officer's compact bar, or the segmented control in the dispatcher's account disclosure (closed
- * again afterwards, so it never covers the page).
+ * Chooses a theme mode wherever the page offers it: the select on the login page, the icon buttons
+ * in the officer's compact bar, or the segmented control in the dispatcher's account disclosure
+ * (closed again afterwards, so it never covers the page).
  */
 export async function chooseTheme(page: Page, mode: keyof typeof THEME_LABELS): Promise<void> {
   const select = page.getByRole("combobox", { name: "Theme" });
@@ -88,6 +87,12 @@ export async function chooseTheme(page: Page, mode: keyof typeof THEME_LABELS): 
   await select.or(account).first().waitFor();
   if ((await select.count()) > 0) {
     await select.selectOption(mode);
+    return;
+  }
+  // The officer's compact bar carries the theme as icon buttons of its own.
+  const barTheme = page.getByRole("banner").getByRole("group", { name: "Theme" });
+  if ((await barTheme.count()) > 0) {
+    await barTheme.getByRole("button", { name: THEME_LABELS[mode], exact: true }).click();
     return;
   }
   const panel = await openAccountMenu(page);

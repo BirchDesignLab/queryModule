@@ -379,6 +379,43 @@ main[tabindex="-1"]:focus {
   min-width: var(--qm-target-min);
 }
 
+/* Officer bar (design target): the mark alone, the account as its initial, nothing muted (spec 6.3).
+   The names stay in the accessibility tree: the product name at zero size beside the mark, the
+   account email hidden the way VisuallyHidden hides it. */
+.qm-app-header--compact .qm-app-header__product {
+  font-size: 0;
+}
+
+.qm-app-header--compact .qm-account__email {
+  position: absolute;
+  inline-size: var(--qm-border-width);
+  block-size: var(--qm-border-width);
+  margin: calc(var(--qm-border-width) * -1);
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.qm-app-header--compact .qm-app-header__link,
+.qm-app-header--compact .qm-account__role {
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-app-header--compact .qm-account__avatar {
+  inline-size: calc(var(--qm-target-min) - var(--qm-space-2));
+  block-size: calc(var(--qm-target-min) - var(--qm-space-2));
+  font-size: var(--qm-type-size-lg);
+}
+
+/* The icon group sits in the bar without its own track: the 48 px buttons set the bar's height. */
+.qm-app-header--compact .qm-seg {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .qm-app-header .qm-field {
   flex-direction: row;
   align-items: center;

@@ -11,6 +11,8 @@ export interface AccountMenuProps {
   themeMode: ThemeModePreference | null;
   onThemeChange(mode: ThemeModePreference): void;
   onSignOut(): void;
+  /** The officer's bar carries the theme icons itself; the disclosure then omits the second control. */
+  showTheme?: boolean;
 }
 
 /**
@@ -25,6 +27,7 @@ export function AccountMenu({
   themeMode,
   onThemeChange,
   onSignOut,
+  showTheme = true,
 }: AccountMenuProps) {
   const t = useT();
   const panelId = useId();
@@ -96,7 +99,7 @@ export function AccountMenu({
               })}
             </p>
           )}
-          <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} />
+          {showTheme ? <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} /> : null}
           <button type="button" className="qm-button qm-button--ghost" onClick={onSignOut}>
             {t("home.signOut")}
           </button>

@@ -246,6 +246,25 @@ h1 {
   font-weight: 600;
 }
 
+/* Icon-only segments (the officer bar's theme choice): 48 px squares, spec 6.3. */
+.qm-seg--icons > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--qm-target-min);
+  min-height: var(--qm-target-min);
+  padding: 0;
+}
+
+.qm-seg__icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* Subtype segmented control (TypeFieldBar): one radio per option, the label draws the segment. The
    radio is transparent but keeps its hit area; checked fills with accent.subtle; the ring sits on
    the segment (E1), the invalid edge on the track. */
@@ -564,6 +583,8 @@ h1 {
    M4 P1): single column, quick access first, 16 px text, 56 px controls and 48x48 targets. The
    persona selects the layout only (spec 6.1). Nothing the officer reads is muted or small. */
 .qm-layout--mobile-unit {
+  max-width: none;
+  padding: var(--qm-space-5) var(--qm-space-6);
   font-size: var(--qm-type-body-size);
 }
 
@@ -579,6 +600,12 @@ h1 {
 .qm-layout--mobile-unit input[type="radio"] {
   width: var(--qm-target-min);
   height: var(--qm-target-min);
+}
+
+/* A checkbox inside a chip stays 24 px: the whole chip (48 px tall, label fills it) is the target. */
+.qm-layout--mobile-unit .qm-chip__label input {
+  width: var(--qm-space-6);
+  height: var(--qm-space-6);
 }
 
 .qm-layout--mobile-unit .qm-field__input,
@@ -631,19 +658,47 @@ h1 {
   font-size: var(--qm-type-body-size);
 }
 
-.qm-layout--mobile-unit .qm-quick-access button {
-  flex: 1 1 calc(50% - var(--qm-space-2));
+/* Quick access as tiles (design target): a grid of 88 px tiles, the type code in mono above the
+   name; ten rem is the narrowest tile, so five fit one row at 1024 and fewer wrap below that. The
+   keyboard hint is for a physical keyboard: the vehicle laptop's touch layout leaves it out. */
+.qm-layout--mobile-unit .qm-quick-access {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--qm-space-3);
+  margin-block-end: var(--qm-space-4);
 }
 
-/* Nothing the officer reads is muted or small (spec 6.3). */
-.qm-layout--mobile-unit .qm-quick-access__button,
 .qm-layout--mobile-unit .qm-quick-access__hint {
+  display: none;
   color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);
 }
 
+/* Nothing the officer reads is muted or small (spec 6.3). */
+.qm-layout--mobile-unit .qm-quick-access__button {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--qm-space-1);
+  min-height: calc(var(--qm-control-height-touch) + var(--qm-space-8));
+  padding: var(--qm-space-3) var(--qm-space-4);
+  border-color: var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-size-xl);
+  font-weight: 600;
+  text-align: start;
+}
+
+.qm-layout--mobile-unit .qm-quick-access__button[aria-pressed="true"] {
+  border-color: var(--qm-color-accent);
+  border-width: calc(var(--qm-border-width) * 2);
+  background: var(--qm-color-accent-subtle);
+}
+
 .qm-layout--mobile-unit .qm-quick-access__code {
-  font-size: var(--qm-type-body-size);
+  font-size: var(--qm-type-size-lg);
 }
 
 /* Command echo (signature element): a sunken strip with the command in mono and its action. */
@@ -828,12 +883,53 @@ h1 {
 
 /* Officer: the run action is 64 px and full width; nothing muted (spec 6.3). */
 .qm-layout--mobile-unit .qm-action-bar > button[type="submit"] {
-  flex: 1 1 100%;
+  flex: 1 1 12rem;
   min-height: calc(var(--qm-control-height-touch) + var(--qm-space-2));
   font-size: var(--qm-type-size-xl);
+}
+
+/* The Enter hint is for a physical keyboard; the touch layout leaves it off the button. */
+.qm-layout--mobile-unit .qm-action-bar .qm-kbd {
+  display: none;
 }
 
 .qm-layout--mobile-unit .qm-action-bar__status {
   color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);
+}
+
+/* Officer: the form is one card at touch density (design target). Its sections lose their own
+   boxes (one card, not boxes in a box); the action bar keeps to the card's edge. The last request
+   below is a second, quieter card. */
+.qm-layout--mobile-unit .qm-panel__body {
+  padding: var(--qm-space-5) var(--qm-space-6) var(--qm-space-2);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-layout--mobile-unit .qm-query-form__section {
+  padding: 0;
+  border: 0;
+}
+
+.qm-layout--mobile-unit .qm-query-form__section legend {
+  padding-inline: 0;
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-action-bar {
+  margin-inline: calc(var(--qm-space-6) * -1);
+  padding-inline: var(--qm-space-6);
+}
+
+.qm-layout--mobile-unit .qm-ack {
+  margin-block-start: var(--qm-space-4);
+  padding: var(--qm-space-4) var(--qm-space-6);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-layout--mobile-unit .qm-ack__heading {
+  font-size: var(--qm-type-size-lg);
 }
