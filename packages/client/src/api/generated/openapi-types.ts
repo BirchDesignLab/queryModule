@@ -909,7 +909,7 @@ export interface components {
                 email: string;
                 name: string;
                 /** @enum {string} */
-                role: "user" | "trainingOfficer" | "admin";
+                role: "user" | "trainingOfficer" | "admin" | "implementer";
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
@@ -922,7 +922,7 @@ export interface components {
                 email: string;
                 name: string;
                 /** @enum {string} */
-                role: "user" | "trainingOfficer" | "admin";
+                role: "user" | "trainingOfficer" | "admin" | "implementer";
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
@@ -934,7 +934,7 @@ export interface components {
             email: string;
             name: string;
             /** @enum {string} */
-            role: "user" | "trainingOfficer" | "admin";
+            role: "user" | "trainingOfficer" | "admin" | "implementer";
         };
         disableAdminUser200: {
             user: {
@@ -943,7 +943,7 @@ export interface components {
                 email: string;
                 name: string;
                 /** @enum {string} */
-                role: "user" | "trainingOfficer" | "admin";
+                role: "user" | "trainingOfficer" | "admin" | "implementer";
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
@@ -956,14 +956,14 @@ export interface components {
             email: string;
             name: string;
             /** @enum {string} */
-            role: "user" | "trainingOfficer" | "admin";
+            role: "user" | "trainingOfficer" | "admin" | "implementer";
             disabled: boolean;
             mustChangePassword: boolean;
             createdAt: number;
         };
         setAdminUserRoleBody: {
             /** @enum {string} */
-            role: "user" | "trainingOfficer" | "admin";
+            role: "user" | "trainingOfficer" | "admin" | "implementer";
         };
         listAdminUserSessions200: {
             sessions: {

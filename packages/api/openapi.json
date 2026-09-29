@@ -4138,7 +4138,8 @@
                   "enum": [
                     "user",
                     "trainingOfficer",
-                    "admin"
+                    "admin",
+                    "implementer"
                   ]
                 },
                 "disabled": {
@@ -4197,7 +4198,8 @@
                 "enum": [
                   "user",
                   "trainingOfficer",
-                  "admin"
+                  "admin",
+                  "implementer"
                 ]
               },
               "disabled": {
@@ -4254,7 +4256,8 @@
             "enum": [
               "user",
               "trainingOfficer",
-              "admin"
+              "admin",
+              "implementer"
             ]
           }
         },
@@ -4291,7 +4294,8 @@
                 "enum": [
                   "user",
                   "trainingOfficer",
-                  "admin"
+                  "admin",
+                  "implementer"
                 ]
               },
               "disabled": {
@@ -4352,7 +4356,8 @@
             "enum": [
               "user",
               "trainingOfficer",
-              "admin"
+              "admin",
+              "implementer"
             ]
           },
           "disabled": {
@@ -4386,7 +4391,8 @@
             "enum": [
               "user",
               "trainingOfficer",
-              "admin"
+              "admin",
+              "implementer"
             ]
           }
         },
