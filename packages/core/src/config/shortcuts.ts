@@ -127,6 +127,19 @@ const CODE_PATTERN = `(?:${KEYBOARD_CODES.join("|")}|Key[A-Z]|Digit[0-9]|Numpad[
  *  W3C UI Events allowlist above (spec 4.1, 6.4). */
 export const STROKE_PATTERN = new RegExp(`^(?:Ctrl\\+)?(?:Alt\\+)?(?:Shift\\+)?${CODE_PATTERN}$`);
 
+/** Text-editing combos never fire: the engine ignores them at runtime and config validation rejects a
+ *  binding that uses one (spec 6.4). Ctrl+Shift+Z (redo) and Ctrl+Shift+V (paste plain) are the shifted forms. */
+export const EDITING_COMBOS: ReadonlySet<string> = new Set([
+  "Ctrl+KeyA",
+  "Ctrl+KeyC",
+  "Ctrl+KeyV",
+  "Ctrl+KeyX",
+  "Ctrl+KeyZ",
+  "Ctrl+KeyY",
+  "Ctrl+Shift+KeyZ",
+  "Ctrl+Shift+KeyV",
+]);
+
 export function isValidShortcutKeys(keys: string): boolean {
   if (keys.length === 0) return false;
   return keys.split(" ").every((stroke) => STROKE_PATTERN.test(stroke));

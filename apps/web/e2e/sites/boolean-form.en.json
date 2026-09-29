@@ -1,0 +1,8 @@
+{
+  "queryType.CHK": "Checkbox check",
+  "field.agree": "Confirm subject details",
+  "field.code": "Reference code",
+  "field.mode": "Mode",
+  "picklist.mode.RUN": "Run",
+  "picklist.mode.SKIP": "Skip code"
+}

@@ -123,6 +123,36 @@ describe("FR-007 shortcut provider binds the engine to the DOM (spec 6.4)", () =
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it("nested contexts: the innermost region's action wins a tie (spec 6.4)", () => {
+    const submit = vi.fn();
+    const select = vi.fn();
+    render(
+      <ShortcutProvider
+        bindings={{
+          submit: [{ keys: "F4", context: "panel" }],
+          toggleDetail: [{ keys: "F4", context: "results" }],
+        }}
+      >
+        <Action action="submit" handler={submit} />
+        <Action action="toggleDetail" handler={select} />
+        <div data-shortcut-context="panel">
+          <button type="button">in panel</button>
+          <div data-shortcut-context="results">
+            <button type="button">in results</button>
+          </div>
+        </div>
+      </ShortcutProvider>,
+    );
+    screen.getByRole("button", { name: "in results" }).focus();
+    fireEvent.keyDown(document.activeElement ?? document.body, { code: "F4", key: "F4" });
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(submit).not.toHaveBeenCalled();
+    screen.getByRole("button", { name: "in panel" }).focus();
+    fireEvent.keyDown(document.activeElement ?? document.body, { code: "F4", key: "F4" });
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(select).toHaveBeenCalledTimes(1);
+  });
+
   it("Ctrl+A never fires even when bound", async () => {
     const handler = vi.fn();
     const user = userEvent.setup();

@@ -784,6 +784,22 @@ const PART2_CASES: Case[] = [
     key: "config.delimiterShortcutCollision",
   },
   {
+    name: "shortcut bound to a text-editing combo",
+    mutate: (r) => {
+      r.shortcuts = { submit: { keys: "Ctrl+Shift+KeyZ", context: "panel" } };
+    },
+    path: "/shortcuts/submit",
+    key: "config.shortcutEditingCombo",
+  },
+  {
+    name: "shortcut chord with a text-editing combo stroke",
+    mutate: (r) => {
+      r.shortcuts = { goPanel: { keys: "KeyG Ctrl+KeyA", context: "global" } };
+    },
+    path: "/shortcuts/goPanel",
+    key: "config.shortcutEditingCombo",
+  },
+  {
     name: "shortcut prefix collision",
     mutate: (r) => {
       r.shortcuts = { goPanel: { keys: "KeyG", context: "global" } };

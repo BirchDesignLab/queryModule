@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "site": { "id": "boolean-form", "labelKey": "site.default" },
+  "locales": ["en"],
+  "features": {
+    "credentials": false,
+    "delegation": false,
+    "resultHide": false,
+    "adminAudit": false
+  },
+  "personas": [{ "key": "dispatch", "labelKey": "persona.dispatch", "layout": "dispatch" }],
+  "auth": { "mfaRequired": false, "session": { "absoluteMinutes": 720, "idleMinutes": 30 } },
+  "delegation": {
+    "maxDurationMinutes": 480,
+    "purposes": [
+      {
+        "key": "training",
+        "labelKey": "delegation.training",
+        "delegatorRoles": ["trainingOfficer"]
+      }
+    ]
+  },
+  "retention": { "payloadDays": null, "valuesDays": null },
+  "terminal": { "delimiter": "." },
+  "defaults": {},
+  "picklists": [
+    {
+      "id": "mode",
+      "values": [
+        { "code": "RUN", "labelKey": "picklist.mode.RUN" },
+        { "code": "SKIP", "labelKey": "picklist.mode.SKIP" }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "stateSource",
+      "labelKey": "source.stateSource",
+      "scope": "state",
+      "kind": "mock",
+      "timeoutMs": 10000,
+      "maxConcurrent": 4,
+      "requiresCredentials": false
+    }
+  ],
+  "queryTypes": [
+    {
+      "code": "CHK",
+      "labelKey": "queryType.CHK",
+      "sections": [{ "key": "base", "labelKey": "section.base" }],
+      "fields": [
+        { "key": "agree", "labelKey": "field.agree", "dataType": "boolean", "required": true },
+        { "key": "mode", "labelKey": "field.mode", "dataType": "picklist", "picklist": "mode" },
+        {
+          "key": "code",
+          "labelKey": "field.code",
+          "dataType": "string",
+          "maxLength": 10,
+          "pattern": "[A-Z0-9]+"
+        }
+      ],
+      "rules": [
+        {
+          "field": "code",
+          "when": { "field": "mode", "op": "eq", "value": "SKIP" },
+          "effect": "hide"
+        }
+      ],
+      "sources": [{ "sourceId": "stateSource", "selectedByDefault": true }]
+    }
+  ],
+  "commands": [{ "code": "CHK", "queryType": "CHK", "positions": ["agree", "mode", "code"] }],
+  "keywords": [],
+  "keywordSeverityStyles": {
+    "critical": {
+      "color": "color.severity.critical.fg",
+      "background": "color.severity.critical.bg",
+      "bold": true,
+      "icon": "alert-octagon",
+      "marker": "!!",
+      "audibleCue": false
+    },
+    "warning": {
+      "color": "color.severity.warning.fg",
+      "background": "color.severity.warning.bg",
+      "bold": true,
+      "icon": "alert-triangle",
+      "marker": "!",
+      "audibleCue": false
+    },
+    "info": {
+      "color": "color.severity.info.fg",
+      "background": "color.severity.info.bg",
+      "bold": false,
+      "icon": "info",
+      "marker": "i",
+      "audibleCue": false
+    }
+  },
+  "responseMappings": [],
+  "quickAccess": ["CHK"],
+  "theme": { "defaultMode": "day", "auto": "off" }
+}

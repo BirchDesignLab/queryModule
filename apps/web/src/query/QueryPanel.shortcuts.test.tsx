@@ -89,7 +89,7 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
     slash(true);
     const dialog = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
     const submit = within(dialog).getByText("Submit the query").closest("li") as HTMLElement;
-    expect(within(submit).getByText("Ctrl+Enter")).toBeInTheDocument();
+    expect(within(submit).getByText("Ctrl + Enter")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(vehicle()).toHaveFocus();
