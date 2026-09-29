@@ -114,7 +114,6 @@
   "form.submitting": "Submitting",
   "form.noConnection": "No connection to server",
   "form.updateRequired": "Client update required",
-  "form.readyToSubmit": "Ready to submit. Sending queries arrives in the next release.",
   "form.dateFormats": "Accepted formats: {formats}",
   "shortcut.sheetTitle": "Keyboard shortcuts",
   "shortcut.close": "Close",

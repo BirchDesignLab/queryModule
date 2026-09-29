@@ -2,13 +2,18 @@ import { ClientSiteConfigSchema } from "@querymodule/core/config";
 import { screen, waitFor, within } from "@testing-library/react";
 import { delay, HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { ClientSupportProvider } from "../app/client-support-context.js";
 import { appRoutes } from "../app/routes.js";
-import { API, CLIENT_CONFIG, server, TEST_USER } from "../test/msw-server.js";
+import {
+  ACK_202,
+  API,
+  CLIENT_CONFIG,
+  server,
+  submitRecorder,
+  TEST_USER,
+} from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
-
-const SUBMIT_HINT = "Ready to submit. Sending queries arrives in the next release.";
 
 function renderPanel() {
   const services = testServices();
@@ -225,22 +230,132 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(services.drafts.getState().drafts.VEH?.sources).toEqual(["nationalSource"]);
   });
 
-  it("[D-B3] a valid submit announces readiness and sends no query request", async () => {
-    const urls: string[] = [];
-    server.events.on("request:start", ({ request }) => urls.push(new URL(request.url).pathname));
+  it("[A1] Enter in Plate posts once, announces the acknowledgment, shows it and keeps draft and focus", async () => {
     const { user } = await openPanel();
-    await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
-    expect(polite()).toHaveTextContent(SUBMIT_HINT);
-    expect(urls.some((u) => u.startsWith("/api/v1/queries"))).toBe(false);
+    const plate = screen.getByLabelText("Plate");
+    await user.type(plate, "ZZ-0001{Enter}");
+    await waitFor(() =>
+      expect(polite()).toHaveTextContent(/Vehicle query sent at .* Reference 0198a1b2\./),
+    );
+    expect(submitRecorder.calls).toHaveLength(1);
+    expect(submitRecorder.calls[0]?.body).toMatchObject({
+      queryType: "VEH",
+      values: { plate: "ZZ-0001" },
+      mode: "plateOnly",
+      sourceIds: ["stateSource", "nationalSource"],
+    });
+    const ack = screen.getByRole("region", { name: "Last query" });
+    expect(ack).toHaveTextContent(ACK_202.correlationId);
+    expect(ack).toHaveTextContent(/\d\d-\d\d-\d\d \d\d:\d\d:\d\d/);
+    expect(plate).toHaveValue("ZZ-0001");
+    expect(plate).toHaveFocus();
   });
 
-  it("FR-006 Enter in a text field submits the form once", async () => {
-    const { user, services } = await openPanel();
-    const announce = vi.spyOn(services.announcer, "announce");
-    await user.type(screen.getByLabelText("Plate"), "ZZ-1234{Enter}");
-    const ready = announce.mock.calls.filter(([text]) => text === SUBMIT_HINT);
-    expect(ready).toHaveLength(1);
+  it("FR-064 submit is aria-disabled with the Submitting reason while in flight and a second Enter sends nothing", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`${API}/api/v1/queries`, async ({ request }) => {
+        submitRecorder.calls.push({ key: null, body: await request.json() });
+        await gate;
+        return HttpResponse.json(ACK_202, { status: 202 });
+      }),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const button = await screen.findByRole("button", { name: "Submit" });
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    expect(screen.getByText("Submitting")).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    release();
+    await screen.findByRole("region", { name: "Last query" });
+    expect(submitRecorder.calls).toHaveLength(1);
+    expect(button).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("FR-064 a 409 refetches the config, announces it and keeps the draft", async () => {
+    let configFetches = 0;
+    server.use(
+      http.get(`${API}/api/v1/config`, () => {
+        configFetches += 1;
+        return HttpResponse.json(CLIENT_CONFIG);
+      }),
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          { error: { code: "configHashMismatch", currentConfigHash: "x" } },
+          { status: 409 },
+        ),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    await waitFor(() => expect(polite()).toHaveTextContent("The site configuration changed."));
+    await waitFor(() => expect(configFetches).toBeGreaterThan(1));
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+  });
+
+  it("FR-064 a 400 merges the server errors into the field and focuses it", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: "validationFailed",
+              errors: [{ key: "validation.required", params: { field: "last" } }],
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    const last = await screen.findByLabelText(/Last name/);
+    await waitFor(() => expect(last).toHaveAttribute("aria-invalid", "true"));
+    expect(last).toHaveFocus();
+    expect(polite()).toHaveTextContent("1 field needs attention");
+  });
+
+  it("FR-064 a network error shows the no-connection reason and the retry reuses the Idempotency-Key", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, async ({ request }) => {
+        submitRecorder.calls.push({ key: request.headers.get("idempotency-key"), body: null });
+        return HttpResponse.error();
+      }),
+      http.get(`${API}/api/v1/health`, () => HttpResponse.json({ status: "ok" })),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    expect(await screen.findByText("No connection to server")).toBeInTheDocument();
+    server.use(
+      http.post(`${API}/api/v1/queries`, async ({ request }) => {
+        submitRecorder.calls.push({
+          key: request.headers.get("idempotency-key"),
+          body: await request.json(),
+        });
+        return HttpResponse.json(ACK_202, { status: 202 });
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText("No connection to server")).toBeNull(), {
+      timeout: 4000,
+    });
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await screen.findByRole("region", { name: "Last query" });
+    expect(submitRecorder.calls).toHaveLength(2);
+    expect(submitRecorder.calls[1]?.key).toBe(submitRecorder.calls[0]?.key);
+    expect(submitRecorder.calls[0]?.key).toBeTruthy();
+  });
+
+  it("UX-004 Copy reference writes the correlation ID and announces it", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    await user.click(await screen.findByRole("button", { name: "Copy reference" }));
+    expect(await navigator.clipboard.readText()).toBe(ACK_202.correlationId);
+    await waitFor(() => expect(polite()).toHaveTextContent("Reference copied."));
   });
 
   it("SEC-006 the draft is gone after sign-out", async () => {

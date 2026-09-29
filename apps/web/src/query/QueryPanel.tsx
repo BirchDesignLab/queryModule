@@ -1,5 +1,6 @@
 import { resolveShortcuts } from "@querymodule/core/config";
 import {
+  AckStatus,
   fieldErrorMessages,
   formErrorsId,
   formLevelErrors,
@@ -146,7 +147,7 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
           />
           <SubmitButton
             id={`${ID_PREFIX}-submit`}
-            reason={null}
+            reason={panel.submitReason}
             describedBy={
               panel.showErrors && formLevelErrors(formState).length > 0
                 ? formErrorsId(ID_PREFIX)
@@ -156,6 +157,25 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
           />
         </QueryForm>
       </div>
+      <AckStatus
+        ack={
+          panel.lastAck === null
+            ? null
+            : {
+                queryTypeLabel: labelOfType(panel.lastAck.queryType),
+                correlationId: panel.lastAck.response.correlationId,
+                acknowledgedAt: panel.lastAck.response.acknowledgedAt,
+                skipped: panel.lastAck.response.parts
+                  .filter((part) => part.status === "skipped")
+                  .map((part) => ({
+                    queryTypeLabel: labelOfType(part.queryType),
+                    reasonText: t("plan.nestedNoSources"),
+                  })),
+              }
+        }
+        onCopy={panel.copyReference}
+        t={t}
+      />
     </>
   );
 }

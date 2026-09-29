@@ -1,7 +1,20 @@
-import { clientConfigQuery, type DraftValue, useStore } from "@querymodule/client";
+import {
+  clientConfigQuery,
+  type DraftValue,
+  type SubmitOutcome,
+  type SubmitQueryResponse,
+  useStore,
+} from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
+import type { ValidationError } from "@querymodule/core/contracts";
 import { evaluateForm, type FormState } from "@querymodule/core/rules";
-import { blockedErrorCount, focusFirstInvalid, formLevelMessages } from "@querymodule/web-ui";
+import {
+  blockedErrorCount,
+  focusFirstInvalid,
+  formatAckTime,
+  formLevelMessages,
+  type SubmitBlockReason,
+} from "@querymodule/web-ui";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -25,6 +38,12 @@ export interface ReadyQueryPanel {
   setValue(key: string, value: DraftValue): void;
   setSources(sourceIds: readonly string[]): void;
   onSubmitAttempt(): void;
+  /** Why the submit button is blocked, or null (spec 6.2). */
+  submitReason: SubmitBlockReason | null;
+  /** The last acknowledgment, kept until the next one; null before the first. */
+  lastAck: { response: SubmitQueryResponse; queryType: string } | null;
+  /** Copies a correlation ID to the clipboard and announces it. */
+  copyReference(correlationId: string): void;
 }
 
 export type QueryPanelModel =
@@ -47,11 +66,12 @@ function initialQueryType(config: ClientSiteConfig): string | null {
  * Nothing here is per query type (BR-001).
  */
 export function useQueryPanel(): QueryPanelModel {
-  const { api, queryClient, drafts, announcer } = useServices();
+  const { api, queryClient, drafts, announcer, submit } = useServices();
   const t = useT();
   const [load, setLoad] = useState<ConfigLoad>({ status: "loading" });
   const [showErrors, setShowErrors] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
+  const [serverErrors, setServerErrors] = useState<readonly ValidationError[]>([]);
   const formContainerRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
   const seen = useRef<{ queryType: string; visible: ReadonlySet<string> } | null>(null);
@@ -95,12 +115,30 @@ export function useQueryPanel(): QueryPanelModel {
     queryType === null ? null : (s.drafts[queryType]?.sources ?? null),
   );
 
-  const formState = useMemo(
+  const submitStatus = useStore(submit, (s) => s.status);
+  const lastAck = useStore(submit, (s) => s.lastAck);
+
+  // Server validation errors describe the values that were sent; any edit or type change drops them.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: values and queryType are the triggers
+  useEffect(() => setServerErrors([]), [values, queryType]);
+
+  const localFormState = useMemo(
     () =>
       config === null || queryType === null
         ? null
         : evaluateForm(config, queryType, values ?? NO_VALUES, { now: Date.now() }),
     [config, queryType, values],
+  );
+  const formState = useMemo(
+    () =>
+      localFormState === null || serverErrors.length === 0
+        ? localFormState
+        : {
+            ...localFormState,
+            errors: [...localFormState.errors, ...serverErrors],
+            valid: false,
+          },
+    [localFormState, serverErrors],
   );
 
   // Fields that became visible since the previous evaluation of the same type (spec 6.2 A2).
@@ -147,6 +185,65 @@ export function useQueryPanel(): QueryPanelModel {
       ? formState.sources.filter((s) => s.selectedByDefault).map((s) => s.sourceId)
       : draftSources.filter((id) => eligible.includes(id));
 
+  const announceBlocked = (state: FormState): void => {
+    const count = blockedErrorCount(state);
+    setShowErrors(true);
+    setFocusTick((n) => n + 1);
+    announcer.announce(
+      [t("form.fieldsNeedAttention", { count }), ...formLevelMessages(state, t)].join(" "),
+    );
+  };
+
+  const typeLabel = (code: string): string => {
+    const labelKey = config?.queryTypes.find((q) => q.code === code)?.labelKey;
+    return labelKey === undefined ? code : t(labelKey);
+  };
+
+  const handleOutcome = (outcome: SubmitOutcome, state: FormState): void => {
+    switch (outcome.kind) {
+      case "acknowledged":
+        announcer.announce(
+          t("submit.acknowledged", {
+            queryType: typeLabel(outcome.queryType),
+            time: formatAckTime(outcome.response.acknowledgedAt),
+            reference: outcome.response.correlationId.slice(0, 8),
+          }),
+        );
+        return;
+      case "invalid":
+        setServerErrors(outcome.errors as ValidationError[]);
+        announceBlocked({
+          ...state,
+          errors: [...state.errors, ...(outcome.errors as ValidationError[])],
+          valid: false,
+        });
+        return;
+      case "configChanged":
+        // The controller invalidated the config query; fetching re-evaluates the draft against it.
+        void fetchConfig();
+        announcer.announce(t("submit.configChanged"));
+        return;
+      case "rateLimited":
+        announcer.announce(t("submit.rateLimited", { seconds: outcome.retryAfterSeconds }));
+        return;
+      default:
+        announcer.announce(t(`submit.${outcome.kind}`));
+    }
+  };
+
+  const send = async (): Promise<void> => {
+    if (config === null || queryType === null || formState === null) return;
+    const state = formState;
+    const outcome = await submit.getState().submit({
+      queryType,
+      values: values ?? NO_VALUES,
+      sourceIds: checkedSources,
+      mode: state.mode,
+      configHash: config.configHash,
+    });
+    if (mounted.current) handleOutcome(outcome, state);
+  };
+
   return {
     status: "ready",
     config: load.config,
@@ -164,15 +261,23 @@ export function useQueryPanel(): QueryPanelModel {
     setSources: (sourceIds) => drafts.getState().setSources(sourceIds),
     onSubmitAttempt() {
       if (formState.valid) {
-        // D-B3: P2 proves the form; sending arrives with M1 P3.
-        announcer.announce(t("form.readyToSubmit"));
+        void send();
         return;
       }
-      const count = blockedErrorCount(formState);
-      setShowErrors(true);
-      setFocusTick((n) => n + 1);
-      announcer.announce(
-        [t("form.fieldsNeedAttention", { count }), ...formLevelMessages(formState, t)].join(" "),
+      announceBlocked(formState);
+    },
+    submitReason:
+      submitStatus === "submitting"
+        ? "submitting"
+        : submitStatus === "noConnection"
+          ? "noConnection"
+          : null,
+    lastAck,
+    copyReference(correlationId) {
+      // A failed copy (no permission, no clipboard) stays silent: the ID is on screen to select.
+      void navigator.clipboard?.writeText(correlationId).then(
+        () => announcer.announce(t("submit.referenceCopied")),
+        () => undefined,
       );
     },
   };
