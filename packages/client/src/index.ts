@@ -21,6 +21,11 @@ export { AUTH_BASE_PATH, createAuthApi, parseSessionUser } from "./auth/auth-api
 export type { AuthState, AuthStatus, AuthStore } from "./auth/auth-store.js";
 export { createAuthStore } from "./auth/auth-store.js";
 export { ConfigFetchError, clientConfigQuery, fetchClientConfig } from "./config/config-api.js";
+export {
+  type ConfigRefresh,
+  type ConfigRefreshOptions,
+  createConfigRefresh,
+} from "./config/config-refresh.js";
 export { fromCoreDraft, toCoreDraft } from "./draft/core-draft.js";
 export type {
   DraftState,

@@ -21,6 +21,22 @@ async function signIn() {
   return t;
 }
 
+describe("ADR-0011 item 3 the config refresh runs while signed in (#361)", () => {
+  it("AppShell starts it, and unmounting or a reset stops it", async () => {
+    const t = renderRoot();
+    const start = vi.spyOn(t.services.configRefresh, "start");
+    const stop = vi.spyOn(t.services.configRefresh, "stop");
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Query Module" });
+    expect(start).toHaveBeenCalledTimes(1);
+    await t.user.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByRole("heading", { name: "Sign in" });
+    expect(stop).toHaveBeenCalled();
+  });
+});
+
 describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
   it("shows the signed-in user in the header and focuses the panel heading", async () => {
     await signIn();

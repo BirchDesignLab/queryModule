@@ -15,11 +15,18 @@ export class ConfigFetchError extends Error {
 }
 
 /** GET /api/v1/config, parsed with the forward-tolerant client schema (unknown keys are stripped). */
-export async function fetchClientConfig(api: ApiClient): Promise<ClientSiteConfig> {
+export async function fetchClientConfig(
+  api: ApiClient,
+  options: { background?: boolean } = {},
+): Promise<ClientSiteConfig> {
   let status: number;
   let data: unknown;
   try {
-    const result = await api.GET("/api/v1/config");
+    // X-Background: the server does not count the request as user activity (idle timer, spec 5.6).
+    const result = await api.GET(
+      "/api/v1/config",
+      options.background === true ? { headers: { "X-Background": "1" } } : {},
+    );
     status = result.response.status;
     data = result.data;
   } catch (error) {

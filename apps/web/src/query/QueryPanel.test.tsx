@@ -400,6 +400,94 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(body.values).not.toHaveProperty("plateType");
   });
 
+  describe("ADR-0011 item 3 the open form follows a newer config (#361)", () => {
+    const NEW_HASH = `${"0".repeat(63)}9`;
+    /** The default config with one more VEH field (a custom label the bundle does not have). */
+    const withExtraField = (hash: string) => ({
+      ...CLIENT_CONFIG,
+      configHash: hash,
+      queryTypes: CLIENT_CONFIG.queryTypes.map((q) => {
+        const vin = q.fields.find((f) => f.key === "vin");
+        return q.code === "VEH" && vin !== undefined
+          ? { ...q, fields: [...q.fields, { ...vin, key: "zzNote", labelKey: "custom.zzNote" }] }
+          : q;
+      }),
+    });
+
+    it("shows the new field, announces once politely, keeps the typed value and the focus", async () => {
+      const { user, services } = await openPanel();
+      const plate = screen.getByLabelText("Plate");
+      await user.type(plate, "ZZ-0001");
+      expect(screen.queryByLabelText("custom.zzNote")).not.toBeInTheDocument();
+      const announce = vi.spyOn(services.announcer, "announce");
+      act(() => services.queryClient.setQueryData(["config"], withExtraField(NEW_HASH)));
+      expect(await screen.findByLabelText("custom.zzNote")).toBeInTheDocument();
+      await waitFor(() =>
+        expect(polite()).toHaveTextContent("The form was updated by your administrator."),
+      );
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(plate).toHaveValue("ZZ-0001");
+      expect(plate).toHaveFocus();
+    });
+
+    it("the same hash announces nothing", async () => {
+      const { services } = await openPanel();
+      const announce = vi.spyOn(services.announcer, "announce");
+      act(() =>
+        services.queryClient.setQueryData(["config"], { ...CLIENT_CONFIG, quickAccess: ["VEH"] }),
+      );
+      await Promise.resolve();
+      expect(announce).not.toHaveBeenCalled();
+    });
+
+    it("a removed selected type falls back to the first quick-access type and says so", async () => {
+      const { user, services } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      expect(screen.getByRole("button", { name: "Person" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      act(() =>
+        services.queryClient.setQueryData(["config"], {
+          ...CLIENT_CONFIG,
+          configHash: NEW_HASH,
+          queryTypes: CLIENT_CONFIG.queryTypes.filter((q) => q.code !== "PER"),
+          quickAccess: ["VEH", "PRO", "WNT", "DL"],
+        }),
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Vehicle" })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        ),
+      );
+      expect(screen.queryByRole("button", { name: "Person" })).not.toBeInTheDocument();
+      expect(polite()).toHaveTextContent(
+        "The form was updated by your administrator. The selected query type is no longer available. Vehicle is selected.",
+      );
+    });
+
+    it("after a 409 the refetched config changes the form without a second announcement", async () => {
+      server.use(
+        http.post(`${API}/api/v1/queries`, () =>
+          HttpResponse.json(
+            { error: { code: "configHashMismatch", currentConfigHash: NEW_HASH } },
+            { status: 409 },
+          ),
+        ),
+      );
+      const { user, services } = await openPanel();
+      server.use(
+        http.get(`${API}/api/v1/config`, () => HttpResponse.json(withExtraField(NEW_HASH))),
+      );
+      await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+      expect(await screen.findByLabelText("custom.zzNote")).toBeInTheDocument();
+      await waitFor(() => expect(polite()).toHaveTextContent("The site configuration changed."));
+      expect(services.queryClient.getQueryData(["config"])).toMatchObject({ configHash: NEW_HASH });
+      expect(polite()).not.toHaveTextContent("updated by your administrator");
+    });
+  });
+
   it("FR-064 a 400 merges the server errors into the field and focuses it", async () => {
     server.use(
       http.post(`${API}/api/v1/queries`, () =>

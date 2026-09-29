@@ -113,7 +113,13 @@ export function AppHeader() {
 
 /** Layout of every signed-in screen that runs the app: the header, then the page. */
 export function AppShell() {
-  const { api, queryClient } = useServices();
+  const { api, queryClient, configRefresh } = useServices();
+  // Refetch the config every 15 s and when the tab becomes visible, while signed in (ADR-0011
+  // item 3). A reset (sign-out, 401, user change) stops it too.
+  useEffect(() => {
+    configRefresh.start();
+    return () => configRefresh.stop();
+  }, [configRefresh]);
   // Load GET /api/v1/config on every signed-in screen, not only the panel, so SiteConfig.theme
   // applies after a reload on /status too (spec 6.5); the panel reuses the cached entry.
   useEffect(() => {
