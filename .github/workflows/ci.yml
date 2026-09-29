@@ -169,16 +169,19 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         # Diffs the merge base, not the base tip (#171), so a route main added after the
         # branch was cut is not a removal; a component renamed with a byte-identical body
-        # (#69, #95) is mapped back first. Fails closed: skip only when the merge base lists
-        # no openapi.json; any git failure fails the step (fetch-depth 0 above). Image pinned
+        # (#69, #95) is mapped back first. Fails closed: skip only on the script exit code 3
+        # (merge base lists no openapi.json), exit 0 must leave the file; any git failure fails the step (fetch-depth 0 above). Image pinned
         # by digest (v1.32.1).
         run: |
           set -euo pipefail
           rm -f base-openapi.json
-          pnpm tsx scripts/ci/openapi-base.ts "origin/$BASE_REF" base-openapi.json
-          if [ ! -f base-openapi.json ]; then
-            exit 0
-          fi
+          rc=0
+          pnpm tsx scripts/ci/openapi-base.ts "origin/$BASE_REF" base-openapi.json || rc=$?
+          case "$rc" in
+            3) exit 0 ;;
+            0) [ -f base-openapi.json ] || exit 1 ;;
+            *) exit "$rc" ;;
+          esac
           pnpm tsx scripts/ci/openapi-rename-map.ts base-openapi.json packages/api/openapi.json head-openapi.renamed.json
           docker run --rm -v "$PWD:/work" tufin/oasdiff@sha256:3b14fe0112e5d1bf862f91ab234a4bcd161a3f399e98f8b0b665ce70857694ac breaking /work/base-openapi.json /work/head-openapi.renamed.json --fail-on ERR
 

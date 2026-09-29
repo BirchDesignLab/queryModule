@@ -65,6 +65,12 @@ describe("ci.yml structure (ADR-0008)", () => {
     expect(run).toContain("set -euo pipefail");
     expect(run).toContain('openapi-base.ts "origin/$BASE_REF" base-openapi.json');
     expect(run).not.toMatch(/git (show|ls-tree)/);
+    // Skip is an explicit exit code 3; exit 0 must leave the file, anything else fails.
+    expect(run).toContain("rc=$?");
+    expect(run).toMatch(/3\)\s+exit 0/);
+    expect(run).toMatch(/0\)\s+\[ -f base-openapi.json \] \|\| exit 1/);
+    expect(run).toMatch(/\*\)\s+exit "\$rc"/);
+    expect(run).not.toMatch(/if \[ ! -f base-openapi.json \]/);
     const rename = run.indexOf(
       "openapi-rename-map.ts base-openapi.json packages/api/openapi.json head-openapi.renamed.json",
     );

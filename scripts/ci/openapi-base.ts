@@ -5,11 +5,15 @@
  * base lists no openapi.json.
  *
  * CLI: pnpm tsx scripts/ci/openapi-base.ts <base-ref> <out>
- * Exit 0 with <out> written, or exit 0 with no <out> (prints "skip"); exit 1 on failure.
+ * Exit 0 with <out> written and a "base: <sha>" line; exit 3 with no <out> (prints "skip:") when
+ * the merge base has no openapi.json; exit 1 on any git failure; exit 2 on bad usage. The
+ * workflow treats only 3 as skip, so a silent no-op cannot pass as a skip.
  */
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { isMainModule } from "./cli-io";
+
+export const EXIT_SKIP = 3;
 
 export const SPEC_PATH = "packages/api/openapi.json";
 
@@ -49,7 +53,7 @@ function main(argv: string[]): number {
   }
   if (sel.kind === "skip") {
     console.log("skip: no openapi.json at the merge base yet; nothing to diff.");
-    return 0;
+    return EXIT_SKIP;
   }
   writeFileSync(out, sel.content);
   console.log(`base: ${sel.sha}`);

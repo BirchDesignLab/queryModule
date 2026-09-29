@@ -1,7 +1,9 @@
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { type Git, selectBase } from "./openapi-base";
 
@@ -83,4 +85,42 @@ describe("selectBase", () => {
           : { status: null, stdout: "" };
     expect(selectBase(g, "origin/main")).toEqual({ kind: "fail", reason: "show" });
   });
+});
+
+describe("openapi-base CLI contract", () => {
+  const require = createRequire(import.meta.url);
+  const tsxCli = require.resolve("tsx/cli");
+  const script = fileURLToPath(new URL("./openapi-base.ts", import.meta.url));
+  const run = (cwd: string, args: string[]) =>
+    spawnSync(process.execPath, [tsxCli, script, ...args], { cwd, encoding: "utf8" });
+
+  it("exits 0, prints the base sha and writes the file when a base exists", () => {
+    const r = repo();
+    r.commit('{"v":1}', "base");
+    r.git("update-ref", "refs/remotes/origin/main", "main");
+    r.commit(null, "head");
+    const res = run(r.dir, ["origin/main", "out.json"]);
+    expect(res.status).toBe(0);
+    expect(res.stdout).toMatch(/^base: [0-9a-f]{40}$/m);
+    expect(readFileSync(join(r.dir, "out.json"), "utf8")).toBe('{"v":1}');
+  }, 60_000);
+
+  it("exits 3 with a skip line and no file when the merge base has no openapi.json", () => {
+    const r = repo();
+    r.commit(null, "no spec yet");
+    r.git("update-ref", "refs/remotes/origin/main", "main");
+    r.commit('{"v":1}', "head adds spec");
+    const res = run(r.dir, ["origin/main", "out.json"]);
+    expect(res.status).toBe(3);
+    expect(res.stdout).toMatch(/^skip:/m);
+    expect(existsSync(join(r.dir, "out.json"))).toBe(false);
+  }, 60_000);
+
+  it("exits 1 when the base ref does not exist, and 2 on bad usage", () => {
+    const r = repo();
+    r.commit('{"v":1}', "c");
+    expect(run(r.dir, ["origin/nope", "out.json"]).status).toBe(1);
+    expect(run(r.dir, []).status).toBe(2);
+    expect(existsSync(join(r.dir, "out.json"))).toBe(false);
+  }, 60_000);
 });
