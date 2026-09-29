@@ -1,17 +1,27 @@
+import { resolveShortcuts } from "@querymodule/core/config";
 import {
   formErrorsId,
   formLevelErrors,
   QueryForm,
   QueryTypeSelect,
   QuickAccessBar,
+  ShortcutSheet,
   SourceCheckboxes,
   SubmitButton,
+  useShortcutAction,
 } from "@querymodule/web-ui";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
 
 const ID_PREFIX = "qp";
+const QUICK_TYPE_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+/** Registers one shortcut handler; a component so the nine quickType hooks are not a loop. */
+function PanelShortcut({ action, run }: { action: string; run: () => void }) {
+  useShortcutAction(action, run);
+  return null;
+}
 
 function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
   const t = useT();
@@ -35,10 +45,40 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
     [config, queryType],
   );
   const typeCodes = config.queryTypes.map((q) => q.code);
+  const quickCodes = config.quickAccess.filter((code) => typeCodes.includes(code));
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
   return (
     <>
+      {QUICK_TYPE_SLOTS.map((n) => (
+        <PanelShortcut
+          key={n}
+          action={`quickType${n}`}
+          run={() => {
+            const code = quickCodes[n - 1];
+            if (code !== undefined) panel.selectQueryType(code);
+          }}
+        />
+      ))}
+      <PanelShortcut
+        action="submit"
+        run={() => panel.formContainerRef.current?.querySelector("form")?.requestSubmit()}
+      />
+      <PanelShortcut
+        action="goPanel"
+        run={() => document.getElementById(`${ID_PREFIX}-query-type`)?.focus()}
+      />
+      <PanelShortcut action="shortcutSheet" run={() => setSheetOpen(true)} />
+      {/* Only while the sheet is open: a standing dismiss handler would swallow every Escape. */}
+      {sheetOpen ? <PanelShortcut action="dismiss" run={() => setSheetOpen(false)} /> : null}
+      <ShortcutSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        bindings={bindings}
+        t={t}
+      />
       <QuickAccessBar
-        codes={config.quickAccess.filter((code) => typeCodes.includes(code))}
+        codes={quickCodes}
         current={queryType}
         labelOf={labelOfType}
         onSelect={panel.selectQueryType}
@@ -95,7 +135,11 @@ export function QueryPanel() {
     headingRef.current?.focus();
   }, []);
   return (
-    <main className="qm-page qm-query-panel" aria-busy={panel.status === "loading"}>
+    <main
+      className="qm-page qm-query-panel"
+      data-shortcut-context="panel"
+      aria-busy={panel.status === "loading"}
+    >
       <h1 ref={headingRef} tabIndex={-1}>
         {t("app.title")}
       </h1>
