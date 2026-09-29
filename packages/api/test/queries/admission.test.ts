@@ -18,7 +18,7 @@ const CID = "01890a5d-ac96-774b-bcce-b302099a8057";
 const CID_SKIP = "01890a5d-ac96-774b-bcce-b302099a8059";
 const ACK_AT = 1_790_000_000_123;
 
-/** The assembled app plus a stub POST /api/v1/queries that answers 299 for `admit`. */
+/** The assembled app plus a stub POST route running admitSubmit that answers 299 for `admit`. */
 async function stubApp(): Promise<{
   t: TestApp;
   userId: string;
@@ -36,11 +36,12 @@ async function stubApp(): Promise<{
     return new Response(JSON.stringify({ raw: a.raw }), { status: 299 });
   });
   // Mount before the first request: Hono builds its matcher on first match.
-  t.app.route("/api/v1/queries", sub);
+  // Its own path: the real POST /api/v1/queries (route.ts) is mounted first and would win.
+  t.app.route("/api/v1/admission-stub", sub);
   const userId = await t.createUser("dispatcher@example.test", PASSWORD);
   const cookie = await t.cookieFor("dispatcher@example.test", PASSWORD);
   const post = (o: Post = {}) =>
-    t.request("/api/v1/queries", {
+    t.request("/api/v1/admission-stub", {
       method: "POST",
       headers: {
         cookie: o.cookie ?? cookie,

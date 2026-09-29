@@ -8,7 +8,6 @@ import {
 import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { z } from "zod";
-import { systemMonotonic } from "../clock";
 import type { Db } from "../db/client";
 import { auditEvent, queryRequest, sourceResult } from "../db/schema";
 import type { Tx } from "../db/tx";
@@ -42,7 +41,7 @@ const SourceIdsSchema = z.array(BoundedIdSchema);
  */
 export async function admitSubmit(c: Context<AppEnv>, d: AppDeps): Promise<Admission> {
   const receivedAt = d.clock.now();
-  const receivedMono = systemMonotonic.nowMs();
+  const receivedMono = d.monotonic.nowMs();
   const text = await c.req.text();
   let raw: unknown;
   try {

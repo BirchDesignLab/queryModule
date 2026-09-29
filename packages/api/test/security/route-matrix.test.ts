@@ -11,6 +11,7 @@ const SERVED = new Set([
   "GET /api/v1/config",
   "GET /api/v1/me/preferences",
   "PUT /api/v1/me/preferences",
+  "POST /api/v1/queries",
 ]);
 const fill = (p: string) =>
   p.replace(/:([A-Za-z]+)|\{([A-Za-z]+)\}/g, (_m, a, b) => ((a ?? b) === "locale" ? "en" : "x"));
