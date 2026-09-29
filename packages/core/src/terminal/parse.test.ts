@@ -158,20 +158,17 @@ describe("spec 4.4 error params never carry the typed value", () => {
     "WNT.TESTLAST.PAT.1901-01-01.EXTRA",
   ];
   const exempt = new Set(["terminal.unknownCommand:code", "terminal.unknownField:name"]);
-  const commandCodes = new Set(defaultSite.commands.map((c) => c.code.toLowerCase()));
   /**
-   * Every token and the whole trimmed input. Config is not typed: a named token's key is a field
-   * key, and a recognised command code is config (an unrecognised one stays typed; the exemption
-   * covers terminal.unknownCommand code).
+   * Every token, the command code included, and the whole trimmed input. A named token's key is a
+   * field key (config), so only its value is typed.
    */
-  const typedValues = (input: string): string[] => {
-    const [code = "", ...tokens] = input.split(".").map((t) => t.trim());
-    return [
-      input.trim(),
-      ...(commandCodes.has(code.toLowerCase()) ? [] : [code]),
-      ...tokens.flatMap((t) => [t, t.slice(t.indexOf("=") + 1).trim()]),
-    ].filter((t) => t !== "");
-  };
+  const typedValues = (input: string): string[] =>
+    [input.trim(), ...input.split(".").flatMap((t) => [t, t.slice(t.indexOf("=") + 1)])]
+      .map((t) => t.trim())
+      .filter((t) => t !== "");
+  // Config strings: a recognised code such as PRO is a substring of field.propertyType, so these
+  // params skip the substring check only; an exact or case-insensitive echo still fails (#323).
+  const configParams = new Set(["field", "labelKey"]);
   // Canonicalised echoes: years (26 to 2026) and typed dates (to ISO YYYY-MM-DD).
   const echoFields = defaultSite.queryTypes
     .flatMap((q) => q.fields)
@@ -191,13 +188,14 @@ describe("spec 4.4 error params never carry the typed value", () => {
     const typed = typedValues(input)
       .flatMap(echoes)
       .map((t) => t.toLowerCase());
-    const echoed = (value: unknown) => {
+    const echoed = (name: string, value: unknown) => {
       const text = String(value).toLowerCase();
-      return typed.some((t) => text === t || (t.length >= 3 && text.includes(t)));
+      const substring = !configParams.has(name);
+      return typed.some((t) => text === t || (substring && t.length >= 3 && text.includes(t)));
     };
     return errors.flatMap((e) =>
       Object.entries(e.params ?? {})
-        .filter(([name, value]) => !exempt.has(`${e.key}:${name}`) && echoed(value))
+        .filter(([name, value]) => !exempt.has(`${e.key}:${name}`) && echoed(name, value))
         .map(([name]) => `${e.key}:${name}`),
     );
   };
@@ -223,12 +221,18 @@ describe("spec 4.4 error params never carry the typed value", () => {
     expect(leaks("PER.TESTLAST", err({ echo: "was testlast" }))).toEqual(caught);
   });
 
-  it("config values are not typed values: field keys, labelKeys and a known command code", () => {
+  it("config params (field, labelKey) skip only the substring check", () => {
     const params = { field: "plateType", labelKey: "field.plateType", position: 2 };
     expect(leaks("VEH.ZZ-0001.OK.plateType=PC", [{ key: "x", params }])).toEqual([]);
     const pro = { field: "propertyType", labelKey: "field.propertyType" };
     expect(leaks("PRO.ZZ-0001", [{ key: "x", params: pro }])).toEqual([]);
-    expect(typedValues("pro.ZZ-0001")).not.toContain("pro");
+    // #323: a recognised command code stays typed, so an exact echo is caught in any param.
+    expect(typedValues("pro.ZZ-0001")).toContain("pro");
+    expect(leaks("pro.ZZ-0001", [{ key: "x", params: { echo: "PRO" } }])).toEqual(["x:echo"]);
+    expect(leaks("pro.ZZ-0001", [{ key: "x", params: { field: "PRO" } }])).toEqual(["x:field"]);
+    expect(leaks("VEH.ZZ-0001", [{ key: "x", params: { labelKey: "zz-0001" } }])).toEqual([
+      "x:labelKey",
+    ]);
   });
 
   it("only unknownCommand code and unknownField name are exempt (spec 4.4, #296 ruling 4)", () => {
