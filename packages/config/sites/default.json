@@ -7,7 +7,9 @@
     "credentials": false,
     "delegation": false,
     "resultHide": false,
-    "adminAudit": false
+    "adminAudit": false,
+    "adminConfig": false,
+    "adminUsers": false
   },
   "personas": [
     { "key": "dispatch", "labelKey": "persona.dispatch", "layout": "dispatch" },
@@ -534,6 +536,6 @@
       ]
     }
   ],
-  "quickAccess": ["VEH", "PER", "PRO"],
+  "quickAccess": ["VEH", "PER", "PRO", "WNT", "DL"],
   "theme": { "defaultMode": "auto", "auto": "os" }
 }

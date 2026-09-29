@@ -1,5 +1,7 @@
 import { resolveShortcuts } from "@querymodule/core/config";
 import {
+  AckStatus,
+  fieldErrorMessages,
   formErrorsId,
   formLevelErrors,
   QueryForm,
@@ -8,6 +10,7 @@ import {
   ShortcutSheet,
   SourceCheckboxes,
   SubmitButton,
+  TypeFieldBar,
   useShortcutAction,
 } from "@querymodule/web-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -46,6 +49,15 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
   );
   const typeCodes = config.queryTypes.map((q) => q.code);
   const quickCodes = config.quickAccess.filter((code) => typeCodes.includes(code));
+  // Types with a button are picked there; the select lists the rest (ADR-0010). With no buttons it
+  // lists every type under its original label.
+  const otherCodes = typeCodes.filter((code) => !quickCodes.includes(code));
+  const selectCodes = quickCodes.length === 0 ? typeCodes : otherCodes;
+  const typeFields = formState.fields.filter((f) => f.role === "type" && f.visible);
+  const typeFieldKeys = new Set(typeFields.map((f) => f.key));
+  const errorMessages = panel.showErrors
+    ? fieldErrorMessages(formState, t)
+    : new Map<string, string>();
   const [sheetOpen, setSheetOpen] = useState(false);
   const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
   return (
@@ -66,7 +78,12 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
       />
       <PanelShortcut
         action="goPanel"
-        run={() => document.getElementById(`${ID_PREFIX}-query-type`)?.focus()}
+        run={() =>
+          (
+            document.querySelector<HTMLElement>(".qm-quick-access [aria-pressed='true']") ??
+            document.getElementById(`${ID_PREFIX}-query-type`)
+          )?.focus()
+        }
       />
       <PanelShortcut action="shortcutSheet" run={() => setSheetOpen(true)} />
       {/* Only while the sheet is open: a standing dismiss handler would swallow every Escape. */}
@@ -84,14 +101,31 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
         onSelect={panel.selectQueryType}
         t={t}
       />
-      <QueryTypeSelect
-        id={`${ID_PREFIX}-query-type`}
-        value={queryType}
-        options={typeCodes.map((code) => ({ code, label: labelOfType(code) }))}
-        onChange={panel.selectQueryType}
-        t={t}
-      />
+      {selectCodes.length === 0 ? null : (
+        <QueryTypeSelect
+          id={`${ID_PREFIX}-query-type`}
+          labelKey={quickCodes.length === 0 ? "form.queryType" : "form.otherQueryTypes"}
+          emptyOption={quickCodes.length > 0}
+          value={quickCodes.length > 0 && quickCodes.includes(queryType) ? "" : queryType}
+          options={selectCodes.map((code) => ({ code, label: labelOfType(code) }))}
+          onChange={(code) => {
+            // The empty option means "none of these": keep the current type.
+            if (code !== "") panel.selectQueryType(code);
+          }}
+          t={t}
+        />
+      )}
       <div ref={panel.formContainerRef}>
+        <TypeFieldBar
+          fields={typeFields}
+          values={panel.values}
+          fieldConfig={fieldConfig}
+          showErrors={panel.showErrors}
+          errors={errorMessages}
+          onChange={panel.setValue}
+          t={t}
+          idPrefix={ID_PREFIX}
+        />
         <QueryForm
           formState={formState}
           values={panel.values}
@@ -101,6 +135,7 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
           onSubmitAttempt={panel.onSubmitAttempt}
           t={t}
           idPrefix={ID_PREFIX}
+          excludeKeys={typeFieldKeys}
         >
           <SourceCheckboxes
             sources={formState.sources}
@@ -112,7 +147,7 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
           />
           <SubmitButton
             id={`${ID_PREFIX}-submit`}
-            reason={null}
+            reason={panel.submitReason}
             describedBy={
               panel.showErrors && formLevelErrors(formState).length > 0
                 ? formErrorsId(ID_PREFIX)
@@ -122,6 +157,25 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
           />
         </QueryForm>
       </div>
+      <AckStatus
+        ack={
+          panel.lastAck === null
+            ? null
+            : {
+                queryTypeLabel: labelOfType(panel.lastAck.queryType),
+                correlationId: panel.lastAck.response.correlationId,
+                acknowledgedAt: panel.lastAck.response.acknowledgedAt,
+                skipped: panel.lastAck.response.parts
+                  .filter((part) => part.status === "skipped")
+                  .map((part) => ({
+                    queryTypeLabel: labelOfType(part.queryType),
+                    reasonText: t("plan.nestedNoSources"),
+                  })),
+              }
+        }
+        onCopy={panel.copyReference}
+        t={t}
+      />
     </>
   );
 }

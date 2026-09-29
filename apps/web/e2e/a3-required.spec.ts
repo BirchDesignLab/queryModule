@@ -1,11 +1,11 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { chooseQueryType, signIn } from "./helpers.js";
 
 test("[A3] a blocked submit names the missing field, focuses it and announces (FR-001, FR-005)", async ({
   page,
 }) => {
   await signIn(page);
-  await page.getByLabel("Query type").selectOption("PER");
+  await chooseQueryType(page, "PER");
   const first = page.getByLabel("First name");
   const last = page.getByLabel("Last name");
   await expect(last).toHaveAttribute("aria-required", "true");

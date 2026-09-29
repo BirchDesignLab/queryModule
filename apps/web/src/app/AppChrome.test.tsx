@@ -39,7 +39,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
     );
     expect(within(header).getByLabelText("Theme")).toBeInTheDocument();
     expect(within(header).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
-    expect(await screen.findByLabelText("Query type")).toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Quick access" })).toBeInTheDocument();
   });
   it("the header is one top bar: product name first, then status, user, theme, sign out", async () => {
     await signIn();
@@ -199,7 +199,7 @@ describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
   it("a user preference wins over the site default", async () => {
     withSite({ defaultMode: "night", auto: "off" }, "day");
     await signIn();
-    await screen.findByLabelText("Query type");
+    await screen.findByRole("navigation", { name: "Quick access" });
     expect(document.documentElement.dataset.theme).toBe("day");
   });
   it("a signed-in reload on /status applies the site default without the query panel", async () => {

@@ -93,12 +93,12 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
     expect(polite()).toHaveTextContent("1 field needs attention.");
   });
 
-  it("G then Q with focus on the page body focuses the query-type select", async () => {
+  it("G then Q with focus on the page body focuses the pressed quick access button", async () => {
     const { user } = await openPanel();
     (document.activeElement as HTMLElement).blur();
     expect(document.body).toHaveFocus();
     await user.keyboard("gq");
-    expect(screen.getByLabelText("Query type")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Vehicle" })).toHaveFocus();
   });
 
   it("Shift+/ opens the sheet listing submit with Ctrl+Enter; Escape closes it and focus returns", async () => {

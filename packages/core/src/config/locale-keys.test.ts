@@ -72,3 +72,19 @@ describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", (
     expect(en["terminal.delimiterInValue"]).not.toContain("{delimiter}");
   });
 });
+
+describe("FR-006 form.readyToSubmit is gone (M1 P3 sends queries)", () => {
+  it("is not in en.json", () => {
+    expect("form.readyToSubmit" in en).toBe(false);
+  });
+  it("is in no web source file", () => {
+    const root = new URL("../../../../apps/web/src/", import.meta.url);
+    const files = readdirSync(root, { recursive: true, encoding: "utf8" }).filter(
+      (f) => /\.tsx?$/.test(f) && !f.endsWith("locale-keys.test.ts"),
+    );
+    const hits = files.filter((f) =>
+      readFileSync(new URL(f.replaceAll("\\", "/"), root), "utf8").includes("readyToSubmit"),
+    );
+    expect(hits).toEqual([]);
+  });
+});

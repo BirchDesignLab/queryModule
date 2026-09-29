@@ -1,5 +1,12 @@
 {
   "schemaVersion": 1,
   "extends": "default",
-  "features": { "credentials": true, "delegation": true, "resultHide": true, "adminAudit": true }
+  "features": {
+    "credentials": true,
+    "delegation": true,
+    "resultHide": true,
+    "adminAudit": true,
+    "adminConfig": true,
+    "adminUsers": true
+  }
 }

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
+  FEATURES,
   mergeSiteOverlay,
   migrateConfig,
   SiteConfigSchema,
@@ -99,13 +100,13 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
   });
 
   it("test configs flip every flag", () => {
-    expect(Object.values(resolve("test/all-on.json").features)).toEqual([true, true, true, true]);
-    expect(Object.values(resolve("test/flags-off.json").features)).toEqual([
-      false,
-      false,
-      false,
-      false,
-    ]);
+    // Every catalogue flag, including the admin console flags (ADR-0011).
+    expect(resolve("test/all-on.json").features).toEqual(
+      Object.fromEntries(FEATURES.map((k) => [k, true])),
+    );
+    expect(resolve("test/flags-off.json").features).toEqual(
+      Object.fromEntries(FEATURES.map((k) => [k, false])),
+    );
   });
 
   it("mock files parse and cover every (queryType, mock source) pair", () => {

@@ -414,6 +414,8 @@ FormatResult { text, errors: ValidationError[], unshownCount }
 
 `ValidationError` is `{ key, params? }` with the field in `params.field` (see 4.7). Every function returns all errors it finds, never only the first.
 
+Submit from the terminal uses a fourth pure function, `checkTerminalSubmit(siteConfig, input, drafts, { now })`: it tokenizes, merges into the command's own query type draft (`mergeDraft`), runs `evaluateForm` on the merged draft rather than on the command's values alone, and returns the merged draft, its `FormState` and the errors enriched as `parseCommand` enriches them. Enter submits only when it returns no errors and a valid `FormState` (#297, #377).
+
 **Grammar.** `CommandDef` is defined in 4.1. The delimiter is site-level, `siteConfig.terminal.delimiter` (default `.`). There is no per-command delimiter. Input is split on the delimiter; the first token is the command code, matched case-insensitively. The remaining tokens fill `CommandDef.positions` in order. `validateSiteConfig` rejects command codes that collide after case folding. Source selection stays in the panel UI in Phase 1; the command string does not name sources.
 
 - `presets` set user values before positions are read. This is how a command selects type-level fields (`role: "type"`, see 4.1); positions may also include type fields.
@@ -1057,6 +1059,8 @@ Covers UX-001, UX-012, UX-014, BR-002, PLT-006.
 ### 6.2 Screens and semantics
 
 Phase 1 screens: login (standalone mode only); query panel (query-type selector, form or terminal toggle, source checkboxes, quick-access bar, FR-007); results list; credentials settings; preferences (persona override, layout orientation, terminal layout, theme mode, locale); admin audit viewer. M3 adds the delegation screens below; M4 the mobile home with quick queries (6.10). A screen whose `features` flag is off is not rendered (5.8).
+
+Overridden by ADR-0010.
 
 **Generic field renderer.** Forms render only from core's `FormState` (4.3): fields in `order`, grouped by section under `sectionLabelKey`, picklist options from the filtered enabled options, labels from `labelKey`. No per-query-type UI code exists (BR-001). A field with `isDefault` shows a text tag "default"; typing makes it a user value.
 
