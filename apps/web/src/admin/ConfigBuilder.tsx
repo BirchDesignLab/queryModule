@@ -31,6 +31,7 @@ import {
   toPointer,
   validateDraft,
 } from "./draft.js";
+import { BuilderPreview } from "./Preview.js";
 import { useCachedClientConfig } from "./use-cached-config.js";
 
 const stores = new WeakMap<Services["reset"], ConfigDraftStore>();
@@ -57,9 +58,18 @@ interface DraftChecks {
   status: BundleState["status"];
   issues: readonly DraftIssue[];
   groups: ReadonlyMap<string, readonly DraftIssue[]>;
+  /** The settled (debounced) draft the issues were computed on; the preview renders this one. */
+  doc: JsonObject | null;
+  labels: ReturnType<typeof useDraft>["labels"];
 }
 
-const NO_CHECKS: DraftChecks = { status: "loading", issues: [], groups: new Map() };
+const NO_CHECKS: DraftChecks = {
+  status: "loading",
+  issues: [],
+  groups: new Map(),
+  doc: null,
+  labels: {},
+};
 const ChecksContext = createContext<DraftChecks>(NO_CHECKS);
 const CHECK_DEBOUNCE_MS = 150;
 
@@ -81,9 +91,11 @@ function useDraftChecks(
   const settledDoc = useDebounced(doc, CHECK_DEBOUNCE_MS);
   const settledLabels = useDebounced(labels, CHECK_DEBOUNCE_MS);
   return useMemo(() => {
-    if (bundleState.status !== "ready") return { ...NO_CHECKS, status: bundleState.status };
+    const settled = { doc: settledDoc, labels: settledLabels };
+    if (bundleState.status !== "ready")
+      return { ...NO_CHECKS, ...settled, status: bundleState.status };
     const issues = draftIssues(validateDraft(settledDoc, settledLabels, bundleState.bundle));
-    return { status: "ready", issues, groups: groupByControl(settledDoc, issues) };
+    return { status: "ready", issues, groups: groupByControl(settledDoc, issues), ...settled };
   }, [bundleState, settledDoc, settledLabels]);
 }
 
@@ -687,6 +699,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
                 tabRefs.current[id] = el;
               }}
               type="button"
+              className="qm-button"
               role="tab"
               id={`${uid}-tab-${id}`}
               aria-selected={tab === id}
@@ -699,11 +712,21 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
             </button>
           ))}
         </div>
-        <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${tab}`}>
-          {tab === "form" ? (
-            <FormTab doc={doc} />
-          ) : (
-            <RawTab raw={raw} setRaw={setRaw} onRawDoc={onRawDoc} />
+        <div className="qm-admin__workspace">
+          <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${tab}`}>
+            {tab === "form" ? (
+              <FormTab doc={doc} />
+            ) : (
+              <RawTab raw={raw} setRaw={setRaw} onRawDoc={onRawDoc} />
+            )}
+          </div>
+          {checks.doc !== null && (
+            <BuilderPreview
+              doc={checks.doc}
+              labels={checks.labels}
+              blocked={raw.parseError !== null || errorCount > 0}
+              pending={checks.doc !== doc || checks.labels !== labels}
+            />
           )}
         </div>
       </div>

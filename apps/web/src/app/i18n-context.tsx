@@ -18,3 +18,10 @@ export function useT(): Translator["t"] {
   if (translator === null) throw new Error("I18nProvider missing");
   return translator.t;
 }
+
+/** The whole translator, for a subtree that layers its own strings over it (the builder preview). */
+export function useTranslator(): Translator {
+  const translator = useContext(I18nContext);
+  if (translator === null) throw new Error("I18nProvider missing");
+  return translator;
+}
