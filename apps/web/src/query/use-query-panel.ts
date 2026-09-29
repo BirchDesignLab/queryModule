@@ -273,6 +273,14 @@ export function useQueryPanel(): QueryPanelModel {
     setValue: (key, value) => drafts.getState().setValue(key, value),
     setSources: (sourceIds) => drafts.getState().setSources(sourceIds),
     onSubmitAttempt() {
+      // Ctrl+Enter calls requestSubmit() with no submitter, so the button's aria-disabled guard
+      // never runs: while submitting or gated (spec 6.8) re-announce the reason and send nothing.
+      if (submitStatus !== "idle") {
+        announcer.announce(
+          t(submitStatus === "submitting" ? "form.submitting" : "form.noConnection"),
+        );
+        return;
+      }
       if (formState.valid) {
         void send();
         return;

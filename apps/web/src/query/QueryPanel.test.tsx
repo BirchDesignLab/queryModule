@@ -2,7 +2,7 @@ import { ClientSiteConfigSchema } from "@querymodule/core/config";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { delay, HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClientSupportProvider } from "../app/client-support-context.js";
 import { appRoutes } from "../app/routes.js";
 import {
@@ -275,6 +275,47 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(button).not.toHaveAttribute("aria-disabled");
   });
 
+  it("FR-064 Ctrl+Enter while in flight sends nothing and the acknowledgment is announced once", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`${API}/api/v1/queries`, async ({ request }) => {
+        submitRecorder.calls.push({ key: null, body: await request.json() });
+        await gate;
+        return HttpResponse.json(ACK_202, { status: 202 });
+      }),
+    );
+    const { user, services } = await openPanel();
+    const announce = vi.spyOn(services.announcer, "announce");
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const button = await screen.findByRole("button", { name: "Submit" });
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    release();
+    await screen.findByRole("region", { name: "Last query" });
+    await waitFor(() => expect(button).not.toHaveAttribute("aria-disabled"));
+    expect(submitRecorder.calls).toHaveLength(1);
+    const acks = announce.mock.calls.filter(([text]) => /query sent at/.test(String(text)));
+    expect(acks).toHaveLength(1);
+  });
+
+  it("spec 6.8 Ctrl+Enter while noConnection sends no request", async () => {
+    const { user, services } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    act(() => services.submit.setState({ status: "noConnection" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      ),
+    );
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    await waitFor(() => expect(polite()).toHaveTextContent("No connection to server"));
+    expect(submitRecorder.calls).toHaveLength(0);
+  });
+
   it("spec 6.6 entering noConnection is announced politely", async () => {
     const { services } = await openPanel();
     expect(polite()).not.toHaveTextContent("No connection to server");
@@ -470,6 +511,18 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       expect(screen.getByLabelText(/Property type/)).toHaveValue("BOAT");
       await user.click(screen.getByRole("button", { name: "Submit" }));
       expect(screen.getByLabelText(/Property type/)).not.toHaveAttribute("aria-invalid");
+    });
+
+    it("FR-031 a type-bar value reaches the submit body", async () => {
+      const { user } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Property" }));
+      await user.selectOptions(await screen.findByLabelText(/Property type/), "BOAT");
+      await user.click(screen.getByRole("button", { name: "Submit" }));
+      await screen.findByRole("region", { name: "Last query" });
+      expect(submitRecorder.calls.at(-1)?.body).toMatchObject({
+        queryType: "PRO",
+        values: { propertyType: "BOAT" },
+      });
     });
 
     it("a blocked submit marks an empty Property type and focuses it", async () => {
