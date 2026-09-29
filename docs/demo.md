@@ -6,9 +6,10 @@ The live demo at https://querymodule.birchdesignlab.com uses these accounts. Pas
 |---|---|
 | dispatcher@example.test | user |
 | records@example.test | user |
-| mobileunit@example.test | user |
-| officer@example.test | trainingOfficer |
+| mobileunit@example.test | user (mobile-unit layout) |
+| officer@example.test | trainingOfficer (mobile-unit layout) |
 | admin@example.test | admin |
+| implementer@example.test | implementer (site config only) |
 | smoke@example.test | user (smoke tests only) |
 
 All data behind these accounts is mock data (spec 5.4 fixture policy). No real person, vehicle or property record exists in this system.
@@ -57,7 +58,10 @@ database silently seedable again:
   Save that output; it is the only place those passwords are shown.
 - A user in that table exists and can sign in, but may still need its role. Use
   `scripts/ops/grant-role.ts <email> <role>` to finish any role grant the failed run did not reach
-  (`admin@example.test admin` or `officer@example.test trainingOfficer`).
+  (`admin@example.test admin`, `officer@example.test trainingOfficer` or
+  `implementer@example.test implementer`).
+- The officer accounts also get a stored `mobileUnit` persona. If the run stopped before that, the
+  account works with the device layout until the demo database is reset and seeded again.
 - To seed the remaining demo users, either grant their roles by hand the same way, or reset the
   demo database (drop and recreate it, or restore from a pre-seed snapshot) and rerun
   `scripts/ops/seed.js` from empty.

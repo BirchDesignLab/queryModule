@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { user, userPreference } from "../../src/db/schema";
@@ -46,7 +48,13 @@ describe("SEC-005 seed", () => {
     const smoke = out.find((u) => u.email === "smoke@example.test");
     expect((await t.signIn("smoke@example.test", smoke?.password ?? "")).status).toBe(200);
     const changed = await t.auditRows("roleChanged");
-    expect(changed.map((r) => r.details.role).sort()).toEqual(["admin", "trainingOfficer"]);
+    expect(changed.map((r) => r.details.role).sort()).toEqual([
+      "admin",
+      "implementer",
+      "trainingOfficer",
+    ]);
+    // ADR-0011 item 6 (#363): the config-only demo account.
+    expect(out.find((u) => u.email === "implementer@example.test")?.role).toBe("implementer");
   });
   it("UX-012 D-A33: the officer demo accounts get the mobileUnit persona, the others none", async () => {
     const t = await createTestApp();
@@ -59,6 +67,38 @@ describe("SEC-005 seed", () => {
       { email: "mobileunit@example.test", personaOverride: "mobileUnit" },
       { email: "officer@example.test", personaOverride: "mobileUnit" },
     ]);
+  });
+  it("#363 M1: every seeded persona is a persona key of the shipped default site", () => {
+    const site = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, "../../../config/sites/default.json"), "utf8"),
+    ) as { personas: { key: string }[] };
+    const keys = site.personas.map((p) => p.key);
+    for (const u of DEMO_USERS)
+      if (u.persona !== undefined) expect(keys, u.email).toContain(u.persona);
+  });
+  it("#363 M2: a failed preference write reports the users already created, no password", async () => {
+    const t = await createTestApp();
+    const insert = t.deps.db.insert.bind(t.deps.db);
+    const spy = vi.spyOn(t.deps.db, "insert").mockImplementation(((table: unknown) => {
+      if (table === userPreference) throw new Error("injected preference failure");
+      return insert(table as never);
+    }) as typeof t.deps.db.insert);
+    try {
+      const caught = await seedUsers(t.deps, SECRET).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(caught).toBeInstanceOf(SeedPartialFailureError);
+      const err = caught as SeedPartialFailureError;
+      expect(err.created.map((u) => u.email)).toEqual([
+        "dispatcher@example.test",
+        "records@example.test",
+        "mobileunit@example.test",
+      ]);
+      for (const u of err.created) expect(err.message).not.toContain(u.password);
+    } finally {
+      spy.mockRestore();
+    }
   });
   it("refuses a non-empty database", async () => {
     const t = await createTestApp();
