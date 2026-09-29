@@ -65,6 +65,7 @@ describe("example-ok site through the shared renderer (BR-001)", () => {
     const state = await screen.findByLabelText("State");
     await user.selectOptions(state, "TX");
     expect(await screen.findByLabelText(/Plate type/)).toBeRequired();
+    expect(screen.getByLabelText(/Plate color/)).toBeRequired();
     expect(screen.getByLabelText("Tag sticker")).toBeInTheDocument();
   });
 

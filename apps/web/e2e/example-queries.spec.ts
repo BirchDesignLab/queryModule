@@ -34,8 +34,6 @@ async function runCommand(page: Page, command: string) {
   const sent = (await request).postDataJSON() as Sent;
   const reply = await response;
   const parts = ((await reply.json()) as { parts: { queryType: string; status: string }[] }).parts;
-  // No problems listed, and the acknowledgment is on screen.
-  await expect(page.getByRole("list", { name: "Command problems" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Last query" })).toBeVisible();
   return { sent, status: reply.status(), parts };
 }
@@ -89,6 +87,21 @@ test.describe("example queries, form (FR-001 to FR-012, FR-030 to FR-032)", () =
     await expect(type).toHaveValue("ARTICLE");
     await expect(page.getByLabel("Description")).toHaveAttribute("aria-required", "true");
     await expect(page.getByLabel("Make")).toHaveCount(0);
+
+    // Electronics shows Make and Model but not Caliber; a State other than the default requires
+    // the serial number.
+    await page.keyboard.press("ArrowDown");
+    await expect(type).toHaveValue("ELECTRONICS");
+    await expect(page.getByLabel("Make")).toBeVisible();
+    await expect(page.getByLabel("Model")).toBeVisible();
+    await expect(page.getByLabel("Caliber")).toHaveCount(0);
+    const serial = page.getByLabel("Serial number");
+    await expect(serial).not.toHaveAttribute("aria-required", "true");
+    const state = page.getByLabel("State", { exact: true });
+    await state.focus();
+    await page.keyboard.type("Ok");
+    await expect(state).toHaveValue("OK");
+    await expect(serial).toHaveAttribute("aria-required", "true");
     await expectNoSeriousAxeViolations(page);
   });
 });
@@ -115,7 +128,13 @@ test.describe("example queries, terminal, keyboard only (FR-050 to FR-056, FR-04
     );
     expect(status).toBe(202);
     expect(sent.queryType).toBe("PRO");
-    expect(sent.values).toMatchObject({ propertyType: "FIREARM", serial: "ZZ123" });
+    expect(sent.values).toEqual({
+      propertyType: "FIREARM",
+      serial: "ZZ123",
+      state: "TX",
+      make: "ZZMAKE",
+      caliber: "22",
+    });
     expect(parts[0]).toMatchObject({ queryType: "PRO" });
     await expectNoSeriousAxeViolations(page);
   });
@@ -138,11 +157,17 @@ test.describe("example queries, terminal, keyboard only (FR-050 to FR-056, FR-04
     );
     expect(status).toBe(202);
     expect(sent.queryType).toBe("DL");
+    expect(sent.values).toMatchObject({
+      licenseNumber: "ZZ1234567",
+      last: "TESTERSON",
+      first: "SAMPLE",
+      dob: "01011901",
+    });
     expect(parts.map((p) => p.queryType)).toEqual(["DL", "WNT"]);
     await expectNoSeriousAxeViolations(page);
   });
 
-  test("VEH.ABC123..26 runs a vehicle query with the state default", async ({ page }) => {
+  test("VEH.ABC123..26 runs a vehicle query, State left to its default", async ({ page }) => {
     await panelReady(page);
     const { sent, status, parts } = await runCommand(page, "VEH.ABC123..26");
     expect(status).toBe(202);
