@@ -169,7 +169,8 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
                   .filter((part) => part.status === "skipped")
                   .map((part) => ({
                     queryTypeLabel: labelOfType(part.queryType),
-                    reasonText: t("plan.nestedNoSources"),
+                    // The 202 carries no skip reason; claim none (#382 A1).
+                    reasonText: null,
                   })),
               }
         }

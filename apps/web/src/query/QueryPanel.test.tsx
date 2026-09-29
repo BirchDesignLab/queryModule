@@ -419,6 +419,34 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(submitRecorder.calls[0]?.key).toBeTruthy();
   });
 
+  it("#382 A1 a skipped part says it was not run without inventing a reason", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          {
+            ...ACK_202,
+            parts: [
+              ...ACK_202.parts,
+              {
+                partId: 2,
+                queryType: "WNT",
+                status: "skipped",
+                sourceIds: [],
+                droppedSourceIds: [],
+              },
+            ],
+          },
+          { status: 202 },
+        ),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const ack = await screen.findByRole("region", { name: "Last query" });
+    expect(ack).toHaveTextContent("Wanted check was not run.");
+    expect(ack).not.toHaveTextContent("linked query has no sources");
+  });
+
   it("UX-004 Copy reference writes the correlation ID and announces it", async () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");

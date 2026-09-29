@@ -67,6 +67,13 @@ describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", (
     const forms = plural.flatMap((k) => [`${k}.one`, `${k}.other`]);
     expect(forms.filter((k) => !(k in en))).toEqual([]);
   });
+  it("#382 A1 submit.partNotRun names the type and claims no reason", () => {
+    expect(en["submit.partNotRun"]).toContain("{queryType}");
+    expect(en["submit.partNotRun"]).not.toContain("{reason}");
+  });
+  it("#382 A3 submit.noResponse does not tell a gated user to submit again now", () => {
+    expect(en["submit.noResponse"]).not.toMatch(/Submit again/i);
+  });
   it("FR-055 terminal.delimiterInValue names the label, not the delimiter (D-B9)", () => {
     expect(en["terminal.delimiterInValue"]).toContain("{label}");
     expect(en["terminal.delimiterInValue"]).not.toContain("{delimiter}");
