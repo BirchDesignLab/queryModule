@@ -56,6 +56,30 @@ describe("ci.yml structure (ADR-0008)", () => {
     expect(guardIndex).toBeLessThan(setupIndex);
   });
 
+  it("the oasdiff step diffs the merge base against the rename-mapped head, fail closed (#171)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow steps
+    const steps: any[] = jobs.test.steps;
+    const step = steps.find((s) => s.name === "oasdiff breaking");
+    expect(step).toBeDefined();
+    const run: string = step.run;
+    expect(run).toContain("set -euo pipefail");
+    expect(run).toContain('openapi-base.ts "origin/$BASE_REF" base-openapi.json');
+    expect(run).not.toMatch(/git (show|ls-tree)/);
+    const rename = run.indexOf(
+      "openapi-rename-map.ts base-openapi.json packages/api/openapi.json head-openapi.renamed.json",
+    );
+    const diff = run.indexOf(
+      "breaking /work/base-openapi.json /work/head-openapi.renamed.json --fail-on ERR",
+    );
+    expect(rename).toBeGreaterThan(run.indexOf("openapi-base.ts"));
+    expect(diff).toBeGreaterThan(rename);
+    expect(step.if).toContain("api-breaking");
+    const checkout = steps.find(
+      (s) => typeof s.uses === "string" && s.uses.startsWith("actions/checkout"),
+    );
+    expect(checkout.with["fetch-depth"]).toBe(0);
+  });
+
   it("`web` and `mobile` jobs need `checks`", () => {
     expect(jobNeeds(jobs.web)).toContain("checks");
     expect(jobNeeds(jobs.mobile)).toContain("checks");
