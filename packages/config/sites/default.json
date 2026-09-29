@@ -536,6 +536,6 @@
       ]
     }
   ],
-  "quickAccess": ["VEH", "PER", "PRO"],
+  "quickAccess": ["VEH", "PER", "PRO", "WNT", "DL"],
   "theme": { "defaultMode": "auto", "auto": "os" }
 }

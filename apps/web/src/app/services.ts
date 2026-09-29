@@ -13,6 +13,7 @@ import {
   createQueryClient,
   createResetController,
   createSessionController,
+  createSubmitController,
   type DraftStore,
   type PreferencesStore,
   type ResetController,
@@ -20,6 +21,7 @@ import {
   type SessionController,
   type SignOutMarker,
   type SocketLike,
+  type SubmitController,
 } from "@querymodule/client";
 import { createBrowserSocket } from "../platform/browser-socket.js";
 import { createStorageSignOutMarker } from "../platform/sign-out-marker.js";
@@ -41,6 +43,7 @@ export interface Services {
   announcer: Announcer;
   preferences: PreferencesStore;
   drafts: DraftStore;
+  submit: SubmitController;
   reset: ResetController;
   createSocket: (url: string) => SocketLike;
 }
@@ -69,11 +72,13 @@ export function createServices(options: ServicesOptions): Services {
   const announcer = createAnnouncer();
   const preferences = createPreferencesStore();
   const drafts = createDraftStore();
+  const submit = createSubmitController({ api, queryClient, online: options.platform.online });
   registerQueryCacheReset(reset, queryClient);
   reset.register(() => authStore.getState().setSignedOut());
   reset.register(() => announcer.clear());
   reset.register(() => preferences.getState().reset());
   reset.register(() => drafts.getState().reset());
+  reset.register(() => submit.getState().reset());
   return {
     platform: options.platform,
     api,
@@ -84,6 +89,7 @@ export function createServices(options: ServicesOptions): Services {
     announcer,
     preferences,
     drafts,
+    submit,
     reset,
     createSocket: options.createSocket ?? createBrowserSocket,
   };

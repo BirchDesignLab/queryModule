@@ -1,6 +1,6 @@
 import { evaluateForm } from "@querymodule/core/rules";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { chooseQueryType, signIn } from "./helpers.js";
 
 interface LiveConfig {
   queryTypes: { code: string; labelKey: string }[];
@@ -20,12 +20,20 @@ test("FR-002 FR-003 FR-011 the panel renders from the live GET /api/v1/config", 
   >;
   const label = (key: string): string => bundle[key] ?? key;
 
-  const select = page.getByLabel("Query type");
-  await expect(select).toBeVisible();
-  const optionLabels = await select.locator("option").allTextContents();
-  expect(optionLabels).toEqual(config.queryTypes.map((q) => label(q.labelKey)));
+  // ADR-0010: quick-access buttons plus the "Other query types" options cover the live types.
+  const nav = page.getByRole("navigation", { name: "Quick access" });
+  await expect(nav).toBeVisible();
+  const buttonLabels = await nav.getByRole("button").allTextContents();
+  const other = page.getByLabel("Other query types");
+  const otherLabels =
+    (await other.count()) === 0
+      ? []
+      : (await other.locator("option").allTextContents()).filter((l) => l !== "");
+  expect([...buttonLabels, ...otherLabels].sort()).toEqual(
+    config.queryTypes.map((q) => label(q.labelKey)).sort(),
+  );
 
-  await select.selectOption("VEH");
+  await chooseQueryType(page, "VEH");
   const expected = evaluateForm(
     config as unknown as Parameters<typeof evaluateForm>[0],
     "VEH",

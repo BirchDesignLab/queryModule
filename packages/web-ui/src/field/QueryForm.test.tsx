@@ -34,7 +34,11 @@ function form(queryType: string, input: Record<string, string | null> = {}): For
 
 function setup(
   state: FormState,
-  over: { showErrors?: boolean; values?: Record<string, DraftValue> } = {},
+  over: {
+    showErrors?: boolean;
+    values?: Record<string, DraftValue>;
+    excludeKeys?: ReadonlySet<string>;
+  } = {},
 ) {
   const onChange = vi.fn();
   const onSubmitAttempt = vi.fn();
@@ -48,6 +52,7 @@ function setup(
       onSubmitAttempt={onSubmitAttempt}
       t={t}
       idPrefix="qf"
+      excludeKeys={over.excludeKeys}
     >
       <button type="submit">Go</button>
     </QueryForm>,
@@ -267,5 +272,18 @@ describe("FR-005 errors that name no rendered field are never dropped", () => {
     expect(blockedErrorCount({ ...per, errors: [...per.errors, modeMismatch] })).toBe(
       per.missingRequired.length + 1,
     );
+  });
+});
+
+describe("ADR-0010 excludeKeys", () => {
+  it("does not render excluded fields, keeps the others and drops an emptied section", () => {
+    const state = form("PRO");
+    const visible = state.fields.filter((f) => f.visible);
+    setup(state, { excludeKeys: new Set(["propertyType"]) });
+    expect(screen.queryByLabelText(/Property type/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Serial/)).toBeInTheDocument();
+    cleanup();
+    const all = setup(state, { excludeKeys: new Set(visible.map((f) => f.key)) });
+    expect(all.container.querySelectorAll("fieldset")).toHaveLength(0);
   });
 });
