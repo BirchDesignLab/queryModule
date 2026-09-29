@@ -39,7 +39,7 @@ export interface ShortcutEngine {
 
 export const CHORD_TIMEOUT_MS = 1000;
 
-/** Text-editing combos never fire, even if a site bound them (config validation also rejects them). */
+/** Text-editing combos never fire, even if a site bound them. The engine guards this at runtime; core config validation does not reject them. */
 export const EDITING_COMBOS: ReadonlySet<string> = new Set([
   "Ctrl+KeyA",
   "Ctrl+KeyC",
