@@ -190,6 +190,17 @@ describe("FR-006 FR-050 terminal shortcuts (spec 6.4)", () => {
     await waitFor(() => expect(screen.getByLabelText("Plate")).toHaveFocus());
   });
 
+  it("Alt+2 in terminal mode switches the command to PER and focuses the command line", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    const command = await screen.findByLabelText("Command");
+    (document.activeElement as HTMLElement).blur();
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(person()).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(command).toHaveFocus());
+    expect((command as HTMLInputElement).value).toMatch(/^PER/);
+  });
+
   it("Ctrl+Enter in terminal mode submits the terminal form", async () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Terminal mode" }));

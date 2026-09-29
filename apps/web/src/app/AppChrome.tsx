@@ -6,8 +6,17 @@ import {
 } from "@querymodule/core/config";
 import type { ThemeSelection } from "@querymodule/tokens";
 import { ShortcutProvider, ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
-import { Link, Outlet, useLocation } from "react-router";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { Link, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
 import { useT } from "./i18n-context.js";
 import { MAIN_LANDMARK } from "./main-landmark.js";
@@ -133,6 +142,21 @@ function SkipLink() {
   );
 }
 
+/** The router location key AppShell first rendered at: the entry the document was loaded on. */
+const FirstLocationKey = createContext<string | null>(null);
+
+/**
+ * True when a page mounts on the entry the document was loaded on, by a fresh load or a reload
+ * (POP): focus then stays at the top of the page, so the first Tab is the skip link. A page reached
+ * by any navigation (sign-in, a link, browser Back) is false: focus follows it (spec 6.4).
+ */
+export function useIsFreshLoad(): boolean {
+  const first = useContext(FirstLocationKey);
+  const key = useLocation().key;
+  const navigationType = useNavigationType();
+  return key === first && navigationType === "POP";
+}
+
 /** Layout of every signed-in screen that runs the app: the header, then the page. */
 export function AppShell() {
   const { api, queryClient, configRefresh, authStore } = useServices();
@@ -150,13 +174,16 @@ export function AppShell() {
     void queryClient.prefetchQuery({ ...clientConfigQuery(api), retry: false });
   }, [api, queryClient]);
   // Bindings are the site's overrides over the spec 6.4 defaults; the defaults apply until the config loads.
+  const firstKey = useRef(useLocation().key);
   const shortcuts = useCachedConfig()?.shortcuts;
   const bindings = useMemo(() => resolveShortcuts(shortcuts), [shortcuts]);
   return (
     <ShortcutProvider bindings={bindings}>
-      <SkipLink />
-      <AppHeader />
-      <Outlet />
+      <FirstLocationKey.Provider value={firstKey.current}>
+        <SkipLink />
+        <AppHeader />
+        <Outlet />
+      </FirstLocationKey.Provider>
     </ShortcutProvider>
   );
 }

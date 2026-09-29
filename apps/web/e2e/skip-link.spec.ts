@@ -16,6 +16,16 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     await expect(nav.getByRole("button").first()).toBeFocused();
   });
 
+  test("browser Back to the panel from /status puts focus on the panel heading", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.getByRole("link", { name: "Connection status" }).click();
+    await expect(page).toHaveURL(/\/status$/);
+    await page.goBack();
+    await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
+  });
+
   test("on a fresh load the first Tab is Skip to query; activating it moves focus into the panel", async ({
     page,
   }) => {
