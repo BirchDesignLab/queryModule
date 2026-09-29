@@ -26,16 +26,17 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     expect(adminLink()).toBeNull();
   });
 
-  it("the header links back to the query panel from /admin, and not on the panel itself", async () => {
+  it("the header Queries link goes back to the query panel from /admin; it is the current page on the panel", async () => {
     const t = await openAs("admin", "/admin/config");
     await screen.findByRole("heading", { name: "Site config", level: 2 });
-    const back = within(screen.getByRole("banner")).getByRole("link", { name: "Query panel" });
+    const back = within(screen.getByRole("banner")).getByRole("link", { name: "Queries" });
     expect(back).toHaveAttribute("href", "/");
+    expect(back).not.toHaveAttribute("aria-current");
     await t.user.click(back);
     expect(await screen.findByRole("heading", { name: /^Query Module$/ })).toBeInTheDocument();
     expect(
-      within(screen.getByRole("banner")).queryByRole("link", { name: "Query panel" }),
-    ).toBeNull();
+      within(screen.getByRole("banner")).getByRole("link", { name: "Queries" }),
+    ).toHaveAttribute("aria-current", "page");
   });
 
   it("the Config and Users links are a nav bar: the open section is aria-current", async () => {

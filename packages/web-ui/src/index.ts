@@ -46,6 +46,8 @@ export type { ModeToggleProps } from "./terminal/ModeToggle.js";
 export { ModeToggle } from "./terminal/ModeToggle.js";
 export type { TerminalInputProps } from "./terminal/TerminalInput.js";
 export { TerminalInput } from "./terminal/TerminalInput.js";
+export type { ThemeModeSegProps } from "./theme/ThemeModeSeg.js";
+export { ThemeModeSeg } from "./theme/ThemeModeSeg.js";
 export type { ThemeModeSelectProps } from "./theme/ThemeModeSelect.js";
 export { ThemeModeSelect } from "./theme/ThemeModeSelect.js";
 export type { UseThemeModeOptions } from "./theme/useThemeMode.js";

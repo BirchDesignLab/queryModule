@@ -51,6 +51,54 @@ export async function signIn(page: Page, user = e2eUser()): Promise<void> {
   await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeVisible();
 }
 
+const THEME_LABELS = {
+  auto: "Match system",
+  day: "Day",
+  night: "Night",
+  redShift: "Red shift",
+} as const;
+
+/** Opens the header's account disclosure if it is closed; returns its panel. */
+export async function openAccountMenu(page: Page) {
+  const button = page.getByRole("banner").locator(".qm-account__button");
+  if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+  const panel = page.getByRole("group", { name: "Account" });
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
+/** Signs out through the header: the account disclosure holds the button on the dispatch bar, the
+ *  officer's compact bar keeps it inline. Call it once the panel has rendered (the persona layout
+ *  can still flip from dispatch to compact while the config loads). */
+export async function signOutFromHeader(page: Page): Promise<void> {
+  if ((await page.getByRole("banner").locator(".qm-account__button").count()) > 0)
+    await openAccountMenu(page);
+  await page.getByRole("button", { name: "Sign out" }).click();
+}
+
+/**
+ * Chooses a theme mode wherever the page offers it: the select on the login page and on the
+ * officer's compact bar, or the segmented control in the dispatcher's account disclosure (closed
+ * again afterwards, so it never covers the page).
+ */
+export async function chooseTheme(page: Page, mode: keyof typeof THEME_LABELS): Promise<void> {
+  const select = page.getByRole("combobox", { name: "Theme" });
+  const account = page.getByRole("banner").locator(".qm-account__button");
+  // Wait for whichever the page renders; the count alone would race the render.
+  await select.or(account).first().waitFor();
+  if ((await select.count()) > 0) {
+    await select.selectOption(mode);
+    return;
+  }
+  const panel = await openAccountMenu(page);
+  await panel
+    .getByRole("group", { name: "Theme" })
+    .getByRole("button", { name: THEME_LABELS[mode], exact: true })
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+}
+
 /** "#rrggbb" or the short "#rgb" a minified production stylesheet emits (for example #fff). */
 export function hexToRgb(hex: string): string {
   const h = hex.trim().slice(1);

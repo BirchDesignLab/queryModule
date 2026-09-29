@@ -1,4 +1,9 @@
-import { clientConfigQuery, savePreferences, useStore } from "@querymodule/client";
+import {
+  clientConfigQuery,
+  savePreferences,
+  type ThemeModePreference,
+  useStore,
+} from "@querymodule/client";
 import {
   type ClientSiteConfig,
   type PERSONA_LAYOUTS,
@@ -16,8 +21,9 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { Link, Outlet, useLocation, useNavigationType } from "react-router";
+import { NavLink, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
+import { AccountMenu } from "./AccountMenu.js";
 import { useT } from "./i18n-context.js";
 import { MAIN_LANDMARK } from "./main-landmark.js";
 import { useServices } from "./services-context.js";
@@ -73,8 +79,34 @@ export function AppChrome() {
   return null;
 }
 
+/** SiteConfig.site.labelKey from the cached config, translated; null before sign-in and after reset. */
+function useSiteLabel(): string | null {
+  const config = useCachedConfig();
+  const t = useT();
+  return config === undefined ? null : t(config.site.labelKey);
+}
+
+/** Prompt mark: the product's glyph, decorative (the product name beside it is the text). */
+function BrandMark() {
+  return (
+    <svg
+      className="qm-app-header__mark"
+      viewBox="-4 -4 32 32"
+      width="24"
+      height="24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="-4" y="-4" width="32" height="32" rx="8" />
+      <path d="M6 8l4 4-4 4M12 17h6" />
+    </svg>
+  );
+}
+
 /**
- * The signed-in header (D-B4): who is signed in, the status link, the theme select and sign-out.
+ * The signed-in header (D-B4, design B1): product mark and name, site name, the Main nav (Queries,
+ * Status, Admin), then the account disclosure (user, role, theme, sign out). The mobile-unit bar
+ * is the compact one: the same nav, the theme select and sign out inline (its own look is B4).
  * It needs the router and the translator, so it lives under the routes, not beside AppChrome.
  */
 export function AppHeader() {
@@ -84,44 +116,52 @@ export function AppHeader() {
   const user = useStore(authStore, (s) => s.user);
   const themeMode = useStore(preferences, (s) => s.themeMode);
   const layout = usePersonaLayout();
-  const onPanel = useLocation().pathname === "/";
+  const siteLabel = useSiteLabel();
+  const compact = layout === "mobileUnit";
+  const changeTheme = (mode: ThemeModePreference) => {
+    preferences.getState().setThemeMode(mode);
+    void savePreferences(api, { themeMode: mode }).catch(() => false);
+  };
+  const doSignOut = () => {
+    void signOut();
+  };
   return (
-    <header
-      className={layout === "mobileUnit" ? "qm-app-header qm-app-header--compact" : "qm-app-header"}
-    >
+    <header className={compact ? "qm-app-header qm-app-header--compact" : "qm-app-header"}>
       {/* Product name as plain text: each page owns its h1. */}
-      <p className="qm-app-header__product">{t("login.product")}</p>
+      <p className="qm-app-header__product">
+        <BrandMark />
+        {t("login.product")}
+      </p>
+      {compact || siteLabel === null ? null : <p className="qm-app-header__site">{siteLabel}</p>}
+      <nav className="qm-app-header__nav" aria-label={t("home.navLabel")}>
+        <NavLink className="qm-app-header__link" to="/" end>
+          {t("nav.queries")}
+        </NavLink>
+        <NavLink className="qm-app-header__link" to="/status">
+          {t("nav.status")}
+        </NavLink>
+        <AdminLink />
+      </nav>
       <div className="qm-app-header__end">
-        <nav aria-label={t("home.navLabel")}>
-          {onPanel ? null : (
-            <Link className="qm-app-header__status" to="/">
-              {t("nav.query")}
-            </Link>
-          )}
-          <Link className="qm-app-header__status" to="/status">
-            {t("status.title")}
-          </Link>
-          <AdminLink />
-        </nav>
-        <p className="qm-app-header__user">{t("home.signedInAs", { email: user?.email ?? "" })}</p>
-        <ThemeModeSelect
-          id="app-theme"
-          value={themeMode}
-          onChange={(mode) => {
-            preferences.getState().setThemeMode(mode);
-            void savePreferences(api, { themeMode: mode }).catch(() => false);
-          }}
-          t={t}
-        />
-        <button
-          type="button"
-          className="qm-button"
-          onClick={() => {
-            void signOut();
-          }}
-        >
-          {t("home.signOut")}
-        </button>
+        {compact ? (
+          <>
+            <p className="qm-app-header__user">
+              {t("home.signedInAs", { email: user?.email ?? "" })}
+            </p>
+            <ThemeModeSelect id="app-theme" value={themeMode} onChange={changeTheme} t={t} />
+            <button type="button" className="qm-button" onClick={doSignOut}>
+              {t("home.signOut")}
+            </button>
+          </>
+        ) : (
+          <AccountMenu
+            email={user?.email ?? ""}
+            role={user?.role ?? null}
+            themeMode={themeMode}
+            onThemeChange={changeTheme}
+            onSignOut={doSignOut}
+          />
+        )}
       </div>
     </header>
   );

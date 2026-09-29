@@ -162,7 +162,7 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
     const t = await openBuilder();
     await edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
     await within(t.preview).findByText("Preview paused: fix the errors to update it.");
-    await t.user.click(screen.getByRole("link", { name: "Connection status" }));
+    await t.user.click(screen.getByRole("link", { name: "Status" }));
     await t.user.click(await screen.findByRole("link", { name: "Admin" }));
     const preview = await screen.findByRole("region", { name: "Dispatcher preview" });
     // The panel shows (from the live site config), not only the paused note.

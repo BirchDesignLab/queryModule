@@ -1,12 +1,12 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { chooseQueryType, signIn } from "./helpers.js";
+import { chooseQueryType, chooseTheme, signIn } from "./helpers.js";
 
 const MODES = ["day", "night", "redShift"] as const;
 const MIN_TARGET = 24;
 
 async function blockedVehiclePanel(page: Page, mode: (typeof MODES)[number]): Promise<void> {
-  await page.getByLabel("Theme").selectOption(mode);
+  await chooseTheme(page, mode);
   await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
   await chooseQueryType(page, "VEH");
   await page.getByLabel("State", { exact: true }).selectOption("OK");
@@ -116,18 +116,16 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
       headerFirst:
         focusable.findIndex((el) => main?.contains(el)) >
         focusable.map((el) => header?.contains(el) === true).lastIndexOf(true),
-      headerHasTheme: header !== null && header.querySelector("select") !== null,
+      headerHasAccount: header !== null && header.querySelector(".qm-account__button") !== null,
     };
   });
   expect(order.hasHeader).toBe(true);
   expect(order.headerFirst).toBe(true);
-  expect(order.headerHasTheme).toBe(true);
+  expect(order.headerHasAccount).toBe(true);
 
   await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
   await page.keyboard.press("Shift+Tab");
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.getByLabel("Theme")).toBeFocused();
+  await expect(page.getByRole("banner").locator(".qm-account__button")).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(page.getByRole("link", { name: "Status" })).toBeFocused();
 
@@ -160,18 +158,18 @@ test.describe("signed-in top bar (spec 6.2, 6.5)", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
   for (const mode of MODES) {
-    test(`${mode}: product left, controls right on one row, status focus ring, axe`, async ({
+    test(`${mode}: product left, account right on one row, status focus ring, axe`, async ({
       page,
     }) => {
       await signIn(page);
-      await page.getByLabel("Theme").selectOption(mode);
+      await chooseTheme(page, mode);
       await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
       const header = page.getByRole("banner");
       const product = header.getByText("Query Module 2.0");
-      const status = header.getByRole("link", { name: "Connection status" });
-      const signOut = header.getByRole("button", { name: "Sign out" });
+      const status = header.getByRole("link", { name: "Status" });
+      const account = header.locator(".qm-account__button");
       const [h, p, s, o] = await Promise.all(
-        [header, product, status, signOut].map(async (l) => {
+        [header, product, status, account].map(async (l) => {
           const box = await l.boundingBox();
           if (box === null) throw new Error("not rendered");
           return box;
@@ -182,7 +180,7 @@ test.describe("signed-in top bar (spec 6.2, 6.5)", () => {
       const centre = (b: { y: number; height: number }) => b.y + b.height / 2;
       expect(Math.abs(centre(s) - centre(p))).toBeLessThan(p.height);
       expect(Math.abs(centre(o) - centre(p))).toBeLessThan(p.height);
-      // Product at the start, sign out at the end, status between them.
+      // Product at the start, the account button at the end, status between them.
       expect(p.x - h.x).toBeLessThan(40);
       expect(h.x + h.width - (o.x + o.width)).toBeLessThan(40);
       expect(s.x).toBeGreaterThan(p.x + p.width);
