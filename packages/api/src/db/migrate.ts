@@ -80,7 +80,10 @@ export async function checkAuditTriggers(db: Db): Promise<void> {
  * and no DELETE trigger while recursive_triggers is off, through every uniqueness constraint
  * each table has: the primary key, the source_result (correlation_id, part_id, source_id)
  * index, the part-0 (user_id, idempotency_key) index and the rowid (both are rowid tables; an
- * auto-assigned NEW.rowid reads -1 in a BEFORE INSERT trigger, so a normal insert passes). A
+ * auto-assigned NEW.rowid reads -1 in a BEFORE INSERT trigger, so a normal insert passes; the
+ * AFTER INSERT positive_rowid triggers refuse any non-positive rowid, so no stored row can ever
+ * sit at -1 and block normal inserts, #279 rr:N2). source_result_write_once also refuses an UPDATE
+ * that changes the rowid, which UPDATE OR REPLACE could use to delete another row (#279 rr:N1). A
  * duplicate idempotency key aborts with 'query_request idempotency key exists', which is how
  * admission detects the idempotency race (spec 5.2 step 1). request_key has none:
  * lost-data-key.ts and purge.ts crypto-shred by deleting its rows.
@@ -93,6 +96,8 @@ export const QUERY_TRIGGERS = [
   "query_request_idempotency_once",
   "source_result_no_replace",
   "query_request_no_delete",
+  "query_request_positive_rowid",
+  "source_result_positive_rowid",
 ] as const;
 
 /** The statement of each trigger as migration 0004 or 0005 creates it, whitespace collapsed. */
@@ -100,7 +105,7 @@ export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> 
   query_request_no_update:
     "CREATE TRIGGER query_request_no_update BEFORE UPDATE ON query_request BEGIN SELECT RAISE(ABORT, 'query_request is insert-once'); END",
   source_result_write_once:
-    "CREATE TRIGGER source_result_write_once BEFORE UPDATE ON source_result WHEN OLD.status <> 'pending' OR NEW.status = 'pending' OR NEW.result_id IS NOT OLD.result_id OR NEW.correlation_id IS NOT OLD.correlation_id OR NEW.part_id IS NOT OLD.part_id OR NEW.source_id IS NOT OLD.source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.credential_user_id IS NOT OLD.credential_user_id OR NEW.delegation_id IS NOT OLD.delegation_id OR NEW.adapter_kind IS NOT OLD.adapter_kind OR NEW.created_at IS NOT OLD.created_at BEGIN SELECT RAISE(ABORT, 'source_result status is write-once from pending'); END",
+    "CREATE TRIGGER source_result_write_once BEFORE UPDATE ON source_result WHEN OLD.status <> 'pending' OR NEW.status = 'pending' OR NEW.result_id IS NOT OLD.result_id OR NEW.correlation_id IS NOT OLD.correlation_id OR NEW.part_id IS NOT OLD.part_id OR NEW.source_id IS NOT OLD.source_id OR NEW.user_id IS NOT OLD.user_id OR NEW.credential_user_id IS NOT OLD.credential_user_id OR NEW.delegation_id IS NOT OLD.delegation_id OR NEW.adapter_kind IS NOT OLD.adapter_kind OR NEW.created_at IS NOT OLD.created_at OR NEW.rowid IS NOT OLD.rowid BEGIN SELECT RAISE(ABORT, 'source_result status is write-once from pending'); END",
   source_result_no_delete:
     "CREATE TRIGGER source_result_no_delete BEFORE DELETE ON source_result BEGIN SELECT RAISE(ABORT, 'source_result rows are never deleted'); END",
   query_request_no_replace:
@@ -111,6 +116,10 @@ export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> 
     "CREATE TRIGGER source_result_no_replace BEFORE INSERT ON source_result WHEN EXISTS (SELECT 1 FROM source_result WHERE result_id = NEW.result_id OR (correlation_id = NEW.correlation_id AND part_id = NEW.part_id AND source_id = NEW.source_id)) OR EXISTS (SELECT 1 FROM source_result WHERE rowid = NEW.rowid) BEGIN SELECT RAISE(ABORT, 'source_result rows are never replaced'); END",
   query_request_no_delete:
     "CREATE TRIGGER query_request_no_delete BEFORE DELETE ON query_request BEGIN SELECT RAISE(ABORT, 'query_request rows are never deleted'); END",
+  query_request_positive_rowid:
+    "CREATE TRIGGER query_request_positive_rowid AFTER INSERT ON query_request WHEN NEW.rowid < 1 BEGIN SELECT RAISE(ABORT, 'query_request rowids are positive'); END",
+  source_result_positive_rowid:
+    "CREATE TRIGGER source_result_positive_rowid AFTER INSERT ON source_result WHEN NEW.rowid < 1 BEGIN SELECT RAISE(ABORT, 'source_result rowids are positive'); END",
 };
 
 /** Some query-table trigger is missing (missing) or not the statement migration 0004 or 0005 made (altered). */

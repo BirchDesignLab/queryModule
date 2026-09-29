@@ -434,6 +434,62 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
       db.$client.close();
     }
   });
+  it("UPDATE OR REPLACE moving a pending source_result onto another row's rowid aborts and deletes nothing (#279 rr:N1)", async () => {
+    const db = await queryDb();
+    try {
+      expect((await setStatus(db, "pending", "returned")).rowsAffected).toBe(1);
+      await insertQueryRequest(db, 1, null);
+      await insertPendingResult(db, "r2", 1);
+      const r1 = (
+        await db.$client.execute("SELECT rowid AS r FROM source_result WHERE result_id = 'r1'")
+      ).rows[0]?.r;
+      await expect(
+        db.$client.execute({
+          sql: "UPDATE OR REPLACE source_result SET rowid = ?, status = 'returned', received_at = 2 WHERE result_id = 'r2'",
+          args: [Number(r1)],
+        }),
+      ).rejects.toThrow(/write-once from pending/);
+      const rows = (
+        await db.$client.execute("SELECT result_id, status FROM source_result ORDER BY result_id")
+      ).rows;
+      expect(rows.map((r) => [r.result_id, r.status])).toEqual([
+        ["r1", "returned"],
+        ["r2", "pending"],
+      ]);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it.each([
+    ["query_request", "query_request rowids are positive"],
+    ["source_result", "source_result rowids are positive"],
+  ])(
+    "an explicit non-positive rowid in %s is refused, so auto-assigned inserts keep working (#279 rr:N2)",
+    async (table, message) => {
+      const db = await queryDb();
+      try {
+        const insert =
+          table === "query_request"
+            ? db.$client.execute({
+                sql: `INSERT INTO query_request (rowid, correlation_id, part_id, user_id, origin, query_type,
+                type_values, plate_only, selected_source_ids, dropped_source_ids, config_hash,
+                idempotency_key, submitted_at)
+                VALUES (-1, 'c9', 0, 'u1', 'primary', 'vehicle', '{}', 0, '[]', '[]', 'h1', NULL, 1)`,
+                args: [],
+              })
+            : db.$client.execute({
+                sql: `INSERT INTO source_result (rowid, result_id, correlation_id, part_id, source_id,
+                user_id, status, adapter_kind, created_at) VALUES (-1, 'r9', ?, 0, 's9', 'u1', 'pending', 'mock', 1)`,
+                args: [CID],
+              });
+        await expect(insert).rejects.toThrow(new RegExp(message));
+        await insertQueryRequest(db, 1, null);
+        await insertPendingResult(db, "r2", 1);
+      } finally {
+        db.$client.close();
+      }
+    },
+  );
   it("normal inserts with auto-assigned rowids are not refused (#279 C-I1)", async () => {
     const db = await queryDb();
     try {

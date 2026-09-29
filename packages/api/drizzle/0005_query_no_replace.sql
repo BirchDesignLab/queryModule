@@ -16,3 +16,11 @@ BEGIN SELECT RAISE(ABORT, 'source_result rows are never replaced'); END;
 --> statement-breakpoint
 CREATE TRIGGER query_request_no_delete BEFORE DELETE ON query_request
 BEGIN SELECT RAISE(ABORT, 'query_request rows are never deleted'); END;
+--> statement-breakpoint
+CREATE TRIGGER query_request_positive_rowid AFTER INSERT ON query_request
+WHEN NEW.rowid < 1
+BEGIN SELECT RAISE(ABORT, 'query_request rowids are positive'); END;
+--> statement-breakpoint
+CREATE TRIGGER source_result_positive_rowid AFTER INSERT ON source_result
+WHEN NEW.rowid < 1
+BEGIN SELECT RAISE(ABORT, 'source_result rowids are positive'); END;

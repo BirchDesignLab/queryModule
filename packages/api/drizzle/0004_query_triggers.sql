@@ -7,7 +7,7 @@ WHEN OLD.status <> 'pending' OR NEW.status = 'pending'
   OR NEW.part_id IS NOT OLD.part_id OR NEW.source_id IS NOT OLD.source_id
   OR NEW.user_id IS NOT OLD.user_id OR NEW.credential_user_id IS NOT OLD.credential_user_id
   OR NEW.delegation_id IS NOT OLD.delegation_id OR NEW.adapter_kind IS NOT OLD.adapter_kind
-  OR NEW.created_at IS NOT OLD.created_at
+  OR NEW.created_at IS NOT OLD.created_at OR NEW.rowid IS NOT OLD.rowid
 BEGIN SELECT RAISE(ABORT, 'source_result status is write-once from pending'); END;
 --> statement-breakpoint
 CREATE TRIGGER source_result_no_delete BEFORE DELETE ON source_result
