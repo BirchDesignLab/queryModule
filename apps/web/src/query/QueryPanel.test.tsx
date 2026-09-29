@@ -626,6 +626,17 @@ describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
     expect(terminal()).toHaveValue("VEH.ZZ-0001");
   });
 
+  it("spec 4.4 a typed edit survives switching type and back in terminal mode", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    await user.click(toggle());
+    await user.clear(terminal());
+    await user.type(terminal(), "VEH.ZZ-0002.OK");
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    await user.click(screen.getByRole("button", { name: "Vehicle" }));
+    expect(terminal()).toHaveValue("VEH.ZZ-0002.OK");
+  });
+
   it("PER.TESTERSON in terminal mode switches to Person on toggle back and keeps the Vehicle draft", async () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001");

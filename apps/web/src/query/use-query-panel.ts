@@ -75,6 +75,17 @@ function initialQueryType(config: ClientSiteConfig): string | null {
   return codes[0] ?? null;
 }
 
+/** Defaults while the draft has no choice, else the draft's sources that are still eligible. */
+export function resolveCheckedSources(
+  formState: FormState,
+  draftSources: readonly string[] | null,
+): string[] {
+  const eligible = formState.sources.map((s) => s.sourceId);
+  return draftSources === null
+    ? formState.sources.filter((s) => s.selectedByDefault).map((s) => s.sourceId)
+    : draftSources.filter((id) => eligible.includes(id));
+}
+
 /**
  * Wires the config, the draft store and evaluateForm to the query panel (spec 6.2). The config
  * lives in the query cache only (spec 6.7); drafts live in the draft store, values as entered.
@@ -207,11 +218,7 @@ export function useQueryPanel(): QueryPanelModel {
   }
   if (config === null || queryType === null || formState === null) return { status: "loading" };
 
-  const eligible = formState.sources.map((s) => s.sourceId);
-  const checkedSources =
-    draftSources === null
-      ? formState.sources.filter((s) => s.selectedByDefault).map((s) => s.sourceId)
-      : draftSources.filter((id) => eligible.includes(id));
+  const checkedSources = resolveCheckedSources(formState, draftSources);
 
   const announceBlocked = (state: FormState): void => {
     const count = blockedErrorCount(state);

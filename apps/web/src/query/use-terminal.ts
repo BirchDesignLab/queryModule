@@ -17,7 +17,7 @@ import {
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
-import type { ReadyQueryPanel } from "./use-query-panel.js";
+import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
 
 type Values = Readonly<Record<string, DraftValue>>;
 
@@ -108,6 +108,16 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     drafts.getState().setMode("terminal");
   }, [derive, drafts, panel.queryType]);
 
+  /** Merges the current text into the draft of its own type (spec 4.4: nothing typed is lost). */
+  const mergeText = (): { queryType: string } | null => {
+    const byType = Object.fromEntries(
+      Object.entries(drafts.getState().drafts).map(([code, d]) => [code, d.values]),
+    );
+    const merged = terminalToForm(config, text, byType);
+    if (merged !== null) drafts.getState().replaceValues(merged.queryType, merged.values);
+    return merged;
+  };
+
   const requestFocus = (): void => {
     wantFocus.current = true;
     setFocusTick((n) => n + 1);
@@ -127,14 +137,8 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       if (mode === "form") {
         enterTerminal();
       } else {
-        const byType = Object.fromEntries(
-          Object.entries(drafts.getState().drafts).map(([code, d]) => [code, d.values]),
-        );
-        const merged = terminalToForm(config, text, byType);
-        if (merged !== null) {
-          drafts.getState().replaceValues(merged.queryType, merged.values);
-          panel.selectQueryType(merged.queryType);
-        }
+        const merged = mergeText();
+        if (merged !== null) panel.selectQueryType(merged.queryType);
         setErrors([]);
         drafts.getState().setMode("form");
       }
@@ -145,6 +149,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       requestFocus();
     },
     selectType(code) {
+      if (mode === "terminal") mergeText();
       panel.selectQueryType(code);
       if (mode === "terminal") derive(code);
     },
@@ -178,12 +183,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       const values = fromCoreDraft(merged);
       state.replaceValues(queryType, values);
       panel.selectQueryType(queryType);
-      const eligible = formState.sources.map((s) => s.sourceId);
-      const chosen = state.drafts[queryType]?.sources ?? null;
-      const sourceIds =
-        chosen === null
-          ? formState.sources.filter((s) => s.selectedByDefault).map((s) => s.sourceId)
-          : chosen.filter((id) => eligible.includes(id));
+      const sourceIds = resolveCheckedSources(formState, state.drafts[queryType]?.sources ?? null);
       void panel.sendChecked({ queryType, values, sourceIds, state: formState });
     },
   };
