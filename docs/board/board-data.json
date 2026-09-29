@@ -371,6 +371,20 @@
       "body": "Deferred minors, none fail open:\n- [ ] `config:validate` rejects unknown `--` flags instead of dropping them.\n- [ ] `config:validate` prints forward-slash paths on Windows too (master plan 9: identical output in PowerShell and bash).\n- [ ] `config:migrate` catches read and parse errors and prints path and key only (no raw stack or file excerpt).\n- [ ] `config:validate` reports an invalid-JSON locale bundle as `config.invalidJson`, not `config.missingLocale`.\n- [ ] `mockSchema` diagnostics point into the mock file, not the site file.\n- [ ] `stories.json` file paths stay inside the repo (no absolute or `..` paths).\n- [ ] `hasTaggedTest` and `isPureBarrel` comment stripping become string-aware.\n- [ ] `check-licences.ts`, `check-story-tags.ts`: clean `path: message` errors instead of stack traces for a missing or malformed input file.\n\n**Source:** SDD ledger, W4 deferred minors (Tasks 18 to 22)."
     },
     {
+      "number": 75,
+      "title": "Board and repo settings: the manual steps",
+      "labels": ["documentation", "platform", "p1", "follow-up"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": null,
+      "phase": "P1",
+      "size": "S",
+      "priority": "High",
+      "reqIds": "",
+      "assignee": "BirchDesignLab",
+      "body": "Views, built-in project workflows and repo settings have no API. Follow the checklist in `docs/project-board.md` (section \"Manual steps\"), tick it there (it is the one checklist), and close this issue when it is done."
+    },
+    {
       "number": 78,
       "title": "Decide: recalibrate review rules before W5 (sdd-task and wave-review by tier)",
       "labels": ["decision", "follow-up", "platform", "p1"],
@@ -410,6 +424,19 @@
       "body": "The Roadmap view falls apart when tweaked: two layers of data are missing (developer, 09-26-26).\n\n- [ ] Task and follow-up dates: Start = issue created date, Finish = closed date (the roadmap needs custom date fields, so copy them).\n- [ ] Parent dates (wave, phase, milestone): Start = earliest child Start; Finish = latest child Finish once all children are closed, else the latest child date so far.\n- [ ] Milestone parent issues M0 to M4 (label `epic`), phases as their sub-issues; \"No Parent issue\" then holds only milestones.\n- [ ] `Level` single-select field: Milestone, Phase, Wave, Task, Follow-up. Suggested views: \"Plan\" (level Milestone, Phase), \"P0 detail\" (level Wave, Task, grouped by parent).\n- [ ] `project-sync` rolls dates up on every event; `scripts/ops/gh-setup-project.mjs` backfills once.\n- [ ] README SVG dashboard (option B) reads the same roll-ups.\n\nGate tier (`.github/workflows/**`, `scripts/ops/**`): ride W5, which gets a gate `wave-review` anyway.\n\n**Source:** Roadmap view feedback, developer 09-26-26."
     },
     {
+      "number": 81,
+      "title": "Decide: CI pipeline design before the ruleset (ADR, before W6 Tasks 26 and 28)",
+      "labels": ["decision", "follow-up", "platform", "p1"],
+      "milestone": "M0 Skeleton",
+      "parent": 40,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "",
+      "body": "Before the ruleset makes `ci` and `sensitive-review` required (Task 28) and CI grows (Task 26 web build and expo export; Track A P1 image, boot smoke, Playwright, publish), settle the pipeline design so CI never becomes a merge blocker the way the review workflows did on PR #76 (developer, 09-26-26).\n\n- [ ] One stable required check: heavy work in separate jobs, a final `ci` job aggregates them, so new steps never touch the ruleset.\n- [ ] Path-scoped jobs: web build, expo export, image and Playwright run only when their paths change (extends the docs-only fast path).\n- [ ] Fast fail first: lint and typecheck ahead of parallel heavy jobs; `timeout-minutes` on every job; PR CI budget under 10 minutes.\n- [ ] Flake policy: Playwright one retry with trace; quarantine label plus issue; no silent retry loops.\n- [ ] External services (oasdiff image, dependency review, pipx zizmor): pinned and cached; an outage fails with a clear message, not a code failure.\n- [ ] Break glass: spec 9.1's empty bypass list plus a broken CI deadlocks a CI fix. Who may lift the ruleset (repo admin), when, and how it is logged.\n- [ ] Merge style: squash with linear history (spec 9.1) or merge commits for wave PRs, recorded in an ADR.\n- [ ] CI duration per PR recorded next to agent metrics.\n\n**Source:** developer, 09-26-26."
+    },
+    {
       "number": 84,
       "title": "Track B P1 plan: align with the P0 tokens, platform and shell (W5 phase critic)",
       "labels": ["follow-up", "web", "p1"],
@@ -434,33 +461,6 @@
       "priority": "Medium",
       "reqIds": "",
       "body": "Deferred minors from the W5 reviews (PR #83), none fail open today:\n\n- [x] Core IO-globals lint (#71) matches bare identifiers only: `globalThis.fetch`, `window.localStorage`, `self.navigator` in `packages/core/src` lint clean. Add a restricted member-access rule or a test-side scan.\n- [x] `apps/web/vite.config.ts` and `vitest.config.ts` sit outside `tsc -b` (tsconfig `include: [\"src\"]`); add a node tsconfig so they are typechecked.\n- [x] `packages/client` TokenStore (bearer token storage, SEC-006) has no `.github/sensitive-paths` tier, so the P1 native SecureStore store would land at ordinary tier. Decide its tier (critical-tier file change, own PR).\n- [x] jsdom is held at 29.1.1 because jsdom 30 needs Node >= 24.15 and `engines` is `>=24 <25`. Decide whether to raise the Node floor to 24.15 (ADR-0001) and then take jsdom 30.\n- [x] Dashboard wave timeline uses issue created dates (#80 rule), so every P0 wave shows 09-26; consider first-commit-to-merge spans for merged waves.\n- [x] `milestone parents` get Level and dates only on the run after their numbers are recorded (first `--apply` creates them).\n\n**Source:** SDD ledger, W5 deferred minors (Tasks 23 to 25, W5A, W5B).\n"
-    },
-    {
-      "number": 81,
-      "title": "Decide: CI pipeline design before the ruleset (ADR, before W6 Tasks 26 and 28)",
-      "labels": ["decision", "follow-up", "platform", "p1"],
-      "milestone": "M0 Skeleton",
-      "parent": 40,
-      "track": "Platform (A)",
-      "phase": "P1",
-      "size": "M",
-      "priority": "Medium",
-      "reqIds": "",
-      "body": "Before the ruleset makes `ci` and `sensitive-review` required (Task 28) and CI grows (Task 26 web build and expo export; Track A P1 image, boot smoke, Playwright, publish), settle the pipeline design so CI never becomes a merge blocker the way the review workflows did on PR #76 (developer, 09-26-26).\n\n- [ ] One stable required check: heavy work in separate jobs, a final `ci` job aggregates them, so new steps never touch the ruleset.\n- [ ] Path-scoped jobs: web build, expo export, image and Playwright run only when their paths change (extends the docs-only fast path).\n- [ ] Fast fail first: lint and typecheck ahead of parallel heavy jobs; `timeout-minutes` on every job; PR CI budget under 10 minutes.\n- [ ] Flake policy: Playwright one retry with trace; quarantine label plus issue; no silent retry loops.\n- [ ] External services (oasdiff image, dependency review, pipx zizmor): pinned and cached; an outage fails with a clear message, not a code failure.\n- [ ] Break glass: spec 9.1's empty bypass list plus a broken CI deadlocks a CI fix. Who may lift the ruleset (repo admin), when, and how it is logged.\n- [ ] Merge style: squash with linear history (spec 9.1) or merge commits for wave PRs, recorded in an ADR.\n- [ ] CI duration per PR recorded next to agent metrics.\n\n**Source:** developer, 09-26-26."
-    },
-    {
-      "number": 75,
-      "title": "Board and repo settings: the manual steps",
-      "labels": ["documentation", "platform", "p1", "follow-up"],
-      "milestone": "M0 Skeleton",
-      "parent": 40,
-      "track": null,
-      "phase": "P1",
-      "size": "S",
-      "priority": "High",
-      "reqIds": "",
-      "assignee": "BirchDesignLab",
-      "body": "Views, built-in project workflows and repo settings have no API. Follow the checklist in `docs/project-board.md` (section \"Manual steps\"), tick it there (it is the one checklist), and close this issue when it is done."
     },
     {
       "number": 92,
@@ -815,9 +815,9 @@
       "title": "Wave 9 review minors: e2e and smoke test hardening",
       "labels": ["platform", "p2", "follow-up"],
       "milestone": "M1 Forms and terminal",
-      "parent": 41,
+      "parent": 42,
       "track": "Platform (A)",
-      "phase": "P2",
+      "phase": "P3",
       "size": "S",
       "priority": "Low",
       "reqIds": "NFR-003",
@@ -925,7 +925,7 @@
       "size": "S",
       "priority": "Medium",
       "reqIds": "FR-056",
-      "body": "Carries for the M1 P3 client terminal work, from wave B2. Read these when writing the M1 P3 plan.\n\n- [ ] `mergeDraft(draft, t, config)` takes three arguments: the draft store passes the same `TerminalConfig` it tokenized with (the P2 plan's two-argument form is wrong).\n- [ ] `terminal.delimiterInValue`: the en string needs `{label}` and `{delimiter}`, but the error carries only `field`, `labelKey`, `position`. The renderer resolves the label from `labelKey` (fallback `field`) and the delimiter from site config. The same error also fires when a positioned value would read as a named token, where \"contains the delimiter\" misleads: consider its own key. Same renderer rule for `terminal.missingDelimiter` (params `{length}` only).\n- [ ] `parseCommand` evaluates only the command's own values, not the merged draft. Submit runs `evaluateForm` on the merged draft, or a draft-only value (e.g. `plateType`) won't satisfy required.\n- [ ] The caller keeps one draft per query type; `mergeDraft` cannot check the type matches.\n\n**Source:** B2 triage, checker 09-28-26.\n"
+      "body": "Carries for the M1 P3 client terminal work, from wave B2. Read these when writing the M1 P3 plan.\n\n- [x] `mergeDraft(draft, t, config)` takes three arguments: the draft store passes the same `TerminalConfig` it tokenized with (the P2 plan's two-argument form is wrong).\n- [x] `terminal.delimiterInValue`: the en string needs `{label}` and `{delimiter}`, but the error carries only `field`, `labelKey`, `position`. The renderer resolves the label from `labelKey` (fallback `field`) and the delimiter from site config. The same error also fires when a positioned value would read as a named token, where \"contains the delimiter\" misleads: consider its own key. Same renderer rule for `terminal.missingDelimiter` (params `{length}` only).\n- [x] `parseCommand` evaluates only the command's own values, not the merged draft. Submit runs `evaluateForm` on the merged draft, or a draft-only value (e.g. `plateType`) won't satisfy required.\n- [x] The caller keeps one draft per query type; `mergeDraft` cannot check the type matches.\n\n**Source:** B2 triage, checker 09-28-26.\n\n\n"
     },
     {
       "number": 300,
@@ -1084,6 +1084,19 @@
       "body": "From the fix/b-p2-core-minors review (`docs/reviews/fix-b-p2-core-minors.md`, reviewed 7a4e346). Tier: `scripts/ci/**` gate; `packages/core/src/terminal/**` critical.\n\n- [ ] G-M1: `FIXTURE_IMPORT` misses the directory-index import `\"./__fixtures__\"`.\n- [ ] G-M2: it also misses template-literal specifiers.\n- [ ] C-CR-M1: the leak substring skip is keyed on the param name, not on whether the value is one of the config strings.\n- [ ] C-CR-M2: `typedValues` misses rest-remainder joins (pre-existing).\n- [ ] C-CR-M3: redundant `selected?.code` in `roundtrip.a5.test.ts:128`.\n- [ ] C-CR-M4: `types.ts` `positionedKeys` doc should say interior empties.\n\n**Source:** B core-minors push request, checker 09-29-26.\n"
     },
     {
+      "number": 333,
+      "title": "Admin UI: console with visual site-config builder for implementers (new scope, design pass)",
+      "labels": ["platform", "decision"],
+      "milestone": "M1 Forms and terminal",
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "XL",
+      "priority": "High",
+      "reqIds": "BR-001",
+      "body": "Developer direction 09-29-26, after the first live look at the P2 build: forms must be reactive, interactable and configurable from an admin UI; implementers need a visual JSON builder in admin for the site config (fields, rules, picklists, defaults, sources, terminal commands; later M2 response mapping and keywords).\n\nToday BR-001 (\"common site customizations through configuration, without code changes\") is met by JSON site config files, `config:validate` and a deploy; FR-060 names implementers as the ones who configure. No milestone plans a config editor, and spec 5.8 loads config from files at startup with a `configHash`. This is new scope.\n\nDesign pass (Opus 5.5 high, one session) to decide, before any build:\n- [ ] Storage: config stays files (builder writes a validated file plus reload) vs a versioned config store in the DB; how `configHash`, the 409 on stale config, and `configLoaded` audit behave on a live change.\n- [ ] Editor scope and UX: visual builder over the `SiteConfig` schema (field list, rule conditions, picklists, commands), live preview of the query panel, `validateSiteConfig` diagnostics inline, draft vs publish, rollback.\n- [ ] Roles and audit: admin-only (or an `implementer` role), every publish audited, diff shown.\n- [ ] Placement in the roadmap: late M2 beside configurable responses (FR-060, UX-010, UX-012), or its own phase; effect on M3 and M4.\n- [ ] ADR and spec changes.\n\nP3 (M1) plans are asked to avoid choices that block a later config store or editor.\n\n**Source:** developer, checker 09-29-26.\n",
+      "parent": 42
+    },
+    {
       "number": 337,
       "title": "Sign-out of an idle-expired session writes no logout audit row",
       "labels": ["platform", "p3", "sensitive", "follow-up"],
@@ -1120,19 +1133,46 @@
       "size": "S",
       "priority": "Low",
       "reqIds": "none",
-      "body": "From the review of Track A's P2 PR-1 (`docs/reviews/fix-a-p2-api-minors.md`, reviewed 8c2da7a). All minor.\n\n- [ ] G-G-m1 (gate): `packages/api/src/auth/routes.ts:201` fallback Set-Cookie duplicates `auth.ts:208` attributes; share one `clearSessionCookie(env)` helper.\n- [ ] C-C-m1 (critical): `packages/api/src/queries/admission.ts:133-149`: a ZodError on replay (stored-data fault) leaves as generic \"submit replay failed\"; map it to a fixed-text `ReplayIntegrityError`.\n- [ ] C-C-m2 (docs): CLAUDE.md \"Paths landed so far\" lacks `scripts/ci/is-main-module.mjs` and `scripts/ci/check-schema-writes.ts` (pair with #338's CLAUDE.md update).\n- [ ] C-C-m3: `packages/api/src/queries/route.ts:8-12` re-export sits inside the import block.\n\n**Source:** A W5 PR-1 push request, checker 09-29-26.\n"
+      "body": "From the review of Track A's P2 PR-1 (`docs/reviews/fix-a-p2-api-minors.md`, reviewed 8c2da7a). All minor.\n\n- [ ] G-G-m1 (gate): `packages/api/src/auth/routes.ts:201` fallback Set-Cookie duplicates `auth.ts:208` attributes; share one `clearSessionCookie(env)` helper.\n- [ ] C-C-m1 (critical): `packages/api/src/queries/admission.ts:133-149`: a ZodError on replay (stored-data fault) leaves as generic \"submit replay failed\"; map it to a fixed-text `ReplayIntegrityError`.\n- [ ] C-C-m2 (docs): CLAUDE.md \"Paths landed so far\" lacks `scripts/ci/is-main-module.mjs` and `scripts/ci/check-schema-writes.ts` (pair with #338's CLAUDE.md update).\n- [ ] C-C-m3: `packages/api/src/queries/route.ts:8-12` re-export sits inside the import block.\n\n**Source:** A W5 PR-1 push request, checker 09-29-26.\n**From the implementer@ seed review (feat/a-p3-ad-implementer, gate; rides AM1):**\n- [ ] m1 `packages/api/src/ops/grant-role.ts:13` usage text omits `implementer`; build it from `ROLES`.\n- [ ] m2 `packages/api/src/seed/seed.ts:22` JSDoc says an operator can \"set a missing persona preference\", but no tool does; align with `docs/demo.md` (reset and reseed).\n- [ ] m3 persona test names the default site only; widen or rename."
     },
     {
-      "number": 333,
-      "title": "Admin UI: console with visual site-config builder for implementers (new scope, design pass)",
-      "labels": ["platform", "decision"],
-      "milestone": "M2 Results and audit",
+      "number": 377,
+      "milestone": "M1 Forms and terminal",
+      "parent": 42,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "FR-050",
+      "title": "Terminal test minors from B2 and AX reviews: draft-only invalid value, typed-only commands, spec 4.4 line",
+      "body": "Residual minors from the B2 critical wave-review (feat/b-p3-wave-2, run wf_82cbcb78-f5a, artifact docs/reviews/feat-b-p3-wave-2.md, reviewed f5d84c5).\n\n- [ ] C-M1 (critical tier, `packages/core/src/terminal/**`): add a `checkTerminalSubmit` test for a draft-only invalid value (for example a draft `plateType` not in its picklist) that yields an error with no position. Rides the next PR that touches `terminal/**` (critical review), or its own fast-path PR.\n- [x] C-M2 (ordinary, spec doc): spec 4.4 names the submit path but not `checkTerminalSubmit`; add one line naming it as the terminal submit check on the merged draft. May ride any ordinary Track B PR. (done in #381, commit 3536cb2)\n\nC-M3 (`enrichErrors` exported but not in the package index) ruled no change.\nFrom the AX critical review (feat/a-p3-wave-ax, artifact docs/reviews/feat-a-p3-wave-ax.md, reviewed f79edf5), same file area (`packages/core/src/terminal/roundtrip.a5.test.ts`, critical):\n- [ ] C-C-M1: the typed-only case asserts the toggle does not pick NAM/PROP but not which command it does pick; map `{ NAM: \"PER\", PROP: \"PRO\" }` and assert equality.\n- [ ] C-C-M2: `TYPED_ONLY` is keyed by command code across all sites (including the inline presets site); key it by site, or assert per site.\n",
+      "labels": ["web", "p3", "follow-up"]
+    },
+    {
+      "number": 382,
+      "milestone": "M1 Forms and terminal",
+      "parent": 42,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "M",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Wave B3 minors: submit and ack UX, submit controller, tests, type bar",
+      "body": "Triaged minors from wave B3 (PR #381, sdd-wave wf_55009ddc-5fe, wave critic W2/W3 plus 44 ledger minors; 12 dropped as fixed, rulings or carried to #371; duplicates merged). Full triage: Track B lane ledger `b3-minors-triage.md`. None blocks an M1 gate row. Ordinary tier.\n\n**Ride wave B4 inline (before the v1 demo):**\n- [ ] A1 skipped-part reason hard-coded to `plan.nestedNoSources` (`apps/web/src/query/QueryPanel.tsx:170`); the 202 carries no reason, key by label.\n- [ ] A3 `submit.noResponse` says \"submit again\" while the button is gated by no-connection (`en.json`).\n- [x] B1 submit controller stop/start poll race loses the timer handle (`packages/client/src/query/submit.ts:540`).\n- [x] B2 online subscription never unsubscribed; offline at construction not gated (`submit.ts:572`).\n\n**Later (any ordinary Track B PR):**\n- [ ] A2 `AckStatus` keyed by label collides; comma outside `t`; constant heading id (`AckStatus.tsx:52`).\n- [ ] A4 stale server 400 errors after a sources-only change or an in-flight edit (`use-query-panel.ts:120`).\n- [x] A5 submit body sends rule-hidden draft values (server prunes; data minimisation) (`use-query-panel.ts:232`).\n- [ ] B3 a response after reset maps to `failed` (harmless).\n- [x] B4 `as` casts on `ValidationError`/data hide type drift (`submit.ts`).\n- [x] C1 controller branch tests: backoff cap, bad Retry-After, 202 with no body, offline.\n- [x] C2 announcement tests for the other outcomes.\n- [ ] C3 vacuous PRO property-type test.\n- [ ] C4 `goPanel` fallback test.\n- [ ] C5 e2e \"Other query types\" branch; hard-coded `TYPE_LABELS`.\n- [ ] C6 `readyToSubmit` removal grep covers only `apps/web`.\n- [ ] D1 type bar section visibility and order (unreachable with shipped config).\n- [ ] D2 duplicated error-text builder in the type bar.\n- [ ] D3 spec 6.2 \"Overridden by ADR-0010\" note is too broad.\n- [ ] E1 keyboard focus ring hides the invalid outline after a blocked submit (styling decision).\n- [ ] E2 silent clipboard failure on \"Copy reference\".\n**From wave B4 (feat/b-p3-wave-4, run wf_c2bd143f-585, wave critic W2-W6 and T8 minors):**\n- [ ] W2 the Ctrl+Enter-in-terminal test would also pass on implicit submit; make it distinguish.\n- [ ] W3 \"n fields not shown\" goes stale after the typed query type changes.\n- [ ] W4 `terminal.description` hard-codes `VEH{delimiter}plate{delimiter}state`; derive the example from config.\n- [x] W5 submit controller `reset()` does not re-check offline.\n- [ ] W6 the sign-out reset test asserts only the store, not the rendered terminal/mode.\n- [ ] T8 describe titles cite wrong FR IDs; duplicated draft-map projection; terminal errors stored pre-translated (store keys + params, translate at render).\n- [x] Flake (fixed in #392: handlers, listener and the terminal focus effect run in layout effects; see the PR for the diagnosis): `apps/web/src/query/QueryPanel.shortcuts.test.tsx` \"/ outside inputs switches to terminal mode\" fails about 2 in 6 full `src/query` runs on Windows (\"Unable to find a label Command\" at ~1051 ms), passes alone; pre-existing (baseline also 2/6). Root-cause before raising any timeout. Check the session adopt path first: if a late adopt calls reset.resetAll() after the panel is interactive, it is a product bug (the user's draft and mode are wiped), not only a flake. Ruled out already (B4, 09-29-26): no async mount (no lazy, Suspense or transition), the mode flip is synchronous, no pending chord, the dialog[open] guard is closed. Other suspect: the AppShell config subscription swapping the shortcut engine and listener around the dispatch.\n\n\n### From Task 19 (#390, 09-29-26)\n- [ ] `apps/web/src/query/QueryPanelView.test.tsx` terminal preview test ends with a decorative `queryByText(\"Preview\")` check; no preview test for Ctrl+Enter or for duplicate ids in terminal mode; no live-mode positive control showing the no-request assertion is sensitive.\n- [ ] `apps/web/src/query/use-query-panel.ts` preview still subscribes to the live submit store (value discarded) and its comment says it never reads it; drop the subscription in preview or fix the comment.\n- [ ] Preview announces field reveals through the global announcer on the admin page (collision check carried to #357 for Task 32).\n- [ ] T19 run evidence: RED shown only as \"module missing\", not per behavioural test; the SubmitButton preview case had no separate RED (process note for later sdd briefs).\n\n\n\n### From Task 20 (#393, 09-29-26)\n- [ ] `apps/web/src/query/QueryPanel.test.tsx`: no test for the coarse-pointer path with no override (usePersona's heuristic gives mobileUnit); mock matchMedia(\"(any-pointer: coarse)\").\n- [ ] `apps/web/src/app/AppChrome.tsx`: usePersonaLayout calls usePersona a second time beside AppChrome's own call (two matchMedia listeners, two resolutions); expose one hook for the resolved persona.\n**From Track A Task 32 (observation, check first in the next B PR):**\n- [ ] Builder preview: reopening on the live config shows the query type as a select, while the same data via the draft config shows the quick-access buttons. Check `QueryPanelView` first-render vs config-change path (quickAccess / type-control selection).\n",
+      "labels": ["web", "p3", "follow-up"]
+    },
+    {
+      "number": 388,
+      "milestone": "M1 Forms and terminal",
+      "parent": 42,
       "track": "Platform (A)",
-      "phase": "P1",
-      "size": "XL",
-      "priority": "High",
+      "phase": "P3",
+      "size": "M",
+      "priority": "Low",
       "reqIds": "BR-001",
-      "body": "Developer direction 09-29-26, after the first live look at the P2 build: forms must be reactive, interactable and configurable from an admin UI; implementers need a visual JSON builder in admin for the site config (fields, rules, picklists, defaults, sources, terminal commands; later M2 response mapping and keywords).\n\nToday BR-001 (\"common site customizations through configuration, without code changes\") is met by JSON site config files, `config:validate` and a deploy; FR-060 names implementers as the ones who configure. No milestone plans a config editor, and spec 5.8 loads config from files at startup with a `configHash`. This is new scope.\n\nDesign pass (Opus 5.5 high, one session) to decide, before any build:\n- [ ] Storage: config stays files (builder writes a validated file plus reload) vs a versioned config store in the DB; how `configHash`, the 409 on stale config, and `configLoaded` audit behave on a live change.\n- [ ] Editor scope and UX: visual builder over the `SiteConfig` schema (field list, rule conditions, picklists, commands), live preview of the query panel, `validateSiteConfig` diagnostics inline, draft vs publish, rollback.\n- [ ] Roles and audit: admin-only (or an `implementer` role), every publish audited, diff shown.\n- [ ] Placement in the roadmap: late M2 beside configurable responses (FR-060, UX-010, UX-012), or its own phase; effect on M3 and M4.\n- [ ] ADR and spec changes.\n\nP3 (M1) plans are asked to avoid choices that block a later config store or editor.\n\n**Source:** developer, checker 09-29-26.\n"
+      "title": "Wave AB minors: admin builder form, focus, issue display, tests",
+      "body": "Deferred minors from wave AB (PR #387, sdd-wave wf_42cb441e-150 plus wave critic; admin builder in `apps/web/src/admin/`). Fixed and duplicate items dropped. Ordinary tier. None blocks the client-only demo.\n\n**Form and design**\n- [ ] S1 `ConfigBuilder.tsx` NodeEditor (~:230-310): the form is value-shape driven; enums are free text; absent optional keys (`defaultValue`, `pattern`, `when`, `picklist`, `parent`) cannot be added (Task 31 part 2 purpose-built editors).\n- [ ] M10 `ConfigBuilder.tsx:119` `pathText` ids join with \".\"; key `a.b` collides with path `a`,`b`; label-overlay ids embed raw keys (whitespace).\n- [ ] NumberEditor: non-numeric text (\"12a\") is neither written nor flagged (no `aria-invalid`, no message).\n- [ ] `sources.N.timeoutMs` read-only in the form but editable in the raw tab; no per-field \"server setting\" note (`ConfigBuilder.tsx:122`, RawTab).\n- [ ] `AdminLayout.tsx:19-21` vs `:48-50`: h1 and section h2 both take focus on mount; first load of `/admin/config` can end on either.\n- [ ] FormTab root issues block id is not referenced by any `aria-describedby`.\n- [ ] IssueMessages: errors and warnings look the same (no level text); `qm-admin__issue(s)`/count classes have no CSS.\n- [ ] `useEnglishBundle`: extra `GET /api/v1/locales/en` although bootstrap has it; the en bundle validates every draft locale.\n- [ ] Split `ConfigBuilder.tsx` (~690 lines) and `draft.ts` (~350) into shell, tabs, form, labels, raw, hooks before part 2.\n\n**Tests**\n- [ ] Form edits tested on string leaves only: add boolean, number-via-form, array edge cases, overlay-on-validation.\n- [ ] Direct unit tests for `draft.ts` `draftIssues` (shape branch, dedupe) and `groupByControl` (missing key to parent, root group).\n- [ ] \"shows a loading message until the bundle arrives\" never asserts the loading message.\n- [ ] Key-completeness test regex matches only quoted literal `config.*` keys; template-built keys evade it.\n- [ ] `ConfigBuilderIdle.test.tsx` uses real timers (~1.7 s).\n\n**Carried to Task 32 / Task 35 (#357, #362):** keyboard-only and axe on the Form and Raw tabs; the seeded config shows 6 baseline warnings: match the browser count to the server `validateSiteConfig`; manual screen-reader check of the summary region.\n\nProcess notes (no action): T31 tests and implementation in one commit, RED recorded as module-unresolved only (ruler: stands); one unreproduced unrelated coverage-run failure seen by a fixer.",
+      "labels": ["web", "p3", "follow-up"]
     }
   ]
 }
