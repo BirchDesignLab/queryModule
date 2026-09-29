@@ -78,6 +78,27 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(screen.queryByText("The service is unavailable. Try again.")).not.toBeInTheDocument();
   });
 
+  it("Retry keeps keyboard focus off body when the retry succeeds (spec 6.4)", async () => {
+    server.use(
+      http.get(`${API}/api/v1/config`, () => new HttpResponse(null, { status: 503 }), {
+        once: true,
+      }),
+    );
+    const { user } = renderPanel();
+    await user.click(await screen.findByRole("button", { name: "Retry" }));
+    await screen.findByLabelText("Plate");
+    expect(document.body).not.toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Query Module" })).toHaveFocus();
+  });
+
+  it("Retry keeps keyboard focus off body when the retry fails again (spec 6.4)", async () => {
+    server.use(http.get(`${API}/api/v1/config`, () => new HttpResponse(null, { status: 503 })));
+    const { user } = renderPanel();
+    await user.click(await screen.findByRole("button", { name: "Retry" }));
+    await screen.findByRole("button", { name: "Retry" });
+    expect(document.body).not.toHaveFocus();
+  });
+
   it("[A1] VEH opens with Plate, State (TX, default tag), Year, VIN and no Plate type", async () => {
     await openPanel();
     expect(screen.getByLabelText("Query type")).toHaveValue("VEH");

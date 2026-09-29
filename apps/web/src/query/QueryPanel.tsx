@@ -94,7 +94,15 @@ export function QueryPanel() {
           <p role="alert" className="qm-form-error">
             {t("error.unavailable")}
           </p>
-          <button type="button" className="qm-button" onClick={panel.retry}>
+          <button
+            type="button"
+            className="qm-button"
+            onClick={() => {
+              // The focused Retry unmounts on click; keep focus on the stable heading (spec 6.4).
+              headingRef.current?.focus();
+              panel.retry();
+            }}
+          >
             {t("app.retry")}
           </button>
         </>
