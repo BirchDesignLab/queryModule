@@ -10,7 +10,7 @@ import {
   resolveShortcuts,
 } from "@querymodule/core/config";
 import type { ThemeSelection } from "@querymodule/tokens";
-import { ShortcutProvider, ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
+import { ShortcutProvider, ThemeModeSeg, usePersona, useThemeMode } from "@querymodule/web-ui";
 import {
   createContext,
   useCallback,
@@ -106,7 +106,7 @@ function BrandMark() {
 /**
  * The signed-in header (D-B4, design B1): product mark and name, site name, the Main nav (Queries,
  * Status, Admin), then the account disclosure (user, role, theme, sign out). The mobile-unit bar
- * is the compact one: the same nav, the theme select and sign out inline (its own look is B4).
+ * is the compact one: the mark, the same nav, the theme as icon buttons and the account disclosure.
  * It needs the router and the translator, so it lives under the routes, not beside AppChrome.
  */
 export function AppHeader() {
@@ -143,25 +143,17 @@ export function AppHeader() {
         <AdminLink />
       </nav>
       <div className="qm-app-header__end">
-        {compact ? (
-          <>
-            <p className="qm-app-header__user">
-              {t("home.signedInAs", { email: user?.email ?? "" })}
-            </p>
-            <ThemeModeSelect id="app-theme" value={themeMode} onChange={changeTheme} t={t} />
-            <button type="button" className="qm-button" onClick={doSignOut}>
-              {t("home.signOut")}
-            </button>
-          </>
-        ) : (
-          <AccountMenu
-            email={user?.email ?? ""}
-            role={user?.role ?? null}
-            themeMode={themeMode}
-            onThemeChange={changeTheme}
-            onSignOut={doSignOut}
-          />
-        )}
+        {compact ? <ThemeModeSeg value={themeMode} onChange={changeTheme} t={t} icons /> : null}
+        <AccountMenu
+          // A flip between the two bars remounts it: an open panel closes and focus goes to <main>.
+          key={compact ? "compact" : "full"}
+          email={user?.email ?? ""}
+          role={user?.role ?? null}
+          themeMode={themeMode}
+          onThemeChange={changeTheme}
+          onSignOut={doSignOut}
+          showTheme={!compact}
+        />
       </div>
     </header>
   );

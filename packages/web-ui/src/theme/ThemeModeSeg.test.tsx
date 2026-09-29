@@ -45,4 +45,21 @@ describe("UX-002 theme mode segmented control (visual system: controls and state
     await userEvent.click(screen.getByRole("button", { name: "Red shift" }));
     expect(onChange).toHaveBeenCalledWith("redShift");
   });
+  it("icons: each button is named by its label and shows a decorative icon, no text", () => {
+    render(<ThemeModeSeg value="night" onChange={() => undefined} t={t} icons />);
+    const group = screen.getByRole("group", { name: "Theme" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Match system",
+      "Day",
+      "Night",
+      "Red shift",
+    ]);
+    for (const b of buttons) {
+      expect(b.textContent).toBe("");
+      expect(b.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    }
+    expect(screen.getByRole("button", { name: "Night" })).toHaveAttribute("aria-pressed", "true");
+    expect(group).toHaveClass("qm-seg", "qm-seg--icons");
+  });
 });

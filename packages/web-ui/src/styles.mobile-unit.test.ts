@@ -22,6 +22,11 @@ describe("UX-002 UX-012 mobile-unit layout, spec 6.3 v1 subset (48x48 targets, 1
     expect(tokens).toMatch(/--qm-type-body-size:\s*16px;/);
   });
 
+  it("the layout fills the vehicle laptop's width instead of the 40 rem page column", () => {
+    const root = css.match(/^\.qm-layout--mobile-unit\s*\{([^}]*)\}/m)?.[1] ?? "";
+    expect(root).toMatch(/max-width:\s*none/);
+  });
+
   it("body text in the layout is at least the 16 px body size", () => {
     const root = css.match(/^\.qm-layout--mobile-unit\s*\{([^}]*)\}/m)?.[1] ?? "";
     expect(root).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
@@ -37,5 +42,42 @@ describe("UX-002 UX-012 mobile-unit layout, spec 6.3 v1 subset (48x48 targets, 1
     const body = rulesFor('.qm-layout--mobile-unit input[type="checkbox"]');
     expect(body).toMatch(/width:\s*var\(--qm-target-min\)/);
     expect(body).toMatch(/height:\s*var\(--qm-target-min\)/);
+  });
+
+  it("checkboxes outside a chip are 48x48; inside a chip the label is the 48 px target", () => {
+    const body = rulesFor('.qm-layout--mobile-unit input[type="checkbox"]');
+    expect(body).toMatch(/width:\s*var\(--qm-target-min\)/);
+    expect(css).toMatch(
+      /\.qm-layout--mobile-unit\s+\.qm-chip\s*\{[^}]*min-height:\s*var\(--qm-target-min\)/,
+    );
+  });
+});
+
+describe("B4 officer quick access: tiles, run button, no muted text", () => {
+  it("quick access is a grid of tiles, one row of up to five at 1024", () => {
+    const quick = rulesFor(".qm-layout--mobile-unit .qm-quick-access");
+    expect(quick).toMatch(/display:\s*grid/);
+    expect(quick).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(10rem/);
+  });
+  it("a tile is 88 px tall (touch control plus space-8), code above the name", () => {
+    const tile = rulesFor(".qm-layout--mobile-unit .qm-quick-access__button");
+    expect(tile).toMatch(
+      /min-height:\s*calc\(var\(--qm-control-height-touch\)\s*\+\s*var\(--qm-space-8\)\)/,
+    );
+    expect(tile).toMatch(/flex-direction:\s*column/);
+  });
+  it("the run action is 64 px (touch control plus space-2) and takes the row beside Clear", () => {
+    const run = rulesFor('.qm-layout--mobile-unit .qm-action-bar > button[type="submit"]');
+    expect(run).toMatch(
+      /min-height:\s*calc\(var\(--qm-control-height-touch\)\s*\+\s*var\(--qm-space-2\)\)/,
+    );
+    expect(run).toMatch(/flex:\s*1 1 12rem/);
+  });
+  it("no rule of the officer layout uses the muted text colour (spec 6.3)", () => {
+    const officerRules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, sel]) => sel?.includes(".qm-layout--mobile-unit"))
+      .map(([, , body]) => body ?? "");
+    expect(officerRules.length).toBeGreaterThan(10);
+    for (const body of officerRules) expect(body).not.toMatch(/--qm-color-text-muted/);
   });
 });

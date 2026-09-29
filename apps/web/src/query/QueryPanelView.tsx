@@ -175,7 +175,7 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
           t={t}
         />
       )}
-      <div ref={panel.formContainerRef}>
+      <div ref={panel.formContainerRef} className="qm-panel__body">
         {terminal.mode === "terminal" ? (
           <TerminalInput
             id={`${idPrefix}-terminal`}

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { COLOR_TOKENS, type ThemeMode, tokenValue } from "@querymodule/tokens";
 import { expect, test } from "./fixtures.js";
-import { chooseTheme, hexToRgb, seededUser, signIn } from "./helpers.js";
+import { chooseTheme, hexToRgb, openAccountMenu, seededUser, signIn } from "./helpers.js";
 
 // D0.4 visual regression baseline (design system plan, docs/design/2026-09-29-visual-system.md).
 //
@@ -220,15 +220,20 @@ test.describe("D0.3 dispatcher density and E1 focus with invalid (1440x900)", ()
   });
 });
 
-/** Elements with text whose colour is exactly `color` (an rgb() string), under `root`. */
-const textInColor = (page: Page, root: string, color: string): Promise<number> =>
+/** Elements with text whose colour is exactly `color` (an rgb() string), under `root`, as "tag.class: text". */
+const textInColor = (page: Page, root: string, color: string): Promise<string[]> =>
   page.evaluate(
     ([rootSel, rgbColor]) =>
-      [...document.querySelectorAll(`${rootSel} *`)].filter(
-        (el) =>
-          [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent ?? "").trim() !== "") &&
-          getComputedStyle(el).color === rgbColor,
-      ).length,
+      [...document.querySelectorAll(`${rootSel} *`)]
+        .filter(
+          (el) =>
+            [...el.childNodes].some(
+              (n) => n.nodeType === 3 && (n.textContent ?? "").trim() !== "",
+            ) && getComputedStyle(el).color === rgbColor,
+        )
+        .map(
+          (el) => `${el.tagName.toLowerCase()}.${el.className}: ${(el.textContent ?? "").trim()}`,
+        ),
     [root, color] as const,
   );
 
@@ -257,7 +262,51 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
         expect(
           await textInColor(page, ".qm-layout--mobile-unit", muted),
           "officer muted text",
-        ).toBe(0);
+        ).toEqual([]);
+        // The bar sits outside the layout: scan it with the account disclosure open.
+        await openAccountMenu(page);
+        expect(
+          await textInColor(page, ".qm-app-header--compact", muted),
+          "officer bar muted text",
+        ).toEqual([]);
+      });
+    });
+  }
+
+  for (const mode of MODES) {
+    test(`${mode}: tiles are 88 px in one row, Run is 64 px, and the last request sits under the card`, async ({
+      page,
+    }) => {
+      await asUser(page, "officer@example.test", mode, async () => {
+        const tiles = await page
+          .locator(".qm-layout--mobile-unit .qm-quick-access button")
+          .evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
+        expect(tiles.length).toBeGreaterThanOrEqual(3);
+        expect(new Set(tiles.map((r) => Math.round(r.top))).size, "one row").toBe(1);
+        for (const r of tiles) expect(Math.round(r.height)).toBeGreaterThanOrEqual(88);
+        const run = await page.locator(".qm-layout--mobile-unit button[type=submit]").boundingBox();
+        expect(Math.round(run?.height ?? 0)).toBe(64);
+        await capture(page, `officer-1024x768-${mode}-top`);
+
+        await page.getByLabel("Plate", { exact: true }).fill("ZZ-0001");
+        const sent = page.waitForResponse(
+          (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
+        );
+        await page.getByRole("button", { name: "Run query" }).click();
+        expect((await sent).status()).toBe(202);
+        const ack = page.locator(".qm-layout--mobile-unit .qm-ack");
+        await expect(ack).toBeVisible();
+        const [card, ackBox] = await Promise.all([
+          page.locator(".qm-layout--mobile-unit .qm-panel__body").boundingBox(),
+          ack.boundingBox(),
+        ]);
+        expect(ackBox?.y ?? 0).toBeGreaterThan((card?.y ?? 0) + (card?.height ?? 0));
+        expect(await overflowX(page), "officer after a run").toBeLessThanOrEqual(0);
+        expect(
+          await textInColor(page, ".qm-layout--mobile-unit", rgb(mode, "color.text.muted")),
+          "officer muted text after a run",
+        ).toEqual([]);
+        await capture(page, `officer-1024x768-${mode}-ack`);
       });
     });
   }
