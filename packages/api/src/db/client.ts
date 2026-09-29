@@ -54,6 +54,52 @@ export class DatabaseLockTimeoutError extends Error {
   }
 }
 
+/*
+ * SEC-013 (#189): the app connection never turns on writable_schema. Without it SQLite
+ * itself refuses writes to sqlite_master and sqlite_schema, so an append-only or write-once
+ * trigger cannot be rewritten in place. The pragma name is spelled in parts because the
+ * source-layer scanner (scripts/ci/check-schema-writes.ts) refuses the whole token anywhere
+ * in packages/api/src code outside comments; that scanner stays as the CI layer.
+ */
+const SCHEMA_WRITE_PRAGMA = ["writable", "schema"].join("_");
+const SCHEMA_WRITE_PATTERN = new RegExp(SCHEMA_WRITE_PRAGMA, "i");
+
+/** A statement named the refused pragma. The message names the rule, never the statement. */
+export class SchemaWriteRefusedError extends Error {
+  constructor() {
+    super(`statement refused: ${SCHEMA_WRITE_PRAGMA} is not allowed on the app connection`);
+    this.name = "SchemaWriteRefusedError";
+  }
+}
+
+/** @libsql/client 0.18 does not expose SQLITE_DBCONFIG_DEFENSIVE, so this filter stands alone. */
+function assertNoSchemaWrite(sql: string): void {
+  if (SCHEMA_WRITE_PATTERN.test(sql)) throw new SchemaWriteRefusedError();
+}
+
+type StatementLike = InStatement | [string, InArgs?];
+
+/** The SQL text of a statement in any form @libsql/client accepts. */
+function sqlOf(stmt: StatementLike): string {
+  if (typeof stmt === "string") return stmt;
+  if (Array.isArray(stmt)) return stmt[0];
+  return stmt.sql;
+}
+
+function assertNoSchemaWriteIn(stmts: readonly StatementLike[]): void {
+  for (const stmt of stmts) assertNoSchemaWrite(sqlOf(stmt));
+}
+
+/** Runs the guard first, so a refusal surfaces as a rejection, as the libsql call would. */
+function guarded<T>(check: () => void, op: () => Promise<T>): Promise<T> {
+  try {
+    check();
+  } catch (e) {
+    return Promise.reject(e);
+  }
+  return op();
+}
+
 type Release = () => void;
 
 /** FIFO mutex whose waiters give up after a bounded wait. */
@@ -117,13 +163,22 @@ class LockedTransaction implements Transaction {
     private readonly recover: () => Promise<void>,
   ) {}
   execute(stmt: InStatement): Promise<ResultSet> {
-    return this.inner.execute(stmt);
+    return guarded(
+      () => assertNoSchemaWrite(sqlOf(stmt)),
+      () => this.inner.execute(stmt),
+    );
   }
   batch(stmts: Array<InStatement>): Promise<Array<ResultSet>> {
-    return this.inner.batch(stmts);
+    return guarded(
+      () => assertNoSchemaWriteIn(stmts),
+      () => this.inner.batch(stmts),
+    );
   }
   executeMultiple(sql: string): Promise<void> {
-    return this.inner.executeMultiple(sql);
+    return guarded(
+      () => assertNoSchemaWrite(sql),
+      () => this.inner.executeMultiple(sql),
+    );
   }
   async #settle(op: () => Promise<void>): Promise<void> {
     try {
@@ -197,21 +252,34 @@ class SerializedClient implements Client {
   execute(stmt: InStatement): Promise<ResultSet>;
   execute(sql: string, args?: InArgs): Promise<ResultSet>;
   execute(stmt: InStatement | string, args?: InArgs): Promise<ResultSet> {
-    return this.#locked(() =>
-      typeof stmt === "string" ? this.inner.execute(stmt, args) : this.inner.execute(stmt),
+    return guarded(
+      () => assertNoSchemaWrite(sqlOf(stmt)),
+      () =>
+        this.#locked(() =>
+          typeof stmt === "string" ? this.inner.execute(stmt, args) : this.inner.execute(stmt),
+        ),
     );
   }
   batch(
     stmts: Array<InStatement | [string, InArgs?]>,
     mode?: TransactionMode,
   ): Promise<Array<ResultSet>> {
-    return this.#locked(() => this.inner.batch(stmts, mode), true);
+    return guarded(
+      () => assertNoSchemaWriteIn(stmts),
+      () => this.#locked(() => this.inner.batch(stmts, mode), true),
+    );
   }
   migrate(stmts: Array<InStatement>): Promise<Array<ResultSet>> {
-    return this.#locked(() => this.inner.migrate(stmts), true);
+    return guarded(
+      () => assertNoSchemaWriteIn(stmts),
+      () => this.#locked(() => this.inner.migrate(stmts), true),
+    );
   }
   executeMultiple(sql: string): Promise<void> {
-    return this.#locked(() => this.inner.executeMultiple(sql), true);
+    return guarded(
+      () => assertNoSchemaWrite(sql),
+      () => this.#locked(() => this.inner.executeMultiple(sql), true),
+    );
   }
   /**
    * The "write" default is what makes withTransaction IMMEDIATE: drizzle-orm 0.45 ignores

@@ -153,17 +153,24 @@ describe("storage: SEC-006, SEC-010", () => {
   );
 
   it("a trigger body rewritten through writable_schema makes the check refuse", async () => {
-    const db = await migratedDb();
+    // The app connection refuses writable_schema (#189), so the tamper comes out of band:
+    // a raw libsql client with the key, on the same file.
+    const file = tempDbFile();
+    const db = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    await runMigrations(db, MIGRATIONS);
+    const raw = createClient({ url: `file:${file}`, encryptionKey: TEST_DB_KEY });
     try {
-      await db.$client.execute("PRAGMA writable_schema = ON");
-      await db.$client.execute(
+      await raw.execute("PRAGMA writable_schema = ON");
+      await raw.execute(
         "UPDATE sqlite_master SET sql = 'CREATE TRIGGER audit_event_no_delete BEFORE DELETE ON audit_event BEGIN SELECT 1; END' WHERE type = 'trigger' AND name = 'audit_event_no_delete'",
       );
-      await db.$client.execute("PRAGMA writable_schema = OFF");
+      await raw.execute("PRAGMA writable_schema = OFF");
+      raw.close();
       const err = await checkAuditTriggers(db).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(AuditTriggerMissingError);
       expect((err as AuditTriggerMissingError).altered).toEqual(["audit_event_no_delete"]);
     } finally {
+      if (!raw.closed) raw.close();
       db.$client.close();
     }
   });

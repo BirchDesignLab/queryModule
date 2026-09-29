@@ -12,9 +12,11 @@ import {
   openDatabase,
   REQUIRED_PRAGMAS,
   readPragmas,
+  SchemaWriteRefusedError,
 } from "../src/db/client";
+import { checkAuditTriggers, checkQueryTriggers, runMigrations } from "../src/db/migrate";
 import { withTransaction } from "../src/db/tx";
-import { TEST_DB_KEY, tempDbFile } from "./helpers/db";
+import { openTempDatabase, TEST_DB_KEY, tempDbFile } from "./helpers/db";
 
 const WRONG_KEY = "wrong-key-wrong-key-wrong-key-wrong";
 
@@ -578,5 +580,84 @@ describe("SEC-006 encrypted database", () => {
       if (relative(root, f).split(sep)[0] === "db") continue;
       expect(readFileSync(f, "utf8"), f).not.toMatch(/\.transaction\(/);
     }
+  });
+});
+
+describe("SEC-013 no writable_schema on the app connection (#189)", () => {
+  const MIGRATIONS = join(import.meta.dirname, "../drizzle");
+  async function migrated(): Promise<Db> {
+    const db = await openTempDatabase();
+    await runMigrations(db, MIGRATIONS);
+    return db;
+  }
+
+  it.each([
+    "PRAGMA writable_schema=ON",
+    "pragma WRITABLE_SCHEMA = 1",
+    "PRAGMA main.writable_schema=1",
+    "SELECT * FROM pragma_writable_schema",
+  ])("refuses %s", async (sql) => {
+    const db = await migrated();
+    await expect(db.$client.execute(sql)).rejects.toThrow(SchemaWriteRefusedError);
+    await expect(db.$client.execute({ sql, args: [] })).rejects.toThrow(SchemaWriteRefusedError);
+  });
+
+  it("refuses it inside batch and executeMultiple", async () => {
+    const db = await migrated();
+    await expect(
+      db.$client.batch(["SELECT 1", "PRAGMA writable_schema=ON"], "write"),
+    ).rejects.toThrow(SchemaWriteRefusedError);
+    await expect(
+      db.$client.batch(["SELECT 1", ["PRAGMA writable_schema=ON"]], "write"),
+    ).rejects.toThrow(SchemaWriteRefusedError);
+    await expect(
+      db.$client.executeMultiple("SELECT 1; PRAGMA writable_schema=ON;"),
+    ).rejects.toThrow(SchemaWriteRefusedError);
+  });
+
+  it("refuses it in migrate and on every statement path of a transaction", async () => {
+    const db = await migrated();
+    await expect(
+      db.$client.migrate([{ sql: "PRAGMA writable_schema=ON", args: [] }]),
+    ).rejects.toThrow(SchemaWriteRefusedError);
+    const tx = await db.$client.transaction("write");
+    try {
+      await expect(tx.execute("PRAGMA writable_schema=ON")).rejects.toThrow(
+        SchemaWriteRefusedError,
+      );
+      await expect(tx.batch([{ sql: "PRAGMA writable_schema=ON", args: [] }])).rejects.toThrow(
+        SchemaWriteRefusedError,
+      );
+      await expect(tx.executeMultiple("PRAGMA writable_schema=ON;")).rejects.toThrow(
+        SchemaWriteRefusedError,
+      );
+    } finally {
+      await tx.rollback();
+    }
+    expect((await db.$client.execute("SELECT 1 AS one")).rows[0]?.one).toBe(1);
+  });
+
+  it("names the rule, never the statement", async () => {
+    const db = await migrated();
+    const err = await db.$client
+      .execute("PRAGMA writable_schema = ON /* marker-xyz */")
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SchemaWriteRefusedError);
+    expect((err as Error).message).toMatch(/writable_schema/);
+    expect((err as Error).message).not.toContain("marker-xyz");
+    expect((err as Error).message).not.toContain("PRAGMA");
+  });
+
+  it("SQLite refuses a sqlite_master write without writable_schema", async () => {
+    const db = await migrated();
+    await expect(
+      db.$client.execute("UPDATE sqlite_master SET sql = sql WHERE name = 'audit_event_no_update'"),
+    ).rejects.toThrow(/may not be modified|not authorized|readonly/i);
+  });
+
+  it("reads of sqlite_master, migrations and the trigger checks still work", async () => {
+    const db = await migrated();
+    await expect(checkAuditTriggers(db)).resolves.toBeUndefined();
+    await expect(checkQueryTriggers(db)).resolves.toBeUndefined();
   });
 });
