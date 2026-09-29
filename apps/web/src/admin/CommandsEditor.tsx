@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import {
   asObjects,
@@ -11,10 +12,11 @@ import {
   useDraftSetters,
   useFocusRequest,
   useGeneration,
+  useItemIssues,
 } from "./controls.js";
 import type { JsonObject, PathSegment } from "./draft.js";
 import { OtherKeys } from "./GenericForm.js";
-import { type FieldInfo, fieldInfo, LiteralControl, type ValueKind } from "./RulesEditor.js";
+import { type FieldInfo, fieldInfo, LiteralControl } from "./RulesEditor.js";
 
 /**
  * Task 31 part 2 PR3a (#355): terminal commands (FR-050 to FR-055: code, query type, ordered
@@ -29,10 +31,6 @@ const positionField = (p: unknown): string =>
   typeof p === "string" ? p : typeof p === "object" && p !== null ? str((p as Obj).field) : "";
 const isRest = (p: unknown): boolean =>
   typeof p === "object" && p !== null && (p as Obj).rest === true;
-
-/** A preset value of the field's kind, visible in its control (no hidden blank literal). */
-const blankOf = (kind: ValueKind): string | number | boolean =>
-  kind === "number" ? 0 : kind === "boolean" ? false : "";
 
 export function CommandsEditor({
   value,
@@ -61,8 +59,7 @@ export function CommandsEditor({
         const type = types.find((q) => q.code === cmd.queryType);
         const info = fieldInfo(type ?? {});
         return (
-          <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
-            <legend>{t("admin.config.command.legend", { code })}</legend>
+          <CommandBox key={`${owner(i)}:${gen}`} path={cmdPath} idPrefix={idPrefix} code={code}>
             <TextControl
               idPrefix={idPrefix}
               path={[...cmdPath, "code"]}
@@ -106,7 +103,7 @@ export function CommandsEditor({
                 focus([owner(Math.min(at, next.length - 1)), "first"], [listOwner, "add"]);
               }}
             />
-          </fieldset>
+          </CommandBox>
         );
       })}
       <button
@@ -143,9 +140,15 @@ function PositionsEditor({
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   const used = new Set(positions.map(positionField));
+  const listIssues = useItemIssues(
+    idPrefix,
+    path,
+    positions.map((_, j) => String(j)),
+  );
   return (
-    <fieldset>
+    <fieldset aria-describedby={listIssues.describedBy}>
       <legend>{t("admin.config.command.positions")}</legend>
+      {listIssues.messages}
       {positions.map((pos, i) => {
         const n = i + 1;
         const field = positionField(pos);
@@ -219,6 +222,11 @@ function PositionsEditor({
   );
 }
 
+/**
+ * A command's presets (field -> literal). A new preset is a pending row that writes nothing until
+ * a value is entered (critic I4: no invented "", 0 or false). A row offers only fields that are
+ * neither positioned nor preset elsewhere (critic I3).
+ */
 function PresetsEditor({
   command,
   path,
@@ -233,6 +241,8 @@ function PresetsEditor({
   const t = useT();
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
+  const [gen, bump] = useGeneration();
+  const [pending, setPending] = useState<string | null>(null);
   const presetsPath = [...path, "presets"];
   const presets =
     typeof command.presets === "object" && command.presets !== null ? (command.presets as Obj) : {};
@@ -240,29 +250,47 @@ function PresetsEditor({
   const positioned = new Set(
     (Array.isArray(command.positions) ? command.positions : []).map(positionField),
   );
+  const free = (own: string | null) =>
+    info.keys.filter((k) => k === own || (!positioned.has(k) && !(k in presets) && k !== pending));
   const owner = (i: number) => controlId(idPrefix, [...presetsPath, i]);
   const listOwner = controlId(idPrefix, presetsPath);
+  const issues = useItemIssues(
+    idPrefix,
+    presetsPath,
+    entries.map(([k]) => k),
+  );
   /** Presets with one entry replaced or dropped, key order kept; none left removes the key. */
   const write = (at: number, entry: [string, unknown] | null) => {
     const next = entries.flatMap((e, j) => (j !== at ? [e] : entry === null ? [] : [entry]));
     setPath(presetsPath, next.length === 0 ? undefined : Object.fromEntries(next));
   };
+  const canAdd = pending === null && free(null).length > 0;
   return (
-    <fieldset>
+    <fieldset aria-describedby={issues.describedBy}>
       <legend>{t("admin.config.command.presets")}</legend>
+      {issues.messages}
       {entries.map(([key, value], i) => {
         const n = i + 1;
         return (
-          <fieldset key={owner(i)} className="qm-admin__item">
+          <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
             <legend>{t("admin.config.command.preset", { n })}</legend>
             <SelectControl
               idPrefix={idPrefix}
               path={[...presetsPath, `$key${i}`]}
               label={t("admin.config.condition.field")}
               value={key}
-              options={info.keys}
+              options={free(key)}
               owner={owner(i)}
-              onValue={(next) => write(i, [next ?? "", value])}
+              onValue={(next) => {
+                const to = next ?? "";
+                if (info.kind(to) === info.kind(key)) write(i, [to, value]);
+                else {
+                  // A value of another kind does not carry over: the row becomes pending.
+                  bump();
+                  write(i, null);
+                  setPending(to);
+                }
+              }}
             />
             <LiteralControl
               idPrefix={idPrefix}
@@ -279,6 +307,7 @@ function PresetsEditor({
               movable={false}
               removeLabel={t("admin.config.remove")}
               onRemove={(at) => {
+                bump();
                 write(at, null);
                 focus([owner(Math.min(at, entries.length - 2)), "first"], [listOwner, "add"]);
               }}
@@ -286,20 +315,143 @@ function PresetsEditor({
           </fieldset>
         );
       })}
+      {pending !== null && (
+        <PendingPreset
+          field={pending}
+          options={free(pending)}
+          n={entries.length + 1}
+          info={info}
+          owner={owner(entries.length)}
+          onField={setPending}
+          onValue={(v) => {
+            setPending(null);
+            setPath(presetsPath, { ...presets, [pending]: v });
+          }}
+          onRemove={() => {
+            setPending(null);
+            focus([listOwner, "add"]);
+          }}
+        />
+      )}
       <button
         type="button"
         className="qm-button"
         data-owner={listOwner}
         data-role="add"
+        disabled={!canAdd}
         onClick={() => {
-          const key = info.keys.find((k) => !positioned.has(k) && !(k in presets));
+          const key = free(null)[0];
           if (key === undefined) return;
-          setPath(presetsPath, { ...presets, [key]: blankOf(info.kind(key)) });
+          setPending(key);
           focus([owner(entries.length), "first"]);
         }}
       >
         {t("admin.config.command.addPreset")}
       </button>
+    </fieldset>
+  );
+}
+
+/** A preset row not yet in the draft: its first non-blank value commits it. */
+function PendingPreset({
+  field,
+  options,
+  n,
+  info,
+  owner,
+  onField,
+  onValue,
+  onRemove,
+}: {
+  field: string;
+  options: readonly string[];
+  n: number;
+  info: FieldInfo;
+  owner: string;
+  onField(field: string): void;
+  onValue(value: string | number | boolean): void;
+  onRemove(): void;
+}) {
+  const t = useT();
+  const kind = info.kind(field);
+  const fieldId = `${owner}-pending-field`;
+  const valueId = `${owner}-pending-value`;
+  return (
+    <fieldset className="qm-admin__item">
+      <legend>{t("admin.config.command.preset", { n })}</legend>
+      <div>
+        <label htmlFor={fieldId}>{t("admin.config.condition.field")}</label>{" "}
+        <select
+          id={fieldId}
+          data-owner={owner}
+          data-role="first"
+          value={field}
+          onChange={(e) => onField(e.target.value)}
+        >
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={valueId}>{t("admin.config.condition.value")}</label>{" "}
+        {kind === "boolean" ? (
+          <select
+            id={valueId}
+            value=""
+            onChange={(e) => {
+              if (e.target.value !== "") onValue(e.target.value === "true");
+            }}
+          >
+            <option value="">{t("admin.config.none")}</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        ) : (
+          <input
+            id={valueId}
+            type="text"
+            inputMode={kind === "number" ? "decimal" : undefined}
+            defaultValue=""
+            onChange={(e) => {
+              const text = e.target.value;
+              if (text.trim() === "") return;
+              if (kind !== "number") onValue(text);
+              else if (Number.isFinite(Number(text))) onValue(Number(text));
+            }}
+          />
+        )}
+      </div>
+      <div className="qm-admin__item-buttons">
+        <button type="button" className="qm-button" onClick={onRemove}>
+          {`${t("admin.config.remove")} ${t("admin.config.command.presetName", { n })}`}
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+/** One command's fieldset: its own issues (a missing key, a union error) (critic I2). */
+function CommandBox({
+  path,
+  idPrefix,
+  code,
+  children,
+}: {
+  path: readonly PathSegment[];
+  idPrefix: string;
+  code: string;
+  children: React.ReactNode;
+}) {
+  const t = useT();
+  const issues = useItemIssues(idPrefix, path, [...COMMAND_KEYS]);
+  return (
+    <fieldset className="qm-admin__item" aria-describedby={issues.describedBy}>
+      <legend>{t("admin.config.command.legend", { code })}</legend>
+      {issues.messages}
+      {children}
     </fieldset>
   );
 }

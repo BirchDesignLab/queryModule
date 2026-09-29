@@ -101,23 +101,52 @@ describe("commands editor (Task 31 part 2, FR-050, FR-051, FR-060, UX-004)", () 
     expect(command(t, "PRO").positions[2]).toEqual({ field: "make", rest: true });
   });
 
-  it("adds, edits, renames and removes a preset", async () => {
+  it("critic I3/I4: a new preset writes nothing until a value is entered; rename skips taken keys", async () => {
     const t = await openBuilder();
     await openSection(t, "commands");
-    await t.user.click(within(box("NAM")).getByRole("button", { name: "Add preset" }));
-    // The first field of the type that is neither positioned nor preset.
-    expect(command(t, "NAM").presets).toEqual({ state: "" });
-    await fill(t, within(group(box("NAM"), "Preset 1")).getByLabelText("Value"), "TX");
-    expect(command(t, "NAM").presets).toEqual({ state: "TX" });
+    await t.user.click(within(box("VEH")).getByRole("button", { name: "Add preset" }));
+    // Pending: the first free field, no value written yet.
+    expect(command(t, "VEH").presets).toBeUndefined();
+    const field = within(group(box("VEH"), "Preset 1")).getByLabelText("Field");
+    expect(field).toHaveValue("plateType");
+    expect(field).toHaveFocus();
+    const options = within(field)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(options).not.toContain("plate");
+    await fill(t, within(group(box("VEH"), "Preset 1")).getByLabelText("Value"), "PC");
+    expect(command(t, "VEH").presets).toEqual({ plateType: "PC" });
     await t.user.selectOptions(
-      within(group(box("NAM"), "Preset 1")).getByLabelText("Field"),
-      "race",
+      within(group(box("VEH"), "Preset 1")).getByLabelText("Field"),
+      "plateColor",
     );
-    expect(command(t, "NAM").presets).toEqual({ race: "TX" });
+    expect(command(t, "VEH").presets).toEqual({ plateColor: "PC" });
     await t.user.click(
-      within(group(box("NAM"), "Preset 1")).getByRole("button", { name: "Remove preset 1" }),
+      within(group(box("VEH"), "Preset 1")).getByRole("button", { name: "Remove preset 1" }),
     );
-    expect(command(t, "NAM").presets).toBeUndefined();
+    expect(command(t, "VEH").presets).toBeUndefined();
+  });
+
+  it("critic I4: removing a pending preset writes nothing", async () => {
+    const t = await openBuilder();
+    await openSection(t, "commands");
+    await t.user.click(within(box("VEH")).getByRole("button", { name: "Add preset" }));
+    await t.user.click(
+      within(group(box("VEH"), "Preset 1")).getByRole("button", { name: "Remove preset 1" }),
+    );
+    expect(command(t, "VEH").presets).toBeUndefined();
+    expect(within(box("VEH")).getByRole("button", { name: "Add preset" })).toHaveFocus();
+  });
+
+  it("critic I1: a command without positions shows why on its positions", async () => {
+    const t = await openBuilder();
+    await openSection(t, "commands");
+    await t.user.click(screen.getByRole("button", { name: "Add command" }));
+    // A valid code, so the semantic checks run; PER has required fields and no positions yet.
+    await fill(t, within(box("")).getByLabelText("Code"), "ZZ");
+    await t.user.selectOptions(within(box("ZZ")).getByLabelText("Query type"), "PER");
+    const positions = group(box("ZZ"), "Positions");
+    await waitFor(() => expect(positions).toHaveAccessibleDescription(/^Error:/));
   });
 
   it("adds a command and focuses its code; a code with the delimiter shows its diagnostic", async () => {
