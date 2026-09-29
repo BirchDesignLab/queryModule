@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
@@ -43,19 +43,42 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(draftDoc(t)?.terminal).toEqual({ delimiter: "," });
   });
 
-  it("labels server-only sections and disables publish and history with a reason", async () => {
-    await openBuilder();
+  it("labels server-only sections; publish and history are aria-disabled, focusable, with one reason", async () => {
+    const t = await openBuilder();
     expect(
       screen.getByText(/server settings: available after the config store lands/i),
     ).toBeInTheDocument();
     const publish = screen.getByRole("button", { name: "Publish" });
     const history = screen.getByRole("button", { name: "History" });
-    expect(publish).toBeDisabled();
-    expect(history).toBeDisabled();
-    const reason = document.getElementById(publish.getAttribute("aria-describedby") ?? "");
-    expect(reason).toHaveTextContent("Publish and history arrive with the config store");
-    expect(reason).toHaveAttribute("tabindex", "0");
+    for (const b of [publish, history]) {
+      expect(b).not.toBeDisabled();
+      expect(b).toHaveAttribute("aria-disabled", "true");
+      expect(b).toHaveAccessibleDescription("Publish and history arrive with the config store.");
+    }
     expect(history.getAttribute("aria-describedby")).toBe(publish.getAttribute("aria-describedby"));
+    const reason = document.getElementById(publish.getAttribute("aria-describedby") ?? "");
+    expect(reason).not.toHaveAttribute("tabindex");
+    const before = JSON.stringify(draftDoc(t));
+    await t.user.click(publish);
+    await t.user.click(history);
+    expect(JSON.stringify(draftDoc(t))).toBe(before);
+  });
+
+  it("the toolbar follows the section title and shows a draft status that is not a live region", async () => {
+    const t = await openBuilder();
+    const heading = screen.getByRole("heading", { name: "Site configuration", level: 2 });
+    const toolbar = heading.nextElementSibling as HTMLElement;
+    expect(toolbar).toHaveClass("qm-builder__toolbar");
+    const status = within(toolbar).getByTestId("draft-status");
+    expect(status).toHaveTextContent("Draft: no changes");
+    expect(status).not.toHaveAttribute("aria-live");
+    expect(status).not.toHaveAttribute("role");
+    await t.user.click(await screen.findByText("terminal"));
+    const input = await screen.findByLabelText("terminal.delimiter");
+    await t.user.clear(input);
+    await t.user.type(input, ",");
+    expect(status).toHaveTextContent("Draft: unpublished changes, kept in this tab only");
+    expect(status).not.toHaveTextContent(/saved|version/i);
   });
 
   it("the raw JSON tab shows the draft and a valid edit updates it", async () => {

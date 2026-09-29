@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -35,8 +36,18 @@ export function ConfigBuilder() {
     if (config !== undefined && !seeded)
       configDraftStore(services).getState().start(docFromClient(config));
   }, [config, services, seeded]);
-  if (doc === null && failed) return <p role="alert">{t("admin.config.loadError")}</p>;
-  if (doc === null) return <p aria-busy="true">{t("admin.config.loading")}</p>;
+  if (doc === null && failed)
+    return (
+      <p className="qm-builder__body" role="alert">
+        {t("admin.config.loadError")}
+      </p>
+    );
+  if (doc === null)
+    return (
+      <p className="qm-builder__body" aria-busy="true">
+        {t("admin.config.loading")}
+      </p>
+    );
   return <BuilderBody doc={doc} />;
 }
 
@@ -51,6 +62,21 @@ function useConfigLoadFailed(): boolean {
     subscribe,
     () => queryClient.getQueryState(["config"])?.status === "error",
   );
+}
+
+/**
+ * Whether the draft differs from the live config (design lead 09-29-26: no count and no "saved"
+ * before the config store, AC2). Label overlay entries count as changes.
+ */
+function useDraftChanged(doc: JsonObject, labels: Readonly<Record<string, object>>): boolean {
+  const live = useCachedClientConfig();
+  const liveText = useMemo(
+    () => (live === undefined ? null : JSON.stringify(docFromClient(live))),
+    [live],
+  );
+  const docText = useMemo(() => JSON.stringify(doc), [doc]);
+  const labelled = Object.values(labels).some((l) => Object.keys(l).length > 0);
+  return labelled || (liveText !== null && docText !== liveText);
 }
 
 function BuilderBody({ doc }: { doc: JsonObject }) {
@@ -101,34 +127,19 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   const reasonId = `${uid}-publish-reason`;
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
+  const changed = useDraftChanged(doc, labels);
   return (
     <ChecksContext.Provider value={checks}>
-      <div>
-        <p>{t("admin.config.serverOnly")}</p>
-        <div data-testid="draft-summary" aria-live="polite">
-          {raw.parseError !== null ? (
-            <p>{t("admin.config.raw.notParsed")}</p>
-          ) : checks.status === "error" ? (
-            <p>{t("admin.config.raw.bundleError")}</p>
-          ) : checks.status === "loading" ? (
-            <p>{t("admin.config.raw.checksLoading")}</p>
-          ) : (
-            <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
-          )}
-        </div>
-        <div>
-          <button type="button" className="qm-button" disabled aria-describedby={reasonId}>
-            {t("admin.config.publish")}
-          </button>{" "}
-          <button type="button" className="qm-button" disabled aria-describedby={reasonId}>
-            {t("admin.config.history")}
-          </button>
-          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the disabled controls cannot take focus, so their reason text must (checker ruling 09-29-26) */}
-          <p id={reasonId} tabIndex={0}>
-            {t("admin.config.publishDisabled")}
-          </p>
-        </div>
-        <div role="tablist" aria-label={t("admin.config.tabsLabel")}>
+      {/* The section h2 sits just before this bar and reads as its title (design target, A2). */}
+      <div className="qm-builder__toolbar">
+        <p className="qm-builder__status" data-testid="draft-status">
+          {t(changed ? "admin.config.status.changed" : "admin.config.status.unchanged")}
+        </p>
+        <div
+          role="tablist"
+          aria-label={t("admin.config.tabsLabel")}
+          className="qm-seg qm-builder__views"
+        >
           {TABS.map((id) => (
             <button
               key={id}
@@ -136,7 +147,6 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
                 tabRefs.current[id] = el;
               }}
               type="button"
-              className="qm-button"
               role="tab"
               id={`${uid}-tab-${id}`}
               aria-selected={tab === id}
@@ -148,6 +158,40 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
               {t(`admin.config.tab.${id}`)}
             </button>
           ))}
+        </div>
+        {/* Spec 6.2: aria-disabled keeps both focusable, and one visible reason describes both. */}
+        <button
+          type="button"
+          className="qm-button qm-button--secondary"
+          aria-disabled="true"
+          aria-describedby={reasonId}
+        >
+          {t("admin.config.history")}
+        </button>
+        <button
+          type="button"
+          className="qm-button"
+          aria-disabled="true"
+          aria-describedby={reasonId}
+        >
+          {t("admin.config.publish")}
+        </button>
+        <p className="qm-builder__reason" id={reasonId}>
+          {t("admin.config.publishDisabled")}
+        </p>
+      </div>
+      <div className="qm-builder__body">
+        <p>{t("admin.config.serverOnly")}</p>
+        <div data-testid="draft-summary" aria-live="polite">
+          {raw.parseError !== null ? (
+            <p>{t("admin.config.raw.notParsed")}</p>
+          ) : checks.status === "error" ? (
+            <p>{t("admin.config.raw.bundleError")}</p>
+          ) : checks.status === "loading" ? (
+            <p>{t("admin.config.raw.checksLoading")}</p>
+          ) : (
+            <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
+          )}
         </div>
         <div className="qm-admin__workspace">
           <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${tab}`}>

@@ -332,6 +332,57 @@ main[tabindex="-1"]:focus {
 
 /* Admin config builder (Task 32): the builder and the dispatcher preview side by side when there
    is room, stacked otherwise. */
+/* Builder toolbar (A2): the section h2 and the bar share one row, which wraps on narrow widths;
+   everything after the bar takes a full row. */
+.qm-builder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-3);
+}
+
+.qm-builder > h2 {
+  margin: 0;
+  font-size: var(--qm-type-size-xl);
+  font-weight: 600;
+}
+
+.qm-builder__toolbar {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  min-inline-size: 0;
+}
+
+.qm-builder__status {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* Form or JSON: WAI-ARIA tabs drawn as the segmented control (design lead 09-29-26). */
+.qm-builder__views > button[aria-selected="true"] {
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
+  font-weight: 600;
+}
+
+.qm-builder__reason {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-xs);
+  text-align: end;
+}
+
+.qm-builder__body {
+  flex-basis: 100%;
+  min-inline-size: 0;
+}
+
 .qm-admin__workspace {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 48ch), 1fr));

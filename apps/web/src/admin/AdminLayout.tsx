@@ -92,7 +92,7 @@ export function SectionHeading({ children }: { children: string }) {
 export function AdminConfigPage() {
   const t = useT();
   return (
-    <section>
+    <section className="qm-builder">
       <SectionHeading>{t("admin.config.title")}</SectionHeading>
       <ConfigBuilder />
     </section>

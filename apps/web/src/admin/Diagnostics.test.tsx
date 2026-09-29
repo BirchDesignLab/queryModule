@@ -83,17 +83,15 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
     expect(area).not.toHaveFocus();
   });
 
-  it("publish and history are disabled with reason text reachable by keyboard", async () => {
+  it("publish and history stay in the tab order, described by their reason", async () => {
     const t = await openBuilder();
     const publish = screen.getByRole("button", { name: "Publish" });
-    expect(publish).toBeDisabled();
-    expect(screen.getByRole("button", { name: "History" })).toBeDisabled();
-    const reason = document.getElementById(publish.getAttribute("aria-describedby") ?? "");
-    expect(reason).toHaveTextContent("Publish and history arrive with the config store");
-    // disabled buttons are skipped, so tabbing lands on the reason text
-    const tab = screen.getByRole("tab", { name: "Form" });
-    tab.focus();
-    await t.user.tab({ shift: true });
-    expect(reason).toHaveFocus();
+    const history = screen.getByRole("button", { name: "History" });
+    history.focus();
+    await t.user.tab();
+    expect(publish).toHaveFocus();
+    expect(publish).toHaveAccessibleDescription(
+      "Publish and history arrive with the config store.",
+    );
   });
 });
