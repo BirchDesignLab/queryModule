@@ -76,18 +76,29 @@ h1 {
   outline-offset: var(--qm-focus-ring-offset);
 }
 
+/* Headings, sections and the page that take focus for orientation are not controls: no ring around
+   them. Controls keep the ring, including on programmatic focus (E1). */
+:where(h1, h2, h3, h4, h5, h6, section, main)[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* Read-back data (plates, VINs, commands) is monospace so 0/O and 1/I differ. */
 [data-terminal] .qm-field__input {
   font-family: var(--qm-type-family-data);
 }
 
+/* The "Default" tag: a small condensed uppercase pill, not a placeholder or a disabled look. */
 .qm-field__tag {
   align-self: flex-start;
   padding: 0 var(--qm-space-2);
-  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-sm);
-  color: var(--qm-color-text-muted);
+  background: var(--qm-color-accent-subtle);
+  color: var(--qm-color-text-body);
+  font-family: var(--qm-type-family-label);
   font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .qm-checkbox {
@@ -190,7 +201,8 @@ h1 {
   background: var(--qm-color-accent-subtle);
 }
 
-.qm-button[aria-disabled="true"] {
+.qm-button[aria-disabled="true"],
+.qm-button:disabled {
   border: var(--qm-border-width) dashed var(--qm-color-border);
   background: transparent;
   color: var(--qm-color-text-muted);

@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { COLOR_TOKENS, type ThemeMode, tokenValue } from "@querymodule/tokens";
 import { expect, test } from "./fixtures.js";
 import { hexToRgb, seededUser, signIn } from "./helpers.js";
@@ -13,6 +13,10 @@ import { hexToRgb, seededUser, signIn } from "./helpers.js";
 // the fonts that load from the built app, control heights per persona (E1, density), the focus and
 // invalid styles together, and no horizontal overflow, on every screen at both viewports and in all
 // three themes. Set E2E_SCREENSHOT_DIR to also write a PNG per screen for review (not asserted).
+
+// Reduced motion: the tokens drop to 0 ms, so a screenshot or a computed style never catches a
+// colour mid-transition (a theme switch eases background-color over 120 ms).
+test.use({ reducedMotion: "reduce" });
 
 const MODES = ["day", "night", "redShift"] as const satisfies readonly ThemeMode[];
 const VIEWPORTS = [
@@ -80,7 +84,28 @@ async function capture(page: Page, name: string): Promise<void> {
   const dir = process.env.E2E_SCREENSHOT_DIR;
   if (dir === undefined || dir === "") return;
   mkdirSync(dir, { recursive: true });
+  await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: join(dir, `${name}.png`), fullPage: true });
+}
+
+/** A crop around one element (with a margin for its focus ring), for E1 review. */
+async function captureCrop(page: Page, target: Locator, name: string): Promise<void> {
+  const dir = process.env.E2E_SCREENSHOT_DIR;
+  if (dir === undefined || dir === "") return;
+  mkdirSync(dir, { recursive: true });
+  await page.evaluate(() => document.fonts.ready);
+  const box = await target.boundingBox();
+  if (box === null) return;
+  const m = 16;
+  await page.screenshot({
+    path: join(dir, `${name}.png`),
+    clip: {
+      x: Math.max(0, box.x - m),
+      y: Math.max(0, box.y - m),
+      width: box.width + 2 * m,
+      height: box.height + 2 * m,
+    },
+  });
 }
 
 test.describe("D0 tokens and fonts reach the browser", () => {
@@ -173,6 +198,7 @@ test.describe("D0.3 dispatcher density and E1 focus with invalid (1440x900)", ()
         expect(style.boxShadow).toContain("inset");
         expect(style.outlineColor).not.toBe(style.borderColor);
         expect(Math.round(style.height)).toBe(36);
+        await captureCrop(page, last, `e1-invalid-focused-${mode}`);
       });
     });
   }
@@ -236,11 +262,82 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
     });
   }
 
-  test("the muted check is live: the dispatch layout does show muted text (the Default tag)", async ({
+  test("the muted check is live: a .qm-tag in the dispatch layout is muted, the same tag in the officer layout is not", async ({
     page,
   }) => {
+    const probe = () =>
+      page.evaluate(() => {
+        const layout =
+          document.querySelector(".qm-layout--mobile-unit") ?? document.querySelector("main");
+        const tag = document.createElement("span");
+        tag.className = "qm-tag";
+        tag.textContent = "probe";
+        layout?.append(tag);
+        const color = getComputedStyle(tag).color;
+        tag.remove();
+        return color;
+      });
     await asUser(page, "dispatcher@example.test", "night", async () => {
-      expect(await textInColor(page, "main", rgb("night", "color.text.muted"))).toBeGreaterThan(0);
+      expect(await probe()).toBe(rgb("night", "color.text.muted"));
+    });
+    await asUser(page, "officer@example.test", "night", async () => {
+      expect(await probe()).toBe(rgb("night", "color.text.body"));
+    });
+  });
+});
+
+test.describe("D0 must-fixes from the design review (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: the primary button is the accent fill, on the login and the panel`, async ({
+      page,
+    }) => {
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+      await setTheme(page, mode);
+      const signInButton = page.getByRole("button", { name: "Sign in" });
+      await expect(signInButton).toHaveCSS("background-color", rgb(mode, "color.accent.fill"));
+      await expect(signInButton).toHaveCSS("color", rgb(mode, "color.accent.onFill"));
+      await asUser(page, "dispatcher@example.test", mode, async () => {
+        const submit = page.locator("main button[type=submit]");
+        await expect(submit).toHaveCSS("background-color", rgb(mode, "color.accent.fill"));
+        // The Default tag: an accent.subtle pill in uppercase, not a dashed outline.
+        const tag = page.locator("main .qm-field__tag").first();
+        await expect(tag).toHaveCSS("background-color", rgb(mode, "color.accent.subtle"));
+        await expect(tag).toHaveCSS("text-transform", "uppercase");
+        await expect(tag).toHaveCSS("border-top-style", "none");
+      });
+    });
+  }
+
+  test("headings that take focus draw no ring (login heading, admin section heading)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const signIn = page.getByRole("heading", { name: "Sign in" });
+    await expect(signIn).toBeFocused();
+    await expect(signIn).toHaveCSS("outline-style", "none");
+    await asUser(page, "admin@example.test", "night", async () => {
+      await page.goto("/admin/config");
+      const section = page.getByRole("heading", { name: "Site config" });
+      await expect(section).toBeFocused();
+      await expect(section).toHaveCSS("outline-style", "none");
+    });
+  });
+
+  test("an unavailable admin button (Publish, History) has the disabled look, not the primary fill", async ({
+    page,
+  }) => {
+    await asUser(page, "admin@example.test", "night", async () => {
+      await page.goto("/admin/config");
+      await expect(page.getByRole("heading", { name: "Site config" })).toBeVisible();
+      for (const name of ["Publish", "History"]) {
+        const button = page.getByRole("button", { name });
+        await expect(button, name).toHaveCSS("border-top-style", "dashed");
+        await expect(button, name).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+        await expect(button, name).toHaveCSS("color", rgb("night", "color.text.muted"));
+      }
     });
   });
 });

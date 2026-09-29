@@ -122,7 +122,8 @@ describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)"
     expect(disabled).toMatch(/border(-style)?:[^;]*dashed/);
     expect(disabled).toMatch(/color:\s*var\(--qm-color-text-muted\)/);
     expect(css).not.toMatch(/pointer-events:\s*none/);
-    expect(css).not.toMatch(/\.qm-button:disabled/);
+    // A native disabled button (the admin builder's Publish and History today) reads the same.
+    expect(decls(".qm-button:disabled")).toBe(disabled);
   });
 
   it("declares the secondary, ghost and danger button variants", () => {
@@ -167,5 +168,21 @@ describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)"
     for (const [, value] of css.matchAll(/transition:([^;]*);/g))
       expect(value, value).toMatch(/var\(--qm-motion-duration-/);
     expect(css).not.toMatch(/\d+ms/);
+  });
+
+  it("programmatic focus targets that are not controls draw no ring (tabindex -1 headings, sections, main)", () => {
+    // decls() splits on commas, and :where(...) holds some: match the rule text itself.
+    expect(css).toMatch(
+      /:where\(h1, h2, h3, h4, h5, h6, section, main\)\[tabindex="-1"\]:focus\s*\{[^}]*outline:\s*none/,
+    );
+  });
+
+  it("the Default tag is a small condensed uppercase pill on accent.subtle, no border", () => {
+    const body = decls(".qm-field__tag");
+    expect(body).toMatch(/background:\s*var\(--qm-color-accent-subtle\)/);
+    expect(body).toMatch(/color:\s*var\(--qm-color-text-body\)/);
+    expect(body).toMatch(/font-family:\s*var\(--qm-type-family-label\)/);
+    expect(body).toMatch(/text-transform:\s*uppercase/);
+    expect(body).not.toMatch(/border:/);
   });
 });
