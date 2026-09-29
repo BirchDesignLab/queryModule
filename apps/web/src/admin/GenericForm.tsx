@@ -84,7 +84,7 @@ function ArrayEditor({
             <NodeEditor value={item} path={itemPath} idPrefix={idPrefix} onChange={onChange} />
             <button
               type="button"
-              className="qm-button"
+              className="qm-button qm-button--danger"
               aria-label={`${t("admin.config.remove")} ${pathText(itemPath)}`}
               onClick={() => {
                 const next = items.filter((_, j) => j !== i);

@@ -8,7 +8,7 @@ import { type JsonObject, type PathSegment, toPointer } from "./draft.js";
 import { EditorSection, NodeEditor } from "./GenericForm.js";
 import { LabelOverlayEditor } from "./LabelOverlay.js";
 import { PicklistsEditor } from "./PicklistEditor.js";
-import { HIDDEN_KEYS, LABELS_ITEM, SelectionContext, topItem } from "./selection.js";
+import { HIDDEN_KEYS, isRootIssue, LABELS_ITEM, SelectionContext, topItem } from "./selection.js";
 import { QueryTypesEditor } from "./TypeEditors.js";
 
 /** The plain name of a top-level item (design lead 09-29-26); an unknown key shows as itself. */
@@ -41,12 +41,15 @@ export function FormTab({ doc }: { doc: JsonObject }) {
   const t = useT();
   const name = useItemName();
   const { pointer } = useContext(SelectionContext);
-  const rootIssues = useContext(ChecksContext).groups.get("");
+  // #388 and A-D1 critic: issues with no item of their own (the whole config, a missing
+  // top-level key, schemaVersion) are shown here, whatever item is selected.
+  const { issues } = useContext(ChecksContext);
+  const root = issues.filter((i) => isRootIssue(doc, i.pointer));
+  const rootIssues = root.length > 0 ? root : undefined;
   const rootId = `${idPrefix}-root-issues`;
   const top = pointer === null ? null : topItem(pointer);
   const shown = top !== null && (top === LABELS_ITEM || (top in doc && !HIDDEN_KEYS.has(top)));
   const value = top === null ? undefined : doc[top];
-  // #388: issues with no control of their own (a missing top-level key) describe the whole form.
   return (
     <fieldset
       className="qm-admin__form"
@@ -54,7 +57,12 @@ export function FormTab({ doc }: { doc: JsonObject }) {
       aria-describedby={rootIssues === undefined ? undefined : rootId}
       data-testid="form-tab"
     >
-      <IssueMessages id={rootId} issues={rootIssues} />
+      {rootIssues !== undefined && (
+        // The issue button focuses these messages (they have no control of their own).
+        <div className="qm-editor__root-issues" tabIndex={-1} data-root-issues="">
+          <IssueMessages id={rootId} issues={rootIssues} />
+        </div>
+      )}
       {!shown || top === null ? (
         <p>{t("admin.editor.empty")}</p>
       ) : top === LABELS_ITEM ? (

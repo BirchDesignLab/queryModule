@@ -250,6 +250,7 @@
   "admin.tree.clear": "Clear search",
   "admin.tree.types": "Query types",
   "admin.tree.site": "Site",
+  "admin.tree.root": "Whole configuration",
   "admin.tree.expand": "{name} sections and fields",
   "admin.editor.empty": "Select a query type, field or setting.",
   "admin.issues.error": "{count} error",

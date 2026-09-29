@@ -16,10 +16,17 @@ import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext, useDraftChecks } from "./checks.js";
 import { docFromClient, type JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
-import { parentPointer } from "./issues.js";
+import { hasPointer, parentPointer } from "./issues.js";
 import { BuilderPreview } from "./Preview.js";
 import { type RawState, RawTab } from "./RawTab.js";
-import { defaultPointer, issueWords, type Selection, SelectionContext } from "./selection.js";
+import {
+  defaultPointer,
+  isRootIssue,
+  issueWords,
+  type Selection,
+  SelectionContext,
+  topItem,
+} from "./selection.js";
 import { useCachedClientConfig } from "./use-cached-config.js";
 
 export { configDraftStore } from "./builder-store.js";
@@ -68,16 +75,45 @@ function useConfigLoadFailed(): boolean {
   );
 }
 
+/** A top-level item's own pointer ("/commands", "/queryTypes/2"), which the editor shows whole. */
+function isTopPointer(pointer: string): boolean {
+  const depth = pointer.split("/").length - 1;
+  return depth <= (topItem(pointer) === "queryTypes" ? 2 : 1);
+}
+
+/**
+ * A selection that no longer exists after a draft change (a raw edit, a removed item) moves to
+ * what does, so the tree and the editor show the same item (critic m4): a type index past the
+ * end goes to the last type, anything else to its nearest existing parent.
+ */
+function existingPointer(doc: JsonObject, pointer: string): string | null {
+  if (pointer.startsWith("#") || hasPointer(doc, pointer)) return pointer;
+  const types = Array.isArray(doc.queryTypes) ? doc.queryTypes.length : 0;
+  const m = /^\/queryTypes\/([0-9]+)/.exec(pointer);
+  if (m !== null && types > 0 && Number(m[1]) >= types) return `/queryTypes/${types - 1}`;
+  for (let p = parentPointer(pointer); p !== null && p !== ""; p = parentPointer(p))
+    if (hasPointer(doc, p) && !isTopArray(p)) return p;
+  return null;
+}
+
+/** "/queryTypes" itself is not an item the editor can show; its elements are. */
+const isTopArray = (pointer: string) => pointer === "/queryTypes";
+
 /**
  * Marks the selected item in the editor and scrolls to it (A-D1 A2); for the issue button, also
  * focuses the issue's control. The mark is a DOM attribute, not React state, so memoized rows do
  * not re-render on every selection.
  */
-function useMarkSelected(panel: React.RefObject<HTMLDivElement | null>, selection: Selection) {
+function useMarkSelected(
+  panel: React.RefObject<HTMLDivElement | null>,
+  selection: Selection,
+  tab: TabId,
+) {
   useEffect(() => {
     const root = panel.current;
     const pointer = selection.pointer;
-    if (root === null || pointer === null) return;
+    // The Raw JSON view has no items; returning to the form marks and scrolls again (critic m7).
+    if (root === null || pointer === null || tab !== "form") return;
     for (const el of root.querySelectorAll("[data-selected]")) el.removeAttribute("data-selected");
     const focus = selection.focus;
     const find = (p: string) => root.querySelector<HTMLElement>(`[data-path="${CSS.escape(p)}"]`);
@@ -101,10 +137,14 @@ function useMarkSelected(panel: React.RefObject<HTMLDivElement | null>, selectio
       return el === null ? null : { el, message };
     };
     const apply = (el: HTMLElement, message: Element | null | undefined) => {
-      el.setAttribute("data-selected", "true");
+      // The editor shows only the selected top-level item, so marking that item would tint the
+      // whole pane: only a part inside it (a section, a field) is marked (critic m6).
+      if (!isTopPointer(pointer)) el.setAttribute("data-selected", "true");
       const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? true;
       el.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
-      if (message?.id) {
+      const rootMessages = message?.closest<HTMLElement>("[data-root-issues]");
+      if (rootMessages) rootMessages.focus();
+      else if (message?.id) {
         // The control the issue's message describes, or the first control of the item it
         // describes (an item-level issue).
         const described = root.querySelector<HTMLElement>(
@@ -141,7 +181,7 @@ function useMarkSelected(panel: React.RefObject<HTMLDivElement | null>, selectio
     };
     observer.observe(root, { childList: true, subtree: true });
     return stop;
-  }, [panel, selection]);
+  }, [panel, selection, tab]);
 }
 
 /**
@@ -212,13 +252,19 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   // Errors outrank warnings: the button goes to the first error, else the first warning.
   const firstIssue = checks.issues.find((i) => i.level === "error") ?? checks.issues[0];
   const panelRef = useRef<HTMLDivElement>(null);
-  useMarkSelected(panelRef, selection);
+  useMarkSelected(panelRef, selection, tab);
   // Before any selection the editor shows the first query type (design lead 09-29-26).
   const fallback = defaultPointer(doc);
   const shown = useMemo<Selection>(
     () => ({ ...selection, pointer: selection.pointer ?? fallback, select: onSelect }),
     [selection, fallback, onSelect],
   );
+  useEffect(() => {
+    const p = selection.pointer;
+    if (p === null) return;
+    const next = existingPointer(doc, p);
+    if (next !== p) setSelection((s) => ({ pointer: next, seq: s.seq }));
+  }, [doc, selection.pointer]);
   const reasonId = `${uid}-publish-reason`;
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
@@ -234,7 +280,15 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           <button
             type="button"
             className={`qm-badge ${errorCount > 0 ? "qm-badge--critical" : "qm-badge--warning"} qm-builder__issues`}
-            onClick={() => onSelect(firstIssue.pointer, firstIssue.pointer)}
+            onClick={() =>
+              // A whole-config issue has no item: keep the current one and focus its message.
+              onSelect(
+                isRootIssue(doc, firstIssue.pointer)
+                  ? (shown.pointer ?? fallback)
+                  : firstIssue.pointer,
+                firstIssue.pointer,
+              )
+            }
           >
             {issueWords(t, errorCount, warningCount)}
             <VisuallyHidden>. {t("admin.issues.goTo")}</VisuallyHidden>

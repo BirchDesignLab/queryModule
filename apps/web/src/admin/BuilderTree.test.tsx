@@ -96,16 +96,15 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     expect(screen.getByText("Query type VEH", { selector: "legend" })).toBeInTheDocument();
   });
 
-  it("selecting a site item shows just that section, marked", async () => {
+  it("selecting a site item shows just that section", async () => {
     const t = await openBuilder();
     await t.user.click(item(/^Terminal commands/));
     const heading = await screen.findByRole("heading", {
       name: /^Terminal commands commands/,
       level: 3,
     });
-    await waitFor(() =>
-      expect(heading.closest("section")).toHaveAttribute("data-selected", "true"),
-    );
+    // The editor shows only this item, so the item itself is not tinted (only a part inside is).
+    expect(heading.closest("section")).not.toHaveAttribute("data-selected");
     await t.user.click(item(/^Terminal settings terminal/));
     expect(await screen.findByLabelText("terminal.delimiter")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^Terminal commands/, level: 3 })).toBeNull();
@@ -183,5 +182,72 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     expect(
       screen.getByRole("heading", { name: /^Terminal commands commands/, level: 3 }),
     ).toBeInTheDocument();
+  });
+
+  it("a whole-config issue (a missing required key) is counted, listed, and the issue button focuses its message", async () => {
+    const t = await openBuilder();
+    const summary = screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary).toHaveTextContent(/Draft checks: 0 errors/));
+    const store = configDraftStore(t.services);
+    act(() => {
+      const d = structuredClone(store.getState().doc) as Record<string, unknown>;
+      delete d.site;
+      store.getState().setDoc(d as never);
+    });
+    await waitFor(() => expect(summary).toHaveTextContent(/Draft checks: [1-9]\d* errors/));
+    // The tree lists whole-config issues, so its rows still add up to the total.
+    const [, errors, warnings] =
+      /(\d+) errors, (\d+) warnings/.exec(summary.textContent ?? "") ?? [];
+    const rows = [...tree().querySelectorAll("ul[aria-labelledby] > li > button, .qm-tree__root")];
+    const sum = rows.reduce(
+      (n, b) => n + Number(b.querySelector(".qm-tree__issues")?.textContent ?? 0),
+      0,
+    );
+    expect(sum).toBe(Number(errors) + Number(warnings));
+    await t.user.click(screen.getByRole("button", { name: /Go to the first issue\.$/ }));
+    // The editor keeps its item; focus lands on the whole-config messages.
+    expect(screen.getByText("Query type VEH", { selector: "legend" })).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("data-root-issues"));
+    expect(document.activeElement?.querySelector('[data-issue-pointer="/site"]')).not.toBeNull();
+  });
+
+  it("a schemaVersion issue shows with the whole-config messages (the key is hidden)", async () => {
+    const t = await openBuilder();
+    const store = configDraftStore(t.services);
+    act(() => store.getState().setPath(["schemaVersion"], 99));
+    const root = await waitFor(() => {
+      const el = document.querySelector("[data-root-issues]");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    await waitFor(() => expect(root.textContent).not.toBe(""));
+  });
+
+  it("a selection that no longer exists moves to what does, in the tree and the editor", async () => {
+    const t = await openBuilder();
+    await t.user.click(item(/^Wanted check WNT/));
+    const store = configDraftStore(t.services);
+    act(() => {
+      const d = structuredClone(store.getState().doc) as { queryTypes: unknown[] };
+      d.queryTypes.splice(3, 2);
+      store.getState().setDoc(d as never);
+    });
+    await waitFor(() => expect(item(/^Property PRO/)).toHaveAttribute("aria-current", "true"));
+    expect(screen.getByText("Query type PRO", { selector: "legend" })).toBeInTheDocument();
+  });
+
+  it("adding a query type selects it and focuses its code", async () => {
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("button", { name: "Add query type" }));
+    const legend = await screen.findByText(/^Query type\s*$/, { selector: "legend" });
+    const code = within(legend.closest("fieldset") as HTMLElement).getByRole("textbox", {
+      name: "Code",
+    });
+    await waitFor(() => expect(code).toHaveFocus());
+    expect(
+      within(tree())
+        .getAllByRole("button")
+        .filter((b) => b.getAttribute("aria-current") === "true"),
+    ).toHaveLength(1);
   });
 });

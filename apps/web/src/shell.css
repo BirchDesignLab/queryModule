@@ -533,6 +533,27 @@ main[tabindex="-1"]:focus {
   min-inline-size: 0;
 }
 
+/* Scroll panes clip what overflows them, focus rings included: keep room for the ring inside the
+   pane on every side, and when scrolling to an item (E1, critic I3). */
+.qm-builder__editor,
+.qm-builder__panes > .qm-admin__preview {
+  box-sizing: border-box;
+  padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+  scroll-padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+}
+
+.qm-tree {
+  scroll-padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+}
+
+.qm-tree__root {
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0 var(--qm-space-2);
+}
+
 .qm-builder__panes > .qm-admin__preview {
   flex: 2 1 calc(var(--qm-space-12) * 6);
   min-inline-size: 0;
@@ -597,6 +618,10 @@ main[tabindex="-1"]:focus {
 }
 
 .qm-tree__label + .qm-tree__issues {
+  margin-inline-start: auto;
+}
+
+.qm-tree__root .qm-tree__issues {
   margin-inline-start: auto;
 }
 
@@ -788,7 +813,7 @@ main[tabindex="-1"]:focus {
   color: var(--qm-color-accent);
 }
 
-.qm-admin__form .qm-button:is([data-role="remove"], [aria-label^="Remove"], .qm-button--danger) {
+.qm-admin__form .qm-button:is([data-role="remove"], .qm-button--danger) {
   border-color: transparent;
   background: transparent;
   color: var(--qm-field-required);

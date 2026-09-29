@@ -1,11 +1,11 @@
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { memo, useCallback, useContext, useId, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { ChecksContext } from "./checks.js";
 import { asObjects, str } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
 import { useItemName } from "./FormTab.js";
-import { HIDDEN_KEYS, issueWords, LABELS_ITEM } from "./selection.js";
+import { HIDDEN_KEYS, isRootIssue, issueWords, LABELS_ITEM } from "./selection.js";
 
 /** One row of the builder tree: a button that selects `pointer`, and its children. */
 interface TreeNode {
@@ -130,6 +130,12 @@ export function BuilderTree({
   const t = useT();
   const uid = useId();
   const { types, site } = useTreeNodes(doc);
+  // Whole-config issues have no row of their own: one line lists them, so the rows add up to the
+  // toolbar total (critic I1).
+  const { issues } = useContext(ChecksContext);
+  const root = issues.filter((i) => isRootIssue(doc, i.pointer));
+  const rootErrors = root.filter((i) => i.level === "error").length;
+  const rootWarnings = root.length - rootErrors;
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const q = query.trim().toLowerCase();
@@ -144,6 +150,20 @@ export function BuilderTree({
       .map((n) => n.pointer)
       .filter((p) => q !== "" || (toggled.get(p) ?? p === selectedType)),
   );
+  // A changed type count shifts pointers, so the user's toggles no longer name the same types; a
+  // new selection always opens its type (critic m5).
+  const typeCount = types.length;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the type count changes
+  useEffect(() => setToggled(new Map()), [typeCount]);
+  useEffect(() => {
+    if (selectedType !== null)
+      setToggled((m) => {
+        if (!m.has(selectedType)) return m;
+        const next = new Map(m);
+        next.delete(selectedType);
+        return next;
+      });
+  }, [selectedType]);
   const onToggle = useCallback(
     (pointer: string, open: boolean) => setToggled((m) => new Map(m).set(pointer, open)),
     [],
@@ -159,6 +179,18 @@ export function BuilderTree({
         value={query}
         onChange={(e) => setQuery(e.currentTarget.value)}
       />
+      {root.length > 0 && (
+        <p className="qm-tree__root">
+          {t("admin.tree.root")}
+          <span
+            className={`qm-tree__issues qm-badge ${rootErrors > 0 ? "qm-badge--critical" : "qm-badge--warning"}`}
+            aria-hidden="true"
+          >
+            {root.length}
+          </span>
+          <VisuallyHidden>, {issueWords(t, rootErrors, rootWarnings)}</VisuallyHidden>
+        </p>
+      )}
       {shownTypes.length === 0 && shownSite.length === 0 ? (
         <div className="qm-tree__empty">
           <p>{t("admin.tree.noMatches", { text: query.trim() })}</p>

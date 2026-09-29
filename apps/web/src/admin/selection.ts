@@ -27,6 +27,16 @@ export function topItem(pointer: string): string {
   return first.replaceAll("~1", "/").replaceAll("~0", "~");
 }
 
+/**
+ * An issue with no item of its own in the tree or the editor: the whole config (""), a missing
+ * top-level key, or a hidden key (schemaVersion). It is listed with the whole-config messages.
+ */
+export function isRootIssue(doc: Readonly<Record<string, unknown>>, pointer: string): boolean {
+  if (pointer === "") return true;
+  const top = topItem(pointer);
+  return HIDDEN_KEYS.has(top) || !(top in doc);
+}
+
 /** What the editor shows before any selection: the first query type, else the first setting. */
 export function defaultPointer(doc: Readonly<Record<string, unknown>>): string {
   const types = doc.queryTypes;
