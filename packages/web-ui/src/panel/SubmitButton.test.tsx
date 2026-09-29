@@ -67,7 +67,7 @@ describe("FR-006 submit button (spec 6.2)", () => {
       </form>,
     );
     const button = screen.getByRole("button", { name: "Submit" });
-    expect(button.querySelector("kbd")).toHaveTextContent("Enter");
-    expect(button.querySelector("kbd")).toHaveAttribute("aria-hidden", "true");
+    expect(button.querySelector(".qm-kbd")).toHaveTextContent("Enter");
+    expect(button.querySelector(".qm-kbd")).toHaveAttribute("aria-hidden", "true");
   });
 });

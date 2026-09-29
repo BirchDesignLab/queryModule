@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { VisuallyHidden } from "../visually-hidden.js";
 
 export interface CommandEchoProps {
   /** The terminal command the form is building, from the core formatter (spec 4.4). */
@@ -24,8 +25,11 @@ export function CommandEcho({
 }: CommandEchoProps): JSX.Element | null {
   if (text === "") return null;
   return (
-    <div className="qm-command-echo">
-      <p className="qm-command-echo__text" aria-label={label}>
+    <fieldset className="qm-command-echo">
+      <legend>
+        <VisuallyHidden>{label}</VisuallyHidden>
+      </legend>
+      <p className="qm-command-echo__text">
         <span className="qm-command-echo__prompt" aria-hidden="true">
           &gt;
         </span>
@@ -34,6 +38,6 @@ export function CommandEcho({
       <button type="button" className="qm-button qm-button--ghost" onClick={onEdit}>
         {actionLabel}
       </button>
-    </div>
+    </fieldset>
   );
 }

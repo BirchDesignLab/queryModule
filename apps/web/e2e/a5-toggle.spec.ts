@@ -77,7 +77,11 @@ test("[A5] the toggle and the command line have a keyboard focus ring and a 24px
   await page.keyboard.press("Enter");
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   const input = page.getByRole("textbox", { name: "Command" });
-  await page.keyboard.press("Tab");
+  // The mode control now precedes the quick access buttons: Tab through them to the command line.
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press("Tab");
+    if (await input.evaluate((el) => el === document.activeElement)) break;
+  }
   await expect(input).toBeFocused();
   expect(await hasFocusRing(input)).toBe(true);
 

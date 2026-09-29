@@ -41,9 +41,9 @@ export function SubmitButton({
       >
         {t("form.submit")}
         {keyHint === undefined ? null : (
-          <kbd className="qm-kbd" aria-hidden="true">
+          <span className="qm-kbd" aria-hidden="true">
             {keyHint}
-          </kbd>
+          </span>
         )}
       </button>
       {reason === null ? null : (

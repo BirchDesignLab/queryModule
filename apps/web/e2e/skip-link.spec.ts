@@ -5,7 +5,7 @@ const inMain = (page: import("@playwright/test").Page) =>
   page.evaluate(() => document.querySelector("main")?.contains(document.activeElement) ?? false);
 
 test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
-  test("after sign-in focus is on the panel heading and the next Tab is the first quick access button", async ({
+  test("after sign-in focus is on the panel heading and the next Tab is the panel head's Form mode button", async ({
     page,
   }) => {
     await signIn(page);
@@ -13,7 +13,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     await expect(nav).toBeVisible();
     await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(nav.getByRole("button").first()).toBeFocused();
+    await expect(page.getByRole("button", { name: "Form mode" })).toBeFocused();
   });
 
   test("a page opened while the preferences load is still pending is not replaced by the panel", async ({

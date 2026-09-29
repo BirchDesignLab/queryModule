@@ -292,14 +292,18 @@ describe("design B2 quick access: codes, shortcuts declared only where bound", (
   });
 });
 
+/** The command text the echo shows, without the prompt mark or the action. */
+const echoText = () =>
+  screen.getByRole("group", { name: "Command preview" }).querySelector("code")?.textContent ?? "";
+
 describe("design B2 command echo (signature element, spec 4.4)", () => {
   it("shows the command the form is building, live, equal to the terminal's text", async () => {
     const { user } = renderView({ config: CLIENT_CONFIG });
-    const echo = await screen.findByLabelText("Command preview");
+    await screen.findByRole("group", { name: "Command preview" });
     await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
-    expect(echo).toHaveTextContent("VEH.ZZ-1234");
+    expect(echoText()).toContain("VEH.ZZ-1234");
     // The same text the terminal shows after the toggle (one draft, spec 4.4).
-    const text = echo.textContent?.replace(/^>/, "") ?? "";
+    const text = echoText();
     await user.click(screen.getByRole("button", { name: "Terminal mode" }));
     expect(await screen.findByRole("textbox", { name: "Command" })).toHaveValue(text);
   });
@@ -307,19 +311,19 @@ describe("design B2 command echo (signature element, spec 4.4)", () => {
   it("Edit as command switches to the terminal with that text and focuses the command line", async () => {
     const { user } = renderView({ config: CLIENT_CONFIG });
     await user.type(await screen.findByLabelText("Plate"), "ZZ-1234");
-    const text = screen.getByLabelText("Command preview").textContent?.replace(/^>/, "") ?? "";
+    const text = echoText();
     await user.click(screen.getByRole("button", { name: "Edit as command" }));
     const input = await screen.findByRole("textbox", { name: "Command" });
     expect(input).toHaveValue(text);
     await waitFor(() => expect(input).toHaveFocus());
-    expect(screen.queryByLabelText("Command preview")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Command preview" })).toBeNull();
   });
 
   it("follows the query type and takes no Tab stop of its own beyond its action", async () => {
     const { user } = renderView({ config: CLIENT_CONFIG });
-    await screen.findByLabelText("Command preview");
+    await screen.findByRole("group", { name: "Command preview" });
     await user.click(screen.getByRole("button", { name: "Person" }));
-    expect(screen.getByLabelText("Command preview")).toHaveTextContent(/^>PER/);
+    expect(echoText()).toMatch(/^PER/);
   });
 });
 
@@ -335,7 +339,7 @@ describe("design B2 sources as chips and the sticky action bar", () => {
   it("Run query carries the Enter hint aria-hidden; Clear and the status sit in the action bar", async () => {
     renderView({ config: CLIENT_CONFIG });
     const run = await screen.findByRole("button", { name: "Run query" });
-    expect(run.querySelector("kbd")).toHaveTextContent("Enter");
+    expect(run.querySelector(".qm-kbd")).toHaveTextContent("Enter");
     const bar = run.closest(".qm-action-bar") as HTMLElement;
     expect(within(bar).getByRole("button", { name: "Clear" })).toBeInTheDocument();
   });

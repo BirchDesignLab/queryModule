@@ -73,25 +73,24 @@ test.describe("example queries, form (FR-001 to FR-012, FR-030 to FR-032)", () =
   }) => {
     await panelReady(page);
     await chooseQueryType(page, "PRO");
-    const type = page.getByLabel("Property type");
-    await type.focus();
-    await page.keyboard.type("Fi");
-    await expect(type).toHaveValue("FIREARM");
+    // The property type is a segmented control of radios (design B2), one segment per option.
+    const radio = (name: string) =>
+      page.getByRole("group", { name: /Property type/ }).getByRole("radio", { name });
+    await radio("Firearm").check();
+    await expect(radio("Firearm")).toBeChecked();
     await expect(page.getByLabel("Make")).toHaveAttribute("aria-required", "true");
     await expect(page.getByLabel("Caliber")).toHaveAttribute("aria-required", "true");
     await expectNoSeriousAxeViolations(page);
 
-    // Picklist order is Firearm, Boat, Article; type-ahead would append to "Fi".
-    await page.keyboard.press("ArrowDown");
-    await page.keyboard.press("ArrowDown");
-    await expect(type).toHaveValue("ARTICLE");
+    await radio("Article").check();
+    await expect(radio("Article")).toBeChecked();
     await expect(page.getByLabel("Description")).toHaveAttribute("aria-required", "true");
     await expect(page.getByLabel("Make")).toHaveCount(0);
 
     // Electronics shows Make and Model but not Caliber; a State other than the default requires
     // the serial number.
-    await page.keyboard.press("ArrowDown");
-    await expect(type).toHaveValue("ELECTRONICS");
+    await radio("Electronics").check();
+    await expect(radio("Electronics")).toBeChecked();
     await expect(page.getByLabel("Make")).toBeVisible();
     await expect(page.getByLabel("Model")).toBeVisible();
     await expect(page.getByLabel("Caliber")).toHaveCount(0);

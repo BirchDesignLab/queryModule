@@ -15,7 +15,7 @@ describe("command echo (visual system signature element, spec 4.4)", () => {
       />,
     );
     expect(screen.getByText("VEH.ZZ-1234.TX").tagName).toBe("CODE");
-    expect(screen.getByLabelText("Command")).toHaveTextContent("VEH.ZZ-1234.TX");
+    expect(screen.getByRole("group", { name: "Command" })).toHaveTextContent("VEH.ZZ-1234.TX");
     await userEvent.click(screen.getByRole("button", { name: "Edit as command" }));
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
