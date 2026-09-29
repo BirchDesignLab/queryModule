@@ -2,15 +2,12 @@ import fc from "fast-check";
 import type { CommandDef, FieldDef } from "../../config/index.js";
 import { canonicalise } from "../../rules/canonicalise.js";
 import { compileQueryType, findQueryType } from "../../rules/compile.js";
+import { fieldOf, isRest, namedFieldReader, type Position } from "../positions.js";
 import type { Draft, TerminalConfig } from "../types.js";
 
 /** Test-only fast-check arbitraries for the terminal round trip (spec 4.4, 10.1). */
 
-type Position = CommandDef["positions"][number];
 type DraftValue = Draft[string];
-
-const fieldOf = (p: Position): string => (typeof p === "string" ? p : p.field);
-const isRest = (p: Position): boolean => typeof p === "object" && p.rest === true;
 
 const PRINTABLE_ASCII = Array.from({ length: 0x7f - 0x20 }, (_, i) =>
   String.fromCharCode(0x20 + i),
@@ -22,14 +19,6 @@ const PRINTABLE_EXTRA = ["é", "ñ", "ß", "Å", "Ω", " "];
 export function enabledCodes(config: TerminalConfig, queryType: string, key: string): string[] {
   const field = compileQueryType(config, queryType, 0)?.fieldByKey.get(key);
   return field === undefined ? [] : field.enabledValues.map((v) => v.code);
-}
-
-/** A `name=value` token whose name is a field key of the query type reads as named (spec 4.4). */
-function readsAsNamed(config: TerminalConfig, queryType: string, text: string): boolean {
-  const eq = text.indexOf("=");
-  if (eq <= 0) return false;
-  const name = text.slice(0, eq).trim().toLowerCase();
-  return (findQueryType(config, queryType)?.fields ?? []).some((f) => f.key.toLowerCase() === name);
 }
 
 const iso = (d: Date): string => d.toISOString().slice(0, 10);
@@ -125,6 +114,8 @@ export function draftFor(
   const qt = findQueryType(config, command.queryType);
   if (qt === undefined) throw new Error(`no query type ${command.queryType}`);
   const byKey = new Map(qt.fields.map((f) => [f.key, f]));
+  // A `name=value` value whose name is a field key would read as a named token (spec 4.4).
+  const named = namedFieldReader(config, command.queryType);
   const positioned = command.positions.map(fieldOf);
   const preset = new Set(Object.keys(command.presets ?? {}));
   const unpositioned = qt.fields
@@ -134,7 +125,7 @@ export function draftFor(
     const field = byKey.get(fieldOf(p));
     if (field === undefined) throw new Error(`no field ${fieldOf(p)}`);
     const value = canonicalValue(config, command.queryType, field, isRest(p), now).filter(
-      (v) => isRest(p) || !readsAsNamed(config, command.queryType, String(v)),
+      (v) => isRest(p) || named(String(v)) === undefined,
     );
     return fc.oneof({ arbitrary: value, weight: 3 }, { arbitrary: emptyValue, weight: 1 });
   };
