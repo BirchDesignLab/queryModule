@@ -36,7 +36,7 @@ async function replaceRaw(t: Awaited<ReturnType<typeof openBuilder>>, text: stri
 describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("edits in the generic form change the draft JSON", async () => {
     const t = await openBuilder();
-    await t.user.click(await screen.findByText("terminal"));
+    await t.user.click(await screen.findByText("terminal", { selector: "summary" }));
     const input = await screen.findByLabelText("terminal.delimiter");
     await t.user.clear(input);
     await t.user.type(input, ",");
@@ -73,7 +73,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(status).toHaveTextContent("Draft: no changes");
     expect(status).not.toHaveAttribute("aria-live");
     expect(status).not.toHaveAttribute("role");
-    await t.user.click(await screen.findByText("terminal"));
+    await t.user.click(await screen.findByText("terminal", { selector: "summary" }));
     const input = await screen.findByLabelText("terminal.delimiter");
     await t.user.clear(input);
     await t.user.type(input, ",");

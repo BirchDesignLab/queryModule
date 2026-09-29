@@ -10,12 +10,14 @@ import {
 } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { BuilderTree } from "./BuilderTree.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext, useDraftChecks } from "./checks.js";
 import { docFromClient, type JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
 import { BuilderPreview } from "./Preview.js";
 import { type RawState, RawTab } from "./RawTab.js";
+import { type Selection, SelectionContext } from "./selection.js";
 import { useCachedClientConfig } from "./use-cached-config.js";
 
 export { configDraftStore } from "./builder-store.js";
@@ -62,6 +64,34 @@ function useConfigLoadFailed(): boolean {
     subscribe,
     () => queryClient.getQueryState(["config"])?.status === "error",
   );
+}
+
+/**
+ * Marks the selected item in the editor and scrolls to it (A-D1 A2). The item renders once its
+ * section or type has opened, so this retries for a few frames. The mark is a DOM attribute, not
+ * React state, so memoized rows do not re-render on every selection.
+ */
+function useMarkSelected(panel: React.RefObject<HTMLDivElement | null>, selection: Selection) {
+  useEffect(() => {
+    const root = panel.current;
+    const pointer = selection.pointer;
+    if (root === null || pointer === null) return;
+    for (const el of root.querySelectorAll("[data-selected]")) el.removeAttribute("data-selected");
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const mark = () => {
+      const el = root.querySelector<HTMLElement>(`[data-path="${CSS.escape(pointer)}"]`);
+      if (el === null) {
+        if (tries++ < 20) timer = setTimeout(mark, 16);
+        return;
+      }
+      el.setAttribute("data-selected", "true");
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? true;
+      el.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
+    };
+    mark();
+    return () => clearTimeout(timer);
+  }, [panel, selection]);
 }
 
 /**
@@ -124,6 +154,13 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
     setTab(target);
     tabRefs.current[target]?.focus();
   };
+  const [selection, setSelection] = useState<Selection>({ pointer: null, seq: 0 });
+  const onSelect = useCallback((pointer: string) => {
+    setTab("form");
+    setSelection((s) => ({ pointer, seq: s.seq + 1 }));
+  }, []);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useMarkSelected(panelRef, selection);
   const reasonId = `${uid}-publish-reason`;
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
@@ -193,10 +230,19 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
             <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
           )}
         </div>
-        <div className="qm-admin__workspace">
-          <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${tab}`}>
+        <div className="qm-builder__panes">
+          <BuilderTree doc={doc} selected={selection.pointer} onSelect={onSelect} />
+          <div
+            ref={panelRef}
+            className="qm-builder__editor"
+            role="tabpanel"
+            id={`${uid}-panel`}
+            aria-labelledby={`${uid}-tab-${tab}`}
+          >
             {tab === "form" ? (
-              <FormTab doc={doc} />
+              <SelectionContext.Provider value={selection}>
+                <FormTab doc={doc} />
+              </SelectionContext.Provider>
             ) : (
               <RawTab raw={raw} setRaw={setRaw} onRawDoc={onRawDoc} />
             )}

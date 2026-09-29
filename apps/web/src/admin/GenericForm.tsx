@@ -3,6 +3,7 @@ import { useT } from "../app/i18n-context.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
 import { controlId, NumberControl, useDraftSetters } from "./controls.js";
 import { type PathSegment, toPointer } from "./draft.js";
+import { SelectionContext, selects } from "./selection.js";
 
 interface NodeEditorProps {
   value: unknown;
@@ -194,17 +195,33 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
   );
 }
 
-/** Sections open on demand, so a large config does not render every control at once. */
-export function Section({ name, children }: { name: string; children: () => React.ReactNode }) {
+/**
+ * Sections open on demand, so a large config does not render every control at once. The builder
+ * tree opens the section it selects (A-D1 A2); `pointer` names it there (default: /<name>).
+ */
+export function Section({
+  name,
+  pointer = toPointer([name]),
+  children,
+}: {
+  name: string;
+  pointer?: string;
+  children: () => React.ReactNode;
+}) {
   const t = useT();
   const checks = useContext(ChecksContext);
+  const selection = useContext(SelectionContext);
   const [open, setOpen] = useState(false);
+  const selected = selects(selection, pointer);
+  useEffect(() => {
+    if (selected) setOpen(true);
+  }, [selected, selection.seq]);
   const prefix = toPointer([name]);
   const count = checks.issues.filter(
     (i) => i.pointer === prefix || i.pointer.startsWith(`${prefix}/`),
   ).length;
   return (
-    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details data-path={pointer} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>
         {name}
         {count > 0 && (

@@ -4,6 +4,7 @@ import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { controlId } from "./controls.js";
 import { Section } from "./GenericForm.js";
+import { LABELS_ITEM } from "./selection.js";
 
 export function LabelOverlayEditor({
   locales,
@@ -17,7 +18,7 @@ export function LabelOverlayEditor({
   const { labels } = useDraft();
   const store = configDraftStore(services);
   return (
-    <Section name={t("admin.config.labels.title")}>
+    <Section name={t("admin.config.labels.title")} pointer={LABELS_ITEM}>
       {() =>
         locales.map((locale) => (
           <LocaleLabels

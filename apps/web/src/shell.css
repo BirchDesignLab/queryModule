@@ -383,11 +383,128 @@ main[tabindex="-1"]:focus {
   min-inline-size: 0;
 }
 
-.qm-admin__workspace {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 48ch), 1fr));
+/* Three panes (A2): tree, editor, preview. Each keeps a basis and they wrap into rows on narrow
+   viewports, so nothing scrolls sideways. */
+.qm-builder__panes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--qm-space-4);
-  align-items: start;
+  margin-block-start: var(--qm-space-3);
+}
+
+.qm-tree {
+  flex: 1 1 calc(var(--qm-space-12) * 5.5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-builder__editor {
+  flex: 3 1 calc(var(--qm-space-12) * 10);
+  min-inline-size: 0;
+}
+
+.qm-builder__panes > .qm-admin__preview {
+  flex: 2 1 calc(var(--qm-space-12) * 8);
+  min-inline-size: 0;
+}
+
+.qm-tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-tree ul ul {
+  margin-inline-start: var(--qm-space-3);
+  padding-inline-start: var(--qm-space-2);
+  border-inline-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-tree button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  width: 100%;
+  min-height: var(--qm-space-8);
+  padding: 0 var(--qm-space-2);
+  border: 0;
+  border-radius: var(--qm-radius-sm);
+  background: transparent;
+  color: var(--qm-color-text-body);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.qm-tree button:hover {
+  background: var(--qm-color-surface-raised);
+}
+
+/* The selected row: filled, accent edge and heavier text, so the state is not colour alone. */
+.qm-tree button[aria-current="true"] {
+  background: var(--qm-color-accent-subtle);
+  box-shadow: inset calc(var(--qm-border-width) * 2) 0 0 var(--qm-color-accent);
+  font-weight: 600;
+}
+
+.qm-tree__key {
+  margin-inline-start: auto;
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
+}
+
+.qm-tree__group {
+  margin: var(--qm-space-2) 0 0;
+  padding: 0 var(--qm-space-2);
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.qm-tree__empty p {
+  margin: 0 0 var(--qm-space-2);
+  color: var(--qm-color-text-muted);
+}
+
+/* The editor item the tree selected: a static accent.subtle fill (design lead 09-29-26). */
+.qm-builder__editor [data-selected="true"] {
+  background: var(--qm-color-accent-subtle);
+}
+
+/* Lighter fieldset rules (A2, CSS only): items are divided by a thin rule instead of boxed and
+   nested borders; ruled sections with a label column come in A3. */
+.qm-admin__form :where(fieldset) {
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--qm-space-3) 0 var(--qm-space-3) var(--qm-space-3);
+  border: 0;
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__form :where(legend) {
+  padding: 0;
+  font-weight: 600;
+}
+
+.qm-admin__form :where(details) {
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__form :where(summary) {
+  min-height: var(--qm-control-height-dense);
+  padding: var(--qm-space-2) 0;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 /* Builder diagnostics and item controls (issue 388): level text leads each message; errors use the

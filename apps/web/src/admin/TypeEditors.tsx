@@ -18,9 +18,10 @@ import {
   useFocusRequest,
   useGeneration,
 } from "./controls.js";
-import type { JsonObject, PathSegment } from "./draft.js";
+import { type JsonObject, type PathSegment, toPointer } from "./draft.js";
 import { OtherKeys } from "./GenericForm.js";
 import { RulesEditor, SectionCondition } from "./RulesEditor.js";
+import { useSelectedIndex } from "./selection.js";
 
 /**
  * Task 31 part 2 (#355): purpose-built editors for query types, their sections and their fields
@@ -107,11 +108,17 @@ export function QueryTypesEditor({ value, idPrefix }: { value: unknown; idPrefix
       else next.delete(i);
       return next;
     });
+  // The builder tree opens the type it selects (A-D1 A2); it never closes one.
+  const selected = useSelectedIndex("queryTypes");
+  useEffect(() => {
+    if (selected !== null) setOpened((s) => (s.has(selected) ? s : new Set([...s, selected])));
+  }, [selected]);
   return (
     <div>
       {types.map((type, i) => (
         <details
           key={`${owner(i)}:${gen}`}
+          data-path={toPointer([...path, i])}
           open={opened.has(i)}
           onToggle={(e) => setOpen(i, e.currentTarget.open)}
         >
@@ -241,7 +248,11 @@ function SectionsEditor({
         const itemPath = [...path, i];
         const key = str(section.key);
         return (
-          <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
+          <fieldset
+            key={`${owner(i)}:${gen}`}
+            className="qm-admin__item"
+            data-path={toPointer(itemPath)}
+          >
             <legend>{t("admin.config.section.legend", { key })}</legend>
             <TextControl
               idPrefix={idPrefix}
@@ -418,7 +429,7 @@ const FieldRow = memo(
   }: FieldRowProps) {
     const t = useT();
     return (
-      <fieldset className="qm-admin__item">
+      <fieldset className="qm-admin__item" data-path={toPointer(path)}>
         <legend>{t("admin.config.field.legend", { key: str(field.key) })}</legend>
         <FieldControls field={field} path={path} owner={owner} {...rest} />
         <ItemButtons
