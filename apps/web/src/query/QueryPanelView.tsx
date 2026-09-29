@@ -3,6 +3,7 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import { resolveShortcuts } from "@querymodule/core/config";
 import {
   AckStatus,
+  CommandEcho,
   fieldErrorMessages,
   formErrorsId,
   formLevelErrors,
@@ -20,7 +21,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
-import { useTerminal } from "./use-terminal.js";
+import { formToTerminal, useTerminal } from "./use-terminal.js";
 
 const QUICK_TYPE_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 
@@ -66,6 +67,11 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
         ]),
       ),
     [config, queryType],
+  );
+  // The command the form is building, live (spec 4.4): the core formatter over the current draft.
+  const echo = useMemo(
+    () => formToTerminal(config, queryType, panel.values, Date.now()).text,
+    [config, queryType, panel.values],
   );
   const typeCodes = config.queryTypes.map((q) => q.code);
   const quickCodes = config.quickAccess.filter((code) => typeCodes.includes(code));
@@ -195,6 +201,12 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
               onChange={panel.setValue}
               t={t}
               idPrefix={idPrefix}
+            />
+            <CommandEcho
+              text={echo}
+              label={t("echo.label")}
+              actionLabel={t("echo.edit")}
+              onEdit={() => terminal.toggle({ focus: true })}
             />
             <QueryForm
               formState={formState}

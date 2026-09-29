@@ -49,6 +49,8 @@ describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", (
     "mode.form",
     "mode.terminal",
     "panel.title",
+    "echo.label",
+    "echo.edit",
     "form.quickAccessHint",
     "submit.acknowledged",
     "submit.reference",

@@ -84,6 +84,8 @@
   "terminal.problems.one": "{count} problem with the command.",
   "terminal.problems.other": "{count} problems with the command.",
   "mode.label": "Entry mode",
+  "echo.label": "Command preview",
+  "echo.edit": "Edit as command",
   "mode.form": "Form mode",
   "mode.terminal": "Terminal mode",
   "panel.title": "{type} query",

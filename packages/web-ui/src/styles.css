@@ -621,3 +621,40 @@ h1 {
 .qm-layout--mobile-unit .qm-quick-access__code {
   font-size: var(--qm-type-body-size);
 }
+
+/* Command echo (signature element): a sunken strip with the command in mono and its action. */
+.qm-command-echo {
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-3);
+  min-inline-size: 0;
+  margin-block-end: var(--qm-space-3);
+  padding: var(--qm-space-1) var(--qm-space-1) var(--qm-space-1) var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-sunken);
+}
+
+.qm-command-echo__text {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  overflow-x: auto;
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-md);
+  white-space: nowrap;
+}
+
+.qm-command-echo__prompt {
+  margin-inline-end: var(--qm-space-2);
+  color: var(--qm-color-accent);
+}
+
+.qm-command-echo__text code {
+  font: inherit;
+}
+
+/* Nothing the officer reads is muted or small (spec 6.3): the echo is body-coloured, 16 px. */
+.qm-layout--mobile-unit .qm-command-echo__text {
+  font-size: var(--qm-type-body-size);
+}

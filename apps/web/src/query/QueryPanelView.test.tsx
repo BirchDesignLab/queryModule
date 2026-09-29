@@ -1,7 +1,7 @@
 import { createDraftStore } from "@querymodule/client";
 import { type ClientSiteConfig, resolveShortcuts } from "@querymodule/core/config";
 import { ShortcutProvider } from "@querymodule/web-ui";
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLIENT_CONFIG, submitRecorder } from "../test/msw-server.js";
@@ -289,5 +289,36 @@ describe("design B2 quick access: codes, shortcuts declared only where bound", (
     const [first, second] = within(group).getAllByRole("button");
     expect(first).toHaveAttribute("aria-keyshortcuts", "Alt+Q");
     expect(second).toHaveAttribute("aria-keyshortcuts", "Alt+2");
+  });
+});
+
+describe("design B2 command echo (signature element, spec 4.4)", () => {
+  it("shows the command the form is building, live, equal to the terminal's text", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    const echo = await screen.findByLabelText("Command preview");
+    await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
+    expect(echo).toHaveTextContent("VEH.ZZ-1234");
+    // The same text the terminal shows after the toggle (one draft, spec 4.4).
+    const text = echo.textContent?.replace(/^>/, "") ?? "";
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    expect(await screen.findByRole("textbox", { name: "Command" })).toHaveValue(text);
+  });
+
+  it("Edit as command switches to the terminal with that text and focuses the command line", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    await user.type(await screen.findByLabelText("Plate"), "ZZ-1234");
+    const text = screen.getByLabelText("Command preview").textContent?.replace(/^>/, "") ?? "";
+    await user.click(screen.getByRole("button", { name: "Edit as command" }));
+    const input = await screen.findByRole("textbox", { name: "Command" });
+    expect(input).toHaveValue(text);
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(screen.queryByLabelText("Command preview")).toBeNull();
+  });
+
+  it("follows the query type and takes no Tab stop of its own beyond its action", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG });
+    await screen.findByLabelText("Command preview");
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    expect(screen.getByLabelText("Command preview")).toHaveTextContent(/^>PER/);
   });
 });
