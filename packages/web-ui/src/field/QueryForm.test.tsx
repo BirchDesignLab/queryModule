@@ -396,4 +396,24 @@ describe("design B2 form grid and the More details disclosure", () => {
       "true",
     );
   });
+
+  it("a section forced open by an error stays open once the error is fixed, and a click on its toggle while forced does not store a close", async () => {
+    const state = form("VEH", { state: "OK" });
+    const errored = { ...state, missingRequired: ["plateColor"] };
+    const { rerender } = renderForm(state);
+    // The user closes it (it starts closed), then a blocked submit forces it open.
+    const toggle = () => screen.getByRole("button", { name: "More details" });
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    rerender(errored, { showErrors: true });
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    // A click while forced open is a no-op.
+    await userEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    // The error is fixed (showErrors stays on): the section does not collapse under the user.
+    rerender(state, { showErrors: true });
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    // Once nothing forces it, the user can close it.
+    await userEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  });
 });

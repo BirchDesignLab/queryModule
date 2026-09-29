@@ -234,6 +234,7 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
               onEdit={() => terminal.toggle({ focus: true })}
             />
             <QueryForm
+              key={queryType}
               formState={formState}
               values={panel.values}
               fieldConfig={fieldConfig}

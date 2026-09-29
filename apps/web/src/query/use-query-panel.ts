@@ -27,6 +27,7 @@ import {
 } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { firstField } from "./first-field.js";
 import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
@@ -430,7 +431,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         void send();
         // A run that goes out leaves focus on the first field, ready for the next query (design
         // B2); a blocked one focuses the first invalid field instead.
-        formContainerRef.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+        firstField(formContainerRef.current)?.focus();
         return;
       }
       announceBlocked(formState);

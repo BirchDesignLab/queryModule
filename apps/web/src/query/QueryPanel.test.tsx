@@ -162,6 +162,37 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(polite()).toHaveTextContent("1 field needs attention.");
   });
 
+  it("B2 More details starts closed on a type that has nothing required or entered in it, and its state is per type", async () => {
+    const { user } = await openPanel();
+    // Vehicle at the default state shows no More details; Property does (agency), closed.
+    await user.click(screen.getByRole("button", { name: "Property" }));
+    const toggle = await screen.findByRole("button", { name: "More details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "More details" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    // Person has no such section; back on Property it starts closed again, not carried over.
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    await user.click(screen.getByRole("button", { name: "Property" }));
+    expect(await screen.findByRole("button", { name: "More details" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("B2 after a run, focus lands on a checked or non-radio control, never on an unchecked type radio", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Property" }));
+    await user.click(await screen.findByRole("radio", { name: "Article" }));
+    await user.type(screen.getByLabelText(/Description/), "TESTITEM");
+    await user.click(screen.getByRole("button", { name: "Run query" }));
+    await screen.findByRole("region", { name: "Last query" });
+    const active = document.activeElement as HTMLInputElement;
+    expect(active.type === "radio" ? active.checked : true).toBe(true);
+  });
+
   it("B2 a run that goes out leaves focus on the first field: a click on Run, and Enter in a later field", async () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-1234");

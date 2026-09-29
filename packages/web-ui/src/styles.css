@@ -302,7 +302,7 @@ h1 {
   align-items: center;
   gap: var(--qm-space-2);
   min-height: var(--qm-control-height-dense);
-  padding: 0 var(--qm-space-3);
+  padding: 0;
   border: var(--qm-border-width) solid var(--qm-color-border);
   border-radius: var(--qm-radius-control);
   background: var(--qm-color-surface-base);
@@ -336,7 +336,8 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: var(--qm-space-2);
-  min-block-size: inherit;
+  align-self: stretch;
+  padding-inline: var(--qm-space-3) var(--qm-space-2);
   cursor: pointer;
 }
 
@@ -348,6 +349,7 @@ h1 {
 }
 
 .qm-chip__meta {
+  padding-inline-end: var(--qm-space-3);
   color: var(--qm-color-text-muted);
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-xs);

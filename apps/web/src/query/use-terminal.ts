@@ -17,6 +17,7 @@ import {
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { firstField } from "./first-field.js";
 import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
 
 type Values = Readonly<Record<string, DraftValue>>;
@@ -93,10 +94,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     if (!wantFocus.current) return;
     wantFocus.current = false;
     if (mode === "terminal") inputRef.current?.focus();
-    else
-      panel.formContainerRef.current
-        ?.querySelector<HTMLElement>("input, select, textarea")
-        ?.focus();
+    else firstField(panel.formContainerRef.current)?.focus();
   }, [focusTick, mode]);
 
   const derive = useCallback(

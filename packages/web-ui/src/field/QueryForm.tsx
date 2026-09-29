@@ -165,22 +165,34 @@ function useDisclosures(
   const counts = new Map(sections.map(({ section, fields }) => [section.key, fields.length]));
   // A new visible field in a section (after the first render) opens it, once, so a revealed field
   // is never hidden inside a closed disclosure. Layout effect: it lands in the same commit.
+  const hasError = ({ fields }: (typeof sections)[number]): boolean =>
+    showErrors && fields.some((f) => errored.has(f.key));
   useLayoutEffect(() => {
     const before = seen.current;
     seen.current = counts;
-    if (before === null) return;
-    const grown = [...counts].filter(([key, n]) => n > (before.get(key) ?? 0)).map(([key]) => key);
-    if (grown.length > 0)
-      setExplicit((prev) => ({ ...prev, ...Object.fromEntries(grown.map((key) => [key, true])) }));
+    // A section that holds an error is opened for good: fixing the error must not collapse it
+    // under the user's cursor (focus is never lost, spec 6.4).
+    const forced = sections.filter(hasError).map(({ section }) => section.key);
+    const grown =
+      before === null
+        ? []
+        : [...counts].filter(([key, n]) => n > (before.get(key) ?? 0)).map(([key]) => key);
+    const open = [...new Set([...grown, ...forced])].filter((key) => explicit[key] !== true);
+    if (open.length > 0)
+      setExplicit((prev) => ({ ...prev, ...Object.fromEntries(open.map((key) => [key, true])) }));
   });
-  const isOpen = ({ section, fields }: (typeof sections)[number]): boolean => {
-    if (showErrors && fields.some((f) => errored.has(f.key))) return true;
+  const isOpen = (entry: (typeof sections)[number]): boolean => {
+    const { section, fields } = entry;
+    if (hasError(entry)) return true;
     const chosen = explicit[section.key];
     if (chosen !== undefined) return chosen;
     return fields.some((f) => f.required || f.userValue !== null);
   };
-  const toggle = (key: string, next: boolean): void =>
-    setExplicit((prev) => ({ ...prev, [key]: next }));
+  // While an error holds a section open, a close is not stored (the click does nothing).
+  const toggle = (entry: (typeof sections)[number], next: boolean): void => {
+    if (!next && hasError(entry)) return;
+    setExplicit((prev) => ({ ...prev, [entry.section.key]: next }));
+  };
   return { isOpen, toggle };
 }
 
@@ -236,7 +248,7 @@ export function QueryForm({
                   className="qm-disclosure-toggle"
                   aria-expanded={open}
                   aria-controls={regionId}
-                  onClick={() => disclosures.toggle(section.key, !open)}
+                  onClick={() => disclosures.toggle(entry, !open)}
                 >
                   {t(section.labelKey)}
                 </button>
