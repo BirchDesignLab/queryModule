@@ -6,7 +6,11 @@ import { signIn } from "./helpers.js";
 async function hasFocusRing(el: Locator): Promise<boolean> {
   return el.evaluate((node) => {
     const style = getComputedStyle(node);
-    return style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0;
+    return (
+      node.matches(":focus-visible") &&
+      style.outlineStyle !== "none" &&
+      Number.parseFloat(style.outlineWidth) > 0
+    );
   });
 }
 

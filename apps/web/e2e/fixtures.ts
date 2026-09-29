@@ -19,7 +19,7 @@ export const test = base.extend<{ cspViolations: string[]; axeAfterEach: undefin
         await expectNoSeriousAxeViolations(page);
       }
     },
-    { auto: true },
+    { auto: true, timeout: 15_000 },
   ],
 
   cspViolations: [

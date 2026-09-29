@@ -6,7 +6,7 @@ async function openTerminal(page: Page) {
   await signIn(page);
   await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
   // The slash key focuses the terminal from anywhere outside a text input (spec 6.4).
-  await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
+  await expect(page.locator("input:focus, textarea:focus")).toHaveCount(0);
   await page.keyboard.press("Slash");
   const input = page.getByRole("textbox", { name: "Command" });
   await expect(input).toBeFocused();
@@ -33,7 +33,8 @@ test("[A4] VEH.ABC123..26 runs with State TX and Year 2026 (FR-050 to FR-056, FR
     values: Record<string, unknown>;
   };
   expect(body.queryType).toBe("VEH");
-  expect(body.values).toMatchObject({ plate: "ABC123", year: "26" });
+  // Exactly what was typed: the empty state position is left out, so the site default (TX) applies.
+  expect(body.values).toEqual({ plate: "ABC123", year: "26" });
   const reply = await response;
   expect(reply.status()).toBe(202);
   const { parts } = (await reply.json()) as { parts: { queryType: string; status: string }[] };

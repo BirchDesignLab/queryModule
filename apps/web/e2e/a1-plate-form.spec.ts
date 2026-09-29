@@ -43,7 +43,7 @@ test("[A1] the plate form shows Plate, State TX, Year and VIN, and Enter submits
 
   // The polite region gives the short reference; the acknowledgment section shows the full ID.
   await expect(page.getByTestId("announcer-polite")).toHaveText(
-    /Vehicle query sent at .+\. Reference \S+\./,
+    new RegExp(String.raw`Vehicle query sent at .+\. Reference ${correlationId.slice(0, 8)}\.`),
   );
   const ack = page.getByRole("region", { name: "Last query" });
   await expect(ack).toBeVisible();

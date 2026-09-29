@@ -67,6 +67,9 @@ test("an aborted request shows No connection, and the retry reuses the Idempoten
     if (calls === 1) await route.abort("connectionrefused");
     else await route.continue();
   });
+  // Hold the health poll off so the gate stays up while the assertions below read it; the poll
+  // otherwise answers within a second and could clear the gate mid-check.
+  await page.route("**/api/v1/health", (route) => route.abort());
   await page.keyboard.press("Enter");
 
   // Focusable, aria-disabled (never disabled), and the visible reason is linked to it.
@@ -79,6 +82,8 @@ test("an aborted request shows No connection, and the retry reuses the Idempoten
   await expect(page.locator(`#${reasonId.split(" ").at(-1)}`)).toHaveText(
     "No connection to server",
   );
+
+  await page.unroute("**/api/v1/health");
 
   // The health poll clears the gate; the same query, resubmitted, carries the same key.
   await expect(submit).not.toHaveAttribute("aria-disabled", "true", { timeout: 20_000 });
