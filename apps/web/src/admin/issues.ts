@@ -139,7 +139,7 @@ export function draftIssues(validation: DraftValidation): DraftIssue[] {
   return issues;
 }
 
-const hasPointer = (doc: unknown, pointerText: string): boolean => {
+export const hasPointer = (doc: unknown, pointerText: string): boolean => {
   let node: unknown = doc;
   for (const raw of pointerText.split("/").slice(1)) {
     const seg = raw.replaceAll("~1", "/").replaceAll("~0", "~");

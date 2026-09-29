@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
+import { selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -53,12 +54,12 @@ const typeOf = (t: Opened, code: string) => types(t).find((q) => q.code === code
 const picklists = (t: Opened) => (state(t).doc as { picklists: Picklist[] }).picklists;
 
 async function openSection(t: Opened, name: string) {
-  await t.user.click(await screen.findByText(name, { selector: "summary" }));
+  if (name !== "queryTypes") await selectBuilderItem(t.user, name);
 }
 
 /** Opens one query type; each type renders on demand. */
 async function openType(t: Opened, code: string) {
-  await t.user.click(screen.getByText(`Query type ${code}`, { selector: "summary" }));
+  await selectBuilderItem(t.user, code);
 }
 
 const typeBox = (code: string) => group(document, `Query type ${code}`.trim());
@@ -327,17 +328,17 @@ describe("critic fixes (Task 31 part 2 PR1)", () => {
     expect(vin).toHaveAttribute("aria-invalid", "false");
   });
 
-  it("M1: a type count change from the raw tab closes the opened types", async () => {
+  it("M1: a type count change from the raw tab keeps the editor on an existing type", async () => {
     const t = await openBuilder();
-    await openSection(t, "queryTypes");
-    await openType(t, "WNT");
+    await openType(t, "DL");
     act(() => {
       const d = structuredClone(state(t).doc) as { queryTypes: QueryType[] };
       d.queryTypes.shift();
       state(t).setDoc(d as never);
     });
-    expect(screen.queryByRole("group", { name: "Query type WNT" })).toBeNull();
-    expect(screen.queryByRole("group", { name: /^Query type / })).toBeNull();
+    // DL was the last type; the index now points past the end, so the last type (DL) shows.
+    expect(screen.getByText("Query type DL", { selector: "legend" })).toBeInTheDocument();
+    expect(screen.getAllByText(/^Query type /, { selector: "legend" })).toHaveLength(1);
   });
 
   it("M2: a field section select offers a blank for a missing or stale section", async () => {
@@ -381,13 +382,14 @@ describe("focus after remove (#388)", () => {
     expect(within(group(picklistBox("sex"), `Value ${next}`)).getByLabelText("Code")).toHaveFocus();
   });
 
-  it("removing a query type focuses the next type's summary", async () => {
+  it("removing a query type selects the next type and focuses its code", async () => {
     const t = await openBuilder();
     await openSection(t, "queryTypes");
     await openType(t, "PRO");
     await t.user.click(
       within(typeBox("PRO")).getByRole("button", { name: "Remove query type PRO" }),
     );
-    expect(screen.getByText("Query type WNT", { selector: "summary" })).toHaveFocus();
+    const code = await waitFor(() => within(typeBox("WNT")).getByRole("textbox", { name: "Code" }));
+    await waitFor(() => expect(code).toHaveFocus());
   });
 });

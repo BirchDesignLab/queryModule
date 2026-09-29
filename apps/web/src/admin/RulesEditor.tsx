@@ -648,7 +648,7 @@ export function SectionCondition({
       />
       <button
         type="button"
-        className="qm-button"
+        className="qm-button qm-button--danger"
         onClick={() => {
           setPath(whenPath, undefined);
           focus([owner, "add"]);

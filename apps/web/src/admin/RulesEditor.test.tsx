@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
+import { selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -52,8 +53,7 @@ const rulesOf = (t: Opened, code: string) =>
   (types(t).find((q) => q.code === code) as QueryType).rules;
 
 async function openType(t: Opened, code: string) {
-  await t.user.click(await screen.findByText("queryTypes", { selector: "summary" }));
-  await t.user.click(screen.getByText(`Query type ${code}`, { selector: "summary" }));
+  await selectBuilderItem(t.user, code);
   return group(document, `Query type ${code}`);
 }
 

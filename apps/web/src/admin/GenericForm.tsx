@@ -1,8 +1,10 @@
+import { VisuallyHidden } from "@querymodule/web-ui";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
 import { controlId, NumberControl, useDraftSetters } from "./controls.js";
-import { type PathSegment, toPointer } from "./draft.js";
+import type { PathSegment } from "./draft.js";
+import { issueWords } from "./selection.js";
 
 interface NodeEditorProps {
   value: unknown;
@@ -82,7 +84,7 @@ function ArrayEditor({
             <NodeEditor value={item} path={itemPath} idPrefix={idPrefix} onChange={onChange} />
             <button
               type="button"
-              className="qm-button"
+              className="qm-button qm-button--danger"
               aria-label={`${t("admin.config.remove")} ${pathText(itemPath)}`}
               onClick={() => {
                 const next = items.filter((_, j) => j !== i);
@@ -194,25 +196,54 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
   );
 }
 
-/** Sections open on demand, so a large config does not render every control at once. */
-export function Section({ name, children }: { name: string; children: () => React.ReactNode }) {
+/**
+ * One top-level item in the editor (A-D1 A2): the tree selects it, so it renders open under a
+ * heading with its plain name, its config key in mono and its issue count (design lead 09-29-26).
+ */
+export function EditorSection({
+  pointer,
+  label,
+  configKey,
+  children,
+}: {
+  pointer: string;
+  label: string;
+  configKey?: string;
+  children: React.ReactNode;
+}) {
   const t = useT();
   const checks = useContext(ChecksContext);
-  const [open, setOpen] = useState(false);
-  const prefix = toPointer([name]);
-  const count = checks.issues.filter(
-    (i) => i.pointer === prefix || i.pointer.startsWith(`${prefix}/`),
-  ).length;
+  let errors = 0;
+  let warnings = 0;
+  for (const i of checks.issues)
+    if (i.pointer === pointer || i.pointer.startsWith(`${pointer}/`)) {
+      if (i.level === "error") errors++;
+      else warnings++;
+    }
   return (
-    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>
-        {name}
-        {count > 0 && (
-          <span className="qm-admin__count"> {t("admin.config.issueCount", { count })}</span>
+    <section className="qm-editor__section" data-path={pointer}>
+      <h3 className="qm-editor__title">
+        {label}
+        {configKey !== undefined && configKey !== label && (
+          <>
+            {" "}
+            <span className="qm-tree__key">{configKey}</span>
+          </>
         )}
-      </summary>
-      {open && children()}
-    </details>
+        {errors + warnings > 0 && (
+          <>
+            <span
+              className={`qm-badge ${errors > 0 ? "qm-badge--critical" : "qm-badge--warning"}`}
+              aria-hidden="true"
+            >
+              {errors + warnings}
+            </span>
+            <VisuallyHidden>, {issueWords(t, errors, warnings)}</VisuallyHidden>
+          </>
+        )}
+      </h3>
+      {children}
+    </section>
   );
 }
 
