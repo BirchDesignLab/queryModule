@@ -199,12 +199,31 @@ export function pointerLines(text: string): Map<string, number> {
       i++;
     }
   };
+  const fail = (): never => {
+    throw new SyntaxError("unparseable draft text");
+  };
+  const expect = (ch: string): void => {
+    if (text[i] !== ch) fail();
+    i++;
+  };
   const readString = (): string => {
     const start = i;
-    i++;
+    expect('"');
     while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
+    if (i >= text.length) fail();
     i++;
     return JSON.parse(text.slice(start, i)) as string;
+  };
+  /** After an element: a comma continues the container, the closer ends it, anything else is malformed. */
+  const more = (closer: string): boolean => {
+    skipWs();
+    if (text[i] === ",") {
+      i++;
+      skipWs();
+      return true;
+    }
+    expect(closer);
+    return false;
   };
   const value = (path: string): void => {
     skipWs();
@@ -212,37 +231,38 @@ export function pointerLines(text: string): Map<string, number> {
     if (c === "{") {
       i++;
       skipWs();
-      while (text[i] !== "}") {
+      if (text[i] === "}") {
+        i++;
+        return;
+      }
+      do {
         const keyLine = line;
         const key = readString();
         const child = `${path}/${escapeSegment(key)}`;
         lines.set(child, keyLine);
         skipWs();
-        i++; // ':'
+        expect(":");
         value(child);
-        skipWs();
-        if (text[i] === ",") i++;
-        skipWs();
-      }
-      i++;
+      } while (more("}"));
     } else if (c === "[") {
       i++;
       skipWs();
+      if (text[i] === "]") {
+        i++;
+        return;
+      }
       let index = 0;
-      while (text[i] !== "]") {
-        skipWs();
+      do {
         const child = `${path}/${index++}`;
         lines.set(child, line);
         value(child);
-        skipWs();
-        if (text[i] === ",") i++;
-        skipWs();
-      }
-      i++;
+      } while (more("]"));
     } else if (c === '"') {
       readString();
     } else {
+      const start = i;
       while (i < text.length && !/[\s,\]}]/.test(text[i] ?? "")) i++;
+      if (i === start) fail();
     }
   };
   try {

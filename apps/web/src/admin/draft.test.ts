@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createResetController } from "@querymodule/client";
 import { describe, expect, it } from "vitest";
 import { EN_BUNDLE } from "../test/en-bundle.js";
@@ -100,5 +103,33 @@ describe("pointerLines (Task 33)", () => {
     const lines = pointerLines(JSON.stringify({ a: { b: 1 } }, null, 2));
     expect(lineOf(lines, "/a/missing/deeper")).toBe(2);
     expect(lineOf(lines, "/nope")).toBeUndefined();
+  });
+
+  it.each([
+    ["an unterminated array", '{"a": [1, 2'],
+    ["a stray } in an array", '{"a": [1, }'],
+    ["[,]", '{"a": [,]}'],
+    ["an unterminated object", '{"a": {"b": 1'],
+    ["an unterminated string", '{"a": "x'],
+    ["empty text", ""],
+  ])("terminates with an empty map on %s", (_name, text) => {
+    expect(pointerLines(text).size).toBe(0);
+  });
+});
+
+describe("config diagnostic texts (Task 33 round 1, S1/C2, NFR-001)", () => {
+  it("every config.* key core can emit has en text", () => {
+    const dir = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../../packages/core/src/config",
+    );
+    const keys = new Set<string>();
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".ts") && !n.endsWith(".test.ts"))) {
+      for (const m of readFileSync(join(dir, f), "utf8").matchAll(/"(config\.[A-Za-z0-9]+)"/g)) {
+        keys.add(m[1] as string);
+      }
+    }
+    expect(keys.size).toBeGreaterThan(50);
+    expect([...keys].filter((k) => !(k in flattenBundle(EN_BUNDLE)))).toEqual([]);
   });
 });

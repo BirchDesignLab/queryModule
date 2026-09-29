@@ -78,12 +78,13 @@ function useDraftChecks(
   labels: ReturnType<typeof useDraft>["labels"],
 ): DraftChecks {
   const bundleState = useEnglishBundle();
-  const settled = useDebounced({ doc, labels }, CHECK_DEBOUNCE_MS);
+  const settledDoc = useDebounced(doc, CHECK_DEBOUNCE_MS);
+  const settledLabels = useDebounced(labels, CHECK_DEBOUNCE_MS);
   return useMemo(() => {
     if (bundleState.status !== "ready") return { ...NO_CHECKS, status: bundleState.status };
-    const issues = draftIssues(validateDraft(settled.doc, settled.labels, bundleState.bundle));
-    return { status: "ready", issues, groups: groupByControl(settled.doc, issues) };
-  }, [bundleState, settled]);
+    const issues = draftIssues(validateDraft(settledDoc, settledLabels, bundleState.bundle));
+    return { status: "ready", issues, groups: groupByControl(settledDoc, issues) };
+  }, [bundleState, settledDoc, settledLabels]);
 }
 
 const isError = (issues: readonly DraftIssue[] | undefined): boolean =>

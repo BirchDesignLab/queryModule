@@ -44,7 +44,7 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
     await waitFor(() =>
       expect(
         document.getElementById(input.getAttribute("aria-describedby") ?? ""),
-      ).toHaveTextContent(/unknownQueryType/),
+      ).toHaveTextContent(/Unknown query type "ZZZ"/),
     );
     expect(errorCount()).toBe(base + 1);
     expect(input).toHaveFocus();
