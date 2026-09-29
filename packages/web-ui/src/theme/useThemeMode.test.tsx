@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { installMatchMedia } from "../test/match-media.js";
 import { useThemeMode } from "./useThemeMode.js";
 
@@ -17,5 +17,26 @@ describe("UX-002 theme mode applied to <html> without reload (spec 6.5)", () => 
     const { result } = renderHook(() => useThemeMode({ preference: "redShift", selection: null }));
     expect(result.current).toBe("redShift");
     expect(document.documentElement.dataset.theme).toBe("redShift");
+  });
+});
+
+describe("UX-002 site default auto follows the clock (D-B1, #175)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  it("tracks the hour with no preference when the site defaults to auto time", () => {
+    installMatchMedia({});
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 28, 18, 59));
+    const { result } = renderHook(() =>
+      useThemeMode({ preference: null, selection: { defaultMode: "auto", auto: "time" } }),
+    );
+    expect(result.current).toBe("day");
+    act(() => {
+      vi.setSystemTime(new Date(2026, 8, 28, 19, 0));
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(result.current).toBe("night");
+    expect(document.documentElement.dataset.theme).toBe("night");
   });
 });

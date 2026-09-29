@@ -1,8 +1,15 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
-import { API, PREFERENCES, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
+import {
+  API,
+  CLIENT_CONFIG,
+  PREFERENCES,
+  server,
+  TEST_PASSWORD,
+  TEST_USER,
+} from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 
 async function signIn() {
@@ -142,5 +149,49 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
     const { user } = await signIn();
     await user.selectOptions(screen.getByLabelText("Theme"), "redShift");
     await waitFor(() => expect(puts).toEqual([{ ...PREFERENCES, themeMode: "redShift" }]));
+  });
+});
+
+describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
+  const withSite = (theme: { defaultMode: string; auto: string }, themeMode: string | null) =>
+    server.use(
+      http.get(`${API}/api/v1/config`, () => HttpResponse.json({ ...CLIENT_CONFIG, theme })),
+      http.get(`${API}/api/v1/me/preferences`, () =>
+        HttpResponse.json({ ...PREFERENCES, themeMode }),
+      ),
+    );
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  it("signed out, the OS scheme decides", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    renderRoot();
+    await screen.findByLabelText(/Email/);
+    expect(document.documentElement.dataset.theme).toBe("day");
+  });
+  it("with no preference the site default applies after sign-in", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, null);
+    await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+  });
+  it("a user preference wins over the site default", async () => {
+    withSite({ defaultMode: "night", auto: "off" }, "day");
+    await signIn();
+    await screen.findByLabelText("Query type");
+    expect(document.documentElement.dataset.theme).toBe("day");
+  });
+  it("preference auto with site auto time follows the clock", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 28, 21, 0));
+    withSite({ defaultMode: "day", auto: "time" }, "auto");
+    await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+  });
+  it("D-B1: site default auto with auto time and no preference follows the clock", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 28, 21, 0));
+    withSite({ defaultMode: "auto", auto: "time" }, null);
+    await signIn();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
   });
 });

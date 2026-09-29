@@ -1,17 +1,37 @@
 import { savePreferences, useStore } from "@querymodule/client";
+import type { ClientSiteConfig } from "@querymodule/core/config";
+import type { ThemeSelection } from "@querymodule/tokens";
 import { ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
-import { useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect, useSyncExternalStore } from "react";
 import { Link, Outlet } from "react-router";
 import { useT } from "./i18n-context.js";
 import { useServices } from "./services-context.js";
 import { useSignOut } from "./use-sign-out.js";
 
-/** Applies theme mode and persona to <html>. Site theme selection arrives with GET config in B P2. */
+/**
+ * SiteConfig.theme from the cached GET /api/v1/config (key ["config"], filled by the query panel),
+ * or null before sign-in and after reset, when the OS scheme decides (spec 6.5, #175).
+ */
+function useSiteThemeSelection(): ThemeSelection | null {
+  const { queryClient } = useServices();
+  const subscribe = useCallback(
+    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
+    [queryClient],
+  );
+  const config = useSyncExternalStore(subscribe, () =>
+    queryClient.getQueryData<ClientSiteConfig>(["config"]),
+  );
+  if (config === undefined) return null;
+  return { defaultMode: config.theme?.defaultMode ?? "day", auto: config.theme?.auto ?? "off" };
+}
+
+/** Applies theme mode (user preference, then SiteConfig.theme) and persona to <html>. */
 export function AppChrome() {
   const { preferences } = useServices();
   const themeMode = useStore(preferences, (s) => s.themeMode);
   const personaOverride = useStore(preferences, (s) => s.personaOverride);
-  useThemeMode({ preference: themeMode, selection: null });
+  const selection = useSiteThemeSelection();
+  useThemeMode({ preference: themeMode, selection });
   const { persona } = usePersona(null, personaOverride);
   useLayoutEffect(() => {
     document.documentElement.dataset.persona = persona;

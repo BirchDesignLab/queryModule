@@ -23,7 +23,10 @@ function useLocalHour(active: boolean): number {
 /** Sets `data-theme` on <html>; no reload (spec 6.5). */
 export function useThemeMode({ preference, selection, root }: UseThemeModeOptions): ThemeMode {
   const osPrefersDark = useMediaQuery("(prefers-color-scheme: dark)");
-  const localHour = useLocalHour(preference === "auto" && selection?.auto === "time");
+  // The clock matters when auto "time" applies: a preference of auto, or none with a site default of auto (D-B1).
+  const followsAuto =
+    preference === "auto" || (preference === null && selection?.defaultMode === "auto");
+  const localHour = useLocalHour(followsAuto && selection?.auto === "time");
   const mode = resolveThemeMode({ preference, selection, osPrefersDark, localHour });
   useLayoutEffect(() => {
     (root ?? document.documentElement).dataset.theme = mode;
