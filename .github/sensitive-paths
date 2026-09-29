@@ -83,6 +83,12 @@ packages/api/src/log/**
 # Auth and sessions (developer decision 09-27-26: gate, not critical)
 packages/api/src/auth/**
 packages/api/src/http/session.ts
+# #338: X-Requested-With CSRF guard, security headers, body cap
+packages/api/src/http/security.ts
+# #338: sets the CSP nonce header on served pages
+packages/api/src/http/web.ts
+# #338: the one place the CSRF, header and body-cap middleware is mounted
+packages/api/src/app.ts
 packages/api/src/ws/**
 packages/api/src/seed/**
 packages/api/src/ops/**
