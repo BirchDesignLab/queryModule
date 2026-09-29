@@ -4,7 +4,7 @@ import { configuredDefault } from "./defaults";
 import { type DiagnosticSink, pointer } from "./diagnostic";
 import type { SiteConfig } from "./schema";
 import { MAX_ALSO_RUN, MAX_VALUE_LENGTH } from "./schema-fields";
-import { resolveShortcuts, strokesCollide, usLayoutChar } from "./shortcuts";
+import { EDITING_COMBOS, resolveShortcuts, strokesCollide, usLayoutChar } from "./shortcuts";
 import { forEachConditionLiteral } from "./validate-literals";
 
 export const MAX_SOURCES_PER_SUBMIT = 8;
@@ -205,6 +205,13 @@ export function checkShortcuts(config: SiteConfig, out: DiagnosticSink): void {
   const all = Object.entries(resolveShortcuts(config.shortcuts)).flatMap(([action, bs]) =>
     bs.map((b) => ({ action, ...b })),
   );
+  for (const b of all) {
+    // Params carry the action and the stroke code, never a value (spec 4.1).
+    const stroke = b.keys.split(" ").find((s) => EDITING_COMBOS.has(s));
+    if (stroke === undefined) continue;
+    const path = config.shortcuts?.[b.action] ? pointer("shortcuts", b.action) : "/shortcuts";
+    out.error(path, "config.shortcutEditingCombo", { action: b.action, keys: stroke });
+  }
   for (let i = 0; i < all.length; i++) {
     for (let j = i + 1; j < all.length; j++) {
       const a = all[i];

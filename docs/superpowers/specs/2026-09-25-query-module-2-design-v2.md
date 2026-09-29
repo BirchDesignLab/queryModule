@@ -1129,7 +1129,7 @@ A shortcut engine in `packages/web-ui` serves every web persona. Bindings use `S
 - Single keys (no modifier, or Shift only) are inert while focus is in an `input`, `textarea`, `select`, contenteditable element or the terminal.
 - Combos (Ctrl or Alt) and chords fire anywhere unless the focused text input consumes the key. Standard editing combos (Ctrl+A, C, V, X, Z, Y) are never bound.
 - A chord whose first stroke is a single key is therefore inert in text inputs. A pending chord times out after 1000 ms.
-- Context: `global` always applies; `panel`, `results` or `terminal` applies while focus is inside that region.
+- Context: `global` always applies; `panel`, `results` or `terminal` applies while focus is inside that region. When regions nest and bind the same keys, the innermost region wins, then outer regions, then `global`.
 - Config validation (4.1) rejects: two bindings with the same keys in one context; a chord prefix equal to another binding in the same context (`KeyG` with `KeyG KeyR`); a `global` binding that collides with a binding in any context; a single-key binding whose character equals `terminal.delimiter`, resolved on a US layout because `KeyboardEvent.code` is US-positional.
 - `siteConfig.shortcuts` overrides the default map per action key.
 

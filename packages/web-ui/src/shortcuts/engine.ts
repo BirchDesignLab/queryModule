@@ -1,4 +1,5 @@
 import {
+  EDITING_COMBOS,
   type ShortcutBinding,
   type ShortcutContext,
   STROKE_PATTERN,
@@ -7,6 +8,8 @@ import {
 /** Pure keyboard shortcut engine (spec 6.4). No DOM, no timers: the caller passes `now`. */
 
 export interface StrokeInput {
+  /** KeyboardEvent.getModifierState; AltGr (AltGraph) arrives as Ctrl+Alt on Windows layouts. */
+  getModifierState?(key: string): boolean;
   code: string;
   ctrlKey: boolean;
   altKey: boolean;
@@ -17,13 +20,16 @@ export interface StrokeInput {
 /** "[Ctrl+][Alt+][Shift+]<code>" in STROKE_PATTERN order; null for Meta combos and unknown codes (never bound). */
 export function strokeOf(e: StrokeInput): string | null {
   if (e.metaKey) return null;
+  // An AltGr keystroke types a character; it is not a Ctrl+Alt combo (spec 6.4).
+  if (e.getModifierState?.("AltGraph") === true) return null;
   const stroke = `${e.ctrlKey ? "Ctrl+" : ""}${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${e.code}`;
   return STROKE_PATTERN.test(stroke) ? stroke : null;
 }
 
 export interface KeyContext {
   inTextInput: boolean;
-  /** "global" plus every region the focus is inside. */
+  /** Every region the focus is inside, innermost first, plus "global". A "global" entry is always
+   *  ranked last wherever it sits; regions rank by position (nested tie order, spec 6.4). */
   contexts: readonly ShortcutContext[];
 }
 
@@ -39,15 +45,8 @@ export interface ShortcutEngine {
 
 export const CHORD_TIMEOUT_MS = 1000;
 
-/** Text-editing combos never fire, even if a site bound them. The engine guards this at runtime; core config validation does not reject them. */
-export const EDITING_COMBOS: ReadonlySet<string> = new Set([
-  "Ctrl+KeyA",
-  "Ctrl+KeyC",
-  "Ctrl+KeyV",
-  "Ctrl+KeyX",
-  "Ctrl+KeyZ",
-  "Ctrl+KeyY",
-]);
+/** Text-editing combos never fire, even if bound. The engine guards this at runtime; core config validation also rejects them (config.shortcutEditingCombo). One source, in core. */
+export { EDITING_COMBOS };
 
 interface Entry {
   strokes: readonly string[];
@@ -55,7 +54,8 @@ interface Entry {
   context: ShortcutContext;
 }
 
-const NONE: EngineResult = { kind: "none" };
+/** Shared result; frozen so a caller cannot change what every later call returns. */
+const NONE: EngineResult = Object.freeze({ kind: "none" as const });
 
 /** A single key: no Ctrl and no Alt (Shift allowed). */
 function isSingleKey(stroke: string): boolean {
@@ -76,6 +76,10 @@ export function createShortcutEngine(
   const applies = (entry: Entry, ctx: KeyContext): boolean =>
     entry.context === "global" || ctx.contexts.includes(entry.context);
 
+  /** Lower wins. Nested contexts: innermost region first, then outer regions, then global. */
+  const rank = (entry: Entry, ctx: KeyContext): number =>
+    entry.context === "global" ? Number.MAX_SAFE_INTEGER : ctx.contexts.indexOf(entry.context);
+
   const matchFrom = (
     seq: readonly string[],
     ctx: KeyContext,
@@ -85,8 +89,9 @@ export function createShortcutEngine(
     for (const entry of entries) {
       if (!applies(entry, ctx) || entry.strokes.length < seq.length) continue;
       if (!seq.every((s, i) => s === entry.strokes[i])) continue;
-      if (entry.strokes.length === seq.length) full ??= entry;
-      else prefix = true;
+      if (entry.strokes.length === seq.length) {
+        if (full === null || rank(entry, ctx) < rank(full, ctx)) full = entry;
+      } else prefix = true;
     }
     return { full, prefix };
   };
