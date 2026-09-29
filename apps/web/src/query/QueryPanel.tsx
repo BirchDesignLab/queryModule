@@ -1,4 +1,6 @@
 import {
+  formErrorsId,
+  formLevelErrors,
   QueryForm,
   QueryTypeSelect,
   QuickAccessBar,
@@ -68,7 +70,16 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
             idPrefix={ID_PREFIX}
             t={t}
           />
-          <SubmitButton id={`${ID_PREFIX}-submit`} reason={null} t={t} />
+          <SubmitButton
+            id={`${ID_PREFIX}-submit`}
+            reason={null}
+            describedBy={
+              panel.showErrors && formLevelErrors(formState).length > 0
+                ? formErrorsId(ID_PREFIX)
+                : undefined
+            }
+            t={t}
+          />
         </QueryForm>
       </div>
     </>

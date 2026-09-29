@@ -83,6 +83,22 @@ export function blockedErrorCount(s: FormState): number {
   return perField + formLevelErrors(s).length;
 }
 
+/** The text of one form-level error, with the field label when it names a known field. */
+export function formLevelMessages(s: FormState, t: Translator["t"]): string[] {
+  return formLevelErrors(s).map((error) => {
+    const field = s.fields.find((f) => f.key === error.params?.field);
+    return t(
+      error.key,
+      field === undefined ? error.params : { ...error.params, label: t(field.labelKey) },
+    );
+  });
+}
+
+/** Element id of the form-level error list, for aria-describedby on the submit button. */
+export function formErrorsId(idPrefix: string): string {
+  return `${idPrefix}-form-errors`;
+}
+
 /** Renders only from FormState (BR-001): visible sections as fieldsets, visible fields in order (spec 6.2). */
 export function QueryForm({
   formState,
@@ -137,7 +153,7 @@ export function QueryForm({
         </fieldset>
       ))}
       {formErrors.length === 0 ? null : (
-        <ul className="qm-form-errors">
+        <ul id={formErrorsId(idPrefix)} className="qm-form-errors">
           {formErrors.map((error) => {
             const label = labelOf(error);
             return (

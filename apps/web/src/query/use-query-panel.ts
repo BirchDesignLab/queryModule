@@ -1,7 +1,7 @@
 import { clientConfigQuery, type DraftValue, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { evaluateForm, type FormState } from "@querymodule/core/rules";
-import { blockedErrorCount, focusFirstInvalid } from "@querymodule/web-ui";
+import { blockedErrorCount, focusFirstInvalid, formLevelMessages } from "@querymodule/web-ui";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -168,7 +168,9 @@ export function useQueryPanel(): QueryPanelModel {
       const count = blockedErrorCount(formState);
       setShowErrors(true);
       setFocusTick((n) => n + 1);
-      announcer.announce(t("form.fieldsNeedAttention", { count }));
+      announcer.announce(
+        [t("form.fieldsNeedAttention", { count }), ...formLevelMessages(formState, t)].join(" "),
+      );
     },
   };
 }
