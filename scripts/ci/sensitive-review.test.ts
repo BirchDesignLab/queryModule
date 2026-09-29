@@ -115,6 +115,11 @@ describe("sensitive-review (spec 9.1)", () => {
     for (const f of [
       "packages/api/src/auth/x.ts",
       "packages/api/src/http/session.ts",
+      // #338: the X-Requested-With CSRF guard, security headers and body cap; the CSP
+      // nonce header; the one place that middleware is mounted.
+      "packages/api/src/http/security.ts",
+      "packages/api/src/http/web.ts",
+      "packages/api/src/app.ts",
       "packages/api/src/ws/server.ts",
       "packages/api/src/seed/users.ts",
       "packages/api/src/ops/grant-role.ts",
