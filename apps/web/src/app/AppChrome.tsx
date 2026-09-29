@@ -4,6 +4,7 @@ import type { ThemeSelection } from "@querymodule/tokens";
 import { ShortcutProvider, ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
 import { Link, Outlet } from "react-router";
+import { AdminLink } from "../admin/AdminLink.js";
 import { useT } from "./i18n-context.js";
 import { useServices } from "./services-context.js";
 import { useSignOut } from "./use-sign-out.js";
@@ -63,6 +64,7 @@ export function AppHeader() {
           <Link className="qm-app-header__status" to="/status">
             {t("status.title")}
           </Link>
+          <AdminLink />
         </nav>
         <p className="qm-app-header__user">{t("home.signedInAs", { email: user?.email ?? "" })}</p>
         <ThemeModeSelect

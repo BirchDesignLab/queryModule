@@ -186,5 +186,13 @@
   "picklist.plateColor.WH": "White",
   "picklist.plateColor.BL": "Blue",
   "picklist.propertyType.ELECTRONICS": "Electronics",
-  "picklist.propertyType.VEHICLE": "Vehicle"
+  "picklist.propertyType.VEHICLE": "Vehicle",
+  "admin.link": "Admin",
+  "admin.title": "Admin",
+  "admin.navLabel": "Admin sections",
+  "admin.nav.config": "Config",
+  "admin.nav.users": "Users",
+  "admin.config.title": "Site config",
+  "admin.users.title": "Users",
+  "admin.users.pending": "User administration arrives with the admin API."
 }
