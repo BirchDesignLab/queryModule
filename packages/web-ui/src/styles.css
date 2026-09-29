@@ -658,3 +658,98 @@ h1 {
 .qm-layout--mobile-unit .qm-command-echo__text {
   font-size: var(--qm-type-body-size);
 }
+
+/* The form on a 12-column grid: each cell's width comes from its type and maxLength (fieldSpan),
+   never from the query type. Under 36rem every cell is full width. */
+.qm-form-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--qm-space-1) var(--qm-space-3);
+}
+
+.qm-form-grid[hidden] {
+  display: none;
+}
+
+.qm-form-cell {
+  grid-column: span 12;
+  min-inline-size: 0;
+}
+
+.qm-form-cell > .qm-field {
+  margin-block-end: var(--qm-space-2);
+}
+
+@media (min-width: 36rem) {
+  .qm-span-2 {
+    grid-column: span 2;
+  }
+
+  .qm-span-3 {
+    grid-column: span 3;
+  }
+
+  .qm-span-4 {
+    grid-column: span 4;
+  }
+
+  .qm-span-6 {
+    grid-column: span 6;
+  }
+
+  .qm-span-8 {
+    grid-column: span 8;
+  }
+}
+
+/* "More details" and any later section: the legend holds a button that opens and closes the fields. */
+.qm-disclosure-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  min-height: var(--qm-control-height-dense);
+  padding: 0 var(--qm-space-2);
+  border: var(--qm-border-width) solid transparent;
+  border-radius: var(--qm-radius-sm);
+  background: transparent;
+  color: var(--qm-color-text-muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.qm-disclosure-toggle::before {
+  content: "+";
+  inline-size: var(--qm-space-4);
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-disclosure-toggle[aria-expanded="true"]::before {
+  content: "\2212";
+}
+
+.qm-disclosure-toggle:hover {
+  color: var(--qm-color-text-body);
+}
+
+/* Officer: a 6-column grid, narrow cells half width, everything else full (spec 6.3). */
+.qm-layout--mobile-unit .qm-form-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--qm-space-2) var(--qm-space-4);
+}
+
+.qm-layout--mobile-unit .qm-form-cell {
+  grid-column: span 6;
+}
+
+.qm-layout--mobile-unit .qm-span-2,
+.qm-layout--mobile-unit .qm-span-3,
+.qm-layout--mobile-unit .qm-span-4 {
+  grid-column: span 3;
+}
+
+.qm-layout--mobile-unit .qm-disclosure-toggle {
+  min-height: var(--qm-target-min);
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}

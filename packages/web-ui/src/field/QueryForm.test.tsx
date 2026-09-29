@@ -7,7 +7,13 @@ import { evaluateForm, type FormState } from "@querymodule/core/rules";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { blockedErrorCount, fieldErrors, formLevelErrors, QueryForm } from "./QueryForm.js";
+import {
+  blockedErrorCount,
+  fieldErrors,
+  fieldSpan,
+  formLevelErrors,
+  QueryForm,
+} from "./QueryForm.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string): unknown => JSON.parse(readFileSync(join(here, rel), "utf8"));
@@ -38,6 +44,7 @@ function setup(
     showErrors?: boolean;
     values?: Record<string, DraftValue>;
     excludeKeys?: ReadonlySet<string>;
+    fieldConfig?: ReadonlyMap<string, { maxLength?: number }>;
   } = {},
 ) {
   const onChange = vi.fn();
@@ -46,7 +53,7 @@ function setup(
     <QueryForm
       formState={state}
       values={over.values ?? {}}
-      fieldConfig={new Map()}
+      fieldConfig={over.fieldConfig ?? new Map()}
       showErrors={over.showErrors ?? false}
       onChange={onChange}
       onSubmitAttempt={onSubmitAttempt}
@@ -58,6 +65,32 @@ function setup(
     </QueryForm>,
   );
   return { onChange, onSubmitAttempt, container };
+}
+
+/** Like setup, but returns a rerender that keeps the same mounted form. */
+function renderForm(state: FormState, over: { showErrors?: boolean } = {}) {
+  const view = (
+    next: FormState,
+    o: { showErrors?: boolean; values?: Record<string, DraftValue> },
+  ) => (
+    <QueryForm
+      formState={next}
+      values={o.values ?? {}}
+      fieldConfig={new Map()}
+      showErrors={o.showErrors ?? false}
+      onChange={() => undefined}
+      onSubmitAttempt={() => undefined}
+      t={t}
+      idPrefix="qf"
+    />
+  );
+  const r = render(view(state, over));
+  return {
+    rerender: (
+      next: FormState,
+      o: { showErrors?: boolean; values?: Record<string, DraftValue> } = {},
+    ) => r.rerender(view(next, o)),
+  };
 }
 
 describe("FR-002 sections render as fieldsets", () => {
@@ -285,5 +318,82 @@ describe("ADR-0010 excludeKeys", () => {
     cleanup();
     const all = setup(state, { excludeKeys: new Set(visible.map((f) => f.key)) });
     expect(all.container.querySelectorAll("fieldset")).toHaveLength(0);
+  });
+});
+
+describe("design B2 form grid and the More details disclosure", () => {
+  it("fieldSpan: width from data type and maxLength, no per-type code", () => {
+    expect(fieldSpan("year", undefined)).toBe(2);
+    expect(fieldSpan("date", undefined)).toBe(3);
+    expect(fieldSpan("boolean", undefined)).toBe(6);
+    expect(fieldSpan("picklist", undefined)).toBe(4);
+    expect(fieldSpan("string", 7)).toBe(3);
+    expect(fieldSpan("string", 17)).toBe(6);
+    expect(fieldSpan("string", 50)).toBe(8);
+    expect(fieldSpan("string", 200)).toBe(12);
+    expect(fieldSpan("string", undefined)).toBe(12);
+  });
+
+  it("renders fields as grid cells with a span class from fieldConfig maxLength", () => {
+    const { container } = setup(form("VEH"), {
+      fieldConfig: new Map([["vin", { maxLength: 17 }]]),
+    });
+    expect(container.querySelector(".qm-form-grid")).not.toBeNull();
+    const vin = screen.getByLabelText("VIN").closest(".qm-form-cell");
+    expect(vin).toHaveClass("qm-span-6");
+    expect(screen.getByLabelText("Year").closest(".qm-form-cell")).toHaveClass("qm-span-2");
+  });
+
+  it("the first section is a plain group; a later one is a disclosure with the fields in a region", () => {
+    // State OK shows Plate type (base) and Plate color (More details).
+    setup(form("VEH", { state: "OK" }));
+    const more = screen.getByRole("group", { name: "More details" });
+    const toggle = within(more).getByRole("button", { name: "More details" });
+    expect(toggle).toHaveAttribute("aria-expanded");
+    expect(screen.getByRole("group", { name: "Details" }).querySelector("button")).toBeNull();
+  });
+
+  it("starts closed with nothing required or entered; the toggle opens and closes it, and the state survives a re-render", async () => {
+    const state = form("VEH", { state: "OK" });
+    const { rerender } = renderForm(state);
+    const toggle = screen.getByRole("button", { name: "More details" });
+    const region = document.getElementById(
+      toggle.getAttribute("aria-controls") ?? "",
+    ) as HTMLElement;
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(region).toHaveAttribute("hidden");
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(region).not.toHaveAttribute("hidden");
+    rerender(state, { values: { plate: "ZZ" } });
+    expect(screen.getByRole("button", { name: "More details" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "More details" }));
+    expect(screen.getByRole("button", { name: "More details" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("a field revealed by a rule opens its closed disclosure, so it is never hidden", () => {
+    const { rerender } = renderForm(form("VEH"));
+    expect(screen.queryByRole("button", { name: "More details" })).toBeNull();
+    rerender(form("VEH", { state: "OK" }));
+    const toggle = screen.getByRole("button", { name: "More details" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText(/Plate color/)).toBeVisible();
+  });
+
+  it("a blocked submit opens a disclosure that holds an error", () => {
+    // Property: the agency field is in More details; force an error by a required field there is
+    // not available in the default site, so use the general rule with an errored key.
+    const state = { ...form("VEH", { state: "OK" }), missingRequired: ["plateColor"] };
+    renderForm(state, { showErrors: true });
+    expect(screen.getByRole("button", { name: "More details" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 });

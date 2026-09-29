@@ -63,7 +63,7 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
       new Map(
         (config.queryTypes.find((q) => q.code === queryType)?.fields ?? []).map((f) => [
           f.key,
-          { inputFormats: f.inputFormats, numberKind: f.numberKind },
+          { inputFormats: f.inputFormats, numberKind: f.numberKind, maxLength: f.maxLength },
         ]),
       ),
     [config, queryType],

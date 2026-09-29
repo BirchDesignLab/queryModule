@@ -1,7 +1,15 @@
 import type { DraftValue, Translator } from "@querymodule/client";
 import type { ValidationError } from "@querymodule/core/contracts";
 import type { FormState } from "@querymodule/core/rules";
-import type { FormEvent, JSX, ReactNode } from "react";
+import {
+  type FormEvent,
+  type JSX,
+  type ReactNode,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { FieldRenderer } from "./FieldRenderer.js";
 
 export interface QueryFormProps {
@@ -9,7 +17,7 @@ export interface QueryFormProps {
   values: Readonly<Record<string, DraftValue>>;
   fieldConfig: ReadonlyMap<
     string,
-    { inputFormats?: readonly string[]; numberKind?: "integer" | "decimal" }
+    { inputFormats?: readonly string[]; numberKind?: "integer" | "decimal"; maxLength?: number }
   >;
   /** True after a blocked submit. */
   showErrors: boolean;
@@ -117,6 +125,65 @@ export function formErrorsId(idPrefix: string): string {
   return `${idPrefix}-form-errors`;
 }
 
+/**
+ * Grid columns (of 12) a field takes, from its type and maxLength alone (BR-001: no per-query-type
+ * UI code): short codes narrow, longer text wider, unbounded text full width.
+ */
+export function fieldSpan(dataType: string, maxLength: number | undefined): number {
+  switch (dataType) {
+    case "year":
+      return 2;
+    case "date":
+    case "number":
+      return 3;
+    case "boolean":
+      return 6;
+    case "picklist":
+      return 4;
+    default:
+      if (maxLength === undefined) return 12;
+      if (maxLength <= 8) return 3;
+      if (maxLength <= 20) return 6;
+      return maxLength <= 60 ? 8 : 12;
+  }
+}
+
+/**
+ * Sections after the first are disclosures: a button in the legend, the fields in a region that is
+ * hidden while closed (still in the DOM, so values and rules are untouched). Open state is kept
+ * here, so it survives re-renders. A section starts open when it holds a required field or a value
+ * the user already entered, opens when a field appears in it (a rule revealed one) and while a
+ * blocked submit shows an error in it; the user's own toggle wins otherwise.
+ */
+function useDisclosures(
+  sections: ReturnType<typeof renderedSections>,
+  showErrors: boolean,
+  errored: ReadonlySet<string>,
+) {
+  const [explicit, setExplicit] = useState<Readonly<Record<string, boolean>>>({});
+  const seen = useRef<Map<string, number> | null>(null);
+  const counts = new Map(sections.map(({ section, fields }) => [section.key, fields.length]));
+  // A new visible field in a section (after the first render) opens it, once, so a revealed field
+  // is never hidden inside a closed disclosure. Layout effect: it lands in the same commit.
+  useLayoutEffect(() => {
+    const before = seen.current;
+    seen.current = counts;
+    if (before === null) return;
+    const grown = [...counts].filter(([key, n]) => n > (before.get(key) ?? 0)).map(([key]) => key);
+    if (grown.length > 0)
+      setExplicit((prev) => ({ ...prev, ...Object.fromEntries(grown.map((key) => [key, true])) }));
+  });
+  const isOpen = ({ section, fields }: (typeof sections)[number]): boolean => {
+    if (showErrors && fields.some((f) => errored.has(f.key))) return true;
+    const chosen = explicit[section.key];
+    if (chosen !== undefined) return chosen;
+    return fields.some((f) => f.required || f.userValue !== null);
+  };
+  const toggle = (key: string, next: boolean): void =>
+    setExplicit((prev) => ({ ...prev, [key]: next }));
+  return { isOpen, toggle };
+}
+
 /** Renders only from FormState (BR-001): visible sections as fieldsets, visible fields in order (spec 6.2). */
 export function QueryForm({
   formState,
@@ -132,6 +199,8 @@ export function QueryForm({
 }: QueryFormProps): JSX.Element {
   const errors = showErrors ? fieldErrors(formState) : new Map<string, ValidationError>();
   const sections = renderedSections(formState, excludeKeys);
+  const disclosures = useDisclosures(sections, showErrors, new Set(errors.keys()));
+  const disclosureId = useId();
   const formErrors = showErrors ? formLevelErrors(formState) : [];
   const labelOf = (error: ValidationError): string | undefined => {
     const field = formState.fields.find((f) => f.key === error.params?.field);
@@ -145,32 +214,64 @@ export function QueryForm({
 
   return (
     <form noValidate className="qm-query-form" onSubmit={onSubmit}>
-      {sections.map(({ section, fields }) => (
-        <fieldset key={section.key} className="qm-query-form__section">
-          <legend>{t(section.labelKey)}</legend>
-          {fields.map((field) => {
-            const error = errors.get(field.key);
-            const cfg = fieldConfig.get(field.key);
-            return (
-              <FieldRenderer
-                key={field.key}
-                field={field}
-                userValue={values[field.key] ?? null}
-                error={
-                  error === undefined
-                    ? undefined
-                    : t(error.key, { ...error.params, label: t(field.labelKey) })
-                }
-                onChange={onChange}
-                t={t}
-                idPrefix={idPrefix}
-                inputFormats={cfg?.inputFormats}
-                numberKind={cfg?.numberKind}
-              />
-            );
-          })}
-        </fieldset>
-      ))}
+      {sections.map((entry, index) => {
+        const { section, fields } = entry;
+        const open = index === 0 || disclosures.isOpen(entry);
+        const regionId = `${disclosureId}-${section.key}`;
+        return (
+          <fieldset
+            key={section.key}
+            className={
+              index === 0
+                ? "qm-query-form__section"
+                : "qm-query-form__section qm-query-form__section--disclosure"
+            }
+          >
+            <legend>
+              {index === 0 ? (
+                t(section.labelKey)
+              ) : (
+                <button
+                  type="button"
+                  className="qm-disclosure-toggle"
+                  aria-expanded={open}
+                  aria-controls={regionId}
+                  onClick={() => disclosures.toggle(section.key, !open)}
+                >
+                  {t(section.labelKey)}
+                </button>
+              )}
+            </legend>
+            <div id={regionId} className="qm-form-grid" hidden={!open}>
+              {fields.map((field) => {
+                const error = errors.get(field.key);
+                const cfg = fieldConfig.get(field.key);
+                return (
+                  <div
+                    key={field.key}
+                    className={`qm-form-cell qm-span-${fieldSpan(field.dataType, cfg?.maxLength)}`}
+                  >
+                    <FieldRenderer
+                      field={field}
+                      userValue={values[field.key] ?? null}
+                      error={
+                        error === undefined
+                          ? undefined
+                          : t(error.key, { ...error.params, label: t(field.labelKey) })
+                      }
+                      onChange={onChange}
+                      t={t}
+                      idPrefix={idPrefix}
+                      inputFormats={cfg?.inputFormats}
+                      numberKind={cfg?.numberKind}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </fieldset>
+        );
+      })}
       {formErrors.length === 0 ? null : (
         <ul id={formErrorsId(idPrefix)} className="qm-form-errors">
           {formErrors.map((error) => {
