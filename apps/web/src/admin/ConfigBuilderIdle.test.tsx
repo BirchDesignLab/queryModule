@@ -1,8 +1,11 @@
 import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
+import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
+
+beforeAll(preloadAdminRoutes);
 
 const validateDraftCalls = vi.hoisted(() => ({ count: 0 }));
 

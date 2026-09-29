@@ -46,3 +46,24 @@ describe("spec:CV1 the invalid-field border and error text meet WCAG 2.1 AA cont
     }
   });
 });
+
+describe("#395 critic 6: a selected tab is visually distinct from an unselected one (UX-004, WCAG 1.4.1, 1.4.11)", () => {
+  it("an unselected tab is outlined: surface fill, accent text, the button's accent border", () => {
+    expect(css).toMatch(
+      /\.qm-button\[role="tab"\]\[aria-selected="false"\]\s*\{[^}]*background:\s*var\(--qm-color-surface-base\);[^}]*color:\s*var\(--qm-color-accent\);/,
+    );
+    expect(css).toMatch(/\.qm-button\s*\{[^}]*border:[^;]*var\(--qm-color-accent\);/);
+  });
+
+  it("both tab states meet 4.5:1 in every mode", () => {
+    // Contrast is symmetric, so one pair covers both states (surface text on the accent fill, accent
+    // text on the surface) and the fill-versus-outline cue and border against the page (3:1 needed).
+    for (const mode of THEME_MODES) {
+      const ratio = contrastRatio(
+        COLOR_TOKENS["color.surface.base"][mode],
+        COLOR_TOKENS["color.accent"][mode],
+      );
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});

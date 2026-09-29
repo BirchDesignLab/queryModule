@@ -1,9 +1,12 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
+import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
+
+beforeAll(preloadAdminRoutes);
 
 // Wave AB inline batch (checker 09-29-26): deferred critic and quality minors that matter for the demo.
 
@@ -92,6 +95,8 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
     expect(keywords.at(-1)?.keyword).toBe("");
     expect(keywords.at(-2)?.keyword).not.toBe("");
     await openSection(t, "queryTypes");
+    // Task 31 part 2: each query type opens on demand.
+    await t.user.click(screen.getByText("Query type WNT", { selector: "summary" }));
     const add = screen.getByRole("button", { name: "Add item queryTypes.3.rules" });
     expect(add).toBeDisabled();
     expect(document.getElementById(add.getAttribute("aria-describedby") ?? "")).toHaveTextContent(

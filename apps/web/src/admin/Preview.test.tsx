@@ -1,10 +1,13 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { API, server, submitRecorder, TEST_USER } from "../test/msw-server.js";
+import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
 import type { JsonObject } from "./draft.js";
+
+beforeAll(preloadAdminRoutes);
 
 // Task 32 (#357): the builder's live preview is the dispatcher's own panel (ADR-0011 item 4).
 
