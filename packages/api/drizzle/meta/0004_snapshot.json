@@ -792,7 +792,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "source_result_status_check": {
+          "name": "source_result_status_check",
+          "value": "\"source_result\".\"status\" IN ('pending', 'returned', 'failed', 'timedOut', 'credentialsMissing', 'credentialsRejected', 'interrupted')"
+        }
+      }
     },
     "user": {
       "name": "user",

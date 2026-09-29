@@ -24,7 +24,15 @@ const tsxCli = require.resolve("tsx/cli");
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..", "..");
 const temps: string[] = [];
+const links: string[] = [];
+/** Removes the link itself (never its target), so no cleanup can walk through it into scripts/ci. */
+const removeLink = (link: string) => {
+  if (process.platform === "win32") rmdirSync(link);
+  else unlinkSync(link);
+};
+// One hook, links first: the guarantee does not depend on vitest's hook order (#279 G-m2).
 afterAll(() => {
+  for (const l of links.splice(0)) removeLink(l);
   for (const d of temps) rmSync(d, { recursive: true, force: true });
 });
 const temp = (prefix: string) => {
@@ -41,13 +49,9 @@ const temp = (prefix: string) => {
 const linkedCi = (() => {
   const link = join(temp("qm-cli-link-"), "ci");
   symlinkSync(here, link, process.platform === "win32" ? "junction" : "dir");
+  links.push(link);
   return link;
 })();
-// Remove the link itself first, so no cleanup can ever walk through it into scripts/ci.
-afterAll(() => {
-  if (process.platform === "win32") rmdirSync(linkedCi);
-  else unlinkSync(linkedCi);
-});
 
 function run(cli: string, args: string[], env: NodeJS.ProcessEnv = {}) {
   const entry = join(linkedCi, cli);

@@ -62,10 +62,11 @@ export async function recoverLostKey(
       );
       out.requestCount = Number(total[0]?.requests ?? 0);
       await tx.run(sql`DELETE FROM request_key`);
+      // One retentionPurged per scope whenever the table exists, zero counts included (spec 8.7).
       for (const scope of SCOPES) {
         const row = perScope.find((r) => r.scope === scope);
-        if (!row) continue;
-        out.keysDeleted += Number(row.keys);
+        const keysDeleted = row ? Number(row.keys) : 0;
+        out.keysDeleted += keysDeleted;
         await audit.record(tx, {
           type: "retentionPurged",
           actor: SYSTEM_ACTOR,
@@ -74,8 +75,8 @@ export async function recoverLostKey(
             scope,
             reason: "keyLost",
             olderThan: null,
-            requestCount: Number(row.requests),
-            keysDeleted: Number(row.keys),
+            requestCount: row ? Number(row.requests) : 0,
+            keysDeleted,
           },
         });
       }

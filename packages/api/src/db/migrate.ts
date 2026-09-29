@@ -77,7 +77,12 @@ export async function checkAuditTriggers(db: Db): Promise<void> {
  * Every trigger that keeps query_request insert-once and undeletable and source_result
  * write-once and undeletable (migrations 0004 and 0005, SEC-013, FR-063); all must exist.
  * The 0005 BEFORE INSERT triggers close INSERT OR REPLACE, which fires no UPDATE trigger
- * and no DELETE trigger while recursive_triggers is off. request_key has none:
+ * and no DELETE trigger while recursive_triggers is off, through every uniqueness constraint
+ * each table has: the primary key, the source_result (correlation_id, part_id, source_id)
+ * index, the part-0 (user_id, idempotency_key) index and the rowid (both are rowid tables; an
+ * auto-assigned NEW.rowid reads -1 in a BEFORE INSERT trigger, so a normal insert passes). A
+ * duplicate idempotency key aborts with 'query_request idempotency key exists', which is how
+ * admission detects the idempotency race (spec 5.2 step 1). request_key has none:
  * lost-data-key.ts and purge.ts crypto-shred by deleting its rows.
  */
 export const QUERY_TRIGGERS = [
@@ -85,6 +90,7 @@ export const QUERY_TRIGGERS = [
   "source_result_write_once",
   "source_result_no_delete",
   "query_request_no_replace",
+  "query_request_idempotency_once",
   "source_result_no_replace",
   "query_request_no_delete",
 ] as const;
@@ -98,9 +104,11 @@ export const QUERY_TRIGGER_SQL: Record<(typeof QUERY_TRIGGERS)[number], string> 
   source_result_no_delete:
     "CREATE TRIGGER source_result_no_delete BEFORE DELETE ON source_result BEGIN SELECT RAISE(ABORT, 'source_result rows are never deleted'); END",
   query_request_no_replace:
-    "CREATE TRIGGER query_request_no_replace BEFORE INSERT ON query_request WHEN EXISTS (SELECT 1 FROM query_request WHERE correlation_id = NEW.correlation_id AND part_id = NEW.part_id) BEGIN SELECT RAISE(ABORT, 'query_request is insert-once'); END",
+    "CREATE TRIGGER query_request_no_replace BEFORE INSERT ON query_request WHEN EXISTS (SELECT 1 FROM query_request WHERE correlation_id = NEW.correlation_id AND part_id = NEW.part_id) OR EXISTS (SELECT 1 FROM query_request WHERE rowid = NEW.rowid) BEGIN SELECT RAISE(ABORT, 'query_request is insert-once'); END",
+  query_request_idempotency_once:
+    "CREATE TRIGGER query_request_idempotency_once BEFORE INSERT ON query_request WHEN NEW.part_id = 0 AND NEW.idempotency_key IS NOT NULL AND EXISTS (SELECT 1 FROM query_request WHERE part_id = 0 AND user_id = NEW.user_id AND idempotency_key = NEW.idempotency_key) BEGIN SELECT RAISE(ABORT, 'query_request idempotency key exists'); END",
   source_result_no_replace:
-    "CREATE TRIGGER source_result_no_replace BEFORE INSERT ON source_result WHEN EXISTS (SELECT 1 FROM source_result WHERE result_id = NEW.result_id OR (correlation_id = NEW.correlation_id AND part_id = NEW.part_id AND source_id = NEW.source_id)) BEGIN SELECT RAISE(ABORT, 'source_result rows are never replaced'); END",
+    "CREATE TRIGGER source_result_no_replace BEFORE INSERT ON source_result WHEN EXISTS (SELECT 1 FROM source_result WHERE result_id = NEW.result_id OR (correlation_id = NEW.correlation_id AND part_id = NEW.part_id AND source_id = NEW.source_id)) OR EXISTS (SELECT 1 FROM source_result WHERE rowid = NEW.rowid) BEGIN SELECT RAISE(ABORT, 'source_result rows are never replaced'); END",
   query_request_no_delete:
     "CREATE TRIGGER query_request_no_delete BEFORE DELETE ON query_request BEGIN SELECT RAISE(ABORT, 'query_request rows are never deleted'); END",
 };

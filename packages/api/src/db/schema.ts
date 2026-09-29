@@ -215,6 +215,11 @@ export const sourceResult = sqliteTable(
     index("source_result_user_created_idx").on(t.userId, t.createdAt),
     index("source_result_credential_created_idx").on(t.credentialUserId, t.createdAt),
     index("source_result_status_idx").on(t.status),
+    // spec 5.5 status enum, so an out-of-enum status cannot pass the write-once trigger as terminal
+    check(
+      "source_result_status_check",
+      sql`${t.status} IN ('pending', 'returned', 'failed', 'timedOut', 'credentialsMissing', 'credentialsRejected', 'interrupted')`,
+    ),
   ],
 );
 

@@ -129,11 +129,42 @@ describe("SEC-006 lost DATA_KEY shreds request_key (spec 8.7)", () => {
     );
     expect(await count(t, "request_key")).toBe(4);
   });
-  it("reports zero when request_key is empty", async () => {
+  it("reports zero when request_key is empty and still audits one retentionPurged per scope", async () => {
     const t = await createTestApp();
+    const before = await count(t, "audit_event");
     expect(
       await recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), t.deps.audit),
     ).toEqual({ keysDeleted: 0, requestCount: 0 });
+    expect(await count(t, "audit_event")).toBe(before + 2);
+    const rows = (
+      await t.deps.db.$client.execute(
+        "SELECT type, details FROM audit_event ORDER BY id DESC LIMIT 2",
+      )
+    ).rows;
+    expect(rows.map((x) => x.type)).toEqual(["retentionPurged", "retentionPurged"]);
+    const details = rows.map((x) => JSON.parse(String(x.details)) as Record<string, unknown>);
+    expect(details.map((d) => d.scope).sort()).toEqual(["payload", "values"]);
+    for (const d of details)
+      expect(d).toEqual({
+        scope: d.scope,
+        reason: "keyLost",
+        olderThan: null,
+        requestCount: 0,
+        keysDeleted: 0,
+      });
+  });
+  it("audits a zero count for a scope that has no rows", async () => {
+    const t = await createTestApp();
+    await t.deps.db.$client.execute(
+      "INSERT INTO request_key VALUES ('req-a', 'values', x'01', x'02', x'03', 1, 1)",
+    );
+    await recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), t.deps.audit);
+    const details = (
+      await t.deps.db.$client.execute("SELECT details FROM audit_event ORDER BY id DESC LIMIT 2")
+    ).rows.map((x) => JSON.parse(String(x.details)) as Record<string, unknown>);
+    const byScope = Object.fromEntries(details.map((d) => [d.scope, d]));
+    expect(byScope.values).toMatchObject({ requestCount: 1, keysDeleted: 1 });
+    expect(byScope.payload).toMatchObject({ requestCount: 0, keysDeleted: 0 });
   });
   it("still works on a database from before migration 0003 and reports zero", async () => {
     const t = await createTestApp();

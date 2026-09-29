@@ -70,6 +70,14 @@ export function sealPartValues(
   return seal(dek, Buffer.from(JSON.stringify(sorted), "utf8"), valuesAad(correlationId, partId));
 }
 
+/** Decrypted part values that are not JSON. Fixed message: a JSON.parse error quotes its input (spec 5.9). */
+export class PartValuesError extends Error {
+  constructor() {
+    super("part values are not valid JSON");
+    this.name = "PartValuesError";
+  }
+}
+
 export function openPartValues(
   dek: Buffer,
   correlationId: string,
@@ -77,5 +85,11 @@ export function openPartValues(
   s: Sealed,
 ): Record<string, CanonicalValue> {
   const pt = open(dek, s, valuesAad(correlationId, partId));
-  return JSON.parse(pt.toString("utf8")) as Record<string, CanonicalValue>;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(pt.toString("utf8"));
+  } catch {
+    throw new PartValuesError();
+  }
+  return parsed as Record<string, CanonicalValue>;
 }

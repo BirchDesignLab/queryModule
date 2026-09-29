@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { AeadError } from "../../src/keys/aead";
+import { AeadError, seal } from "../../src/keys/aead";
 import {
   createRequestKeys,
   openPartValues,
+  PartValuesError,
   payloadAad,
   REQUEST_KEY_SCOPES,
   type RequestKeyRow,
@@ -77,6 +78,19 @@ describe("SEC-006 per-request DEKs wrapped under DATA_KEY (spec 5.5)", () => {
     }
     expect(caught).toBeInstanceOf(AeadError);
     expect(String((caught as Error).message)).not.toMatch(/ZZ-0001|query_request|[0-9a-f]{32}/);
+  });
+  it("a malformed plaintext fails with a fixed message that quotes none of it (spec 5.9)", () => {
+    const { deks } = createRequestKeys(dataKey, cid, 0);
+    const s = seal(deks.values, Buffer.from('{"plate":"ZZ-0003"', "utf8"), valuesAad(cid, 0));
+    let caught: unknown;
+    try {
+      openPartValues(deks.values, cid, 0, s);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(PartValuesError);
+    expect(String((caught as Error).message)).not.toMatch(/ZZ-0003|plate/);
+    expect((caught as Error).cause).toBeUndefined();
   });
   it("AAD strings follow the spec 5.5 table|id|column formats", () => {
     expect(requestKeyAad(cid, "values", 1)).toBe(`request_key|${cid}|values|1`);

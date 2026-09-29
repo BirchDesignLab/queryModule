@@ -367,6 +367,102 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
       db.$client.close();
     }
   });
+  it("INSERT OR REPLACE on an existing query_request's rowid aborts and leaves the row (#279 C-I1)", async () => {
+    const db = await queryDb();
+    try {
+      await insertQueryRequest(db, 1, null);
+      const rowid = (
+        await db.$client.execute("SELECT rowid AS r FROM query_request WHERE part_id = 1")
+      ).rows[0]?.r;
+      await expect(
+        db.$client.execute({
+          sql: `INSERT OR REPLACE INTO query_request (rowid, correlation_id, part_id, user_id, origin,
+            query_type, type_values, plate_only, selected_source_ids, dropped_source_ids, config_hash,
+            idempotency_key, submitted_at)
+            VALUES (?, 'c9', 0, 'u2', 'primary', 'person', '{}', 0, '[]', '[]', 'h2', 'idem-9', 9)`,
+          args: [Number(rowid)],
+        }),
+      ).rejects.toThrow(/query_request is insert-once/);
+      const rows = (
+        await db.$client.execute(
+          "SELECT correlation_id, part_id FROM query_request ORDER BY part_id",
+        )
+      ).rows;
+      expect(rows.map((r) => [r.correlation_id, r.part_id])).toEqual([
+        [CID, 0],
+        [CID, 1],
+      ]);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("INSERT OR REPLACE on an existing source_result's rowid aborts and leaves the row (#279 C-I1)", async () => {
+    const db = await queryDb();
+    try {
+      expect((await setStatus(db, "pending", "returned")).rowsAffected).toBe(1);
+      const rowid = (await db.$client.execute("SELECT rowid AS r FROM source_result")).rows[0]?.r;
+      await expect(
+        db.$client.execute({
+          sql: `INSERT OR REPLACE INTO source_result (rowid, result_id, correlation_id, part_id,
+            source_id, user_id, status, adapter_kind, created_at)
+            VALUES (?, 'r2', ?, 0, 's2', 'u1', 'pending', 'mock', 1)`,
+          args: [Number(rowid), CID],
+        }),
+      ).rejects.toThrow(/source_result rows are never replaced/);
+      const rows = (await db.$client.execute("SELECT result_id, status FROM source_result")).rows;
+      expect(rows.map((r) => [r.result_id, r.status])).toEqual([["r1", "returned"]]);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("INSERT OR REPLACE through the idempotency index aborts and leaves a child-less request (#279 C-I2)", async () => {
+    const db = await migratedDb();
+    try {
+      await insertQueryRequest(db, 0, "idem-1");
+      await expect(
+        db.$client.execute({
+          sql: `INSERT OR REPLACE INTO query_request (correlation_id, part_id, user_id, origin,
+            query_type, type_values, plate_only, selected_source_ids, dropped_source_ids, config_hash,
+            idempotency_key, submitted_at)
+            VALUES ('c2', 0, 'u1', 'primary', 'person', '{}', 0, '[]', '[]', 'h2', 'idem-1', 9)`,
+          args: [],
+        }),
+      ).rejects.toThrow(/query_request idempotency key exists/);
+      const rows = (await db.$client.execute("SELECT correlation_id FROM query_request")).rows;
+      expect(rows.map((r) => r.correlation_id)).toEqual([CID]);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("normal inserts with auto-assigned rowids are not refused (#279 C-I1)", async () => {
+    const db = await queryDb();
+    try {
+      await insertQueryRequest(db, 1, null);
+      await insertQueryRequest(db, 0, "idem-2", "01890a5d-ac96-774b-bcce-b302099a8058");
+      await insertPendingResult(db, "r2", 1);
+      const n = async (t: string) =>
+        Number((await db.$client.execute(`SELECT count(*) AS n FROM ${t}`)).rows[0]?.n);
+      expect(await n("query_request")).toBe(3);
+      expect(await n("source_result")).toBe(2);
+    } finally {
+      db.$client.close();
+    }
+  });
+  it("a source_result status outside the spec 5.5 enum is refused (#279 C-M1)", async () => {
+    const db = await queryDb();
+    try {
+      await expect(
+        db.$client.execute({
+          sql: `INSERT INTO source_result (result_id, correlation_id, part_id, source_id, user_id,
+            status, adapter_kind, created_at) VALUES ('r2', ?, 0, 's2', 'u1', 'bogus', 'mock', 1)`,
+          args: [CID],
+        }),
+      ).rejects.toThrow(/CHECK constraint failed/);
+      await expect(setStatus(db, "pending", "bogus")).rejects.toThrow(/CHECK constraint failed/);
+    } finally {
+      db.$client.close();
+    }
+  });
   it("DELETE of a child-less query_request aborts even with foreign_keys off", async () => {
     const db = await queryDb();
     try {
@@ -394,7 +490,7 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
     try {
       await expect(
         insertQueryRequest(db, 0, "idem-1", "01890a5d-ac96-774b-bcce-b302099a8058"),
-      ).rejects.toThrow(/UNIQUE constraint failed/);
+      ).rejects.toThrow(/query_request idempotency key exists/);
       await insertQueryRequest(db, 1, null);
       await insertQueryRequest(db, 2, null);
       const n = (await db.$client.execute("SELECT count(*) AS n FROM query_request")).rows[0]?.n;

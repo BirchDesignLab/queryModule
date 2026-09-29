@@ -50,7 +50,8 @@ CREATE TABLE `source_result` (
 	`created_at` integer NOT NULL,
 	`received_at` integer,
 	`timed_out_at` integer,
-	FOREIGN KEY (`correlation_id`,`part_id`) REFERENCES `query_request`(`correlation_id`,`part_id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`correlation_id`,`part_id`) REFERENCES `query_request`(`correlation_id`,`part_id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "source_result_status_check" CHECK("source_result"."status" IN ('pending', 'returned', 'failed', 'timedOut', 'credentialsMissing', 'credentialsRejected', 'interrupted'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `source_result_part_source_idx` ON `source_result` (`correlation_id`,`part_id`,`source_id`);--> statement-breakpoint
