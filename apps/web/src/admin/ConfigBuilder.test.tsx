@@ -126,9 +126,11 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
     const area = screen.getByRole("textbox", { name: "Draft JSON" });
     const region = document.getElementById(area.getAttribute("aria-describedby") ?? "");
-    expect(await screen.findByText(/draft checks are unavailable/i)).toBeInTheDocument();
-    expect(region).toHaveAttribute("aria-live", "polite");
-    expect(region).toHaveTextContent(/unavailable/i);
+    // Batch M3/C4: the summary is the one live region; the raw-tab diagnostics are not live.
+    const summary = screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary).toHaveTextContent(/draft checks are unavailable/i));
+    expect(summary).toHaveAttribute("aria-live", "polite");
+    expect(region?.closest("[aria-live]")).toBeNull();
     expect(screen.queryByText(/Draft checks: \d+ errors/)).not.toBeInTheDocument();
     expect(area).not.toHaveFocus();
   });
@@ -161,17 +163,16 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     const active = document.activeElement as HTMLElement;
     expect(active).not.toBe(document.body);
     expect(active.closest(".qm-admin__item")).not.toBeNull();
-    // remove down to the last: focus falls to the Add button
+    // adding focuses the new item
+    await t.user.click(screen.getByRole("button", { name: "Add item sources" }));
+    const added = document.querySelector(`.qm-admin__item[data-item-path='sources.${before - 1}']`);
+    expect(added?.contains(document.activeElement)).toBe(true);
+    // remove down to empty: Add is disabled (batch M5), so its reason text takes focus
     while (count() > 0) {
       await t.user.click(screen.getByRole("button", { name: "Remove sources.0" }));
     }
-    expect(screen.getByRole("button", { name: "Add item sources" })).toHaveFocus();
-    await t.user.click(screen.getByRole("button", { name: "Add item sources" }));
-    expect(document.activeElement).not.toBe(document.body);
-    expect((document.activeElement as HTMLElement).closest(".qm-admin__item")).not.toBeNull();
-    await t.user.click(screen.getByRole("button", { name: "Add item sources" }));
-    const items = document.querySelectorAll(".qm-admin__item[data-item-path='sources.1']");
-    expect(items[0]?.contains(document.activeElement)).toBe(true);
+    expect(screen.getByRole("button", { name: "Add item sources" })).toBeDisabled();
+    expect(document.activeElement).toHaveTextContent("Add the first item in Raw JSON");
   });
 
   it("per-source timeoutMs is server-side and read-only in the generic form (CV1)", async () => {

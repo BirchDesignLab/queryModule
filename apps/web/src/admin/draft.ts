@@ -20,7 +20,6 @@ export type PathSegment = string | number;
 export type LabelOverlay = Readonly<Record<string, Readonly<Record<string, string>>>>;
 
 /** Sections the builder never edits: they are server-only or derived (ADR-0011, ruling 09-29-26). */
-export const SERVER_ONLY_SECTIONS = ["auth", "retention", "roleClaims", "source server settings"];
 
 /** The editable draft document: the client view without its hash. */
 export function docFromClient(config: ClientSiteConfig): JsonObject {

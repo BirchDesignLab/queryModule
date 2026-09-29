@@ -200,7 +200,6 @@
   "admin.config.tab.raw": "Raw JSON",
   "admin.config.raw.label": "Draft JSON",
   "admin.config.raw.parseError": "Invalid JSON: {message}",
-  "admin.config.raw.shapeIssues": "The draft does not match the config schema:",
   "admin.config.raw.counts": "Draft checks: {errors} errors, {warnings} warnings",
   "admin.config.raw.bundleError": "Label text could not be loaded, so draft checks are unavailable",
   "admin.config.serverOnly": "Server settings: available after the config store lands (auth, retention, role claims, source server settings)",
@@ -213,7 +212,6 @@
   "admin.config.labels.key": "Label key ({locale})",
   "admin.config.labels.text": "Label text ({locale})",
   "admin.config.labels.add": "Add label ({locale})",
-  "admin.config.labels.loading": "Loading label text",
   "admin.config.loading": "Loading the site config",
   "admin.config.issueCount": "Issues: {count}",
   "admin.config.shapeIssue": "{message}",
@@ -287,5 +285,8 @@
   "config.unknownAdapterKind": "Unknown source kind {kind}.",
   "config.unknownAction": "Unknown shortcut action {action}.",
   "config.missingLocale": "The locale {locale} has no label bundle.",
-  "config.missingLabel": "The label {labelKey} has no text in locale {locale}."
+  "config.missingLabel": "The label {labelKey} has no text in locale {locale}.",
+  "admin.config.addInRaw": "Add the first item in Raw JSON.",
+  "admin.config.loadError": "The site config could not be loaded.",
+  "admin.config.raw.notParsed": "Draft JSON does not parse; checks paused."
 }

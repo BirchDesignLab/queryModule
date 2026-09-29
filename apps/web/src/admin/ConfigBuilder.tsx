@@ -124,6 +124,19 @@ const isServerSideLeaf = (path: readonly PathSegment[]): boolean =>
 
 type PendingFocus = { kind: "item"; index: number } | { kind: "add" };
 
+/** Keys that name an item in its list (spec 4.1 overlay identities); a cloned item starts blank. */
+const IDENTITY_KEYS = ["id", "code", "key", "keyword"] as const;
+
+/** The next item for a list: a copy of the last one with its identity keys cleared (M5). */
+function nextItem(last: unknown): unknown {
+  const copy = structuredClone(last);
+  if (typeof copy === "object" && copy !== null && !Array.isArray(copy)) {
+    const obj = copy as Record<string, unknown>;
+    for (const k of IDENTITY_KEYS) if (typeof obj[k] === "string") obj[k] = "";
+  }
+  return copy;
+}
+
 /** Array editor; keeps keyboard focus inside the list after an add or a remove (UX-004). */
 function ArrayEditor({
   items,
@@ -138,7 +151,10 @@ function ArrayEditor({
   const issuesId = `${idPrefix}-${text}-issues`;
   const root = useRef<HTMLFieldSetElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
+  const reasonRef = useRef<HTMLSpanElement>(null);
   const [want, setWant] = useState<PendingFocus | null>(null);
+  const addReasonId = `${idPrefix}-${text}-add-reason`;
+  const empty = items.length === 0;
   useEffect(() => {
     if (want === null) return;
     setWant(null);
@@ -152,7 +168,9 @@ function ArrayEditor({
         return;
       }
     }
-    addRef.current?.focus();
+    // An emptied list has no enabled Add; its reason text takes focus instead (M5).
+    if (addRef.current?.disabled) reasonRef.current?.focus();
+    else addRef.current?.focus();
   }, [want, path]);
   return (
     <fieldset ref={root} aria-describedby={issues === undefined ? undefined : issuesId}>
@@ -187,13 +205,21 @@ function ArrayEditor({
         type="button"
         className="qm-button"
         aria-label={`${t("admin.config.add")} ${text}`}
+        disabled={empty}
+        aria-describedby={empty ? addReasonId : undefined}
         onClick={() => {
           setWant({ kind: "item", index: items.length });
-          onChange(path, [...items, structuredClone(items[items.length - 1] ?? "")]);
+          onChange(path, [...items, nextItem(items[items.length - 1])]);
         }}
       >
         {t("admin.config.add")}
       </button>
+      {empty && (
+        <span ref={reasonRef} id={addReasonId} tabIndex={-1}>
+          {" "}
+          {t("admin.config.addInRaw")}
+        </span>
+      )}
     </fieldset>
   );
 }
@@ -245,22 +271,17 @@ function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps) {
   }
   if (typeof value === "number") {
     return (
-      <div>
-        <label htmlFor={id}>{text}</label>{" "}
-        <input
-          id={id}
-          type="number"
-          value={value}
-          readOnly={isServerSideLeaf(path)}
-          aria-invalid={invalid}
-          aria-describedby={describedBy}
-          onChange={(e) => {
-            const n = e.target.valueAsNumber;
-            if (Number.isFinite(n)) onChange(path, n);
-          }}
-        />
+      <NumberEditor
+        id={id}
+        label={text}
+        value={value}
+        readOnly={isServerSideLeaf(path)}
+        invalid={invalid}
+        describedBy={describedBy}
+        onValue={(n) => onChange(path, n)}
+      >
         <IssueMessages id={issuesId} issues={issues} />
-      </div>
+      </NumberEditor>
     );
   }
   return (
@@ -275,6 +296,55 @@ function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps) {
         onChange={(e) => onChange(path, e.target.value)}
       />
       <IssueMessages id={issuesId} issues={issues} />
+    </div>
+  );
+}
+
+/** A number control that keeps partial text ("", "-") until it parses (M1). */
+function NumberEditor({
+  id,
+  label,
+  value,
+  readOnly,
+  invalid,
+  describedBy,
+  onValue,
+  children,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  readOnly: boolean;
+  invalid: boolean;
+  describedBy: string | undefined;
+  onValue(n: number): void;
+  children: React.ReactNode;
+}) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText((current) =>
+      Number(current) === value && current.trim() !== "" ? current : String(value),
+    );
+  }, [value]);
+  return (
+    <div>
+      <label htmlFor={id}>{label}</label>{" "}
+      <input
+        id={id}
+        type="text"
+        inputMode="decimal"
+        value={text}
+        readOnly={readOnly}
+        aria-invalid={invalid}
+        aria-describedby={describedBy}
+        onChange={(e) => {
+          const next = e.target.value;
+          setText(next);
+          const n = Number(next);
+          if (next.trim() !== "" && Number.isFinite(n)) onValue(n);
+        }}
+      />
+      {children}
     </div>
   );
 }
@@ -437,25 +507,24 @@ function useEnglishBundle(): BundleState {
   return state;
 }
 
-function RawTab({ doc }: { doc: JsonObject }) {
+interface RawState {
+  text: string;
+  parseError: string | null;
+}
+
+function RawTab({ raw, setRaw }: { raw: RawState; setRaw(next: RawState): void }) {
   const t = useT();
   const services = useServices();
   const store = configDraftStore(services);
   const uid = useId();
-  const [text, setText] = useState(() => JSON.stringify(doc, null, 2));
-  const [parseError, setParseError] = useState<string | null>(null);
+  const { text, parseError } = raw;
   const checks = useContext(ChecksContext);
   const errorId = `${uid}-error`;
   const lines = useMemo(() => pointerLines(text), [text]);
   const onEdit = (next: string) => {
-    setText(next);
     const parsed = parseRawDraft(next);
-    if (parsed.ok) {
-      setParseError(null);
-      store.getState().setDoc(parsed.doc);
-    } else {
-      setParseError(parsed.message);
-    }
+    setRaw({ text: next, parseError: parsed.ok ? null : parsed.message });
+    if (parsed.ok) store.getState().setDoc(parsed.doc);
   };
   return (
     <div>
@@ -470,14 +539,8 @@ function RawTab({ doc }: { doc: JsonObject }) {
         aria-describedby={errorId}
         onChange={(e) => onEdit(e.target.value)}
       />
-      <div id={errorId} aria-live="polite">
+      <div id={errorId}>
         {parseError !== null && <p>{t("admin.config.raw.parseError", { message: parseError })}</p>}
-        {parseError === null && checks.status === "loading" && (
-          <p>{t("admin.config.labels.loading")}</p>
-        )}
-        {parseError === null && checks.status === "error" && (
-          <p>{t("admin.config.raw.bundleError")}</p>
-        )}
         {parseError === null && checks.issues.length > 0 && (
           <ul>
             {checks.issues.map((issue) => {
@@ -506,12 +569,30 @@ export function ConfigBuilder() {
   const t = useT();
   const services = useServices();
   const config = useCachedClientConfig();
+  const failed = useConfigLoadFailed();
   const { doc } = useDraft();
+  const seeded = doc !== null;
   useEffect(() => {
-    if (config !== undefined) configDraftStore(services).getState().start(docFromClient(config));
-  }, [config, services]);
+    // Q8: also reseeds after a reset while the builder stays open.
+    if (config !== undefined && !seeded)
+      configDraftStore(services).getState().start(docFromClient(config));
+  }, [config, services, seeded]);
+  if (doc === null && failed) return <p role="alert">{t("admin.config.loadError")}</p>;
   if (doc === null) return <p aria-busy="true">{t("admin.config.loading")}</p>;
   return <BuilderBody doc={doc} />;
+}
+
+/** M8: the cached GET /api/v1/config failed, so the builder has nothing to start from. */
+function useConfigLoadFailed(): boolean {
+  const { queryClient } = useServices();
+  const subscribe = useCallback(
+    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
+    [queryClient],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => queryClient.getQueryState(["config"])?.status === "error",
+  );
 }
 
 function BuilderBody({ doc }: { doc: JsonObject }) {
@@ -520,12 +601,34 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   const { labels } = useDraft();
   const checks = useDraftChecks(doc, labels);
   const [tab, setTab] = useState<TabId>("form");
+  const [raw, setRaw] = useState<RawState>(() => ({
+    text: JSON.stringify(doc, null, 2),
+    parseError: null,
+  }));
+  // Form edits refresh the raw text unless the raw text is mid-edit and does not parse (M7).
+  useEffect(() => {
+    setRaw((r) =>
+      r.parseError === null ? { text: JSON.stringify(doc, null, 2), parseError: null } : r,
+    );
+  }, [doc]);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({ form: null, raw: null });
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
-    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-    const next = TABS[(TABS.indexOf(tab) + 1) % TABS.length] ?? "form";
-    setTab(next);
-    tabRefs.current[next]?.focus();
+    // M4: WAI-ARIA tabs, arrows by direction with wrap, Home and End.
+    const i = TABS.indexOf(tab);
+    const target =
+      e.key === "ArrowRight"
+        ? TABS[(i + 1) % TABS.length]
+        : e.key === "ArrowLeft"
+          ? TABS[(i - 1 + TABS.length) % TABS.length]
+          : e.key === "Home"
+            ? TABS[0]
+            : e.key === "End"
+              ? TABS[TABS.length - 1]
+              : undefined;
+    if (target === undefined) return;
+    e.preventDefault();
+    setTab(target);
+    tabRefs.current[target]?.focus();
   };
   const reasonId = `${uid}-publish-reason`;
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
@@ -535,8 +638,14 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
       <div>
         <p>{t("admin.config.serverOnly")}</p>
         <div data-testid="draft-summary" aria-live="polite">
-          {checks.status === "ready" && (
-            <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
+          {raw.parseError !== null ? (
+            <p>{t("admin.config.raw.notParsed")}</p>
+          ) : checks.status === "error" ? (
+            <p>{t("admin.config.raw.bundleError")}</p>
+          ) : (
+            checks.status === "ready" && (
+              <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
+            )
           )}
         </div>
         <div>
@@ -572,7 +681,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           ))}
         </div>
         <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${tab}`}>
-          {tab === "form" ? <FormTab doc={doc} /> : <RawTab doc={doc} />}
+          {tab === "form" ? <FormTab doc={doc} /> : <RawTab raw={raw} setRaw={setRaw} />}
         </div>
       </div>
     </ChecksContext.Provider>

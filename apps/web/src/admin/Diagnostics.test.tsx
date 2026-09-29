@@ -29,9 +29,12 @@ async function breakCommand(t: Awaited<ReturnType<typeof openBuilder>>) {
 }
 
 describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-001)", () => {
-  it("a clean draft announces zero errors in a polite region", async () => {
+  // C3: the seeded default site has a baseline of diagnostics, so this checks the announced counts.
+  it("the draft check counts are announced in a polite region", async () => {
     await openBuilder();
-    await waitFor(() => expect(errorCount()).toBeGreaterThanOrEqual(0));
+    await waitFor(() =>
+      expect(summary()).toHaveTextContent(/Draft checks: \d+ errors, \d+ warnings/),
+    );
     expect(summary()).toHaveAttribute("aria-live", "polite");
   });
 

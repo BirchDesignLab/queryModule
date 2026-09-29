@@ -1,0 +1,123 @@
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { describe, expect, it } from "vitest";
+import { API, server, TEST_USER } from "../test/msw-server.js";
+import { renderRoot } from "../test/render-root.js";
+import { configDraftStore } from "./ConfigBuilder.js";
+
+// Wave AB inline batch (checker 09-29-26): deferred critic and quality minors that matter for the demo.
+
+function asImplementer() {
+  const user = { ...TEST_USER, role: "implementer" };
+  server.use(
+    http.get(`${API}/api/v1/auth/get-session`, () =>
+      HttpResponse.json({ session: { id: "s1" }, user }),
+    ),
+  );
+}
+
+async function openBuilder() {
+  asImplementer();
+  const t = renderRoot({ path: "/admin/config" });
+  await screen.findByRole("tab", { name: "Form" });
+  return t;
+}
+
+const draft = (t: Awaited<ReturnType<typeof openBuilder>>) =>
+  configDraftStore(t.services).getState().doc as Record<string, unknown>;
+
+async function openSection(t: Awaited<ReturnType<typeof openBuilder>>, name: string) {
+  await t.user.click(await screen.findByText(name, { selector: "summary" }));
+}
+
+describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
+  it("M3/C4: raw-tab diagnostics are not a live region; only the summary announces", async () => {
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const area = screen.getByRole("textbox", { name: "Draft JSON" });
+    const described = document.getElementById(area.getAttribute("aria-describedby") ?? "");
+    expect(described).not.toBeNull();
+    expect(described?.closest("[aria-live]")).toBeNull();
+    expect(screen.getByTestId("draft-summary")).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("C9/M7: an unparsable raw edit is announced once in the summary and survives a tab switch", async () => {
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const area = screen.getByRole("textbox", { name: "Draft JSON" });
+    await t.user.click(area);
+    await t.user.keyboard("{Control>}{End}{/Control}xx");
+    await waitFor(() =>
+      expect(screen.getByTestId("draft-summary")).toHaveTextContent("Draft JSON does not parse"),
+    );
+    const broken = (area as HTMLTextAreaElement).value;
+    await t.user.click(screen.getByRole("tab", { name: "Form" }));
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    expect(screen.getByRole("textbox", { name: "Draft JSON" })).toHaveValue(broken);
+  });
+
+  it("M8: a failed config load shows an error, not an endless loading state", async () => {
+    server.use(
+      http.get(`${API}/api/v1/config`, () =>
+        HttpResponse.json(
+          { error: { code: "internal", requestId: "r1" } },
+          {
+            status: 500,
+          },
+        ),
+      ),
+    );
+    asImplementer();
+    renderRoot({ path: "/admin/config" });
+    expect(await screen.findByText("The site config could not be loaded.")).toBeInTheDocument();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it("M1: a number field can be cleared and take a negative value", async () => {
+    const t = await openBuilder();
+    await openSection(t, "delegation");
+    const input = await screen.findByLabelText("delegation.maxDurationMinutes");
+    await t.user.clear(input);
+    expect(input).toHaveValue("");
+    await t.user.type(input, "-5");
+    expect(input).toHaveValue("-5");
+    expect((draft(t).delegation as Record<string, unknown>).maxDurationMinutes).toBe(-5);
+  });
+
+  it("M5: Add item clears the new item's identity key; an empty list adds through Raw JSON", async () => {
+    const t = await openBuilder();
+    await openSection(t, "keywords");
+    await t.user.click(screen.getByRole("button", { name: "Add item keywords" }));
+    const keywords = draft(t).keywords as { keyword: string }[];
+    expect(keywords.at(-1)?.keyword).toBe("");
+    expect(keywords.at(-2)?.keyword).not.toBe("");
+    await openSection(t, "queryTypes");
+    const add = screen.getByRole("button", { name: "Add item queryTypes.3.rules" });
+    expect(add).toBeDisabled();
+    expect(document.getElementById(add.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
+      "Add the first item in Raw JSON",
+    );
+  });
+
+  it("M4: ArrowLeft, ArrowRight, Home and End move between tabs by direction", async () => {
+    const t = await openBuilder();
+    const form = screen.getByRole("tab", { name: "Form" });
+    const raw = screen.getByRole("tab", { name: "Raw JSON" });
+    form.focus();
+    await t.user.keyboard("{ArrowRight}");
+    expect(raw).toHaveFocus();
+    await t.user.keyboard("{ArrowLeft}");
+    expect(form).toHaveFocus();
+    await t.user.keyboard("{End}");
+    expect(raw).toHaveFocus();
+    await t.user.keyboard("{Home}");
+    expect(form).toHaveFocus();
+  });
+
+  it("Q8: resetting the draft while the builder is open reseeds it from the config", async () => {
+    const t = await openBuilder();
+    act(() => configDraftStore(t.services).getState().reset());
+    await waitFor(() => expect(configDraftStore(t.services).getState().doc).not.toBeNull());
+    expect(within(screen.getByRole("tablist")).getAllByRole("tab")).toHaveLength(2);
+  });
+});
