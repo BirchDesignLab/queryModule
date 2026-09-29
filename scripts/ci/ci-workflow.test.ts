@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { createHmac } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { derivePassword } from "../../packages/api/src/seed/password";
 
 // ADR-0008: one aggregate `ci` check, path-scoped jobs. This test parses the
 // real ci.yml so a structural regression fails here instead of only in CI.
@@ -275,33 +275,68 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   });
 });
 
+/**
+ * Step 12 no-echo guard (G-m2): no xtrace in any spelling, and the derived password `$pw` appears
+ * only on the mask line and the export line. Returns the offending lines.
+ */
+function step12Violations(run: string): string[] {
+  const bad: string[] = [];
+  for (const raw of run.split("\n")) {
+    const l = raw.trim();
+    if (/^set\s+(-[a-zA-Z]*x[a-zA-Z]*|.*-o\s+xtrace)/.test(l) || /xtrace/.test(l)) bad.push(l);
+    else if (/\$\{?pw(?![A-Za-z_])/.test(l)) {
+      const isMask = l === 'echo "::add-mask::$pw"';
+      const isExport = /^export E2E_USER_EMAIL=\S+ E2E_USER_PASSWORD="\$pw"$/.test(l);
+      if (!isMask && !isExport) bad.push(l);
+    }
+  }
+  return bad;
+}
+
 describe("ci.yml step 12: the M0 Playwright suite against the boot-smoke container (#167)", () => {
   const step = () =>
     (jobs.image.steps as WorkflowStep[]).find(
       (s) => typeof s.name === "string" && s.name.startsWith("12:"),
     );
 
-  it("runs the whole e2e suite, not one spec, at the container's PUBLIC_ORIGIN", () => {
+  it("runs the whole e2e suite, not one spec, at the container's PUBLIC_ORIGIN via QM_BASE_URL", () => {
     const run = String(step()?.run ?? "");
     expect(run).toMatch(/playwright test\s*$/m);
-    const origin = readFileSync(resolve(root, "scripts/ci/boot-smoke.sh"), "utf8").match(
-      /-e PUBLIC_ORIGIN=(\S+)/,
-    )?.[1];
+    const smoke = readFileSync(resolve(root, "scripts/ci/boot-smoke.sh"), "utf8");
+    const origin = smoke.match(/-e PUBLIC_ORIGIN=(\S+)/)?.[1];
     expect(origin).toBe("http://localhost:3000");
-    expect(run).toContain(`E2E_BASE_URL=${origin} `);
+    // boot-smoke.sh hands step 12 the same origin the container was started with.
+    expect(smoke).toContain(`QM_BASE_URL=${origin}`);
+    expect(run).toContain("E2E_BASE_URL=$QM_BASE_URL ");
   });
 
   it("masks the derived smoke password before exporting it and never echoes it otherwise", () => {
-    const lines = String(step()?.run ?? "")
+    const run = String(step()?.run ?? "");
+    expect(step12Violations(run)).toEqual([]);
+    const lines = run
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
-    const mask = lines.findIndex((l) => l === 'echo "::add-mask::$pw"');
+    const mask = lines.indexOf('echo "::add-mask::$pw"');
     const exported = lines.findIndex((l) => l.includes('E2E_USER_PASSWORD="$pw"'));
     expect(mask).toBeGreaterThan(-1);
     expect(exported).toBeGreaterThan(mask);
-    expect(lines.filter((l) => l.includes("$pw") && l.startsWith("echo"))).toHaveLength(1);
     expect(lines[0]).toMatch(/"\$SEED_PASSWORD_SECRET_FILE" smoke@example\.test\)$/);
+  });
+
+  it.each([
+    ["set -x", "set -x"],
+    ["set -o xtrace", "set -o xtrace"],
+    ["set -ex", "set -ex"],
+    ["printf of the password", 'printf "$pw"'],
+    ["printf into GITHUB_ENV", 'printf "PW=$pw" >> "$GITHUB_ENV"'],
+    ["braced reference", `cat <<< "$` + `{pw}"`],
+  ])("the no-echo guard rejects %s", (_name, line) => {
+    const run = String(step()?.run ?? "");
+    expect(
+      step12Violations(`${line}
+${run}`),
+    ).not.toEqual([]);
   });
 
   it("derives derivePassword's value (spec 8.5) from the secret file", () => {
@@ -320,9 +355,7 @@ describe("ci.yml step 12: the M0 Playwright suite against the boot-smoke contain
         env: { ...process.env, SEED_PASSWORD_SECRET_FILE: file },
       });
       expect(r.status).toBe(0);
-      expect(r.stdout).toBe(
-        createHmac("sha256", secret).update("smoke@example.test").digest("base64url"),
-      );
+      expect(r.stdout).toBe(derivePassword(secret, "smoke@example.test"));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

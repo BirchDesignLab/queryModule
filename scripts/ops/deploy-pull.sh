@@ -5,10 +5,13 @@ set -euo pipefail
 : "${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is unset (deploy/.env)}"
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$here/../../deploy"
-docker compose pull app
+# One log line per failed step, so the journal names it (systemd alone only says "exit-code").
+fail() { echo "$(date -u +%FT%TZ) deploy-pull: FAILED $1"; exit 1; }
+docker compose pull app || fail pull
 # Compare the pulled tag's image with the one the app container runs: `compose images` would
 # report the container's own image, which a pull does not change.
-want=$(docker image inspect -f '{{.Id}}' "$(docker compose config --images app)")
+ref=$(docker compose config --images app) || fail config
+want=$(docker image inspect -f '{{.Id}}' "$ref") || fail inspect
 cid=$(docker compose ps -q app)
 have=""
 if [ -n "$cid" ]; then have=$(docker inspect -f '{{.Image}}' "$cid"); fi

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const script = resolve(import.meta.dirname, "restore-test.sh");
@@ -18,12 +18,23 @@ esac
 const AGE = `#!/usr/bin/env bash
 echo "age $*" >> "$STUB_LOG"
 # age -d -i <identity> -o <out> <in>
+[ -z "\${STUB_AGE_FAIL:-}" ] || { echo "age: decryption failed" >&2; exit 1; }
 cp "$6" "$5"
 `;
 const DOCKER = `#!/usr/bin/env bash
 echo "docker $*" >> "$STUB_LOG"
 # The app container's arguments, one per line, so mounts can be checked exactly.
-if [ "$1 $2" = "run -d" ]; then printf '%s\\n' "$@" > "$STUB_LOG.run-d"; fi
+if [ "$1 $2" = "run -d" ]; then
+  printf '%s\\n' "$@" > "$STUB_LOG.run-d"
+  # Like Docker: a --mount bind whose source is missing fails before the container starts.
+  for a in "$@"; do
+    case "$a" in
+      type=bind,src=*)
+        src=\${a#type=bind,src=}; src=\${src%%,*}
+        [ -e "$src" ] || { echo "docker: bind source path does not exist: $src" >&2; exit 125; } ;;
+    esac
+  done
+fi
 case "$*" in
   *"audit-stats.js --up-to"*) echo "$STUB_AUDIT" ;;
 esac
@@ -40,6 +51,10 @@ else console.log(JSON.stringify({ auditCount: j.auditCount, auditMaxId: j.auditM
 ' -- "$@"
 `;
 
+const AGE_KEY = "AGE-SECRET-KEY-TEST";
+const REQUIRED_SECRETS = ["DB_ENCRYPTION_KEY", "CREDENTIAL_KEY", "DATA_KEY", "BETTER_AUTH_SECRET"];
+const ALL_SECRETS = [...REQUIRED_SECRETS, "SEED_PASSWORD_SECRET"];
+
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "qm-restore-test-"));
@@ -47,7 +62,14 @@ beforeEach(() => {
   mkdirSync(join(dir, "bucket"));
   for (const [n, s] of Object.entries({ rclone: RCLONE, age: AGE, docker: DOCKER, jq: JQ }))
     writeFileSync(join(dir, "bin", n), s, { mode: 0o755 });
-  writeFileSync(join(dir, "age-key.txt"), "AGE-SECRET-KEY-TEST");
+  writeFileSync(join(dir, "age-key.txt"), AGE_KEY);
+  mkdirSync(join(dir, "secrets"));
+  for (const k of ALL_SECRETS)
+    writeFileSync(
+      join(dir, "secrets", k),
+      `fake-${k}
+`,
+    );
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -158,7 +180,25 @@ describe("restore-test.sh (spec 8.6, NFR-003, SEC-010)", { timeout: 30_000 }, ()
     expect(r.calls).toContain("docker rm -f qm-restore-test");
   });
 
-  it("#135: mounts each app secret file read-only, as compose does, never the secrets directory", () => {
+  const okEnv = () => ({
+    AGE_IDENTITY: join(dir, "age-key.txt"),
+    STUB_AUDIT: '{"auditCount":3,"auditMaxId":7}',
+  });
+  const runArgs = () =>
+    readFileSync(join(dir, "calls.log.run-d"), "utf8").split("\n").filter(Boolean);
+  const bindMounts = (args: string[]) => args.filter((_, i) => args[i - 1] === "--mount");
+
+  it("removes a leftover volume before creating a fresh one (T32 G-M1)", () => {
+    backup("20260928T020000Z", 3, 7);
+    const r = run(okEnv());
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const rm = r.calls.indexOf("docker volume rm -f qm-restore-test-data");
+    const create = r.calls.indexOf("docker volume create qm-restore-test-data");
+    expect(rm).toBeGreaterThan(-1);
+    expect(create).toBeGreaterThan(rm);
+  });
+
+  it("#135, T32 G-M2: mounts each app secret file read-only, as compose does, never the directory", () => {
     // The host secrets dir is root mode 700: uid 10001 cannot enter a directory mount of it,
     // but a per-file bind mount of a uid 10001 mode 400 file is readable (deploy/compose.yml).
     const compose = readFileSync(resolve(import.meta.dirname, "../../deploy/compose.yml"), "utf8");
@@ -166,26 +206,75 @@ describe("restore-test.sh (spec 8.6, NFR-003, SEC-010)", { timeout: 30_000 }, ()
       .match(/^ {4}secrets: \[([^\]]+)\]/m)?.[1]
       ?.split(",")
       .map((n) => n.trim());
-    expect(names).toEqual([
-      "DB_ENCRYPTION_KEY",
-      "CREDENTIAL_KEY",
-      "DATA_KEY",
-      "BETTER_AUTH_SECRET",
-      "SEED_PASSWORD_SECRET",
-    ]);
+    expect(names).toEqual(ALL_SECRETS);
     backup("20260928T020000Z", 3, 7);
-    const r = run({
-      AGE_IDENTITY: join(dir, "age-key.txt"),
-      STUB_AUDIT: '{"auditCount":3,"auditMaxId":7}',
-    });
+    const r = run(okEnv());
     expect(r.status, r.stdout + r.stderr).toBe(0);
-    const args = readFileSync(join(dir, "calls.log.run-d"), "utf8").split("\n").filter(Boolean);
-    const mounts = args.filter((_, i) => args[i - 1] === "-v");
+    const args = runArgs();
     const secrets = join(dir, "secrets");
-    expect(mounts.filter((m) => m.includes(":/run/secrets")).sort()).toEqual(
-      (names ?? []).map((n) => `${secrets}/${n}:/run/secrets/${n}:ro`).sort(),
+    expect(bindMounts(args).sort()).toEqual(
+      (names ?? [])
+        .map((n) => `type=bind,src=${secrets}/${n},dst=/run/secrets/${n},readonly`)
+        .sort(),
     );
-    expect(mounts.some((m) => m.startsWith(`${secrets}:`))).toBe(false);
+    // No -v/--volume flag reaches a secrets path, and no mount names the directory itself.
+    expect(
+      args.filter((_, i) => args[i - 1] === "-v").some((m) => m.includes("/run/secrets")),
+    ).toBe(false);
+    expect(args.some((a) => a.includes(`src=${secrets},`) || a.startsWith(`${secrets}:`))).toBe(
+      false,
+    );
     expect(args.join(" ")).not.toContain("TUNNEL_TOKEN");
+  });
+
+  it("skips the optional SEED_PASSWORD_SECRET with a note when its file is absent (M1)", () => {
+    rmSync(join(dir, "secrets", "SEED_PASSWORD_SECRET"));
+    backup("20260928T020000Z", 3, 7);
+    const r = run(okEnv());
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout + r.stderr).toContain("restore-test: SEED_PASSWORD_SECRET absent, not mounted");
+    expect(bindMounts(runArgs())).toHaveLength(4);
+    expect(runArgs().join(" ")).not.toContain("SEED_PASSWORD_SECRET");
+  });
+
+  it("fails before the container starts when a required secret file is absent (M1)", () => {
+    rmSync(join(dir, "secrets", "DATA_KEY"));
+    backup("20260928T020000Z", 3, 7);
+    const r = run(okEnv());
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("bind source path does not exist");
+    expect(r.stdout).not.toContain("restore test ok");
+    expect(r.calls.some((c) => c.startsWith("docker exec"))).toBe(false);
+  });
+
+  it("never prints the age key's contents or passes them in any argument (T32 G-M2)", () => {
+    backup("20260928T020000Z", 3, 7);
+    const r = run(okEnv());
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const everything = [r.stdout, r.stderr, ...r.calls, runArgs().join("\n")].join("\n");
+    expect(everything).not.toContain(AGE_KEY);
+    // The key is passed by path only.
+    expect(r.calls.some((c) => c.includes(`age -d -i ${join(dir, "age-key.txt")} `))).toBe(true);
+  });
+
+  const workDirOf = (calls: string[]) =>
+    dirname(calls.find((c) => c.startsWith("age -d "))?.match(/ -o (\S+)/)?.[1] ?? "");
+
+  it("removes the work dir holding the decrypted tar on success (T32 G-M3)", () => {
+    backup("20260928T020000Z", 3, 7);
+    const r = run(okEnv());
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const work = workDirOf(r.calls);
+    expect(work).not.toBe(".");
+    expect(existsSync(work)).toBe(false);
+  });
+
+  it("removes the work dir when age fails midway (T32 G-M3)", () => {
+    backup("20260928T020000Z", 3, 7);
+    const r = run({ ...okEnv(), STUB_AGE_FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    const work = workDirOf(r.calls);
+    expect(work).not.toBe(".");
+    expect(existsSync(work)).toBe(false);
   });
 });

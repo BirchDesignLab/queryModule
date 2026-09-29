@@ -21,14 +21,23 @@ dir=$(find "$work" -mindepth 1 -maxdepth 1 -type d | head -n1)
 want=$(jq -c '{auditCount, auditMaxId}' "$dir/manifest.json")
 max=$(jq -r '.auditMaxId' "$dir/manifest.json")
 
+# A volume left by a failed earlier cleanup must never be reused.
+docker volume rm -f "$vol" >/dev/null 2>&1 || true
 docker volume create "$vol" >/dev/null
 docker run --rm -v "$vol:/data" -v "$dir:/src:ro" alpine:3 sh -c 'cp /src/querymodule.db* /data/ && chown -R 10001:10001 /data'
 # One read-only bind mount per app secret, the set deploy/compose.yml gives `app` (#135): the
 # host secrets dir is root mode 700, so uid 10001 cannot enter a mount of the whole directory,
-# while each file is uid 10001 mode 400. TUNNEL_TOKEN belongs to cloudflared and is not mounted.
+# while each file is uid 10001 mode 400. --mount (not -v) errors on a missing source instead of
+# creating an empty root-owned directory, so a missing required secret fails before the container
+# starts. SEED_PASSWORD_SECRET is optional in the app (packages/api/src/secrets.ts): skipped
+# with a note when absent. TUNNEL_TOKEN belongs to cloudflared and is not mounted.
 secret_mounts=()
 for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSWORD_SECRET; do
-  secret_mounts+=(-v "$QM_SECRETS_DIR/$k:/run/secrets/$k:ro")
+  if [ "$k" = SEED_PASSWORD_SECRET ] && [ ! -e "$QM_SECRETS_DIR/$k" ]; then
+    echo "restore-test: SEED_PASSWORD_SECRET absent, not mounted"
+    continue
+  fi
+  secret_mounts+=(--mount "type=bind,src=$QM_SECRETS_DIR/$k,dst=/run/secrets/$k,readonly")
 done
 docker run -d --name "$name" -v "$vol:/data" "${secret_mounts[@]}" -e PUBLIC_ORIGIN=http://localhost:3000 "$image" >/dev/null
 for i in $(seq 1 60); do
