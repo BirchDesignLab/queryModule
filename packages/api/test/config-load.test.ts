@@ -26,7 +26,7 @@ function copy(): string {
  * step 6), so it changes with packages/config/sites/default.json and with any core schema
  * default; update it deliberately in the change that does that.
  */
-const DEFAULT_CONFIG_HASH = "769f9f3c815f38bc3d11641a5c17d2764354e75e3313a5c7886987f8dcaee57f";
+const DEFAULT_CONFIG_HASH = "08079c2a7a3f64dc0f2d6abc85db41d4e789aa03fda6e84d8df4d1efb1d572ec";
 
 /*
  * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
@@ -34,7 +34,7 @@ const DEFAULT_CONFIG_HASH = "769f9f3c815f38bc3d11641a5c17d2764354e75e3313a5c7886
  * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
  * default; update it deliberately in the change that does that.
  */
-const EXAMPLE_OK_CONFIG_HASH = "457bc94d26c1e24fcc941cedbddd7bf9907bd821d56ab4651bc49b420dc3bb3b";
+const EXAMPLE_OK_CONFIG_HASH = "8da615950d906e8fe8d510d65705a8772563f727bb8f149824cbb9e0b912b3c8";
 
 /** The bundled sites' own warnings; plateType is conditionally required with no VEH position. */
 const BUNDLED_WARNINGS = [

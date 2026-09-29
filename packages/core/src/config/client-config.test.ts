@@ -127,6 +127,8 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
       delegation: false,
       resultHide: false,
       adminAudit: false,
+      adminConfig: false,
+      adminUsers: false,
     });
   });
 
@@ -228,6 +230,8 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     "delegation.purposes.maxDurationMinutes",
     "features",
     "features.adminAudit",
+    "features.adminConfig",
+    "features.adminUsers",
     "features.credentials",
     "features.delegation",
     "features.resultHide",

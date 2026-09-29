@@ -519,13 +519,21 @@
               },
               "adminAudit": {
                 "type": "boolean"
+              },
+              "adminConfig": {
+                "type": "boolean"
+              },
+              "adminUsers": {
+                "type": "boolean"
               }
             },
             "required": [
               "credentials",
               "delegation",
               "resultHide",
-              "adminAudit"
+              "adminAudit",
+              "adminConfig",
+              "adminUsers"
             ],
             "additionalProperties": false
           },

@@ -153,6 +153,8 @@ export interface components {
                 delegation: boolean;
                 resultHide: boolean;
                 adminAudit: boolean;
+                adminConfig: boolean;
+                adminUsers: boolean;
             };
             personas: {
                 key: string;

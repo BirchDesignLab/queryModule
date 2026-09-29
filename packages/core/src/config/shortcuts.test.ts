@@ -11,7 +11,14 @@ import {
 
 describe("FEATURES catalogue (spec 5.8)", () => {
   it("is the closed list", () => {
-    expect([...FEATURES]).toEqual(["credentials", "delegation", "resultHide", "adminAudit"]);
+    expect([...FEATURES]).toEqual([
+      "credentials",
+      "delegation",
+      "resultHide",
+      "adminAudit",
+      "adminConfig",
+      "adminUsers",
+    ]);
   });
 });
 
