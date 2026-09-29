@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Link, Navigate, Outlet } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { ConfigBuilder } from "./ConfigBuilder.js";
 import { canManageUsers, canOpenAdmin } from "./roles.js";
 
 /**
@@ -59,6 +60,7 @@ export function AdminConfigPage() {
   return (
     <section>
       <SectionHeading>{t("admin.config.title")}</SectionHeading>
+      <ConfigBuilder />
     </section>
   );
 }
