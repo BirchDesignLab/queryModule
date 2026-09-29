@@ -874,6 +874,99 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
     ],
   ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
 
+  // C-I1: the actor is bound to the admin type (ADR-0011 items 6 to 8; spec 4.7 sweeper writes expired).
+  const user = { id: "u1", email: "officer@example.test", role: "user" } as const;
+  const sys = <T extends AuditEventType>(type: T, details: object) => ({
+    type,
+    actor: SYSTEM_ACTOR,
+    identitySource: "system",
+    details,
+  });
+  const human = <T extends AuditEventType>(
+    type: T,
+    actor: { id: string; email: string; role: string },
+    details: object,
+  ) => ({ type, actor, identitySource: "local", details });
+  const roleChange = (via: "grant-role" | "adminConsole") => ({
+    targetUserId: "u2",
+    role: "trainingOfficer",
+    change: "granted",
+    via,
+  });
+  it.each([
+    ["userDisabled by the system actor", sys("userDisabled", samples.userDisabled)],
+    ["userCreated by the system actor", sys("userCreated", samples.userCreated)],
+    ["configPublished by the system actor", sys("configPublished", samples.configPublished)],
+    ["userCreated by an implementer", human("userCreated", implementer, samples.userCreated)],
+    ["userDisabled by an implementer", human("userDisabled", implementer, samples.userDisabled)],
+    ["configPublished by role user", human("configPublished", user, samples.configPublished)],
+    ["sessionRevoked admin by the system actor", sys("sessionRevoked", samples.sessionRevoked)],
+    [
+      "sessionRevoked userDisabled by the system actor",
+      sys("sessionRevoked", { sessionId: RID, reason: "userDisabled" }),
+    ],
+    [
+      "sessionRevoked expired by an admin",
+      human("sessionRevoked", admin, { sessionId: RID, reason: "expired" }),
+    ],
+    [
+      "sessionRevoked admin by an implementer",
+      human("sessionRevoked", implementer, samples.sessionRevoked),
+    ],
+    [
+      "roleChanged adminConsole by the system actor",
+      sys("roleChanged", roleChange("adminConsole")),
+    ],
+    ["roleChanged grant-role by an admin", human("roleChanged", admin, roleChange("grant-role"))],
+    [
+      "roleChanged adminConsole by an implementer",
+      human("roleChanged", implementer, roleChange("adminConsole")),
+    ],
+  ])("C-I1 rejects %s", (_n, e) => {
+    const r = AuditEventSchema.safeParse(e);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some((i) => i.path[0] === "actor")).toBe(true);
+  });
+  it.each([
+    ["configPublished by an admin", human("configPublished", admin, samples.configPublished)],
+    [
+      "configPublished by an implementer",
+      human("configPublished", implementer, samples.configPublished),
+    ],
+    ["userCreated by an admin", human("userCreated", admin, samples.userCreated)],
+    ["userDisabled by an admin", human("userDisabled", admin, samples.userDisabled)],
+    ["sessionRevoked admin by an admin", human("sessionRevoked", admin, samples.sessionRevoked)],
+    [
+      "sessionRevoked userDisabled by an admin",
+      human("sessionRevoked", admin, { sessionId: RID, reason: "userDisabled" }),
+    ],
+    [
+      "sessionRevoked expired by the system actor",
+      sys("sessionRevoked", { sessionId: RID, reason: "expired" }),
+    ],
+    ["roleChanged grant-role by the system actor", sys("roleChanged", roleChange("grant-role"))],
+    [
+      "roleChanged adminConsole by an admin",
+      human("roleChanged", admin, roleChange("adminConsole")),
+    ],
+  ])("C-I1 accepts %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(true));
+
+  // C-m2: a rollback republishes an older version (ADR-0011 item 5).
+  it.each([
+    ["the same version", 3],
+    ["a later version", 4],
+  ])("C-m2 rejects a rollback to %s", (_n, rollbackOf) =>
+    expect(
+      AUDIT_DETAILS_SCHEMAS.configPublished.safeParse({ ...samples.configPublished, rollbackOf })
+        .success,
+    ).toBe(false),
+  );
+  it("C-m2 accepts a rollback to an older version", () =>
+    expect(
+      AUDIT_DETAILS_SCHEMAS.configPublished.safeParse({ ...samples.configPublished, rollbackOf: 2 })
+        .success,
+    ).toBe(true));
+
   it("caps changedPointers so a publish row stays bounded", () => {
     const many = Array.from({ length: 1001 }, (_, i) => `/picklists/0/values/${i}`);
     expect(

@@ -77,7 +77,13 @@ function delegationNeedsOwner(
 
 /**
  * A JSON pointer (RFC 6901) into a site config document: key and index segments only
- * (identifier characters, "-" for append, ~0 and ~1 escapes), so no field value fits.
+ * (identifier characters, "-" for append, ~0 and ~1 escapes), so no free text or
+ * punctuation-bearing value fits (an alphanumeric value still would; writers emit keys only).
+ * Writer rule (ADR-0011 item 7, the publish and rollback routes): a changed leaf whose path has a
+ * segment outside this grammar (an arbitrary map key such as a roleClaims URN) is recorded as its
+ * deepest parent whose segments all fit; when more than MAX_CHANGED_POINTERS pointers remain,
+ * collapse them to their parents until they fit. A pointer the schema rejects would fail the
+ * publish closed.
  */
 const ConfigPointerSchema = z
   .string()
@@ -236,15 +242,21 @@ export const AUDIT_DETAILS_SCHEMAS = {
    * ADR-0011 item 7: one row per publish or rollback of a site config version. changedPointers
    * are JSON pointers into the document (spec 4.1 key and index segments), never values.
    */
-  configPublished: z.strictObject({
-    siteId: BoundedIdSchema,
-    versionId: Uuid7Schema,
-    version: z.int().min(1),
-    configHash: Sha256HexSchema,
-    previousConfigHash: Sha256HexSchema,
-    changedPointers: z.array(ConfigPointerSchema).max(MAX_CHANGED_POINTERS),
-    rollbackOf: z.int().min(1).optional(),
-  }),
+  configPublished: z
+    .strictObject({
+      siteId: BoundedIdSchema,
+      versionId: Uuid7Schema,
+      version: z.int().min(1),
+      configHash: Sha256HexSchema,
+      previousConfigHash: Sha256HexSchema,
+      changedPointers: z.array(ConfigPointerSchema).max(MAX_CHANGED_POINTERS),
+      rollbackOf: z.int().min(1).optional(),
+    })
+    // ADR-0011 item 5: a rollback republishes an older version as a new, higher version.
+    .refine((d) => d.rollbackOf === undefined || d.rollbackOf < d.version, {
+      path: ["rollbackOf"],
+      message: "rollbackOf names an older version than version",
+    }),
   /** ADR-0011 item 8: an admin created a user (the one-time password is never audited). */
   userCreated: z.strictObject({ targetUserId: BoundedIdSchema, role: RoleSchema }),
   /** Spec 4.7, ADR-0011 item 8: one disable transaction and what it ended (counts only). */
@@ -324,7 +336,10 @@ const systemEnvelope = {
 
 /**
  * Admin console types (ADR-0011 item 7): no request, part or state credential, like the system
- * types, but written by an admin or implementer (and sessionRevoked expired by SYSTEM_ACTOR).
+ * types. The actor is bound to the type (AuditEventSchema superRefine; ADR-0011 items 6 to 8):
+ * configPublished by an admin or implementer; userCreated and userDisabled by an admin;
+ * sessionRevoked expired by SYSTEM_ACTOR only (the spec 5.2 sweeper) and any other reason by an
+ * admin; roleChanged via grant-role by SYSTEM_ACTOR and via adminConsole by an admin.
  */
 const adminEnvelope = systemEnvelope;
 
@@ -442,6 +457,24 @@ export const AuditEventSchema = z
     const systemType = e.type === "configLoaded" || e.type === "retentionPurged";
     if (systemType && !systemRole) {
       ctx.addIssue({ code: "custom", path: ["actor"], message: "written by the system actor" });
+    }
+    // SEC-010 (ADR-0011 items 6 to 8; spec 4.7, 5.2 sweeper): admin rows name the human who acted.
+    const actorIs = (ok: boolean, message: string) => {
+      if (!ok) ctx.addIssue({ code: "custom", path: ["actor"], message });
+    };
+    const role = e.actor.role;
+    if (e.type === "configPublished") {
+      actorIs(role === "admin" || role === "implementer", "written by an admin or implementer");
+    } else if (e.type === "userCreated" || e.type === "userDisabled") {
+      actorIs(role === "admin", "written by an admin");
+    } else if (e.type === "sessionRevoked") {
+      if (e.details.reason === "expired") {
+        actorIs(systemRole, "an expired session is revoked by the system actor");
+      } else actorIs(role === "admin", "written by an admin");
+    } else if (e.type === "roleChanged") {
+      if (e.details.via === "grant-role") {
+        actorIs(systemRole, "grant-role writes as the system actor");
+      } else actorIs(role === "admin", "the admin console role change is written by an admin");
     }
     // Auth and system types have neither envelope column; the checks below are query-only.
     if (
