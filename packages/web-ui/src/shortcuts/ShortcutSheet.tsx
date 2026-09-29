@@ -1,4 +1,4 @@
-import { type ShortcutBinding, usLayoutChar } from "@querymodule/core/config";
+import type { ShortcutBinding } from "@querymodule/core/config";
 import { type JSX, useEffect, useRef, useState } from "react";
 
 export interface ShortcutSheetProps {
@@ -16,17 +16,12 @@ type LayoutMap = { get(code: string): string | undefined };
 const MODIFIERS = ["Ctrl", "Alt", "Shift"] as const;
 
 /** Modifiers and key joined with " + ". The key is the layout's label where the browser gave one,
- *  else the US character, else the code (spec 6.4). A bare or Shift-only stroke on a US layout
- *  keeps its typed character ("?" for Shift+Slash). */
+ *  else the code (spec 6.4). Never a US character: on another layout it would name the wrong key. */
 function strokeLabel(stroke: string, layout: LayoutMap | null): string {
   const parts = stroke.split("+");
   const code = parts[parts.length - 1] ?? stroke;
   const mods = parts.slice(0, -1);
-  if (layout === null && !mods.includes("Ctrl") && !mods.includes("Alt")) {
-    const typed = usLayoutChar(stroke);
-    if (typed !== null) return typed;
-  }
-  const key = layout?.get(code) ?? usLayoutChar(code) ?? code;
+  const key = layout?.get(code) ?? code;
   return [...MODIFIERS.filter((m) => mods.includes(m)), key].join(" + ");
 }
 

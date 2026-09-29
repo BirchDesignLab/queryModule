@@ -1,5 +1,5 @@
 import { resolveShortcuts } from "@querymodule/core/config";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -47,11 +47,11 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
     expect(within(submit).getByText("Ctrl + Enter")).toBeInTheDocument();
     expect(within(submit).getByText("Query panel")).toBeInTheDocument();
     const terminal = row(dialog, "Go to the command line");
-    expect(within(terminal).getByText("/")).toBeInTheDocument();
+    expect(within(terminal).getByText("Slash")).toBeInTheDocument();
     expect(within(terminal).getByText("Anywhere")).toBeInTheDocument();
     const chord = row(dialog, "Go to the query panel");
-    expect(within(chord).getByText("g")).toBeInTheDocument();
-    expect(within(chord).getByText("q")).toBeInTheDocument();
+    expect(within(chord).getByText("KeyG")).toBeInTheDocument();
+    expect(within(chord).getByText("KeyQ")).toBeInTheDocument();
   });
 
   it("lists every binding of an action that has several", () => {
@@ -119,7 +119,7 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
 
   it("renders combos with every modifier and no raw stroke string when no layout map exists", () => {
     render(sheet());
-    expect(screen.getByText("Ctrl + `")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
     expect(screen.queryByText("Ctrl+Backquote")).not.toBeInTheDocument();
   });
 
@@ -144,7 +144,7 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
         }),
     });
     render(sheet());
-    expect(screen.getByText("Ctrl + `")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
     resolve(
       new Map([
         ["Backquote", "²"],
@@ -161,8 +161,11 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
     setKeyboard({ getLayoutMap });
     render(sheet());
     await vi.waitFor(() => expect(getLayoutMap).toHaveBeenCalled());
-    await Promise.resolve();
-    expect(screen.getByText("Ctrl + `")).toBeInTheDocument();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
   });
 
   it("falls back when getLayoutMap throws synchronously", () => {
@@ -172,12 +175,15 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
       },
     });
     render(sheet());
-    expect(screen.getByText("Ctrl + `")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
   });
 
-  it("falls back for a code the layout map does not carry", async () => {
-    setKeyboard({ getLayoutMap: () => Promise.resolve(new Map([["KeyG", "g"]])) });
+  it("falls back to the code for a code the layout map does not carry, after the map resolved", async () => {
+    setKeyboard({ getLayoutMap: () => Promise.resolve(new Map([["KeyQ", "a"]])) });
     render(sheet());
-    await vi.waitFor(() => expect(screen.getByText("Ctrl + `")).toBeInTheDocument());
+    // The map has resolved once a mapped key shows its layout label (US layout would say "q").
+    expect(await screen.findByText("a")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    expect(screen.getByText("KeyG")).toBeInTheDocument();
   });
 });
