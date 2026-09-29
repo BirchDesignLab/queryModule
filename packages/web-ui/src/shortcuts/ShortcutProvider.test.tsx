@@ -165,6 +165,45 @@ describe("FR-007 shortcut provider binds the engine to the DOM (spec 6.4)", () =
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it("an AltGr keystroke (Ctrl+Alt on Windows) fires no Ctrl+Alt shortcut (#319)", () => {
+    const handler = vi.fn();
+    render(
+      <ShortcutProvider bindings={{ submit: [{ keys: "Ctrl+Alt+Digit2", context: "global" }] }}>
+        <Action action="submit" handler={handler} />
+      </ShortcutProvider>,
+    );
+    const altGr = new KeyboardEvent("keydown", {
+      code: "Digit2",
+      key: "@",
+      ctrlKey: true,
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(altGr, "getModifierState", { value: (k: string) => k === "AltGraph" });
+    document.body.dispatchEvent(altGr);
+    expect(handler).not.toHaveBeenCalled();
+    expect(altGr.defaultPrevented).toBe(false);
+    // The same keys without AltGraph are a real Ctrl+Alt combo and fire.
+    fireEvent.keyDown(document.body, { code: "Digit2", key: "2", ctrlKey: true, altKey: true });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("a global binding fires with no global entry in the contexts (the engine ranks it)", () => {
+    const handler = vi.fn();
+    render(
+      <ShortcutProvider bindings={{ submit: [{ keys: "F4", context: "global" }] }}>
+        <div data-shortcut-context="panel">
+          <button type="button">in panel</button>
+        </div>
+        <Action action="submit" handler={handler} />
+      </ShortcutProvider>,
+    );
+    screen.getByRole("button", { name: "in panel" }).focus();
+    fireEvent.keyDown(document.activeElement ?? document.body, { code: "F4", key: "F4" });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
   it("a chord fires on the second stroke and expires after 1000 ms", async () => {
     const handler = vi.fn();
     const user = userEvent.setup();
