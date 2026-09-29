@@ -291,5 +291,7 @@
   "config.missingLabel": "The label {labelKey} has no text in locale {locale}.",
   "admin.config.addInRaw": "Add the first item in Raw JSON.",
   "admin.config.loadError": "The site config could not be loaded.",
-  "admin.config.raw.notParsed": "Draft JSON does not parse; checks paused."
+  "admin.config.raw.notParsed": "Draft JSON does not parse; checks paused.",
+  "admin.preview.title": "Dispatcher preview",
+  "admin.preview.paused": "Preview paused: fix the errors to update it."
 }

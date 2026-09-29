@@ -135,3 +135,12 @@ body {
 .qm-login__secondary .qm-field__label {
   font-weight: 400;
 }
+
+/* Admin config builder (Task 32): the builder and the dispatcher preview side by side when there
+   is room, stacked otherwise. */
+.qm-admin__workspace {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 48ch), 1fr));
+  gap: var(--qm-space-4);
+  align-items: start;
+}
