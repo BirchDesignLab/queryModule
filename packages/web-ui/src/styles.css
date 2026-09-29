@@ -120,6 +120,12 @@ h1 {
   cursor: not-allowed;
 }
 
+/* Tabs: the selected tab keeps the accent fill, an unselected one is outlined (#395 critic 6). */
+.qm-button[role="tab"][aria-selected="false"] {
+  background: var(--qm-color-surface-base);
+  color: var(--qm-color-accent);
+}
+
 /* Query panel (spec 6.2). min-inline-size: 0 lets a fieldset shrink below its widest control at 320px. */
 .qm-query-form__section {
   min-inline-size: 0;

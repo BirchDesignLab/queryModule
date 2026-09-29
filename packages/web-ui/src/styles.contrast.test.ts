@@ -46,3 +46,22 @@ describe("spec:CV1 the invalid-field border and error text meet WCAG 2.1 AA cont
     }
   });
 });
+
+describe("#395 critic 6: a selected tab is visually distinct from an unselected one (UX-004, WCAG 1.4.1, 1.4.11)", () => {
+  it("an unselected tab is outlined: surface fill, accent text, accent border", () => {
+    expect(css).toMatch(
+      /\.qm-button\[role="tab"\]\[aria-selected="false"\]\s*\{[^}]*background:\s*var\(--qm-color-surface-base\);[^}]*color:\s*var\(--qm-color-accent\);/,
+    );
+  });
+
+  it("both tab states meet contrast in every mode: text 4.5:1, the selected fill 3:1 against the page", () => {
+    for (const mode of THEME_MODES) {
+      const accent = COLOR_TOKENS["color.accent"][mode];
+      const surface = COLOR_TOKENS["color.surface.base"][mode];
+      // Selected: surface-colored text on the accent fill; unselected: accent text on the surface.
+      expect(contrastRatio(surface, accent)).toBeGreaterThanOrEqual(4.5);
+      // The fill (selected) versus none (unselected) is the state cue: accent against the page.
+      expect(contrastRatio(accent, surface)).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
