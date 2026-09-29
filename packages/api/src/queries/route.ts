@@ -22,10 +22,33 @@ export function lostIdempotencyRace(e: unknown): boolean {
   return false;
 }
 
+/** Driver result codes are fixed tokens such as SQLITE_CONSTRAINT, never data. */
+const DRIVER_CODE = /^SQLITE_[A-Z_]+$/;
+
+/**
+ * The only error a failed T1 hands to app.onError (spec 5.9, SEC-006). drizzle's wrapper
+ * message quotes every insert param: wrapped DEKs, sealed values, ids and the Idempotency-Key.
+ * This keeps just a fixed message and the driver's result code, with no cause.
+ */
+export class SubmitTransactionError extends Error {
+  override name = "SubmitTransactionError";
+  constructor(code: string | null) {
+    super(code ? `submit transaction failed (${code})` : "submit transaction failed");
+  }
+}
+
+export function sanitizeSubmitError(e: unknown): SubmitTransactionError {
+  for (let x: unknown = e; x instanceof Error; x = x.cause) {
+    const code: unknown = (x as { code?: unknown }).code;
+    if (typeof code === "string" && DRIVER_CODE.test(code)) return new SubmitTransactionError(code);
+  }
+  return new SubmitTransactionError(null);
+}
+
 /**
  * POST /api/v1/queries (spec 5.2 steps 1 to 4), mounted after the body cap and the
  * X-Requested-With check. Nothing from the body is logged; any other throw reaches
- * app.onError as 500 internal.
+ * app.onError as 500 internal, a T1 failure only as a SubmitTransactionError.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
   app.post("/api/v1/queries", requireSession(d.identity), async (c) => {
@@ -39,9 +62,9 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     try {
       body = await acknowledge(d, principal, p.value, a);
     } catch (e) {
-      if (!lostIdempotencyRace(e)) throw e;
+      if (!lostIdempotencyRace(e)) throw sanitizeSubmitError(e);
       const winner = await replayResponse(d.db, principal.userId, a.idempotencyKey);
-      if (winner === null) throw e;
+      if (winner === null) throw sanitizeSubmitError(e);
       body = winner;
     }
     return c.json(SubmitQueryResponseSchema.parse(body), 202);

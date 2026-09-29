@@ -11,7 +11,7 @@ import type { Tx } from "../../src/db/tx";
 import { openPartValues, unwrapRequestKey } from "../../src/keys/request-keys";
 import { acknowledge } from "../../src/queries/acknowledge";
 import type { PreparedSubmit } from "../../src/queries/prepare";
-import { lostIdempotencyRace } from "../../src/queries/route";
+import { lostIdempotencyRace, sanitizeSubmitError } from "../../src/queries/route";
 import type { Principal } from "../../src/seams";
 import { TEST_SECRETS, type TestClock } from "../helpers/fixture";
 import { createTestApp, type TestApp } from "../helpers/test-app";
@@ -504,6 +504,37 @@ describe("POST /api/v1/queries fail closed and middleware (SEC-012, spec 5.9)", 
     expect(t.logLines.join("\n")).not.toContain(PLATE);
   });
 
+  it.each(["request_key", "query_request", "source_result"])(
+    "a real driver failure on the %s insert logs a fixed message, no params or key bytes",
+    async (table) => {
+      const { t, post, body, userId, configHash } = await setup();
+      // A real LibsqlError, wrapped by drizzle in a DrizzleQueryError that quotes every param.
+      await t.deps.db.$client.execute(
+        `CREATE TRIGGER probe_abort BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'probe abort'); END`,
+      );
+      const key = crypto.randomUUID();
+      t.logLines.length = 0;
+      const r = await post(body(), { key });
+      expect(r.status).toBe(500);
+      expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("internal");
+      const lines = t.logLines.filter((l) => l.includes('"msg":"unhandled"'));
+      expect(lines).toHaveLength(1);
+      const line = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
+      expect(line.err).toEqual({
+        name: "SubmitTransactionError",
+        message: "submit transaction failed (SQLITE_CONSTRAINT)",
+      });
+      for (const s of ["params", "Failed query", "probe abort", key, userId, configHash, PLATE])
+        expect(t.logLines.join("\n")).not.toContain(s);
+      expect(await tableCounts(t)).toEqual({
+        queryRequest: 0,
+        sourceResult: 0,
+        requestKey: 0,
+        queryAudit: 0,
+      });
+    },
+  );
+
   it("a 33 KB body is 413 and a missing X-Requested-With is 403, both before admission", async () => {
     const { t, post, body } = await setup();
     const hit = vi.spyOn(t.deps.limiter, "hit");
@@ -634,5 +665,19 @@ describe("acknowledge envelope and the race detector (SEC-011, spec 5.2 step 1)"
     quoted.name = "DrizzleQueryError";
     expect(lostIdempotencyRace(quoted)).toBe(false);
     expect(lostIdempotencyRace("query_request idempotency key exists")).toBe(false);
+  });
+
+  it("sanitizeSubmitError keeps only a driver result code, never a message or cause", () => {
+    const inner = Object.assign(new Error("SQLITE_BUSY: params ZZ-0001"), { code: "SQLITE_BUSY" });
+    const outer = new Error("Failed query: params: ZZ-0001", { cause: inner });
+    const e = sanitizeSubmitError(outer);
+    expect([e.name, e.message, e.cause]).toEqual([
+      "SubmitTransactionError",
+      "submit transaction failed (SQLITE_BUSY)",
+      undefined,
+    ]);
+    const odd = Object.assign(new Error("x"), { code: "ZZ-0001 leaked" });
+    expect(sanitizeSubmitError(odd).message).toBe("submit transaction failed");
+    expect(sanitizeSubmitError("audit down").message).toBe("submit transaction failed");
   });
 });
