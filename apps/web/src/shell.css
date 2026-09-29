@@ -157,37 +157,99 @@ main[tabindex="-1"]:focus {
   text-decoration: none;
 }
 
-/* Admin sections as a nav bar: pills like the header links; the open one is bold and filled
-   (aria-current), so the state is not colour alone. */
-.qm-admin__nav {
+/* Admin console (design target, A1): a left rail beside the section. */
+.qm-admin {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--qm-space-2);
-  margin: 0 0 var(--qm-space-4);
+  align-items: stretch;
+  background: var(--qm-color-surface-sunken);
+}
+
+/* Sidebar pattern: the rail keeps its basis (about 220 px) while the section takes the rest; the
+   rail wraps to full width above the section once both cannot fit. */
+.qm-admin__rail {
+  flex: 1 1 calc(var(--qm-space-12) * 4.5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  padding: var(--qm-space-4) var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border-inline-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__rail ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.qm-admin__nav a {
+.qm-admin__rail a,
+.qm-admin__rail button {
   box-sizing: border-box;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  min-height: var(--qm-target-min);
+  width: 100%;
+  min-height: var(--qm-control-height-dense);
   padding: 0 var(--qm-space-3);
-  border: var(--qm-border-width) solid var(--qm-color-border);
-  border-radius: var(--qm-radius-md);
-  color: var(--qm-color-text-body);
+  border: 0;
+  border-radius: var(--qm-radius-control);
+  background: transparent;
+  color: var(--qm-color-text-muted);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
   text-decoration: none;
+  cursor: pointer;
 }
 
-.qm-admin__nav a:hover {
-  text-decoration: underline;
-}
-
-.qm-admin__nav a[aria-current="page"] {
+.qm-admin__rail a:hover,
+.qm-admin__rail button:hover {
   background: var(--qm-color-surface-raised);
-  border-color: var(--qm-color-text-body);
-  font-weight: 700;
+  color: var(--qm-color-text-body);
+}
+
+/* The open section: filled and body-coloured, with an accent edge, so the state is not colour alone. */
+.qm-admin__rail a[aria-current="page"] {
+  background: var(--qm-color-accent-subtle);
+  box-shadow: inset calc(var(--qm-border-width) * 2) 0 0 var(--qm-color-accent);
+  color: var(--qm-color-text-body);
+  font-weight: 600;
+}
+
+.qm-admin__rail .qm-admin__back {
+  margin-block-end: var(--qm-space-3);
+  color: var(--qm-color-accent);
+}
+
+.qm-admin__rail button[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.qm-admin__group {
+  margin: 0;
+  padding: var(--qm-space-3) var(--qm-space-3) var(--qm-space-1);
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* The audit log's reason, visible under it (spec 6.2). */
+.qm-admin__soon {
+  display: block;
+  padding: 0 var(--qm-space-3) var(--qm-space-1);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-xs);
+}
+
+.qm-admin__main {
+  flex: 999 1 calc(var(--qm-space-12) * 12);
+  min-inline-size: 0;
+  padding: var(--qm-space-4) var(--qm-space-5);
 }
 
 /* Mobile-unit layout: a shorter bar; its controls keep their 48 px targets (spec 6.3 subset). */

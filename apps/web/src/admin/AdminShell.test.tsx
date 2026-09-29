@@ -28,7 +28,7 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
 
   it("the header links back to the query panel from /admin, and not on the panel itself", async () => {
     const t = await openAs("admin", "/admin/config");
-    await screen.findByRole("heading", { name: "Site config", level: 2 });
+    await screen.findByRole("heading", { name: "Site configuration", level: 2 });
     const back = within(screen.getByRole("banner")).getByRole("link", { name: "Query panel" });
     expect(back).toHaveAttribute("href", "/");
     await t.user.click(back);
@@ -38,22 +38,60 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     ).toBeNull();
   });
 
-  it("the Config and Users links are a nav bar: the open section is aria-current", async () => {
+  it("the rail links are the admin sections: the open one is aria-current", async () => {
     const t = await openAs("admin", "/admin/config");
-    await screen.findByRole("heading", { name: "Site config", level: 2 });
+    await screen.findByRole("heading", { name: "Site configuration", level: 2 });
     const nav = screen.getByRole("navigation", { name: "Admin sections" });
-    expect(within(nav).getByRole("link", { name: "Config" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "Site configuration" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(within(nav).getByRole("link", { name: "Users" })).not.toHaveAttribute("aria-current");
-    await t.user.click(within(nav).getByRole("link", { name: "Users" }));
-    await screen.findByRole("heading", { name: "Users", level: 2 });
-    expect(within(nav).getByRole("link", { name: "Users" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "Users and roles" })).not.toHaveAttribute(
+      "aria-current",
+    );
+    await t.user.click(within(nav).getByRole("link", { name: "Users and roles" }));
+    await screen.findByRole("heading", { name: "Users and roles", level: 2 });
+    expect(within(nav).getByRole("link", { name: "Users and roles" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(within(nav).getByRole("link", { name: "Config" })).not.toHaveAttribute("aria-current");
+    expect(within(nav).getByRole("link", { name: "Site configuration" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("the rail leads with Back to queries, then the sections, then the audit log with its reason", async () => {
+    const t = await openAs("admin", "/admin/config");
+    await screen.findByRole("heading", { name: "Site configuration", level: 2 });
+    const nav = screen.getByRole("navigation", { name: "Admin sections" });
+    const items = [...nav.querySelectorAll("a, button")];
+    expect(items.map((el) => el.textContent)).toEqual([
+      "Back to queries",
+      "Site configuration",
+      "Users and roles",
+      "Audit log",
+    ]);
+    expect(within(nav).getByText("Configure")).toBeInTheDocument();
+    expect(within(nav).getByText("People")).toBeInTheDocument();
+    const audit = within(nav).getByRole("button", { name: "Audit log" });
+    expect(audit).toHaveAttribute("aria-disabled", "true");
+    expect(audit).toHaveAccessibleDescription("Arrives in M2");
+    audit.focus();
+    expect(audit).toHaveFocus();
+    await t.user.click(audit);
+    expect(
+      screen.getByRole("heading", { name: "Site configuration", level: 2 }),
+    ).toBeInTheDocument();
+    await t.user.click(within(nav).getByRole("link", { name: "Back to queries" }));
+    expect(await screen.findByRole("heading", { name: /^Query Module$/ })).toBeInTheDocument();
+  });
+
+  it("an implementer's rail has no People group", async () => {
+    await openAs("implementer", "/admin/config");
+    await screen.findByRole("heading", { name: "Site configuration", level: 2 });
+    const nav = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(nav).queryByText("People")).toBeNull();
+    expect(within(nav).queryByRole("button", { name: "Audit log" })).toBeNull();
   });
 
   it("a user at /admin gets the query panel, as for any unknown path", async () => {
@@ -62,7 +100,7 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     expect(screen.queryByRole("heading", { name: "Admin" })).toBeNull();
   });
 
-  it("an admin opens the console from the header; Config and Users are listed", async () => {
+  it("an admin opens the console from the header; both sections are listed", async () => {
     const t = await openAs("admin", "/");
     const link = await waitFor(() => {
       const l = adminLink();
@@ -73,38 +111,38 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     await t.user.click(link);
     // #388: /admin opens its Config section, whose heading takes focus (no h1/h2 race).
     expect(await screen.findByRole("heading", { name: "Admin", level: 1 })).toBeInTheDocument();
-    const heading = await screen.findByRole("heading", { name: "Site config", level: 2 });
+    const heading = await screen.findByRole("heading", { name: "Site configuration", level: 2 });
     await waitFor(() => expect(heading).toHaveFocus());
     const nav = screen.getByRole("navigation", { name: "Admin sections" });
-    expect(within(nav).getByRole("link", { name: "Config" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "Site configuration" })).toHaveAttribute(
       "href",
       "/admin/config",
     );
-    expect(within(nav).getByRole("link", { name: "Users" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "Users and roles" })).toHaveAttribute(
       "href",
       "/admin/users",
     );
     expect(
-      await screen.findByRole("heading", { name: "Site config", level: 2 }),
+      await screen.findByRole("heading", { name: "Site configuration", level: 2 }),
     ).toBeInTheDocument();
   });
 
-  it("an implementer has the Admin link and Config only; /admin/users goes to Config", async () => {
+  it("an implementer has the Admin link and Site configuration only; /admin/users goes there", async () => {
     await openAs("implementer", "/admin/users");
     expect(
-      await screen.findByRole("heading", { name: "Site config", level: 2 }),
+      await screen.findByRole("heading", { name: "Site configuration", level: 2 }),
     ).toBeInTheDocument();
     expect(adminLink()).not.toBeNull();
     const nav = screen.getByRole("navigation", { name: "Admin sections" });
-    expect(within(nav).getByRole("link", { name: "Config" })).toBeInTheDocument();
-    expect(within(nav).queryByRole("link", { name: "Users" })).toBeNull();
+    expect(within(nav).getByRole("link", { name: "Site configuration" })).toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Users and roles" })).toBeNull();
   });
 
   it("moving between sections focuses the section heading", async () => {
     const t = await openAs("admin", "/admin/config");
-    await screen.findByRole("heading", { name: "Site config", level: 2 });
-    await t.user.click(screen.getByRole("link", { name: "Users" }));
-    const users = await screen.findByRole("heading", { name: "Users", level: 2 });
+    await screen.findByRole("heading", { name: "Site configuration", level: 2 });
+    await t.user.click(screen.getByRole("link", { name: "Users and roles" }));
+    const users = await screen.findByRole("heading", { name: "Users and roles", level: 2 });
     await waitFor(() => expect(users).toHaveFocus());
   });
 });

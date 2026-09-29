@@ -1,6 +1,7 @@
 import { useStore } from "@querymodule/client";
-import { useEffect, useRef } from "react";
-import { Navigate, NavLink, useOutlet } from "react-router";
+import { visuallyHiddenStyle } from "@querymodule/web-ui";
+import { useEffect, useId, useRef } from "react";
+import { Link, Navigate, NavLink, useOutlet } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
@@ -20,23 +21,58 @@ export function AdminLayout() {
   // own heading (SectionHeading); the console title never takes focus, so the two cannot race (#388).
   const outlet = useOutlet();
   if (!allowed) return <Navigate to="/" replace />;
+  // The console title stays for the outline but is visually hidden: the section heading is the
+  // visible title (design target 09-29-26).
   return (
     <main className="qm-admin" {...MAIN_LANDMARK}>
-      <h1>{t("admin.title")}</h1>
-      <nav aria-label={t("admin.navLabel")}>
-        <ul className="qm-admin__nav">
-          <li>
-            <NavLink to="/admin/config">{t("admin.nav.config")}</NavLink>
-          </li>
-          {canManageUsers(role) && (
+      <h1 style={visuallyHiddenStyle}>{t("admin.title")}</h1>
+      <AdminRail users={canManageUsers(role)} />
+      <div className="qm-admin__main">{outlet}</div>
+    </main>
+  );
+}
+
+/**
+ * The admin rail (design target, A1): the way back first, then the sections by group. The audit
+ * log is listed but not yet built (M2): aria-disabled keeps it focusable with its reason (spec 6.2).
+ */
+function AdminRail({ users }: { users: boolean }) {
+  const t = useT();
+  const uid = useId();
+  return (
+    <nav className="qm-admin__rail" aria-label={t("admin.navLabel")}>
+      <Link className="qm-admin__back" to="/">
+        {t("admin.nav.back")}
+      </Link>
+      <p className="qm-admin__group" id={`${uid}-configure`}>
+        {t("admin.nav.configure")}
+      </p>
+      <ul aria-labelledby={`${uid}-configure`}>
+        <li>
+          <NavLink to="/admin/config">{t("admin.nav.config")}</NavLink>
+        </li>
+      </ul>
+      {users && (
+        <>
+          <p className="qm-admin__group" id={`${uid}-people`}>
+            {t("admin.nav.people")}
+          </p>
+          <ul aria-labelledby={`${uid}-people`}>
             <li>
               <NavLink to="/admin/users">{t("admin.nav.users")}</NavLink>
             </li>
-          )}
-        </ul>
-      </nav>
-      {outlet}
-    </main>
+            <li>
+              <button type="button" aria-disabled="true" aria-describedby={`${uid}-audit`}>
+                {t("admin.nav.audit")}
+              </button>
+              <span className="qm-admin__soon" id={`${uid}-audit`}>
+                {t("admin.nav.auditPending")}
+              </span>
+            </li>
+          </ul>
+        </>
+      )}
+    </nav>
   );
 }
 

@@ -154,13 +154,13 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
     await link.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("heading", { name: "Admin", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Site config" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Site configuration" })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     const sections = page.getByRole("navigation", { name: "Admin sections" });
-    await sections.getByRole("link", { name: "Users" }).focus();
+    await sections.getByRole("link", { name: "Users and roles" }).focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("heading", { name: "Users", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Users and roles", exact: true })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
   });
 });

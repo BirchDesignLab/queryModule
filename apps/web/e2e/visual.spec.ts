@@ -320,7 +320,7 @@ test.describe("D0 must-fixes from the design review (1440x900)", () => {
     await expect(signIn).toHaveCSS("outline-style", "none");
     await asUser(page, "admin@example.test", "night", async () => {
       await page.goto("/admin/config");
-      const section = page.getByRole("heading", { name: "Site config" });
+      const section = page.getByRole("heading", { name: "Site configuration" });
       await expect(section).toBeFocused();
       await expect(section).toHaveCSS("outline-style", "none");
     });
@@ -331,7 +331,7 @@ test.describe("D0 must-fixes from the design review (1440x900)", () => {
   }) => {
     await asUser(page, "admin@example.test", "night", async () => {
       await page.goto("/admin/config");
-      await expect(page.getByRole("heading", { name: "Site config" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Site configuration" })).toBeVisible();
       for (const name of ["Publish", "History"]) {
         const button = page.getByRole("button", { name });
         await expect(button, name).toHaveCSS("border-top-style", "dashed");
@@ -361,7 +361,7 @@ test.describe("every screen, viewport and theme: no horizontal overflow", () => 
         });
         await asUser(page, "admin@example.test", mode, async () => {
           await page.goto("/admin/config");
-          await expect(page.getByRole("heading", { name: "Site config" })).toBeVisible();
+          await expect(page.getByRole("heading", { name: "Site configuration" })).toBeVisible();
           expect(await overflowX(page), "admin config").toBeLessThanOrEqual(0);
           await capture(page, name("admin-config"));
         });

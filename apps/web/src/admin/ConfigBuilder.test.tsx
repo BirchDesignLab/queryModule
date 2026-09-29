@@ -16,7 +16,7 @@ async function openBuilder() {
     ),
   );
   const t = renderRoot({ path: "/admin/config" });
-  await screen.findByRole("heading", { name: "Site config", level: 2 });
+  await screen.findByRole("heading", { name: "Site configuration", level: 2 });
   await screen.findByRole("tab", { name: "Form" });
   return t;
 }
@@ -155,7 +155,9 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     await t.user.click(screen.getByRole("tab", { name: "Form" }));
     await t.user.click(await screen.findByText("Label text"));
     expect(await screen.findByLabelText("Label key (en)")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Site config", level: 2 })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Site configuration", level: 2 }),
+    ).toBeInTheDocument();
   });
 
   it("removing an array item keeps focus in the list; adding focuses the new item (I3)", async () => {

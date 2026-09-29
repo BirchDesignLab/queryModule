@@ -43,7 +43,7 @@ describe("builder polish (#388)", () => {
   it("opening the config page leaves focus on its section heading, not the console title", async () => {
     asImplementer();
     renderRoot({ path: "/admin/config" });
-    const h2 = await screen.findByRole("heading", { name: "Site config", level: 2 });
+    const h2 = await screen.findByRole("heading", { name: "Site configuration", level: 2 });
     await waitFor(() => expect(h2).toHaveFocus());
     await waitFor(() =>
       expect(screen.getByTestId("draft-summary")).toHaveTextContent(/Draft checks/),
@@ -67,7 +67,7 @@ describe("builder polish (#388)", () => {
     );
     act(() => t.services.queryClient.removeQueries({ queryKey: ["locale", "en"] }));
     await t.user.click(admin);
-    await t.user.click(await screen.findByRole("link", { name: "Config" }));
+    await t.user.click(await screen.findByRole("link", { name: "Site configuration" }));
     expect(await screen.findByText("Checking the draft…")).toBeInTheDocument();
     act(() => release());
     await waitFor(() =>
