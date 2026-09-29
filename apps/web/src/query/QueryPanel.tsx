@@ -4,18 +4,21 @@ import {
   fieldErrorMessages,
   formErrorsId,
   formLevelErrors,
+  ModeToggle,
   QueryForm,
   QueryTypeSelect,
   QuickAccessBar,
   ShortcutSheet,
   SourceCheckboxes,
   SubmitButton,
+  TerminalInput,
   TypeFieldBar,
   useShortcutAction,
 } from "@querymodule/web-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
+import { useTerminal } from "./use-terminal.js";
 
 const ID_PREFIX = "qp";
 const QUICK_TYPE_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
@@ -29,6 +32,7 @@ function PanelShortcut({ action, run }: { action: string; run: () => void }) {
 function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
   const t = useT();
   const { config, formState, queryType } = panel;
+  const terminal = useTerminal(panel);
   const labelOfType = (code: string): string => {
     const labelKey = config.queryTypes.find((q) => q.code === code)?.labelKey;
     return labelKey === undefined ? code : t(labelKey);
@@ -68,7 +72,7 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
           action={`quickType${n}`}
           run={() => {
             const code = quickCodes[n - 1];
-            if (code !== undefined) panel.selectQueryType(code);
+            if (code !== undefined) terminal.selectType(code);
           }}
         />
       ))}
@@ -76,6 +80,8 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
         action="submit"
         run={() => panel.formContainerRef.current?.querySelector("form")?.requestSubmit()}
       />
+      <PanelShortcut action="focusTerminal" run={terminal.focusTerminal} />
+      <PanelShortcut action="toggleMode" run={() => terminal.toggle({ focus: true })} />
       <PanelShortcut
         action="goPanel"
         run={() =>
@@ -98,7 +104,7 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
         codes={quickCodes}
         current={queryType}
         labelOf={labelOfType}
-        onSelect={panel.selectQueryType}
+        onSelect={terminal.selectType}
         t={t}
       />
       {selectCodes.length === 0 ? null : (
@@ -110,52 +116,84 @@ function ReadyPanel({ panel }: { panel: ReadyQueryPanel }) {
           options={selectCodes.map((code) => ({ code, label: labelOfType(code) }))}
           onChange={(code) => {
             // The empty option means "none of these": keep the current type.
-            if (code !== "") panel.selectQueryType(code);
+            if (code !== "") terminal.selectType(code);
           }}
           t={t}
         />
       )}
+      <ModeToggle
+        pressed={terminal.mode === "terminal"}
+        label={t("mode.terminal")}
+        onToggle={() => terminal.toggle()}
+      />
       <div ref={panel.formContainerRef}>
-        <TypeFieldBar
-          fields={typeFields}
-          values={panel.values}
-          fieldConfig={fieldConfig}
-          showErrors={panel.showErrors}
-          errors={errorMessages}
-          onChange={panel.setValue}
-          t={t}
-          idPrefix={ID_PREFIX}
-        />
-        <QueryForm
-          formState={formState}
-          values={panel.values}
-          fieldConfig={fieldConfig}
-          showErrors={panel.showErrors}
-          onChange={panel.setValue}
-          onSubmitAttempt={panel.onSubmitAttempt}
-          t={t}
-          idPrefix={ID_PREFIX}
-          excludeKeys={typeFieldKeys}
-        >
-          <SourceCheckboxes
-            sources={formState.sources}
-            checked={panel.checkedSources}
-            labelOf={labelOfSource}
-            onChange={panel.setSources}
-            idPrefix={ID_PREFIX}
-            t={t}
-          />
-          <SubmitButton
-            id={`${ID_PREFIX}-submit`}
-            reason={panel.submitReason}
-            describedBy={
-              panel.showErrors && formLevelErrors(formState).length > 0
-                ? formErrorsId(ID_PREFIX)
-                : undefined
-            }
-            t={t}
-          />
-        </QueryForm>
+        {terminal.mode === "terminal" ? (
+          <TerminalInput
+            id={`${ID_PREFIX}-terminal`}
+            label={t("terminal.label")}
+            description={t("terminal.description", { delimiter: config.terminal.delimiter })}
+            value={terminal.text}
+            onChange={terminal.setText}
+            onSubmit={terminal.submitTerminal}
+            errors={terminal.errors}
+            unshown={terminal.unshown}
+            errorsLabel={t("terminal.errorsLabel")}
+            inputRef={terminal.inputRef}
+          >
+            <SourceCheckboxes
+              sources={formState.sources}
+              checked={panel.checkedSources}
+              labelOf={labelOfSource}
+              onChange={panel.setSources}
+              idPrefix={ID_PREFIX}
+              t={t}
+            />
+            <SubmitButton id={`${ID_PREFIX}-submit`} reason={panel.submitReason} t={t} />
+          </TerminalInput>
+        ) : (
+          <>
+            <TypeFieldBar
+              fields={typeFields}
+              values={panel.values}
+              fieldConfig={fieldConfig}
+              showErrors={panel.showErrors}
+              errors={errorMessages}
+              onChange={panel.setValue}
+              t={t}
+              idPrefix={ID_PREFIX}
+            />
+            <QueryForm
+              formState={formState}
+              values={panel.values}
+              fieldConfig={fieldConfig}
+              showErrors={panel.showErrors}
+              onChange={panel.setValue}
+              onSubmitAttempt={panel.onSubmitAttempt}
+              t={t}
+              idPrefix={ID_PREFIX}
+              excludeKeys={typeFieldKeys}
+            >
+              <SourceCheckboxes
+                sources={formState.sources}
+                checked={panel.checkedSources}
+                labelOf={labelOfSource}
+                onChange={panel.setSources}
+                idPrefix={ID_PREFIX}
+                t={t}
+              />
+              <SubmitButton
+                id={`${ID_PREFIX}-submit`}
+                reason={panel.submitReason}
+                describedBy={
+                  panel.showErrors && formLevelErrors(formState).length > 0
+                    ? formErrorsId(ID_PREFIX)
+                    : undefined
+                }
+                t={t}
+              />
+            </QueryForm>
+          </>
+        )}
       </div>
       <AckStatus
         ack={
