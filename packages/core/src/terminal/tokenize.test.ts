@@ -161,6 +161,28 @@ describe("FR-052 named tokens and the rest position", () => {
       { key: "terminal.duplicateField", params: { field: "plate", labelKey: "field.plate" } },
     ]);
   });
+  it("a named token for a positioned field left empty is accepted (#296 ruling 2)", () => {
+    expect(t("VEH.ZZ-0001.OK..year=26")).toEqual({
+      commandCode: "VEH",
+      queryType: "VEH",
+      userValues: { plate: "ZZ-0001", state: "OK", year: "26" },
+      positionedKeys: ["plate", "state"],
+      presetKeys: [],
+      namedKeys: ["year"],
+      errors: [],
+    });
+    expect(t("VEH.ZZ-0001. . year=26").errors).toEqual([]);
+  });
+  it("a named token for a positioned field filled non-empty is still a duplicate", () => {
+    expect(t("VEH.ZZ-0001.OK.26.year=27")).toMatchObject({
+      userValues: { year: "26" },
+      positionedKeys: ["plate", "state", "year"],
+      namedKeys: [],
+      errors: [
+        { key: "terminal.duplicateField", params: { field: "year", labelKey: "field.year" } },
+      ],
+    });
+  });
   it("an identifier-shaped name after a named token that is no field is unknownField (D-B2)", () => {
     expect(t("VEH.ABC123.plateType=PC.colour=RED").errors).toEqual([
       { key: "terminal.unknownField", params: { name: "colour" } },

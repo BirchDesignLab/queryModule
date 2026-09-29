@@ -32,6 +32,14 @@ describe("FR-056 draft merge (spec 4.4)", () => {
     });
     expect(merge(d, "PRO")).toEqual({ serial: null, propertyType: null, description: null });
   });
+  it("a named token for an empty positioned field writes its value (#296 ruling 2)", () => {
+    expect(merge({ year: "20" }, "VEH.ZZ-0001.OK..year=26")).toEqual({
+      plate: "ZZ-0001",
+      state: "OK",
+      year: "26",
+      vin: null,
+    });
+  });
   it("writes named keys", () => {
     expect(merge({ plateType: "PC" }, "VEH.ZZ-0001.OK.plateType=TK")).toMatchObject({
       plate: "ZZ-0001",

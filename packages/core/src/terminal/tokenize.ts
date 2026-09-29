@@ -51,8 +51,12 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
     const restStart = i + restAt - pos; // the part where the rest value begins
     return parts.slice(i + 1, restStart).every(blank) && blank(parts.slice(restStart).join(d));
   };
+  // A position the command left empty does not take its field: a named token may fill it
+  // (spec 4.4, #296 ruling 2). A preset takes its field whatever its value.
   const taken = (k: string) =>
-    out.presetKeys.includes(k) || out.positionedKeys.includes(k) || out.namedKeys.includes(k);
+    out.presetKeys.includes(k) ||
+    out.namedKeys.includes(k) ||
+    (out.positionedKeys.includes(k) && out.userValues[k] !== "");
   for (const [i, token] of parts.entries()) {
     const p = cmd.positions[pos];
     if (!seenNamed && isRest(p)) {
@@ -79,6 +83,8 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
         });
       } else {
         out.userValues[key] = token.slice(token.indexOf("=") + 1).trim();
+        // the key now comes from the named token only: the key lists stay disjoint
+        out.positionedKeys = out.positionedKeys.filter((x) => x !== key);
         out.namedKeys.push(key);
       }
       seenNamed = true;
