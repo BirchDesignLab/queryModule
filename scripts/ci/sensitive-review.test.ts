@@ -1103,7 +1103,7 @@ describe("deps demotion against a real git repo (C1, I1 repros)", () => {
       expect(r.review.messages[0]).toContain("deps tier only");
       expect(r.label.files).toEqual([]);
     }
-  });
+  }, 30_000);
 
   it("classifies every swap and injection repro as gate, with the sensitive label", () => {
     const cases: Array<[string, (edit: Edit) => void, string]> = [

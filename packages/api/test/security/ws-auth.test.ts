@@ -288,15 +288,11 @@ describe("SEC-014 upgrade costs no DB lookup before Origin and limit (#225)", ()
           retryAfter: r.headers["retry-after"] as string | undefined,
         }),
       );
-      ws.once("error", (e) => {
-        console.log("ERR", String(e));
-        rej(e);
-      });
-      ws.once("close", () => console.log("CLOSED"));
+      ws.once("error", rej);
     });
     expect(res.status).toBe(429);
     expect(Number(res.retryAfter)).toBeGreaterThan(0);
-    expect(resolve.mock.calls.length).toBeLessThanOrEqual(60);
+    expect(resolve).not.toHaveBeenCalled();
   }, 30_000);
   it("a foreign Origin never reaches identity.resolve", async () => {
     const { t, s, cookie } = await setup();
