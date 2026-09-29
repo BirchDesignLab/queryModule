@@ -1610,7 +1610,8 @@
                 "enum": [
                   "day",
                   "night",
-                  "redShift"
+                  "redShift",
+                  "auto"
                 ]
               },
               "auto": {

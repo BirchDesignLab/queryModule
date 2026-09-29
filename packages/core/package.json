@@ -8,7 +8,8 @@
     "./contracts": "./src/contracts/index.ts",
     "./config": "./src/config/index.ts",
     "./rules": "./src/rules/index.ts",
-    "./terminal": "./src/terminal/index.ts"
+    "./terminal": "./src/terminal/index.ts",
+    "./planner": "./src/planner/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -b",

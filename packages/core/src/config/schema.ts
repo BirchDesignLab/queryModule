@@ -131,7 +131,8 @@ export function makeSiteConfigSchemas(mode: SchemaMode) {
 
   const TokenOverrides = z.record(z.string(), z.string());
   const ThemeConfig = obj({
-    defaultMode: z.enum(THEME_MODES).default("day"),
+    // D-B1 (#175): "auto" follows `auto` when the user has no preference; needs auto os or time.
+    defaultMode: z.enum([...THEME_MODES, "auto"]).default("day"),
     auto: z.enum(["off", "os", "time"]).default("off"),
     tokens: obj({
       all: TokenOverrides.optional(),
