@@ -19,12 +19,7 @@
   "javascript": { "formatter": { "quoteStyle": "double" } },
   "overrides": [
     {
-      "includes": [
-        "packages/core/src/**",
-        "!**/*.test.ts",
-        "!**/*.test.tsx",
-        "!**/__fixtures__/**"
-      ],
+      "includes": ["packages/core/src/**", "!**/*.test.ts", "!**/*.test.tsx"],
       "linter": {
         "rules": {
           "style": {
