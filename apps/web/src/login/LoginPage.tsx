@@ -130,62 +130,69 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
   }
 
   return (
-    <main className="qm-page">
-      <h1 ref={headingRef} tabIndex={-1}>
-        {t("login.title")}
-      </h1>
-      {signOutFailed ? <SignOutFailedNotice onCleared={() => headingRef.current?.focus()} /> : null}
-      <form
-        ref={formRef}
-        noValidate
-        onSubmit={(event) => void onSubmit(event)}
-        aria-describedby={formError === null ? undefined : "login-error"}
-      >
-        <TextField
-          id="login-email"
-          label={t("login.email")}
-          requiredText={t("field.required")}
-          required
-          type="email"
-          autoComplete="username"
-          value={email}
-          onChange={setEmail}
-          error={errorFor("email")}
-        />
-        <TextField
-          id="login-password"
-          label={t("login.password")}
-          requiredText={t("field.required")}
-          required
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={setPassword}
-          error={errorFor("password")}
-        />
-        {formError === null ? null : (
-          <p id="login-error" className="qm-form-error">
-            {formError}
-          </p>
-        )}
-        <button
-          type="submit"
-          className="qm-button"
-          aria-disabled={blockedReason === null ? undefined : "true"}
-          aria-describedby={blockedReason === null ? undefined : "login-blocked"}
+    <main className="qm-login">
+      <section className="qm-login__panel" aria-labelledby="login-product">
+        <h1 id="login-product" className="qm-login__product">
+          {t("login.product")}
+        </h1>
+        <h2 ref={headingRef} tabIndex={-1} className="qm-login__title">
+          {t("login.title")}
+        </h2>
+        {signOutFailed ? (
+          <SignOutFailedNotice onCleared={() => headingRef.current?.focus()} />
+        ) : null}
+        <form
+          ref={formRef}
+          noValidate
+          onSubmit={(event) => void onSubmit(event)}
+          aria-describedby={formError === null ? undefined : "login-error"}
         >
-          {t("login.submit")}
-        </button>
-        {blockedReason === null ? null : <p id="login-blocked">{blockedReason}</p>}
-      </form>
-      <footer>
-        <ThemeModeSelect
-          id="login-theme"
-          value={themeMode}
-          onChange={(mode) => preferences.getState().setThemeMode(mode)}
-          t={t}
-        />
-      </footer>
+          <TextField
+            id="login-email"
+            label={t("login.email")}
+            requiredText={t("field.required")}
+            required
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={setEmail}
+            error={errorFor("email")}
+          />
+          <TextField
+            id="login-password"
+            label={t("login.password")}
+            requiredText={t("field.required")}
+            required
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={setPassword}
+            error={errorFor("password")}
+          />
+          {formError === null ? null : (
+            <p id="login-error" className="qm-form-error">
+              {formError}
+            </p>
+          )}
+          <button
+            type="submit"
+            className="qm-button qm-button--block"
+            aria-disabled={blockedReason === null ? undefined : "true"}
+            aria-describedby={blockedReason === null ? undefined : "login-blocked"}
+          >
+            {t("login.submit")}
+          </button>
+          {blockedReason === null ? null : <p id="login-blocked">{blockedReason}</p>}
+        </form>
+        <footer className="qm-login__secondary">
+          <ThemeModeSelect
+            id="login-theme"
+            value={themeMode}
+            onChange={(mode) => preferences.getState().setThemeMode(mode)}
+            t={t}
+          />
+        </footer>
+      </section>
     </main>
   );
 }
