@@ -28,6 +28,14 @@ function copy(): string {
  */
 const DEFAULT_CONFIG_HASH = "36605ff36bb00be36f62476672c7019423403163703ac410e47e9decc1588b56";
 
+/*
+ * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
+ * the merged, resolved config (default under example-ok), not of the overlay file or the unmerged
+ * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
+ * default; update it deliberately in the change that does that.
+ */
+const EXAMPLE_OK_CONFIG_HASH = "0e805a08937254a213cb21ef03a099024ba3b433912d8330deb230fd9d9ce9e8";
+
 /** The bundled sites' own warnings; plateType is conditionally required with no VEH position. */
 const BUNDLED_WARNINGS = [
   {
@@ -170,8 +178,7 @@ describe("BR-001 config load chain (spec 5.8)", () => {
     const c = await loadSiteConfig(join(bundled, "sites/example-ok.json"));
     expect(c.extendsChain).toEqual(["default"]);
     expect(c.clientConfig.terminal.delimiter).toBe("/");
-    expect(c.configHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(c.configHash).not.toBe(DEFAULT_CONFIG_HASH);
+    expect(c.configHash).toBe(EXAMPLE_OK_CONFIG_HASH);
     expect(c.warnings).toEqual(BUNDLED_WARNINGS);
   });
   it("default site has an empty extends chain", async () => {
