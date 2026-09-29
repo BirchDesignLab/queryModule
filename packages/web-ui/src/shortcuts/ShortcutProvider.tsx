@@ -5,7 +5,7 @@ import {
   type JSX,
   type ReactNode,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -79,7 +79,9 @@ export function ShortcutProvider({
   );
   const engine = useMemo(() => createShortcutEngine(bindings), [bindings]);
 
-  useEffect(() => {
+  // Layout effects run in the commit, so the listener and every handler are live as soon as the UI
+  // is on screen: a key pressed before React's passive-effect task would otherwise be dropped.
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target instanceof Element ? event.target : document.body;
       const result = engine.handle(
@@ -113,7 +115,7 @@ export function useShortcutAction(action: string, handler: Handler): void {
   const registry = useContext(ShortcutContextValue);
   const ref = useRef<HandlerRef>({ current: handler });
   ref.current.current = handler;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (registry === null) return;
     return registry.register(action, ref.current);
   }, [registry, action]);

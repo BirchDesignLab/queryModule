@@ -2,6 +2,7 @@ import { resolveShortcuts } from "@querymodule/core/config";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { ShortcutProvider, useShortcutAction } from "./ShortcutProvider.js";
 
@@ -301,5 +302,43 @@ describe("FR-007 shortcut provider binds the engine to the DOM (spec 6.4)", () =
     document.body.dispatchEvent(repeat);
     expect(handler).not.toHaveBeenCalled();
     expect(repeat.defaultPrevented).toBe(true);
+  });
+});
+
+describe("FR-006 a key pressed as soon as the UI is on screen is not lost (#382 flake root cause)", () => {
+  it("handlers and the listener are live when the committed DOM first appears, before passive effects run", async () => {
+    // Outside act(), as during Testing Library's waitFor: React commits the DOM in one task and runs
+    // useEffect callbacks in a later one. A key pressed in between must still reach its handler.
+    const actEnv = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const previous = actEnv.IS_REACT_ACT_ENVIRONMENT;
+    actEnv.IS_REACT_ACT_ENVIRONMENT = false;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const handler = vi.fn();
+    try {
+      const committed = new Promise<void>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (host.querySelector("[data-ready]") !== null) {
+            observer.disconnect();
+            resolve();
+          }
+        });
+        observer.observe(host, { childList: true, subtree: true });
+      });
+      root.render(
+        <ShortcutProvider bindings={resolveShortcuts()}>
+          <Action action="focusTerminal" handler={handler} />
+          <p data-ready>ready</p>
+        </ShortcutProvider>,
+      );
+      await committed;
+      slash();
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      root.unmount();
+      host.remove();
+      actEnv.IS_REACT_ACT_ENVIRONMENT = previous;
+    }
   });
 });

@@ -14,7 +14,7 @@ import {
   selectCommand,
   tokenize,
 } from "@querymodule/core/terminal";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
@@ -80,9 +80,11 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
   const wantFocus = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus follows the commit that shows the target control.
+  // Focus follows the commit that shows the target control. A layout effect, so it runs in that
+  // commit: a passive mount-time run could otherwise consume wantFocus with a stale mode when a
+  // shortcut fires right after the panel first paints (#382).
   // biome-ignore lint/correctness/useExhaustiveDependencies: focusTick and mode are the triggers
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!wantFocus.current) return;
     wantFocus.current = false;
     if (mode === "terminal") inputRef.current?.focus();
