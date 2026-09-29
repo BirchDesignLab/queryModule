@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-export type SubmitBlockReason = "submitting" | "noConnection" | "updateRequired";
+export type SubmitBlockReason = "submitting" | "noConnection" | "updateRequired" | "preview";
 
 export interface SubmitButtonProps {
   id: string;

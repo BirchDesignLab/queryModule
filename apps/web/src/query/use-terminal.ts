@@ -69,9 +69,9 @@ export interface TerminalModel {
 
 /** Terminal mode of the query panel (FR-050 to FR-056, spec 4.4, 6.2, 6.4). */
 export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
-  const { drafts, announcer } = useServices();
+  const { announcer } = useServices();
   const t = useT();
-  const { config } = panel;
+  const { config, drafts } = panel;
   const mode = useStore(drafts, (s) => s.mode);
   const text = useStore(drafts, (s) => s.terminalText);
   const [errors, setErrors] = useState<string[]>([]);

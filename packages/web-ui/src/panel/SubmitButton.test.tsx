@@ -9,10 +9,11 @@ const LABELS: Record<string, string> = {
   "form.submitting": "Submitting",
   "form.noConnection": "No connection to server",
   "form.updateRequired": "Client update required",
+  "form.preview": "Preview",
 };
 const t = (key: string) => LABELS[key] ?? key;
 
-function renderInForm(reason: "submitting" | "noConnection" | "updateRequired" | null) {
+function renderInForm(reason: "submitting" | "noConnection" | "updateRequired" | "preview" | null) {
   const onSubmit = vi.fn((e: FormEvent) => e.preventDefault());
   render(
     <form onSubmit={onSubmit}>
@@ -37,6 +38,7 @@ describe("FR-006 submit button (spec 6.2)", () => {
     ["submitting", "Submitting"],
     ["noConnection", "No connection to server"],
     ["updateRequired", "Client update required"],
+    ["preview", "Preview"],
   ] as const) {
     it(`${reason}: aria-disabled (never disabled) with a visible reason, and no submit`, async () => {
       const onSubmit = renderInForm(reason);
