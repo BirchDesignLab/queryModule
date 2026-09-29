@@ -118,6 +118,12 @@ export function useQueryPanel(): QueryPanelModel {
   const submitStatus = useStore(submit, (s) => s.status);
   const lastAck = useStore(submit, (s) => s.lastAck);
 
+  // Spec 6.6: connection changes are announced politely; a screen reader user has no other signal
+  // that the submit is held until the server answers again.
+  useEffect(() => {
+    if (submitStatus === "noConnection") announcer.announce(t("form.noConnection"));
+  }, [submitStatus, announcer, t]);
+
   // Server validation errors describe the values that were sent; any edit or type change drops them.
   // biome-ignore lint/correctness/useExhaustiveDependencies: values and queryType are the triggers
   useEffect(() => setServerErrors([]), [values, queryType]);

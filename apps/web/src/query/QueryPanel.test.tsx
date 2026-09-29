@@ -1,5 +1,5 @@
 import { ClientSiteConfigSchema } from "@querymodule/core/config";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { delay, HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
@@ -273,6 +273,13 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await screen.findByRole("region", { name: "Last query" });
     expect(submitRecorder.calls).toHaveLength(1);
     expect(button).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("spec 6.6 entering noConnection is announced politely", async () => {
+    const { services } = await openPanel();
+    expect(polite()).not.toHaveTextContent("No connection to server");
+    act(() => services.submit.setState({ status: "noConnection" }));
+    await waitFor(() => expect(polite()).toHaveTextContent("No connection to server"));
   });
 
   it("FR-064 a 409 refetches the config, announces it and keeps the draft", async () => {
