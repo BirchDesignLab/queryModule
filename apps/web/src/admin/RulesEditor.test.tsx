@@ -23,6 +23,26 @@ async function openBuilder() {
 }
 
 type Opened = Awaited<ReturnType<typeof openBuilder>>;
+
+/** Enters text as one paste: each keystroke re-renders the open type, slow in jsdom under load. */
+/**
+ * A fieldset by its legend text (first match). getByRole("group", { name }) computes accessible
+ * names over the whole editor DOM and dominated these tests under full-suite load.
+ */
+function group(root: ParentNode, name: string | RegExp): HTMLElement {
+  const legend = [...root.querySelectorAll("legend")].find((l) => {
+    const text = (l.textContent ?? "").trim();
+    return typeof name === "string" ? text === name : name.test(text);
+  });
+  const box = legend?.closest("fieldset");
+  if (box === null || box === undefined) throw new Error(`no group named ${String(name)}`);
+  return box;
+}
+
+async function fill(t: Opened, el: HTMLElement, text: string) {
+  await t.user.click(el);
+  await t.user.paste(text);
+}
 type Rule = { field: string; when: unknown; effect: string; value?: unknown };
 type QueryType = { code: string; rules: Rule[]; sections: { key: string; when?: unknown }[] };
 
@@ -34,14 +54,12 @@ const rulesOf = (t: Opened, code: string) =>
 async function openType(t: Opened, code: string) {
   await t.user.click(await screen.findByText("queryTypes", { selector: "summary" }));
   await t.user.click(screen.getByText(`Query type ${code}`, { selector: "summary" }));
-  return screen.getByRole("group", { name: `Query type ${code}` });
+  return group(document, `Query type ${code}`);
 }
 
-const ruleBox = (type: HTMLElement, n: number) =>
-  within(type).getByRole("group", { name: `Rule ${n}` });
+const ruleBox = (type: HTMLElement, n: number) => group(type, `Rule ${n}`);
 /** The rule's own condition group (the first "Condition" group inside it). */
-const conditionOf = (rule: HTMLElement) =>
-  within(rule).getAllByRole("group", { name: /^Condition/ })[0] as HTMLElement;
+const conditionOf = (rule: HTMLElement) => group(rule, /^Condition/);
 
 describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
   it("shows a rule's target, effect and a $default comparison", async () => {
@@ -61,7 +79,7 @@ describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
     const t = await openBuilder();
     const rule = ruleBox(await openType(t, "VEH"), 1);
     await t.user.selectOptions(within(rule).getByLabelText("Effect"), "setDefault");
-    await t.user.type(within(ruleBox(typeBoxOf("VEH"), 1)).getByLabelText("Default value"), "PC");
+    await fill(t, within(ruleBox(typeBoxOf("VEH"), 1)).getByLabelText("Default value"), "PC");
     expect(rulesOf(t, "VEH")[0]).toMatchObject({ effect: "setDefault", value: "PC" });
     await t.user.selectOptions(
       within(ruleBox(typeBoxOf("VEH"), 1)).getByLabelText("Effect"),
@@ -117,7 +135,7 @@ describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
     await t.user.selectOptions(within(cond()).getByLabelText("Operator"), "in");
     expect(rulesOf(t, "PRO")[1]?.when).toMatchObject({ op: "in", value: ["FIREARM"] });
     await t.user.click(within(cond()).getByRole("button", { name: "Add value" }));
-    await t.user.type(within(cond()).getByLabelText("Value 2"), "VEHICLE");
+    await fill(t, within(cond()).getByLabelText("Value 2"), "VEHICLE");
     expect(rulesOf(t, "PRO")[1]?.when).toMatchObject({ value: ["FIREARM", "VEHICLE"] });
     await t.user.selectOptions(within(cond()).getByLabelText("Operator"), "empty");
     expect(rulesOf(t, "PRO")[1]?.when).toEqual({ field: "propertyType", op: "empty" });
@@ -129,7 +147,7 @@ describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
     const cond = () => conditionOf(ruleBox(typeBoxOf("VEH"), 1));
     await t.user.selectOptions(within(cond()).getByLabelText("Compare with"), "value");
     expect(rulesOf(t, "VEH")[0]?.when).toEqual({ field: "state", op: "neq", value: "" });
-    await t.user.type(within(cond()).getByLabelText("Value"), "TX");
+    await fill(t, within(cond()).getByLabelText("Value"), "TX");
     expect(rulesOf(t, "VEH")[0]?.when).toEqual({ field: "state", op: "neq", value: "TX" });
     await t.user.selectOptions(within(cond()).getByLabelText("Compare with"), "default");
     expect(rulesOf(t, "VEH")[0]?.when).toEqual({
@@ -167,15 +185,14 @@ describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
   it("a section condition can be added and removed", async () => {
     const t = await openBuilder();
     const type = await openType(t, "PER");
-    const section = within(type).getByRole("group", { name: "Section base" });
+    const section = group(type, "Section base");
     await t.user.click(within(section).getByRole("button", { name: "Add condition" }));
     const per = () => types(t).find((q) => q.code === "PER") as QueryType;
     expect(per().sections[0]?.when).toEqual({ field: "last", op: "notEmpty" });
     await t.user.click(
-      within(within(typeBoxOf("PER")).getByRole("group", { name: "Section base" })).getByRole(
-        "button",
-        { name: "Remove condition" },
-      ),
+      within(group(typeBoxOf("PER"), "Section base")).getByRole("button", {
+        name: "Remove condition",
+      }),
     );
     expect(per().sections[0] && "when" in per().sections[0]).toBe(false);
   });
@@ -185,9 +202,7 @@ describe("#388 diagnostics polish", () => {
   it("issue messages carry their level as text", async () => {
     const t = await openBuilder();
     await openType(t, "WNT");
-    const key = within(
-      within(typeBoxOf("WNT")).getByRole("group", { name: "Field first" }),
-    ).getByLabelText("Key");
+    const key = within(group(typeBoxOf("WNT"), "Field first")).getByLabelText("Key");
     await t.user.clear(key);
     await waitFor(() => expect(key).toHaveAttribute("aria-invalid", "true"));
     expect(key).toHaveAccessibleDescription(/^Error:/);
@@ -195,5 +210,5 @@ describe("#388 diagnostics polish", () => {
 });
 
 function typeBoxOf(code: string) {
-  return screen.getByRole("group", { name: `Query type ${code}` });
+  return group(document, `Query type ${code}`);
 }

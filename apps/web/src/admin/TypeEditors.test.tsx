@@ -23,6 +23,26 @@ async function openBuilder() {
 }
 
 type Opened = Awaited<ReturnType<typeof openBuilder>>;
+
+/** Enters text as one paste: each keystroke re-renders the open type, slow in jsdom under load. */
+/**
+ * A fieldset by its legend text (first match). getByRole("group", { name }) computes accessible
+ * names over the whole editor DOM and dominated these tests under full-suite load.
+ */
+function group(root: ParentNode, name: string | RegExp): HTMLElement {
+  const legend = [...root.querySelectorAll("legend")].find((l) => {
+    const text = (l.textContent ?? "").trim();
+    return typeof name === "string" ? text === name : name.test(text);
+  });
+  const box = legend?.closest("fieldset");
+  if (box === null || box === undefined) throw new Error(`no group named ${String(name)}`);
+  return box;
+}
+
+async function fill(t: Opened, el: HTMLElement, text: string) {
+  await t.user.click(el);
+  await t.user.paste(text);
+}
 type Field = Record<string, unknown> & { key: string };
 type QueryType = Record<string, unknown> & { code: string; fields: Field[] };
 type Picklist = { id: string; values: Record<string, unknown>[] };
@@ -41,10 +61,9 @@ async function openType(t: Opened, code: string) {
   await t.user.click(screen.getByText(`Query type ${code}`, { selector: "summary" }));
 }
 
-const typeBox = (code: string) => screen.getByRole("group", { name: `Query type ${code}`.trim() });
-const fieldBox = (code: string, key: string) =>
-  within(typeBox(code)).getByRole("group", { name: `Field ${key}`.trim() });
-const picklistBox = (id: string) => screen.getByRole("group", { name: `Picklist ${id}`.trim() });
+const typeBox = (code: string) => group(document, `Query type ${code}`.trim());
+const fieldBox = (code: string, key: string) => group(typeBox(code), `Field ${key}`.trim());
+const picklistBox = (id: string) => group(document, `Picklist ${id}`.trim());
 
 describe("query type editor (Task 31 part 2, BR-001, FR-060, UX-004)", () => {
   it("edits a type's code and its label text in the draft locale overlay", async () => {
@@ -56,11 +75,11 @@ describe("query type editor (Task 31 part 2, BR-001, FR-060, UX-004)", () => {
     const label = within(box).getAllByLabelText("Label (en)")[0] as HTMLElement;
     expect(label).toHaveValue("Wanted check");
     await t.user.clear(label);
-    await t.user.type(label, "Wants");
+    await fill(t, label, "Wants");
     expect(state(t).labels.en?.["queryType.WNT"]).toBe("Wants");
     const code = within(box).getByLabelText("Code");
     await t.user.clear(code);
-    await t.user.type(code, "WAR");
+    await fill(t, code, "WAR");
     expect(types(t).map((q) => q.code)).toContain("WAR");
   });
 
@@ -88,7 +107,7 @@ describe("query type editor (Task 31 part 2, BR-001, FR-060, UX-004)", () => {
     const sections = (typeOf(t, "PER").sections as { key: string }[]).map((s) => s.key);
     expect(sections).toEqual(["base", ""]);
     const keys = within(typeBox("PER")).getAllByLabelText("Section key");
-    await t.user.type(keys[1] as HTMLElement, "extra");
+    await fill(t, keys[1] as HTMLElement, "extra");
     const select = within(fieldBox("PER", "dob")).getByLabelText("Section");
     expect(
       within(select)
@@ -133,7 +152,7 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await openSection(t, "queryTypes");
     await openType(t, "PER");
     const box = fieldBox("PER", "sex");
-    await t.user.type(within(box).getByLabelText("Default value"), "F");
+    await fill(t, within(box).getByLabelText("Default value"), "F");
     expect(typeOf(t, "PER").fields.find((f) => f.key === "sex")?.defaultValue).toBe("F");
     await t.user.selectOptions(within(box).getByLabelText("Data type"), "number");
     const sex = typeOf(t, "PER").fields.find((f) => f.key === "sex") as Field;
@@ -147,9 +166,9 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await openSection(t, "queryTypes");
     await openType(t, "VEH");
     const input = within(fieldBox("VEH", "year")).getByLabelText("Default value");
-    await t.user.type(input, "2020");
+    await fill(t, input, "2020");
     expect(typeOf(t, "VEH").fields.find((f) => f.key === "year")?.defaultValue).toBe(2020);
-    await t.user.type(input, "a");
+    await fill(t, input, "a");
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAccessibleDescription(/enter a number/i);
     expect(typeOf(t, "VEH").fields.find((f) => f.key === "year")?.defaultValue).toBe(2020);
@@ -215,7 +234,7 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await openType(t, "WNT");
     const key = within(fieldBox("WNT", "first")).getByLabelText("Key");
     await t.user.clear(key);
-    await t.user.type(key, "bad key");
+    await fill(t, key, "bad key");
     // Diagnostics follow the debounced draft check.
     await waitFor(() => expect(key).toHaveAttribute("aria-invalid", "true"));
     expect(key).toHaveAccessibleDescription(/must match pattern/);
@@ -229,7 +248,7 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await t.user.click(within(box).getByText("More settings", { selector: "summary" }));
     const max = within(box).getByLabelText("queryTypes.1.fields.0.maxLength");
     await t.user.clear(max);
-    await t.user.type(max, "40");
+    await fill(t, max, "40");
     expect(typeOf(t, "PER").fields[0]?.maxLength).toBe(40);
   });
 });
@@ -238,11 +257,11 @@ describe("picklist editor (Task 31 part 2, FR-060, UX-004)", () => {
   it("edits a value's code, label text and enabled flag", async () => {
     const t = await openBuilder();
     await openSection(t, "picklists");
-    const value = within(picklistBox("sex")).getByRole("group", { name: "Value F" });
+    const value = group(picklistBox("sex"), "Value F");
     await t.user.click(within(value).getByLabelText("Enabled"));
     const label = within(value).getByLabelText("Label (en)");
     await t.user.clear(label);
-    await t.user.type(label, "Woman");
+    await fill(t, label, "Woman");
     const sex = picklists(t).find((p) => p.id === "sex") as Picklist;
     expect(sex.values[0]).toMatchObject({ code: "F", enabled: false });
     expect(state(t).labels.en?.["picklist.sex.F"]).toBe("Woman");
@@ -255,7 +274,7 @@ describe("picklist editor (Task 31 part 2, FR-060, UX-004)", () => {
     await t.user.click(within(box).getByRole("button", { name: "Add value" }));
     const sex = () => picklists(t).find((p) => p.id === "sex") as Picklist;
     expect(sex().values.at(-1)).toMatchObject({ code: "", labelKey: "", enabled: true });
-    expect(within(picklistBox("sex")).getByRole("group", { name: "Value" })).toContainElement(
+    expect(group(picklistBox("sex"), "Value")).toContainElement(
       document.activeElement as HTMLElement,
     );
     const second = sex().values[1]?.code as string;
@@ -299,7 +318,7 @@ describe("critic fixes (Task 31 part 2 PR1)", () => {
       within(fieldBox("VEH", "vin")).getByLabelText("Data type"),
       "number",
     );
-    await t.user.type(within(fieldBox("VEH", "year")).getByLabelText("Default value"), "abc");
+    await fill(t, within(fieldBox("VEH", "year")).getByLabelText("Default value"), "abc");
     await t.user.click(
       within(fieldBox("VEH", "year")).getByRole("button", { name: "Remove field year" }),
     );
