@@ -39,14 +39,14 @@ D0 goes to Track B (it owns `packages/web-ui` and the shell). Track A starts A-D
 
 ### D0.2 Fonts, self-hosted (S)
 
-**Files:** `apps/web/public/fonts/` (IBM Plex Sans 400, 500, 600; Sans Condensed 600; Mono 400, 500; latin woff2 from the IBM Plex GitHub release, OFL; commit `OFL.txt` beside them), `@font-face` rules in `apps/web/src/shell.css` (`font-display: swap`), tests.
+**Files:** `apps/web/src/fonts/` (IBM Plex Sans 400, 500, 600; Sans Condensed 600; Mono 400, 500; latin woff2 from the IBM Plex GitHub release, OFL; commit `OFL.txt` beside them), `@font-face` rules in `apps/web/src/shell.css` (`font-display: swap`), tests.
 **Step 0:** the developer approves the font download (source URL and total size stated in the ask).
 **Tests first:** `shell.css.test.ts` asserts one `@font-face` per shipped file, each `src` under `/fonts/`, and every font stack ends in a system fallback.
 
 ### D0.3 Primitives restyle (M)
 
 **Files:** `packages/web-ui/src/styles.css` and tests beside it.
-**Change:** controls, buttons (primary, secondary, ghost, danger; `aria-disabled` dashed with muted text), segmented control (`.qm-seg`, `aria-pressed` buttons in a sunken track), chips (`.qm-chip` for source checkboxes), badges (severity and status), tags (Default, Shown), kbd. Focus: 2 px `focus.ring`, 2 px offset, on `:focus-visible` and on `:focus` for inputs and selects (programmatic focus after a blocked submit). Invalid: 2 px `field.required` edge inside the control (border plus inset shadow), icon and message; ring and edge both visible (E1). Chips and radio cards draw one ring. Density from `data-persona`/layout class: dispatch uses `control.height.dense`, mobile unit `control.height.touch` and 48 px targets. Reduced motion: no transitions; a revealed field keeps a static "Shown" tag.
+**Change:** controls, buttons (primary, secondary, ghost, danger; `aria-disabled` dashed with muted text), segmented control (`.qm-seg`, `aria-pressed` buttons in a sunken track), chips (`.qm-chip` for source checkboxes), badges (severity and status), tags (Default, Shown; IBM Plex Sans Condensed 12 px, `type.size.xs`), kbd. Focus: 2 px `focus.ring`, 2 px offset, on `:focus-visible` and on `:focus` for inputs and selects (programmatic focus after a blocked submit). Invalid: 2 px `field.required` edge inside the control (border plus inset shadow), icon and message; ring and edge both visible (E1). Chips and radio cards draw one ring. Density from `data-persona`/layout class: dispatch uses `control.height.dense`, mobile unit `control.height.touch` and 48 px targets. Reduced motion: no transitions; a revealed field keeps a static "Shown" tag.
 **Tests first:** computed-style tests (existing helper) for E1 in each mode: focused invalid input has outline colour `focus.ring` and border colour `field.required`; mobile-unit targets at least 48 px; dispatch control height 36 px; `aria-disabled` button keeps focusability.
 
 ### D0.4 Visual regression baseline (S)
@@ -131,5 +131,5 @@ Built with AC2 (Tasks 27, 33 part 2), not before: publish review dialog (changes
 2. D0.4 visual baselines are their own spec inside D0 (`apps/web/e2e/visual.spec.ts`); Task 21 is already merged. Ask the checker before each e2e run (port 3000).
 3. B3 requests list is in M1 P3: it fills the dispatcher's right pane, and submit already ends at the acknowledgment, so it is phase-true.
 4. Budget order: before the Thu 10-01 2 PM reset only D0, B-D1 and A-D1 run; A-D2 and B-D2 run after it.
-5. Fonts: the developer approved self-hosted IBM Plex, downloaded from the github.com/IBM/plex releases, with its `OFL.txt` shipped beside the woff2 files in `apps/web/public/fonts/` (D0.2 Step 0 is done).
+5. Fonts: the developer approved self-hosted IBM Plex, downloaded from the github.com/IBM/plex releases, with its `OFL.txt` shipped beside the woff2 files in `apps/web/src/fonts/` (D0.2 Step 0 is done).
 6. Roles: Track B implements D0, B-D1 and B-D2; a Track A builder session implements A-D1, A-D2 and A-D3; session "M1P3 A W3" is design lead (no implementation): it answers design questions and reviews diffs and screenshots against the target on request.
