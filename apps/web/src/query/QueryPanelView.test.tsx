@@ -1,5 +1,6 @@
 import { createDraftStore } from "@querymodule/client";
-import type { ClientSiteConfig } from "@querymodule/core/config";
+import { type ClientSiteConfig, resolveShortcuts } from "@querymodule/core/config";
+import { ShortcutProvider } from "@querymodule/web-ui";
 import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { CLIENT_CONFIG, submitRecorder } from "../test/msw-server.js";
@@ -24,12 +25,14 @@ function renderView(
     {
       path: "/",
       element: (
-        <QueryPanelView
-          config={props.config ?? CUSTOM}
-          drafts={drafts}
-          mode={props.mode ?? "preview"}
-          idPrefix={props.idPrefix ?? "pv"}
-        />
+        <ShortcutProvider bindings={resolveShortcuts((props.config ?? CUSTOM).shortcuts)}>
+          <QueryPanelView
+            config={props.config ?? CUSTOM}
+            drafts={drafts}
+            mode={props.mode ?? "preview"}
+            idPrefix={props.idPrefix ?? "pv"}
+          />
+        </ShortcutProvider>
       ),
     },
   ]);
@@ -70,25 +73,35 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
     expect(submitRecorder.calls).toEqual([]);
   });
 
-  it("preview: registers no global shortcuts (Alt+1 does nothing)", async () => {
-    const { user } = renderView({
-      config: {
-        ...CUSTOM,
-        queryTypes: [
-          { ...VEH, code: "ZZQ", labelKey: "custom.zzq.label" },
-          { ...VEH, code: "ZZR", labelKey: "custom.zzr.label" },
-        ],
-        quickAccess: ["ZZQ", "ZZR"],
-      },
-    });
+  const TWO: ClientSiteConfig = {
+    ...CUSTOM,
+    queryTypes: [
+      { ...VEH, code: "ZZQ", labelKey: "custom.zzq.label" },
+      { ...VEH, code: "ZZR", labelKey: "custom.zzr.label" },
+    ],
+    quickAccess: ["ZZQ", "ZZR"],
+  };
+
+  it("live control: Alt+2 selects the second type under a ShortcutProvider", async () => {
+    const { user } = renderView({ config: TWO, mode: "live" });
+    const second = await screen.findByRole("button", { name: "custom.zzr.label" });
+    expect(second).toHaveAttribute("aria-pressed", "false");
+    await user.keyboard("{Alt>}2{/Alt}");
+    expect(second).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("preview: registers no global shortcuts (Alt+2 does nothing, Shift+/ opens no dialog)", async () => {
+    const { user } = renderView({ config: TWO });
     const first = await screen.findByRole("button", { name: "custom.zzq.label" });
     expect(first).toHaveAttribute("aria-pressed", "true");
     await user.keyboard("{Alt>}2{/Alt}");
+    await user.keyboard("{Shift>}/{/Shift}");
     expect(first).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "custom.zzr.label" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("uses only the injected draft store and resets it on unmount", async () => {
