@@ -2,6 +2,7 @@ import { type HeartbeatResult, runHeartbeatProbe, type SocketLike } from "@query
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useT } from "../app/i18n-context.js";
+import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 
 export function heartbeatUrl(location: { protocol: string; host: string }): string {
@@ -55,7 +56,7 @@ export function StatusPage() {
   }, [result, text, announcer]);
 
   return (
-    <main className="qm-page">
+    <main className="qm-page" {...MAIN_LANDMARK}>
       <h1 ref={headingRef} tabIndex={-1}>
         {t("status.title")}
       </h1>

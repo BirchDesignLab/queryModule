@@ -77,7 +77,7 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
               action={`quickType${n}`}
               run={() => {
                 const code = quickCodes[n - 1];
-                if (code !== undefined) terminal.selectType(code);
+                if (code !== undefined) terminal.selectType(code, { focus: true });
               }}
             />
           ))}

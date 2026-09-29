@@ -41,7 +41,7 @@ export type {
   SocketLike,
 } from "./heartbeat/heartbeat-probe.js";
 export { runHeartbeatProbe } from "./heartbeat/heartbeat-probe.js";
-export { fetchLocaleBundle } from "./i18n/locale-api.js";
+export { fetchLocaleBundle, LocaleUnavailableError } from "./i18n/locale-api.js";
 export type { LocaleBundle, MessageParams, Translator } from "./i18n/translator.js";
 export { createTranslator, isLocaleBundle } from "./i18n/translator.js";
 export { compareSemver, fetchMeta, isClientSupported } from "./meta/version.js";

@@ -73,6 +73,14 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
   const [invalidAttempt, setInvalidAttempt] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // Sign-in resolves before the preferences load; a page opened meanwhile must not be replaced.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -111,7 +119,8 @@ export function LoginPage({ clientSupported }: { clientSupported: boolean }) {
       const result = await session.signIn(email.trim(), password);
       if (result.ok) {
         await loadPreferences(api, preferences).catch(() => undefined);
-        navigate("/", { replace: true });
+        // The signed-in render below already left this page; only a page still showing goes on.
+        if (mounted.current) navigate("/", { replace: true });
         return;
       }
       const failure = failureKey(result);

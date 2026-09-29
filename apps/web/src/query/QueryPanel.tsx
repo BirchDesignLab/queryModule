@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
-import { usePersonaLayout } from "../app/AppChrome.js";
+import { useIsFreshLoad, usePersonaLayout } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
+import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { QueryPanelView } from "./QueryPanelView.js";
 import { useLiveConfig } from "./use-query-panel.js";
@@ -14,8 +15,12 @@ export function QueryPanel() {
   const live = useLiveConfig();
   const layout = usePersonaLayout();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // Focus follows a navigation (sign-in, a link back, browser Back), spec 6.4; a fresh load keeps
+  // it at the top of the page, so the first Tab is the skip link.
+  const freshLoad = useIsFreshLoad();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, on mount
   useEffect(() => {
-    headingRef.current?.focus();
+    if (!freshLoad) headingRef.current?.focus();
   }, []);
   return (
     <main
@@ -24,6 +29,7 @@ export function QueryPanel() {
           ? "qm-page qm-query-panel qm-layout--mobile-unit"
           : "qm-page qm-query-panel"
       }
+      {...MAIN_LANDMARK}
       data-shortcut-context="panel"
       aria-busy={live.status === "loading"}
     >

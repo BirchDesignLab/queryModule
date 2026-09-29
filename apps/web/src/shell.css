@@ -27,6 +27,28 @@ body {
   outline-offset: var(--qm-focus-ring-offset);
 }
 
+/* Off screen until it takes focus, then the first thing on the page (spec 6.4 skip link). */
+.qm-skip-link {
+  position: absolute;
+  inset-block-start: var(--qm-space-2);
+  inset-inline-start: var(--qm-space-2);
+  z-index: 1;
+  transform: translateY(calc(-100% - var(--qm-space-2)));
+  padding: var(--qm-space-2) var(--qm-space-4);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+}
+
+.qm-skip-link:focus {
+  transform: none;
+}
+
+/* The skip link's target takes focus but is not a control: no ring around the whole page. */
+main[tabindex="-1"]:focus {
+  outline: none;
+}
+
 .qm-app-header {
   display: flex;
   flex-wrap: wrap;
@@ -53,6 +75,12 @@ body {
   min-inline-size: 0;
 }
 
+.qm-app-header__end nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+}
+
 .qm-app-header__user {
   margin: 0;
   min-inline-size: 0;
@@ -68,6 +96,39 @@ body {
   border-radius: var(--qm-radius-md);
   color: var(--qm-color-text-body);
   text-decoration: none;
+}
+
+/* Admin sections as a nav bar: pills like the header links; the open one is bold and filled
+   (aria-current), so the state is not colour alone. */
+.qm-admin__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+  margin: 0 0 var(--qm-space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.qm-admin__nav a {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--qm-target-min);
+  padding: 0 var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-md);
+  color: var(--qm-color-text-body);
+  text-decoration: none;
+}
+
+.qm-admin__nav a:hover {
+  text-decoration: underline;
+}
+
+.qm-admin__nav a[aria-current="page"] {
+  background: var(--qm-color-surface-raised);
+  border-color: var(--qm-color-text-body);
+  font-weight: 700;
 }
 
 /* Mobile-unit layout: a shorter bar; its controls keep their 48 px targets (spec 6.3 subset). */

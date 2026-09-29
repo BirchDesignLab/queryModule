@@ -6,10 +6,20 @@ import {
 } from "@querymodule/core/config";
 import type { ThemeSelection } from "@querymodule/tokens";
 import { ShortcutProvider, ThemeModeSelect, usePersona, useThemeMode } from "@querymodule/web-ui";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from "react";
-import { Link, Outlet } from "react-router";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { Link, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
 import { useT } from "./i18n-context.js";
+import { MAIN_LANDMARK } from "./main-landmark.js";
 import { useServices } from "./services-context.js";
 import { useSignOut } from "./use-sign-out.js";
 
@@ -74,6 +84,7 @@ export function AppHeader() {
   const user = useStore(authStore, (s) => s.user);
   const themeMode = useStore(preferences, (s) => s.themeMode);
   const layout = usePersonaLayout();
+  const onPanel = useLocation().pathname === "/";
   return (
     <header
       className={layout === "mobileUnit" ? "qm-app-header qm-app-header--compact" : "qm-app-header"}
@@ -82,6 +93,11 @@ export function AppHeader() {
       <p className="qm-app-header__product">{t("login.product")}</p>
       <div className="qm-app-header__end">
         <nav aria-label={t("home.navLabel")}>
+          {onPanel ? null : (
+            <Link className="qm-app-header__status" to="/">
+              {t("nav.query")}
+            </Link>
+          )}
           <Link className="qm-app-header__status" to="/status">
             {t("status.title")}
           </Link>
@@ -111,6 +127,36 @@ export function AppHeader() {
   );
 }
 
+/**
+ * The first Tab stop of every signed-in page (spec 6.4): an in-page link past the header to the
+ * page's `<main>`, which takes focus, so the next Tab enters the page. "Skip to query" on the
+ * panel, "Skip to main content" elsewhere.
+ */
+function SkipLink() {
+  const t = useT();
+  const onPanel = useLocation().pathname === "/";
+  return (
+    <a className="qm-skip-link" href={`#${MAIN_LANDMARK.id}`}>
+      {t(onPanel ? "skip.toQuery" : "skip.toMain")}
+    </a>
+  );
+}
+
+/** True until the router location changes after AppShell mounted: the document is still on its entry. */
+const OnLoadEntry = createContext<{ current: boolean } | null>(null);
+
+/**
+ * True when a page mounts on the entry the document was loaded on (a fresh load or a reload, POP):
+ * focus then stays at the top of the page, so the first Tab is the skip link. A page reached by
+ * any navigation (sign-in, a link, browser Back, even Back to the loaded entry) is false: focus
+ * follows it (spec 6.4).
+ */
+export function useIsFreshLoad(): boolean {
+  const onLoadEntry = useContext(OnLoadEntry);
+  const navigationType = useNavigationType();
+  return onLoadEntry?.current === true && navigationType === "POP";
+}
+
 /** Layout of every signed-in screen that runs the app: the header, then the page. */
 export function AppShell() {
   const { api, queryClient, configRefresh, authStore } = useServices();
@@ -128,12 +174,22 @@ export function AppShell() {
     void queryClient.prefetchQuery({ ...clientConfigQuery(api), retry: false });
   }, [api, queryClient]);
   // Bindings are the site's overrides over the spec 6.4 defaults; the defaults apply until the config loads.
+  const locationKey = useLocation().key;
+  const firstKey = useRef(locationKey);
+  const onLoadEntry = useRef(true);
+  // The first navigation ends "fresh load" for good: Back to the loaded entry is a navigation too.
+  useEffect(() => {
+    if (locationKey !== firstKey.current) onLoadEntry.current = false;
+  }, [locationKey]);
   const shortcuts = useCachedConfig()?.shortcuts;
   const bindings = useMemo(() => resolveShortcuts(shortcuts), [shortcuts]);
   return (
     <ShortcutProvider bindings={bindings}>
-      <AppHeader />
-      <Outlet />
+      <OnLoadEntry.Provider value={onLoadEntry}>
+        <SkipLink />
+        <AppHeader />
+        <Outlet />
+      </OnLoadEntry.Provider>
     </ShortcutProvider>
   );
 }

@@ -1,7 +1,8 @@
 import { useStore } from "@querymodule/client";
 import { useEffect, useRef } from "react";
-import { Link, Navigate, useOutlet } from "react-router";
+import { Navigate, NavLink, useOutlet } from "react-router";
 import { useT } from "../app/i18n-context.js";
+import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { ConfigBuilder } from "./ConfigBuilder.js";
 import { canManageUsers, canOpenAdmin } from "./roles.js";
@@ -20,16 +21,16 @@ export function AdminLayout() {
   const outlet = useOutlet();
   if (!allowed) return <Navigate to="/" replace />;
   return (
-    <main className="qm-admin">
+    <main className="qm-admin" {...MAIN_LANDMARK}>
       <h1>{t("admin.title")}</h1>
       <nav aria-label={t("admin.navLabel")}>
         <ul className="qm-admin__nav">
           <li>
-            <Link to="/admin/config">{t("admin.nav.config")}</Link>
+            <NavLink to="/admin/config">{t("admin.nav.config")}</NavLink>
           </li>
           {canManageUsers(role) && (
             <li>
-              <Link to="/admin/users">{t("admin.nav.users")}</Link>
+              <NavLink to="/admin/users">{t("admin.nav.users")}</NavLink>
             </li>
           )}
         </ul>

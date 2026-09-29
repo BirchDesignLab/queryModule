@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
@@ -36,6 +36,89 @@ describe("ADR-0011 item 3 the config refresh runs while signed in (#361)", () =>
     await t.user.click(screen.getByRole("button", { name: "Sign out" }));
     await screen.findByRole("heading", { name: "Sign in" });
     await waitFor(() => expect(stop).toHaveBeenCalled());
+  });
+});
+
+describe("sign-in: a slow preferences load does not pull the user back", () => {
+  it("a page opened while the preferences load is still pending stays open after it lands", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let served = false;
+    server.use(
+      http.get(`${API}/api/v1/me/preferences`, async () => {
+        await gate;
+        served = true;
+        return HttpResponse.json(PREFERENCES);
+      }),
+    );
+    const t = renderRoot();
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await t.user.click(await screen.findByRole("link", { name: "Connection status" }));
+    await screen.findByRole("heading", { name: "Connection status" });
+    release();
+    await waitFor(() => expect(served).toBe(true));
+    // Let the sign-in's continuation run (it used to navigate to "/" here).
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(screen.getByRole("heading", { name: "Connection status" })).toBeInTheDocument();
+  });
+});
+
+describe("spec 6.4 skip link: the first Tab stop of every signed-in page", () => {
+  it("is the first link in the document, before the header, and links to the main landmark", async () => {
+    await signIn();
+    const skip = screen.getByRole("link", { name: "Skip to query" });
+    const header = screen.getByRole("banner");
+    // Document order: the skip link precedes the header's controls.
+    expect(skip.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(header.contains(skip)).toBe(false);
+    // A real fragment link to the main landmark (the browser moves focus there: see the e2e).
+    expect(skip).toHaveAttribute("href", "#qm-main");
+    const main = screen.getByRole("main");
+    expect(main).toHaveAttribute("id", "qm-main");
+    expect(main).toHaveAttribute("tabindex", "-1");
+  });
+  it("a fresh load of / with a live session leaves focus at the top: the first Tab is the skip link", async () => {
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: TEST_USER }),
+      ),
+    );
+    const t = renderRoot({ path: "/" });
+    await screen.findByRole("navigation", { name: "Quick access" });
+    expect(screen.getByRole("heading", { name: "Query Module" })).not.toHaveFocus();
+    await t.user.tab();
+    expect(screen.getByRole("link", { name: "Skip to query" })).toHaveFocus();
+  });
+  it("right after sign-in the next Tab is the first quick access button, not the header", async () => {
+    const t = await signIn();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Query Module" })).toHaveFocus(),
+    );
+    await screen.findByRole("navigation", { name: "Quick access" });
+    await t.user.tab();
+    expect(screen.getByRole("button", { name: "Vehicle" })).toHaveFocus();
+  });
+  it("Tab from the panel heading reaches a panel control, not the header's status link", async () => {
+    const t = await signIn();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Query Module" })).toHaveFocus(),
+    );
+    await t.user.tab();
+    const focused = document.activeElement as HTMLElement;
+    expect(screen.getByRole("main").contains(focused)).toBe(true);
+  });
+  it("on /status it reads Skip to main content and targets that page's main landmark", async () => {
+    const t = await signIn();
+    await t.user.click(screen.getByRole("link", { name: "Connection status" }));
+    const skip = await screen.findByRole("link", { name: "Skip to main content" });
+    expect(skip).toHaveAttribute("href", "#qm-main");
+    expect(screen.getByRole("main")).toHaveAttribute("id", "qm-main");
   });
 });
 

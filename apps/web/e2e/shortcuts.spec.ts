@@ -25,6 +25,17 @@ test.describe("keyboard shortcuts on the query panel (FR-006, FR-007)", () => {
     await expect(page.getByTestId("announcer-polite")).toHaveText(/1 field needs attention\./);
   });
 
+  test("Alt+2 puts focus on the first field of the Person form", async ({ page }) => {
+    await signIn(page);
+    await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
+    await page.keyboard.press("Alt+Digit2");
+    await expect(page.getByRole("button", { name: "Person", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.locator("main form").locator("input, select").first()).toBeFocused();
+  });
+
   test("a slash typed into First name is text, not a shortcut", async ({ page }) => {
     await signIn(page);
     // The panel renders after GET /api/v1/config; keys sent earlier reach no handler.
