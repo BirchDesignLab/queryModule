@@ -125,6 +125,30 @@ describe("FR-012 plate-only narrowing (spec 4.6 step 3)", () => {
       droppedSourceIds: [],
       skipReasons: [{ key: "plan.noPlateOnlySource" }],
     });
+    expect(p.parts[2]?.mode).toBe("plateOnly");
+  });
+  it("each part carries its own mode; a nested plate-only part with nothing dropped still reads plateOnly", () => {
+    const onlyPlateOnlyDefaults = edit(withPerAlsoRunVeh(config, true), (c) => {
+      for (const s of queryTypeOf(c, "VEH").sources) if (!s.plateOnly) s.selectedByDefault = false;
+    });
+    const p = ok(
+      planRequest(onlyPlateOnlyDefaults, "PER", { last: "Testerson" }, ["stateSource"], { now }),
+    );
+    expect(p.parts[0]?.mode).toBe(p.mode);
+    expect(p.parts[0]?.mode).toBe("normal");
+    expect(p.parts[1]?.mode).toBe("normal");
+    expect(p.parts[2]).toMatchObject({
+      partId: 2,
+      queryType: "VEH",
+      status: "planned",
+      mode: "plateOnly",
+      sourceIds: ["stateSource"],
+      droppedSourceIds: [],
+    });
+  });
+  it("the primary part's mode equals Plan.mode in plate-only", () => {
+    const p = ok(planRequest(config, "VEH", { plate: "ZZ-0001" }, ["stateSource"], { now }));
+    expect([p.mode, p.parts[0]?.mode]).toEqual(["plateOnly", "plateOnly"]);
   });
 });
 
@@ -163,6 +187,41 @@ describe("FR-041 source selection (spec 4.6 step 2)", () => {
   it("an empty selection plans the primary with no sources in normal mode", () => {
     const p = ok(planRequest(config, "VEH", { plate: "ZZ-0001", year: "2026" }, [], { now }));
     expect(p.parts[0]).toMatchObject({ status: "planned", sourceIds: [] });
+  });
+  it("dedupes a repeated selected source, first occurrence wins", () => {
+    const p = ok(
+      planRequest(
+        config,
+        "PER",
+        { last: "Sampleworth" },
+        ["nationalSource", "stateSource", "nationalSource", "stateSource"],
+        { now },
+      ),
+    );
+    expect(p.parts[0]?.sourceIds).toEqual(["nationalSource", "stateSource"]);
+  });
+  it("dedupes before plate-only narrowing, so kept and dropped ids appear once", () => {
+    const p = ok(
+      planRequest(
+        config,
+        "VEH",
+        { plate: "ZZ-0001" },
+        ["stateSource", "nationalSource", "stateSource", "nationalSource"],
+        { now },
+      ),
+    );
+    expect(p.parts[0]).toMatchObject({
+      sourceIds: ["stateSource"],
+      droppedSourceIds: ["nationalSource"],
+    });
+    expect(p.droppedSourceIds).toEqual(["nationalSource"]);
+  });
+  it("a duplicate does not count twice toward the pair cap", () => {
+    // PER with four sources and WNT with four defaults: 8 distinct pairs, allowed.
+    const wide = withPerAndWntSources(config, { per: 4, wnt: 4 });
+    const ids = queryTypeOf(wide, "PER").sources.map((s) => s.sourceId);
+    const p = ok(planRequest(wide, "PER", { last: "Testerson" }, [...ids, ids[0] ?? ""], { now }));
+    expect(p.parts.reduce((t, x) => t + x.sourceIds.length, 0)).toBe(8);
   });
   it("records the canonical query type code for a case-folded request", () => {
     const p = ok(

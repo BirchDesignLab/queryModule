@@ -33,6 +33,11 @@ export interface PlanPart {
   sourceIds: string[];
   /** Plate-only narrowing for this part (internal addition to spec 4.6; submitted details carry it per part). */
   droppedSourceIds: string[];
+  /**
+   * This part's own FormState.mode (internal addition to spec 4.6; submitted details carry plateOnly
+   * per part, and a nested plate-only part with nothing dropped is otherwise indistinguishable).
+   */
+  mode: FormMode;
   status: "planned" | "skipped";
   skipReasons?: AuditValidationError[];
 }
@@ -106,13 +111,15 @@ export function planRequest(
   // Step 1: primary.
   const primary = evaluateForm(config, queryType, userValues, options);
   if (primary.errors.length > 0) return { errors: primary.errors };
-  // Step 2: eligible sources.
+  // Step 2: eligible sources. Dedupe first (first occurrence wins): the request schema bounds only the
+  // length, and a repeated id would plan a duplicate (part, source) pair and count twice toward the cap.
+  const selected = [...new Set(selectedSourceIds)];
   const eligible = new Set(primary.sources.map((s) => s.sourceId));
-  const foreign = selectedSourceIds.find((id) => !eligible.has(id));
+  const foreign = selected.find((id) => !eligible.has(id));
   if (foreign !== undefined)
     return { errors: [{ key: "plan.sourceNotAllowed", params: { sourceId: foreign } }] };
   // Step 3: plate-only.
-  const n = narrow(primary, selectedSourceIds);
+  const n = narrow(primary, selected);
   if (primary.mode === "plateOnly" && n.keep.length === 0)
     return { errors: [{ key: "plan.noPlateOnlySource" }] };
   const parts: PlanPart[] = [
@@ -125,6 +132,7 @@ export function planRequest(
       values: { ...primary.values },
       sourceIds: n.keep,
       droppedSourceIds: n.dropped,
+      mode: primary.mode,
       status: "planned",
     },
   ];
@@ -145,6 +153,7 @@ export function planRequest(
       queryType: s.queryType,
       typeValues: typeValuesOf(s),
       fieldMapApplied: { ...nested.fieldMap },
+      mode: s.mode,
     };
     const skip = (skipReasons: AuditValidationError[]): PlanPart => ({
       ...base,

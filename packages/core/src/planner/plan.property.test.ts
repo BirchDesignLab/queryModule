@@ -60,7 +60,10 @@ const cases = fc.oneof(
   fc.record({ c: fc.constant(wide), code: fc.constant("PER"), input: perInput }),
 );
 const withSelection = cases.chain((k) =>
-  fc.subarray(sourceIdsOf(k.c, k.code)).map((selected) => ({ ...k, selected })),
+  // Two subarrays joined, so a selection may repeat an id (the request schema does not dedupe).
+  fc
+    .tuple(fc.subarray(sourceIdsOf(k.c, k.code)), fc.subarray(sourceIdsOf(k.c, k.code)))
+    .map(([a, b]) => ({ ...k, selected: [...a, ...b] })),
 );
 
 /** The part re-evaluated from its own canonical values: its eligible sources and visible fields. */
@@ -92,6 +95,8 @@ describe("NFR-002 planRequest invariants over random VEH and PER submits (spec 4
         let total = 0;
         for (const part of first.parts) {
           total += part.sourceIds.length;
+          expect(new Set(part.sourceIds).size).toBe(part.sourceIds.length);
+          expect(new Set(part.droppedSourceIds).size).toBe(part.droppedSourceIds.length);
           const dropped = new Set(part.droppedSourceIds);
           expect(part.sourceIds.some((id) => dropped.has(id))).toBe(false);
           const { eligible, visible } = reEvaluate(c, part);
