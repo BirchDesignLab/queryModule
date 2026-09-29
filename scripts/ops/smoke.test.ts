@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
-import { createHmac } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { derivePassword } from "../../packages/api/src/seed/password";
 
 const here = import.meta.dirname;
 const secret = "smoke-test-secret-not-real";
@@ -104,7 +104,7 @@ function smokeWithStubs(
   });
 }
 
-const derivedPassword = () => createHmac("sha256", secret).update(email).digest("base64url");
+const derivedPassword = () => derivePassword(secret, email);
 
 describe("smoke.sh keeps secrets off argv (G-I2, #167)", { timeout: 30_000 }, () => {
   it("never passes the seed secret, the password or the session cookie as an argument", async () => {
@@ -150,8 +150,33 @@ describe("smoke.sh on the deploy host (G-I3, #167)", { timeout: 30_000 }, () => 
     expect(r.out).toMatch(/2 ok: login as smoke/);
     expect(JSON.parse(signInBody ?? "{}")).toEqual({ email, password: derivedPassword() });
     const call = readFileSync(join(dir, "bin", "docker.log"), "utf8").trim();
-    expect(call.split(" ")[2]).toMatch(/deploy\/compose\.yml$/);
+    expect(call).toMatch(/-f (.*deploy\/compose\.yml) exec/);
     expect(call).not.toContain(secret);
+  });
+
+  it("finds the compose file when the checkout path contains a space (G-m3)", async () => {
+    const checkout = join(dir, "my checkout");
+    mkdirSync(join(checkout, "scripts", "ops"), { recursive: true });
+    for (const f of ["smoke.sh", "ws-soak.ts"])
+      cpSync(join(here, f), join(checkout, "scripts", "ops", f));
+    const docker = [
+      'printf "%s\\n" "$*" >> "$STUB_DIR/docker.log"',
+      'S=$9; shift 9; exec "$REAL_NODE" -e "$S" "$STUB_SECRET_FILE" "$2"',
+    ].join("\n");
+    const r = await smokeWithStubs(
+      base,
+      { docker },
+      {
+        SCRIPT: join(checkout, "scripts", "ops", "smoke.sh"),
+        SEED_PASSWORD_SECRET_FILE: undefined,
+        STUB_SECRET_FILE: join(dir, "SEED_PASSWORD_SECRET"),
+      },
+    );
+    expect(r.out).toMatch(/2 ok: login as smoke/);
+    const call = readFileSync(join(dir, "bin", "docker.log"), "utf8").trim();
+    expect(call.match(/-f (.*deploy\/compose\.yml) exec/)?.[1]).toMatch(
+      /my checkout\/scripts\/ops\/\.\.\/\.\.\/deploy\/compose\.yml$/,
+    );
   });
 });
 
@@ -160,7 +185,7 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     const r = await smoke(base);
     expect(r.out).toMatch(/1 ok: health and meta/);
     expect(r.out).toMatch(/2 ok: login as smoke and GET \/api\/v1\/config/);
-    const pw = createHmac("sha256", secret).update(email).digest("base64url");
+    const pw = derivedPassword();
     expect(pw).toHaveLength(43);
     expect(JSON.parse(signInBody ?? "{}")).toEqual({ email, password: pw });
     // No WebSocket on the stub: step 5 fails, and nothing secret is printed on the way.

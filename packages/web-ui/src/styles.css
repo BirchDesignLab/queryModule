@@ -165,3 +165,29 @@ h1 {
   color: var(--qm-color-surface-base);
   font-weight: 600;
 }
+
+/* Shortcut sheet (spec 6.4, 6.2 dialogs) */
+.qm-shortcut-sheet {
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  padding: var(--qm-space-4);
+  border: var(--qm-border-width) solid var(--qm-color-accent);
+  border-radius: var(--qm-radius-sm);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+}
+
+.qm-shortcut-sheet__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--qm-space-2);
+}
+
+.qm-shortcut-sheet__keys kbd {
+  padding: var(--qm-space-1) var(--qm-space-2);
+  border: var(--qm-border-width) solid var(--qm-color-accent);
+  border-radius: var(--qm-radius-sm);
+  font-family: inherit;
+}

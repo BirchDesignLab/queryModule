@@ -167,17 +167,26 @@ jobs:
         if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'api-breaking')
         env:
           BASE_REF: ${{ github.base_ref }}
-        # Fails closed: skip only when ls-tree of the base succeeds and lists no
-        # openapi.json; any git failure fails the step. Image pinned by digest (v1.32.1).
+          # The checkout is refs/pull/N/merge, whose merge base with the base tip is the tip;
+          # the PR head sha gives the real merge base and the PR's own openapi.json (#171).
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # Diffs the merge base, not the base tip (#171), so a route main added after the
+        # branch was cut is not a removal; a component renamed with a byte-identical body
+        # (#69, #95) is mapped back first. Fails closed: skip only on the script exit code 3
+        # (merge base lists no openapi.json), exit 0 must leave the file; any git failure fails the step (fetch-depth 0 above). Image pinned
+        # by digest (v1.32.1).
         run: |
           set -euo pipefail
-          listed="$(git ls-tree --name-only "origin/$BASE_REF" -- packages/api/openapi.json)"
-          if [ -z "$listed" ]; then
-            echo "No openapi.json on the base branch yet; nothing to diff."
-            exit 0
-          fi
-          git show "origin/$BASE_REF:packages/api/openapi.json" > base-openapi.json
-          docker run --rm -v "$PWD:/work" tufin/oasdiff@sha256:3b14fe0112e5d1bf862f91ab234a4bcd161a3f399e98f8b0b665ce70857694ac breaking /work/base-openapi.json /work/packages/api/openapi.json --fail-on ERR
+          rm -f base-openapi.json head-openapi.json
+          rc=0
+          pnpm tsx scripts/ci/openapi-base.ts "origin/$BASE_REF" base-openapi.json "$HEAD_SHA" head-openapi.json || rc=$?
+          case "$rc" in
+            3) exit 0 ;;
+            0) [ -f base-openapi.json ] && [ -f head-openapi.json ] || exit 1 ;;
+            *) exit "$rc" ;;
+          esac
+          pnpm tsx scripts/ci/openapi-rename-map.ts base-openapi.json head-openapi.json head-openapi.renamed.json
+          docker run --rm -v "$PWD:/work" tufin/oasdiff@sha256:3b14fe0112e5d1bf862f91ab234a4bcd161a3f399e98f8b0b665ce70857694ac breaking /work/base-openapi.json /work/head-openapi.renamed.json --fail-on ERR
 
   # ADR-0008: path-scoped, skipped only when changes says web=false (fails open, #96 G-M2).
   web:
@@ -286,14 +295,14 @@ jobs:
         # $GITHUB_ENV): a throwaway secret for this run's container only. The smoke user's
         # password is derived from it as smoke.sh does (derivePassword, spec 8.5), masked
         # before it reaches the environment, never echoed and never on a process argv.
-        # The base URL is the container's PUBLIC_ORIGIN (http://localhost:3000, set by
-        # boot-smoke.sh), not QM_BASE_URL (127.0.0.1): sign-in and the WebSocket upgrade
-        # check the browser's Origin against it.
+        # QM_BASE_URL comes from step 11 too: boot-smoke.sh sets it to the container's
+        # PUBLIC_ORIGIN (http://localhost:3000), which sign-in and the WebSocket upgrade
+        # check the browser's Origin against.
         run: |
           pw=$(node -e 'const c=require("node:crypto"),f=require("node:fs");process.stdout.write(c.createHmac("sha256",f.readFileSync(process.argv[1],"utf8").trim()).update(process.argv[2].toLowerCase()).digest("base64url"))' "$SEED_PASSWORD_SECRET_FILE" smoke@example.test)
           echo "::add-mask::$pw"
           export E2E_USER_EMAIL=smoke@example.test E2E_USER_PASSWORD="$pw"
-          E2E_BASE_URL=http://localhost:3000 pnpm --filter @querymodule/web exec playwright test
+          E2E_BASE_URL=$QM_BASE_URL pnpm --filter @querymodule/web exec playwright test
 
       # C2 (round 1 review): publish must ship the exact bytes steps 10-12
       # just smoke-tested, not a fresh rebuild in a different job. Save the
