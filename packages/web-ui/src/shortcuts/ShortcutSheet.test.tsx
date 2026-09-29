@@ -1,8 +1,8 @@
 import { resolveShortcuts } from "@querymodule/core/config";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ShortcutSheet } from "./ShortcutSheet.js";
 
 const MESSAGES: Record<string, string> = {
@@ -44,14 +44,14 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
     await user.click(screen.getByRole("button", { name: "opener" }));
     const dialog = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
     const submit = row(dialog, "Submit the query");
-    expect(within(submit).getByText("Ctrl+Enter")).toBeInTheDocument();
+    expect(within(submit).getByText("Ctrl + Enter")).toBeInTheDocument();
     expect(within(submit).getByText("Query panel")).toBeInTheDocument();
     const terminal = row(dialog, "Go to the command line");
-    expect(within(terminal).getByText("/")).toBeInTheDocument();
+    expect(within(terminal).getByText("Slash")).toBeInTheDocument();
     expect(within(terminal).getByText("Anywhere")).toBeInTheDocument();
     const chord = row(dialog, "Go to the query panel");
-    expect(within(chord).getByText("g")).toBeInTheDocument();
-    expect(within(chord).getByText("q")).toBeInTheDocument();
+    expect(within(chord).getByText("KeyG")).toBeInTheDocument();
+    expect(within(chord).getByText("KeyQ")).toBeInTheDocument();
   });
 
   it("lists every binding of an action that has several", () => {
@@ -68,7 +68,7 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
         t={t}
       />,
     );
-    expect(screen.getByText("Ctrl+Enter")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl + Enter")).toBeInTheDocument();
     expect(screen.getByText("F5")).toBeInTheDocument();
   });
 
@@ -102,5 +102,88 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     rerender(<ShortcutSheet open={false} onClose={onClose} bindings={resolveShortcuts()} t={t} />);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
+  const setKeyboard = (value: unknown) =>
+    Object.defineProperty(navigator, "keyboard", { configurable: true, value });
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "keyboard");
+  });
+  const bindings = {
+    toggleMode: [{ keys: "Ctrl+Backquote", context: "global" }],
+    goPanel: [{ keys: "KeyG KeyQ", context: "global" }],
+  } as const;
+  const sheet = () => <ShortcutSheet open onClose={() => undefined} bindings={bindings} t={t} />;
+
+  it("renders combos with every modifier and no raw stroke string when no layout map exists", () => {
+    render(sheet());
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    expect(screen.queryByText("Ctrl+Backquote")).not.toBeInTheDocument();
+  });
+
+  it("shows the code where a code has no US character and no layout map exists", () => {
+    render(
+      <ShortcutSheet
+        open
+        onClose={() => undefined}
+        bindings={{ submit: [{ keys: "Ctrl+Alt+Shift+F5", context: "global" }] }}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("Ctrl + Alt + Shift + F5")).toBeInTheDocument();
+  });
+
+  it("renders the fallback immediately, then swaps in the layout map's labels", async () => {
+    let resolve: (m: ReadonlyMap<string, string>) => void = () => undefined;
+    setKeyboard({
+      getLayoutMap: () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    });
+    render(sheet());
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    resolve(
+      new Map([
+        ["Backquote", "²"],
+        ["KeyG", "g"],
+        ["KeyQ", "a"],
+      ]),
+    );
+    expect(await screen.findByText("Ctrl + ²")).toBeInTheDocument();
+    expect(screen.getByText("a")).toBeInTheDocument();
+  });
+
+  it("falls back when the layout map rejects", async () => {
+    const getLayoutMap = vi.fn().mockRejectedValue(new Error("SecurityError"));
+    setKeyboard({ getLayoutMap });
+    render(sheet());
+    await vi.waitFor(() => expect(getLayoutMap).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+  });
+
+  it("falls back when getLayoutMap throws synchronously", () => {
+    setKeyboard({
+      getLayoutMap: () => {
+        throw new Error("nope");
+      },
+    });
+    render(sheet());
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+  });
+
+  it("falls back to the code for a code the layout map does not carry, after the map resolved", async () => {
+    setKeyboard({ getLayoutMap: () => Promise.resolve(new Map([["KeyQ", "a"]])) });
+    render(sheet());
+    // The map has resolved once a mapped key shows its layout label (US layout would say "q").
+    expect(await screen.findByText("a")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    expect(screen.getByText("KeyG")).toBeInTheDocument();
   });
 });

@@ -35,15 +35,17 @@ function inTextInput(target: Element): boolean {
   return editable !== null && editable.getAttribute("contenteditable") !== "false";
 }
 
+/** Regions the focus is inside, innermost first (nearest ancestor wins ties), then "global" last. */
 function contextsOf(target: Element): ShortcutContext[] {
-  const found = new Set<ShortcutContext>(["global"]);
+  const found: ShortcutContext[] = [];
   for (let el: Element | null = target; el !== null; el = el.parentElement) {
     const value = el.getAttribute(CONTEXT_ATTRIBUTE);
     if (value !== null && (SHORTCUT_CONTEXTS as readonly string[]).includes(value)) {
-      found.add(value as ShortcutContext);
+      const region = value as ShortcutContext;
+      if (!found.includes(region)) found.push(region);
     }
   }
-  return [...found];
+  return found.includes("global") ? found : [...found, "global"];
 }
 
 /**

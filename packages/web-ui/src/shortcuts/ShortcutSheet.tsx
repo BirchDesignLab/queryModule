@@ -1,5 +1,5 @@
-import { type ShortcutBinding, usLayoutChar } from "@querymodule/core/config";
-import { type JSX, useEffect, useRef } from "react";
+import type { ShortcutBinding } from "@querymodule/core/config";
+import { type JSX, useEffect, useRef, useState } from "react";
 
 export interface ShortcutSheetProps {
   open: boolean;
@@ -10,15 +10,52 @@ export interface ShortcutSheetProps {
 
 const TITLE_ID = "qm-shortcut-sheet-title";
 
-/** Each stroke as the character it types on a US layout where one resolves, else its code. */
-function strokeLabel(stroke: string): string {
-  return usLayoutChar(stroke) ?? stroke;
+/** `navigator.keyboard.getLayoutMap()` result: KeyboardEvent.code to the character on this layout. */
+type LayoutMap = { get(code: string): string | undefined };
+
+const MODIFIERS = ["Ctrl", "Alt", "Shift"] as const;
+
+/** Modifiers and key joined with " + ". The key is the layout's label where the browser gave one,
+ *  else the code (spec 6.4). Never a US character: on another layout it would name the wrong key. */
+function strokeLabel(stroke: string, layout: LayoutMap | null): string {
+  const parts = stroke.split("+");
+  const code = parts[parts.length - 1] ?? stroke;
+  const mods = parts.slice(0, -1);
+  const key = layout?.get(code) ?? code;
+  return [...MODIFIERS.filter((m) => mods.includes(m)), key].join(" + ");
+}
+
+/** The layout map where the browser exposes one (Chromium); null until it resolves, and for good
+ *  when it is absent, throws or rejects. The sheet renders with the fallback labels meanwhile. */
+function useLayoutMap(open: boolean): LayoutMap | null {
+  const [layout, setLayout] = useState<LayoutMap | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    try {
+      const keyboard = (navigator as { keyboard?: { getLayoutMap?(): Promise<LayoutMap> } })
+        .keyboard;
+      keyboard
+        ?.getLayoutMap?.()
+        .then((map) => {
+          if (live) setLayout(map);
+        })
+        .catch(() => undefined);
+    } catch {
+      // Layout map unavailable: keep the fallback labels.
+    }
+    return () => {
+      live = false;
+    };
+  }, [open]);
+  return layout;
 }
 
 /** Modal list of every bound action (spec 6.4, 6.2 dialogs): Escape closes, focus returns to the opener. */
 export function ShortcutSheet({ open, onClose, bindings, t }: ShortcutSheetProps): JSX.Element {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
+  const layout = useLayoutMap(open);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -57,7 +94,7 @@ export function ShortcutSheet({ open, onClose, bindings, t }: ShortcutSheetProps
               <span className="qm-shortcut-sheet__keys">
                 {binding.keys.split(" ").map((stroke, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: a chord may repeat a stroke; order is fixed
-                  <kbd key={i}>{strokeLabel(stroke)}</kbd>
+                  <kbd key={i}>{strokeLabel(stroke, layout)}</kbd>
                 ))}
               </span>{" "}
               <span className="qm-shortcut-sheet__context">

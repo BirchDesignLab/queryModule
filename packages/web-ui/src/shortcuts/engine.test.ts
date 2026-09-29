@@ -1,4 +1,4 @@
-import { resolveShortcuts } from "@querymodule/core/config";
+import { EDITING_COMBOS as CORE_EDITING_COMBOS, resolveShortcuts } from "@querymodule/core/config";
 import { describe, expect, it } from "vitest";
 import { createShortcutEngine, EDITING_COMBOS, strokeOf } from "./engine";
 
@@ -23,10 +23,22 @@ describe("FR-007 single keys, combos and chords (spec 6.4)", () => {
     expect(k("ShiftLeft", { shiftKey: true })).toBeNull();
     expect(k("Unidentified")).toBeNull();
   });
-  it("EDITING_COMBOS lists Ctrl+A, C, V, X, Z, Y", () => {
+  it("EDITING_COMBOS lists Ctrl+A, C, V, X, Z, Y and the shifted redo and paste-plain forms", () => {
     expect([...EDITING_COMBOS].sort()).toEqual(
-      ["Ctrl+KeyA", "Ctrl+KeyC", "Ctrl+KeyV", "Ctrl+KeyX", "Ctrl+KeyY", "Ctrl+KeyZ"].sort(),
+      [
+        "Ctrl+KeyA",
+        "Ctrl+KeyC",
+        "Ctrl+KeyV",
+        "Ctrl+KeyX",
+        "Ctrl+KeyY",
+        "Ctrl+KeyZ",
+        "Ctrl+Shift+KeyV",
+        "Ctrl+Shift+KeyZ",
+      ].sort(),
     );
+  });
+  it("the engine's editing set is the core one (single source)", () => {
+    expect(EDITING_COMBOS).toBe(CORE_EDITING_COMBOS);
   });
   it("Slash focuses the terminal outside inputs and is inert inside them", () => {
     expect(e().handle(k("Slash"), outside, 0)).toEqual({ kind: "action", action: "focusTerminal" });
@@ -110,6 +122,89 @@ describe("FR-007 single keys, combos and chords (spec 6.4)", () => {
     expect(en.handle(k("Slash", { ctrlKey: true }), inInput, 0)).toEqual({
       kind: "action",
       action: "focusTerminal",
+    });
+  });
+});
+
+describe("FR-007 engine edges (#313)", () => {
+  it("Ctrl+Shift+KeyZ and Ctrl+Shift+KeyV never fire, even if bound", () => {
+    for (const code of ["KeyZ", "KeyV"]) {
+      const en = createShortcutEngine(
+        resolveShortcuts({ submit: { keys: `Ctrl+Shift+${code}`, context: "global" } }),
+      );
+      expect(en.handle(k(code, { ctrlKey: true, shiftKey: true }), outside, 0)).toEqual({
+        kind: "none",
+      });
+    }
+  });
+
+  it("an AltGr keystroke (Ctrl+Alt plus AltGraph) is not a Ctrl+Alt combo", () => {
+    const altGr = (state: boolean) =>
+      strokeOf({
+        code: "Digit2",
+        ctrlKey: true,
+        altKey: true,
+        shiftKey: false,
+        metaKey: false,
+        getModifierState: (key: string) => key === "AltGraph" && state,
+      });
+    expect(altGr(true)).toBeNull();
+    expect(altGr(false)).toBe("Ctrl+Alt+Digit2");
+  });
+
+  it("chord timeout boundary: fires at 999 ms, times out at exactly 1000 ms", () => {
+    const at999 = e();
+    at999.handle(k("KeyG"), outside, 0);
+    expect(at999.handle(k("KeyR"), outside, 999)).toEqual({ kind: "action", action: "goResults" });
+    const at1000 = e();
+    at1000.handle(k("KeyG"), outside, 0);
+    expect(at1000.handle(k("KeyR"), outside, 1000)).toEqual({ kind: "none" });
+  });
+
+  it("a combo-first chord started inside a text input completes with a combo stroke", () => {
+    const en = createShortcutEngine({
+      submit: [{ keys: "Ctrl+KeyK Ctrl+KeyJ", context: "global" }],
+      dismiss: [{ keys: "Ctrl+KeyK KeyX", context: "global" }],
+    });
+    expect(en.handle(k("KeyK", { ctrlKey: true }), inInput, 0)).toEqual({ kind: "pending" });
+    expect(en.handle(k("KeyJ", { ctrlKey: true }), inInput, 10)).toEqual({
+      kind: "action",
+      action: "submit",
+    });
+    // A single-key second stroke is typing inside an input: inert, and it drops the chord.
+    expect(en.handle(k("KeyK", { ctrlKey: true }), inInput, 20)).toEqual({ kind: "pending" });
+    expect(en.handle(k("KeyX"), inInput, 30)).toEqual({ kind: "none" });
+  });
+
+  it("the shared none result cannot be mutated by a caller", () => {
+    const first = e().handle(null, outside, 0);
+    expect(() => {
+      (first as { kind: string }).kind = "action";
+    }).toThrow(TypeError);
+    expect(e().handle(null, outside, 0)).toEqual({ kind: "none" });
+  });
+
+  it("nested contexts: the innermost region wins, then outer regions, then global", () => {
+    const en = createShortcutEngine({
+      inGlobal: [{ keys: "F2", context: "global" }],
+      inPanel: [{ keys: "F2", context: "panel" }],
+      inResults: [{ keys: "F2", context: "results" }],
+    });
+    // contexts run innermost first; global is always last.
+    expect(
+      en.handle("F2", { inTextInput: false, contexts: ["results", "panel", "global"] }, 0),
+    ).toEqual({ kind: "action", action: "inResults" });
+    expect(
+      en.handle("F2", { inTextInput: false, contexts: ["panel", "results", "global"] }, 0),
+    ).toEqual({ kind: "action", action: "inPanel" });
+    expect(en.handle("F2", { inTextInput: false, contexts: ["global"] }, 0)).toEqual({
+      kind: "action",
+      action: "inGlobal",
+    });
+    // A global binding listed first still loses to a region that contains focus.
+    expect(en.handle("F2", { inTextInput: false, contexts: ["global", "panel"] }, 0)).toEqual({
+      kind: "action",
+      action: "inPanel",
     });
   });
 });
