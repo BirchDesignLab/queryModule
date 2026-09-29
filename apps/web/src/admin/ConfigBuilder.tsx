@@ -97,7 +97,10 @@ function IssueMessages({ id, issues }: { id: string; issues: readonly DraftIssue
   return (
     <span id={id} className="qm-admin__issues">
       {issues.map((issue) => (
-        <span key={`${issue.key}:${JSON.stringify(issue.params)}`} className="qm-admin__issue">
+        <span
+          key={`${issue.pointer}:${issue.key}:${JSON.stringify(issue.params)}`}
+          className="qm-admin__issue"
+        >
           {" "}
           {t(issue.key, issue.params)}
         </span>
@@ -512,10 +515,16 @@ interface RawState {
   parseError: string | null;
 }
 
-function RawTab({ raw, setRaw }: { raw: RawState; setRaw(next: RawState): void }) {
+function RawTab({
+  raw,
+  setRaw,
+  onRawDoc,
+}: {
+  raw: RawState;
+  setRaw(next: RawState): void;
+  onRawDoc(doc: JsonObject): void;
+}) {
   const t = useT();
-  const services = useServices();
-  const store = configDraftStore(services);
   const uid = useId();
   const { text, parseError } = raw;
   const checks = useContext(ChecksContext);
@@ -524,7 +533,7 @@ function RawTab({ raw, setRaw }: { raw: RawState; setRaw(next: RawState): void }
   const onEdit = (next: string) => {
     const parsed = parseRawDraft(next);
     setRaw({ text: next, parseError: parsed.ok ? null : parsed.message });
-    if (parsed.ok) store.getState().setDoc(parsed.doc);
+    if (parsed.ok) onRawDoc(parsed.doc);
   };
   return (
     <div>
@@ -605,11 +614,21 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
     text: JSON.stringify(doc, null, 2),
     parseError: null,
   }));
-  // Form edits refresh the raw text unless the raw text is mid-edit and does not parse (M7).
+  // The raw text follows the draft only when something else changed it (wave critic I1, I2): a
+  // raw edit keeps the user's text and caret; a form edit (even while the raw text does not parse,
+  // M7 keeps it across a tab switch) replaces the raw text, so no edit is lost.
+  const rawDoc = useRef<JsonObject | null>(null);
+  const store = configDraftStore(useServices());
+  const onRawDoc = useCallback(
+    (next: JsonObject) => {
+      rawDoc.current = next;
+      store.getState().setDoc(next);
+    },
+    [store],
+  );
   useEffect(() => {
-    setRaw((r) =>
-      r.parseError === null ? { text: JSON.stringify(doc, null, 2), parseError: null } : r,
-    );
+    if (doc === rawDoc.current) return;
+    setRaw({ text: JSON.stringify(doc, null, 2), parseError: null });
   }, [doc]);
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({ form: null, raw: null });
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
@@ -681,7 +700,11 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           ))}
         </div>
         <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${tab}`}>
-          {tab === "form" ? <FormTab doc={doc} /> : <RawTab raw={raw} setRaw={setRaw} />}
+          {tab === "form" ? (
+            <FormTab doc={doc} />
+          ) : (
+            <RawTab raw={raw} setRaw={setRaw} onRawDoc={onRawDoc} />
+          )}
         </div>
       </div>
     </ChecksContext.Provider>

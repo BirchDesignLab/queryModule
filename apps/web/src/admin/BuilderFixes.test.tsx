@@ -121,3 +121,34 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
     expect(within(screen.getByRole("tablist")).getAllByRole("tab")).toHaveLength(2);
   });
 });
+
+describe("config builder wave-critic fixes (I1, I2)", () => {
+  it("I1: typing in Raw JSON keeps the user's text (a new blank line stays)", async () => {
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const area = screen.getByRole("textbox", { name: "Draft JSON" }) as HTMLTextAreaElement;
+    area.setSelectionRange(1, 1);
+    await t.user.type(area, "{Enter}", {
+      initialSelectionStart: 1,
+      initialSelectionEnd: 1,
+    });
+    await waitFor(() => expect(area.value.startsWith("{\n\n")).toBe(true));
+  });
+
+  it("I2: a form edit made while Raw JSON is broken replaces the broken text, so no edit is lost", async () => {
+    const t = await openBuilder();
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const area = screen.getByRole("textbox", { name: "Draft JSON" });
+    await t.user.click(area);
+    await t.user.keyboard("{Control>}{End}{/Control}xx");
+    await t.user.click(screen.getByRole("tab", { name: "Form" }));
+    await openSection(t, "terminal");
+    const input = await screen.findByLabelText("terminal.delimiter");
+    await t.user.clear(input);
+    await t.user.type(input, ",");
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const text = (screen.getByRole("textbox", { name: "Draft JSON" }) as HTMLTextAreaElement).value;
+    expect(JSON.parse(text).terminal).toEqual({ delimiter: "," });
+    expect(screen.getByTestId("draft-summary")).not.toHaveTextContent("does not parse");
+  });
+});
