@@ -65,3 +65,4 @@ export type {
   SignOutMarker,
 } from "./session/session-controller.js";
 export { createSessionController } from "./session/session-controller.js";
+export { terminalErrorText } from "./terminal/messages.js";
