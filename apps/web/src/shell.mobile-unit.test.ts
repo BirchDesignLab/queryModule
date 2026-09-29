@@ -11,4 +11,13 @@ describe("UX-002 compact top bar in the mobile-unit layout (spec 6.3 v1 subset)"
     expect(rule).toMatch(/padding:/);
     expect(rule).not.toMatch(/min-height|height:|font-size/);
   });
+
+  it("the bar's buttons and selects are 48 px targets, above the dense 36 px of the dispatch bar", () => {
+    const rule =
+      css.match(
+        /\.qm-app-header--compact\s+(?:\.qm-button|:where\([^)]*\))[^{]*\{([^}]*)\}/,
+      )?.[1] ?? "";
+    expect(rule).toMatch(/min-height:\s*var\(--qm-target-min\)/);
+    expect(rule).toMatch(/min-width:\s*var\(--qm-target-min\)/);
+  });
 });

@@ -2,7 +2,7 @@
 
 Status: approved 09-29-26 as the design target (developer, via the checker). No product code changes with this document.
 Mockup: clickable, private Artifact https://claude.ai/artifact/9eV85kHA7ZxDeupDfiz9Ys (not in the repo: Biome lints HTML, and the mockup is prototype code, not product code).
-Contrast proof: `scripts/design/contrast-check.ts` (`pnpm tsx scripts/design/contrast-check.ts`, exits 1 on any failing pair).
+Contrast proof: `CONTRAST_PAIRS` in `packages/tokens/src/contrast.ts`, checked in every mode by `packages/tokens/src/tokens.test.ts` (the proposal script `scripts/design/contrast-check.ts` was deleted when D0.1 moved the palette into the tokens package).
 
 ## Why
 

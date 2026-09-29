@@ -1,3 +1,62 @@
+/* IBM Plex, self-hosted (OFL 1.1, ./fonts/OFL.txt; scripts/fonts/fetch-plex.sh). Vite bundles each file
+   under /assets/, the only static path the API serves; no font host is contacted at runtime. Latin-1
+   subsets; the token font stacks end in a system face (packages/tokens). */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/IBMPlexSans-Regular-Latin1.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/IBMPlexSans-Medium-Latin1.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/IBMPlexSans-SemiBold-Latin1.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/IBMPlexSans-Italic-Latin1.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans Condensed";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/IBMPlexSansCondensed-SemiBold-Latin1.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/IBMPlexMono-Regular-Latin1.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2");
+}
+
 body {
   margin: 0;
   background: var(--qm-color-surface-base);
@@ -134,6 +193,13 @@ main[tabindex="-1"]:focus {
 /* Mobile-unit layout: a shorter bar; its controls keep their 48 px targets (spec 6.3 subset). */
 .qm-app-header--compact {
   padding: var(--qm-space-1) var(--qm-space-2);
+}
+
+/* Dispatch controls are the dense 36 px; the officer's bar keeps 48 px targets (spec 6.3). */
+.qm-app-header--compact .qm-button,
+.qm-app-header--compact .qm-select {
+  min-height: var(--qm-target-min);
+  min-width: var(--qm-target-min);
 }
 
 .qm-app-header__status:hover {

@@ -26,6 +26,49 @@ export interface ContrastPair {
   use: string;
 }
 
+type Surface = ColorTokenName;
+const SURFACES: readonly Surface[] = [
+  "color.surface.sunken",
+  "color.surface.base",
+  "color.surface.raised",
+  "color.surface.overlay",
+];
+/** Reading surfaces: where accent text, error text and status text sit. */
+const READING: readonly Surface[] = ["color.surface.base", "color.surface.raised"];
+
+/**
+ * The design-system pairs (docs/design/2026-09-29-visual-system.md): 7:1 body text on every
+ * surface, 4.5:1 secondary text, 3:1 non-text edges and rings. The ring sits outside a 2 px gap,
+ * so its neighbour is always a surface, never a button fill.
+ */
+function designSystemPairs(): ContrastPair[] {
+  const pair = (fg: ColorTokenName, bg: ColorTokenName, min: number, use: string) => ({
+    fg,
+    bg,
+    min,
+    use,
+  });
+  return [
+    ...SURFACES.filter((bg) => bg !== "color.surface.base" && bg !== "color.surface.raised").map(
+      (bg) => pair("color.text.body", bg, 7, "body text on every surface"),
+    ),
+    pair("color.text.body", "color.accent.subtle", 7, "selected row, pressed chip"),
+    pair("color.accent", "color.accent.subtle", 4.5, "type code on a pressed quick-access button"),
+    pair("color.text.muted", "color.accent.subtle", 4.5, "timeout on a checked source chip"),
+    ...SURFACES.map((bg) => pair("color.text.muted", bg, 4.5, "secondary text (dispatch only)")),
+    pair("color.accent.onFill", "color.accent.fill", 4.5, "primary button label"),
+    ...SURFACES.filter((bg) => bg !== "color.surface.base").map((bg) =>
+      pair("color.border", bg, 3, "control edge (non-text)"),
+    ),
+    ...SURFACES.filter((bg) => bg !== "color.surface.base").map((bg) =>
+      pair("focus.ring", bg, 3, "focus ring (non-text)"),
+    ),
+    ...READING.map((bg) => pair("field.required", bg, 4.5, "error text, required mark")),
+    pair("field.required", "color.accent.subtle", 4.5, "danger button on hover"),
+    ...READING.map((bg) => pair("color.status.ok", bg, 4.5, "connected, acknowledged")),
+  ];
+}
+
 export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   {
     fg: "color.text.body",
@@ -72,6 +115,7 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
     min: 3,
     use: "control and badge edge (non-text)",
   },
+  ...designSystemPairs(),
 ];
 
 /** Pairs below target in a mode, with optional site overrides (SiteConfig.theme.tokens) applied. */

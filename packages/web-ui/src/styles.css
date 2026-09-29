@@ -1,3 +1,6 @@
+/* Query Module primitives (design system D0.3, docs/design/2026-09-29-visual-system.md). Tokens only
+   (spec 6.5). Density follows the persona layout, never the width (spec 6.1): dispatch and admin use
+   the dense 36 px controls; .qm-layout--mobile-unit uses 56 px controls and 48 px targets. */
 .qm-page {
   max-width: 40rem;
   padding: var(--qm-space-4);
@@ -11,22 +14,24 @@ a {
 nav a {
   display: inline-flex;
   align-items: center;
-  min-height: var(--qm-target-min);
+  min-height: var(--qm-control-height-dense);
 }
 
 h1 {
   font-size: var(--qm-type-heading-size);
 }
 
+/* Fields */
 .qm-field {
   display: flex;
   flex-direction: column;
   gap: var(--qm-space-1);
-  margin-block-end: var(--qm-space-4);
+  margin-block-end: var(--qm-space-3);
 }
 
 .qm-field__label {
-  font-weight: 600;
+  font-size: var(--qm-type-size-sm);
+  font-weight: 500;
 }
 
 .qm-field__required-mark {
@@ -35,43 +40,84 @@ h1 {
 
 .qm-field__input,
 .qm-select {
-  min-height: var(--qm-target-min);
-  padding: var(--qm-space-2) var(--qm-space-3);
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  min-height: var(--qm-control-height-dense);
+  padding: var(--qm-space-1) var(--qm-space-3);
   border: var(--qm-border-width) solid var(--qm-color-border);
-  border-radius: var(--qm-radius-sm);
-  background: var(--qm-color-surface-raised);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-base);
   color: var(--qm-color-text-body);
   font: inherit;
+  font-size: var(--qm-type-size-md);
+  transition: border-color var(--qm-motion-duration-fast);
 }
 
+.qm-field__input:hover,
+.qm-select:hover {
+  border-color: var(--qm-color-text-muted);
+}
+
+.qm-field__input[readonly] {
+  border-style: dashed;
+  background: var(--qm-color-surface-raised);
+}
+
+/* E1: the ring is a 2 px outline offset outside the control; an invalid edge sits inside it, so both
+   show together. Inputs and selects take the ring on :focus too (programmatic focus after a blocked
+   submit shows it, not only keyboard focus). */
+.qm-field__input:focus,
 .qm-field__input:focus-visible,
+.qm-select:focus,
 .qm-select:focus-visible,
 .qm-checkbox input:focus-visible {
   outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
   outline-offset: var(--qm-focus-ring-offset);
 }
 
+/* Headings, sections and the page that take focus for orientation are not controls: no ring around
+   them. Controls keep the ring, including on programmatic focus (E1). */
+:where(h1, h2, h3, h4, h5, h6, section, main)[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Read-back data (plates, VINs, commands) is monospace so 0/O and 1/I differ. */
+[data-terminal] .qm-field__input {
+  font-family: var(--qm-type-family-data);
+}
+
+/* The "Default" tag: a small condensed uppercase pill, not a placeholder or a disabled look. */
 .qm-field__tag {
   align-self: flex-start;
+  padding: 0 var(--qm-space-2);
+  border-radius: var(--qm-radius-sm);
+  background: var(--qm-color-accent-subtle);
   color: var(--qm-color-text-body);
-  font-size: var(--qm-type-body-size);
-  font-style: italic;
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .qm-checkbox {
   display: flex;
   align-items: center;
   gap: var(--qm-space-2);
-  min-height: var(--qm-target-min);
+  min-height: var(--qm-control-height-dense);
 }
 
 .qm-checkbox input {
-  width: var(--qm-target-min);
-  height: var(--qm-target-min);
+  width: var(--qm-space-6);
+  height: var(--qm-space-6);
+  accent-color: var(--qm-color-accent);
 }
 
+/* Invalid: a 2 px required edge inside the control (1 px border plus a 1 px inset shadow). */
 .qm-field__input[aria-invalid="true"] {
   border-color: var(--qm-field-required);
+  box-shadow: inset 0 0 0 var(--qm-border-width) var(--qm-field-required);
 }
 
 .qm-select[aria-invalid="true"],
@@ -79,22 +125,33 @@ h1 {
   border-color: var(--qm-field-required);
 }
 
-/* A native checkbox ignores border-color, so the cue is an outline until it is focused. */
-.qm-checkbox input[aria-invalid="true"]:not(:focus-visible) {
-  outline: var(--qm-border-width) solid var(--qm-field-required);
-  outline-offset: var(--qm-focus-ring-offset);
+.qm-select[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 var(--qm-border-width) var(--qm-field-required);
+}
+
+/* A native checkbox ignores border-color: the cue is a 2 px shadow hugging the box. The focus ring
+   is an outline 2 px further out, so both show together (E1). */
+.qm-checkbox input[aria-invalid="true"] {
+  box-shadow: 0 0 0 calc(var(--qm-border-width) * 2) var(--qm-field-required);
 }
 
 .qm-field__description {
   margin: 0;
-  color: var(--qm-color-text-body);
-  font-size: var(--qm-type-body-size);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
 }
 
 .qm-field__error,
 .qm-form-error {
   margin: 0;
   color: var(--qm-field-required);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* The error icon is decorative (empty alt text); the message is the text. */
+.qm-field__error::before {
+  content: "\26A0\FE0E" / "";
+  margin-inline-end: var(--qm-space-1);
 }
 
 .qm-form-errors {
@@ -102,21 +159,53 @@ h1 {
   padding-inline-start: var(--qm-space-4);
 }
 
+/* Buttons: primary (accent fill), secondary, ghost, danger. aria-disabled stays focusable. */
 .qm-button {
-  min-height: var(--qm-target-min);
-  min-width: var(--qm-target-min);
-  padding: var(--qm-space-2) var(--qm-space-4);
-  border: var(--qm-border-width) solid var(--qm-color-accent);
-  border-radius: var(--qm-radius-sm);
-  background: var(--qm-color-accent);
-  color: var(--qm-color-surface-base);
+  min-height: var(--qm-control-height-dense);
+  min-width: var(--qm-control-height-dense);
+  padding: var(--qm-space-1) var(--qm-space-4);
+  border: var(--qm-border-width) solid var(--qm-color-accent-fill);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-accent-fill);
+  color: var(--qm-color-accent-onFill);
   font: inherit;
+  font-size: var(--qm-type-size-md);
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color var(--qm-motion-duration-fast);
+  transition:
+    background-color var(--qm-motion-duration-fast),
+    border-color var(--qm-motion-duration-fast);
 }
 
-.qm-button[aria-disabled="true"] {
-  border-style: dashed;
+.qm-button--secondary {
+  border-color: var(--qm-color-border);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+}
+
+.qm-button--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qm-color-accent);
+}
+
+.qm-button--danger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qm-field-required);
+}
+
+.qm-button--secondary:hover,
+.qm-button--ghost:hover,
+.qm-button--danger:hover {
+  background: var(--qm-color-accent-subtle);
+}
+
+.qm-button[aria-disabled="true"],
+.qm-button:disabled {
+  border: var(--qm-border-width) dashed var(--qm-color-border);
+  background: transparent;
+  color: var(--qm-color-text-muted);
   cursor: not-allowed;
 }
 
@@ -126,25 +215,144 @@ h1 {
   color: var(--qm-color-accent);
 }
 
+/* Segmented control: aria-pressed buttons in a sunken track (form or terminal, theme, persona). */
+.qm-seg {
+  display: inline-flex;
+  gap: var(--qm-space-1);
+  padding: var(--qm-space-1);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-sunken);
+}
+
+.qm-seg > button {
+  min-height: calc(var(--qm-control-height-dense) - var(--qm-space-2));
+  padding: 0 var(--qm-space-3);
+  border: var(--qm-border-width) solid transparent;
+  border-radius: var(--qm-radius-sm);
+  background: transparent;
+  color: var(--qm-color-text-body);
+  font: inherit;
+  font-size: var(--qm-type-size-md);
+  cursor: pointer;
+}
+
+.qm-seg > button[aria-pressed="true"] {
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
+  font-weight: 600;
+}
+
+/* Source chips: a checkbox inside a bordered label; checked fills with accent.subtle. One ring, on
+   the chip (E1): the checkbox inside draws none. */
+.qm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  min-height: var(--qm-control-height-dense);
+  padding: 0 var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-base);
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-size-md);
+  cursor: pointer;
+}
+
+.qm-chip:has(input:checked) {
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
+}
+
+.qm-chip:has(input:focus-visible) {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
+.qm-chip input:focus-visible {
+  outline: none;
+}
+
+.qm-chip__meta {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
+}
+
+/* Badges: condensed uppercase text. Severity badges use the severity tokens; status badges are outlined. */
+.qm-badge {
+  display: inline-block;
+  padding: 0 var(--qm-space-2);
+  border: var(--qm-border-width) solid transparent;
+  border-radius: var(--qm-radius-sm);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.qm-badge--critical {
+  background: var(--qm-color-severity-critical-bg);
+  color: var(--qm-color-severity-critical-fg);
+}
+
+.qm-badge--warning {
+  background: var(--qm-color-severity-warning-bg);
+  color: var(--qm-color-severity-warning-fg);
+}
+
+.qm-badge--info {
+  background: var(--qm-color-severity-info-bg);
+  color: var(--qm-color-severity-info-fg);
+}
+
+.qm-badge--status {
+  border-color: var(--qm-color-border);
+  color: var(--qm-color-text-body);
+}
+
+.qm-badge--ok {
+  border-color: var(--qm-color-status-ok);
+  color: var(--qm-color-status-ok);
+}
+
+/* Tags (Default, Shown): small and static; a revealed field keeps its Shown tag under reduced motion. */
+.qm-tag {
+  display: inline-block;
+  padding: 0 var(--qm-space-2);
+  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-sm);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-xs);
+}
+
+.qm-kbd {
+  padding: 0 var(--qm-space-2);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-sm);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
+}
+
 /* Query panel (spec 6.2). min-inline-size: 0 lets a fieldset shrink below its widest control at 320px. */
 .qm-query-form__section {
   min-inline-size: 0;
   margin: 0 0 var(--qm-space-4);
   padding: var(--qm-space-3) var(--qm-space-4);
-  border: var(--qm-border-width) solid var(--qm-color-border);
-  border-radius: var(--qm-radius-md);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
 }
 
 .qm-query-form__section legend {
   padding-inline: var(--qm-space-2);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
   font-weight: 600;
-}
-
-.qm-field__input,
-.qm-select {
-  min-inline-size: 0;
-  max-inline-size: 100%;
-  box-sizing: border-box;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .qm-quick-access {
@@ -155,20 +363,21 @@ h1 {
 }
 
 .qm-quick-access__button {
-  min-height: var(--qm-target-min);
-  min-width: var(--qm-target-min);
-  padding: var(--qm-space-2) var(--qm-space-4);
-  border: var(--qm-border-width) solid var(--qm-color-accent);
-  border-radius: var(--qm-radius-sm);
+  min-height: var(--qm-control-height-dense);
+  min-width: var(--qm-control-height-dense);
+  padding: var(--qm-space-1) var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
   background: var(--qm-color-surface-raised);
   color: var(--qm-color-text-body);
   font: inherit;
+  font-size: var(--qm-type-size-md);
   cursor: pointer;
 }
 
 .qm-quick-access__button[aria-pressed="true"] {
-  background: var(--qm-color-accent);
-  color: var(--qm-color-surface-base);
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
   font-weight: 600;
 }
 
@@ -177,9 +386,9 @@ h1 {
   max-inline-size: 100%;
   box-sizing: border-box;
   padding: var(--qm-space-4);
-  border: var(--qm-border-width) solid var(--qm-color-accent);
-  border-radius: var(--qm-radius-sm);
-  background: var(--qm-color-surface-raised);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-overlay);
   color: var(--qm-color-text-body);
 }
 
@@ -192,10 +401,12 @@ h1 {
 }
 
 .qm-shortcut-sheet__keys kbd {
-  padding: var(--qm-space-1) var(--qm-space-2);
-  border: var(--qm-border-width) solid var(--qm-color-accent);
+  padding: 0 var(--qm-space-2);
+  border: var(--qm-border-width) solid var(--qm-color-border);
   border-radius: var(--qm-radius-sm);
-  font-family: inherit;
+  background: var(--qm-color-surface-raised);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
 }
 
 /* A full-width button (the sign-in submit). */
@@ -208,8 +419,9 @@ h1 {
 .qm-ack {
   margin-block-start: var(--qm-space-4);
   padding: var(--qm-space-3) var(--qm-space-4);
-  border: var(--qm-border-width) solid var(--qm-color-border);
-  border-radius: var(--qm-radius-md);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-raised);
 }
 
 .qm-ack__heading {
@@ -233,8 +445,8 @@ h1 {
 }
 
 /* Mobile-unit layout, the officer on a vehicle laptop (spec 6.3, v1 subset pulled forward from
-   M4 P1): single column, quick access first, 16 px text and 48x48 targets. The persona selects
-   the layout only (spec 6.1). */
+   M4 P1): single column, quick access first, 16 px text, 56 px controls and 48x48 targets. The
+   persona selects the layout only (spec 6.1). Nothing the officer reads is muted or small. */
 .qm-layout--mobile-unit {
   font-size: var(--qm-type-body-size);
 }
@@ -251,6 +463,51 @@ h1 {
 .qm-layout--mobile-unit input[type="radio"] {
   width: var(--qm-target-min);
   height: var(--qm-target-min);
+}
+
+.qm-layout--mobile-unit .qm-field__input,
+.qm-layout--mobile-unit .qm-select {
+  min-height: var(--qm-control-height-touch);
+  font-size: var(--qm-type-size-xl);
+}
+
+.qm-layout--mobile-unit .qm-button {
+  min-height: var(--qm-control-height-touch);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-quick-access__button {
+  min-height: var(--qm-control-height-touch);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-seg > button {
+  min-height: var(--qm-target-min);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-chip {
+  min-height: var(--qm-target-min);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-field__label,
+.qm-layout--mobile-unit .qm-field__error,
+.qm-layout--mobile-unit .qm-form-error {
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-field__description,
+.qm-layout--mobile-unit .qm-tag,
+.qm-layout--mobile-unit .qm-field__tag,
+.qm-layout--mobile-unit .qm-chip__meta {
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+/* A badge keeps its own foreground and background pair (severity tokens); only its size grows. */
+.qm-layout--mobile-unit .qm-badge {
+  font-size: var(--qm-type-body-size);
 }
 
 .qm-layout--mobile-unit .qm-quick-access button {
