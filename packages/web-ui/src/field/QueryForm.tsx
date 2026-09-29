@@ -18,6 +18,8 @@ export interface QueryFormProps {
   onSubmitAttempt(): void;
   t: Translator["t"];
   idPrefix: string;
+  /** Fields rendered elsewhere (the type bar, ADR-0010): not repeated here; an emptied section is not rendered. */
+  excludeKeys?: ReadonlySet<string>;
   /** Source checkboxes and the submit button. */
   children?: ReactNode;
 }
@@ -36,16 +38,32 @@ export function fieldErrors(s: FormState): Map<string, ValidationError> {
 }
 
 /** Visible fields in visible sections with at least one visible field: the ones QueryForm renders. */
-function renderedSections(s: FormState) {
+function renderedSections(s: FormState, excludeKeys?: ReadonlySet<string>) {
   return s.sections
     .filter((section) => section.visible)
     .map((section) => ({
       section,
       fields: s.fields
-        .filter((f) => f.visible && f.section === section.key)
+        .filter((f) => f.visible && f.section === section.key && !excludeKeys?.has(f.key))
         .sort((a, b) => a.order - b.order),
     }))
     .filter(({ fields }) => fields.length > 0);
+}
+
+/** Resolved error message per field key, with the field label; the same text QueryForm shows. */
+export function fieldErrorMessages(s: FormState, t: Translator["t"]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [key, error] of fieldErrors(s)) {
+    const field = s.fields.find((f) => f.key === key);
+    out.set(
+      key,
+      t(
+        error.key,
+        field === undefined ? error.params : { ...error.params, label: t(field.labelKey) },
+      ),
+    );
+  }
+  return out;
 }
 
 /**
@@ -109,10 +127,11 @@ export function QueryForm({
   onSubmitAttempt,
   t,
   idPrefix,
+  excludeKeys,
   children,
 }: QueryFormProps): JSX.Element {
   const errors = showErrors ? fieldErrors(formState) : new Map<string, ValidationError>();
-  const sections = renderedSections(formState);
+  const sections = renderedSections(formState, excludeKeys);
   const formErrors = showErrors ? formLevelErrors(formState) : [];
   const labelOf = (error: ValidationError): string | undefined => {
     const field = formState.fields.find((f) => f.key === error.params?.field);

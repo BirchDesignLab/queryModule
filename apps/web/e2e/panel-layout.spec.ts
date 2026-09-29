@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { chooseQueryType, signIn } from "./helpers.js";
 
 const MODES = ["day", "night", "redShift"] as const;
 const MIN_TARGET = 24;
@@ -8,7 +8,7 @@ const MIN_TARGET = 24;
 async function blockedVehiclePanel(page: Page, mode: (typeof MODES)[number]): Promise<void> {
   await page.getByLabel("Theme").selectOption(mode);
   await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
-  await page.getByLabel("Query type").selectOption("VEH");
+  await chooseQueryType(page, "VEH");
   await page.getByLabel("State", { exact: true }).selectOption("OK");
   await expect(page.getByLabel("Plate type")).toBeVisible();
   await page.getByRole("button", { name: "Submit" }).click();
@@ -104,7 +104,7 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
   page,
 }) => {
   await signIn(page);
-  await page.getByLabel("Query type").selectOption("PER");
+  await chooseQueryType(page, "PER");
   const order = await page.evaluate(() => {
     const focusable = [
       ...document.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea"),
@@ -148,7 +148,7 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
   await expect(page.getByLabel("Last name")).toHaveAttribute("aria-invalid", "true");
   // Sentinel instead of a fixed wait: a later, distinct announcement proves every announcement
   // from the Enter press has landed before the count is checked.
-  await page.getByLabel("Query type").selectOption("VEH");
+  await chooseQueryType(page, "VEH");
   await page.getByLabel("State", { exact: true }).selectOption("OK");
   await expect
     .poll(() => attempts.some((a) => a.includes("Plate type is now shown and required.")))

@@ -107,6 +107,7 @@
   "form.fieldRevealed": "{label} is now shown.",
   "form.fieldRevealedRequired": "{label} is now shown and required.",
   "form.queryType": "Query type",
+  "form.otherQueryTypes": "Other query types",
   "form.quickAccess": "Quick access",
   "form.sources": "Sources",
   "form.submit": "Submit",

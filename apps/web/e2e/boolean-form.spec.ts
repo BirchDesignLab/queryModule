@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Locator, Page, Route } from "@playwright/test";
 import { SiteConfigSchema, toClientSiteConfig } from "@querymodule/core/config";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { hexToRgb, signIn } from "./helpers.js";
+import { chooseQueryType, hexToRgb, signIn } from "./helpers.js";
 
 const read = (name: string): unknown =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./sites/${name}`, import.meta.url)), "utf8"));
@@ -34,7 +34,10 @@ test.beforeEach(async ({ page }) => {
 /** CHK with a bad reference code hidden by a rule, so its error has no field on screen. */
 async function blockedForm(page: Page): Promise<Locator> {
   await signIn(page);
-  await page.getByLabel("Query type").selectOption("CHK");
+  await chooseQueryType(page, "CHK");
+  // The keyboard pick above makes a later script focus match :focus-visible, whose ring would hide
+  // the invalid outline this spec checks. A pointer click resets the modality, as the old select did.
+  await page.getByRole("heading", { name: "Query Module", exact: true }).click();
   const agree = page.getByLabel("Confirm subject details");
   await expect(agree).toHaveAttribute("type", "checkbox");
   await expect(agree).toHaveAttribute("aria-required", "true");

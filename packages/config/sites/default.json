@@ -303,6 +303,6 @@
       ]
     }
   ],
-  "quickAccess": ["VEH", "PER", "PRO"],
+  "quickAccess": ["VEH", "PER", "PRO", "WNT"],
   "theme": { "defaultMode": "auto", "auto": "os" }
 }

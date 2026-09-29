@@ -1060,6 +1060,8 @@ Covers UX-001, UX-012, UX-014, BR-002, PLT-006.
 
 Phase 1 screens: login (standalone mode only); query panel (query-type selector, form or terminal toggle, source checkboxes, quick-access bar, FR-007); results list; credentials settings; preferences (persona override, layout orientation, terminal layout, theme mode, locale); admin audit viewer. M3 adds the delegation screens below; M4 the mobile home with quick queries (6.10). A screen whose `features` flag is off is not rendered (5.8).
 
+Overridden by ADR-0010.
+
 **Generic field renderer.** Forms render only from core's `FormState` (4.3): fields in `order`, grouped by section under `sectionLabelKey`, picklist options from the filtered enabled options, labels from `labelKey`. No per-query-type UI code exists (BR-001). A field with `isDefault` shows a text tag "default"; typing makes it a user value.
 
 - Required indicator: label text, an asterisk (`aria-hidden`), visually hidden "required", and `aria-required="true"` on the input. Never colour alone. Styled by the `field.required` token (6.5).
