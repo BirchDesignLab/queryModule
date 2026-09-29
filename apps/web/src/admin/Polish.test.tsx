@@ -34,6 +34,9 @@ describe("builder polish (#388)", () => {
     server.events.on("request:start", onRequest);
     asImplementer();
     renderRoot({ path: "/admin/config" });
+    // The fetch count is under test, not first-render speed: wait for the builder with a normal
+    // findBy (the first type's editor renders on open, A-D1), then for its checks.
+    await screen.findByRole("navigation", { name: "Configuration items" });
     await waitFor(() =>
       expect(screen.getByTestId("draft-summary")).toHaveTextContent(/Draft checks: \d+ errors/),
     );

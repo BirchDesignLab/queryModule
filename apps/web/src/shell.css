@@ -690,6 +690,7 @@ main[tabindex="-1"]:focus {
 
 .qm-admin__form :where(legend) {
   padding: 0;
+  font-size: var(--qm-type-size-md);
   font-weight: 600;
 }
 
@@ -702,6 +703,105 @@ main[tabindex="-1"]:focus {
   padding: var(--qm-space-2) 0;
   font-weight: 500;
   cursor: pointer;
+}
+
+/* Editor controls (A-D1, design lead 09-29-26): the D0 control look in every mode, no native white
+   inputs (spec 6.5). CSS only; the editors' markup and legends stay as they are until A3. */
+.qm-builder__editor :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: calc(var(--qm-space-12) * 10);
+  min-height: var(--qm-control-height-dense);
+  padding: var(--qm-space-1) var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-base);
+  color: var(--qm-color-text-body);
+  font: inherit;
+  font-size: var(--qm-type-size-md);
+}
+
+.qm-builder__editor textarea {
+  max-inline-size: none;
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-builder__editor :where(input, select, textarea):hover {
+  border-color: var(--qm-color-text-muted);
+}
+
+/* E1, as D0: the ring outside on focus (programmatic too), the invalid edge inside. */
+.qm-builder__editor :where(input, select, textarea):focus {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
+.qm-builder__editor :where(input:not([type="checkbox"]), select, textarea)[aria-invalid="true"] {
+  border-color: var(--qm-field-required);
+  box-shadow: inset 0 0 0 var(--qm-border-width) var(--qm-field-required);
+}
+
+.qm-builder__editor input[type="checkbox"] {
+  inline-size: var(--qm-space-4);
+  block-size: var(--qm-space-4);
+  margin: 0;
+  accent-color: var(--qm-color-accent);
+}
+
+.qm-builder__editor input[type="checkbox"][aria-invalid="true"] {
+  box-shadow: 0 0 0 calc(var(--qm-border-width) * 2) var(--qm-field-required);
+}
+
+/* A control row: the label stacks above its control; a checkbox sits before its label. */
+.qm-admin__form :where(div):has(> label:first-child) {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--qm-space-1) * 1.5);
+  margin-block: var(--qm-space-3);
+}
+
+.qm-admin__form :where(div):has(> input[type="checkbox"]:first-child) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2);
+  margin-block: var(--qm-space-3);
+}
+
+.qm-admin__form :where(label) {
+  font-size: var(--qm-type-size-sm);
+  font-weight: 500;
+}
+
+/* Editor buttons: Add is secondary, Move is ghost, Remove is danger; no accent fill in the editor
+   (primary stays for Publish). */
+.qm-admin__form .qm-button {
+  border-color: var(--qm-color-border);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+  font-weight: 500;
+}
+
+.qm-admin__form .qm-button:is([data-role="up"], [data-role="down"]) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qm-color-accent);
+}
+
+.qm-admin__form .qm-button:is([data-role="remove"], [aria-label^="Remove"], .qm-button--danger) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--qm-field-required);
+}
+
+.qm-admin__form .qm-button:hover {
+  background: var(--qm-color-accent-subtle);
+}
+
+.qm-admin__form .qm-button:disabled {
+  border: var(--qm-border-width) dashed var(--qm-color-border);
+  background: transparent;
+  color: var(--qm-color-text-muted);
 }
 
 /* Builder diagnostics and item controls (issue 388): level text leads each message; errors use the
