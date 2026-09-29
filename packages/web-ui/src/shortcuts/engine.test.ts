@@ -207,4 +207,40 @@ describe("FR-007 engine edges (#313)", () => {
       action: "inPanel",
     });
   });
+
+  describe("an inner chord prefix against an outer full match (#319)", () => {
+    const en = () =>
+      createShortcutEngine({
+        panelKey: [{ keys: "KeyG", context: "panel" }],
+        resultsChord: [{ keys: "KeyG KeyX", context: "results" }],
+      });
+    const inResults = { inTextInput: false, contexts: ["results", "panel", "global"] } as const;
+    const inPanel = { inTextInput: false, contexts: ["panel", "global"] } as const;
+
+    it("focus in the inner region: the inner chord is reachable; the outer single key does not fire first", () => {
+      const x = en();
+      expect(x.handle("KeyG", inResults, 0)).toEqual({ kind: "pending" });
+      expect(x.handle("KeyX", inResults, 10)).toEqual({ kind: "action", action: "resultsChord" });
+    });
+
+    it("focus only in the outer region: the outer single key still fires at once", () => {
+      expect(en().handle("KeyG", inPanel, 0)).toEqual({ kind: "action", action: "panelKey" });
+    });
+
+    it("the reverse nesting: an inner full match beats an outer chord prefix", () => {
+      const x = createShortcutEngine({
+        resultsKey: [{ keys: "KeyG", context: "results" }],
+        panelChord: [{ keys: "KeyG KeyX", context: "panel" }],
+      });
+      expect(x.handle("KeyG", inResults, 0)).toEqual({ kind: "action", action: "resultsKey" });
+    });
+
+    it("a global chord prefix does not delay a region's full match", () => {
+      const x = createShortcutEngine({
+        panelKey: [{ keys: "KeyG", context: "panel" }],
+        globalChord: [{ keys: "KeyG KeyR", context: "global" }],
+      });
+      expect(x.handle("KeyG", inPanel, 0)).toEqual({ kind: "action", action: "panelKey" });
+    });
+  });
 });
