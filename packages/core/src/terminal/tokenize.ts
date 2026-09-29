@@ -1,15 +1,6 @@
-import type { CommandDef } from "../config/schema";
-import { FIELD_KEY_PATTERN } from "../contracts/primitives";
-import type { ValidationError } from "../contracts/validation-error";
-import { findQueryType } from "../rules/compile";
-import type { TerminalConfig, TokenizeResult } from "./types";
-
-type Position = CommandDef["positions"][number];
-type RestPosition = Extract<Position, { rest: true }>;
-
-const fieldOf = (p: Position): string => (typeof p === "string" ? p : p.field);
-const isRest = (p: Position | undefined): p is RestPosition =>
-  typeof p === "object" && p.rest === true;
+import { FIELD_KEY_PATTERN, type ValidationError } from "../contracts/index.js";
+import { fieldOf, isRest, namedFieldReader } from "./positions.js";
+import type { TerminalConfig, TokenizeResult } from "./types.js";
 
 /** Spec 4.4. Pure; returns every value it could read and every error it found. */
 export function tokenize(config: TerminalConfig, input: string): TokenizeResult {
@@ -35,79 +26,83 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
   }
   out.commandCode = cmd.code;
   out.queryType = cmd.queryType;
-  const fields = findQueryType(config, cmd.queryType)?.fields ?? [];
-  const byLower = new Map(fields.map((f) => [f.key.toLowerCase(), f]));
   for (const [k, v] of Object.entries(cmd.presets ?? {})) {
     out.userValues[k] = String(v);
     out.presetKeys.push(k);
   }
   if (cut === -1) return out;
 
-  let remaining: string | null = text.slice(cut + d.length);
+  const named = namedFieldReader(config, cmd.queryType);
+  const parts = text.slice(cut + d.length).split(d);
+  const blank = (x: string) => x.trim() === "";
+  const lastFilled = parts.findLastIndex((x) => !blank(x));
   let pos = 0; // next CommandDef position
   let tokenNo = 0; // 1-based value token number
   let seenNamed = false;
-  let nonEmptyPositional = 0;
+  let positional = 0; // positional tokens before the first named one, interior empties included
   let overflow = false; // a non-empty token landed past the last position
   const restAt = cmd.positions.findIndex(isRest);
   // Before a rest position, only the tokens up to it are split: the remainder there is one
   // value (delimiters included), so a delimiter-only rest value is not a trailing empty.
-  const isTrailingEmpty = (token: string, rest: string | null) => {
-    if (token.trim() !== "") return false;
-    if (rest === null) return true;
-    const parts = rest.split(d);
-    const upTo = !seenNamed && restAt > pos ? restAt - pos - 1 : parts.length;
-    return (
-      parts.slice(0, upTo).every((x) => x.trim() === "") && parts.slice(upTo).join(d).trim() === ""
-    );
+  // Elsewhere a blank token is trailing when no later token is filled (one scan, linear).
+  const isTrailingEmpty = (i: number, token: string) => {
+    if (!blank(token)) return false;
+    if (seenNamed || restAt <= pos) return i > lastFilled;
+    const restStart = i + restAt - pos; // the part where the rest value begins
+    return parts.slice(i + 1, restStart).every(blank) && blank(parts.slice(restStart).join(d));
   };
+  // A position the command left empty does not take its field: a named token may fill it
+  // (spec 4.4, #296 ruling 2). A preset takes its field whatever its value.
   const taken = (k: string) =>
-    out.presetKeys.includes(k) || out.positionedKeys.includes(k) || out.namedKeys.includes(k);
-  while (remaining !== null) {
+    out.presetKeys.includes(k) ||
+    out.namedKeys.includes(k) ||
+    (out.positionedKeys.includes(k) && out.userValues[k] !== "");
+  for (const [i, token] of parts.entries()) {
     const p = cmd.positions[pos];
     if (!seenNamed && isRest(p)) {
-      // rest: the remainder verbatim, named tokens no longer read
-      if (remaining.trim() === "") break; // a trailing empty token
-      const value = remaining.trim();
-      out.userValues[p.field] = value;
-      out.positionedKeys.push(p.field);
-      nonEmptyPositional += 1;
+      // rest: the remainder verbatim, named tokens no longer read; a blank one is a trailing empty
+      const value = parts.slice(i).join(d).trim();
+      if (value !== "") {
+        out.userValues[p.field] = value;
+        out.positionedKeys.push(p.field);
+        positional += 1;
+      }
       break;
     }
-    const k = remaining.indexOf(d);
-    const token = k === -1 ? remaining : remaining.slice(0, k);
-    remaining = k === -1 ? null : remaining.slice(k + d.length);
-    if (isTrailingEmpty(token, remaining)) break;
+    if (isTrailingEmpty(i, token)) break;
     tokenNo += 1;
-    const eq = token.indexOf("=");
-    if (eq > 0) {
-      const name = token.slice(0, eq).trim();
-      const field = byLower.get(name.toLowerCase());
-      if (field !== undefined) {
-        const key = field.key;
-        if (taken(key)) {
-          out.errors.push({
-            key: "terminal.duplicateField",
-            params: { field: key, labelKey: field.labelKey },
-          });
-        } else {
-          out.userValues[key] = token.slice(eq + 1).trim();
-          out.namedKeys.push(key);
-        }
-        seenNamed = true;
-        continue;
+    // A blank token after a named token carries no value: skipped, no error (spec 4.4).
+    if (seenNamed && blank(token)) continue;
+    const field = named(token);
+    if (field !== undefined) {
+      const key = field.key;
+      if (taken(key)) {
+        out.errors.push({
+          key: "terminal.duplicateField",
+          params: { field: key, labelKey: field.labelKey },
+        });
+      } else {
+        out.userValues[key] = token.slice(token.indexOf("=") + 1).trim();
+        // the key now comes from the named token only: the key lists stay disjoint
+        out.positionedKeys = out.positionedKeys.filter((x) => x !== key);
+        out.namedKeys.push(key);
       }
-      if (seenNamed && FIELD_KEY_PATTERN.test(name)) {
-        out.errors.push({ key: "terminal.unknownField", params: { name } });
-        continue;
-      }
+      seenNamed = true;
+      continue;
     }
     if (seenNamed) {
-      out.errors.push({ key: "terminal.positionalAfterNamed", params: { position: tokenNo } });
+      // an identifier-shaped name that is no field key is unknownField (D-B2)
+      const eq = token.indexOf("=");
+      const name = eq > 0 ? token.slice(0, eq).trim() : "";
+      out.errors.push(
+        FIELD_KEY_PATTERN.test(name)
+          ? { key: "terminal.unknownField", params: { name } }
+          : { key: "terminal.positionalAfterNamed", params: { position: tokenNo } },
+      );
       continue;
     }
     const value = token.trim();
-    if (value !== "") nonEmptyPositional += 1;
+    positional += 1;
     if (p === undefined) {
       // an extra token past the last position: never dropped silently
       if (value !== "") overflow = true;
@@ -121,7 +116,7 @@ export function tokenize(config: TerminalConfig, input: string): TokenizeResult 
   if (overflow) {
     out.errors.push({
       key: "terminal.tooManyPositions",
-      params: { expected: cmd.positions.length, got: nonEmptyPositional },
+      params: { expected: cmd.positions.length, got: positional },
     });
   }
   return out;

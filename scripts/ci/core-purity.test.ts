@@ -199,3 +199,23 @@ describe("core purity: IO globals through a global object (#85)", () => {
       expect(findGlobalMemberAccess(src, names), src).not.toEqual([]);
   });
 });
+
+// #295 box 1 (carried to #294): test-only IO is allowed in __fixtures__, so the core purity
+// override exempts it instead of a biome-ignore per file.
+describe("core purity override scope (#295)", () => {
+  const biome = JSON.parse(readFileSync(resolve(root, "biome.json"), "utf8")) as {
+    overrides: { includes: string[] }[];
+  };
+  const core = biome.overrides.find((o) => o.includes.includes("packages/core/src/**"));
+
+  it("covers packages/core/src and exempts tests and __fixtures__", () => {
+    expect(core?.includes).toEqual(
+      expect.arrayContaining([
+        "packages/core/src/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/__fixtures__/**",
+      ]),
+    );
+  });
+});

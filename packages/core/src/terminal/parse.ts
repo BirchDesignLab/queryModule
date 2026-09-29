@@ -1,8 +1,8 @@
-import type { ValidationError } from "../contracts/validation-error";
-import { evaluateForm } from "../rules/evaluate-form";
-import type { EvaluateOptions } from "../rules/types";
-import { tokenize } from "./tokenize";
-import type { ParseResult, TerminalConfig } from "./types";
+import type { ValidationError } from "../contracts/index.js";
+import { type EvaluateOptions, evaluateForm } from "../rules/index.js";
+import { fieldOf } from "./positions.js";
+import { tokenize } from "./tokenize.js";
+import type { ParseResult, TerminalConfig } from "./types.js";
 
 /**
  * Spec 4.4. tokenize, then evaluateForm on the user values; every error from both.
@@ -19,9 +19,7 @@ export function parseCommand(
   if (t.queryType === undefined || cmd === undefined)
     return { userValues: t.userValues, errors: t.errors };
 
-  const positionOf = new Map(
-    cmd.positions.map((p, i) => [typeof p === "string" ? p : p.field, i + 1]),
-  );
+  const positionOf = new Map(cmd.positions.map((p, i) => [fieldOf(p), i + 1]));
   // Draft merge: an omitted or trailing-empty position writes an empty user value.
   const userValues = { ...t.userValues };
   for (const key of positionOf.keys()) userValues[key] ??= "";
@@ -42,11 +40,14 @@ export function parseCommand(
     if (!e.key.startsWith("validation.") || typeof field !== "string") return e;
     return { key: e.key, params: { ...e.params, ...fieldParams(field) } };
   };
-  // The form input is only this command's values, so every hidden value came from it.
-  const hidden: ValidationError[] = formState.hiddenWithValue.map((key) => ({
-    key: "terminal.valueForHiddenField",
-    params: fieldParams(key),
-  }));
+  // Only a key the user typed (positioned or named) raises it; a preset-only key never does.
+  const typed = new Set([...t.positionedKeys, ...t.namedKeys]);
+  const hidden: ValidationError[] = formState.hiddenWithValue
+    .filter((key) => typed.has(key))
+    .map((key) => ({
+      key: "terminal.valueForHiddenField",
+      params: fieldParams(key),
+    }));
 
   return {
     queryType: t.queryType,

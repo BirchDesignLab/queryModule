@@ -1,4 +1,3 @@
-// biome-ignore lint/style/noRestrictedImports: test-only IO; __fixtures__ is imported by tests only (plan: test-only IO allowed in __fixtures__).
 import { readFileSync } from "node:fs";
 import type { SiteConfig } from "../../config/index.js";
 import { mergeSiteOverlay, migrateConfig, SiteConfigSchema } from "../../config/index.js";
