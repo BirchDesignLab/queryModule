@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
+import { controlId } from "./controls.js";
 import { Section } from "./GenericForm.js";
 
 export function LabelOverlayEditor({
@@ -46,13 +47,13 @@ function LocaleLabels({
   const t = useT();
   const [key, setKey] = useState("");
   const [text, setText] = useState("");
-  const keyId = `${idPrefix}-label-key-${locale}`;
-  const textId = `${idPrefix}-label-text-${locale}`;
+  const keyId = controlId(idPrefix, ["labelKey", locale]);
+  const textId = controlId(idPrefix, ["labelNew", locale]);
   return (
     <fieldset>
       <legend>{locale}</legend>
       {Object.entries(entries).map(([k, v]) => {
-        const id = `${idPrefix}-label-${locale}-${k}`;
+        const id = controlId(idPrefix, ["label", locale, k]);
         return (
           <div key={k}>
             <label htmlFor={id}>{k}</label>{" "}

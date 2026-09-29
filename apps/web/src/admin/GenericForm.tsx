@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
+import { controlId, NumberControl } from "./controls.js";
 import { type PathSegment, toPointer } from "./draft.js";
 
 interface NodeEditorProps {
@@ -42,19 +43,19 @@ function ArrayEditor({
   const text = pathText(path);
   const checks = useContext(ChecksContext);
   const issues = issuesFor(checks, path);
-  const issuesId = `${idPrefix}-${text}-issues`;
+  const issuesId = `${controlId(idPrefix, path)}-issues`;
   const root = useRef<HTMLFieldSetElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   const reasonRef = useRef<HTMLSpanElement>(null);
   const [want, setWant] = useState<PendingFocus | null>(null);
-  const addReasonId = `${idPrefix}-${text}-add-reason`;
+  const addReasonId = `${controlId(idPrefix, path)}-add-reason`;
   const empty = items.length === 0;
   useEffect(() => {
     if (want === null) return;
     setWant(null);
     if (want.kind === "item") {
       const item = root.current?.querySelector<HTMLElement>(
-        `:scope > [data-item-path="${pathText([...path, want.index])}"]`,
+        `:scope > [data-item-path="${CSS.escape(pathText([...path, want.index]))}"]`,
       );
       const control = item?.querySelector<HTMLElement>("input, select, textarea, button");
       if (control !== undefined && control !== null) {
@@ -120,8 +121,9 @@ function ArrayEditor({
 
 /** The generic schema-driven form: one control per JSON leaf, labelled with its path. */
 export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps) {
+  const t = useT();
   const text = pathText(path);
-  const id = `${idPrefix}-${text}`;
+  const id = controlId(idPrefix, path);
   const checks = useContext(ChecksContext);
   const issues = issuesFor(checks, path);
   const issuesId = `${id}-issues`;
@@ -165,17 +167,14 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
   }
   if (typeof value === "number") {
     return (
-      <NumberEditor
-        id={id}
+      <NumberControl
+        idPrefix={idPrefix}
+        path={path}
         label={text}
         value={value}
         readOnly={isServerSideLeaf(path)}
-        invalid={invalid}
-        describedBy={describedBy}
-        onValue={(n) => onChange(path, n)}
-      >
-        <IssueMessages id={issuesId} issues={issues} />
-      </NumberEditor>
+        note={isServerSideLeaf(path) ? t("admin.config.serverSetting") : undefined}
+      />
     );
   }
   return (
@@ -190,55 +189,6 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
         onChange={(e) => onChange(path, e.target.value)}
       />
       <IssueMessages id={issuesId} issues={issues} />
-    </div>
-  );
-}
-
-/** A number control that keeps partial text ("", "-") until it parses (M1). */
-function NumberEditor({
-  id,
-  label,
-  value,
-  readOnly,
-  invalid,
-  describedBy,
-  onValue,
-  children,
-}: {
-  id: string;
-  label: string;
-  value: number;
-  readOnly: boolean;
-  invalid: boolean;
-  describedBy: string | undefined;
-  onValue(n: number): void;
-  children: React.ReactNode;
-}) {
-  const [text, setText] = useState(String(value));
-  useEffect(() => {
-    setText((current) =>
-      Number(current) === value && current.trim() !== "" ? current : String(value),
-    );
-  }, [value]);
-  return (
-    <div>
-      <label htmlFor={id}>{label}</label>{" "}
-      <input
-        id={id}
-        type="text"
-        inputMode="decimal"
-        value={text}
-        readOnly={readOnly}
-        aria-invalid={invalid}
-        aria-describedby={describedBy}
-        onChange={(e) => {
-          const next = e.target.value;
-          setText(next);
-          const n = Number(next);
-          if (next.trim() !== "" && Number.isFinite(n)) onValue(n);
-        }}
-      />
-      {children}
     </div>
   );
 }

@@ -5,6 +5,8 @@ import { ChecksContext, IssueMessages } from "./checks.js";
 import type { JsonObject, PathSegment } from "./draft.js";
 import { NodeEditor, Section } from "./GenericForm.js";
 import { LabelOverlayEditor } from "./LabelOverlay.js";
+import { PicklistsEditor } from "./PicklistEditor.js";
+import { QueryTypesEditor } from "./TypeEditors.js";
 
 export function FormTab({ doc }: { doc: JsonObject }) {
   const services = useServices();
@@ -24,7 +26,15 @@ export function FormTab({ doc }: { doc: JsonObject }) {
       <IssueMessages id={`${idPrefix}-root-issues`} issues={rootIssues} />
       {Object.entries(doc).map(([name, value]) => (
         <Section key={name} name={name}>
-          {() => <NodeEditor value={value} path={[name]} idPrefix={idPrefix} onChange={onChange} />}
+          {() =>
+            name === "queryTypes" ? (
+              <QueryTypesEditor value={value} idPrefix={idPrefix} />
+            ) : name === "picklists" ? (
+              <PicklistsEditor value={value} idPrefix={idPrefix} />
+            ) : (
+              <NodeEditor value={value} path={[name]} idPrefix={idPrefix} onChange={onChange} />
+            )
+          }
         </Section>
       ))}
       <LabelOverlayEditor locales={locales} idPrefix={idPrefix} />
