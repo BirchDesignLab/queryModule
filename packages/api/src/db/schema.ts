@@ -24,7 +24,7 @@ export const user = sqliteTable(
     image: text(),
     createdAt: ms().notNull(),
     updatedAt: ms().notNull(),
-    role: text({ enum: ["user", "trainingOfficer", "admin"] })
+    role: text({ enum: ["user", "trainingOfficer", "admin", "implementer"] })
       .notNull()
       .default("user"),
     disabledAt: integer(),

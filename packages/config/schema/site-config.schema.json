@@ -107,7 +107,8 @@
                     "enum": [
                       "user",
                       "trainingOfficer",
-                      "admin"
+                      "admin",
+                      "implementer"
                     ]
                   }
                 }
@@ -161,7 +162,8 @@
                     "enum": [
                       "user",
                       "trainingOfficer",
-                      "admin"
+                      "admin",
+                      "implementer"
                     ]
                   }
                 }
@@ -222,7 +224,8 @@
                   "enum": [
                     "user",
                     "trainingOfficer",
-                    "admin"
+                    "admin",
+                    "implementer"
                   ]
                 }
               },
