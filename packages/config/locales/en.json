@@ -123,6 +123,7 @@
   "shortcut.context.terminal": "Command line",
   "announce.fieldsNeedAttention.one": "{count} field needs attention",
   "announce.fieldsNeedAttention.other": "{count} fields need attention",
+  "login.product": "Query Module 2.0",
   "login.title": "Sign in",
   "login.email": "Email",
   "login.password": "Password",

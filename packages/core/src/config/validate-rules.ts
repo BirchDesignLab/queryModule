@@ -1,11 +1,10 @@
 import { TypePicklistCodeSchema } from "../contracts/primitives";
-import { canonicalCondition, canonicaliseLiteral, literalCodes } from "../rules/canonical-literal";
+import { canonicalCondition } from "../rules/canonical-literal";
 import { configuredDefault } from "./defaults";
 import { type DiagnosticSink, pointer } from "./diagnostic";
 import type { SiteConfig } from "./schema";
 import { MAX_ALSO_RUN, MAX_VALUE_LENGTH } from "./schema-fields";
 import { EDITING_COMBOS, resolveShortcuts, strokesCollide, usLayoutChar } from "./shortcuts";
-import { forEachConditionLiteral } from "./validate-literals";
 
 export const MAX_SOURCES_PER_SUBMIT = 8;
 /** Spec 5.2 step 2: dispatched (part, source) pairs per submit, across the primary and nested parts. */
@@ -234,8 +233,10 @@ export function checkShortcuts(config: SiteConfig, out: DiagnosticSink): void {
 export function checkLimits(config: SiteConfig, out: DiagnosticSink): void {
   const seen = new Set<string>();
   config.responseMappings.forEach((m, i) => {
-    // #73: key on the canonical when. now = 0 is safe: only century "past" two-digit years depend
-    // on it, and both sides use the same value. An unknown query type keeps the presence-only key.
+    // #73: key on the canonical when. This is an equality key only: both sides canonicalise at the
+    // same now = 0, so equal literals give equal keys even where a century "past" two-digit year
+    // resolves to the wrong century; validity is checkLiterals' job at context.now (#303). An
+    // unknown query type keeps the presence-only key.
     const qt = config.queryTypes.find((q) => q.code === m.queryType);
     const when =
       m.when === undefined
@@ -298,7 +299,8 @@ export function checkWarnings(config: SiteConfig, out: DiagnosticSink): void {
       });
   });
   checkRequiredWithoutPosition(config, out);
-  checkDisabledCodes(config, out);
+  // config.disabledCodeInCondition comes from checkLiterals, which canonicalises each condition
+  // literal once at context.now (#303).
 }
 
 /** A field some rule can make required, with no position in a command of its query type. */
@@ -321,20 +323,5 @@ function checkRequiredWithoutPosition(config: SiteConfig, out: DiagnosticSink): 
         }
       }
     });
-  });
-}
-
-/** A picklist literal in a condition that names a disabled code (the code is config, not input). */
-function checkDisabledCodes(config: SiteConfig, out: DiagnosticSink): void {
-  forEachConditionLiteral(config, (field, literal, path) => {
-    if (field.dataType !== "picklist") return;
-    const r = canonicaliseLiteral(field, literal, {
-      now: 0,
-      codes: literalCodes(config.picklists, field, "all"),
-    });
-    if (typeof r.value !== "string") return;
-    const enabled = literalCodes(config.picklists, field, "enabled") ?? [];
-    if (!enabled.includes(r.value))
-      out.warn(path, "config.disabledCodeInCondition", { field: field.key, code: r.value });
   });
 }

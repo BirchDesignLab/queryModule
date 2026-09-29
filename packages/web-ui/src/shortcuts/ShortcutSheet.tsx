@@ -16,7 +16,8 @@ type LayoutMap = { get(code: string): string | undefined };
 const MODIFIERS = ["Ctrl", "Alt", "Shift"] as const;
 
 /** Modifiers and key joined with " + ". The key is the layout's label where the browser gave one,
- *  else the code (spec 6.4). Never a US character: on another layout it would name the wrong key. */
+ *  else the code (spec 6.4). Never a US character: on another layout it would name the wrong key.
+ *  The layout map gives each key's unshifted character, so Shift+Slash reads "Shift + /", not "?". */
 function strokeLabel(stroke: string, layout: LayoutMap | null): string {
   const parts = stroke.split("+");
   const code = parts[parts.length - 1] ?? stroke;
@@ -26,27 +27,34 @@ function strokeLabel(stroke: string, layout: LayoutMap | null): string {
 }
 
 /** The layout map where the browser exposes one (Chromium); null until it resolves, and for good
- *  when it is absent, throws or rejects. The sheet renders with the fallback labels meanwhile. */
+ *  when it is absent, throws or rejects. The sheet renders with the fallback labels meanwhile.
+ *  Asked once per mount, on the first open (#319); later opens reuse the answer. */
 function useLayoutMap(open: boolean): LayoutMap | null {
   const [layout, setLayout] = useState<LayoutMap | null>(null);
+  const asked = useRef(false);
+  // Cancelled on unmount only: closing the sheet before the map resolves must not lose it.
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
   useEffect(() => {
-    if (!open) return;
-    let live = true;
+    if (!open || asked.current) return;
+    asked.current = true;
     try {
       const keyboard = (navigator as { keyboard?: { getLayoutMap?(): Promise<LayoutMap> } })
         .keyboard;
       keyboard
         ?.getLayoutMap?.()
         .then((map) => {
-          if (live) setLayout(map);
+          if (mounted.current) setLayout(map);
         })
         .catch(() => undefined);
     } catch {
       // Layout map unavailable: keep the fallback labels.
     }
-    return () => {
-      live = false;
-    };
   }, [open]);
   return layout;
 }

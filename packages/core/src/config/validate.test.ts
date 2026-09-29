@@ -870,6 +870,26 @@ describe("FR-051 FR-052 validateSiteConfig field, command and terminal rules (sp
     });
   }
 
+  it("an editing-combo binding carries the action and the offending stroke (#319)", () => {
+    const at = (keys: string) =>
+      run((r) => {
+        r.shortcuts = { goPanel: { keys, context: "global" } };
+      }).errors.filter((e) => e.key === "config.shortcutEditingCombo");
+    expect(at("Ctrl+Shift+KeyZ")).toEqual([
+      {
+        level: "error",
+        path: "/shortcuts/goPanel",
+        key: "config.shortcutEditingCombo",
+        params: { action: "goPanel", keys: "Ctrl+Shift+KeyZ" },
+      },
+    ]);
+    expect(at("KeyG Ctrl+KeyA")[0]?.params).toEqual({ action: "goPanel", keys: "Ctrl+KeyA" });
+    // Near misses: an extra modifier, or Shift where the combo has none, is not an editing combo.
+    expect(at("Ctrl+Alt+KeyZ")).toEqual([]);
+    expect(at("Ctrl+Shift+KeyA")).toEqual([]);
+    expect(at("Alt+KeyC")).toEqual([]);
+  });
+
   it("a multi-field picklistFilter cycle is reported once, at its first field", () => {
     const { errors } = run((r) => {
       const fields = veh(r).fields;

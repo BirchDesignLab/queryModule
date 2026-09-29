@@ -37,10 +37,41 @@ body {
   border-bottom: var(--qm-border-width) solid var(--qm-color-border);
 }
 
+/* One top bar: product name at the start, everything else pushed to the end; both groups wrap
+   (the narrowest viewport keeps every control, no horizontal scroll). */
+.qm-app-header__product {
+  margin: 0;
+  margin-inline-end: auto;
+  font-weight: 600;
+}
+
+.qm-app-header__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-4);
+  min-inline-size: 0;
+}
+
 .qm-app-header__user {
   margin: 0;
   min-inline-size: 0;
   overflow-wrap: anywhere;
+}
+
+/* Compact link to /status: a bordered pill, still a full-size touch target. */
+.qm-app-header__status {
+  box-sizing: border-box;
+  min-height: var(--qm-target-min);
+  padding: 0 var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-md);
+  color: var(--qm-color-text-body);
+  text-decoration: none;
+}
+
+.qm-app-header__status:hover {
+  text-decoration: underline;
 }
 
 .qm-app-header .qm-field {
@@ -48,4 +79,59 @@ body {
   align-items: center;
   gap: var(--qm-space-2);
   margin-block-end: 0;
+}
+
+/* Sign-in screen: one raised panel, centred both ways; nine touch targets wide. */
+.qm-login {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--qm-space-4);
+}
+
+.qm-login__panel {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--qm-target-min) * 9);
+  padding: var(--qm-space-6);
+  background: var(--qm-color-surface-raised);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-md);
+}
+
+.qm-login__product {
+  margin: 0 0 var(--qm-space-2);
+  font-size: var(--qm-type-heading-size);
+  text-align: center;
+}
+
+.qm-login__title {
+  margin: 0 0 var(--qm-space-4);
+  font-size: var(--qm-type-body-size);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Text inputs, the theme select and the submit button share one width and one height. */
+.qm-login__panel .qm-field__input,
+.qm-login__panel .qm-select,
+.qm-login__panel .qm-button--block {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--qm-target-min);
+}
+
+.qm-login__secondary {
+  margin-top: var(--qm-space-6);
+  padding-top: var(--qm-space-4);
+  border-top: var(--qm-border-width) solid var(--qm-color-border);
+}
+
+.qm-login__secondary .qm-field {
+  margin-block-end: 0;
+}
+
+.qm-login__secondary .qm-field__label {
+  font-weight: 400;
 }

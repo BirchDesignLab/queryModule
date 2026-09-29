@@ -15,7 +15,11 @@ export interface TokenizeResult {
   queryType?: string;
   /** Raw strings as typed (spec 4.4). */
   userValues: Record<string, string>;
-  /** Fields filled by a positional token, empty ones included. */
+  /**
+   * Fields filled by a positional token, interior empty ones included (trailing empties are
+   * dropped), unless a later named token fills an empty one: that key moves to namedKeys
+   * (#296 ruling 2), so the lists stay disjoint.
+   */
   positionedKeys: string[];
   /** Additions to the spec shape: the draft merge and the duplicate check need to know how each key was set. */
   presetKeys: string[];

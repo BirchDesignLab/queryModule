@@ -45,6 +45,21 @@ describe("FR-051 positions fill in order after the command code", () => {
     expect(t(`VEH.ZZ-0001${".".repeat(5000)}`)).toEqual(t("VEH.ZZ-0001"));
     expect(t(`VEH.ZZ-0001${".".repeat(5000)}`).userValues).toEqual({ plate: "ZZ-0001" });
   });
+  it("delimiter runs tokenize in linear time (#323)", () => {
+    // Ratio, not wall clock: 4x the input should cost about 4x; quadratic would be about 16x.
+    const cost = (n: number) => {
+      const input = `VEH${".".repeat(n)}X`;
+      const times: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const start = performance.now();
+        for (let j = 0; j < 4; j++) t(input);
+        times.push(performance.now() - start);
+      }
+      return times.sort((a, b) => a - b)[2] ?? 0;
+    };
+    cost(5_000); // warm up
+    expect(cost(20_000) / Math.max(cost(5_000), 0.05)).toBeLessThan(9);
+  });
   it("a bare command code is a command with no values", () => {
     expect(t("veh")).toMatchObject({ commandCode: "VEH", userValues: {}, errors: [] });
   });

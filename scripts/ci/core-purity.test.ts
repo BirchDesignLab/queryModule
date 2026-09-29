@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deniedGlobals, findGlobalMemberAccess, scanCore } from "./core-purity";
@@ -209,13 +210,92 @@ describe("core purity override scope (#295)", () => {
   const core = biome.overrides.find((o) => o.includes.includes("packages/core/src/**"));
 
   it("covers packages/core/src and exempts tests and __fixtures__", () => {
-    expect(core?.includes).toEqual(
-      expect.arrayContaining([
-        "packages/core/src/**",
-        "!**/*.test.ts",
-        "!**/*.test.tsx",
-        "!**/__fixtures__/**",
-      ]),
+    // #323 G-M2: exact, so a wider negation added later fails here.
+    expect(core?.includes).toEqual([
+      "packages/core/src/**",
+      "!**/*.test.ts",
+      "!**/*.test.tsx",
+      "!**/__fixtures__/**",
+    ]);
+  });
+});
+
+// #323 G-M1, G-M3: __fixtures__ may do test-only IO (as biome allows), so the scan skips it, and
+// in exchange no production file under packages/core/src may import from a __fixtures__ path.
+describe("core purity: __fixtures__ scope (#323)", () => {
+  const withTree = (files: Record<string, string>, run: (dir: string) => void) => {
+    const dir = mkdtempSync(join(tmpdir(), "core-purity-"));
+    try {
+      for (const [rel, text] of Object.entries(files)) {
+        const p = join(dir, "packages", "core", "src", rel);
+        mkdirSync(dirname(p), { recursive: true });
+        writeFileSync(p, text);
+      }
+      run(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const names = ["fetch"];
+
+  it("skips IO globals inside __fixtures__, as the biome override does", () => {
+    withTree({ "terminal/__fixtures__/io.ts": "globalThis.fetch(url);" }, (dir) =>
+      expect(scanCore(dir, names)).toEqual([]),
+    );
+  });
+
+  it("still flags IO globals in production files", () => {
+    withTree({ "rules/x.ts": "globalThis.fetch(url);" }, (dir) =>
+      expect(scanCore(dir, names)).toEqual(["packages/core/src/rules/x.ts: globalThis.fetch"]),
+    );
+  });
+
+  it("flags a production file importing from __fixtures__", () => {
+    withTree(
+      {
+        "terminal/a.ts": 'import { sites } from "./__fixtures__/sites.js";',
+        "terminal/b.ts": 'export * from "../terminal/__fixtures__/arbitraries";',
+        "terminal/c.ts": 'const m = await import("./__fixtures__/sites");',
+      },
+      (dir) =>
+        expect(scanCore(dir, names)).toEqual([
+          "packages/core/src/terminal/a.ts: import from ./__fixtures__/sites.js",
+          "packages/core/src/terminal/b.ts: import from ../terminal/__fixtures__/arbitraries",
+          "packages/core/src/terminal/c.ts: import from ./__fixtures__/sites",
+        ]),
+    );
+  });
+
+  it("flags a directory-index and a template-literal import of __fixtures__ (#329)", () => {
+    withTree(
+      {
+        "terminal/d.ts": 'import { sites } from "./__fixtures__";',
+        "terminal/e.ts": "const m = await import(`./__fixtures__/sites`);",
+        "terminal/f.ts": "import { x } from '../terminal/__fixtures__/';",
+      },
+      (dir) =>
+        expect(scanCore(dir, names)).toEqual([
+          "packages/core/src/terminal/d.ts: import from ./__fixtures__",
+          "packages/core/src/terminal/e.ts: import from ./__fixtures__/sites",
+          "packages/core/src/terminal/f.ts: import from ../terminal/__fixtures__/",
+        ]),
+    );
+  });
+
+  it("does not flag a path that only contains __fixtures__ as part of a longer name", () => {
+    withTree({ "terminal/g.ts": 'import { x } from "./__fixtures__x/y";' }, (dir) =>
+      expect(scanCore(dir, names)).toEqual([]),
+    );
+  });
+
+  it("allows tests and fixtures to import fixtures", () => {
+    withTree(
+      {
+        "terminal/a.test.ts": 'import { sites } from "./__fixtures__/sites";',
+        "terminal/__fixtures__/arbitraries.ts": 'import { sites } from "./sites";',
+        "terminal/__fixtures__/nested/x.ts": 'import { sites } from "../__fixtures__/sites";',
+      },
+      (dir) => expect(scanCore(dir, names)).toEqual([]),
     );
   });
 });

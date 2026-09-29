@@ -35,7 +35,8 @@ function inTextInput(target: Element): boolean {
   return editable !== null && editable.getAttribute("contenteditable") !== "false";
 }
 
-/** Regions the focus is inside, innermost first (nearest ancestor wins ties), then "global" last. */
+/** Regions the focus is inside, innermost first (nearest ancestor wins ties). Global bindings are
+ *  ranked last by the engine, so "global" is never added here (#319). */
 function contextsOf(target: Element): ShortcutContext[] {
   const found: ShortcutContext[] = [];
   for (let el: Element | null = target; el !== null; el = el.parentElement) {
@@ -45,7 +46,7 @@ function contextsOf(target: Element): ShortcutContext[] {
       if (!found.includes(region)) found.push(region);
     }
   }
-  return found.includes("global") ? found : [...found, "global"];
+  return found;
 }
 
 /**

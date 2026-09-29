@@ -182,18 +182,29 @@ function splitTopLevel(list: string): string[] {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
-/** Violations in packages/core/src, test files excluded, as "path: match". */
+/** Module specifiers that reach into a __fixtures__ directory (static, re-export or dynamic),
+ *  including its directory index ("./__fixtures__") and template-literal specifiers (#329). */
+const FIXTURE_IMPORT = /\b(?:from|import)\s*\(?\s*["'`]([^"'`]*\/__fixtures__(?:\/[^"'`]*)?)["'`]/g;
+
+/**
+ * Violations in packages/core/src, test files excluded, as "path: match". __fixtures__ may do
+ * test-only IO (the biome override exempts it, #295), so IO globals are not scanned there; in
+ * exchange a production file importing from a __fixtures__ path is a violation (#323 G-M1, G-M3).
+ */
 export function scanCore(root: string, names: readonly string[]): string[] {
   const out: string[] = [];
-  const walk = (dir: string): void => {
+  const walk = (dir: string, inFixtures: boolean): void => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name))
-        for (const m of findGlobalMemberAccess(readFileSync(p, "utf8"), names))
-          out.push(`${relative(root, p).replaceAll("\\", "/")}: ${m}`);
+      if (e.isDirectory()) walk(p, inFixtures || e.name === "__fixtures__");
+      else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) && !inFixtures) {
+        const source = readFileSync(p, "utf8");
+        const rel = relative(root, p).replaceAll("\\", "/");
+        for (const m of findGlobalMemberAccess(source, names)) out.push(`${rel}: ${m}`);
+        for (const m of source.matchAll(FIXTURE_IMPORT)) out.push(`${rel}: import from ${m[1]}`);
+      }
     }
   };
-  walk(join(root, "packages", "core", "src"));
+  walk(join(root, "packages", "core", "src"), false);
   return out;
 }

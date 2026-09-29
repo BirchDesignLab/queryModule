@@ -70,7 +70,9 @@ function fieldDef(config: TerminalConfig, queryType: string, key: string): Field
 /** Form to terminal (selectCommand, formatCommand), terminal to draft (tokenize, mergeDraft). */
 function trip(config: TerminalConfig, c: DraftCase) {
   const selected = selectCommand(config, c.command.queryType, c.draft, { now });
-  const formatted = formatCommand(config, selected?.code ?? "", c.draft, { now });
+  // #323 C-C-M2: no command selected would format "" and let a property pass vacuously.
+  if (selected === undefined) throw new Error(`no command selected for ${c.command.code}`);
+  const formatted = formatCommand(config, selected.code, c.draft, { now });
   const tokens = tokenize(config, formatted.text);
   const merged = mergeDraft(c.draft, tokens, config);
   return { selected, formatted, tokens, merged };
@@ -100,6 +102,20 @@ function expectedUnshown(config: TerminalConfig, command: DraftCase["command"], 
   }).length;
 }
 
+describe("round-trip harness", () => {
+  it("trip fails when no command is selected, so no property passes vacuously (#323)", () => {
+    const [veh] = defaultSite.commands;
+    if (veh === undefined) throw new Error("no command");
+    const c: DraftCase = {
+      command: { ...veh, queryType: "NOPE" },
+      draft: {},
+      positioned: [],
+      unpositioned: [],
+    };
+    expect(() => trip(defaultSite, c)).toThrow("no command selected");
+  });
+});
+
 describe.each(cases)(
   "[A5] terminal round trip, $name (FR-056, spec 4.4)",
   ({ config, command }) => {
@@ -110,7 +126,7 @@ describe.each(cases)(
       fc.assert(
         fc.property(arb, (c) => {
           const { selected, formatted, tokens, merged } = trip(config, c);
-          expect(selected?.code).toBe(command.code);
+          expect(selected.code).toBe(command.code);
           expect(formatted.errors).toEqual([]);
           expect(tokens.errors).toEqual([]);
           const before = canonDraft(config, qt, c.draft);
