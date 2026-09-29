@@ -2,6 +2,26 @@ import { z } from "zod";
 import { ClientSiteConfigSchema } from "../config/client-config";
 import type { FeatureKey } from "../config/features";
 import { LOCALE_PATTERN } from "../config/schema";
+import {
+  AdminConfigResponseSchema,
+  AdminUserListSchema,
+  AdminUserSchema,
+  AdminUserSessionListSchema,
+  ConfigDocumentSchema,
+  ConfigVersionListSchema,
+  ConfigVersionSchema,
+  CreateUserBodySchema,
+  CreateUserResponseSchema,
+  DisableUserResponseSchema,
+  PublishConfigBodySchema,
+  PutDraftBodySchema,
+  SessionParamsSchema,
+  SetRoleBodySchema,
+  UserParamsSchema,
+  ValidateConfigBodySchema,
+  ValidateConfigResponseSchema,
+  VersionParamsSchema,
+} from "./admin";
 import { ApiErrorSchema } from "./api-error";
 import { SemverSchema, Sha256HexSchema } from "./primitives";
 import {
@@ -14,7 +34,8 @@ import { API_BASE_PATH, API_VERSION } from "./version";
 export const MILESTONES = ["m0", "m1", "m2", "m3", "m4"] as const;
 export type Milestone = (typeof MILESTONES)[number];
 export type HttpMethod = "get" | "post" | "put" | "delete";
-export type RouteAccess = "public" | "session" | "sessionOwn" | "policy" | "admin";
+/** configEditor: admin or implementer (ADR-0011 item 6); admin: admin only. */
+export type RouteAccess = "public" | "session" | "sessionOwn" | "policy" | "admin" | "configEditor";
 /** planned: contract merged, handler not yet; the route matrix expects 404. live: handler merged. */
 export type RouteStatus = "planned" | "live";
 
@@ -76,6 +97,11 @@ export type UserPreference = z.infer<typeof UserPreferenceSchema>;
 
 const error = (description: string): RouteResponse => ({ description, schema: ApiErrorSchema });
 
+/** Admin console routes (ADR-0011): planned until Tasks 27 and 28 mount them. */
+const adminErrors = {
+  401: error("No session"),
+  403: error("Role not allowed, or missing X-Requested-With on a write (forbidden)"),
+};
 const ROUTE_DEFS = [
   {
     id: "getHealth",
@@ -182,6 +208,242 @@ const ROUTE_DEFS = [
       429: error("Rate limited (rateLimited, Retry-After)"),
       500: error("Internal error; nothing was acknowledged (internal)"),
       503: error("Shutting down or not ready (unavailable)"),
+    },
+  },
+  {
+    id: "getAdminConfig",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/config`,
+    summary: "The live config version and the shared draft, with documents",
+    access: "configEditor",
+    since: "m1",
+    status: "planned",
+    feature: "adminConfig",
+    requiresRequestedWith: false,
+    responses: {
+      200: { description: "Live and draft", schema: AdminConfigResponseSchema },
+      ...adminErrors,
+    },
+  },
+  {
+    id: "putAdminConfigDraft",
+    method: "put",
+    path: `${API_BASE_PATH}/admin/config/draft`,
+    summary: "Save the shared draft; the base must be the live version",
+    access: "configEditor",
+    since: "m1",
+    status: "planned",
+    feature: "adminConfig",
+    requiresRequestedWith: true,
+    request: { body: PutDraftBodySchema },
+    responses: {
+      200: { description: "Draft saved", schema: ConfigVersionSchema },
+      400: error("Malformed body (validationFailed)"),
+      409: error("The base is not the live version (draftConflict)"),
+      413: error("Body over the size cap (payloadTooLarge)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "validateAdminConfig",
+    method: "post",
+    path: `${API_BASE_PATH}/admin/config/validate`,
+    summary: "Validate a document by the spec 5.8 chain; diagnostics by JSON pointer",
+    access: "configEditor",
+    since: "m1",
+    status: "planned",
+    feature: "adminConfig",
+    requiresRequestedWith: true,
+    request: { body: ValidateConfigBodySchema },
+    responses: {
+      200: { description: "Diagnostics", schema: ValidateConfigResponseSchema },
+      400: error("Malformed body (validationFailed)"),
+      413: error("Body over the size cap (payloadTooLarge)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "publishAdminConfig",
+    method: "post",
+    path: `${API_BASE_PATH}/admin/config/publish`,
+    summary: "Publish the draft and activate it; refused on any validation error",
+    access: "configEditor",
+    since: "m1",
+    status: "planned",
+    feature: "adminConfig",
+    requiresRequestedWith: true,
+    request: { body: PublishConfigBodySchema },
+    responses: {
+      200: { description: "Published version", schema: ConfigVersionSchema },
+      400: error(
+        "Malformed body, or the draft fails validation; call validate for diagnostics (validationFailed)",
+      ),
+      404: error("No such draft (notFound)"),
+      409: error("The draft base is not the live version (draftConflict)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "listAdminConfigVersions",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/config/versions`,
+    summary: "Version history, newest first; never rewritten",
+    access: "configEditor",
+    since: "m1",
+    status: "planned",
+    feature: "adminConfig",
+    requiresRequestedWith: false,
+    responses: {
+      200: { description: "Versions", schema: ConfigVersionListSchema },
+      ...adminErrors,
+    },
+  },
+  {
+    id: "rollbackAdminConfig",
+    method: "post",
+    path: `${API_BASE_PATH}/admin/config/versions/{version}/rollback`,
+    summary: "Publish an older version as a new version",
+    access: "configEditor",
+    since: "m1",
+    status: "planned",
+    feature: "adminConfig",
+    requiresRequestedWith: true,
+    request: { params: VersionParamsSchema },
+    responses: {
+      200: { description: "New published version", schema: ConfigVersionSchema },
+      400: error("Malformed version (validationFailed)"),
+      404: error("No such version (notFound)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "exportAdminConfigVersion",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/config/versions/{version}/export`,
+    summary: "One version document as JSON (git round trip)",
+    access: "configEditor",
+    since: "m1",
+    status: "planned",
+    feature: "adminConfig",
+    requiresRequestedWith: false,
+    request: { params: VersionParamsSchema },
+    responses: {
+      200: { description: "Document", schema: ConfigDocumentSchema },
+      400: error("Malformed version (validationFailed)"),
+      404: error("No such version (notFound)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "listAdminUsers",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/users`,
+    summary: "Users with role and state; no secrets",
+    access: "admin",
+    since: "m1",
+    status: "planned",
+    feature: "adminUsers",
+    requiresRequestedWith: false,
+    responses: {
+      200: { description: "Users", schema: AdminUserListSchema },
+      ...adminErrors,
+    },
+  },
+  {
+    id: "createAdminUser",
+    method: "post",
+    path: `${API_BASE_PATH}/admin/users`,
+    summary: "Create a user; the one-time password is returned once",
+    access: "admin",
+    since: "m1",
+    status: "planned",
+    feature: "adminUsers",
+    requiresRequestedWith: true,
+    request: { body: CreateUserBodySchema },
+    responses: {
+      201: { description: "Created, with the one-time password", schema: CreateUserResponseSchema },
+      400: error(
+        "Malformed body, or the email is taken (validationFailed, errors[] key validation.emailTaken)",
+      ),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "disableAdminUser",
+    method: "post",
+    path: `${API_BASE_PATH}/admin/users/{id}/disable`,
+    summary: "Disable a user and revoke their sessions in one transaction",
+    access: "admin",
+    since: "m1",
+    status: "planned",
+    feature: "adminUsers",
+    requiresRequestedWith: true,
+    request: { params: UserParamsSchema },
+    responses: {
+      200: { description: "Disabled", schema: DisableUserResponseSchema },
+      400: error("Malformed id (validationFailed)"),
+      404: error("No such user (notFound)"),
+      409: error(
+        "An admin changing their own role or account, or no enabled admin left (lastAdmin)",
+      ),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "setAdminUserRole",
+    method: "put",
+    path: `${API_BASE_PATH}/admin/users/{id}/role`,
+    summary: "Change a user role",
+    access: "admin",
+    since: "m1",
+    status: "planned",
+    feature: "adminUsers",
+    requiresRequestedWith: true,
+    request: { params: UserParamsSchema, body: SetRoleBodySchema },
+    responses: {
+      200: { description: "Updated", schema: AdminUserSchema },
+      400: error("Malformed id or body (validationFailed)"),
+      404: error("No such user (notFound)"),
+      409: error(
+        "An admin changing their own role or account, or no enabled admin left (lastAdmin)",
+      ),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "listAdminUserSessions",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/users/{id}/sessions`,
+    summary: "A user's live sessions by row id; never tokens",
+    access: "admin",
+    since: "m1",
+    status: "planned",
+    feature: "adminUsers",
+    requiresRequestedWith: false,
+    request: { params: UserParamsSchema },
+    responses: {
+      200: { description: "Sessions", schema: AdminUserSessionListSchema },
+      400: error("Malformed id (validationFailed)"),
+      404: error("No such user (notFound)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "revokeAdminSession",
+    method: "delete",
+    path: `${API_BASE_PATH}/admin/sessions/{sessionId}`,
+    summary: "Revoke one session",
+    access: "admin",
+    since: "m1",
+    status: "planned",
+    feature: "adminUsers",
+    requiresRequestedWith: true,
+    request: { params: SessionParamsSchema },
+    responses: {
+      204: { description: "Revoked" },
+      400: error("Malformed session id (validationFailed)"),
+      404: error("No such session (notFound)"),
+      ...adminErrors,
     },
   },
 ] as const satisfies readonly RouteDef[];

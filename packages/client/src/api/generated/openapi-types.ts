@@ -103,6 +103,211 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The live config version and the shared draft, with documents */
+        get: operations["getAdminConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save the shared draft; the base must be the live version */
+        put: operations["putAdminConfigDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate a document by the spec 5.8 chain; diagnostics by JSON pointer */
+        post: operations["validateAdminConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish the draft and activate it; refused on any validation error */
+        post: operations["publishAdminConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Version history, newest first; never rewritten */
+        get: operations["listAdminConfigVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/versions/{version}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish an older version as a new version */
+        post: operations["rollbackAdminConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/versions/{version}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One version document as JSON (git round trip) */
+        get: operations["exportAdminConfigVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Users with role and state; no secrets */
+        get: operations["listAdminUsers"];
+        put?: never;
+        /** Create a user; the one-time password is returned once */
+        post: operations["createAdminUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable a user and revoke their sessions in one transaction */
+        post: operations["disableAdminUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change a user role */
+        put: operations["setAdminUserRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A user's live sessions by row id; never tokens */
+        get: operations["listAdminUserSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke one session */
+        delete: operations["revokeAdminSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -110,7 +315,7 @@ export interface components {
         ApiError: {
             error: {
                 /** @enum {string} */
-                code: "validationFailed" | "unauthenticated" | "stepUpRequired" | "mfaEnrollmentRequired" | "forbidden" | "notFound" | "configHashMismatch" | "delegationCredentialsMissing" | "payloadTooLarge" | "rateLimited" | "internal" | "unavailable";
+                code: "validationFailed" | "unauthenticated" | "stepUpRequired" | "mfaEnrollmentRequired" | "forbidden" | "notFound" | "configHashMismatch" | "delegationCredentialsMissing" | "draftConflict" | "lastAdmin" | "payloadTooLarge" | "rateLimited" | "internal" | "unavailable";
                 params?: {
                     [key: string]: string | number;
                 };
@@ -521,6 +726,254 @@ export interface components {
             mode: "normal" | "plateOnly";
             configHash: string;
         };
+        getAdminConfig200: {
+            siteId: string;
+            live: {
+                id: string;
+                version: number;
+                /** @enum {string} */
+                status: "draft" | "published" | "superseded";
+                configHash: string | null;
+                baseVersion: number | null;
+                createdBy: string;
+                createdAt: number;
+                publishedBy: string | null;
+                publishedAt: number | null;
+                rollbackOf: number | null;
+                document: {
+                    siteConfig: {
+                        [key: string]: unknown;
+                    };
+                    locales: {
+                        [key: string]: {
+                            [key: string]: string;
+                        };
+                    };
+                    mock?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            draft: {
+                id: string;
+                version: number;
+                /** @enum {string} */
+                status: "draft" | "published" | "superseded";
+                configHash: string | null;
+                baseVersion: number | null;
+                createdBy: string;
+                createdAt: number;
+                publishedBy: string | null;
+                publishedAt: number | null;
+                rollbackOf: number | null;
+                document: {
+                    siteConfig: {
+                        [key: string]: unknown;
+                    };
+                    locales: {
+                        [key: string]: {
+                            [key: string]: string;
+                        };
+                    };
+                    mock?: {
+                        [key: string]: unknown;
+                    };
+                };
+            } | null;
+        };
+        putAdminConfigDraft200: {
+            id: string;
+            version: number;
+            /** @enum {string} */
+            status: "draft" | "published" | "superseded";
+            configHash: string | null;
+            baseVersion: number | null;
+            createdBy: string;
+            createdAt: number;
+            publishedBy: string | null;
+            publishedAt: number | null;
+            rollbackOf: number | null;
+        };
+        putAdminConfigDraftBody: {
+            baseVersion: number;
+            document: {
+                siteConfig: {
+                    [key: string]: unknown;
+                };
+                locales: {
+                    [key: string]: {
+                        [key: string]: string;
+                    };
+                };
+                mock?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        validateAdminConfig200: {
+            errors: {
+                /** @enum {string} */
+                level: "error" | "warning";
+                path: string;
+                key: string;
+                params: {
+                    [key: string]: string | number | boolean;
+                };
+            }[];
+            warnings: {
+                /** @enum {string} */
+                level: "error" | "warning";
+                path: string;
+                key: string;
+                params: {
+                    [key: string]: string | number | boolean;
+                };
+            }[];
+        };
+        validateAdminConfigBody: {
+            document: {
+                siteConfig: {
+                    [key: string]: unknown;
+                };
+                locales: {
+                    [key: string]: {
+                        [key: string]: string;
+                    };
+                };
+                mock?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        publishAdminConfig200: {
+            id: string;
+            version: number;
+            /** @enum {string} */
+            status: "draft" | "published" | "superseded";
+            configHash: string | null;
+            baseVersion: number | null;
+            createdBy: string;
+            createdAt: number;
+            publishedBy: string | null;
+            publishedAt: number | null;
+            rollbackOf: number | null;
+        };
+        publishAdminConfigBody: {
+            draftVersion: number;
+        };
+        listAdminConfigVersions200: {
+            versions: {
+                id: string;
+                version: number;
+                /** @enum {string} */
+                status: "draft" | "published" | "superseded";
+                configHash: string | null;
+                baseVersion: number | null;
+                createdBy: string;
+                createdAt: number;
+                publishedBy: string | null;
+                publishedAt: number | null;
+                rollbackOf: number | null;
+            }[];
+        };
+        rollbackAdminConfig200: {
+            id: string;
+            version: number;
+            /** @enum {string} */
+            status: "draft" | "published" | "superseded";
+            configHash: string | null;
+            baseVersion: number | null;
+            createdBy: string;
+            createdAt: number;
+            publishedBy: string | null;
+            publishedAt: number | null;
+            rollbackOf: number | null;
+        };
+        exportAdminConfigVersion200: {
+            siteConfig: {
+                [key: string]: unknown;
+            };
+            locales: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            mock?: {
+                [key: string]: unknown;
+            };
+        };
+        listAdminUsers200: {
+            users: {
+                id: string;
+                /** Format: email */
+                email: string;
+                name: string;
+                /** @enum {string} */
+                role: "user" | "trainingOfficer" | "admin" | "implementer";
+                disabled: boolean;
+                mustChangePassword: boolean;
+                createdAt: number;
+            }[];
+        };
+        createAdminUser201: {
+            user: {
+                id: string;
+                /** Format: email */
+                email: string;
+                name: string;
+                /** @enum {string} */
+                role: "user" | "trainingOfficer" | "admin" | "implementer";
+                disabled: boolean;
+                mustChangePassword: boolean;
+                createdAt: number;
+            };
+            temporaryPassword: string;
+        };
+        createAdminUserBody: {
+            /** Format: email */
+            email: string;
+            name: string;
+            /** @enum {string} */
+            role: "user" | "trainingOfficer" | "admin" | "implementer";
+        };
+        disableAdminUser200: {
+            user: {
+                id: string;
+                /** Format: email */
+                email: string;
+                name: string;
+                /** @enum {string} */
+                role: "user" | "trainingOfficer" | "admin" | "implementer";
+                disabled: boolean;
+                mustChangePassword: boolean;
+                createdAt: number;
+            };
+            sessionsRevoked: number;
+        };
+        setAdminUserRole200: {
+            id: string;
+            /** Format: email */
+            email: string;
+            name: string;
+            /** @enum {string} */
+            role: "user" | "trainingOfficer" | "admin" | "implementer";
+            disabled: boolean;
+            mustChangePassword: boolean;
+            createdAt: number;
+        };
+        setAdminUserRoleBody: {
+            /** @enum {string} */
+            role: "user" | "trainingOfficer" | "admin" | "implementer";
+        };
+        listAdminUserSessions200: {
+            sessions: {
+                id: string;
+                createdAt: number;
+                expiresAt: number;
+                userAgent: string | null;
+                current: boolean;
+            }[];
+        };
     };
     responses: never;
     parameters: never;
@@ -799,6 +1252,737 @@ export interface operations {
             };
             /** @description Shutting down or not ready (unavailable) */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAdminConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live and draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["getAdminConfig200"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putAdminConfigDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["putAdminConfigDraftBody"];
+            };
+        };
+        responses: {
+            /** @description Draft saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["putAdminConfigDraft200"];
+                };
+            };
+            /** @description Malformed body (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description The base is not the live version (draftConflict) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Body over the size cap (payloadTooLarge) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    validateAdminConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["validateAdminConfigBody"];
+            };
+        };
+        responses: {
+            /** @description Diagnostics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["validateAdminConfig200"];
+                };
+            };
+            /** @description Malformed body (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Body over the size cap (payloadTooLarge) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    publishAdminConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["publishAdminConfigBody"];
+            };
+        };
+        responses: {
+            /** @description Published version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["publishAdminConfig200"];
+                };
+            };
+            /** @description Malformed body, or the draft fails validation; call validate for diagnostics (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such draft (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description The draft base is not the live version (draftConflict) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAdminConfigVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["listAdminConfigVersions200"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    rollbackAdminConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New published version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["rollbackAdminConfig200"];
+                };
+            };
+            /** @description Malformed version (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such version (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    exportAdminConfigVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["exportAdminConfigVersion200"];
+                };
+            };
+            /** @description Malformed version (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such version (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAdminUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["listAdminUsers200"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createAdminUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["createAdminUserBody"];
+            };
+        };
+        responses: {
+            /** @description Created, with the one-time password */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["createAdminUser201"];
+                };
+            };
+            /** @description Malformed body, or the email is taken (validationFailed, errors[] key validation.emailTaken) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    disableAdminUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disabled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["disableAdminUser200"];
+                };
+            };
+            /** @description Malformed id (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such user (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description An admin changing their own role or account, or no enabled admin left (lastAdmin) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setAdminUserRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["setAdminUserRoleBody"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["setAdminUserRole200"];
+                };
+            };
+            /** @description Malformed id or body (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such user (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description An admin changing their own role or account, or no enabled admin left (lastAdmin) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAdminUserSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["listAdminUserSessions200"];
+                };
+            };
+            /** @description Malformed id (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such user (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    revokeAdminSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed session id (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such session (notFound) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
