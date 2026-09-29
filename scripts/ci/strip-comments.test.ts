@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { hasTaggedTest } from "./story-tags";
 import { stripComments } from "./strip-comments";
 
 describe("stripComments (item 7)", () => {
@@ -49,5 +50,48 @@ describe("stripComments (item 7)", () => {
     const source = 'const u = /a\\//; it("[A1] x")\nconst v = "b";\n';
     const out = stripComments(source);
     expect(out).toContain('const v = "b";');
+  });
+});
+
+describe("stripComments regex-literal awareness (#220 G-M-a, r1-a)", () => {
+  it("G-M-a: a quote inside a regex literal does not let a commented-out tagged test count as live", () => {
+    const source = ["const r = /'/;", "/*", 'it("[A1] commented out", () => {})', "*/"].join("\n");
+    expect(hasTaggedTest(source, "A1")).toBe(false);
+  });
+
+  it("G-M-a: a quote in a regex literal on the same line as a block-comment opener does not hide the opener", () => {
+    const source = ["const r = /'/; /*", 'it("[A1] commented out", () => {})', "*/"].join("\n");
+    expect(hasTaggedTest(source, "A1")).toBe(false);
+  });
+
+  it("r1-a: an escaped slash inside a regex literal does not open a line comment", () => {
+    const source = 'const r = /a\\//; // it("[A1] x", () => {})';
+    expect(hasTaggedTest(source, "A1")).toBe(false);
+    expect(stripComments(source)).toBe("const r = /a\\//; ");
+  });
+
+  it("a real tagged test after a regex literal on the previous line is still live", () => {
+    const source = ["const r = /'/;", 'it("[A1] real", () => {})'].join("\n");
+    expect(hasTaggedTest(source, "A1")).toBe(true);
+  });
+
+  it("reads a character class containing / and a quote as part of the regex", () => {
+    const source = "const r = /[/']+/g; // tail\nconst s = 1;";
+    expect(stripComments(source)).toBe("const r = /[/']+/g; \nconst s = 1;");
+  });
+
+  it("still treats division as division", () => {
+    expect(stripComments("const q = a / b; // c\n")).toBe("const q = a / b; \n");
+    expect(stripComments("const q = (a) / 2; /* c */")).toBe("const q = (a) / 2; ");
+  });
+
+  it("fails closed on an unterminated regex-looking slash: a block comment after it is still stripped", () => {
+    const source = ["const r = /'", "/*", 'it("[A1] x", () => {})', "*/", "const s = 1;"].join(
+      "\n",
+    );
+    const out = stripComments(source);
+    expect(out).not.toContain("[A1]");
+    expect(out).toContain("const s = 1;");
+    expect(hasTaggedTest(source, "A1")).toBe(false);
   });
 });
