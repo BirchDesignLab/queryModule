@@ -542,6 +542,8 @@ Pure and deterministic. Steps:
 
 Part ids are stable: a nested part's `partId` is its `alsoRun` index plus 1, so ids may have gaps. An `alsoRun` entry whose `when` does not hold produces no part; a skipped part keeps its id.
 
+`PlanPart.queryType` is the canonical code from the site config, not the requested string: a case-folded request for `veh` plans and records `VEH` (09-29-26, #307).
+
 **Limits.** One nesting level, `fieldMap` references both ways and the fixed cap of 4 `alsoRun` entries are validated in 4.1; the per-submit source cap and concurrency caps are in 5.2.
 
 All parts share one correlation ID; each (part, source) pair gets its own pending `source_result` row, keyed (correlation_id, part_id, source_id), and FR-043 status is reported per part per source (5.2, 5.5).
