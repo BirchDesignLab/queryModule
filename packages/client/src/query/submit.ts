@@ -75,6 +75,28 @@ export function buildSubmitBody(req: SubmitRequest): SubmitQueryBody {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/** A 202 body the UI can rely on: a reference, a time and the parts list. Anything else is failed. */
+function isSubmitResponse(value: unknown): value is SubmitQueryResponse {
+  return (
+    isRecord(value) &&
+    typeof value.correlationId === "string" &&
+    value.correlationId !== "" &&
+    typeof value.acknowledgedAt === "number" &&
+    Array.isArray(value.parts)
+  );
+}
+
+/** The errors[] of a 400 ApiError, or undefined when the body has another shape. */
+function validationErrorsOf(body: unknown): ValidationError[] | undefined {
+  if (!isRecord(body) || !isRecord(body.error)) return undefined;
+  const errors = body.error.errors;
+  return Array.isArray(errors) ? (errors as ValidationError[]) : undefined;
+}
+
 /** Deterministic text of a body (sorted value keys), used only to compare two bodies. */
 function bodyFingerprint(body: SubmitQueryBody): string {
   const values = Object.fromEntries(
@@ -104,6 +126,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
   let chain = 0;
   let generation = 0;
   let unsubscribeOnline: () => void = () => undefined;
+  let disposed = false;
   let goOffline: () => void = () => undefined;
 
   const store = createStore<SubmitState>((set, get) => {
@@ -180,14 +203,10 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
       const { response, data, error } = result;
       const status = response.status;
       let outcome: SubmitOutcome;
-      if (status === 202 && data !== undefined) {
-        outcome = {
-          kind: "acknowledged",
-          response: data as SubmitQueryResponse,
-          queryType: req.queryType,
-        };
+      if (status === 202 && isSubmitResponse(data)) {
+        outcome = { kind: "acknowledged", response: data, queryType: req.queryType };
       } else if (status === 400) {
-        const errors = (error as components["schemas"]["ApiError"] | undefined)?.error.errors;
+        const errors = validationErrorsOf(error);
         outcome = errors === undefined ? { kind: "failed" } : { kind: "invalid", errors };
       } else if (status === 409) {
         void options.queryClient.invalidateQueries({ queryKey: ["config"] });
@@ -234,8 +253,11 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
         inFlight = null;
         stopPolling();
         set({ status: "idle", lastAck: null });
+        // The platform signal outlives a reset (sign-out, user change): still offline stays gated.
+        if (!disposed && options.online?.current() === false) goOffline();
       },
       dispose() {
+        disposed = true;
         unsubscribeOnline();
         unsubscribeOnline = () => undefined;
         stopPolling();

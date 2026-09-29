@@ -19,6 +19,7 @@ import {
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
 
@@ -321,7 +322,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     if (preview) return;
     const outcome = await submit.getState().submit({
       queryType: request.queryType,
-      values: request.values,
+      values: valuesToSend(config, request.queryType, request.values, request.state, Date.now()),
       sourceIds: request.sourceIds,
       mode: request.state.mode,
       configHash: config.configHash,
