@@ -5,29 +5,60 @@ import { QueryTypeSchema } from "../config/index";
 import { canonicalise } from "../rules/canonicalise";
 import { compileQueryType } from "../rules/compile";
 import { computeUserValues } from "../rules/effective-values";
-import { type DraftCase, draftFor, enabledCodes } from "./__fixtures__/arbitraries";
+import {
+  type DraftCase,
+  draftFor,
+  enabledCodes,
+  presetOverrides,
+} from "./__fixtures__/arbitraries";
 import { defaultSite, exampleOkSite } from "./__fixtures__/sites";
 import { mergeDraft } from "./draft";
 import { formatCommand, selectCommand } from "./format";
+import { fieldOf } from "./positions";
 import { tokenize } from "./tokenize";
 import type { Draft, TerminalConfig } from "./types";
 
 const now = Date.UTC(2026, 8, 28);
 const runs = { numRuns: 500 };
 
+/** Preset commands inline: the shipped sites have none, so the presets path runs only here. */
+const presetSite: TerminalConfig = {
+  ...defaultSite,
+  commands: [
+    {
+      code: "PROF",
+      queryType: "PRO",
+      presets: { propertyType: "FIREARM" },
+      positions: ["serial", { field: "description", rest: true }],
+    },
+    { code: "VPC", queryType: "VEH", presets: { plateType: "PC" }, positions: ["plate", "state"] },
+    {
+      code: "PERX",
+      queryType: "PER",
+      presets: { sex: "X", race: "U" },
+      positions: ["last", "dob"],
+    },
+  ],
+};
+
 const sites: [string, TerminalConfig][] = [
   ["default", defaultSite],
   ["example-ok", exampleOkSite],
+  ["presets", presetSite],
 ];
 const cases = sites.flatMap(([name, config]) =>
   config.commands.map((command) => ({ name: `${name} ${command.code}`, config, command })),
 );
 
-/** Canonical user values of every field of the query type; an empty or absent value is null. */
+/**
+ * Canonical user values of every field of the query type (an empty or absent value is null) and
+ * their errors by field: a value invalid on both sides is null on both, so errors are compared too.
+ */
 function canonDraft(config: TerminalConfig, queryType: string, draft: Draft) {
   const qt = compileQueryType(config, queryType, now);
   if (qt === undefined) throw new Error(`no query type ${queryType}`);
-  return Object.fromEntries(computeUserValues(qt, draft, now).userValues);
+  const { userValues, errorsByField } = computeUserValues(qt, draft, now);
+  return { values: Object.fromEntries(userValues), errors: Object.fromEntries(errorsByField) };
 }
 
 function fieldDef(config: TerminalConfig, queryType: string, key: string): FieldDef {
@@ -48,6 +79,27 @@ function trip(config: TerminalConfig, c: DraftCase) {
 const isEmpty = (v: Draft[string] | undefined) =>
   v === undefined || v === null || String(v).trim() === "";
 
+/**
+ * Independent unshownCount oracle, from the draft and the command definition: a non-empty value
+ * counts unless the command positions its key or presets it to the same canonical value (Task 18).
+ */
+function expectedUnshown(config: TerminalConfig, command: DraftCase["command"], draft: Draft) {
+  const qt = command.queryType;
+  const positioned = new Set(command.positions.map(fieldOf));
+  const presets: Readonly<Record<string, unknown>> = command.presets ?? {};
+  const canon = (key: string, v: Draft[string]) =>
+    canonicalise(fieldDef(config, qt, key), v, {
+      now,
+      codes: enabledCodes(config, qt, key, now),
+    }).value;
+  return Object.entries(draft).filter(([key, v]) => {
+    if (isEmpty(v) || positioned.has(key)) return false;
+    if (!(key in presets)) return true;
+    const value = canon(key, v);
+    return value === null || value !== canon(key, String(presets[key]));
+  }).length;
+}
+
 describe.each(cases)(
   "[A5] terminal round trip, $name (FR-056, spec 4.4)",
   ({ config, command }) => {
@@ -61,8 +113,10 @@ describe.each(cases)(
           expect(selected?.code).toBe(command.code);
           expect(formatted.errors).toEqual([]);
           expect(tokens.errors).toEqual([]);
-          expect(canonDraft(config, qt, merged)).toEqual(canonDraft(config, qt, c.draft));
+          const before = canonDraft(config, qt, c.draft);
+          expect(canonDraft(config, qt, merged)).toEqual(before);
           for (const key of c.positioned) {
+            expect(before.errors[key]).toBeUndefined();
             const { dataType } = fieldDef(config, qt, key);
             const exact = dataType === "string" || dataType === "picklist";
             if (exact && !isEmpty(c.draft[key])) expect(merged[key]).toBe(c.draft[key]);
@@ -83,17 +137,18 @@ describe.each(cases)(
       );
     });
 
-    it("[A5] unshownCount counts exactly the non-empty unpositioned, unpreset values", () => {
+    it("[A5] unshownCount counts the non-empty values neither positioned nor preset alike", () => {
       fc.assert(
-        fc.property(arb, (c) => {
-          const expected = c.unpositioned.filter((key) => !isEmpty(c.draft[key])).length;
-          expect(trip(config, c).formatted.unshownCount).toBe(expected);
+        fc.property(arb, presetOverrides(command), (c, overrides) => {
+          const draft = { ...c.draft, ...overrides };
+          const { unshownCount } = formatCommand(config, command.code, draft, { now });
+          expect(unshownCount).toBe(expectedUnshown(config, command, draft));
         }),
         runs,
       );
     });
 
-    it("canonicalisation is idempotent on terminal-emitted text", () => {
+    it("[A5] canonicalisation is idempotent on terminal-emitted text", () => {
       fc.assert(
         fc.property(arb, (c) => {
           const { tokens } = trip(config, c);
@@ -101,7 +156,7 @@ describe.each(cases)(
             const text = tokens.userValues[key] ?? "";
             if (text === "") continue;
             const field = fieldDef(config, qt, key);
-            const ctx = { now, codes: enabledCodes(config, qt, key) };
+            const ctx = { now, codes: enabledCodes(config, qt, key, now) };
             const once = canonicalise(field, text, ctx);
             expect(once.errors).toEqual([]);
             expect(canonicalise(field, once.value, ctx)).toEqual(once);

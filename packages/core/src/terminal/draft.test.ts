@@ -85,18 +85,50 @@ describe("FR-056 draft merge (spec 4.4)", () => {
 });
 
 describe("FR-056 round trip: merge(D, tokenize(formatCommand(C, D))) equals D", () => {
-  const trip = (d: Draft) => {
-    const cmd = selectCommand(defaultSite, "PRO", d, { now });
-    const text = formatCommand(defaultSite, cmd?.code ?? "", d, { now }).text;
-    return mergeDraft(d, tokenize(defaultSite, text), defaultSite);
+  const trip = (queryType: string, d: Draft, config: TerminalConfig = defaultSite) => {
+    const cmd = selectCommand(config, queryType, d, { now });
+    // An undefined command would format code "" and pass vacuously.
+    if (cmd === undefined) throw new Error(`no command for ${queryType}`);
+    const formatted = formatCommand(config, cmd.code, d, { now });
+    expect(formatted.errors).toEqual([]);
+    return mergeDraft(d, tokenize(config, formatted.text), config);
   };
+  it("a query type with no command fails the round trip instead of passing vacuously", () => {
+    const noPro: TerminalConfig = {
+      ...defaultSite,
+      commands: defaultSite.commands.filter((c) => c.queryType !== "PRO"),
+    };
+    const d = { serial: "ZZ-0001", propertyType: "BOAT", description: null };
+    expect(() => trip("PRO", d, noPro)).toThrow("no command for PRO");
+  });
   it.each([
     ["a rest value made only of delimiters", "..."],
     ["a rest value with interior delimiters", "x. y"],
     ["a blank rest value", null],
-  ])("%s", (_name, description) => {
+  ])("PRO: %s", (_name, description) => {
     const d = { serial: "ZZ-0001", propertyType: "BOAT", description };
-    expect(trip(d)).toEqual(d);
+    expect(trip("PRO", d)).toEqual(d);
+  });
+  it.each([
+    [
+      "every position filled, plateType kept",
+      { plate: "ZZ-0001", state: "OK", year: "1901", vin: "ZZ1901", plateType: "PC" },
+    ],
+    ["interior and trailing empties", { plate: "ZZ-0002", state: null, year: "1901", vin: null }],
+  ])("VEH: %s", (_name, d) => {
+    expect(trip("VEH", d)).toEqual(d);
+  });
+  it.each([
+    [
+      "every position filled",
+      { last: "TESTLAST", first: "TESTFIRST", dob: "01011901", sex: "X", race: "U" },
+    ],
+    [
+      "first and sex empty",
+      { last: "TESTLAST", first: null, dob: "12311901", sex: null, race: "U" },
+    ],
+  ])("PER: %s", (_name, d) => {
+    expect(trip("PER", d)).toEqual(d);
   });
 });
 

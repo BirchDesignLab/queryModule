@@ -1,7 +1,8 @@
 import fc from "fast-check";
 import type { CommandDef, FieldDef } from "../../config/index.js";
-import { canonicalise } from "../../rules/canonicalise.js";
+import { canonicalise, ISO_DATE_FORMAT } from "../../rules/canonicalise.js";
 import { compileQueryType, findQueryType } from "../../rules/compile.js";
+import { formatDate } from "../format.js";
 import { fieldOf, isRest, namedFieldReader, type Position } from "../positions.js";
 import type { Draft, TerminalConfig } from "../types.js";
 
@@ -15,18 +16,24 @@ const PRINTABLE_ASCII = Array.from({ length: 0x7f - 0x20 }, (_, i) =>
 /** Synthetic non-ASCII letters for `charset: "printable"` fields. */
 const PRINTABLE_EXTRA = ["é", "ñ", "ß", "Å", "Ω", " "];
 
-/** Picklist codes the value may match, as the form path computes them. */
-export function enabledCodes(config: TerminalConfig, queryType: string, key: string): string[] {
-  const field = compileQueryType(config, queryType, 0)?.fieldByKey.get(key);
+/** Picklist codes the value may match, as the form path computes them at `now`. */
+export function enabledCodes(
+  config: TerminalConfig,
+  queryType: string,
+  key: string,
+  now: number,
+): string[] {
+  const field = compileQueryType(config, queryType, now)?.fieldByKey.get(key);
   return field === undefined ? [] : field.enabledValues.map((v) => v.code);
 }
 
 const iso = (d: Date): string => d.toISOString().slice(0, 10);
 
 /**
- * One canonical, non-empty user value for `field` in a command position: strings from the
- * field's pattern (or charset alphabet) without the delimiter unless `rest`, then canonicalised;
- * picklist values from enabled codes; dates 1901-01-01 to 2099-12-31 as ISO; years 1901 to 2099.
+ * One valid, non-empty user value for `field` in a command position: strings from the field's
+ * pattern (or charset alphabet) without the delimiter unless `rest`, then canonicalised; picklist
+ * values from enabled codes; dates 1901-01-01 to 2099-12-31, typed in one of the field's
+ * inputFormats or ISO; years 1901 to 2099.
  */
 function canonicalValue(
   config: TerminalConfig,
@@ -57,15 +64,18 @@ function canonicalValue(
         .filter((v): v is string => typeof v === "string" && (rest || !v.includes(d)));
     }
     case "picklist":
-      return fc.constantFrom(...enabledCodes(config, queryType, field.key));
-    case "date":
+      return fc.constantFrom(...enabledCodes(config, queryType, field.key, now));
+    case "date": {
+      const formats = [...new Set([...field.inputFormats, ISO_DATE_FORMAT])];
+      const date = fc.date({
+        min: new Date("1901-01-01T00:00:00Z"),
+        max: new Date("2099-12-31T00:00:00Z"),
+        noInvalidDate: true,
+      });
       return fc
-        .date({
-          min: new Date("1901-01-01T00:00:00Z"),
-          max: new Date("2099-12-31T00:00:00Z"),
-          noInvalidDate: true,
-        })
-        .map(iso);
+        .tuple(date, fc.constantFrom(...formats))
+        .map(([d, format]) => formatDate(iso(d), format));
+    }
     case "year":
       return fc.integer({ min: 1901, max: 2099 }).chain((y) => fc.constantFrom(y, String(y)));
     case "boolean":
@@ -83,10 +93,11 @@ function unpositionedValue(
   config: TerminalConfig,
   queryType: string,
   field: FieldDef,
+  now: number,
 ): fc.Arbitrary<DraftValue | undefined> {
   const valid =
     field.dataType === "picklist"
-      ? fc.constantFrom(...enabledCodes(config, queryType, field.key))
+      ? fc.constantFrom(...enabledCodes(config, queryType, field.key, now))
       : fc.string({ minLength: 1, maxLength: 8 });
   return fc.oneof(valid, fc.string({ maxLength: 8 }), emptyValue);
 }
@@ -132,7 +143,7 @@ export function draftFor(
   const other = (key: string): fc.Arbitrary<DraftValue | undefined> => {
     const field = byKey.get(key);
     if (field === undefined) throw new Error(`no field ${key}`);
-    return unpositionedValue(config, command.queryType, field);
+    return unpositionedValue(config, command.queryType, field, now);
   };
   return fc
     .tuple(fc.tuple(...command.positions.map(slot)), fc.tuple(...unpositioned.map(other)))
@@ -147,4 +158,25 @@ export function draftFor(
       for (const [i, k] of unpositioned.entries()) put(k, rest[i]);
       return { command, draft, positioned, unpositioned };
     });
+}
+
+/**
+ * Values that may replace a command's preset keys in a draft: the preset in another case or
+ * padded (canonically equal), other text, or an empty value; a key left out keeps the preset.
+ */
+export function presetOverrides(command: CommandDef): fc.Arbitrary<Record<string, DraftValue>> {
+  const entries = Object.entries(command.presets ?? {}).map(([key, preset]) => {
+    const text = String(preset);
+    const value: fc.Arbitrary<DraftValue> = fc.oneof(
+      fc.constantFrom(text.toLowerCase(), ` ${text} `),
+      fc.string({ maxLength: 8 }),
+      fc.constantFrom(null, "", " "),
+    );
+    return fc.option(value, { nil: undefined }).map((v) => ({ key, v }));
+  });
+  return fc.tuple(...entries).map((pairs) => {
+    const out: Record<string, DraftValue> = {};
+    for (const { key, v } of pairs) if (v !== undefined) out[key] = v;
+    return out;
+  });
 }

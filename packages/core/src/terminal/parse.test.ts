@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { ValidationError } from "../contracts/index";
+import { canonicalise } from "../rules/canonicalise";
 import { defaultSite } from "./__fixtures__/sites";
 import * as terminal from "./index";
 import { parseCommand } from "./parse";
@@ -145,24 +147,60 @@ describe("spec 4.4 error params never carry the typed value", () => {
     "VEH.ZZ-0001.plateType=PC.ORPHAN",
     "VEH.ZZ-0001.state=OK.state=AZ",
     "VEH.ZZ-0001.ABCD",
+    "veh.zz-0001.qq.26",
     "PER..PAT",
     "PER.TESTLAST.PAT.13131901.QQ",
     "PER.TESTLAST.PAT.99999999",
+    "PER.TESTLAST.PAT.01011901.QQ",
+    "PER.TESTLAST.PAT.01-01-1901.X.QQ",
     "PRO.ZZ-0001.NOPE.a.b.c",
     "WNT..PAT.1901-13-01",
+    "WNT.TESTLAST.PAT.1901-01-01.EXTRA",
   ];
   const exempt = new Set(["terminal.unknownCommand:code", "terminal.unknownField:name"]);
-  // every token, the command code included (exempt covers unknownCommand:code), and the whole input
-  const typedValues = (input: string): string[] =>
-    [
-      input,
-      ...input
-        .split(".")
-        // a named token's key is a field key, not a typed value
-        .flatMap((t) => [t, t.slice(t.indexOf("=") + 1)]),
-    ]
-      .map((t) => t.trim())
-      .filter((t) => t !== "");
+  const commandCodes = new Set(defaultSite.commands.map((c) => c.code.toLowerCase()));
+  /**
+   * Every token and the whole trimmed input. Config is not typed: a named token's key is a field
+   * key, and a recognised command code is config (an unrecognised one stays typed; the exemption
+   * covers terminal.unknownCommand code).
+   */
+  const typedValues = (input: string): string[] => {
+    const [code = "", ...tokens] = input.split(".").map((t) => t.trim());
+    return [
+      input.trim(),
+      ...(commandCodes.has(code.toLowerCase()) ? [] : [code]),
+      ...tokens.flatMap((t) => [t, t.slice(t.indexOf("=") + 1).trim()]),
+    ].filter((t) => t !== "");
+  };
+  // Canonicalised echoes: years (26 to 2026) and typed dates (to ISO YYYY-MM-DD).
+  const echoFields = defaultSite.queryTypes
+    .flatMap((q) => q.fields)
+    .filter((f) => f.dataType === "year" || f.dataType === "date");
+  const echoes = (typed: string): string[] => [
+    typed,
+    ...echoFields.flatMap((f) => {
+      const { value } = canonicalise(f, typed, { now });
+      return value === null ? [] : [String(value)];
+    }),
+  ];
+  /**
+   * `key:name` of every non-exempt param that echoes a typed value: equal ignoring case (so
+   * upper-cased codes too), or containing a typed value or echo of length 3 or more.
+   */
+  const leaks = (input: string, errors: readonly ValidationError[]): string[] => {
+    const typed = typedValues(input)
+      .flatMap(echoes)
+      .map((t) => t.toLowerCase());
+    const echoed = (value: unknown) => {
+      const text = String(value).toLowerCase();
+      return typed.some((t) => text === t || (t.length >= 3 && text.includes(t)));
+    };
+    return errors.flatMap((e) =>
+      Object.entries(e.params ?? {})
+        .filter(([name, value]) => !exempt.has(`${e.key}:${name}`) && echoed(value))
+        .map(([name]) => `${e.key}:${name}`),
+    );
+  };
 
   it("the typed list includes the command-code token and the whole trimmed input", () => {
     const typed = typedValues(" ZZTOP ");
@@ -172,16 +210,39 @@ describe("spec 4.4 error params never carry the typed value", () => {
     );
   });
 
+  it("the check catches case-insensitive, canonical and substring echoes", () => {
+    const err = (params: Record<string, string | number>): ValidationError[] => [
+      { key: "validation.invalidYear", params },
+    ];
+    const caught = ["validation.invalidYear:echo"];
+    expect(leaks("VEH.ZZ-0001.OK", err({ echo: "zz-0001" }))).toEqual(caught);
+    expect(leaks("VEH.ZZ-0001.ok", err({ echo: "OK" }))).toEqual(caught);
+    expect(leaks("VEH.ZZ-0001.OK.26", err({ echo: 2026 }))).toEqual(caught);
+    expect(leaks("PER.TESTLAST.PAT.01-01-1901", err({ echo: "1901-01-01" }))).toEqual(caught);
+    expect(leaks("PER.TESTLAST.PAT.01011901", err({ echo: "1901-01-01" }))).toEqual(caught);
+    expect(leaks("PER.TESTLAST", err({ echo: "was testlast" }))).toEqual(caught);
+  });
+
+  it("config values are not typed values: field keys, labelKeys and a known command code", () => {
+    const params = { field: "plateType", labelKey: "field.plateType", position: 2 };
+    expect(leaks("VEH.ZZ-0001.OK.plateType=PC", [{ key: "x", params }])).toEqual([]);
+    const pro = { field: "propertyType", labelKey: "field.propertyType" };
+    expect(leaks("PRO.ZZ-0001", [{ key: "x", params: pro }])).toEqual([]);
+    expect(typedValues("pro.ZZ-0001")).not.toContain("pro");
+  });
+
+  it("only unknownCommand code and unknownField name are exempt (spec 4.4, #296 ruling 4)", () => {
+    const code = { key: "terminal.unknownCommand", params: { code: "XYZ" } };
+    const name = { key: "terminal.unknownField", params: { name: "ORPHANX" } };
+    expect(leaks("XYZ.ORPHANX=1", [code, name])).toEqual([]);
+    const other = { key: "terminal.unknownField", params: { code: "XYZ" } };
+    expect(leaks("XYZ.ORPHANX=1", [other])).toEqual(["terminal.unknownField:code"]);
+  });
+
   it.each(inputs.map((input, i) => [i + 1, input] as const))("input %i", (_, input) => {
     const r = p(input);
     expect(r.errors.length).toBeGreaterThan(0);
-    const typed = typedValues(input);
-    for (const e of r.errors) {
-      for (const [name, value] of Object.entries(e.params ?? {})) {
-        if (exempt.has(`${e.key}:${name}`)) continue;
-        expect(typed).not.toContain(String(value));
-      }
-    }
+    expect(leaks(input, r.errors)).toEqual([]);
   });
 });
 
