@@ -4,10 +4,12 @@ import {
   type AuthApi,
   type AuthStore,
   type ClientPlatform,
+  type ConfigRefresh,
   createAnnouncer,
   createApiClient,
   createAuthApi,
   createAuthStore,
+  createConfigRefresh,
   createDraftStore,
   createPreferencesStore,
   createQueryClient,
@@ -44,6 +46,8 @@ export interface Services {
   preferences: PreferencesStore;
   drafts: DraftStore;
   submit: SubmitController;
+  /** Keeps the cached config current while signed in (ADR-0011 item 3); AppShell starts it. */
+  configRefresh: ConfigRefresh;
   reset: ResetController;
   createSocket: (url: string) => SocketLike;
 }
@@ -73,7 +77,9 @@ export function createServices(options: ServicesOptions): Services {
   const preferences = createPreferencesStore();
   const drafts = createDraftStore();
   const submit = createSubmitController({ api, queryClient, online: options.platform.online });
+  const configRefresh = createConfigRefresh({ api, queryClient, platform: options.platform });
   registerQueryCacheReset(reset, queryClient);
+  reset.register(() => configRefresh.stop());
   reset.register(() => authStore.getState().setSignedOut());
   reset.register(() => announcer.clear());
   reset.register(() => preferences.getState().reset());
@@ -90,6 +96,7 @@ export function createServices(options: ServicesOptions): Services {
     preferences,
     drafts,
     submit,
+    configRefresh,
     reset,
     createSocket: options.createSocket ?? createBrowserSocket,
   };

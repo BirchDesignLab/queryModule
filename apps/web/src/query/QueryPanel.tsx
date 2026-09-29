@@ -53,7 +53,7 @@ export function QueryPanel() {
           drafts={drafts}
           mode="live"
           idPrefix={ID_PREFIX}
-          onConfigChanged={() => void live.refetch()}
+          onConfigChanged={() => live.refetch()}
         />
       ) : null}
     </main>

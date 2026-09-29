@@ -116,6 +116,8 @@
   "form.noConnection": "No connection to server",
   "form.connectionRestored": "Connection restored",
   "form.updateRequired": "Client update required",
+  "form.configUpdated": "The form was updated by your administrator.",
+  "form.queryTypeRemoved": "The selected query type is no longer available. {queryType} is selected.",
   "form.preview": "Preview",
   "form.dateFormats": "Accepted formats: {formats}",
   "shortcut.sheetTitle": "Keyboard shortcuts",

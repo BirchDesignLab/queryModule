@@ -239,7 +239,7 @@ export interface QueryPanelViewProps {
   /** Two panels on one page never share ids. */
   idPrefix: string;
   /** Live only: the config changed under a submit; the owner refetches it. */
-  onConfigChanged?: () => void;
+  onConfigChanged?: () => void | Promise<void>;
 }
 
 /** The one renderer of the query panel, from config alone (BR-001; ADR-0011 core loop). */

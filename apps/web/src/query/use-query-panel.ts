@@ -16,7 +16,15 @@ import {
   formLevelMessages,
   type SubmitBlockReason,
 } from "@querymodule/web-ui";
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { valuesToSend } from "./send-values.js";
@@ -79,6 +87,11 @@ export type LiveConfigModel =
   | { status: "error"; retry(): void }
   | { status: "ready"; config: ClientSiteConfig; refetch(): Promise<void> };
 
+/** After a 409 the refetched config's change is not announced again (its own message stands). */
+const CONFIG_CHANGED_QUIET_MS = 10_000;
+/** How long after the refetch settles the quiet lasts, for the render that applies it. */
+const CONFIG_CHANGED_SETTLE_MS = 1000;
+
 const NO_VALUES: Readonly<Record<string, DraftValue>> = {};
 
 function initialQueryType(config: ClientSiteConfig): string | null {
@@ -108,6 +121,14 @@ export function useLiveConfig(): LiveConfigModel {
   const t = useT();
   const [load, setLoad] = useState<ConfigLoad>({ status: "loading" });
   const mounted = useRef(false);
+  // The background refresh writes a newer config into the query cache (ADR-0011 item 3); follow it.
+  const subscribe = useCallback(
+    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
+    [queryClient],
+  );
+  const cached = useSyncExternalStore(subscribe, () =>
+    queryClient.getQueryData<ClientSiteConfig>(["config"]),
+  );
 
   // retry: false, the panel has its own Retry button; a second silent attempt would hide the failure.
   const fetchConfig = useCallback(
@@ -134,7 +155,7 @@ export function useLiveConfig(): LiveConfigModel {
   }, [fetchConfig]);
 
   if (load.status === "ready")
-    return { status: "ready", config: load.config, refetch: fetchConfig };
+    return { status: "ready", config: cached ?? load.config, refetch: fetchConfig };
   if (load.status === "error") {
     return {
       status: "error",
@@ -152,7 +173,7 @@ export interface QueryPanelSource {
   drafts: DraftStore;
   mode: PanelViewMode;
   /** Live: the config changed under a submit; the owner refetches it. */
-  onConfigChanged?: () => void;
+  onConfigChanged?: () => void | Promise<void>;
 }
 
 /**
@@ -187,6 +208,28 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     if (initialType !== null && !known) drafts.getState().select(initialType);
   }, [drafts, initialType, known]);
   const queryType = known ? storeType : initialType;
+
+  // A newer config arrived while the panel is open (the live refresh or a refetch): say so, politely,
+  // and never move focus (spec 6.6). A 409 already announced itself, so its refetch stays quiet.
+  const seenHash = useRef<string | null>(null);
+  const quietUntil = useRef(0);
+  useEffect(() => {
+    const previous = seenHash.current;
+    seenHash.current = config.configHash;
+    if (preview || previous === null || previous === config.configHash) return;
+    if (Date.now() < quietUntil.current) {
+      quietUntil.current = 0;
+      return;
+    }
+    const removed = storeType !== null && !known;
+    const fallbackKey = config.queryTypes.find((q) => q.code === initialType)?.labelKey;
+    const fallback = fallbackKey === undefined ? (initialType ?? "") : t(fallbackKey);
+    announcer.announce(
+      removed && initialType !== null
+        ? `${t("form.configUpdated")} ${t("form.queryTypeRemoved", { queryType: fallback })}`
+        : t("form.configUpdated"),
+    );
+  }, [announcer, config, initialType, known, preview, storeType, t]);
 
   const values = useStore(drafts, (s) =>
     queryType === null ? undefined : s.drafts[queryType]?.values,
@@ -238,12 +281,16 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   );
 
   // Fields that became visible since the previous evaluation of the same type (spec 6.2 A2).
-  // Focus does not move; several reveals share one announcement.
+  // Focus does not move; several reveals share one announcement. A new config shows its own fields:
+  // that is announced once as "updated", not as a rule reveal (one polite slot, spec 6.6).
+  const revealHash = useRef(config.configHash);
   useEffect(() => {
     if (formState === null) return;
     const visible = new Set(formState.fields.filter((f) => f.visible).map((f) => f.key));
     const previous = seen.current;
-    if (previous !== null && previous.queryType === formState.queryType) {
+    const configChanged = revealHash.current !== config.configHash;
+    revealHash.current = config.configHash;
+    if (!configChanged && previous !== null && previous.queryType === formState.queryType) {
       const messages = formState.fields
         .filter((f) => f.visible && !previous.visible.has(f.key))
         .map((f) =>
@@ -254,7 +301,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       if (messages.length > 0) announcer.announce(messages.join(" "));
     }
     seen.current = { queryType: formState.queryType, visible };
-  }, [formState, announcer, t]);
+  }, [formState, config.configHash, announcer, t]);
 
   // Errors render on the commit that follows a blocked submit, so focus moves after it.
   useEffect(() => {
@@ -307,7 +354,14 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         return;
       case "configChanged":
         // The controller invalidated the config query; fetching re-evaluates the draft against it.
-        onConfigChanged?.();
+        quietUntil.current = Date.now() + CONFIG_CHANGED_QUIET_MS;
+        // Once the refetch has settled its change (if any) is applied, so the quiet ends shortly
+        // after: a later, real change is announced even inside the window.
+        void Promise.resolve(onConfigChanged?.()).finally(() => {
+          globalThis.setTimeout(() => {
+            quietUntil.current = 0;
+          }, CONFIG_CHANGED_SETTLE_MS);
+        });
         announcer.announce(t("submit.configChanged"));
         return;
       case "rateLimited":

@@ -27,6 +27,20 @@ describe("SEC-006 sign-out clears query cache, announcer and preferences (spec 6
     expect(clearSpy).toHaveBeenCalled();
   });
 
+  it("#361 sign-out and a 401 on the background config fetch stop the config refresh", async () => {
+    const services = testServices();
+    await services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    const stop = vi.spyOn(services.configRefresh, "stop");
+    await services.session.signOut();
+    expect(stop).toHaveBeenCalled();
+
+    await services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    stop.mockClear();
+    server.use(http.get(`${API}/api/v1/config`, () => new HttpResponse(null, { status: 401 })));
+    await services.api.GET("/api/v1/config", { headers: { "X-Background": "1" } });
+    expect(stop).toHaveBeenCalled();
+  });
+
   it("wires the API client's onUnauthenticated to session.handleUnauthenticated", async () => {
     const services = testServices();
     await services.session.signIn(TEST_USER.email, TEST_PASSWORD);
