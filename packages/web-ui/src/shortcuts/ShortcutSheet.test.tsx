@@ -7,6 +7,7 @@ import { ShortcutSheet } from "./ShortcutSheet.js";
 
 const MESSAGES: Record<string, string> = {
   "shortcut.sheetTitle": "Keyboard shortcuts",
+  "shortcut.close": "Close",
   "shortcut.action.submit": "Submit the query",
   "shortcut.action.focusTerminal": "Go to the command line",
   "shortcut.action.goPanel": "Go to the query panel",
@@ -79,6 +80,16 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
     const dialog = screen.getByRole("dialog");
     dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
     await Promise.resolve();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+  it("has a focusable Close button that closes it and returns focus (axe scrollable-region-focusable)", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const opener = screen.getByRole("button", { name: "opener" });
+    await user.click(opener);
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
   });

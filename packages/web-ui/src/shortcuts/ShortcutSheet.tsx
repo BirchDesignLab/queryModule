@@ -68,6 +68,11 @@ export function ShortcutSheet({ open, onClose, bindings, t }: ShortcutSheetProps
           )),
         )}
       </ul>
+      {/* A focusable control inside the scrolling dialog (axe scrollable-region-focusable) and the
+          element showModal focuses first; Escape still closes through the cancel event. */}
+      <button type="button" className="qm-button" onClick={onClose}>
+        {t("shortcut.close")}
+      </button>
     </dialog>
   );
 }
