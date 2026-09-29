@@ -166,7 +166,7 @@ const ROUTE_DEFS = [
     summary: "Submit a query; answers 202 with the correlation id once the request is recorded",
     access: "session",
     since: "m1",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: true,
     request: {
       headers: z.object({ "idempotency-key": IdempotencyKeySchema }),

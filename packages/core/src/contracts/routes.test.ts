@@ -32,7 +32,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     }
   });
 
-  it("ships the M0/M1 skeleton, all planned", () => {
+  it("ships the M0/M1 skeleton; submitQuery is live (D-A3, #285)", () => {
     expect(ROUTES.map((r) => [r.id, r.method, r.path, r.access, r.since, r.status])).toEqual([
       ["getHealth", "get", "/api/v1/health", "public", "m0", "planned"],
       ["getMeta", "get", "/api/v1/meta", "public", "m0", "planned"],
@@ -40,7 +40,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["getConfig", "get", "/api/v1/config", "session", "m1", "planned"],
       ["getMePreferences", "get", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
       ["putMePreferences", "put", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
-      ["submitQuery", "post", "/api/v1/queries", "session", "m1", "planned"],
+      ["submitQuery", "post", "/api/v1/queries", "session", "m1", "live"],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
