@@ -724,6 +724,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
               doc={checks.doc}
               labels={checks.labels}
               blocked={raw.parseError !== null || errorCount > 0}
+              pending={checks.doc !== doc || checks.labels !== labels}
             />
           )}
         </div>

@@ -26,9 +26,13 @@ type Opened = Awaited<ReturnType<typeof openBuilder>>;
 const store = (t: Opened) => configDraftStore(t.services).getState();
 const doc = (t: Opened) => store(t).doc as JsonObject;
 
-/** A builder edit, as the form or the raw tab would make it. */
-function edit(t: Opened, change: (d: JsonObject) => JsonObject) {
+/**
+ * A builder edit, as the form or the raw tab would make it, then a wait until the debounced draft
+ * reaches the preview (aria-busy clears). Acting before that raced the old config on CI (#357).
+ */
+async function edit(t: Opened, change: (d: JsonObject) => JsonObject) {
   act(() => store(t).setDoc(change(structuredClone(doc(t)))));
+  await waitFor(() => expect(t.preview).not.toHaveAttribute("aria-busy"));
 }
 
 type Field = { key: string; required?: boolean };
@@ -47,9 +51,19 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
     expect(within(preview).getByRole("button", { name: "Vehicle" })).toBeInTheDocument();
   });
 
+  it("#357 CI flake: the preview is aria-busy until the settled draft reaches it", async () => {
+    const t = await openBuilder();
+    expect(t.preview).not.toHaveAttribute("aria-busy");
+    act(() => store(t).setDoc({ ...structuredClone(doc(t)), quickAccess: ["PER", "VEH"] }));
+    expect(t.preview).toHaveAttribute("aria-busy", "true");
+    await waitFor(() => expect(t.preview).not.toHaveAttribute("aria-busy"));
+    const buttons = within(t.preview).getAllByRole("button", { name: /^(Person|Vehicle)$/ });
+    expect(buttons.map((b) => b.textContent)).toEqual(["Person", "Vehicle"]);
+  });
+
   it("a builder edit that makes DOB required shows the required error on preview submit, and sends nothing", async () => {
     const t = await openBuilder();
-    edit(t, (d) => {
+    await edit(t, (d) => {
       const per = (d.queryTypes as QueryType[]).find((q) => q.code === "PER");
       const dob = per?.fields.find((f) => f.key === "dob");
       if (dob === undefined) throw new Error("fixture: PER dob");
@@ -69,16 +83,13 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
     const command = await within(t.preview).findByLabelText("Command");
     await t.user.type(command, "ZZN.TESTERSON{Enter}");
     expect(within(t.preview).getByRole("list", { name: "Command problems" })).toBeInTheDocument();
-    edit(t, (d) => ({
+    await edit(t, (d) => ({
       ...d,
       commands: [
         ...(d.commands as unknown[]),
         { code: "ZZN", queryType: "PER", positions: ["last"] },
       ],
     }));
-    await waitFor(() =>
-      expect(within(t.preview).getByRole("button", { name: "Terminal mode" })).toBeInTheDocument(),
-    );
     const again = within(t.preview).getByLabelText("Command");
     await t.user.clear(again);
     await t.user.type(again, "ZZN.TESTERSON{Enter}");
@@ -97,7 +108,7 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
 
   it("an invalid draft pauses the preview on the last good config", async () => {
     const t = await openBuilder();
-    edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
+    await edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
     expect(
       await within(t.preview).findByText("Preview paused: fix the errors to update it."),
     ).toBeInTheDocument();
@@ -111,7 +122,7 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
       "aria-pressed",
       "true",
     );
-    edit(t, (d) => JSON.parse(JSON.stringify(d).replaceAll('"PER"', '"PEX"')) as JsonObject);
+    await edit(t, (d) => JSON.parse(JSON.stringify(d).replaceAll('"PER"', '"PEX"')) as JsonObject);
     await waitFor(() =>
       expect(within(t.preview).getByRole("button", { name: "Vehicle" })).toHaveAttribute(
         "aria-pressed",
@@ -146,7 +157,7 @@ describe("builder live preview (Task 32, BR-001, UX-004)", () => {
 
   it("critic 2: reopening the builder on a draft with errors still shows a preview", async () => {
     const t = await openBuilder();
-    edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
+    await edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
     await within(t.preview).findByText("Preview paused: fix the errors to update it.");
     await t.user.click(screen.getByRole("link", { name: "Connection status" }));
     await t.user.click(await screen.findByRole("link", { name: "Admin" }));

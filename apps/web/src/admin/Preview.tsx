@@ -34,16 +34,20 @@ function useOverlayTranslator(labels: Readonly<Record<string, Readonly<Record<st
  * Task 32 (#357): the dispatcher's own panel (QueryPanelView, mode "preview") fed from the settled
  * draft. A draft with errors, or one that does not fit the client view, pauses the preview on the
  * last good config. The preview owns a private, memory-only draft store; submit validates like the
- * live form and never sends (Track B Task 19).
+ * live form and never sends (Track B Task 19). The region is aria-busy while a builder edit has not
+ * settled into it yet (#357: tests and assistive tech wait on it).
  */
 export function BuilderPreview({
   doc,
   labels,
   blocked,
+  pending,
 }: {
   doc: JsonObject;
   labels: Readonly<Record<string, Readonly<Record<string, string>>>>;
   blocked: boolean;
+  /** The builder draft has changed since `doc` settled. */
+  pending: boolean;
 }) {
   const t = useT();
   const headingId = useId();
@@ -61,7 +65,11 @@ export function BuilderPreview({
   const config = candidate ?? lastGood ?? live ?? null;
   const paused = candidate === null;
   return (
-    <section className="qm-admin__preview" aria-labelledby={headingId}>
+    <section
+      className="qm-admin__preview"
+      aria-labelledby={headingId}
+      aria-busy={pending ? true : undefined}
+    >
       <h3 id={headingId}>{t("admin.preview.title")}</h3>
       {paused && <p>{t("admin.preview.paused")}</p>}
       {config !== null && (
