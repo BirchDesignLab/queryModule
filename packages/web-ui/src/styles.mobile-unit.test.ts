@@ -73,7 +73,7 @@ describe("B4 officer quick access: tiles, run button, no muted text", () => {
     );
     expect(run).toMatch(/flex:\s*1 1 12rem/);
   });
-  it("no rule of the officer layout or its bar uses the muted text colour (spec 6.3)", () => {
+  it("no rule of the officer layout uses the muted text colour (spec 6.3)", () => {
     const officerRules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
       .filter(([, sel]) => sel?.includes(".qm-layout--mobile-unit"))
       .map(([, , body]) => body ?? "");

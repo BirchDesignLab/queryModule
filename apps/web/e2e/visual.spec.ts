@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { COLOR_TOKENS, type ThemeMode, tokenValue } from "@querymodule/tokens";
 import { expect, test } from "./fixtures.js";
-import { chooseTheme, hexToRgb, seededUser, signIn } from "./helpers.js";
+import { chooseTheme, hexToRgb, openAccountMenu, seededUser, signIn } from "./helpers.js";
 
 // D0.4 visual regression baseline (design system plan, docs/design/2026-09-29-visual-system.md).
 //
@@ -262,6 +262,12 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
         expect(
           await textInColor(page, ".qm-layout--mobile-unit", muted),
           "officer muted text",
+        ).toEqual([]);
+        // The bar sits outside the layout: scan it with the account disclosure open.
+        await openAccountMenu(page);
+        expect(
+          await textInColor(page, ".qm-app-header--compact", muted),
+          "officer bar muted text",
         ).toEqual([]);
       });
     });

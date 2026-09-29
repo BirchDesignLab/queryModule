@@ -98,7 +98,8 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
     await expect(page.locator("html")).toHaveAttribute("data-persona", "mobileUnit");
     await expect(page.locator(".qm-layout--mobile-unit")).toHaveCount(1);
     await expect(page.locator(".qm-app-header--compact")).toHaveCount(1);
-    expect(await headerHeight(page)).toBeLessThanOrEqual(dispatchHeader);
+    // Room for 48 px targets and their focus rings: taller than the dense dispatch bar.
+    expect(await headerHeight(page)).toBeGreaterThanOrEqual(dispatchHeader + 8);
     expect(await overflowX(page)).toBeLessThanOrEqual(0);
 
     // Night and red shift are one control away: icon buttons in the bar, named by their label.

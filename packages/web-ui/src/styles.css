@@ -881,7 +881,7 @@ h1 {
   color: inherit;
 }
 
-/* Officer: the run action is 64 px and full width; nothing muted (spec 6.3). */
+/* Officer: the run action is 64 px and takes the row beside Clear; nothing muted (spec 6.3). */
 .qm-layout--mobile-unit .qm-action-bar > button[type="submit"] {
   flex: 1 1 12rem;
   min-height: calc(var(--qm-control-height-touch) + var(--qm-space-2));

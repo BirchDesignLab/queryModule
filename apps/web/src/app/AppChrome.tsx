@@ -106,7 +106,7 @@ function BrandMark() {
 /**
  * The signed-in header (D-B4, design B1): product mark and name, site name, the Main nav (Queries,
  * Status, Admin), then the account disclosure (user, role, theme, sign out). The mobile-unit bar
- * is the compact one: the same nav, the theme select and sign out inline (its own look is B4).
+ * is the compact one: the mark, the same nav, the theme as icon buttons and the account disclosure.
  * It needs the router and the translator, so it lives under the routes, not beside AppChrome.
  */
 export function AppHeader() {
