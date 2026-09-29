@@ -419,6 +419,34 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(submitRecorder.calls[0]?.key).toBeTruthy();
   });
 
+  it("#382 A1 a skipped part says it was not run without inventing a reason", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          {
+            ...ACK_202,
+            parts: [
+              ...ACK_202.parts,
+              {
+                partId: 2,
+                queryType: "WNT",
+                status: "skipped",
+                sourceIds: [],
+                droppedSourceIds: [],
+              },
+            ],
+          },
+          { status: 202 },
+        ),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const ack = await screen.findByRole("region", { name: "Last query" });
+    expect(ack).toHaveTextContent("Wanted check was not run.");
+    expect(ack).not.toHaveTextContent("linked query has no sources");
+  });
+
   it("UX-004 Copy reference writes the correlation ID and announces it", async () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
@@ -561,5 +589,166 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       expect(screen.queryByLabelText(/Property type/)).not.toBeInTheDocument();
       expect(document.querySelector(".qm-type-fields")).toBeNull();
     });
+  });
+});
+
+describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
+  const toggle = () => screen.getByRole("button", { name: "Terminal mode" });
+  const terminal = () => screen.getByLabelText("Command");
+
+  it("[A5] toggling writes the command and counts the fields it cannot show; editing and toggling back merges", async () => {
+    const { user } = await openPanel();
+    await user.selectOptions(screen.getByLabelText("State"), "OK");
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    await user.selectOptions(screen.getByLabelText(/Plate type/), "PC");
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(terminal()).toHaveValue("VEH.ZZ-0001.OK");
+    expect(screen.getByText("1 field not shown")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Plate")).not.toBeInTheDocument();
+    await user.clear(terminal());
+    await user.type(terminal(), "VEH.ZZ-0002.OK..");
+    await user.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0002");
+    expect(screen.getByLabelText(/Plate type/)).toHaveValue("PC");
+  });
+
+  it("selecting a type in terminal mode re-derives the text from that type's draft", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    await user.click(toggle());
+    expect(terminal()).toHaveValue("VEH.ZZ-0001");
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    expect(terminal()).toHaveValue("PER");
+    await user.click(screen.getByRole("button", { name: "Vehicle" }));
+    expect(terminal()).toHaveValue("VEH.ZZ-0001");
+  });
+
+  it("spec 4.4 a typed edit survives switching type and back in terminal mode", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    await user.click(toggle());
+    await user.clear(terminal());
+    await user.type(terminal(), "VEH.ZZ-0002.OK");
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    await user.click(screen.getByRole("button", { name: "Vehicle" }));
+    expect(terminal()).toHaveValue("VEH.ZZ-0002.OK");
+  });
+
+  it("PER.TESTERSON in terminal mode switches to Person on toggle back and keeps the Vehicle draft", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    await user.click(toggle());
+    await user.clear(terminal());
+    await user.type(terminal(), "PER.TESTERSON");
+    await user.click(toggle());
+    expect(screen.getByRole("button", { name: "Person" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText(/Last name/)).toHaveValue("TESTERSON");
+    await user.click(screen.getByRole("button", { name: "Vehicle" }));
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+  });
+});
+
+describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
+  const toggle = () => screen.getByRole("button", { name: "Terminal mode" });
+  const terminal = () => screen.getByLabelText("Command");
+
+  it("[A4] VEH.ABC123..26 then Enter posts the typed values, announces the ack and the form shows them", async () => {
+    const { user } = await openPanel();
+    await user.click(toggle());
+    await user.type(terminal(), ".ABC123..26{Enter}");
+    await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent at .* Reference/));
+    expect(submitRecorder.calls).toHaveLength(1);
+    const body = submitRecorder.calls[0]?.body as { queryType: string; values: object };
+    expect(body).toMatchObject({ queryType: "VEH", values: { plate: "ABC123", year: "26" } });
+    expect(body.values).not.toHaveProperty("state");
+    await user.click(toggle());
+    expect(screen.getByLabelText("Plate")).toHaveValue("ABC123");
+    expect(screen.getByLabelText("Year")).toHaveValue("26");
+  });
+
+  it("[A4] an unknown command lists one error, keeps focus and text, sends nothing and announces the count", async () => {
+    const { user } = await openPanel();
+    await user.click(toggle());
+    await user.clear(terminal());
+    await user.type(terminal(), "XYZ.123{Enter}");
+    const list = screen.getByRole("list", { name: "Command problems" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(list).getByText("Unrecognized command XYZ.")).toBeInTheDocument();
+    expect(terminal()).toHaveFocus();
+    expect(terminal()).toHaveValue("XYZ.123");
+    expect(submitRecorder.calls).toHaveLength(0);
+    expect(polite()).toHaveTextContent("1 problem with the command.");
+  });
+
+  it("FR-055 a server 400 on a terminal submit lists its errors under the command and keeps focus there", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          { error: { code: "validationFailed", errors: [{ key: "plan.noPlateOnlySource" }] } },
+          { status: 400 },
+        ),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.click(toggle());
+    await user.type(terminal(), ".ABC123{Enter}");
+    const list = await screen.findByRole("list", { name: "Command problems" });
+    expect(
+      within(list).getByText("None of the selected sources accepts a plate-only query."),
+    ).toBeInTheDocument();
+    expect(terminal()).toHaveAttribute("aria-invalid", "true");
+    expect(terminal()).toHaveFocus();
+    await waitFor(() => expect(polite()).toHaveTextContent("1 problem with the command."));
+  });
+
+  it("a value only in the draft counts: plateType set in the form, then VEH.ABC123.OK submits (#297 item 3)", async () => {
+    const { user } = await openPanel();
+    await user.selectOptions(screen.getByLabelText("State"), "OK");
+    await user.selectOptions(screen.getByLabelText(/Plate type/), "PC");
+    await user.click(toggle());
+    await user.clear(terminal());
+    await user.type(terminal(), "VEH.ABC123.OK{Enter}");
+    await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+    expect(submitRecorder.calls[0]?.body).toMatchObject({
+      queryType: "VEH",
+      values: { plate: "ABC123", state: "OK", plateType: "PC" },
+    });
+  });
+
+  it("terminal Enter goes through the submit gate: nothing is sent while a submit is in flight", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`${API}/api/v1/queries`, async ({ request }) => {
+        submitRecorder.calls.push({ key: null, body: await request.json() });
+        await gate;
+        return HttpResponse.json(ACK_202, { status: 202 });
+      }),
+    );
+    const { user, services } = await openPanel();
+    const announce = vi.spyOn(services.announcer, "announce");
+    await user.click(toggle());
+    await user.type(terminal(), ".ABC123{Enter}");
+    await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+    await user.keyboard("{Enter}{Control>}{Enter}{/Control}");
+    expect(screen.getByRole("button", { name: "Submit" })).toHaveAttribute("aria-disabled", "true");
+    await waitFor(() => expect(announce).toHaveBeenCalledWith("Submitting"));
+    release();
+    await screen.findByRole("region", { name: "Last query" });
+    expect(submitRecorder.calls).toHaveLength(1);
+  });
+
+  it("signing out resets the mode to form and clears the terminal text", async () => {
+    const { user, services } = await openPanel();
+    await user.click(toggle());
+    await user.type(terminal(), ".ABC123");
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(services.drafts.getState().mode).toBe("form"));
+    expect(services.drafts.getState().terminalText).toBe("");
   });
 });

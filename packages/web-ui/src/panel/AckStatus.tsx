@@ -5,7 +5,8 @@ export interface AckView {
   correlationId: string;
   /** Epoch milliseconds. */
   acknowledgedAt: number;
-  skipped: readonly { queryTypeLabel: string; reasonText: string }[];
+  /** reasonText null: the 202 gave no reason, so none is shown (#382 A1). */
+  skipped: readonly { queryTypeLabel: string; reasonText: string | null }[];
 }
 
 export interface AckStatusProps {
@@ -54,7 +55,9 @@ export function AckStatus({ ack, onCopy, t }: AckStatusProps): JSX.Element | nul
       </p>
       {ack.skipped.map((part) => (
         <p key={part.queryTypeLabel} className="qm-ack__line">
-          {t("submit.partSkipped", { queryType: part.queryTypeLabel, reason: part.reasonText })}
+          {part.reasonText === null
+            ? t("submit.partNotRun", { queryType: part.queryTypeLabel })
+            : t("submit.partSkipped", { queryType: part.queryTypeLabel, reason: part.reasonText })}
         </p>
       ))}
     </section>

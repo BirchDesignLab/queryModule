@@ -185,6 +185,61 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(delays).toEqual([500, 1000, 2000]);
   });
 
+  it("#382 B1 a health answer from a stopped poll chain starts no second chain", async () => {
+    const delays: number[] = [];
+    const replies = [
+      HttpResponse.error(),
+      HttpResponse.json(ACK, { status: 202 }),
+      HttpResponse.error(),
+    ];
+    serveQueries(() => replies.shift() ?? HttpResponse.error());
+    let releaseHealth: () => void = () => undefined;
+    const held = new Promise<void>((r) => {
+      releaseHealth = r;
+    });
+    let health = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, async () => {
+        health += 1;
+        if (health === 1) await held;
+        return HttpResponse.error();
+      }),
+    );
+    const { controller } = setup({ delays });
+    await controller.getState().submit(REQ); // no response: chain 1 scheduled
+    await vi.advanceTimersByTimeAsync(1000); // chain 1's health request is now in flight
+    await controller.getState().submit(REQ); // 202 stops chain 1
+    await controller.getState().submit(REQ); // no response: chain 2 scheduled
+    releaseHealth(); // chain 1's late answer must not schedule anything
+    await vi.advanceTimersByTimeAsync(0);
+    expect(delays).toEqual([1000, 1000]);
+  });
+
+  it("#382 B2 an offline platform at construction starts in noConnection", () => {
+    const platform = createFakePlatform();
+    platform.setOnline(false);
+    server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.error()));
+    const { controller } = setup({ platform });
+    expect(controller.getState().status).toBe("noConnection");
+  });
+
+  it("#382 B2 dispose unsubscribes from the platform and stops polling", async () => {
+    const platform = createFakePlatform();
+    let health = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () => {
+        health += 1;
+        return HttpResponse.error();
+      }),
+    );
+    const { controller } = setup({ platform });
+    controller.getState().dispose();
+    platform.setOnline(false);
+    expect(controller.getState().status).toBe("idle");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(health).toBe(0);
+  });
+
   it("goes noConnection when the platform reports offline", () => {
     const platform = createFakePlatform();
     server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.error()));

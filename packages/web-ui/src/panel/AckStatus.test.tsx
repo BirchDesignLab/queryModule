@@ -8,6 +8,7 @@ const LABELS: Record<string, string> = {
   "submit.reference": "Reference",
   "submit.copyReference": "Copy reference",
   "submit.partSkipped": "{queryType} was not run: {reason}",
+  "submit.partNotRun": "{queryType} was not run.",
 };
 const t = (key: string, params?: Readonly<Record<string, string | number | boolean>>) =>
   Object.entries(params ?? {}).reduce(
@@ -41,6 +42,17 @@ describe("FR-064 acknowledgment status (spec 6.2)", () => {
   it("lists one line per skipped part", () => {
     render(<AckStatus ack={ACK} onCopy={() => {}} t={t} />);
     expect(screen.getByText("Person was not run: no sources")).toBeInTheDocument();
+  });
+
+  it("#382 A1 a skipped part with no reason says only that it was not run", () => {
+    render(
+      <AckStatus
+        ack={{ ...ACK, skipped: [{ queryTypeLabel: "Person", reasonText: null }] }}
+        onCopy={() => {}}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("Person was not run.")).toBeInTheDocument();
   });
 
   it("Copy reference hands the correlation ID to onCopy", async () => {

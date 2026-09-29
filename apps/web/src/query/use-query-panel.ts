@@ -38,12 +38,32 @@ export interface ReadyQueryPanel {
   setValue(key: string, value: DraftValue): void;
   setSources(sourceIds: readonly string[]): void;
   onSubmitAttempt(): void;
+  /**
+   * The submit gate shared by the form and the terminal (spec 6.8): while submitting or offline it
+   * announces the reason and returns true; the caller sends nothing.
+   */
+  submitGated(): boolean;
+  /** Sends a checked request, as the form does; the terminal passes the type it parsed. */
+  sendChecked(request: CheckedRequest): Promise<void>;
   /** Why the submit button is blocked, or null (spec 6.2). */
   submitReason: SubmitBlockReason | null;
   /** The last acknowledgment, kept until the next one; null before the first. */
   lastAck: { response: SubmitQueryResponse; queryType: string } | null;
   /** Copies a correlation ID to the clipboard and announces it. */
   copyReference(correlationId: string): void;
+}
+
+/** A request whose values were already validated against `state` (the terminal's FR-053 check). */
+export interface CheckedRequest {
+  queryType: string;
+  values: Readonly<Record<string, DraftValue>>;
+  sourceIds: readonly string[];
+  state: FormState;
+  /**
+   * Shows a server 400's errors where the request came from. The terminal lists them under its
+   * input (spec 6.2, FR-055); without it they go to the form fields.
+   */
+  onInvalid?(errors: readonly ValidationError[]): void;
 }
 
 export type QueryPanelModel =
@@ -58,6 +78,17 @@ function initialQueryType(config: ClientSiteConfig): string | null {
   const first = config.quickAccess[0];
   if (first !== undefined && codes.includes(first)) return first;
   return codes[0] ?? null;
+}
+
+/** Defaults while the draft has no choice, else the draft's sources that are still eligible. */
+export function resolveCheckedSources(
+  formState: FormState,
+  draftSources: readonly string[] | null,
+): string[] {
+  const eligible = formState.sources.map((s) => s.sourceId);
+  return draftSources === null
+    ? formState.sources.filter((s) => s.selectedByDefault).map((s) => s.sourceId)
+    : draftSources.filter((id) => eligible.includes(id));
 }
 
 /**
@@ -192,11 +223,7 @@ export function useQueryPanel(): QueryPanelModel {
   }
   if (config === null || queryType === null || formState === null) return { status: "loading" };
 
-  const eligible = formState.sources.map((s) => s.sourceId);
-  const checkedSources =
-    draftSources === null
-      ? formState.sources.filter((s) => s.selectedByDefault).map((s) => s.sourceId)
-      : draftSources.filter((id) => eligible.includes(id));
+  const checkedSources = resolveCheckedSources(formState, draftSources);
 
   const announceBlocked = (state: FormState): void => {
     const count = blockedErrorCount(state);
@@ -212,7 +239,8 @@ export function useQueryPanel(): QueryPanelModel {
     return labelKey === undefined ? code : t(labelKey);
   };
 
-  const handleOutcome = (outcome: SubmitOutcome, state: FormState): void => {
+  const handleOutcome = (outcome: SubmitOutcome, request: CheckedRequest): void => {
+    const { state } = request;
     switch (outcome.kind) {
       case "acknowledged":
         announcer.announce(
@@ -225,6 +253,10 @@ export function useQueryPanel(): QueryPanelModel {
         return;
       case "invalid":
         setServerErrors(outcome.errors as ValidationError[]);
+        if (request.onInvalid !== undefined) {
+          request.onInvalid(outcome.errors as ValidationError[]);
+          return;
+        }
         announceBlocked({
           ...state,
           errors: [...state.errors, ...(outcome.errors as ValidationError[])],
@@ -244,17 +276,31 @@ export function useQueryPanel(): QueryPanelModel {
     }
   };
 
-  const send = async (): Promise<void> => {
-    if (config === null || queryType === null || formState === null) return;
-    const state = formState;
+  const sendChecked = async (request: CheckedRequest): Promise<void> => {
     const outcome = await submit.getState().submit({
+      queryType: request.queryType,
+      values: request.values,
+      sourceIds: request.sourceIds,
+      mode: request.state.mode,
+      configHash: config.configHash,
+    });
+    if (mounted.current) handleOutcome(outcome, request);
+  };
+
+  const send = (): Promise<void> =>
+    sendChecked({
       queryType,
       values: values ?? NO_VALUES,
       sourceIds: checkedSources,
-      mode: state.mode,
-      configHash: config.configHash,
+      state: formState,
     });
-    if (mounted.current) handleOutcome(outcome, state);
+
+  // Ctrl+Enter calls requestSubmit() with no submitter, so the button's aria-disabled guard never
+  // runs: while submitting or gated (spec 6.8) re-announce the reason and send nothing.
+  const submitGated = (): boolean => {
+    if (submitStatus === "idle") return false;
+    announcer.announce(t(submitStatus === "submitting" ? "form.submitting" : "form.noConnection"));
+    return true;
   };
 
   return {
@@ -273,20 +319,15 @@ export function useQueryPanel(): QueryPanelModel {
     setValue: (key, value) => drafts.getState().setValue(key, value),
     setSources: (sourceIds) => drafts.getState().setSources(sourceIds),
     onSubmitAttempt() {
-      // Ctrl+Enter calls requestSubmit() with no submitter, so the button's aria-disabled guard
-      // never runs: while submitting or gated (spec 6.8) re-announce the reason and send nothing.
-      if (submitStatus !== "idle") {
-        announcer.announce(
-          t(submitStatus === "submitting" ? "form.submitting" : "form.noConnection"),
-        );
-        return;
-      }
+      if (submitGated()) return;
       if (formState.valid) {
         void send();
         return;
       }
       announceBlocked(formState);
     },
+    submitGated,
+    sendChecked,
     submitReason:
       submitStatus === "submitting"
         ? "submitting"

@@ -1,9 +1,10 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
 import { ClientSupportProvider } from "../app/client-support-context.js";
 import { appRoutes } from "../app/routes.js";
-import { TEST_USER } from "../test/msw-server.js";
+import { API, CLIENT_CONFIG, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
 
 async function openPanel() {
@@ -34,6 +35,15 @@ function slash(shiftKey = false): void {
     code: "Slash",
     key: shiftKey ? "?" : "/",
     shiftKey,
+  });
+}
+
+/** user-event's default key map has no Backquote either. */
+function ctrlBackquote(): void {
+  fireEvent.keyDown(document.activeElement ?? document.body, {
+    code: "Backquote",
+    key: "`",
+    ctrlKey: true,
   });
 }
 
@@ -131,5 +141,58 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
     });
     document.body.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+describe("FR-006 FR-050 terminal shortcuts (spec 6.4)", () => {
+  it("/ outside inputs switches to terminal mode and focuses the command line; / inside it types a slash", async () => {
+    const { user } = await openPanel();
+    (document.activeElement as HTMLElement).blur();
+    slash();
+    const command = await screen.findByLabelText("Command");
+    await waitFor(() => expect(command).toHaveFocus());
+    await user.keyboard("/");
+    slash();
+    expect(command).toHaveValue("VEH/");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Ctrl+Backquote toggles the mode and keeps focus on the equivalent control", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByLabelText("Plate"));
+    ctrlBackquote();
+    const command = await screen.findByLabelText("Command");
+    await waitFor(() => expect(command).toHaveFocus());
+    ctrlBackquote();
+    await waitFor(() => expect(screen.getByLabelText("Plate")).toHaveFocus());
+  });
+
+  it("Ctrl+Enter in terminal mode submits the terminal form", async () => {
+    const { user } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    await user.type(screen.getByLabelText("Command"), ".ABC123{Control>}{Enter}{/Control}");
+    await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
+  });
+});
+
+describe("FR-054 site terminal settings (example-ok: Ctrl+Slash, / delimiter)", () => {
+  it("Ctrl+Slash focuses the command line and the site delimiter writes and reads the command", async () => {
+    server.use(
+      http.get(`${API}/api/v1/config`, () =>
+        HttpResponse.json({
+          ...CLIENT_CONFIG,
+          terminal: { delimiter: "/" },
+          shortcuts: { focusTerminal: { keys: "Ctrl+Slash", context: "global" } },
+        }),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { code: "Slash", key: "/", ctrlKey: true });
+    const command = await screen.findByLabelText("Command");
+    await waitFor(() => expect(command).toHaveFocus());
+    expect(command).toHaveValue("VEH/ZZ-0001");
+    expect(screen.getByText(/such as VEH\/plate\/state/)).toBeInTheDocument();
   });
 });

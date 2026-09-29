@@ -42,6 +42,10 @@ export {
 export { ShortcutProvider, useShortcutAction } from "./shortcuts/ShortcutProvider.js";
 export type { ShortcutSheetProps } from "./shortcuts/ShortcutSheet.js";
 export { ShortcutSheet } from "./shortcuts/ShortcutSheet.js";
+export type { ModeToggleProps } from "./terminal/ModeToggle.js";
+export { ModeToggle } from "./terminal/ModeToggle.js";
+export type { TerminalInputProps } from "./terminal/TerminalInput.js";
+export { TerminalInput } from "./terminal/TerminalInput.js";
 export type { ThemeModeSelectProps } from "./theme/ThemeModeSelect.js";
 export { ThemeModeSelect } from "./theme/ThemeModeSelect.js";
 export type { UseThemeModeOptions } from "./theme/useThemeMode.js";
