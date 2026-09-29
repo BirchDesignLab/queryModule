@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { migrateConfig, SiteConfigSchema } from "@querymodule/core/config";
+import { mergeSiteOverlay, migrateConfig, SiteConfigSchema } from "@querymodule/core/config";
 import { isPlanError, planRequest } from "@querymodule/core/planner";
 import { evaluateForm } from "@querymodule/core/rules";
 import { parseCommand } from "@querymodule/core/terminal";
@@ -177,5 +177,82 @@ describe("Response mappings (FR-030)", () => {
         qt,
       ).toBe(true);
     }
+  });
+});
+
+// Track A P3 Task 23 (#347): example-ok shows site variations without code (spec 7 overlay).
+const okRaw = migrateConfig(
+  JSON.parse(readFileSync(new URL("../sites/example-ok.json", import.meta.url), "utf8")),
+);
+if (!okRaw.ok) throw new Error(okRaw.error.key);
+const okMerged = mergeSiteOverlay(migrated.config, okRaw.config);
+if (okMerged.errors.length > 0) throw new Error(JSON.stringify(okMerged.errors));
+const okSite = SiteConfigSchema.parse(okMerged.config);
+
+describe("example-ok site variations (FR-008, FR-051, FR-052)", () => {
+  it("NAM/TESTERSON/SAMPLE/W/M/01011901 parses in the site's order last.first.race.sex.dob", () => {
+    const r = parseCommand(okSite, "NAM/TESTERSON/SAMPLE/W/M/01011901", { now });
+    expect(r.errors).toEqual([]);
+    expect(r.queryType).toBe("PER");
+    expect(r.formState?.values).toMatchObject({
+      last: "TESTERSON",
+      first: "SAMPLE",
+      race: "W",
+      sex: "M",
+      dob: "1901-01-01",
+      state: "OK",
+    });
+  });
+
+  it("NAM with the default site's delimiter is terminal.missingDelimiter on example-ok", () => {
+    const r = parseCommand(okSite, "NAM.", { now });
+    expect(r.errors.map((e) => e.key)).toContain("terminal.missingDelimiter");
+  });
+
+  it("the default site keeps NAM's order last.first.dob.sex.race", () => {
+    expect(site.commands.find((c) => c.code === "NAM")?.positions).toEqual([
+      "last",
+      "first",
+      "dob",
+      "sex",
+      "race",
+    ]);
+  });
+
+  it("example-ok alone requires Plate color off its default state; the default site does not", () => {
+    const veh = (s: typeof site, state: string) =>
+      evaluateForm(s, "VEH", { plate: "ZZ-0001", state }, { now }).missingRequired;
+    expect(veh(okSite, "TX")).toEqual(expect.arrayContaining(["plateType", "plateColor"]));
+    expect(veh(okSite, "OK")).toEqual([]);
+    expect(veh(site, "OK")).toContain("plateType");
+    expect(veh(site, "OK")).not.toContain("plateColor");
+  });
+
+  it("example-ok keeps its narrowed property types", () => {
+    const codes = okSite.picklists.find((p) => p.id === "propertyType")?.values.map((v) => v.code);
+    expect(codes).not.toContain("BOAT");
+    expect(codes).toEqual(expect.arrayContaining(["FIREARM", "ELECTRONICS", "VEHICLE"]));
+  });
+});
+
+describe("docs/demo.md terminal examples parse on the default site (BR-005)", () => {
+  // The terminal fills what its positions carry; the form completes the rest (FR-056).
+  it.each([
+    ["VEH.ZZ-0001", "VEH", []],
+    ["VEH.ZZ-0001.OK", "VEH", ["plateType"]],
+    ["VEH....ZZZZZZZZZZZZZZZZ0", "VEH", []],
+    ["PER.TESTERSON.SAMPLE.01011901", "PER", []],
+    ["NAM.TESTERSON.SAMPLE.01011901", "PER", []],
+    ["DL.ZZ1234567", "DL", []],
+    ["WNT.WANTED", "WNT", []],
+    ["WNT.MISSING", "WNT", []],
+    ["PRO.ZZ123.FIREARM", "PRO", ["make", "caliber"]],
+    ["PROP.FIREARM.ZZ123", "PRO", ["make", "caliber"]],
+    ["PRO.ZZSTOLEN1.ELECTRONICS", "PRO", []],
+  ])("%s", (text, queryType, missing) => {
+    const r = parseCommand(site, text, { now });
+    expect(r.queryType).toBe(queryType);
+    expect(r.errors.filter((e) => e.key !== "validation.required")).toEqual([]);
+    expect([...(r.formState?.missingRequired ?? [])].sort()).toEqual([...missing].sort());
   });
 });

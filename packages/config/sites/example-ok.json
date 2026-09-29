@@ -17,7 +17,32 @@
           "section": "expanded",
           "custom": true
         }
+      ],
+      "rules": [
+        {
+          "field": "plateType",
+          "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
+          "effect": "show"
+        },
+        {
+          "field": "plateType",
+          "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
+          "effect": "require"
+        },
+        {
+          "field": "plateColor",
+          "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
+          "effect": "show"
+        },
+        {
+          "field": "plateColor",
+          "when": { "field": "state", "op": "neq", "value": { "$default": "state" } },
+          "effect": "require"
+        }
       ]
     }
+  ],
+  "commands": [
+    { "code": "NAM", "queryType": "PER", "positions": ["last", "first", "race", "sex", "dob"] }
   ]
 }

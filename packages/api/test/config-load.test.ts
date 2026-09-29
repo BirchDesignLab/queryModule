@@ -34,11 +34,12 @@ const DEFAULT_CONFIG_HASH = "e51b838c0e02806ee94bc4572e5a14c32b5e414043be8eb71b0
  * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
  * default; update it deliberately in the change that does that.
  */
-const EXAMPLE_OK_CONFIG_HASH = "54f1bde4b8ead4c7cfaead8246b76f3add50486b4a77b450b9c41804d73611f8";
+const EXAMPLE_OK_CONFIG_HASH = "d7b7f5a6fcc2d639eb02516a68e984253a91366561f28bd763318c7e012bdfc8";
 
 /**
- * The bundled sites' own warnings: fields a rule can require with no position in a command. VEH
- * plateType; PRO make and caliber, and PROP make, caliber and description (per-type rules, #346).
+ * example-ok's resolved warnings: fields a rule can require with no position in a command. VEH
+ * plateType, and plateColor (example-ok's own rule, #347); PRO make and caliber, and PROP make,
+ * caliber and description (per-type rules, #346).
  */
 const required = (path: string, field: string, command: string) => ({
   level: "warning",
@@ -48,6 +49,7 @@ const required = (path: string, field: string, command: string) => ({
 });
 const BUNDLED_WARNINGS = [
   required("/queryTypes/0/rules/1/field", "plateType", "VEH"),
+  required("/queryTypes/0/rules/3/field", "plateColor", "VEH"),
   required("/queryTypes/2/rules/1/field", "make", "PRO"),
   required("/queryTypes/2/rules/1/field", "make", "PROP"),
   required("/queryTypes/2/rules/3/field", "caliber", "PRO"),

@@ -41,6 +41,11 @@ const KNOWN_WARNINGS = [
   required("/queryTypes/2/rules/3/field", "caliber", "PROP"),
   required("/queryTypes/2/rules/6/field", "description", "PROP"),
 ];
+/** example-ok also requires its custom plateColor off the default state (site-only rule, #347). */
+const knownWarnings = (rel: string) =>
+  rel === "sites/example-ok.json"
+    ? KNOWN_WARNINGS.toSpliced(1, 0, required("/queryTypes/0/rules/3/field", "plateColor", "VEH"))
+    : KNOWN_WARNINGS;
 
 describe("BR-001 shipped sites validate (spec 7)", () => {
   for (const rel of [
@@ -52,7 +57,7 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
     it(`${rel} has no errors and only the known required-without-position warnings`, () => {
       expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES)).toEqual({
         errors: [],
-        warnings: KNOWN_WARNINGS,
+        warnings: knownWarnings(rel),
       });
     });
 
@@ -60,7 +65,7 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
       expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES, { adapterKinds: ["mock"] })).toEqual(
         {
           errors: [],
-          warnings: KNOWN_WARNINGS,
+          warnings: knownWarnings(rel),
         },
       );
     });
