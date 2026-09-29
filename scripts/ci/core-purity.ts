@@ -182,8 +182,9 @@ function splitTopLevel(list: string): string[] {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
-/** Module specifiers that reach into a __fixtures__ directory (static, re-export or dynamic). */
-const FIXTURE_IMPORT = /\b(?:from|import)\s*\(?\s*["']([^"']*\/__fixtures__\/[^"']*)["']/g;
+/** Module specifiers that reach into a __fixtures__ directory (static, re-export or dynamic),
+ *  including its directory index ("./__fixtures__") and template-literal specifiers (#329). */
+const FIXTURE_IMPORT = /\b(?:from|import)\s*\(?\s*["'`]([^"'`]*\/__fixtures__(?:\/[^"'`]*)?)["'`]/g;
 
 /**
  * Violations in packages/core/src, test files excluded, as "path: match". __fixtures__ may do

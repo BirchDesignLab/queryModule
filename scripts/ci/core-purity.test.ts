@@ -266,6 +266,28 @@ describe("core purity: __fixtures__ scope (#323)", () => {
     );
   });
 
+  it("flags a directory-index and a template-literal import of __fixtures__ (#329)", () => {
+    withTree(
+      {
+        "terminal/d.ts": 'import { sites } from "./__fixtures__";',
+        "terminal/e.ts": "const m = await import(`./__fixtures__/sites`);",
+        "terminal/f.ts": "import { x } from '../terminal/__fixtures__/';",
+      },
+      (dir) =>
+        expect(scanCore(dir, names)).toEqual([
+          "packages/core/src/terminal/d.ts: import from ./__fixtures__",
+          "packages/core/src/terminal/e.ts: import from ./__fixtures__/sites",
+          "packages/core/src/terminal/f.ts: import from ../terminal/__fixtures__/",
+        ]),
+    );
+  });
+
+  it("does not flag a path that only contains __fixtures__ as part of a longer name", () => {
+    withTree({ "terminal/g.ts": 'import { x } from "./__fixtures__x/y";' }, (dir) =>
+      expect(scanCore(dir, names)).toEqual([]),
+    );
+  });
+
   it("allows tests and fixtures to import fixtures", () => {
     withTree(
       {
