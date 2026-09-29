@@ -1,6 +1,6 @@
 # Query Module visual system and screens (design pass 09-29-26)
 
-Status: proposal for developer review. No product code changes with this document.
+Status: approved 09-29-26 as the design target (developer, via the checker). No product code changes with this document.
 Mockup: clickable, private Artifact https://claude.ai/artifact/9eV85kHA7ZxDeupDfiz9Ys (not in the repo: Biome lints HTML, and the mockup is prototype code, not product code).
 Contrast proof: `scripts/design/contrast-check.ts` (`pnpm tsx scripts/design/contrast-check.ts`, exits 1 on any failing pair).
 
@@ -107,7 +107,7 @@ A left rail: "Back to queries" first, then Configure (Site configuration), Peopl
 
 One Opus 5.5 medium critic read the mockup and this document (25 findings: 1 blocker, 12 important, 12 minor; fixtures clean). Changes, which also bind the implementation tasks:
 
-- **Stage honesty.** The mockup bar has a Product switch: Today (default) or AC2 preview. In Today, "Review and publish" and Roll back are `aria-disabled` with a visible reason ("Publishing arrives with the config store (AC2)"); mockup notes live in the frame captions, never in product UI.
+- **Mockup notes stay out of product UI.** They live in the frame captions. (A Today / AC2 stage switch was tried and then removed by the developer's ruling below: the mockup shows the target experience.)
 - **Focus is never lost.** Run, Enter and Clear put focus on the first field (or keep it in the terminal input). A change that shows or hides fields re-renders after focus has moved and restores it; any other change patches in place, so a click on Run is never swallowed. The builder never rebuilds the control the user is on. Every focusable element has a stable id.
 - **One draft for form and terminal.** Switching to the terminal writes the command; switching back parses it into the draft. The terminal validates like the form: unknown command or missing required value sets `aria-invalid` on the input and lists the errors under it.
 - **Requests pane is populated.** Run shows a Sending row that becomes Acknowledged on the 202. Seeded examples show a timed-out source with "Retry State source" and, as an M2 preview, an expanded response card: severity banner, one tile per source (outcome and time), values in mono, keyword in `<mark>` with its severity text.
@@ -115,11 +115,12 @@ One Opus 5.5 medium critic read the mockup and this document (25 findings: 1 blo
 - **Officer.** Touch density is a class (`.touch`) shared with the preview's Officer view; meta text, chip timeouts and badges are 16 px body colour; every target is 48 px or more.
 - **Smaller fixes.** Disabled items show their reason (audit log "Arrives in M2"); the account menu holds the theme choice and closes on Esc, as does the history drawer (a named region); quick access and tiles are `role="group"`; shortcuts are declared only where bound; a revealed field keeps a static "Shown" tag under reduced motion; chips draw one focus ring; programmatic focus shows the ring on selects; row actions carry the user's name; the header shows the console position (DSP-03) and a prompt mark instead of a letter.
 
-## Open points for the developer
+## Developer rulings (09-29-26, via the checker)
 
-1. Focus ring colour in night: keep amber #ffd24d (existing, strongest visibility) or match the accent blue (quieter)? The mockup uses amber.
-2. Fonts: IBM Plex self-hosted, or stay on the system font stack for now?
-3. Dispatcher density: 36 px controls and 14 px text. Acceptable for a 12-hour console, or keep 44 px?
+1. Night focus ring: amber #ffd24d.
+2. Fonts: IBM Plex (Sans, Sans Condensed, Mono), self-hosted in the product. The mockup may keep Google Fonts.
+3. Dispatcher controls: 36 px. Officer stays at 48 px targets or more (56 px controls, 64 px primary action).
+4. The mockup is the shared target vision: publish, history and roll back work in it as designed, the M2 response card stays, and one small "Design target" label marks it. The product still ships each capability with its own phase: until AC2 lands, publish and roll back stay `aria-disabled` with a visible reason (spec 6.2), and response cards arrive with M2 dispatch.
 
 ## Implementation plan
 
