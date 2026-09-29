@@ -1,5 +1,5 @@
 import { DATA_TYPES, type DataType } from "@querymodule/core/config";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
@@ -338,6 +338,7 @@ function FieldsEditor({
 }) {
   const t = useT();
   const { setPath } = useDraftSetters();
+  const { doc } = useDraft();
   const focus = useFocusRequest();
   const [gen, bump] = useGeneration();
   const fields = asObjects(type.fields);
@@ -348,40 +349,50 @@ function FieldsEditor({
         .filter((k) => k !== ""),
     ),
   ];
+  const picklistIds = asObjects((doc as JsonObject | null)?.picklists)
+    .map((p) => str(p.id))
+    .filter((id) => id !== "");
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
+  // Row handlers read the latest list, so memoized rows never act on a stale copy.
+  const latest = useRef({ fields, path, owner, listOwner });
+  latest.current = { fields, path, owner, listOwner };
+  const onMove = useCallback(
+    (from: number, to: number) => {
+      const { fields: list, path: at, owner: own } = latest.current;
+      bump();
+      setPath(at, moved(list, from, to));
+      focus([own(to), from > to ? "up" : "down"], [own(to), from > to ? "down" : "up"]);
+    },
+    [bump, setPath, focus],
+  );
+  const onRemove = useCallback(
+    (index: number) => {
+      const { fields: list, path: at, owner: own, listOwner: add } = latest.current;
+      bump();
+      const next = list.filter((_, j) => j !== index);
+      setPath(at, next);
+      focus([own(Math.min(index, next.length - 1)), "first"], [add, "add"]);
+    },
+    [bump, setPath, focus],
+  );
   return (
     <fieldset>
       <legend>{t("admin.config.fields")}</legend>
       {fields.map((field, i) => (
-        <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
-          <legend>{t("admin.config.field.legend", { key: str(field.key) })}</legend>
-          <FieldControls
-            field={field}
-            path={[...path, i]}
-            owner={owner(i)}
-            sectionKeys={sectionKeys}
-            idPrefix={idPrefix}
-          />
-          <ItemButtons
-            owner={owner(i)}
-            name={str(field.key)}
-            index={i}
-            count={fields.length}
-            removeLabel={t("admin.config.field.remove")}
-            onMove={(from, to) => {
-              bump();
-              setPath(path, moved(fields, from, to));
-              focus([owner(to), from > to ? "up" : "down"], [owner(to), from > to ? "down" : "up"]);
-            }}
-            onRemove={(at) => {
-              bump();
-              const next = fields.filter((_, j) => j !== at);
-              setPath(path, next);
-              focus([owner(Math.min(at, next.length - 1)), "first"], [listOwner, "add"]);
-            }}
-          />
-        </fieldset>
+        <FieldRow
+          key={`${owner(i)}:${gen}`}
+          field={field}
+          path={[...path, i]}
+          owner={owner(i)}
+          index={i}
+          count={fields.length}
+          sectionKeys={sectionKeys}
+          picklistIds={picklistIds}
+          idPrefix={idPrefix}
+          onMove={onMove}
+          onRemove={onRemove}
+        />
       ))}
       <button
         type="button"
@@ -399,25 +410,84 @@ function FieldsEditor({
   );
 }
 
+interface FieldRowProps {
+  field: Obj;
+  path: readonly PathSegment[];
+  owner: string;
+  index: number;
+  count: number;
+  sectionKeys: readonly string[];
+  picklistIds: readonly string[];
+  idPrefix: string;
+  onMove(from: number, to: number): void;
+  onRemove(index: number): void;
+}
+
+const sameList = (a: readonly unknown[], b: readonly unknown[]) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * One field row. setAtPath keeps an untouched field's identity, so a keystroke re-renders only
+ * the edited row, not every field of the type (render cost under load, PR1 verify).
+ */
+const FieldRow = memo(
+  function FieldRow({
+    field,
+    path,
+    owner,
+    index,
+    count,
+    onMove,
+    onRemove,
+    ...rest
+  }: FieldRowProps) {
+    const t = useT();
+    return (
+      <fieldset className="qm-admin__item">
+        <legend>{t("admin.config.field.legend", { key: str(field.key) })}</legend>
+        <FieldControls field={field} path={path} owner={owner} {...rest} />
+        <ItemButtons
+          owner={owner}
+          name={str(field.key)}
+          index={index}
+          count={count}
+          removeLabel={t("admin.config.field.remove")}
+          onMove={onMove}
+          onRemove={onRemove}
+        />
+      </fieldset>
+    );
+  },
+  (a, b) =>
+    a.field === b.field &&
+    a.owner === b.owner &&
+    a.index === b.index &&
+    a.count === b.count &&
+    a.idPrefix === b.idPrefix &&
+    a.onMove === b.onMove &&
+    a.onRemove === b.onRemove &&
+    sameList(a.path, b.path) &&
+    sameList(a.sectionKeys, b.sectionKeys) &&
+    sameList(a.picklistIds, b.picklistIds),
+);
+
 function FieldControls({
   field,
   path,
   owner,
   sectionKeys,
+  picklistIds,
   idPrefix,
 }: {
   field: Obj;
   path: readonly PathSegment[];
   owner: string;
   sectionKeys: readonly string[];
+  picklistIds: readonly string[];
   idPrefix: string;
 }) {
   const t = useT();
   const { setPath } = useDraftSetters();
-  const { doc } = useDraft();
-  const picklistIds = asObjects((doc as JsonObject | null)?.picklists)
-    .map((p) => str(p.id))
-    .filter((id) => id !== "");
   const kind = kindOf(field.dataType);
   const defaultPath = [...path, "defaultValue"];
   const defaultLabel = t("admin.config.field.defaultValue");

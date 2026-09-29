@@ -1,9 +1,12 @@
 import { screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
+import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
+
+beforeAll(preloadAdminRoutes);
 
 // #388: generic form edge cases (boolean, number, server-side settings, label overlay ids).
 

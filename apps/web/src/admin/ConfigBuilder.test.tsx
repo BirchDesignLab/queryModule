@@ -1,10 +1,13 @@
 import { screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { EN_BUNDLE } from "../test/en-bundle.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
+import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
+
+beforeAll(preloadAdminRoutes);
 
 async function openBuilder() {
   const user = { ...TEST_USER, role: "implementer" };
