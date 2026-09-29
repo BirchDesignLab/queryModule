@@ -120,7 +120,7 @@ test("Tab order puts the header before the panel; Enter attempts one submit (FR-
   expect(order.headerFirst).toBe(true);
   expect(order.headerHasTheme).toBe(true);
 
-  await page.getByRole("heading", { name: "Query Module" }).focus();
+  await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
   await page.keyboard.press("Shift+Tab");
   await expect(page.getByRole("button", { name: "Sign out" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
