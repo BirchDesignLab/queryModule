@@ -49,7 +49,7 @@
  *
  * Returns { task, status, base, head, commits, rounds, rulings (in force, one per item, each
  * with source "ruler" | "checker" | "controller"), supersededRulings, carryForward, deferredMinors, parked,
- * questions, concerns, agents (agent calls in this run), answersUnconsumed?, ledgerLines } and, when status is "stopped", also
+ * controllerActions (#300: a fixer's needsDeveloper items, to relay to the developer), questions, concerns, agents (agent calls in this run), answersUnconsumed?, ledgerLines } and, when status is "stopped", also
  * stopped (a stop point, with the agent that consumes answers there):
  *   "implementer"     -> implementer-continue finishes on top of the existing commits
  *   "precondition"    -> (problem says what: branch, HEAD, dirty tree with the files named; stopPoint
@@ -427,6 +427,15 @@ const WORK = {
     },
     questions: { type: 'array', items: { type: 'string' } },
     preconditionFailed: { type: 'string', description: 'set (with what you found) only when the stated precondition does not hold; then change nothing' },
+    // #300: fixer only. A finding it deliberately leaves unchanged, with the reason; it goes to the ruler.
+    declined: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { id: { type: 'string' }, kind: { type: 'string', enum: ['noChangeNeeded', 'needsDeveloper'] }, reason: { type: 'string' } },
+        required: ['id', 'kind', 'reason'],
+      },
+    },
   },
   required: ['status', 'commits', 'head', 'testSummary', 'concerns', 'questions'],
 }
@@ -525,6 +534,8 @@ const PROGRESS = {
     head: { type: 'string', description: 'full sha from git rev-parse HEAD' },
     newCommits: COMMITS,
     testCount: { type: 'integer', description: 'passing tests in the full run; -1 if the run failed' },
+    testFiles: { type: 'integer', description: 'passing test files in the same run; -1 if the run failed' },
+    testRaw: { type: 'string', description: 'the vitest "Test Files" and "Tests" summary lines of that run, copied verbatim' },
     guardHits: { type: 'array', items: { type: 'string' }, description: 'check 6: each gate-weakening change, "file:line: what"; [] when none' },
   },
   required: ['ok', 'problems', 'head', 'newCommits', 'testCount', 'guardHits'],
@@ -641,6 +652,7 @@ const state = {
   concerns: [],
   roundLog: [],
   preReviewProblems: [],
+  controllerActions: [], // #300: needsDeveloper items the controller must relay to the developer
 }
 
 // ---------- rulings: one in force per item; controller > ruler, later > earlier ----------
@@ -711,6 +723,7 @@ function ledgerLines(result) {
   for (const c of state.carryForward) out.push(`- Task ${N}: carry forward: ${c}`)
   for (const l of state.roundLog) out.push(`- Task ${N}: ${l}`)
   for (const m of state.deferredMinors) out.push(`- Task ${N}: minor (deferred): ${m}`)
+  for (const a of state.controllerActions) out.push(`- Task ${N}: developer action: ${a.id} (ruled ${a.ruling}): ${a.reason}`)
   const ag = `; ${agentsUsed} agent${agentsUsed === 1 ? '' : 's'}`
   if (result.status === 'complete') out.push(`- Task ${N}: complete (commits ${b7}..${h7}, review clean, gate green${ag})`)
   else if (result.status === 'parked') out.push(`- Task ${N}: complete (commits ${b7}..${h7}, ${result.parked.length} parked${ag})`)
@@ -750,6 +763,7 @@ function build(status, extra) {
       carryForward: state.carryForward,
       deferredMinors: state.deferredMinors,
       parked: state.parked,
+      controllerActions: state.controllerActions,
       questions: state.questions,
       concerns: state.concerns,
       agents: agentsUsed,
@@ -898,6 +912,7 @@ async function runFixer(findings, label, roleName, roundTag, round) {
       GIT,
       HOUSE,
       'If you cannot fix a finding, say which and why in concerns (kind correctness) and use DONE_WITH_CONCERNS; use BLOCKED or NEEDS_CONTEXT with questions only when you cannot proceed at all.',
+      'A finding that needs no change (a false alarm: say what you checked and what you found) or an action only the developer may take (for example a GitHub comment, a push or a host step): leave the code as it is for that finding and list it in declined with its id, kind noChangeNeeded or needsDeveloper, and the reason. Never make an empty or cosmetic commit to satisfy a finding. The ruler decides declined findings; a needsDeveloper item is relayed to the developer whatever the ruling.',
     ].filter(Boolean).join('\n'),
     { label, phase: 'Fix', schema: WORK, ...role(roleName) },
   )
@@ -929,18 +944,27 @@ async function runChecker(items, headNow, expectedHead, answerText, label) {
 
 // noCode: the controller closed every open finding of this round with no code change (an answer
 // { at: "fixer-r<r>", text, noCode: true }), so an empty round is expected. Only check 1 is waived.
-async function runProgress(label, roundBase, priorTests, noCode = false) {
+// allDeclined (#300): every open finding of the round was declined with a reason (no change needed or
+// developer action); like noCode, only check 1 is waived and the ruler decides those findings.
+// prior (#300): the counts an earlier progress checker read from pnpm test in this task, or null.
+// Counts from another source (the implementer's coverage summary) are context only, never the baseline.
+function countsText(prior) {
+  return prior
+    ? `Earlier counts from the same source (a previous progress check, pnpm test): ${prior.tests} tests in ${prior.files} test files; its raw summary lines: ${prior.raw}. Fewer passing tests or fewer test files than that is a problem; the problem text must quote both raw summaries (theirs and yours).`
+    : `No earlier pnpm test count exists in this task: this run sets the baseline. Raise a count problem only if the run fails. The implementer's summary, context only (a different source, not comparable): ${state.implTests || 'none'}.`
+}
+async function runProgress(label, roundBase, prior, noCode = false) {
   return call(
     [
       `Check a fix round on Task ${N} in ${REPO}. Round base: ${roundBase}. ${GIT}`,
       'Checks (report each failure as one line in problems; ok is true only with no problems):',
       noCode
-        ? `1. Check 1 does not apply this round: the controller closed every open finding with no code change, so no new commit is expected. Still list any commits from git log --oneline ${roundBase}..HEAD in newCommits (full sha, subject); an empty list is not a problem.`
+        ? `1. Check 1 does not apply this round: every open finding was closed with no code change (a controller ruling, or the fixer declined it with a reason for the ruler), so no new commit is expected. Still list any commits from git log --oneline ${roundBase}..HEAD in newCommits (full sha, subject); an empty list is not a problem.`
         : `1. New commits exist: git log --oneline ${roundBase}..HEAD is not empty. List them in newCommits (full sha, subject).`,
       '2. Working tree clean: git status --porcelain prints nothing.',
       `3. No test was skipped or focused: git diff ${roundBase}..HEAD adds no .skip( / .only( / it.skip / describe.only / test.todo (grep the + lines).`,
       `4. No test file deleted or emptied: git diff --diff-filter=D --name-only ${roundBase}..HEAD and git diff --numstat ${roundBase}..HEAD show no *.test.* or *.spec.* file deleted or left with no content.`,
-      `5. Test count not lower: run pnpm test once (full suite). Report the passing count as testCount (-1 if the run failed). Prior evidence: ${priorTests}. Lower than that, or any failure, is a problem.`,
+      `5. Test count not lower, compared from the same source only: run pnpm test once (full suite). Report the passing tests as testCount and the passing test files as testFiles (-1 each if the run failed), and copy the vitest "Test Files" and "Tests" summary lines verbatim into testRaw. ${countsText(prior)}`,
       `6. No gate weakening (report each hit in guardHits as "file:line: what", not in problems): git diff ${roundBase}..HEAD must not touch vitest config files (vitest*.config.*), biome.json, tsconfig*.json, package.json scripts, or coverage thresholds or excludes, and its + lines must not add biome-ignore, @ts-ignore, @ts-expect-error, istanbul ignore, v8 ignore, c8 ignore or eslint-disable. Flag a hit even when the brief may allow it; a reviewer decides.`,
       'head: git rev-parse HEAD (full sha).',
       'You are read-only: change nothing, commit nothing. Scratch, if needed: ' + scratch(label),
@@ -948,6 +972,12 @@ async function runProgress(label, roundBase, priorTests, noCode = false) {
     ].join('\n'),
     { label, phase: 'Fix', schema: PROGRESS, ...role('progressChecker') },
   )
+}
+// Same-source counts from a progress result (#300), or the earlier ones when the run failed.
+function countsFrom(pc, prior) {
+  return pc && pc.testCount >= 0 && Number.isInteger(pc.testFiles) && pc.testFiles >= 0
+    ? { tests: pc.testCount, files: pc.testFiles, raw: String(pc.testRaw || '').replace(/\s*\n\s*/g, ' / ') }
+    : prior
 }
 
 // gateFindings: gate-* findings still open in a mixed round. The re-reviewer sees them but does not
@@ -1130,16 +1160,28 @@ if (impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') {
   state.concerns.push(...impl.concerns)
   return await finish(build('stopped', { stopped: 'implementer' }))
 }
-if (!impl.commits.length && !IMPLEMENTED) {
-  log('implement: no commits reported; stopping')
+// #300 (B5 Task 17): git decides whether the implementer committed, not the list it reported.
+const sameSha = (a, b) => {
+  const x = String(a || '').trim().toLowerCase(), y = String(b || '').trim().toLowerCase()
+  return x.length >= 7 && y.length >= 7 && (x.startsWith(y) || y.startsWith(x))
+}
+if (!IMPLEMENTED && sameSha(state.head, A.base)) {
+  log(`implement: git HEAD is still the base ${String(A.base).slice(0, 7)}${impl.commits.length ? ` although the implementer listed ${impl.commits.length} commit(s)` : ''}; stopping`)
   state.concerns.push(...impl.concerns)
-  return await finish(build('stopped', { stopped: 'implementer', questions: state.questions.concat(['implementer reported DONE with no commits']) }))
+  const q = impl.commits.length ? 'implementer listed commits but git HEAD is still the base' : 'implementer reported DONE with no commits'
+  return await finish(build('stopped', { stopped: 'implementer', questions: state.questions.concat([q]) }))
+}
+if (!impl.commits.length && !IMPLEMENTED) {
+  log(`implement: the implementer listed no commits but git HEAD moved to ${state.head.slice(0, 7)}; continuing with the head from git`)
+  state.commits.push({ sha: state.head, subject: '(from git; implementer listed none)' })
 }
 
 for (const c of impl.concerns.filter((c) => c.kind === 'observation')) state.deferredMinors.push(`implementer observation: ${c.text}`)
 const implConcerns = impl.concerns.filter((c) => c.kind !== 'observation').map((c, i) => ({ id: `IC${i + 1}`, kind: `implementer ${c.kind} concern`, text: c.text }))
 
-let lastTests = impl.testSummary
+// Same-source counts (#300): only a progress checker's pnpm test result is a baseline.
+let lastTests = null
+state.implTests = impl.testSummary
 
 if (implConcerns.length) {
   phase('Rule')
@@ -1161,7 +1203,7 @@ if (implConcerns.length) {
     const pc = await runProgress('progress-pre', preBase, lastTests)
     if (pc) {
       state.commits.push(...pc.newCommits)
-      if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
+      lastTests = countsFrom(pc, lastTests)
       if (pc.guardHits.length) state.preReviewProblems.push(...pc.guardHits.map((g) => `gate weakening: ${g}`))
       if (!pc.ok) {
         state.preReviewProblems.push(...pc.problems)
@@ -1423,16 +1465,27 @@ while (!gatePassed) {
     state.concerns.push(...fx.concerns.filter((c) => c.kind !== 'observation'))
     for (const c of fx.concerns.filter((c) => c.kind === 'observation')) state.deferredMinors.push(`fixer r${r} observation: ${c.text}`)
 
-    // Only an explicit controller ruling waives the new-commits check; a re-reviewer ADDRESSED on an
-    // empty diff never does, so a fixer that fails to commit is still caught.
+    // #300: findings the fixer declined with a reason (a false alarm, or an action only the developer
+    // may take). They skip the re-reviewer and go to the ruler; only ids of open review findings count.
+    const cleanId = (id) => String(id).replace(/^\[|\]$/g, '').trim()
+    const reviewIds = new Set(open.filter((f) => !/^gate-/.test(f.id)).map((f) => f.id))
+    const declined = (fx.declined || []).map((d) => Object.assign({}, d, { id: cleanId(d.id) })).filter((d) => reviewIds.has(d.id))
+    const declinedIds = new Set(declined.map((d) => d.id))
+    const allDeclined = declined.length > 0 && open.every((f) => declinedIds.has(f.id))
+    if (declined.length) log(`fix: round ${r}: the fixer declined ${declined.map((d) => `${d.id} (${d.kind})`).join(', ')}; ruler-r${r} decides them`)
+
+    // Only an explicit controller ruling, or a fixer that declined every open finding with a reason
+    // (the ruler then decides), waives the new-commits check; a re-reviewer ADDRESSED on an empty diff
+    // never does, so a fixer that fails to commit is still caught.
     const noCode = !!ANSWERS && ANSWERS.entries.some((e) => e.noCode && e.at === `fixer-r${r}`)
     if (noCode) log(`fix: round ${r}: controller answered noCode; progress-r${r} waives the new-commits check`)
-    const pc = await runProgress(`progress-r${r}`, roundBase, lastTests, noCode)
+    else if (allDeclined) log(`fix: round ${r}: every open finding was declined with a reason; progress-r${r} waives the new-commits check`)
+    const pc = await runProgress(`progress-r${r}`, roundBase, lastTests, noCode || allDeclined)
     const progressProblems = []
     const guardHits = []
     if (pc) {
       state.commits.push(...pc.newCommits)
-      if (pc.testCount >= 0) lastTests = `${pc.testCount} passing`
+      lastTests = countsFrom(pc, lastTests)
       if (!pc.ok) progressProblems.push(...pc.problems)
       guardHits.push(...pc.guardHits)
     } else {
@@ -1450,9 +1503,30 @@ while (!gatePassed) {
       : `fix: round ${r} has review findings; re-reviewer runs`)
     // Gate findings are never verdicted by a re-reviewer; they stay open until a gate runs.
     const gateOpen = open.filter((f) => /^gate-/.test(f.id))
-    const reviewed = open.filter((f) => !/^gate-/.test(f.id))
-    const rr = mechanical ? null : await runReReview(reviewed, gateOpen, `re-review-r${r}`, roundBase, state.head, r)
-    if (mechanical) {
+    const reviewed = open.filter((f) => !/^gate-/.test(f.id) && !declinedIds.has(f.id))
+    if (declined.length) {
+      const items = declined.map((d) => {
+        const f = open.find((o) => o.id === d.id)
+        return { id: d.id, kind: `fixer declined: ${d.kind}`, severity: f.severity, finding: f, text: `${f.summary} (${where(f)}). The fixer made no change: ${d.reason}` }
+      })
+      const ruled = await runRuler(items, `ruler-r${r}`, state.head, 10 + 2 * r)
+      const fixIds = new Set(ruled.fixes.map((x) => x.id))
+      next.push(...ruled.fixes)
+      const parkIds = new Set(ruled.escalated.map((e) => cleanId(e.item)).concat(ruled.unruled.map((u) => u.id)))
+      for (const d of declined) {
+        if (parkIds.has(d.id)) state.parked.push(open.find((o) => o.id === d.id))
+        // A needsDeveloper item never closes silently: the controller relays it to the developer.
+        if (d.kind === 'needsDeveloper' && !fixIds.has(d.id)) {
+          const ruling = state.rulings.get(d.id)
+          state.controllerActions.push({ id: d.id, reason: d.reason, ruling: ruling ? ruling.decision : 'unruled' })
+          log(`fix: round ${r}: ${d.id} needs a controller action for the developer: ${d.reason}`)
+        }
+      }
+      if (parkIds.size) log(`fix: round ${r}: ruler-r${r} escalated or left unruled ${[...parkIds].join(', ')}; parked`)
+    }
+    const skipReReview = mechanical || !reviewed.length
+    const rr = skipReReview ? null : await runReReview(reviewed, gateOpen, `re-review-r${r}`, roundBase, state.head, r)
+    if (skipReReview) {
       // closed unless the progress checker reports a problem (below); gate-r<r> checks the rest
     } else if (!rr) {
       log(`fix: round ${r} re-reviewer returned null; every finding stays open`)

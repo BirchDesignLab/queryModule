@@ -80,20 +80,27 @@ export function createShortcutEngine(
   const rank = (entry: Entry, ctx: KeyContext): number =>
     entry.context === "global" ? Number.MAX_SAFE_INTEGER : ctx.contexts.indexOf(entry.context);
 
+  /**
+   * The best full match and whether a chord continues from seq. Innermost-first applies to prefixes
+   * too (#319): a full match fires only when no strictly more inner context holds a chord that seq
+   * starts, so KeyG in panel never hides "KeyG KeyX" in results while focus is in results. Same
+   * rank: the full match wins (config validation rejects a prefix and a full match in one context).
+   */
   const matchFrom = (
     seq: readonly string[],
     ctx: KeyContext,
   ): { full: Entry | null; prefix: boolean } => {
     let full: Entry | null = null;
-    let prefix = false;
+    let prefixRank = Number.POSITIVE_INFINITY;
     for (const entry of entries) {
       if (!applies(entry, ctx) || entry.strokes.length < seq.length) continue;
       if (!seq.every((s, i) => s === entry.strokes[i])) continue;
       if (entry.strokes.length === seq.length) {
         if (full === null || rank(entry, ctx) < rank(full, ctx)) full = entry;
-      } else prefix = true;
+      } else prefixRank = Math.min(prefixRank, rank(entry, ctx));
     }
-    return { full, prefix };
+    if (full !== null && prefixRank < rank(full, ctx)) full = null;
+    return { full, prefix: prefixRank !== Number.POSITIVE_INFINITY };
   };
 
   return {
