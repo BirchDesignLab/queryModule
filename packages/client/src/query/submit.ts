@@ -36,6 +36,8 @@ export interface SubmitState {
   /** Ignored (returns the in-flight promise) while submitting. */
   submit(req: SubmitRequest): Promise<SubmitOutcome>;
   reset(): void;
+  /** Unsubscribes from the platform signal and stops polling (the web app keeps it for the page's life). */
+  dispose(): void;
 }
 
 export type SubmitController = StoreApi<SubmitState>;
@@ -98,11 +100,16 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
   let inFlight: Promise<SubmitOutcome> | null = null;
   let healthTimer: unknown = null;
   let polling = false;
+  /** One id per poll chain: a late health answer from a stopped chain schedules nothing (#382 B1). */
+  let chain = 0;
   let generation = 0;
+  let unsubscribeOnline: () => void = () => undefined;
+  let goOffline: () => void = () => undefined;
 
   const store = createStore<SubmitState>((set, get) => {
     const stopPolling = (): void => {
       polling = false;
+      chain += 1;
       if (healthTimer !== null) timers.clearTimeout(healthTimer);
       healthTimer = null;
     };
@@ -110,6 +117,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
     const schedulePoll = (attempt: number): void => {
       const ceiling = Math.min(HEALTH_MAX_MS, HEALTH_BASE_MS * 2 ** attempt);
       const gen = generation;
+      const myChain = chain;
       healthTimer = timers.setTimeout(() => {
         healthTimer = null;
         void options.api
@@ -117,7 +125,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
           .then(({ response }) => response.ok)
           .catch(() => false)
           .then((answered) => {
-            if (gen !== generation || !polling) return;
+            if (gen !== generation || !polling || myChain !== chain) return;
             if (answered) {
               stopPolling();
               if (get().status === "noConnection") set({ status: "idle" });
@@ -138,10 +146,13 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
       set({ status: "noConnection" });
       startPolling();
     };
+    goOffline = enterNoConnection;
 
-    options.online?.subscribe((online) => {
-      if (!online && get().status !== "submitting") enterNoConnection();
-    });
+    if (options.online !== undefined) {
+      unsubscribeOnline = options.online.subscribe((online) => {
+        if (!online && get().status !== "submitting") enterNoConnection();
+      });
+    }
 
     const settled = (kind: SubmitOutcome): SubmitOutcome => {
       keptKey = null;
@@ -224,7 +235,14 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
         stopPolling();
         set({ status: "idle", lastAck: null });
       },
+      dispose() {
+        unsubscribeOnline();
+        unsubscribeOnline = () => undefined;
+        stopPolling();
+      },
     };
   });
+  // #382 B2: a platform already offline at construction is gated from the start.
+  if (options.online?.current() === false) goOffline();
   return store;
 }
