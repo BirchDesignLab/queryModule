@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createCipheriv, randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { AeadError, open, seal } from "../../src/keys/aead";
 
@@ -40,6 +40,20 @@ describe("SEC-006 shared AES-256-GCM helper", () => {
     const b = seal(key, pt, "ctx|1");
     expect(a.iv.equals(b.iv)).toBe(false);
     expect(a.ciphertext.equals(b.ciphertext)).toBe(false);
+  });
+  it("a tag truncated to 4 or 15 bytes fails closed (tag length pinned to 16)", () => {
+    const s = seal(key, pt, "ctx|1");
+    expect(() => open(key, { ...s, tag: s.tag.subarray(0, 4) }, "ctx|1")).toThrow(AeadError);
+    expect(() => open(key, { ...s, tag: s.tag.subarray(0, 15) }, "ctx|1")).toThrow(AeadError);
+  });
+  it("an otherwise valid seal under an 11-byte or 1-byte IV fails closed (IV length pinned to 12)", () => {
+    for (const n of [11, 1]) {
+      const iv = randomBytes(n);
+      const c = createCipheriv("aes-256-gcm", key, iv).setAAD(Buffer.from("ctx|1", "utf8"));
+      const ciphertext = Buffer.concat([c.update(pt), c.final()]);
+      const tag = c.getAuthTag();
+      expect(() => open(key, { ciphertext, iv, tag }, "ctx|1")).toThrow(AeadError);
+    }
   });
   it("the error message carries no AAD or plaintext", () => {
     const s = seal(key, pt, "secret-aad");

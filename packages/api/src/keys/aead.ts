@@ -16,20 +16,29 @@ export class AeadError extends Error {
 }
 
 const KEY_BYTES = 32;
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
 
 export function seal(key: Buffer, plaintext: Buffer, aad: string): Sealed {
   if (key.length !== KEY_BYTES) throw new AeadError();
-  const iv = randomBytes(12);
+  const iv = randomBytes(IV_BYTES);
   const c = createCipheriv("aes-256-gcm", key, iv).setAAD(Buffer.from(aad, "utf8"));
   const ciphertext = Buffer.concat([c.update(plaintext), c.final()]);
   return { ciphertext, iv, tag: c.getAuthTag() };
 }
 
-/** Throws AeadError on any failure: wrong key, wrong AAD, tampered ciphertext or tag. */
+/**
+ * Throws AeadError on any failure: wrong key, wrong AAD, tampered ciphertext or tag,
+ * or an IV or tag of the wrong length (IV 12, tag 16 pinned; a short tag would weaken forgery resistance).
+ */
 export function open(key: Buffer, s: Sealed, aad: string): Buffer {
   try {
-    if (key.length !== KEY_BYTES) throw new Error();
-    const d = createDecipheriv("aes-256-gcm", key, s.iv).setAAD(Buffer.from(aad, "utf8"));
+    if (key.length !== KEY_BYTES || s.iv.length !== IV_BYTES || s.tag.length !== TAG_BYTES) {
+      throw new Error();
+    }
+    const d = createDecipheriv("aes-256-gcm", key, s.iv, { authTagLength: TAG_BYTES }).setAAD(
+      Buffer.from(aad, "utf8"),
+    );
     d.setAuthTag(s.tag);
     return Buffer.concat([d.update(s.ciphertext), d.final()]);
   } catch {
