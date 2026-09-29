@@ -6,7 +6,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../api/create-api-client.js";
-import { noTokenStore } from "../platform.js";
+import { type ClientPlatform, noTokenStore } from "../platform.js";
 import { ConfigFetchError, clientConfigQuery, fetchClientConfig } from "./config-api.js";
 
 const BASE = "http://api.test";
@@ -25,10 +25,18 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
+const signal = { current: () => true, subscribe: () => () => undefined };
+const PLATFORM: ClientPlatform = {
+  authTransport: "cookie",
+  tokenStore: noTokenStore,
+  online: signal,
+  visible: signal,
+};
+
 function makeApi(onUnauthenticated: () => void = () => undefined) {
   return createApiClient({
     baseUrl: BASE,
-    platform: { authTransport: "cookie", tokenStore: noTokenStore } as never,
+    platform: PLATFORM,
     onUnauthenticated,
   });
 }
@@ -76,6 +84,9 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
       ConfigFetchError,
     );
     expect(onUnauthenticated).toHaveBeenCalledTimes(1);
+    expect(
+      (await fetchClientConfig(makeApi()).catch((e: unknown) => e)) as ConfigFetchError,
+    ).toHaveProperty("kind", "status");
   });
 
   it("a malformed body rejects with ConfigFetchError that carries no body text", async () => {
@@ -83,6 +94,7 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
     const err = await fetchClientConfig(makeApi()).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConfigFetchError);
     expect((err as Error).message).not.toContain("SENTINEL-BODY-TEXT");
+    expect((err as ConfigFetchError).kind).toBe("parse");
   });
 
   it("a non-JSON 200 body rejects with ConfigFetchError", async () => {
@@ -90,6 +102,14 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
     const err = await fetchClientConfig(makeApi()).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConfigFetchError);
     expect((err as Error).message).not.toContain("SENTINEL-BODY-TEXT");
+    expect((err as ConfigFetchError).kind).toBe("parse");
+  });
+
+  it("a network failure rejects with kind network", async () => {
+    serve(() => HttpResponse.error());
+    const err = await fetchClientConfig(makeApi()).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConfigFetchError);
+    expect((err as ConfigFetchError).kind).toBe("network");
   });
 
   it("a 503 rejects with ConfigFetchError naming only the status", async () => {
@@ -97,6 +117,7 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
     const err = await fetchClientConfig(makeApi()).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConfigFetchError);
     expect((err as Error).message).toContain("503");
+    expect((err as ConfigFetchError).kind).toBe("status");
   });
 
   it("clientConfigQuery keys on config and never goes stale", async () => {

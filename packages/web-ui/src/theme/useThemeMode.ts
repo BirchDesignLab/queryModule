@@ -14,6 +14,8 @@ function useLocalHour(active: boolean): number {
   const [hour, setHour] = useState(() => new Date().getHours());
   useEffect(() => {
     if (!active) return;
+    // The hour kept since load may be stale when auto time turns on later (sign-in); read it now.
+    setHour(new Date().getHours());
     const id = window.setInterval(() => setHour(new Date().getHours()), 60_000);
     return () => window.clearInterval(id);
   }, [active]);
@@ -23,7 +25,10 @@ function useLocalHour(active: boolean): number {
 /** Sets `data-theme` on <html>; no reload (spec 6.5). */
 export function useThemeMode({ preference, selection, root }: UseThemeModeOptions): ThemeMode {
   const osPrefersDark = useMediaQuery("(prefers-color-scheme: dark)");
-  const localHour = useLocalHour(preference === "auto" && selection?.auto === "time");
+  // The clock matters when auto "time" applies: a preference of auto, or none with a site default of auto (D-B1).
+  const followsAuto =
+    preference === "auto" || (preference === null && selection?.defaultMode === "auto");
+  const localHour = useLocalHour(followsAuto && selection?.auto === "time");
   const mode = resolveThemeMode({ preference, selection, osPrefersDark, localHour });
   useLayoutEffect(() => {
     (root ?? document.documentElement).dataset.theme = mode;

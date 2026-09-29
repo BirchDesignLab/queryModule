@@ -13,7 +13,9 @@ test("keyboard-only sign-in and sign-out (spec 2, 6.4)", async ({ page }) => {
   await page.keyboard.type(user.password);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Query Module" })).toBeFocused();
-  await page.keyboard.press("Tab");
+  // The header (status link, theme, sign out) precedes the panel in reading order (D-B4), so the
+  // last control before the heading is Sign out.
+  await page.keyboard.press("Shift+Tab");
   await expect(page.getByRole("button", { name: "Sign out" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();

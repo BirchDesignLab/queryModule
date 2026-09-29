@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url";
 import { createTranslator, type DraftValue, type LocaleBundle } from "@querymodule/client";
 import { SiteConfigSchema, toClientSiteConfig } from "@querymodule/core/config";
 import { evaluateForm, type FormState } from "@querymodule/core/rules";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { fieldErrors, QueryForm } from "./QueryForm.js";
+import { blockedErrorCount, fieldErrors, formLevelErrors, QueryForm } from "./QueryForm.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string): unknown => JSON.parse(readFileSync(join(here, rel), "utf8"));
@@ -69,11 +69,17 @@ describe("FR-002 sections render as fieldsets", () => {
     expect(screen.queryByRole("group", { name: "More details" })).toBeNull();
     // Hidden fields are not rendered (spec 4.3, 6.2): plateType is hidden until a non-default state.
     expect(screen.queryByLabelText(/Plate type/)).toBeNull();
-    const controls = within(groups[0] as HTMLElement)
-      .getAllByRole("textbox")
-      .concat(within(groups[0] as HTMLElement).getAllByRole("combobox"))
-      .map((el) => el.getAttribute("id"));
+    // Every control, picklists included, in the configured field order.
+    const expected = form("VEH")
+      .fields.filter((f) => f.visible)
+      .sort((a, b) => a.order - b.order)
+      .map((f) => `qf-${f.key}`);
+    const controls = [...(groups[0] as HTMLElement).querySelectorAll("input, select")].map((el) =>
+      el.getAttribute("id"),
+    );
+    expect(controls).toEqual(expected);
     expect(controls).toHaveLength(4);
+    expect(controls).toContain("qf-state");
   });
 
   it("groups by section, sorts by order, and omits a visible section with no visible fields", () => {
@@ -190,5 +196,69 @@ describe("UX-004 fieldErrors", () => {
     const errors = fieldErrors(state);
     expect(errors.get("first")?.key).toBe("validation.tooShort");
     expect(errors.size).toBe(1);
+  });
+});
+
+describe("FR-005 errors that name no rendered field are never dropped", () => {
+  const modeMismatch = { key: "validation.modeMismatch" };
+  const MODE_TEXT = "The form changed while submitting. Check it and submit again.";
+  const withErrors = (s: FormState, errors: FormState["errors"]): FormState => ({
+    ...s,
+    missingRequired: [],
+    errors,
+  });
+
+  it("shows a modeMismatch error (no params.field) after a blocked submit", () => {
+    setup(withErrors(form("PER"), [modeMismatch]), { showErrors: true });
+    expect(screen.getByText(MODE_TEXT)).toBeInTheDocument();
+  });
+
+  it("shows it only when showErrors is true, and without role alert", () => {
+    const state = withErrors(form("PER"), [modeMismatch]);
+    const { container } = setup(state, { showErrors: false });
+    expect(screen.queryByText(MODE_TEXT)).toBeNull();
+    expect(container.querySelector(".qm-form-errors")).toBeNull();
+    cleanup();
+    setup(state, { showErrors: true });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows an error naming a field the form did not render, labelled from labelKey", () => {
+    const base = form("VEH");
+    const hidden: FormState = {
+      ...base,
+      missingRequired: [],
+      errors: [{ key: "validation.tooShort", params: { field: "plateType", min: 9 } }],
+      fields: base.fields.map((f) => (f.key === "plateType" ? { ...f, visible: false } : f)),
+    };
+    setup(hidden, { showErrors: true });
+    expect(screen.getByText("Plate type needs at least 9 characters.")).toBeInTheDocument();
+  });
+
+  it("shows an error naming an unknown field through t with its params", () => {
+    setup(
+      withErrors(form("PER"), [{ key: "validation.unknownField", params: { field: "ghost" } }]),
+      { showErrors: true },
+    );
+    expect(
+      screen.getByText("The field ghost does not exist for this query type."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a rendered field error on the field, not in the form list", () => {
+    const { container } = setup(form("PER"), { showErrors: true });
+    expect(screen.getAllByText("Last name is required.")).toHaveLength(1);
+    expect(container.querySelector(".qm-form-errors")).toBeNull();
+  });
+
+  it("formLevelErrors and blockedErrorCount count them with the field errors", () => {
+    const per = form("PER");
+    const state = withErrors(per, [modeMismatch]);
+    expect(formLevelErrors(state)).toEqual([modeMismatch]);
+    expect(blockedErrorCount(state)).toBe(1);
+    expect(blockedErrorCount(per)).toBe(per.missingRequired.length);
+    expect(blockedErrorCount({ ...per, errors: [...per.errors, modeMismatch] })).toBe(
+      per.missingRequired.length + 1,
+    );
   });
 });
