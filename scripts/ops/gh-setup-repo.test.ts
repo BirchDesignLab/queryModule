@@ -33,6 +33,7 @@ esac
   chmodSync(join(dir, "gh"), 0o755);
   const r = spawnSync("bash", [script.replaceAll("\\", "/"), ...args], {
     encoding: "utf8",
+    timeout: 25_000,
     env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH ?? ""}`, GH_TOKEN: "" },
   });
   const read = (p: string) => {
@@ -47,7 +48,10 @@ esac
 
 const writes = (calls: string[]) => calls.filter((c) => / -X (PUT|POST|PATCH|DELETE) /.test(c));
 
-describe("gh-setup-repo.sh (Task 28, SEC-020)", () => {
+// Each run forks bash and several stub gh processes; under the full suite on
+// Windows (Git Bash) that outgrows the 5s default, so this matches the other
+// scripts/ops shell tests: 30s per test, 25s per spawn so a hang still fails.
+describe("gh-setup-repo.sh (Task 28, SEC-020)", { timeout: 30_000 }, () => {
   it("dry run by default: prints the ruleset and planned writes, makes none", () => {
     const r = run(["O/R"]);
     expect(r.status, r.stderr).toBe(0);

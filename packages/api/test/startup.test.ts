@@ -1,8 +1,8 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CORE_VERSION } from "@querymodule/core/contracts";
+import { CONFIG_SCHEMA_VERSION, CORE_VERSION } from "@querymodule/core/contracts";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type * as auditService from "../src/audit/service";
 import type * as dbClient from "../src/db/client";
@@ -10,8 +10,9 @@ import { readPragmas } from "../src/db/client";
 import { bootstrap, loadDeps, type RunningServer, startServer } from "../src/startup";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
-// Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert, so the
-// fail-closed case proves the transaction rolls the configLoaded row back (A2 review M1).
+// Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert of a
+// configLoaded event only, so the fail-closed case proves the transaction rolls that row back
+// (A2 review M1) and cannot pass because some earlier audit write failed instead (#303).
 const failAudit = vi.hoisted(() => ({ on: false }));
 vi.mock("../src/audit/service", async (importOriginal) => {
   const real = await importOriginal<typeof auditService>();
@@ -21,7 +22,8 @@ vi.mock("../src/audit/service", async (importOriginal) => {
       return {
         record: async (...a: Parameters<typeof svc.record>) => {
           const written = await svc.record(...a);
-          if (failAudit.on) throw new Error("audit store unavailable");
+          if (failAudit.on && a[1].type === "configLoaded")
+            throw new Error("audit store unavailable");
           return written;
         },
       };
@@ -73,6 +75,18 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+/** Resolves with the error code of a TCP connect to 127.0.0.1:port, or "connected". */
+function connectError(port: number): Promise<string> {
+  return new Promise((r) => {
+    const sock = connect(port, "127.0.0.1");
+    sock.once("connect", () => {
+      sock.destroy();
+      r("connected");
+    });
+    sock.once("error", (e: NodeJS.ErrnoException) => r(e.code ?? "unknown"));
+  });
+}
+
 const k = (fill: number) => Buffer.alloc(32, fill).toString("base64");
 async function envWith(files: Record<string, string> = {}, dataDir = tempDir("qm-data-")) {
   const secrets = tempDir("qm-sec-");
@@ -94,19 +108,30 @@ async function envWith(files: Record<string, string> = {}, dataDir = tempDir("qm
   };
 }
 
-/** A copy of the bundled default site config with auth.mfaRequired replaced. */
-function siteConfigWithMfa(mfaRequired: unknown): string {
+interface SiteJson {
+  auth: { mfaRequired: unknown };
+  defaults: Record<string, unknown>;
+}
+
+/** A copy of the bundled default site config, changed by edit. */
+function siteConfigWith(edit: (site: SiteJson) => void): string {
   const configDir = resolve(import.meta.dirname, "../../config");
   const root = tempDir("qm-cfg-");
   cpSync(join(configDir, "locales"), join(root, "locales"), { recursive: true });
   cpSync(join(configDir, "mock"), join(root, "mock"), { recursive: true });
   mkdirSync(join(root, "sites"));
-  const site = JSON.parse(readFileSync(join(configDir, "sites/default.json"), "utf8"));
-  site.auth.mfaRequired = mfaRequired;
-  const file = join(root, "sites/mfa.json");
+  const site = JSON.parse(readFileSync(join(configDir, "sites/default.json"), "utf8")) as SiteJson;
+  edit(site);
+  const file = join(root, "sites/edited.json");
   writeFileSync(file, JSON.stringify(site));
   return file;
 }
+
+/** A copy of the bundled default site config with auth.mfaRequired replaced. */
+const siteConfigWithMfa = (mfaRequired: unknown): string =>
+  siteConfigWith((site) => {
+    site.auth.mfaRequired = mfaRequired;
+  });
 
 describe("SEC-006 startup fails closed", () => {
   it("serves health after every check passes, with pragmas intact", async () => {
@@ -198,6 +223,39 @@ describe("SEC-005 startup refuses a site config that requires MFA before MFA exi
   });
 });
 
+describe("spec 5.8 step 5, 5.9 config warnings are logged by key and path only", () => {
+  it("logs one config warning line per warning, with no config value", async () => {
+    const env = {
+      ...(await envWith()),
+      SITE_CONFIG: siteConfigWith((site) => {
+        site.defaults.zzUnused = "SECRETVALUE-zz";
+      }),
+    };
+    const lines: string[] = [];
+    const deps = await loadDeps(env, { logSink: (l) => lines.push(l) });
+    deps.db.$client.close();
+    const warned = lines
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((l) => l.msg === "config warning")
+      .map(({ time: _time, ...rest }) => rest);
+    expect(warned).toEqual([
+      {
+        level: "warn",
+        msg: "config warning",
+        key: "config.unusedSiteDefault",
+        path: "/defaults/zzUnused",
+      },
+      {
+        level: "warn",
+        msg: "config warning",
+        key: "config.conditionallyRequiredWithoutPosition",
+        path: "/queryTypes/0/rules/1/field",
+      },
+    ]);
+    expect(lines.join("\n")).not.toContain("SECRETVALUE");
+  });
+});
+
 const exampleOk = resolve(import.meta.dirname, "../../config/sites/example-ok.json");
 
 describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () => {
@@ -225,7 +283,7 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
       details: {
         siteId: "example-ok",
         configHash: first.config.configHash,
-        configSchemaVersion: 1,
+        configSchemaVersion: CONFIG_SCHEMA_VERSION,
         coreVersion: CORE_VERSION,
         extendsChain: ["default"],
       },
@@ -249,12 +307,22 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
   it("configLoaded: an audit failure refuses startup, commits no row and nothing listens", async () => {
     const data = tempDir("qm-data-");
     const env = await envWith({}, data);
+    const lines: string[] = [];
     failAudit.on = true;
     opened.length = 0;
-    await expect(startServer(env, { logSink: () => {} })).rejects.toThrow(
+    await expect(startServer(env, { logSink: (l) => lines.push(l) })).rejects.toThrow(
       /audit store unavailable/,
     );
-    await expect(fetch(`http://127.0.0.1:${env.PORT}/api/v1/health`)).rejects.toThrow();
+    // Like the MFA guard: one fixed "startup refused" line naming the step, with no values.
+    const refused = lines.map((l) => JSON.parse(l)).filter((l) => l.msg === "startup refused");
+    expect(refused).toEqual([
+      expect.objectContaining({ level: "error", reason: "configLoaded audit write failed" }),
+    ]);
+    const logged = lines.join("\n");
+    expect(logged).not.toContain("audit store unavailable");
+    for (const n of [1, 2, 3, 4]) expect(logged).not.toContain(k(n));
+    // Nothing listens: a TCP connect to the configured port is refused.
+    expect(await connectError(Number(env.PORT))).toBe("ECONNREFUSED");
     // The failed start opened exactly one database and closed it.
     expect(opened.map((db) => db.$client.closed)).toEqual([true]);
     // It rolled its row back: a clean restart on the same data dir finds exactly its own row.

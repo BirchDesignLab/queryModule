@@ -75,6 +75,18 @@ describe("BR-002 standalone login through Better Auth (spec 5.6)", () => {
   it("signOut resolves when the server ends the session", async () => {
     await expect(api.signOut()).resolves.toBeUndefined();
   });
+  it("#289: signOut sends X-Requested-With: querymodule, on the first try and on the #241 retry path", async () => {
+    const headers: (string | null)[] = [];
+    server.use(
+      http.post(`${BASE}/api/v1/auth/sign-out`, ({ request }) => {
+        headers.push(request.headers.get("x-requested-with"));
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    await api.signOut();
+    await api.signOut({ signal: new AbortController().signal });
+    expect(headers).toEqual(["querymodule", "querymodule"]);
+  });
   it("SEC-006: signOut throws on a network failure, since the server session may still be valid", async () => {
     server.use(http.post(`${BASE}/api/v1/auth/sign-out`, () => HttpResponse.error()));
     await expect(api.signOut()).rejects.toThrow();

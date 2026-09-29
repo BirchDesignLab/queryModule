@@ -79,9 +79,11 @@ export function createAuthApi(options: AuthApiOptions): AuthApi {
       // Throws on a network failure or a non-2xx: the server session (and its cookie) may still
       // be valid, so the caller must be able to say so (SEC-006, spec 5.6). The controller still
       // wipes local state first.
+      // #289: the server deletes the session before Better Auth runs, so sign-out needs the
+      // app's own X-Requested-With guard (every caller, the #241 retry included, comes here).
       const response = await send("/sign-out", {
         method: "POST",
-        headers: json,
+        headers: { ...json, "x-requested-with": "querymodule" },
         body: "{}",
         ...(o?.signal === undefined ? {} : { signal: o.signal }),
       });

@@ -8,13 +8,12 @@ import { DatabaseOpenError, type Db, openDatabase } from "../../src/db/client";
 import {
   AUDIT_TRIGGER_SQL,
   AUDIT_TRIGGERS,
-  AuditTriggerMissingError,
   checkAuditTriggers,
   checkQueryTriggers,
   QUERY_TRIGGER_SQL,
   QUERY_TRIGGERS,
-  QueryTriggerMissingError,
   runMigrations,
+  TriggerMissingError,
 } from "../../src/db/migrate";
 import { requestKey } from "../../src/db/schema";
 import { buildDeps } from "../../src/deps";
@@ -86,23 +85,24 @@ describe("storage: SEC-006, SEC-010", () => {
 
   it.each(AUDIT_TRIGGERS)("a dropped %s makes the check refuse", async (name) => {
     const err = await missingAfterDropping([name]);
-    expect(err).toBeInstanceOf(AuditTriggerMissingError);
-    expect((err as AuditTriggerMissingError).missing).toEqual([name]);
-    expect((err as AuditTriggerMissingError).message).toContain(name);
+    expect(err).toBeInstanceOf(TriggerMissingError);
+    expect((err as TriggerMissingError).missing).toEqual([name]);
+    expect((err as TriggerMissingError).tables).toEqual(["audit_event"]);
+    expect((err as TriggerMissingError).message).toBe(`audit_event triggers missing: ${name}`);
   });
 
   it("names every missing trigger, in AUDIT_TRIGGERS order", async () => {
     const err = await missingAfterDropping([...AUDIT_TRIGGERS].reverse());
-    expect(err).toBeInstanceOf(AuditTriggerMissingError);
-    expect((err as AuditTriggerMissingError).missing).toEqual([...AUDIT_TRIGGERS]);
+    expect(err).toBeInstanceOf(TriggerMissingError);
+    expect((err as TriggerMissingError).missing).toEqual([...AUDIT_TRIGGERS]);
   });
 
   it("an unmigrated database fails the check", async () => {
     const db = await openDatabase({ file: tempDbFile(), encryptionKey: TEST_DB_KEY });
     try {
       const err = await checkAuditTriggers(db).catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(AuditTriggerMissingError);
-      expect((err as AuditTriggerMissingError).missing).toEqual([...AUDIT_TRIGGERS]);
+      expect(err).toBeInstanceOf(TriggerMissingError);
+      expect((err as TriggerMissingError).missing).toEqual([...AUDIT_TRIGGERS]);
     } finally {
       db.$client.close();
     }
@@ -117,8 +117,8 @@ describe("storage: SEC-006, SEC-010", () => {
         "CREATE TRIGGER audit_event_no_replace BEFORE INSERT ON decoy BEGIN SELECT 1; END",
       );
       const err = await checkAuditTriggers(db).catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(AuditTriggerMissingError);
-      expect((err as AuditTriggerMissingError).missing).toEqual(["audit_event_no_replace"]);
+      expect(err).toBeInstanceOf(TriggerMissingError);
+      expect((err as TriggerMissingError).missing).toEqual(["audit_event_no_replace"]);
     } finally {
       db.$client.close();
     }
@@ -142,10 +142,10 @@ describe("storage: SEC-006, SEC-010", () => {
           `CREATE TRIGGER ${name} BEFORE UPDATE ON audit_event BEGIN SELECT 1; END`,
         );
         const err = await checkAuditTriggers(db).catch((e: unknown) => e);
-        expect(err).toBeInstanceOf(AuditTriggerMissingError);
-        expect((err as AuditTriggerMissingError).missing).toEqual([]);
-        expect((err as AuditTriggerMissingError).altered).toEqual([name]);
-        expect((err as AuditTriggerMissingError).message).toContain(name);
+        expect(err).toBeInstanceOf(TriggerMissingError);
+        expect((err as TriggerMissingError).missing).toEqual([]);
+        expect((err as TriggerMissingError).altered).toEqual([name]);
+        expect((err as TriggerMissingError).message).toContain(name);
       } finally {
         db.$client.close();
       }
@@ -155,9 +155,16 @@ describe("storage: SEC-006, SEC-010", () => {
   it("a trigger body rewritten through writable_schema makes the check refuse", async () => {
     // The app connection refuses writable_schema (#189), so the tamper comes out of band:
     // a raw libsql client with the key, on the same file.
+    // The app connection is closed before the raw client opens and the check runs on a fresh
+    // app connection after the raw one closed, so the two never hold the file at once and the
+    // result does not depend on concurrent-open timing (#311 Task 14).
     const file = tempDbFile();
-    const db = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
-    await runMigrations(db, MIGRATIONS);
+    const setup = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    try {
+      await runMigrations(setup, MIGRATIONS);
+    } finally {
+      setup.$client.close();
+    }
     const raw = createClient({ url: `file:${file}`, encryptionKey: TEST_DB_KEY });
     try {
       await raw.execute("PRAGMA writable_schema = ON");
@@ -165,12 +172,15 @@ describe("storage: SEC-006, SEC-010", () => {
         "UPDATE sqlite_master SET sql = 'CREATE TRIGGER audit_event_no_delete BEFORE DELETE ON audit_event BEGIN SELECT 1; END' WHERE type = 'trigger' AND name = 'audit_event_no_delete'",
       );
       await raw.execute("PRAGMA writable_schema = OFF");
-      raw.close();
-      const err = await checkAuditTriggers(db).catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(AuditTriggerMissingError);
-      expect((err as AuditTriggerMissingError).altered).toEqual(["audit_event_no_delete"]);
     } finally {
-      if (!raw.closed) raw.close();
+      raw.close();
+    }
+    const db = await openDatabase({ file, encryptionKey: TEST_DB_KEY });
+    try {
+      const err = await checkAuditTriggers(db).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TriggerMissingError);
+      expect((err as TriggerMissingError).altered).toEqual(["audit_event_no_delete"]);
+    } finally {
       db.$client.close();
     }
   });
@@ -219,12 +229,24 @@ describe("storage: DATA_KEY and request_key (SEC-006, spec 10.3)", () => {
       expect(unwrapRequestKey(keysA.dataKey, row).equals(deks[row.scope])).toBe(true);
       expect(() => unwrapRequestKey(dataKeyB, row)).toThrow(AeadError);
     }
-    // The credential canary is checked first and opens; only DATA_KEY is refused.
+    // The credential canary is checked first: a wrong CREDENTIAL_KEY is named before DATA_KEY,
+    // so "data" below means the credential canary opened under CREDENTIAL_KEY A.
+    const both = await checkKeyCanaries(
+      db,
+      { credentialKey: Buffer.alloc(32, 7), dataKey: dataKeyB },
+      systemClock,
+    ).catch((e: unknown) => e);
+    expect((both as KeyCanaryError).keyName).toBe("credential");
     const err = await checkKeyCanaries(db, { ...keysA, dataKey: dataKeyB }, systemClock).catch(
       (e: unknown) => e,
     );
     expect(err).toBeInstanceOf(KeyCanaryError);
     expect((err as KeyCanaryError).keyName).toBe("data");
+    // Neither refused check replaced a canary: under keys A both still open.
+    await expect(checkKeyCanaries(db, keysA, systemClock)).resolves.toEqual({
+      credential: "verified",
+      data: "verified",
+    });
   });
 });
 
@@ -519,6 +541,29 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
       db.$client.close();
     }
   });
+  it.each([["nested"], ["Primary"], [""]])(
+    "a query_request origin of %j is refused; primary and alsoRun are stored (#311)",
+    async (origin) => {
+      const db = await queryDb();
+      try {
+        await expect(
+          db.$client.execute({
+            sql: `INSERT INTO query_request (correlation_id, part_id, user_id, origin, query_type,
+              type_values, plate_only, selected_source_ids, dropped_source_ids, config_hash,
+              idempotency_key, submitted_at)
+              VALUES (?, 1, 'u1', ?, 'vehicle', '{}', 0, '[]', '[]', 'h1', NULL, 1)`,
+            args: [CID, origin],
+          }),
+        ).rejects.toThrow(/query_request origin must be primary or alsoRun/);
+        await insertQueryRequest(db, 1, null);
+        const rows = (await db.$client.execute("SELECT origin FROM query_request ORDER BY part_id"))
+          .rows;
+        expect(rows.map((r) => r.origin)).toEqual(["primary", "alsoRun"]);
+      } finally {
+        db.$client.close();
+      }
+    },
+  );
   it("DELETE of a child-less query_request aborts even with foreign_keys off", async () => {
     const db = await queryDb();
     try {
@@ -564,8 +609,12 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
       db.$client.close();
     }
   });
-  it("pins each query trigger's statement to migrations 0004 and 0005", () => {
-    const statements = ["0004_query_triggers.sql", "0005_query_no_replace.sql"].flatMap((f) =>
+  it("pins each query trigger's statement to migrations 0004, 0005 and 0006", () => {
+    const statements = [
+      "0004_query_triggers.sql",
+      "0005_query_no_replace.sql",
+      "0006_query_origin.sql",
+    ].flatMap((f) =>
       readFileSync(resolve(MIGRATIONS, f), "utf8")
         .split("--> statement-breakpoint")
         .map((st) => st.replace(/\s+/g, " ").trim().replace(/;$/, "")),
@@ -577,9 +626,12 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
     try {
       await db.$client.execute(`DROP TRIGGER ${name}`);
       const err = await checkQueryTriggers(db).catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(QueryTriggerMissingError);
-      expect((err as QueryTriggerMissingError).missing).toEqual([name]);
-      expect((err as QueryTriggerMissingError).message).toContain(name);
+      expect(err).toBeInstanceOf(TriggerMissingError);
+      expect((err as TriggerMissingError).missing).toEqual([name]);
+      expect((err as TriggerMissingError).tables).toEqual(["query_request", "source_result"]);
+      expect((err as TriggerMissingError).message).toBe(
+        `query_request, source_result triggers missing: ${name}`,
+      );
     } finally {
       db.$client.close();
     }
@@ -592,20 +644,23 @@ describe("SEC-013 query rows are insert-once and write-once", () => {
         "CREATE TRIGGER source_result_no_delete BEFORE DELETE ON source_result BEGIN SELECT 1; END",
       );
       const err = await checkQueryTriggers(db).catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(QueryTriggerMissingError);
-      expect((err as QueryTriggerMissingError).missing).toEqual([]);
-      expect((err as QueryTriggerMissingError).altered).toEqual(["source_result_no_delete"]);
+      expect(err).toBeInstanceOf(TriggerMissingError);
+      expect((err as TriggerMissingError).missing).toEqual([]);
+      expect((err as TriggerMissingError).altered).toEqual(["source_result_no_delete"]);
     } finally {
       db.$client.close();
     }
   });
-  it("dropping source_result_write_once makes buildDeps throw QueryTriggerMissingError", async () => {
+  it("dropping source_result_write_once makes buildDeps throw TriggerMissingError", async () => {
     const env = testEnv();
     const db = await migratedEnvDb(env);
-    await db.$client.execute("DROP TRIGGER source_result_write_once");
-    db.$client.close();
+    try {
+      await db.$client.execute("DROP TRIGGER source_result_write_once");
+    } finally {
+      db.$client.close();
+    }
     const err = await buildDeps({ env, secrets: TEST_SECRETS }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(QueryTriggerMissingError);
-    expect((err as QueryTriggerMissingError).missing).toEqual(["source_result_write_once"]);
+    expect(err).toBeInstanceOf(TriggerMissingError);
+    expect((err as TriggerMissingError).missing).toEqual(["source_result_write_once"]);
   });
 });

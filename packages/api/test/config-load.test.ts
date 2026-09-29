@@ -1,26 +1,55 @@
-import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { ConfigLoadError, canonicalJson, loadSiteConfig as load } from "../src/config/load";
+import { removeTempDirs } from "./helpers/temp-dirs";
 
 const OPTS = { allowMockSources: true, now: Date.UTC(2026, 8, 28) };
 const loadSiteConfig = (f: string, o: Partial<typeof OPTS> = {}) => load(f, { ...OPTS, ...o });
 
 const bundled = resolve(import.meta.dirname, "../../config");
+const created: string[] = [];
+afterAll(() => removeTempDirs(created.splice(0), "test/config-load"));
 function copy(): string {
   const d = mkdtempSync(join(tmpdir(), "qm-config-"));
+  created.push(d);
   cpSync(join(bundled, "sites"), join(d, "sites"), { recursive: true });
   cpSync(join(bundled, "locales"), join(d, "locales"), { recursive: true });
   cpSync(join(bundled, "mock"), join(d, "mock"), { recursive: true });
   return d;
 }
 
+/*
+ * configHash of the bundled default site, pinned so the assertion does not recompute the hash
+ * from the loader's own output (#303). It is SHA-256 of the canonical resolved config (spec 5.8
+ * step 6), so it changes with packages/config/sites/default.json and with any core schema
+ * default; update it deliberately in the change that does that.
+ */
+const DEFAULT_CONFIG_HASH = "769f9f3c815f38bc3d11641a5c17d2764354e75e3313a5c7886987f8dcaee57f";
+
+/*
+ * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
+ * the merged, resolved config (default under example-ok), not of the overlay file or the unmerged
+ * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
+ * default; update it deliberately in the change that does that.
+ */
+const EXAMPLE_OK_CONFIG_HASH = "457bc94d26c1e24fcc941cedbddd7bf9907bd821d56ab4651bc49b420dc3bb3b";
+
+/** The bundled sites' own warnings; plateType is conditionally required with no VEH position. */
+const BUNDLED_WARNINGS = [
+  {
+    level: "warning",
+    path: "/queryTypes/0/rules/1/field",
+    key: "config.conditionallyRequiredWithoutPosition",
+    params: { field: "plateType", command: "VEH" },
+  },
+];
+
 describe("BR-001 site config load", () => {
   it("loads the bundled default site", async () => {
     const c = await loadSiteConfig(join(bundled, "sites/default.json"));
-    expect(c.configHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(c.configHash).toBe(DEFAULT_CONFIG_HASH);
     expect(c.fieldKeys).toContain("plate");
     expect(Object.keys(c.locales)).toEqual(c.siteConfig.locales);
     expect(c.clientConfig.configHash).toBe(c.configHash);
@@ -149,10 +178,8 @@ describe("BR-001 config load chain (spec 5.8)", () => {
     const c = await loadSiteConfig(join(bundled, "sites/example-ok.json"));
     expect(c.extendsChain).toEqual(["default"]);
     expect(c.clientConfig.terminal.delimiter).toBe("/");
-    expect(c.configHash).toBe(
-      createHash("sha256").update(canonicalJson(c.siteConfig)).digest("hex"),
-    );
-    expect(c.warnings).toBeInstanceOf(Array);
+    expect(c.configHash).toBe(EXAMPLE_OK_CONFIG_HASH);
+    expect(c.warnings).toEqual(BUNDLED_WARNINGS);
   });
   it("default site has an empty extends chain", async () => {
     const c = await loadSiteConfig(join(bundled, "sites/default.json"));
@@ -180,7 +207,7 @@ describe("BR-001 config load chain (spec 5.8)", () => {
     });
     expect((await fails(file)).message).toContain("config.unknownAdapterKind");
   });
-  it("SEC-002 mock sources are refused unless allowed", async () => {
+  it("spec 5.4 mock sources are refused unless ALLOW_MOCK_SOURCES is true", async () => {
     const e = await fails(join(bundled, "sites/default.json"), { allowMockSources: false });
     expect(e.path).toBe("/sources/0/kind");
     expect(e.message).toContain("ALLOW_MOCK_SOURCES=true");
@@ -207,7 +234,7 @@ describe("BR-001 config load chain (spec 5.8)", () => {
     const c = await loadSiteConfig(file);
     expect(c.warnings.map((w) => w.key)).toContain("config.unusedSiteDefault");
   });
-  it("SEC-006 the error names key and pointer, never a field value", async () => {
+  it("spec 5.9 the error names key and pointer, never a field value", async () => {
     const d = copy();
     const file = edit(d, "sites/default.json", (j) => {
       j.defaults.state = "ZZ-0001";
@@ -218,7 +245,7 @@ describe("BR-001 config load chain (spec 5.8)", () => {
   });
 });
 
-describe("SEC-006 startup faults are ConfigLoadError with no config value", () => {
+describe("spec 5.8, 5.9 startup faults are ConfigLoadError with no config value", () => {
   interface Theme {
     theme?: { tokens?: { all?: Record<string, string> } };
     keywordSeverityStyles: Record<string, { color: string }>;

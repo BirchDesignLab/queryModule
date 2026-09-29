@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
 import { ClientSupportProvider } from "../app/client-support-context.js";
@@ -34,6 +34,24 @@ function slash(shiftKey = false): void {
     code: "Slash",
     key: shiftKey ? "?" : "/",
     shiftKey,
+  });
+}
+
+/**
+ * Shift+/ until the sheet opens. The panel and the provider register their key handlers in effects,
+ * and findBy can resolve before those effects run when the suite is under load, so a single
+ * synchronous press right after openPanel can land before anything listens.
+ */
+async function openSheet(target?: Element): Promise<HTMLElement> {
+  return waitFor(() => {
+    if (document.querySelector("dialog[open]") === null) {
+      fireEvent.keyDown(target ?? document.activeElement ?? document.body, {
+        code: "Slash",
+        key: "?",
+        shiftKey: true,
+      });
+    }
+    return screen.getByRole("dialog", { name: "Keyboard shortcuts" });
   });
 }
 
@@ -86,8 +104,7 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
   it("Shift+/ opens the sheet listing submit with Ctrl+Enter; Escape closes it and focus returns", async () => {
     const { user } = await openPanel();
     vehicle().focus();
-    slash(true);
-    const dialog = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    const dialog = await openSheet();
     const submit = within(dialog).getByText("Submit the query").closest("li") as HTMLElement;
     expect(within(submit).getByText("Ctrl + Enter")).toBeInTheDocument();
     await user.keyboard("{Escape}");
@@ -98,8 +115,7 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
   it("spec 6.2: with the sheet open Alt+2 does not change the query type", async () => {
     const { user } = await openPanel();
     await user.click(screen.getByLabelText("Plate"));
-    fireEvent.keyDown(document.body, { code: "Slash", key: "?", shiftKey: true });
-    const sheet = screen.getByRole("dialog");
+    const sheet = await openSheet(document.body);
     fireEvent.keyDown(sheet, { code: "Digit2", key: "2", altKey: true });
     expect(vehicle()).toHaveAttribute("aria-pressed", "true");
     expect(person()).toHaveAttribute("aria-pressed", "false");

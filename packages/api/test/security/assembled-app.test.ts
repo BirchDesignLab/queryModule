@@ -17,7 +17,7 @@ function assertSecurityHeaders(r: Response, label: string | number) {
 
 // Carry-forward #120: the app assembled by createApp/buildDeps must run requestId, then
 // securityHeaders on *, noStore on /api/*, bodyCap and requireRequestedWith on /api/v1/*, in
-// that order, and Better Auth routes stay exempt from the CSRF check.
+// that order, and Better Auth routes stay exempt from the CSRF check except POST sign-out (#289).
 describe("carry-forward #120: assembled app middleware order", () => {
   it("sets security headers and no-store on a 200 from the assembled app", async () => {
     const t = await createTestApp();
@@ -46,7 +46,15 @@ describe("carry-forward #120: assembled app middleware order", () => {
     assertSecurityHeaders(r, 413);
   });
 
-  it("leaves Better Auth routes exempt from the CSRF check (no X-Requested-With needed)", async () => {
+  it("enforces CSRF on POST /api/v1/auth/sign-out, the one Better Auth path that needs X-Requested-With (#289)", async () => {
+    const t = await createTestApp();
+    const r = await t.request("/api/v1/auth/sign-out", { method: "POST" });
+    expect(r.status).toBe(403);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("forbidden");
+    assertSecurityHeaders(r, 403);
+  });
+
+  it("leaves every other Better Auth route exempt from the CSRF check (no X-Requested-With needed)", async () => {
     const t = await createTestApp();
     await t.createUser(EMAIL, PW);
     const r = await t.signIn(EMAIL, PW); // signIn sends no x-requested-with header

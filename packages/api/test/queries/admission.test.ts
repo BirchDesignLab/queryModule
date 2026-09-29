@@ -1,6 +1,6 @@
 import { ApiErrorSchema, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Db } from "../../src/db/client";
 import { requireSession } from "../../src/http/session";
 import type { AppEnv } from "../../src/http/types";
@@ -10,6 +10,7 @@ import {
   QUERY_LIMIT,
   replayResponse,
 } from "../../src/queries/admission";
+import type { TestClock } from "../helpers/fixture";
 import { createTestApp, type TestApp } from "../helpers/test-app";
 
 const PASSWORD = "correct-horse-battery-1";
@@ -18,13 +19,28 @@ const CID = "01890a5d-ac96-774b-bcce-b302099a8057";
 const CID_SKIP = "01890a5d-ac96-774b-bcce-b302099a8059";
 const ACK_AT = 1_790_000_000_123;
 
+/**
+ * A clock that moves only on advance(). createTestClock follows the wall clock, so on a loaded run
+ * the 31 requests of the limiter test could span seconds and Retry-After read 59 instead of 60.
+ */
+function frozenClock(): TestClock {
+  const base = Date.now();
+  let offset = 0;
+  return {
+    now: () => base + offset,
+    advance: (ms) => {
+      offset += ms;
+    },
+  };
+}
+
 /** The assembled app plus a stub POST route running admitSubmit that answers 299 for `admit`. */
 async function stubApp(): Promise<{
   t: TestApp;
   userId: string;
   post: (o?: Post) => Promise<Response>;
 }> {
-  const t = await createTestApp();
+  const t = await createTestApp({ clock: frozenClock() });
   const sub = new Hono<AppEnv>();
   sub.post("/", requireSession(t.deps.identity), async (c) => {
     const a = await admitSubmit(c, t.deps);
@@ -193,13 +209,25 @@ describe("FR-064 NFR-002 submit admission (spec 5.2 step 1)", () => {
 
   it("429s the 31st request in a minute with Retry-After, and resets after the window", async () => {
     const { t, post } = await stubApp();
-    for (let i = 0; i < QUERY_LIMIT.limit; i++) expect((await post()).status).toBe(299);
-    const r = await post();
-    expect(r.status).toBe(429);
-    expect(r.headers.get("Retry-After")).toBe("60");
-    expect((await errorOf(r)).code).toBe("rateLimited");
-    t.clock.advance(60_000);
-    expect((await post()).status).toBe(299);
+    // A loaded run (full suite on Windows) can spend seconds on these requests; simulate it by
+    // letting the wall clock drift 100ms per read. Retry-After must still be exactly 60.
+    const real = Date.now.bind(Date);
+    let drift = 0;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => {
+      drift += 100;
+      return real() + drift;
+    });
+    try {
+      for (let i = 0; i < QUERY_LIMIT.limit; i++) expect((await post()).status).toBe(299);
+      const r = await post();
+      expect(r.status).toBe(429);
+      expect(r.headers.get("Retry-After")).toBe("60");
+      expect((await errorOf(r)).code).toBe("rateLimited");
+      t.clock.advance(60_000);
+      expect((await post()).status).toBe(299);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("limits per user: another user's window is separate", async () => {

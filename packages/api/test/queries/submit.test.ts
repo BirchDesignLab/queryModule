@@ -481,7 +481,10 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
     expect(lines).toHaveLength(1);
     const line = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
     expect(Object.keys(line).sort()).toEqual(["err", "level", "method", "msg", "path", "time"]);
-    expect(line.err).toEqual({ name: "Error", message: "replay: acknowledged audit row missing" });
+    expect(line.err).toEqual({
+      name: "ReplayIntegrityError",
+      message: "replay: acknowledged audit row missing",
+    });
     expect([line.method, line.path]).toEqual(["POST", "/api/v1/queries"]);
     for (const s of [cid, key, userId, PLATE, "h1"]) expect(lines[0]).not.toContain(s);
   });
@@ -532,6 +535,55 @@ describe("POST /api/v1/queries fail closed and middleware (SEC-012, spec 5.9)", 
         requestKey: 0,
         queryAudit: 0,
       });
+    },
+  );
+
+  it.each(["admission", "race"])(
+    "a DB failure in the %s replay logs a fixed message, no userId or Idempotency-Key (#317 C-m1)",
+    async (where) => {
+      const { t, post, body, userId } = await setup();
+      const key = crypto.randomUUID();
+      // drizzle's wrapper quotes the params: here the userId and the Idempotency-Key.
+      const leak = Object.assign(new Error(`Failed query: select ... params: ${userId},${key},0`), {
+        name: "DrizzleQueryError",
+        cause: Object.assign(new Error("SQLITE_BUSY: database is locked"), { code: "SQLITE_BUSY" }),
+      });
+      const select = t.deps.db.select.bind(t.deps.db);
+      // Only replay reads query_request on the app connection: admission replays first, and the
+      // race path replays again after T1 loses. The session lookup's selects pass through.
+      let replays = 0;
+      vi.spyOn(t.deps.db, "select").mockImplementation(((...a: Parameters<typeof select>) => {
+        const builder = select(...a);
+        const from = builder.from.bind(builder);
+        builder.from = ((table: Parameters<typeof from>[0]) => {
+          if (table === queryRequest) {
+            replays += 1;
+            if (where === "admission" || replays > 1) throw leak;
+          }
+          return from(table);
+        }) as typeof from;
+        return builder;
+      }) as typeof select);
+      if (where === "race") {
+        const record = t.deps.audit.record.bind(t.deps.audit);
+        t.deps.audit.record = async (tx: Tx, e: AuditEvent) => {
+          if (e.type === "acknowledged") throw new Error("query_request idempotency key exists");
+          return record(tx, e);
+        };
+      }
+      t.logLines.length = 0;
+      const r = await post(body(), { key });
+      expect(r.status).toBe(500);
+      expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("internal");
+      const lines = t.logLines.filter((l) => l.includes('"msg":"unhandled"'));
+      expect(lines).toHaveLength(1);
+      const line = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
+      expect(line.err).toEqual({
+        name: "SubmitTransactionError",
+        message: "submit replay failed (SQLITE_BUSY)",
+      });
+      for (const s of ["params", "Failed query", key, userId])
+        expect(t.logLines.join("\n")).not.toContain(s);
     },
   );
 

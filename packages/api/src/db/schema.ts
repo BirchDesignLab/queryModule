@@ -140,7 +140,9 @@ export const userPreference = sqliteTable("user_preference", {
   updatedAt: ms().notNull(),
 });
 
-// query_request: insert-once, one row per plan part; trigger in 0004_query_triggers.sql (spec 5.5)
+// query_request: insert-once, one row per plan part (spec 5.5). Triggers: 0004_query_triggers.sql
+// (no update), 0005_query_no_replace.sql (no replace, no delete, idempotency key once, positive
+// rowid) and 0006_query_origin.sql (origin is primary or alsoRun, #311).
 export const queryRequest = sqliteTable(
   "query_request",
   {
@@ -174,7 +176,8 @@ export const queryRequest = sqliteTable(
   ],
 );
 
-// source_result: status is write-once from pending and rows are never deleted (0004, FR-063)
+// source_result: status is write-once from pending and rows are never deleted (0004, FR-063);
+// never replaced and positive rowids (0005)
 export const sourceResult = sqliteTable(
   "source_result",
   {
