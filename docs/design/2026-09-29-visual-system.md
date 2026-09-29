@@ -41,7 +41,7 @@ All values stay in `packages/tokens` (spec 6.5: components use no literal colour
 
 Red shift keeps its rule: amber and red on near-black, no blue-dominant colour. Its focus ring moves from #ff4d4d to pale amber #ffe0a8, because a red ring beside a red invalid edge breaks E1.
 
-Contrast pairs (checked by the script for every mode; the tokens package tests take them over in the implementation task): body text 7:1 on all four surfaces and on `accent.subtle`; muted text 4.5:1; accent text 7:1; primary label 4.5:1 on its fill; control edge, focus ring 3:1 on every surface; error text and status text 4.5:1. The focus ring sits outside a 2 px gap, so its neighbour is always a surface, never the button fill.
+Contrast pairs (checked by the script for every mode; the tokens package tests take them over in the implementation task): body text 7:1 on all four surfaces and on `accent.subtle`; muted text 4.5:1, also on `accent.subtle`; accent text 7:1 on base and raised, 4.5:1 on `accent.subtle` (a pressed button's type code); primary label 4.5:1 on its fill; control edge and focus ring 3:1 on every surface; error text and status text 4.5:1. The focus ring sits outside a 2 px gap, so its neighbour is always a surface, never the button fill.
 
 ### Type
 
@@ -102,6 +102,18 @@ A left rail: "Back to queries" first, then Configure (Site configuration), Peopl
 - **Centre, editor**: breadcrumb, item name, then plain-language groups: "Label shown to users" with translations, "Choices come from", "When is it shown?" (Always, Only when a rule matches, Never) with a sentence rule ("Show when State is not the site default (TX)"), "Is it required?", default, terminal commands. Keys, role, pattern and the JSON pointer sit under a collapsed "Advanced settings". Diagnostics appear on the item as plain sentences with a fix action.
 - **Right, live preview**: the dispatcher's own panel renderer fed with the draft (ADR-0011 item 4), a Dispatcher or Officer switch, and run disabled with "Preview: queries are not sent".
 - **History and publish, ready for AC2**: a history drawer lists versions (who, when, note) with roll back; "Review and publish" opens a dialog listing changes in plain language, an optional change note, and "Publish version 8"; the toast says "Published version 8. Dispatchers see it within 15 seconds." Until AC2 lands, publish and roll back stay `aria-disabled` with the reason, as today.
+
+## Revision 2 (design critic, 09-29-26)
+
+One Opus 5.5 medium critic read the mockup and this document (25 findings: 1 blocker, 12 important, 12 minor; fixtures clean). Changes, which also bind the implementation tasks:
+
+- **Stage honesty.** The mockup bar has a Product switch: Today (default) or AC2 preview. In Today, "Review and publish" and Roll back are `aria-disabled` with a visible reason ("Publishing arrives with the config store (AC2)"); mockup notes live in the frame captions, never in product UI.
+- **Focus is never lost.** Run, Enter and Clear put focus on the first field (or keep it in the terminal input). A change that shows or hides fields re-renders after focus has moved and restores it; any other change patches in place, so a click on Run is never swallowed. The builder never rebuilds the control the user is on. Every focusable element has a stable id.
+- **One draft for form and terminal.** Switching to the terminal writes the command; switching back parses it into the draft. The terminal validates like the form: unknown command or missing required value sets `aria-invalid` on the input and lists the errors under it.
+- **Requests pane is populated.** Run shows a Sending row that becomes Acknowledged on the 202. Seeded examples show a timed-out source with "Retry State source" and, as an M2 preview, an expanded response card: severity banner, one tile per source (outcome and time), values in mono, keyword in `<mark>` with its severity text.
+- **Builder.** Ruled sections with a label column replace stacked cards. A status strip shows the live version (who, when) and the draft ("kept in this tab only" today, "saved" after AC2). The issue badge is a button that goes to the first issue; an empty label is an error at its control (E1 at admin density). The preview has empty (site items), loading (type switch) and paused (draft has errors, with "Go to the error") states. JSON view and Preview as Officer work.
+- **Officer.** Touch density is a class (`.touch`) shared with the preview's Officer view; meta text, chip timeouts and badges are 16 px body colour; every target is 48 px or more.
+- **Smaller fixes.** Disabled items show their reason (audit log "Arrives in M2"); the account menu holds the theme choice and closes on Esc, as does the history drawer (a named region); quick access and tiles are `role="group"`; shortcuts are declared only where bound; a revealed field keeps a static "Shown" tag under reduced motion; chips draw one focus ring; programmatic focus shows the ring on selects; row actions carry the user's name; the header shows the console position (DSP-03) and a prompt mark instead of a letter.
 
 ## Open points for the developer
 

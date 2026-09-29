@@ -81,6 +81,18 @@ const SURFACES = [
 export const PAIRS: Pair[] = [
   ...SURFACES.map((bg) => ({ fg: "color.text.body", bg, min: 7, use: "body text" })),
   { fg: "color.text.body", bg: "color.accent.subtle", min: 7, use: "selected row, pressed chip" },
+  {
+    fg: "color.accent",
+    bg: "color.accent.subtle",
+    min: 4.5,
+    use: "type code on a pressed quick-access button",
+  },
+  {
+    fg: "color.text.muted",
+    bg: "color.accent.subtle",
+    min: 4.5,
+    use: "timeout on a checked source chip",
+  },
   ...SURFACES.map((bg) => ({
     fg: "color.text.muted",
     bg,
@@ -94,7 +106,7 @@ export const PAIRS: Pair[] = [
     use: "links, accent text",
   })),
   { fg: "color.accent.onFill", bg: "color.accent.fill", min: 4.5, use: "primary button label" },
-  ...SURFACES.slice(1).map((bg) => ({ fg: "color.border", bg, min: 3, use: "control edge" })),
+  ...SURFACES.map((bg) => ({ fg: "color.border", bg, min: 3, use: "control edge" })),
   ...SURFACES.map((bg) => ({ fg: "focus.ring", bg, min: 3, use: "focus ring" })),
   // The ring sits outside a 2px offset, so its neighbour is always a surface, never the button fill.
   ...SURFACES.slice(1, 3).map((bg) => ({
