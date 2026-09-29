@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { type SiteConfig, SiteConfigSchema } from "../config/schema";
+import { MAX_PAIRS_PER_SUBMIT, MAX_SOURCES_PER_SUBMIT } from "../config/validate-rules";
 import { auditReason, isPlanError, type Plan, planRequest } from "./plan";
 
 const config = SiteConfigSchema.parse(
@@ -77,6 +78,14 @@ describe("FR-012 plate-only narrowing (spec 4.6 step 3)", () => {
     expect(p.droppedSourceIds).toEqual(["nationalSource"]);
     expect(p.parts[0]?.values).toEqual({ plate: "ZZ-0001", state: "TX" });
   });
+  it("Plan.droppedSourceIds is a copy, not the primary part's array", () => {
+    const p = ok(
+      planRequest(config, "VEH", { plate: "ZZ-0001" }, ["stateSource", "nationalSource"], { now }),
+    );
+    expect(p.droppedSourceIds).toEqual(["nationalSource"]);
+    expect(p.droppedSourceIds).toEqual(p.parts[0]?.droppedSourceIds);
+    expect(p.droppedSourceIds).not.toBe(p.parts[0]?.droppedSourceIds);
+  });
   it("rejects plate-only with no plateOnly source selected", () => {
     const r = planRequest(config, "VEH", { plate: "ZZ-0001" }, ["nationalSource"], { now });
     expect(r).toEqual({ errors: [{ key: "plan.noPlateOnlySource" }] });
@@ -127,6 +136,20 @@ describe("FR-012 plate-only narrowing (spec 4.6 step 3)", () => {
     });
     expect(p.parts[2]?.mode).toBe("plateOnly");
   });
+  it("a plate-only nested part with no default sources is skipped with plan.nestedNoSources", () => {
+    const noDefaults = edit(withPerAlsoRunVeh(config, true), (c) => {
+      for (const s of queryTypeOf(c, "VEH").sources) s.selectedByDefault = false;
+    });
+    const p = ok(planRequest(noDefaults, "PER", { last: "Testerson" }, ["stateSource"], { now }));
+    expect(p.parts[2]).toMatchObject({
+      partId: 2,
+      mode: "plateOnly",
+      status: "skipped",
+      sourceIds: [],
+      droppedSourceIds: [],
+      skipReasons: [{ key: "plan.nestedNoSources" }],
+    });
+  });
   it("each part carries its own mode; a nested plate-only part with nothing dropped still reads plateOnly", () => {
     const onlyPlateOnlyDefaults = edit(withPerAlsoRunVeh(config, true), (c) => {
       for (const s of queryTypeOf(c, "VEH").sources) if (!s.plateOnly) s.selectedByDefault = false;
@@ -172,7 +195,7 @@ describe("FR-041 source selection (spec 4.6 step 2)", () => {
       errors: [{ key: "validation.unknownQueryType", params: { queryType: "NOPE" } }],
     });
   });
-  it("hidden and unknown keys never enter a part", () => {
+  it("hidden keys never enter a part", () => {
     const p = ok(
       planRequest(
         config,
@@ -274,7 +297,8 @@ describe("FR-042 nested parts (spec 4.6 steps 4 and 5)", () => {
     expect(p.parts[1]?.fieldMapApplied).toEqual({ last: "last", first: "first", dob: "dob" });
     const v0 = p.parts[0]?.values ?? {};
     expect(p.parts[1]?.values).toEqual({ last: v0.last, first: v0.first, dob: "1901-01-01" });
-    expect(p.parts[1]?.sourceIds).toEqual(["nationalSource"]); // WNT's own selectedByDefault sources, not the parent's
+    // WNT's own selectedByDefault sources, not the parent's.
+    expect(p.parts[1]?.sourceIds).toEqual(["nationalSource"]);
   });
   it("a nested part that fails validation is skipped with audit-safe reasons; the primary proceeds", () => {
     // The shipped WNT requires only `last`, which PER also requires, so WNT never fails from PER.
@@ -344,12 +368,16 @@ describe("FR-042 nested parts (spec 4.6 steps 4 and 5)", () => {
     );
     expect(shown.parts.map((x) => x.partId)).toEqual([0, 1]);
   });
+  it("the pair cap has its own constant, separate from the per-request source limit", () => {
+    expect(MAX_PAIRS_PER_SUBMIT).toBe(8);
+    expect(MAX_SOURCES_PER_SUBMIT).toBe(8);
+  });
   it("caps total dispatched pairs at 8 across parts", () => {
     // PER with five eligible sources selected, and WNT with four default sources: 9 pairs.
     const wide = withPerAndWntSources(config, { per: 5, wnt: 4 });
     const ids = queryTypeOf(wide, "PER").sources.map((s) => s.sourceId);
     expect(planRequest(wide, "PER", { last: "Testerson" }, ids, { now })).toEqual({
-      errors: [{ key: "plan.tooManySources", params: { max: 8 } }],
+      errors: [{ key: "plan.tooManySources", params: { max: MAX_PAIRS_PER_SUBMIT } }],
     });
   });
   it("exactly 8 pairs across parts is allowed", () => {

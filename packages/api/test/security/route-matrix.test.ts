@@ -11,6 +11,7 @@ const SERVED = new Set([
   "GET /api/v1/config",
   "GET /api/v1/me/preferences",
   "PUT /api/v1/me/preferences",
+  "POST /api/v1/queries",
 ]);
 const fill = (p: string) =>
   p.replace(/:([A-Za-z]+)|\{([A-Za-z]+)\}/g, (_m, a, b) => ((a ?? b) === "locale" ? "en" : "x"));
@@ -62,6 +63,22 @@ describe("SEC-006 route by caller matrix (P1)", () => {
   it("missing X-Requested-With on a state-changing route is 403 forbidden", async () => {
     const t = await createTestApp();
     const r = await t.request("/api/v1/meta", { method: "POST" });
+    expect(r.status).toBe(403);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("forbidden");
+  });
+  it("POST /api/v1/queries: signed in without X-Requested-With is 403 forbidden", async () => {
+    const t = await createTestApp();
+    await t.createUser("dispatcher@example.test", "correct-horse-battery-1");
+    const cookie = await t.cookieFor("dispatcher@example.test", "correct-horse-battery-1");
+    const r = await t.request("/api/v1/queries", {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        "idempotency-key": crypto.randomUUID(),
+      },
+      body: "{}",
+    });
     expect(r.status).toBe(403);
     expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("forbidden");
   });

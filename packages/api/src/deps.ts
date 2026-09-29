@@ -4,7 +4,7 @@ import { createAuditService } from "./audit/service";
 import { type Auth, createAuth } from "./auth/auth";
 import { type AppIdentityService, createIdentityService } from "./auth/identity";
 import { createRateLimiter, type RateLimiter } from "./auth/rate-limit";
-import { type Clock, systemClock } from "./clock";
+import { type Clock, type MonotonicClock, systemClock, systemMonotonic } from "./clock";
 import { type LoadedConfig, loadSiteConfig } from "./config/load";
 import { type Db, openDatabase } from "./db/client";
 import { checkAuditTriggers, checkQueryTriggers, runMigrations } from "./db/migrate";
@@ -25,6 +25,10 @@ export interface AppDeps {
   logger: Logger;
   config: LoadedConfig;
   clock: Clock;
+  /** Durations for audit details (spec 4.7). */
+  monotonic: MonotonicClock;
+  /** DATA_KEY: wraps each request's DEKs (spec 5.5 request_key, SEC-006). */
+  dataKey: Buffer;
   eventBus: AppEventBus;
 }
 
@@ -72,6 +76,8 @@ export async function buildDeps(o: {
       db,
       auth,
       clock,
+      monotonic: systemMonotonic,
+      dataKey: s.dataKey,
       logger,
       config,
       identity: createIdentityService({ db, auth, limits, clock, log: logger }),
