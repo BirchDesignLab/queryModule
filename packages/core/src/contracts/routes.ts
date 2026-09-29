@@ -275,7 +275,9 @@ const ROUTE_DEFS = [
     request: { body: PublishConfigBodySchema },
     responses: {
       200: { description: "Published version", schema: ConfigVersionSchema },
-      400: error("Malformed body or the draft fails validation (validationFailed)"),
+      400: error(
+        "Malformed body, or the draft fails validation; call validate for diagnostics (validationFailed)",
+      ),
       404: error("No such draft (notFound)"),
       409: error("The draft base is not the live version (draftConflict)"),
       ...adminErrors,
@@ -360,7 +362,9 @@ const ROUTE_DEFS = [
     request: { body: CreateUserBodySchema },
     responses: {
       201: { description: "Created, with the one-time password", schema: CreateUserResponseSchema },
-      400: error("Malformed body or email already used (validationFailed)"),
+      400: error(
+        "Malformed body, or the email is taken (validationFailed, errors[] key validation.emailTaken)",
+      ),
       ...adminErrors,
     },
   },
@@ -379,7 +383,9 @@ const ROUTE_DEFS = [
       200: { description: "Disabled", schema: DisableUserResponseSchema },
       400: error("Malformed id (validationFailed)"),
       404: error("No such user (notFound)"),
-      409: error("Would leave no enabled admin (lastAdmin)"),
+      409: error(
+        "An admin changing their own role or account, or no enabled admin left (lastAdmin)",
+      ),
       ...adminErrors,
     },
   },
@@ -398,7 +404,9 @@ const ROUTE_DEFS = [
       200: { description: "Updated", schema: AdminUserSchema },
       400: error("Malformed id or body (validationFailed)"),
       404: error("No such user (notFound)"),
-      409: error("Would leave no enabled admin (lastAdmin)"),
+      409: error(
+        "An admin changing their own role or account, or no enabled admin left (lastAdmin)",
+      ),
       ...adminErrors,
     },
   },

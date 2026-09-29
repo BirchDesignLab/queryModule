@@ -130,7 +130,9 @@ describe("ADR-0011 admin user contracts (SEC-005, SEC-014)", () => {
   });
 
   it("a session row names the session id, never its token", () => {
-    const s = { id: SID, createdAt: 1, expiresAt: 2, userAgent: null };
+    const s = { id: SID, createdAt: 1, expiresAt: 2, userAgent: null, current: true };
+    const { current: _c, ...unmarked } = s;
+    expect(AdminUserSessionSchema.safeParse(unmarked).success).toBe(false);
     expect(AdminUserSessionSchema.safeParse(s).success).toBe(true);
     expect(AdminUserSessionSchema.safeParse({ ...s, token: "x" }).success).toBe(false);
     expect(AdminUserSessionSchema.safeParse({ ...s, id: "not-a-uuid" }).success).toBe(false);

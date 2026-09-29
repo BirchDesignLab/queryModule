@@ -44,7 +44,10 @@ export type ConfigVersion = z.infer<typeof ConfigVersionSchema>;
 
 const VersionWithDocumentSchema = ConfigVersionSchema.extend({ document: ConfigDocumentSchema });
 
-/** GET /api/v1/admin/config: the live version and the site's one shared draft (ADR-0011 item 5). */
+/**
+ * GET /api/v1/admin/config: the live version and the site's one shared draft (ADR-0011 item 5).
+ * live is never null: an empty store seeds version 1 from the site file at startup (item 1).
+ */
 export const AdminConfigResponseSchema = z.strictObject({
   siteId: BoundedIdSchema,
   live: VersionWithDocumentSchema,
@@ -54,7 +57,7 @@ export const AdminConfigResponseSchema = z.strictObject({
 /**
  * PUT /api/v1/admin/config/draft. baseVersion is the live version the draft starts from; a stale
  * base answers 409 draftConflict. A full document can pass the 32 KiB API body cap, so Task 27
- * gives this route its own larger cap.
+ * gives this route and validate their own larger cap.
  */
 export const PutDraftBodySchema = z.strictObject({
   baseVersion: z.int().min(1),
@@ -68,8 +71,17 @@ export const ValidateConfigResponseSchema = z.strictObject({
   warnings: z.array(DiagnosticSchema),
 });
 
+/**
+ * A publish refused on validation answers 400 validationFailed without diagnostics: the builder
+ * validates first and shows the diagnostics at their controls (Task 33).
+ */
 export const PublishConfigBodySchema = z.strictObject({ draftVersion: z.int().min(1) });
 
+/**
+ * Rollback publishes an older document as a new version and leaves the draft as it is; its base
+ * is then stale, so its next save or publish answers 409 draftConflict. Lists are capped, not
+ * paged, in M1 (paging is deferred).
+ */
 export const ConfigVersionListSchema = z.strictObject({
   versions: z.array(ConfigVersionSchema).max(1000),
 });
@@ -121,6 +133,8 @@ export const AdminUserSessionSchema = z.strictObject({
   createdAt: EpochMsSchema,
   expiresAt: EpochMsSchema,
   userAgent: z.string().max(256).nullable(),
+  /** The caller's own session, so the console can mark it before a revoke. */
+  current: z.boolean(),
 });
 
 export const AdminUserSessionListSchema = z.strictObject({

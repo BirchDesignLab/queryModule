@@ -971,6 +971,7 @@ export interface components {
                 createdAt: number;
                 expiresAt: number;
                 userAgent: string | null;
+                current: boolean;
             }[];
         };
     };
@@ -1449,7 +1450,7 @@ export interface operations {
                     "application/json": components["schemas"]["publishAdminConfig200"];
                 };
             };
-            /** @description Malformed body or the draft fails validation (validationFailed) */
+            /** @description Malformed body, or the draft fails validation; call validate for diagnostics (validationFailed) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1710,7 +1711,7 @@ export interface operations {
                     "application/json": components["schemas"]["createAdminUser201"];
                 };
             };
-            /** @description Malformed body or email already used (validationFailed) */
+            /** @description Malformed body, or the email is taken (validationFailed, errors[] key validation.emailTaken) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1795,7 +1796,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Would leave no enabled admin (lastAdmin) */
+            /** @description An admin changing their own role or account, or no enabled admin left (lastAdmin) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1866,7 +1867,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Would leave no enabled admin (lastAdmin) */
+            /** @description An admin changing their own role or account, or no enabled admin left (lastAdmin) */
             409: {
                 headers: {
                     [name: string]: unknown;
