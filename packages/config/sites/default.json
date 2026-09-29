@@ -7,7 +7,9 @@
     "credentials": false,
     "delegation": false,
     "resultHide": false,
-    "adminAudit": false
+    "adminAudit": false,
+    "adminConfig": false,
+    "adminUsers": false
   },
   "personas": [
     { "key": "dispatch", "labelKey": "persona.dispatch", "layout": "dispatch" },
