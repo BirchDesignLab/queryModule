@@ -414,6 +414,8 @@ FormatResult { text, errors: ValidationError[], unshownCount }
 
 `ValidationError` is `{ key, params? }` with the field in `params.field` (see 4.7). Every function returns all errors it finds, never only the first.
 
+Submit from the terminal uses a fourth pure function, `checkTerminalSubmit(siteConfig, input, drafts, { now })`: it tokenizes, merges into the command's own query type draft (`mergeDraft`), runs `evaluateForm` on the merged draft rather than on the command's values alone, and returns the merged draft, its `FormState` and the errors enriched as `parseCommand` enriches them. Enter submits only when it returns no errors and a valid `FormState` (#297, #377).
+
 **Grammar.** `CommandDef` is defined in 4.1. The delimiter is site-level, `siteConfig.terminal.delimiter` (default `.`). There is no per-command delimiter. Input is split on the delimiter; the first token is the command code, matched case-insensitively. The remaining tokens fill `CommandDef.positions` in order. `validateSiteConfig` rejects command codes that collide after case folding. Source selection stays in the panel UI in Phase 1; the command string does not name sources.
 
 - `presets` set user values before positions are read. This is how a command selects type-level fields (`role: "type"`, see 4.1); positions may also include type fields.
