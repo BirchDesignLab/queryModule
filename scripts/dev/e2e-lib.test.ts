@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
-import { probeHealth, runSeed, waitForReady } from "./e2e-lib.ts";
+import { e2eTarget, probeHealth, runSeed, waitForReady } from "./e2e-lib.ts";
 
 describe("runSeed (review C1: seed failure must not be swallowed)", () => {
   it("fails without running seed when the built seed script is missing", () => {
@@ -146,5 +146,31 @@ describe("waitForReady (review C2: readiness must not be judged by port alone)",
     expect(result.up).toBe(false);
     expect(result.reason).toMatch(/timed out/);
     expect(fetchFn).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("e2eTarget (E2E_PORT: a second lane runs e2e beside port 3000)", () => {
+  it("defaults to port 3000 when E2E_PORT is unset or blank", () => {
+    for (const env of [{}, { E2E_PORT: "" }]) {
+      expect(e2eTarget(env)).toEqual({
+        port: "3000",
+        origin: "http://localhost:3000",
+        healthUrl: "http://localhost:3000/api/v1/health",
+      });
+    }
+  });
+
+  it("uses E2E_PORT for the server, origin and health check", () => {
+    expect(e2eTarget({ E2E_PORT: "3100" })).toEqual({
+      port: "3100",
+      origin: "http://localhost:3100",
+      healthUrl: "http://localhost:3100/api/v1/health",
+    });
+  });
+
+  it("rejects an E2E_PORT that is not an integer from 1 to 65535", () => {
+    for (const bad of ["0", "65536", "abc", "31.5", "-1", " 3100"]) {
+      expect(() => e2eTarget({ E2E_PORT: bad })).toThrow(/E2E_PORT/);
+    }
   });
 });

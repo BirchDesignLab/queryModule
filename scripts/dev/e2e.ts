@@ -2,13 +2,14 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { resolve } from "node:path";
-import { probeHealth, runSeed, waitForReady } from "./e2e-lib.ts";
+import { e2eTarget, probeHealth, runSeed, waitForReady } from "./e2e-lib.ts";
 import { ensureDevSecrets } from "./secrets.ts";
 
 const root = resolve(import.meta.dirname, "../..");
 const secrets = resolve(root, ".dev/secrets");
 ensureDevSecrets(secrets);
 const shell = process.platform === "win32";
+const target = e2eTarget(process.env);
 for (const f of ["@querymodule/web", "@querymodule/api"]) {
   const b = spawnSync("pnpm", ["--filter", f, "build"], { cwd: root, stdio: "inherit", shell });
   if (b.status !== 0) process.exit(b.status ?? 1);
@@ -16,8 +17,8 @@ for (const f of ["@querymodule/web", "@querymodule/api"]) {
 const env = {
   ...process.env,
   NODE_ENV: "production",
-  PORT: "3000",
-  PUBLIC_ORIGIN: "http://localhost:3000",
+  PORT: target.port,
+  PUBLIC_ORIGIN: target.origin,
   DATA_DIR: mkdtempSync(resolve(root, ".dev/e2e-")),
   SECRETS_DIR: secrets,
   ALLOW_MOCK_SOURCES: "true",
@@ -25,14 +26,14 @@ const env = {
   MIGRATIONS_DIR: resolve(root, "packages/api/drizzle"),
   WEB_DIST: resolve(root, "apps/web/dist"),
 };
-const healthUrl = "http://localhost:3000/api/v1/health";
+const healthUrl = target.healthUrl;
 
 // C2: refuse to start against a port that already answers, rather than judging
 // readiness later by a health check that could belong to someone else's server
 // (e.g. an already-running `pnpm dev`/`pnpm dev:api`).
 if (await probeHealth(healthUrl)) {
   console.error(
-    `e2e: port 3000 is already in use; stop the existing server before running pnpm e2e`,
+    `e2e: port ${target.port} is already in use; stop the existing server or set E2E_PORT`,
   );
   process.exit(1);
 }
@@ -70,7 +71,8 @@ const pw = spawnSync(
     shell,
     env: {
       ...process.env,
-      QM_BASE_URL: "http://localhost:3000",
+      QM_BASE_URL: target.origin,
+      E2E_BASE_URL: target.origin,
       SEED_PASSWORD_SECRET_FILE: resolve(secrets, "SEED_PASSWORD_SECRET"),
     },
   },

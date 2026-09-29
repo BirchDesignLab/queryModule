@@ -124,3 +124,23 @@ export function runSeed(opts: RunSeedOptions): RunSeedResult {
   }
   return { ok: true };
 }
+
+export interface E2eTarget {
+  port: string;
+  origin: string;
+  healthUrl: string;
+}
+
+/**
+ * Where `pnpm e2e` serves: port 3000, or `E2E_PORT` so a second lane can run beside it. A bad
+ * value fails fast rather than falling back to a port another lane may be using.
+ */
+export function e2eTarget(env: Readonly<Record<string, string | undefined>>): E2eTarget {
+  const raw = env.E2E_PORT;
+  const port = raw === undefined || raw === "" ? "3000" : raw;
+  const n = Number(port);
+  if (!/^\d+$/.test(port) || n < 1 || n > 65535)
+    throw new Error(`E2E_PORT must be an integer from 1 to 65535, got "${port}"`);
+  const origin = `http://localhost:${port}`;
+  return { port, origin, healthUrl: `${origin}/api/v1/health` };
+}
