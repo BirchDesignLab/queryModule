@@ -1,3 +1,6 @@
+import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { fileURLToPath, URL as NodeURL } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect } from "./fixtures.js";
 
@@ -9,6 +12,22 @@ export function e2eUser(): { email: string; password: string } {
     throw new Error("Set E2E_USER_EMAIL and E2E_USER_PASSWORD to the seeded smoke user");
   }
   return { email, password };
+}
+
+/**
+ * A seeded demo account (spec 8.5): its password is derived from the seed secret exactly as the
+ * seeder does (HMAC-SHA256 of the lower-cased email, base64url), so it is never stored or printed.
+ * CI exports SEED_PASSWORD_SECRET_FILE; locally the secret is the repo's `.dev/secrets` file.
+ */
+export function seededUser(email: string): { email: string; password: string } {
+  const file =
+    process.env.SEED_PASSWORD_SECRET_FILE ??
+    fileURLToPath(new NodeURL("../../../.dev/secrets/SEED_PASSWORD_SECRET", import.meta.url));
+  const secret = readFileSync(file, "utf8").trim();
+  return {
+    email,
+    password: createHmac("sha256", secret).update(email.toLowerCase()).digest("base64url"),
+  };
 }
 
 /** Enters at "/" only; the app routes client-side to /login (spec 5.1 lists "/" as a web route). */
