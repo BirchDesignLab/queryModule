@@ -214,5 +214,8 @@
   "admin.config.labels.text": "Label text ({locale})",
   "admin.config.labels.add": "Add label ({locale})",
   "admin.config.labels.loading": "Loading label text",
-  "admin.config.loading": "Loading the site config"
+  "admin.config.loading": "Loading the site config",
+  "admin.config.issueCount": "Issues: {count}",
+  "admin.config.shapeIssue": "{message}",
+  "admin.config.raw.line": "Line {line}: {message}"
 }

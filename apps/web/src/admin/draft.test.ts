@@ -7,7 +7,9 @@ import {
   createConfigDraftStore,
   docFromClient,
   flattenBundle,
+  lineOf,
   parseRawDraft,
+  pointerLines,
   registerConfigDraft,
   setAtPath,
   validateDraft,
@@ -79,5 +81,24 @@ describe("config draft (Task 31 part 1, BR-001, FR-060)", () => {
     store.getState().start({ a: 1 });
     store.getState().start({ a: 2 });
     expect(store.getState().doc).toEqual({ a: 1 });
+  });
+});
+
+describe("pointerLines (Task 33)", () => {
+  it("maps JSON pointers to 1-based lines of the shown text", () => {
+    const text = JSON.stringify({ a: { b: 1, "c/d": [10, { e: 2 }] }, f: "x" }, null, 2);
+    const lines = pointerLines(text);
+    expect(lines.get("/a")).toBe(2);
+    expect(lines.get("/a/b")).toBe(3);
+    expect(lines.get("/a/c~1d")).toBe(4);
+    expect(lines.get("/a/c~1d/0")).toBe(5);
+    expect(lines.get("/a/c~1d/1/e")).toBe(7);
+    expect(lines.get("/f")).toBe(11);
+  });
+
+  it("resolves a pointer to its deepest existing ancestor", () => {
+    const lines = pointerLines(JSON.stringify({ a: { b: 1 } }, null, 2));
+    expect(lineOf(lines, "/a/missing/deeper")).toBe(2);
+    expect(lineOf(lines, "/nope")).toBeUndefined();
   });
 });
