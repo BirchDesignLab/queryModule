@@ -1,4 +1,5 @@
 import type { ThemeModePreference } from "@querymodule/client";
+import { ROLES } from "@querymodule/core/contracts";
 import { ThemeModeSeg, VisuallyHidden } from "@querymodule/web-ui";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "./i18n-context.js";
@@ -88,7 +89,13 @@ export function AccountMenu({
             <VisuallyHidden>{t("account.label")}</VisuallyHidden>
           </legend>
           <p className="qm-account__who">{t("home.signedInAs", { email })}</p>
-          {role === null ? null : <p className="qm-account__role">{t("account.role", { role })}</p>}
+          {role === null ? null : (
+            <p className="qm-account__role">
+              {t("account.role", {
+                role: (ROLES as readonly string[]).includes(role) ? t(`role.${role}`) : role,
+              })}
+            </p>
+          )}
           <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} />
           <button type="button" className="qm-button qm-button--ghost" onClick={onSignOut}>
             {t("home.signOut")}

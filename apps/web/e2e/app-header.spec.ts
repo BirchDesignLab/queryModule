@@ -32,6 +32,10 @@ test.describe("B1 app header (dispatch layout)", () => {
     await signIn(page);
     const button = page.getByRole("banner").locator(".qm-account__button");
     await expect(button).toHaveAttribute("aria-expanded", "false");
+    // At rest the trigger is a ghost button: no border, no ring (the amber seen after Esc is the
+    // focus ring, checked below).
+    await expect(button).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+    await expect(button).toHaveCSS("outline-style", "none");
     const panel = await openAccountMenu(page);
     await expect(button).toHaveAttribute("aria-expanded", "true");
     await expect(panel.getByRole("button", { name: "Sign out" })).toBeVisible();
@@ -43,6 +47,7 @@ test.describe("B1 app header (dispatch layout)", () => {
     await page.keyboard.press("Escape");
     await expect(panel).toBeHidden();
     await expect(button).toBeFocused();
+    await expect(button).toHaveCSS("outline-style", "solid");
     // A theme choice is a saved preference: put it back and wait for the PUT to land.
     const saved = page.waitForResponse(
       (r) => r.url().includes("/api/v1/me/preferences") && r.request().method() === "PUT" && r.ok(),

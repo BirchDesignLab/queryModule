@@ -194,7 +194,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(button).toHaveAttribute("aria-controls", panel.id);
     expect(within(panel).getByText(`Signed in as ${TEST_USER.email}`)).toBeInTheDocument();
-    expect(within(panel).getByText("Role: user")).toBeInTheDocument();
+    expect(within(panel).getByText("Role: User")).toBeInTheDocument();
     expect(within(panel).getByRole("group", { name: "Theme" })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     // Clicking the button again closes it.
