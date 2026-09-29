@@ -1,13 +1,13 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { e2eUser, signIn } from "./helpers.js";
+import { e2eUser, signIn, signOutFromHeader } from "./helpers.js";
 
 test.describe("BR-002 login", () => {
   test("signs in with the seeded user and signs out", { tag: "@smoke" }, async ({ page }) => {
     const user = e2eUser();
     await signIn(page, user);
-    await expect(page.getByText(`Signed in as ${user.email}`)).toBeVisible();
+    await expect(page.getByRole("button", { name: user.email })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await signOutFromHeader(page);
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   });
 

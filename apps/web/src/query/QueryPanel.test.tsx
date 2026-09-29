@@ -97,7 +97,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await waitFor(() =>
       expect(polite()).toHaveTextContent("The service is unavailable. Try again."),
     );
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: TEST_USER.email })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByLabelText("Plate")).toBeInTheDocument();
     expect(
@@ -622,6 +622,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user, services, router } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
     expect(services.drafts.getState().drafts.VEH?.values.plate).toBe("ZZ-1234");
+    await user.click(screen.getByRole("button", { name: TEST_USER.email }));
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
     expect(services.drafts.getState()).toMatchObject({ queryType: null, drafts: {} });
@@ -910,6 +911,7 @@ describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
     const { user, services } = await openPanel();
     await user.click(toggle());
     await user.type(terminal(), ".ABC123");
+    await user.click(screen.getByRole("button", { name: TEST_USER.email }));
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(services.drafts.getState().mode).toBe("form"));
     expect(services.drafts.getState().terminalText).toBe("");

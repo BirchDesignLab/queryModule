@@ -12,12 +12,26 @@ import {
 } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 
+/** Opens the account disclosure (the header's account button is named by the signed-in email). */
+async function openAccount(user: ReturnType<typeof renderRoot>["user"]) {
+  await user.click(screen.getByRole("button", { name: TEST_USER.email }));
+  return screen.getByRole("group", { name: "Account" });
+}
+
+async function signOutViaMenu(user: ReturnType<typeof renderRoot>["user"]) {
+  await openAccount(user);
+  await user.click(screen.getByRole("button", { name: "Sign out" }));
+}
+
 async function signIn() {
   const t = renderRoot();
   await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
   await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
   await t.user.click(screen.getByRole("button", { name: "Sign in" }));
-  await screen.findByRole("heading", { name: "Query Module" });
+  const heading = await screen.findByRole("heading", { name: "Query Module" });
+  // The panel takes focus once it has mounted, in a later task; a disclosure opened before that
+  // would lose the focus race and close (its blur handler), so wait for it.
+  await waitFor(() => expect(heading).toHaveFocus());
   return t;
 }
 
@@ -33,7 +47,7 @@ describe("ADR-0011 item 3 the config refresh runs while signed in (#361)", () =>
     // The heading is committed before the passive effects of the same commit have run (a
     // findBy can resolve between the two, seen 4 in 300 locally and on CI): wait for the effect.
     await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-    await t.user.click(screen.getByRole("button", { name: "Sign out" }));
+    await signOutViaMenu(t.user);
     await screen.findByRole("heading", { name: "Sign in" });
     await waitFor(() => expect(stop).toHaveBeenCalled());
   });
@@ -57,7 +71,7 @@ describe("sign-in: a slow preferences load does not pull the user back", () => {
     await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
     await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
     await t.user.click(screen.getByRole("button", { name: "Sign in" }));
-    await t.user.click(await screen.findByRole("link", { name: "Connection status" }));
+    await t.user.click(await screen.findByRole("link", { name: "Status" }));
     await screen.findByRole("heading", { name: "Connection status" });
     release();
     await waitFor(() => expect(served).toBe(true));
@@ -115,72 +129,131 @@ describe("spec 6.4 skip link: the first Tab stop of every signed-in page", () =>
   });
   it("on /status it reads Skip to main content and targets that page's main landmark", async () => {
     const t = await signIn();
-    await t.user.click(screen.getByRole("link", { name: "Connection status" }));
+    await t.user.click(screen.getByRole("link", { name: "Status" }));
     const skip = await screen.findByRole("link", { name: "Skip to main content" });
     expect(skip).toHaveAttribute("href", "#qm-main");
     expect(screen.getByRole("main")).toHaveAttribute("id", "qm-main");
   });
 });
 
-describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
-  it("shows the signed-in user in the header and focuses the panel heading", async () => {
+describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)", () => {
+  it("shows the signed-in user on the account button and focuses the panel heading", async () => {
     await signIn();
-    expect(screen.getByText(`Signed in as ${TEST_USER.email}`)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("banner")).getByRole("button", { name: TEST_USER.email }),
+    ).toBeInTheDocument();
     // Sign-in resolves outside act(), so React commits the panel and runs its focus effect in a
     // later task; findByRole can return in between (focus still on body) under a loaded suite.
     const heading = screen.getByRole("heading", { name: "Query Module" });
     await waitFor(() => expect(heading).toHaveFocus());
   });
-  it("D-B4 the header carries the status link, theme select and sign-out, and the panel is at /", async () => {
+  it("B1 the header is a banner with the product name, site name, a Main nav and the account button", async () => {
     await signIn();
     const header = screen.getByRole("banner");
-    expect(within(header).getByRole("link", { name: "Connection status" })).toHaveAttribute(
-      "href",
-      "/status",
-    );
-    expect(within(header).getByLabelText("Theme")).toBeInTheDocument();
-    expect(within(header).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(within(header).getByText("Query Module 2.0")).toBeInTheDocument();
+    expect(within(header).queryByRole("heading")).toBeNull();
+    expect(await within(header).findByText("Default site")).toBeInTheDocument();
+    const nav = within(header).getByRole("navigation", { name: "Main" });
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((l) => l.textContent),
+    ).toEqual(["Queries", "Status"]);
+    expect(within(nav).getByRole("link", { name: "Status" })).toHaveAttribute("href", "/status");
+    expect(within(nav).getByRole("link", { name: "Queries" })).toHaveAttribute("href", "/");
+    // The old temporary "Query panel" link is gone: Queries replaces it.
+    expect(within(header).queryByRole("link", { name: "Query panel" })).toBeNull();
     expect(await screen.findByRole("navigation", { name: "Quick access" })).toBeInTheDocument();
   });
-  it("the header is one top bar: product name first, then status, user, theme, sign out", async () => {
-    await signIn();
-    const header = screen.getByRole("banner");
-    const product = within(header).getByText("Query Module 2.0");
-    expect(product.closest(".qm-app-header__product")).not.toBeNull();
-    expect(within(header).queryByRole("heading")).toBeNull();
-    const end = header.querySelector(".qm-app-header__end");
-    expect(end).not.toBeNull();
-    const order = [
-      product,
-      within(header).getByRole("link", { name: "Connection status" }),
-      within(header).getByText(`Signed in as ${TEST_USER.email}`),
-      within(header).getByLabelText("Theme"),
-      within(header).getByRole("button", { name: "Sign out" }),
-    ];
-    for (const el of order.slice(1)) expect(end?.contains(el)).toBe(true);
-    for (let i = 1; i < order.length; i++) {
-      const prev = order[i - 1] as Element;
-      const next = order[i] as Element;
-      expect(prev.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    }
+  it("B1 Queries is the current page on /, Status on /status", async () => {
+    const { user } = await signIn();
+    const nav = within(screen.getByRole("banner")).getByRole("navigation", { name: "Main" });
+    expect(within(nav).getByRole("link", { name: "Queries" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav).getByRole("link", { name: "Status" })).not.toHaveAttribute("aria-current");
+    await user.click(within(nav).getByRole("link", { name: "Status" }));
+    await screen.findByRole("heading", { name: "Connection status" });
+    expect(within(nav).getByRole("link", { name: "Status" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav).getByRole("link", { name: "Queries" })).not.toHaveAttribute("aria-current");
+    // Queries goes back to the panel.
+    await user.click(within(nav).getByRole("link", { name: "Queries" }));
+    expect(await screen.findByRole("navigation", { name: "Quick access" })).toBeInTheDocument();
+  });
+  it("B1 the account disclosure holds the user, role, theme choice and sign-out, closed until opened", async () => {
+    const { user } = await signIn();
+    const button = screen.getByRole("button", { name: TEST_USER.email });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(button).not.toHaveAttribute("aria-haspopup");
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+    const panel = await openAccount(user);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(button).toHaveAttribute("aria-controls", panel.id);
+    expect(within(panel).getByText(`Signed in as ${TEST_USER.email}`)).toBeInTheDocument();
+    expect(within(panel).getByText("Role: user")).toBeInTheDocument();
+    expect(within(panel).getByRole("group", { name: "Theme" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    // Clicking the button again closes it.
+    await user.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
+  });
+  it("B1 sign out is reachable by keyboard inside the disclosure", async () => {
+    const { user } = await signIn();
+    const button = screen.getByRole("button", { name: TEST_USER.email });
+    button.focus();
+    await user.keyboard("{Enter}");
+    const panel = screen.getByRole("group", { name: "Account" });
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(within(panel).getByRole("button", { name: "Sign out" })).toHaveFocus();
+  });
+  it("B1 Esc closes the disclosure and returns focus to the account button", async () => {
+    const { user } = await signIn();
+    const button = screen.getByRole("button", { name: TEST_USER.email });
+    const panel = await openAccount(user);
+    await user.click(within(panel).getByRole("button", { name: "Night" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
+    expect(button).toHaveFocus();
+    expect(button).toHaveAttribute("aria-expanded", "false");
+  });
+  it("B1 a click outside closes the disclosure", async () => {
+    const { user } = await signIn();
+    await openAccount(user);
+    await user.click(screen.getByRole("main"));
+    expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
   });
   it("D-B4 the header stays on the status page", async () => {
     const { user } = await signIn();
-    await user.click(screen.getByRole("link", { name: "Connection status" }));
+    await user.click(screen.getByRole("link", { name: "Status" }));
     expect(await screen.findByRole("heading", { name: "Connection status" })).toBeInTheDocument();
     expect(
-      within(screen.getByRole("banner")).getByRole("button", { name: "Sign out" }),
+      within(screen.getByRole("banner")).getByRole("button", { name: TEST_USER.email }),
     ).toBeInTheDocument();
   });
-  it("UX-002 switches theme without reload", async () => {
+  it("UX-002 switches theme without reload, from the account menu", async () => {
     const { user } = await signIn();
-    await user.selectOptions(screen.getByLabelText("Theme"), "redShift");
+    const panel = await openAccount(user);
+    await user.click(within(panel).getByRole("button", { name: "Red shift" }));
     expect(document.documentElement.dataset.theme).toBe("redShift");
+    expect(within(panel).getByRole("button", { name: "Red shift" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
   it("sign-out returns to sign-in and resets preferences", async () => {
     const { user, services } = await signIn();
-    await user.selectOptions(screen.getByLabelText("Theme"), "night");
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    const panel = await openAccount(user);
+    await user.click(within(panel).getByRole("button", { name: "Night" }));
+    await user.click(within(panel).getByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
     expect(services.preferences.getState().themeMode).toBeNull();
   });
@@ -191,7 +264,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
       }),
     );
     const { user, services } = await signIn();
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await signOutViaMenu(user);
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
     expect(services.authStore.getState()).toMatchObject({ status: "signedOut", user: null });
     const notice = within(screen.getByRole("main")).getByRole("alert");
@@ -208,7 +281,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
       ),
     );
     const { user } = await signIn();
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await signOutViaMenu(user);
     await user.click(await screen.findByRole("button", { name: "Retry sign-out" }));
     await waitFor(() => expect(failures).toBe(0));
     expect(within(screen.getByRole("main")).getByRole("alert")).toHaveTextContent(
@@ -229,7 +302,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
       http.post(`${API}/api/v1/auth/sign-out`, () => new HttpResponse(null, { status: 503 })),
     );
     const first = await signIn();
-    await first.user.click(screen.getByRole("button", { name: "Sign out" }));
+    await signOutViaMenu(first.user);
     await screen.findByRole("heading", { name: "Sign in" });
     first.unmount();
     renderRoot(); // a reload: fresh services, same browser storage
@@ -238,7 +311,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
       "Sign-out failed on the server.",
     );
     expect(screen.queryByRole("heading", { name: "Query Module" })).not.toBeInTheDocument();
-    expect(screen.queryByText(`Signed in as ${TEST_USER.email}`)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: TEST_USER.email })).not.toBeInTheDocument();
   });
   it("#241: a retry that succeeds at boot clears the marker and boots normally", async () => {
     server.use(
@@ -247,7 +320,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
       }),
     );
     const first = await signIn();
-    await first.user.click(screen.getByRole("button", { name: "Sign out" }));
+    await signOutViaMenu(first.user);
     await screen.findByRole("heading", { name: "Sign in" });
     expect(localStorage.getItem(SIGN_OUT_PENDING_KEY)).toBe("1");
     first.unmount();
@@ -270,7 +343,8 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4)", () => {
       }),
     );
     const { user } = await signIn();
-    await user.selectOptions(screen.getByLabelText("Theme"), "redShift");
+    const panel = await openAccount(user);
+    await user.click(within(panel).getByRole("button", { name: "Red shift" }));
     await waitFor(() => expect(puts).toEqual([{ ...PREFERENCES, themeMode: "redShift" }]));
   });
 });
@@ -314,7 +388,7 @@ describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
     withSite({ defaultMode: "night", auto: "off" }, null);
     const { user } = await signIn();
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await signOutViaMenu(user);
     await screen.findByRole("heading", { name: "Sign in" });
     expect(document.documentElement.dataset.theme).toBe("day");
   });

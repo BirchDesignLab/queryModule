@@ -26,7 +26,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
       served = true;
     });
     await signIn(page);
-    await page.getByRole("link", { name: "Connection status" }).click();
+    await page.getByRole("link", { name: "Status" }).click();
     await expect(page).toHaveURL(/\/status$/);
     await expect.poll(() => served).toBe(true);
     // The sign-in continuation runs right after the response; give a late navigation time to land.
@@ -39,7 +39,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     page,
   }) => {
     await signIn(page);
-    await page.getByRole("link", { name: "Connection status" }).click();
+    await page.getByRole("link", { name: "Status" }).click();
     // Wait for the status page itself: Back before it renders leaves the panel mounted, so no
     // navigation to the panel happens at all.
     await expect(page.getByRole("heading", { name: "Connection status" })).toBeVisible();
@@ -54,7 +54,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     // The reload makes "/" the entry AppShell first renders at, with nothing before it.
     await page.reload();
     await expect(page.getByRole("navigation", { name: "Quick access" })).toBeVisible();
-    await page.getByRole("link", { name: "Connection status" }).click();
+    await page.getByRole("link", { name: "Status" }).click();
     // Wait for the status page itself: Back before it renders leaves the panel mounted, so no
     // navigation to the panel happens at all.
     await expect(page.getByRole("heading", { name: "Connection status" })).toBeVisible();

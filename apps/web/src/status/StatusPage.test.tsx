@@ -11,7 +11,7 @@ async function openStatus(createSocket: (url: string) => SocketLike) {
   await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
   await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
   await t.user.click(screen.getByRole("button", { name: "Sign in" }));
-  await t.user.click(await screen.findByRole("link", { name: "Connection status" }));
+  await t.user.click(await screen.findByRole("link", { name: "Status" }));
   return t;
 }
 

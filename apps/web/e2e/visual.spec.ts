@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { COLOR_TOKENS, type ThemeMode, tokenValue } from "@querymodule/tokens";
 import { expect, test } from "./fixtures.js";
-import { hexToRgb, seededUser, signIn } from "./helpers.js";
+import { chooseTheme, hexToRgb, seededUser, signIn } from "./helpers.js";
 
 // D0.4 visual regression baseline (design system plan, docs/design/2026-09-29-visual-system.md).
 //
@@ -28,7 +28,7 @@ const rgb = (mode: ThemeMode, token: keyof typeof COLOR_TOKENS): string =>
   hexToRgb(COLOR_TOKENS[token][mode]);
 
 async function setTheme(page: Page, mode: ThemeMode): Promise<void> {
-  await page.getByLabel("Theme").selectOption(mode);
+  await chooseTheme(page, mode);
   await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
 }
 
@@ -51,7 +51,7 @@ async function asUser(
   } finally {
     await page.goto("/");
     await panelReady(page);
-    await saveTheme(page, () => page.getByLabel("Theme").selectOption({ label: "Match system" }));
+    await saveTheme(page, () => chooseTheme(page, "auto"));
   }
 }
 
