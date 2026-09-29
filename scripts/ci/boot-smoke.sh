@@ -148,9 +148,25 @@ ops_checks() {
   code=0
   ops_run "$lk_vol" "$sec_dk" node scripts/ops/lost-data-key.js || code=$?
   assert_exit "lost-data-key (no confirm flag)" 2 "$code"
+  # seed 4 request_key rows (2 requests x 2 scopes) so the runbook has something to shred (#279)
+  rk_run() {
+    docker run --rm -v "$lk_vol:/data" -v "$sec_dk:/run/secrets:ro" \
+      -v "$PWD/scripts/ci/smoke-request-key.mjs:/app/smoke-request-key.mjs:ro" \
+      "$image" node smoke-request-key.mjs "$1"
+  }
   code=0
-  ops_run "$lk_vol" "$sec_dk" node scripts/ops/lost-data-key.js --confirm-offline-copy-lost || code=$?
+  rk_run seed || code=$?
+  assert_exit "request_key seed" 0 "$code"
+  code=0
+  lk_out=$(ops_run "$lk_vol" "$sec_dk" node scripts/ops/lost-data-key.js --confirm-offline-copy-lost) || code=$?
+  echo "$lk_out"
   assert_exit "lost-data-key (with confirm flag)" 0 "$code"
+  grep -q "request_key shredded: 4 keys for 2 requests" <<<"$lk_out" ||
+    { echo "ops check failed: lost-data-key did not report shredding the 4 seeded request_key rows"; exit 1; }
+  echo "ops check ok: lost-data-key reported the request_key shred"
+  code=0
+  rk_run check || code=$?
+  assert_exit "request_key shredded and audited (retentionPurged keyLost per scope)" 0 "$code"
 
   # the app boots on that volume under the recovered keys: both canaries verify (fail-closed startup)
   boot_once "$lk_vol" "$sec_dk" "$lk_name"

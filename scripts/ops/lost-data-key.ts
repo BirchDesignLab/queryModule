@@ -6,6 +6,8 @@
 //    already unreadable) and writes one retentionPurged per scope with reason keyLost. Ends with wal_checkpoint(TRUNCATE).
 // 4. Start the app. New submissions get fresh request_key rows; audit rows and metadata are unaffected.
 // It never touches state_credential or delegations.
+
+import { createAuditService } from "../../packages/api/src/audit/service";
 import { systemClock } from "../../packages/api/src/clock";
 import { checkAuditTriggers } from "../../packages/api/src/db/migrate";
 import { openForOps } from "../../packages/api/src/ops/audit-stats";
@@ -20,8 +22,16 @@ if (!process.argv.includes("--confirm-offline-copy-lost")) {
 const { db, secrets } = await openForOps(process.env);
 try {
   await checkAuditTriggers(db);
-  await recoverLostKey(db, systemClock, "data", secrets.dataKey);
-  process.stdout.write("data canary rewritten under the new DATA_KEY\n");
+  const r = await recoverLostKey(
+    db,
+    systemClock,
+    "data",
+    secrets.dataKey,
+    createAuditService(systemClock),
+  );
+  process.stdout.write(
+    `request_key shredded: ${r.keysDeleted} keys for ${r.requestCount} requests; data canary rewritten\n`,
+  );
 } finally {
   db.$client.close();
 }

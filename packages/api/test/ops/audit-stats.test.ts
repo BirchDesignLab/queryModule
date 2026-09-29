@@ -117,7 +117,7 @@ describe("runCheckTriggers", () => {
       { write: (s: string) => err.push(s) },
     );
     expect(code).toBe(0);
-    expect(out.join("")).toContain("audit_event triggers present");
+    expect(out.join("")).toContain("audit_event and query table triggers present");
     expect(err).toEqual([]);
   });
 
@@ -135,6 +135,22 @@ describe("runCheckTriggers", () => {
     );
     expect(code).toBe(1);
     expect(err.join("")).toContain("audit_event_no_delete");
+  });
+
+  it("returns 1 and names a dropped query-table trigger (#279 G-m1)", async () => {
+    const { processEnv, deployEnv } = await setupOpsEnv();
+    const db = await openDatabase({ file: deployEnv.dbFile, encryptionKey: TEST_DB_KEY });
+    await db.$client.execute({ sql: "DROP TRIGGER source_result_no_delete", args: [] });
+    db.$client.close();
+
+    const err: string[] = [];
+    const code = await runCheckTriggers(
+      processEnv,
+      { write: () => {} },
+      { write: (s: string) => err.push(s) },
+    );
+    expect(code).toBe(1);
+    expect(err.join("")).toContain("source_result_no_delete");
   });
 });
 

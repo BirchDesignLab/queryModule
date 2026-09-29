@@ -1,5 +1,5 @@
 import type { Db } from "../db/client";
-import { checkAuditTriggers } from "../db/migrate";
+import { checkAuditTriggers, checkQueryTriggers } from "../db/migrate";
 import { openForOps } from "./audit-stats";
 
 interface Writable {
@@ -7,7 +7,8 @@ interface Writable {
 }
 
 /**
- * Spec 9.3 step 11 boot-smoke check: asserts both audit_event triggers exist and are unaltered.
+ * Spec 9.3 step 11 boot-smoke check: asserts every audit_event trigger exists and is unaltered,
+ * then every query_request and source_result trigger, as server startup does (#279 G-m1).
  * Returns 0 when they are, 1 otherwise (never throws); always closes the client it opens via
  * openForOps.
  */
@@ -20,7 +21,8 @@ export async function runCheckTriggers(
   try {
     ({ db } = await openForOps(env));
     await checkAuditTriggers(db);
-    out.write("audit_event triggers present\n");
+    await checkQueryTriggers(db);
+    out.write("audit_event and query table triggers present\n");
     return 0;
   } catch (e) {
     err.write(`${e instanceof Error ? e.message : "trigger check failed"}\n`);

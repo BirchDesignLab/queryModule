@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { isMainModule } from "./is-main-module.mjs";
 
 /**
  * Docs-only fast path (master plan 11). Files under docs/testing/ are gate inputs
@@ -117,4 +117,4 @@ export function main({
   }
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();
+if (isMainModule(import.meta.url, process.argv[1])) main();

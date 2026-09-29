@@ -29,7 +29,8 @@ function run(path: string): { status: number; stderr: string; stdout: string } {
   }
 }
 
-describe("check-lockfile CLI: exit 2 on unparsable YAML (critic:I2)", () => {
+// Each step spawns a tsx CLI (cold start); the 5s default flakes under full-suite load on Windows.
+describe("check-lockfile CLI: exit 2 on unparsable YAML (critic:I2)", { timeout: 20_000 }, () => {
   it("exits 2 with a path: message line and no stack trace", () => {
     dir = mkdtempSync(join(tmpdir(), "lockfile-test-"));
     const path = join(dir, "bad-lock.yaml");

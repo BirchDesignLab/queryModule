@@ -19,7 +19,8 @@ afterEach(() => {
   dir = undefined;
 });
 
-describe("check-licences CLI error output (item 8)", () => {
+// Each step spawns a tsx CLI (cold start); the 5s default flakes under full-suite load on Windows.
+describe("check-licences CLI error output (item 8)", { timeout: 20_000 }, () => {
   it("prints usage and exits 2 with no report path", () => {
     const r = run([]);
     expect(r.status).toBe(2);
