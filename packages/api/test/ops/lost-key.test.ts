@@ -43,20 +43,110 @@ describe("SEC-006 lost-key runbooks", () => {
     const canaries = async () =>
       (await t.deps.db.$client.execute("SELECT * FROM key_canary ORDER BY key_name")).rows;
     const before = await canaries();
-    for (const [name, table] of [
-      ["credential", "state_credential"],
-      ["data", "request_key"],
-    ] as const) {
-      await t.deps.db.$client.execute(`CREATE TABLE ${table} (id TEXT)`);
-      await expect(recoverLostKey(t.deps.db, t.clock, name, Buffer.alloc(32, 9))).rejects.toThrow(
-        RunbookOutdatedError,
-      );
-    }
+    await t.deps.db.$client.execute("CREATE TABLE state_credential (id TEXT)");
+    await expect(
+      recoverLostKey(t.deps.db, t.clock, "credential", Buffer.alloc(32, 9)),
+    ).rejects.toThrow(RunbookOutdatedError);
     expect(await canaries()).toEqual(before);
   });
   it("fails when the WAL checkpoint reports busy (#217)", () => {
     expect(() => assertCheckpointComplete({ busy: 0, log: 3, checkpointed: 3 })).not.toThrow();
     expect(() => assertCheckpointComplete({ busy: 1, log: 3, checkpointed: 0 })).toThrow(/busy/);
     expect(() => assertCheckpointComplete(undefined)).toThrow(/busy/);
+  });
+});
+
+const REQUEST_KEY_DDL = `CREATE TABLE request_key (
+  correlation_id TEXT NOT NULL, scope TEXT NOT NULL, wrapped_dek BLOB NOT NULL, iv BLOB NOT NULL,
+  auth_tag BLOB NOT NULL, key_version INTEGER NOT NULL, created_at INTEGER NOT NULL,
+  PRIMARY KEY (correlation_id, scope))`;
+
+async function withRequestKeys() {
+  const t = await createTestApp();
+  const db = t.deps.db;
+  await db.$client.execute(REQUEST_KEY_DDL);
+  for (const cid of ["req-a", "req-b"]) {
+    for (const scope of ["values", "payload"]) {
+      await db.$client.execute({
+        sql: "INSERT INTO request_key VALUES (?, ?, x'01', x'02', x'03', 1, 1)",
+        args: [cid, scope],
+      });
+    }
+  }
+  return t;
+}
+const count = async (t: Awaited<ReturnType<typeof withRequestKeys>>, table: string) =>
+  Number((await t.deps.db.$client.execute(`SELECT count(*) AS n FROM ${table}`)).rows[0]?.n);
+
+describe("SEC-006 lost DATA_KEY shreds request_key (spec 8.7)", () => {
+  it("deletes every request_key row, rewrites the canary and audits one retentionPurged per scope", async () => {
+    const t = await withRequestKeys();
+    const newData = Buffer.alloc(32, 8);
+    const before = await count(t, "audit_event");
+    const r = await recoverLostKey(t.deps.db, t.clock, "data", newData, t.deps.audit);
+    expect(r).toEqual({ keysDeleted: 4, requestCount: 2 });
+    expect(await count(t, "request_key")).toBe(0);
+    expect(await checkKeyCanaries(t.deps.db, { ...keys, dataKey: newData }, t.clock)).toEqual({
+      credential: "verified",
+      data: "verified",
+    });
+    const rows = (
+      await t.deps.db.$client.execute(
+        "SELECT type, actor_user_id, correlation_id, part_id, credential_user_id, details FROM audit_event ORDER BY id DESC LIMIT 2",
+      )
+    ).rows;
+    expect(await count(t, "audit_event")).toBe(before + 2);
+    const details = rows.map((x) => JSON.parse(String(x.details)) as Record<string, unknown>);
+    expect(details.map((d) => d.scope).sort()).toEqual(["payload", "values"]);
+    for (const d of details)
+      expect(d).toEqual({
+        scope: d.scope,
+        reason: "keyLost",
+        olderThan: null,
+        requestCount: 2,
+        keysDeleted: 2,
+      });
+    for (const x of rows) {
+      expect(x.type).toBe("retentionPurged");
+      expect(x.correlation_id).toBeNull();
+      expect(x.part_id).toBeNull();
+      expect(x.credential_user_id).toBeNull();
+    }
+  });
+  it("an audit failure deletes nothing and leaves the canary alone", async () => {
+    const t = await withRequestKeys();
+    const failing = {
+      record: async () => {
+        throw new Error("audit down");
+      },
+    };
+    await expect(
+      recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), failing),
+    ).rejects.toThrow("audit down");
+    expect(await count(t, "request_key")).toBe(4);
+    await expect(
+      checkKeyCanaries(t.deps.db, { ...keys, dataKey: Buffer.alloc(32, 8) }, t.clock),
+    ).rejects.toThrow(KeyCanaryError);
+  });
+  it("refuses to shred without an audit service", async () => {
+    const t = await withRequestKeys();
+    await expect(recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8))).rejects.toThrow(
+      /audit/,
+    );
+    expect(await count(t, "request_key")).toBe(4);
+  });
+  it("still works before request_key exists and reports zero", async () => {
+    const t = await createTestApp();
+    expect(
+      await recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), t.deps.audit),
+    ).toEqual({ keysDeleted: 0, requestCount: 0 });
+  });
+  it("credential still refuses when state_credential exists", async () => {
+    const t = await withRequestKeys();
+    await t.deps.db.$client.execute("CREATE TABLE state_credential (user_id TEXT)");
+    await expect(
+      recoverLostKey(t.deps.db, t.clock, "credential", Buffer.alloc(32, 7), t.deps.audit),
+    ).rejects.toThrow(RunbookOutdatedError);
+    expect(await count(t, "request_key")).toBe(4);
   });
 });
