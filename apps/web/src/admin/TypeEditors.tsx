@@ -1,5 +1,5 @@
 import { DATA_TYPES, type DataType } from "@querymodule/core/config";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
@@ -16,6 +16,7 @@ import {
   TextControl,
   useDraftSetters,
   useFocusRequest,
+  useGeneration,
 } from "./controls.js";
 import type { JsonObject, PathSegment } from "./draft.js";
 import { NodeEditor } from "./GenericForm.js";
@@ -57,7 +58,7 @@ const newType = (): Obj => ({
   sections: [{ key: "base", labelKey: "" }],
   fields: [newField("base")],
   rules: [],
-  sources: [],
+  // sources (min 1) left out: the missing-key diagnostic names it (critic M3).
 });
 
 /** Value kinds a default can take; a data type change across kinds drops the default. */
@@ -112,8 +113,18 @@ export function QueryTypesEditor({ value, idPrefix }: { value: unknown; idPrefix
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
   const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
+  const [gen, bump] = useGeneration();
+  // A count change this editor did not make (the raw tab) closes every type: indexes moved (critic M1).
+  const ownCount = useRef<number | null>(null);
   const types = asObjects(value);
   const path = ["queryTypes"] as const;
+  useEffect(() => {
+    if (ownCount.current !== null && ownCount.current !== types.length) {
+      setOpened(new Set());
+      bump();
+    }
+    ownCount.current = types.length;
+  }, [types.length, bump]);
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   const setOpen = (i: number, open: boolean) =>
@@ -128,7 +139,7 @@ export function QueryTypesEditor({ value, idPrefix }: { value: unknown; idPrefix
     <div>
       {types.map((type, i) => (
         <details
-          key={owner(i)}
+          key={`${owner(i)}:${gen}`}
           open={opened.has(i)}
           onToggle={(e) => setOpen(i, e.currentTarget.open)}
         >
@@ -143,6 +154,8 @@ export function QueryTypesEditor({ value, idPrefix }: { value: unknown; idPrefix
               idPrefix={idPrefix}
               onRemove={() => {
                 const next = types.filter((_, j) => j !== i);
+                ownCount.current = next.length;
+                bump();
                 setPath(path, next);
                 setOpened(
                   (s) => new Set([...s].filter((j) => j !== i).map((j) => (j > i ? j - 1 : j))),
@@ -160,6 +173,7 @@ export function QueryTypesEditor({ value, idPrefix }: { value: unknown; idPrefix
         data-owner={listOwner}
         data-role="add"
         onClick={() => {
+          ownCount.current = types.length + 1;
           setPath(path, [...types, newType()]);
           setOpen(types.length, true);
           focus([owner(types.length), "first"]);
@@ -202,7 +216,7 @@ function QueryTypeEditor({
         label={t("admin.config.labelKey")}
         value={type.labelKey}
       />
-      <LabelTextControls idPrefix={idPrefix} labelKey={type.labelKey} />
+      <LabelTextControls idPrefix={idPrefix} path={path} labelKey={type.labelKey} />
       <CheckControl
         idPrefix={idPrefix}
         path={[...path, "allowPlateOnly"]}
@@ -241,6 +255,7 @@ function SectionsEditor({
   const t = useT();
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
+  const [gen, bump] = useGeneration();
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   return (
@@ -250,7 +265,7 @@ function SectionsEditor({
         const itemPath = [...path, i];
         const key = str(section.key);
         return (
-          <fieldset key={owner(i)} className="qm-admin__item">
+          <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
             <legend>{t("admin.config.section.legend", { key })}</legend>
             <TextControl
               idPrefix={idPrefix}
@@ -265,7 +280,7 @@ function SectionsEditor({
               label={t("admin.config.labelKey")}
               value={section.labelKey}
             />
-            <LabelTextControls idPrefix={idPrefix} labelKey={section.labelKey} />
+            <LabelTextControls idPrefix={idPrefix} path={itemPath} labelKey={section.labelKey} />
             <OtherKeys
               item={section}
               path={itemPath}
@@ -279,6 +294,7 @@ function SectionsEditor({
               count={sections.length}
               removeLabel={t("admin.config.section.remove")}
               onMove={(from, to) => {
+                bump();
                 setPath(path, moved(sections, from, to));
                 focus(
                   [owner(to), from > to ? "up" : "down"],
@@ -286,6 +302,7 @@ function SectionsEditor({
                 );
               }}
               onRemove={(at) => {
+                bump();
                 const next = sections.filter((_, j) => j !== at);
                 setPath(path, next);
                 focus([owner(Math.min(at, next.length - 1)), "first"], [listOwner, "add"]);
@@ -322,6 +339,7 @@ function FieldsEditor({
   const t = useT();
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
+  const [gen, bump] = useGeneration();
   const fields = asObjects(type.fields);
   const sectionKeys = [
     ...new Set(
@@ -336,7 +354,7 @@ function FieldsEditor({
     <fieldset>
       <legend>{t("admin.config.fields")}</legend>
       {fields.map((field, i) => (
-        <fieldset key={owner(i)} className="qm-admin__item">
+        <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
           <legend>{t("admin.config.field.legend", { key: str(field.key) })}</legend>
           <FieldControls
             field={field}
@@ -352,10 +370,12 @@ function FieldsEditor({
             count={fields.length}
             removeLabel={t("admin.config.field.remove")}
             onMove={(from, to) => {
+              bump();
               setPath(path, moved(fields, from, to));
               focus([owner(to), from > to ? "up" : "down"], [owner(to), from > to ? "down" : "up"]);
             }}
             onRemove={(at) => {
+              bump();
               const next = fields.filter((_, j) => j !== at);
               setPath(path, next);
               focus([owner(Math.min(at, next.length - 1)), "first"], [listOwner, "add"]);
@@ -416,7 +436,7 @@ function FieldControls({
         label={t("admin.config.labelKey")}
         value={field.labelKey}
       />
-      <LabelTextControls idPrefix={idPrefix} labelKey={field.labelKey} />
+      <LabelTextControls idPrefix={idPrefix} path={path} labelKey={field.labelKey} />
       <SelectControl
         idPrefix={idPrefix}
         path={[...path, "dataType"]}
@@ -503,6 +523,7 @@ function FieldControls({
         label={t("admin.config.field.section")}
         value={field.section}
         options={sectionKeys}
+        blank={t("admin.config.none")}
       />
       <MoreSettings item={field} path={path} covered={FIELD_KEYS} idPrefix={idPrefix} />
     </>

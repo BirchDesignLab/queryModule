@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
@@ -91,7 +91,7 @@ describe("query type editor (Task 31 part 2, BR-001, FR-060, UX-004)", () => {
       within(select)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toEqual(["base", "extra"]);
+    ).toEqual(["(none)", "base", "extra"]);
     await t.user.selectOptions(select, "extra");
     expect(typeOf(t, "PER").fields.find((f) => f.key === "dob")?.section).toBe("extra");
     await t.user.click(
@@ -275,5 +275,54 @@ describe("picklist editor (Task 31 part 2, FR-060, UX-004)", () => {
     expect(picklists(t).at(-1)).toMatchObject({ id: "", values: [{ code: "", enabled: true }] });
     const id = within(picklistBox("")).getByLabelText("Picklist id");
     expect(id).toHaveFocus();
+  });
+});
+
+describe("critic fixes (Task 31 part 2 PR1)", () => {
+  it("I1: no duplicate DOM ids after adding a query type (label text ids carry the item path)", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await t.user.click(screen.getByRole("button", { name: "Add query type" }));
+    const ids = [...document.querySelectorAll("[id]")].map((e) => e.id);
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
+
+  it("I2: removing a field with unparsed default text does not leak that text to the next field", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await openType(t, "VEH");
+    // Both fields number-typed, so the same control type sits at the shifted index.
+    await t.user.selectOptions(
+      within(fieldBox("VEH", "vin")).getByLabelText("Data type"),
+      "number",
+    );
+    await t.user.type(within(fieldBox("VEH", "year")).getByLabelText("Default value"), "abc");
+    await t.user.click(
+      within(fieldBox("VEH", "year")).getByRole("button", { name: "Remove field year" }),
+    );
+    const vin = within(fieldBox("VEH", "vin")).getByLabelText("Default value");
+    expect(vin).toHaveValue("");
+    expect(vin).toHaveAttribute("aria-invalid", "false");
+  });
+
+  it("M1: a type count change from the raw tab closes the opened types", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await openType(t, "WNT");
+    act(() => {
+      const d = structuredClone(state(t).doc) as { queryTypes: QueryType[] };
+      d.queryTypes.shift();
+      state(t).setDoc(d as never);
+    });
+    expect(screen.queryByRole("group", { name: "Query type WNT" })).toBeNull();
+    expect(screen.queryByRole("group", { name: /^Query type / })).toBeNull();
+  });
+
+  it("M2: a field section select offers a blank for a missing or stale section", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await openType(t, "WNT");
+    const select = within(fieldBox("WNT", "dob")).getByLabelText("Section");
+    expect(within(select).getAllByRole("option")[0]).toHaveTextContent("(none)");
   });
 });

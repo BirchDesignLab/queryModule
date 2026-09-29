@@ -174,6 +174,7 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
         value={value}
         readOnly={isServerSideLeaf(path)}
         note={isServerSideLeaf(path) ? t("admin.config.serverSetting") : undefined}
+        onChange={onChange}
       />
     );
   }

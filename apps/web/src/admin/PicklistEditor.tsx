@@ -11,6 +11,7 @@ import {
   TextControl,
   useDraftSetters,
   useFocusRequest,
+  useGeneration,
 } from "./controls.js";
 import type { PathSegment } from "./draft.js";
 
@@ -22,6 +23,7 @@ export function PicklistsEditor({ value, idPrefix }: { value: unknown; idPrefix:
   const t = useT();
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
+  const [gen, bump] = useGeneration();
   const lists = asObjects(value);
   const path = ["picklists"] as const;
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
@@ -31,7 +33,7 @@ export function PicklistsEditor({ value, idPrefix }: { value: unknown; idPrefix:
       {lists.map((list, i) => {
         const id = str(list.id);
         return (
-          <fieldset key={owner(i)} className="qm-admin__item">
+          <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
             <legend>{t("admin.config.picklist.legend", { id })}</legend>
             <TextControl
               idPrefix={idPrefix}
@@ -53,6 +55,7 @@ export function PicklistsEditor({ value, idPrefix }: { value: unknown; idPrefix:
               movable={false}
               removeLabel={t("admin.config.picklist.remove")}
               onRemove={() => {
+                bump();
                 const next = lists.filter((_, j) => j !== i);
                 setPath(path, next);
                 focus([owner(Math.min(i, next.length - 1)), "first"], [listOwner, "add"]);
@@ -89,6 +92,7 @@ function ValuesEditor({
   const t = useT();
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
+  const [gen, bump] = useGeneration();
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   return (
@@ -98,7 +102,7 @@ function ValuesEditor({
         const itemPath = [...path, i];
         const code = str(value.code);
         return (
-          <fieldset key={owner(i)} className="qm-admin__item">
+          <fieldset key={`${owner(i)}:${gen}`} className="qm-admin__item">
             <legend>{t("admin.config.picklist.value", { code })}</legend>
             <TextControl
               idPrefix={idPrefix}
@@ -113,7 +117,7 @@ function ValuesEditor({
               label={t("admin.config.labelKey")}
               value={value.labelKey}
             />
-            <LabelTextControls idPrefix={idPrefix} labelKey={value.labelKey} />
+            <LabelTextControls idPrefix={idPrefix} path={itemPath} labelKey={value.labelKey} />
             <CheckControl
               idPrefix={idPrefix}
               path={[...itemPath, "enabled"]}
@@ -134,6 +138,7 @@ function ValuesEditor({
               count={values.length}
               removeLabel={t("admin.config.picklist.removeValue")}
               onMove={(from, to) => {
+                bump();
                 setPath(path, moved(values, from, to));
                 focus(
                   [owner(to), from > to ? "up" : "down"],
@@ -141,6 +146,7 @@ function ValuesEditor({
                 );
               }}
               onRemove={(at) => {
+                bump();
                 const next = values.filter((_, j) => j !== at);
                 setPath(path, next);
                 focus([owner(Math.min(at, next.length - 1)), "first"], [listOwner, "add"]);

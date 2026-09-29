@@ -188,9 +188,18 @@ export function NumberControl({
   optional = false,
   readOnly = false,
   note,
-}: ControlProps & { value: unknown; optional?: boolean; readOnly?: boolean; note?: string }) {
+  onChange,
+}: ControlProps & {
+  value: unknown;
+  optional?: boolean;
+  readOnly?: boolean;
+  note?: string;
+  /** Writes the value; the draft store by default. */
+  onChange?(path: readonly PathSegment[], value: unknown): void;
+}) {
   const t = useT();
-  const { setPath } = useDraftSetters();
+  const setters = useDraftSetters();
+  const setPath = onChange ?? setters.setPath;
   const shownValue = typeof value === "number" ? String(value) : "";
   const [text, setText] = useState(shownValue);
   useEffect(() => {
@@ -241,7 +250,16 @@ export function NumberControl({
 }
 
 /** Label text for a label key, one input per draft locale, written to the draft's overlay. */
-export function LabelTextControls({ idPrefix, labelKey }: { idPrefix: string; labelKey: unknown }) {
+export function LabelTextControls({
+  idPrefix,
+  path,
+  labelKey,
+}: {
+  idPrefix: string;
+  /** The item that owns the label key; ids carry it, since items may share a key (critic I1). */
+  path: readonly PathSegment[];
+  labelKey: unknown;
+}) {
   const t = useT();
   const translator = useTranslator();
   const { labels } = useDraft();
@@ -251,7 +269,7 @@ export function LabelTextControls({ idPrefix, labelKey }: { idPrefix: string; la
   return (
     <>
       {locales.map((locale) => {
-        const id = controlId(idPrefix, ["labelText", locale, key]);
+        const id = controlId(idPrefix, [...path, "labelText", locale]);
         const overlay = labels[locale]?.[key];
         const shipped =
           locale === translator.locale && translator.has(key) ? translator.t(key) : "";
@@ -352,6 +370,16 @@ export function ItemButtons({
       </button>
     </div>
   );
+}
+
+/**
+ * A list generation: bumped on every remove or move, and part of each item's React key, so
+ * per-item local state (partial number text, open disclosures) never shifts to another item
+ * (critic I2).
+ */
+export function useGeneration(): [number, () => void] {
+  const [gen, setGen] = useState(0);
+  return [gen, useCallback(() => setGen((g) => g + 1), [])];
 }
 
 /** A copy of a list with one item moved. */
