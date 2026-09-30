@@ -14,6 +14,7 @@ import {
   useFocusRequest,
   useGeneration,
   useItemIssues,
+  useLabelText,
 } from "./controls.js";
 import type { JsonObject, PathSegment } from "./draft.js";
 import { OtherKeys } from "./GenericForm.js";
@@ -50,6 +51,8 @@ export function CommandsEditor({
   const path = ["commands"] as const;
   const types = asObjects(doc.queryTypes);
   const typeCodes = types.map((q) => str(q.code)).filter((c) => c !== "");
+  const labelText = useLabelText();
+  const typeName = useTypeName(doc);
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   return (
@@ -58,7 +61,7 @@ export function CommandsEditor({
         const cmdPath = [...path, i];
         const code = str(cmd.code);
         const type = types.find((q) => q.code === cmd.queryType);
-        const info = fieldInfo(type ?? {});
+        const info = fieldInfo(type ?? {}, labelText);
         return (
           <CommandBox key={`${owner(i)}:${gen}`} path={cmdPath} idPrefix={idPrefix} code={code}>
             <TextControl
@@ -74,6 +77,7 @@ export function CommandsEditor({
               label={t("admin.config.command.queryType")}
               value={cmd.queryType}
               options={typeCodes}
+              optionLabel={typeName}
             />
             <StaleFields command={cmd} path={cmdPath} info={info} />
             <PositionsEditor
@@ -168,6 +172,7 @@ function PositionsEditor({
               label={t("admin.config.condition.field")}
               value={field}
               options={info.keys}
+              optionLabel={info.name}
               owner={owner(i)}
               onValue={(next) => {
                 const f = next ?? "";
@@ -291,6 +296,7 @@ function PresetsEditor({
               label={t("admin.config.condition.field")}
               value={key}
               options={free(key)}
+              optionLabel={info.name}
               owner={owner(i)}
               onValue={(next) => {
                 const to = next ?? "";
@@ -401,7 +407,7 @@ function PendingPreset({
         >
           {options.map((o) => (
             <option key={o} value={o}>
-              {o}
+              {info.name(o)}
             </option>
           ))}
         </select>
@@ -527,6 +533,7 @@ export function QuickAccessEditor({
   const focus = useFocusRequest();
   const [gen, bump] = useGeneration();
   const codes = Array.isArray(value) ? value.map(str) : [];
+  const typeName = useTypeName(doc);
   const typeCodes = asObjects(doc.queryTypes)
     .map((q) => str(q.code))
     .filter((c) => c !== "");
@@ -544,6 +551,7 @@ export function QuickAccessEditor({
             label={t("admin.config.quickAccess.item", { n: i + 1 })}
             value={code}
             options={typeCodes}
+            optionLabel={typeName}
             owner={owner(i)}
           />
           <ItemButtons
@@ -581,4 +589,15 @@ export function QuickAccessEditor({
       </button>
     </fieldset>
   );
+}
+
+/** A query type as an option: its name with its code, "Vehicle (VEH)"; the code alone unnamed. */
+function useTypeName(doc: JsonObject): (code: string) => string {
+  const t = useT();
+  const labelText = useLabelText();
+  const types = asObjects(doc.queryTypes);
+  return (code: string) => {
+    const name = labelText(types.find((q) => str(q.code) === code)?.labelKey);
+    return name === "" ? code : t("admin.config.typeOption", { name, code });
+  };
 }

@@ -34,14 +34,14 @@ describe("generic form edge cases (#388, UX-004)", () => {
   it("a boolean leaf toggles through its checkbox", async () => {
     const t = await openBuilder();
     await openSection(t, "features");
-    await t.user.click(screen.getByLabelText("features.credentials"));
+    await t.user.click(screen.getByLabelText(/ features\.credentials$/));
     expect((doc(t).features as Record<string, boolean>).credentials).toBe(true);
   });
 
   it("non-numeric text in a number field is flagged and not written", async () => {
     const t = await openBuilder();
     await openSection(t, "delegation");
-    const input = screen.getByLabelText("delegation.maxDurationMinutes");
+    const input = screen.getByLabelText(/ delegation\.maxDurationMinutes$/);
     await t.user.type(input, "a");
     expect(input).toHaveValue("480a");
     expect(input).toHaveAttribute("aria-invalid", "true");
@@ -54,7 +54,7 @@ describe("generic form edge cases (#388, UX-004)", () => {
   it("a source timeout is read-only in the form and says it is a server setting", async () => {
     const t = await openBuilder();
     await openSection(t, "sources");
-    const input = screen.getByLabelText("sources.0.timeoutMs");
+    const input = screen.getByLabelText(/ sources\.0\.timeoutMs$/);
     expect(input).toHaveAttribute("readonly");
     expect(input).toHaveAccessibleDescription(/server setting/i);
   });

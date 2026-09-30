@@ -80,7 +80,7 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
   it("M1: a number field can be cleared and take a negative value", async () => {
     const t = await openBuilder();
     await openSection(t, "delegation");
-    const input = await screen.findByLabelText("delegation.maxDurationMinutes");
+    const input = await screen.findByLabelText(/ delegation\.maxDurationMinutes$/);
     await t.user.clear(input);
     expect(input).toHaveValue("");
     await t.user.type(input, "-5");
@@ -148,7 +148,7 @@ describe("config builder wave-critic fixes (I1, I2)", () => {
     await t.user.keyboard("{Control>}{End}{/Control}xx");
     await t.user.click(screen.getByRole("tab", { name: "Form" }));
     await openSection(t, "terminal");
-    const input = await screen.findByLabelText("terminal.delimiter");
+    const input = await screen.findByLabelText(/ terminal\.delimiter$/);
     await t.user.clear(input);
     await t.user.type(input, ",");
     await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));

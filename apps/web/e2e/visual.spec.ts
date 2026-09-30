@@ -456,6 +456,35 @@ test.describe("D0 must-fixes from the design review (1440x900)", () => {
   });
 });
 
+test.describe("A3 builder editors in plain language (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: a rule reads as a sentence in body text on the sunken surface; Advanced is closed`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        const tree = page.getByRole("navigation", { name: "Configuration items" });
+        await tree.getByRole("button", { name: /^Property PRO/ }).click();
+        // The rule's own fieldset: the legend's parent (the type's fieldset holds it too).
+        const rule = page.locator("legend", { hasText: /^Rule 1$/ }).locator("xpath=..");
+        const sentence = rule.locator(":scope > .qm-rule__sentence");
+        await expect(sentence).toHaveText(
+          "Show Make when Property type is one of Firearm, Electronics.",
+        );
+        await sentence.scrollIntoViewIfNeeded();
+        await expect(sentence).toHaveCSS("color", rgb(mode, "color.text.body"));
+        await expect(sentence).toHaveCSS("background-color", rgb(mode, "color.surface.sunken"));
+        const advanced = page.locator(".qm-admin__item .qm-advanced").first();
+        await expect(advanced).not.toHaveAttribute("open");
+        expect(await overflowX(page), "builder editor").toBeLessThanOrEqual(0);
+        await captureCrop(page, rule, `a3-rule-${mode}`);
+      });
+    });
+  }
+});
+
 test.describe("every screen, viewport and theme: no horizontal overflow", () => {
   for (const viewport of VIEWPORTS) {
     for (const mode of MODES) {

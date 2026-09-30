@@ -1,5 +1,13 @@
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { type ReactNode, useCallback, useContext, useEffect, useId, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
@@ -50,7 +58,8 @@ export function useDraftLocales(): string[] {
 interface ControlProps {
   idPrefix: string;
   path: readonly PathSegment[];
-  label: string;
+  /** Text, or text with a hidden part (the generic form's config path). */
+  label: ReactNode;
 }
 
 /** Diagnostics for a path plus an optional local message (text that does not parse). */
@@ -459,10 +468,16 @@ export function moved<T>(items: readonly T[], from: number, to: number): T[] {
   return copy;
 }
 
+/** The draft's label overlay alone: a subscriber re-renders on a label edit, not every keystroke. */
+function useDraftLabels() {
+  const store = configDraftStore(useServices());
+  return useSyncExternalStore(store.subscribe, () => store.getState().labels);
+}
+
 /** The label text a user sees for a label key: the draft's overlay, else the shipped text. */
 export function useLabelText(): (labelKey: unknown) => string {
   const translator = useTranslator();
-  const { labels } = useDraft();
+  const labels = useDraftLabels();
   return useCallback(
     (labelKey: unknown) => {
       const key = typeof labelKey === "string" ? labelKey : "";
@@ -512,12 +527,17 @@ export function Advanced({
   path,
   keys,
   attention = false,
+  defaultOpen = false,
+  onOpenChange,
   children,
 }: {
   path: readonly PathSegment[];
   /** The item's keys edited in here, for their issues. */
   keys: readonly string[];
   attention?: boolean;
+  /** Open on mount: a list remembers what the user opened across a move (items remount). */
+  defaultOpen?: boolean;
+  onOpenChange?(open: boolean): void;
   children: ReactNode;
 }) {
   const t = useT();
@@ -526,7 +546,7 @@ export function Advanced({
   const flagged = checks.issues.some((i) =>
     pointers.some((p) => i.pointer === p || i.pointer.startsWith(`${p}/`)),
   );
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const forced = flagged || attention;
   // Latched: fixing the issue never closes it under the user's focus.
   useEffect(() => {
@@ -536,7 +556,10 @@ export function Advanced({
     <details
       className="qm-advanced"
       open={open || forced}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
+      onToggle={(e) => {
+        setOpen(e.currentTarget.open);
+        onOpenChange?.(e.currentTarget.open);
+      }}
     >
       <summary>{t("admin.config.advanced")}</summary>
       {children}
@@ -545,4 +568,14 @@ export function Advanced({
       </p>
     </details>
   );
+}
+
+/** A config key as words: "maxDurationMinutes" reads "Max duration minutes"; an index, "Item 2". */
+export function humanize(segment: PathSegment, itemWord: string): string {
+  if (typeof segment === "number") return `${itemWord} ${segment + 1}`;
+  const words = segment
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

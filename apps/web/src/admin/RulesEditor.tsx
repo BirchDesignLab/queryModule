@@ -1,4 +1,5 @@
 import { useT } from "../app/i18n-context.js";
+import { useDraft } from "./builder-store.js";
 import {
   asObjects,
   controlId,
@@ -13,8 +14,9 @@ import {
   useFocusRequest,
   useGeneration,
   useItemIssues,
+  useLabelText,
 } from "./controls.js";
-import type { PathSegment } from "./draft.js";
+import type { JsonObject, PathSegment } from "./draft.js";
 import { OtherKeys } from "./GenericForm.js";
 
 /**
@@ -118,13 +120,82 @@ function convertOp(leaf: Obj, op: string): Obj {
 export interface FieldInfo {
   keys: readonly string[];
   kind(key: unknown): ValueKind;
+  /** What a field reads as: its label text, else its key (A3); the key without a label hook. */
+  name(key: unknown): string;
 }
 
-export function fieldInfo(type: Obj): FieldInfo {
+export function fieldInfo(type: Obj, labelText?: (labelKey: unknown) => string): FieldInfo {
   const fields = asObjects(type.fields);
   const keys = fields.map((f) => str(f.key)).filter((k) => k !== "");
   const kinds = new Map(fields.map((f) => [str(f.key), kindOfType(f.dataType)]));
-  return { keys, kind: (key) => kinds.get(str(key)) ?? "text" };
+  const labelKeys = new Map(fields.map((f) => [str(f.key), f.labelKey]));
+  return {
+    keys,
+    kind: (key) => kinds.get(str(key)) ?? "text",
+    name: (key) => {
+      const text = labelText?.(labelKeys.get(str(key))) ?? "";
+      return text === "" ? str(key) : text;
+    },
+  };
+}
+
+/** fieldInfo with plain field names (A3). */
+export function useFieldInfo(type: Obj): FieldInfo {
+  return fieldInfo(type, useLabelText());
+}
+
+/**
+ * A rule or condition in plain words (A3, design target "Show when State is not the site default").
+ * Read-only: it describes the schema Condition the controls write, and adds no syntax (PR2 ruling).
+ */
+export function useConditionWords(type: Obj) {
+  const t = useT();
+  const labelText = useLabelText();
+  const info = useFieldInfo(type);
+  const { doc } = useDraft();
+  const lists = asObjects((doc as JsonObject | null)?.picklists);
+  const fields = asObjects(type.fields);
+  const value = (field: unknown, v: unknown): string => {
+    if (v === undefined) return t("admin.rule.notSet");
+    if (isDefaultRef(v))
+      return str(v.$default) === str(field)
+        ? t("admin.rule.siteDefault")
+        : t("admin.rule.siteDefaultOf", { field: info.name(v.$default) });
+    if (typeof v === "boolean") return t(v ? "admin.config.yes" : "admin.config.no");
+    const def = fields.find((f) => str(f.key) === str(field));
+    const list = lists.find((l) => str(l.id) === str(def?.picklist));
+    const item = asObjects(list?.values).find((x) => str(x.code) === String(v));
+    const text = item === undefined ? "" : labelText(item.labelKey);
+    return text === "" ? String(v) : text;
+  };
+  const when = (cond: unknown, nested = false): string => {
+    const c = (typeof cond === "object" && cond !== null ? cond : {}) as Obj;
+    const kind = kindOf(c);
+    if (kind === "not") return t("admin.rule.not", { when: when(c.not, true) });
+    if (kind === "all" || kind === "any") {
+      const joined = childrenOf(c)
+        .map((x) => when(x, true))
+        .join(` ${t(kind === "all" ? "admin.rule.and" : "admin.rule.or")} `);
+      return nested && childrenOf(c).length > 1 ? `(${joined})` : joined;
+    }
+    const op = OPS.includes(c.op as (typeof OPS)[number]) ? str(c.op) : "eq";
+    const field = info.name(c.field);
+    const values = Array.isArray(c.value) ? c.value.map((x) => value(c.field, x)).join(", ") : "";
+    return t(`admin.rule.op.${op}`, { field, value: value(c.field, c.value), values });
+  };
+  return {
+    rule: (rule: Obj): string => {
+      const effect = EFFECTS.includes(rule.effect as (typeof EFFECTS)[number])
+        ? str(rule.effect)
+        : "show";
+      return t(`admin.rule.effect.${effect}`, {
+        field: info.name(rule.field),
+        value: value(rule.field, rule.value),
+        when: when(rule.when),
+      });
+    },
+    section: (cond: unknown): string => t("admin.rule.section", { when: when(cond) }),
+  };
 }
 
 const defaultLeaf = (info: FieldInfo): Obj => ({ field: info.keys[0] ?? "", op: "notEmpty" });
@@ -339,6 +410,7 @@ function LeafControls({
         label={t("admin.config.condition.field")}
         value={leaf.field}
         options={info.keys}
+        optionLabel={info.name}
         onValue={(next) => setPath(path, changeLeafField(leaf, next, info))}
       />
       <SelectControl
@@ -375,6 +447,7 @@ function LeafControls({
               label={t("admin.config.condition.defaultOf")}
               value={leaf.value.$default}
               options={info.keys}
+              optionLabel={info.name}
             />
           ) : (
             <LiteralControl
@@ -478,7 +551,8 @@ export function RulesEditor({
   const focus = useFocusRequest();
   const [gen, bump] = useGeneration();
   const rules = asObjects(type.rules);
-  const info = fieldInfo(type);
+  const info = useFieldInfo(type);
+  const words = useConditionWords(type);
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   return (
@@ -488,13 +562,21 @@ export function RulesEditor({
         const rulePath = [...path, i];
         const effect = str(rule.effect);
         return (
-          <RuleBox key={`${owner(i)}:${gen}`} path={rulePath} idPrefix={idPrefix} rule={rule} n={n}>
+          <RuleBox
+            key={`${owner(i)}:${gen}`}
+            path={rulePath}
+            idPrefix={idPrefix}
+            rule={rule}
+            n={n}
+            sentence={words.rule(rule)}
+          >
             <SelectControl
               idPrefix={idPrefix}
               path={[...rulePath, "field"]}
               label={t("admin.config.rule.target")}
               value={rule.field}
               options={info.keys}
+              optionLabel={info.name}
               owner={owner(i)}
               onValue={(next) => {
                 // Critic I2: a value of another kind no longer fits the new target.
@@ -583,12 +665,15 @@ function RuleBox({
   path,
   idPrefix,
   n,
+  sentence,
   children,
 }: {
   rule: Obj;
   path: readonly PathSegment[];
   idPrefix: string;
   n: number;
+  /** The rule in plain words, above its controls (A3). */
+  sentence: string;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -596,6 +681,7 @@ function RuleBox({
   return (
     <fieldset className="qm-admin__item" aria-describedby={issues.describedBy}>
       <legend>{t("admin.config.rule.legend", { n })}</legend>
+      <p className="qm-rule__sentence">{sentence}</p>
       {issues.messages}
       {children}
       <OtherKeys item={rule} path={path} covered={RULE_KEYS} idPrefix={idPrefix} />
@@ -618,7 +704,8 @@ export function SectionCondition({
   const t = useT();
   const { setPath } = useDraftSetters();
   const focus = useFocusRequest();
-  const info = fieldInfo(type);
+  const info = useFieldInfo(type);
+  const words = useConditionWords(type);
   const whenPath = [...path, "when"];
   const owner = controlId(idPrefix, whenPath);
   if (section.when === undefined)
@@ -638,6 +725,7 @@ export function SectionCondition({
     );
   return (
     <>
+      <p className="qm-rule__sentence">{words.section(section.when)}</p>
       <ConditionEditor
         value={section.when}
         path={whenPath}

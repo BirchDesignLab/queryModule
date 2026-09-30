@@ -1,5 +1,6 @@
 import { useT } from "../app/i18n-context.js";
 import {
+  Advanced,
   asObjects,
   CheckControl,
   controlId,
@@ -111,12 +112,6 @@ function ValuesEditor({
               value={value.code}
               owner={owner(i)}
             />
-            <TextControl
-              idPrefix={idPrefix}
-              path={[...itemPath, "labelKey"]}
-              label={t("admin.config.labelKey")}
-              value={value.labelKey}
-            />
             <LabelTextControls idPrefix={idPrefix} path={itemPath} labelKey={value.labelKey} />
             <CheckControl
               idPrefix={idPrefix}
@@ -131,6 +126,15 @@ function ValuesEditor({
               value={value.parent}
               optional
             />
+            {/* A3: the label key under Advanced; open while it is blank (a new value). */}
+            <Advanced path={itemPath} keys={["labelKey"]} attention={str(value.labelKey) === ""}>
+              <TextControl
+                idPrefix={idPrefix}
+                path={[...itemPath, "labelKey"]}
+                label={t("admin.config.labelKey")}
+                value={value.labelKey}
+              />
+            </Advanced>
             <ItemButtons
               owner={owner(i)}
               name={code}

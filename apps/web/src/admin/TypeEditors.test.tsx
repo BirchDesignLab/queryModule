@@ -249,7 +249,7 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await openType(t, "PER");
     const box = fieldBox("PER", "last");
     await t.user.click(within(box).getByText("More settings", { selector: "summary" }));
-    const max = within(box).getByLabelText("queryTypes.1.fields.0.maxLength");
+    const max = within(box).getByLabelText(/ queryTypes\.1\.fields\.0\.maxLength$/);
     await t.user.clear(max);
     await fill(t, max, "40");
     expect(typeOf(t, "PER").fields[0]?.maxLength).toBe(40);
