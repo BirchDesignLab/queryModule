@@ -6,7 +6,7 @@ import { I18nProvider, useT, useTranslator } from "../app/i18n-context.js";
 import { QueryPanelView } from "../query/QueryPanelView.js";
 import type { JsonObject } from "./draft.js";
 import { topItem } from "./selection.js";
-import { useCachedClientConfig } from "./use-cached-config.js";
+import { useCachedClientConfig, useCachedConfigFailed } from "./use-cached-config.js";
 
 /** A fixed hash: the preview never submits, so no server compares it (ADR-0011 item 4). */
 const PREVIEW_HASH = "0".repeat(64);
@@ -30,16 +30,6 @@ function useOverlayTranslator(labels: Readonly<Record<string, Readonly<Record<st
       t: (key, params) => (over.has(key) ? over.t(key, params) : base.t(key, params)),
     };
   }, [base, overlay]);
-}
-
-/** The query type a tree pointer is in ("/queryTypes/2/fields/1" is the third type's code), if any. */
-function selectedTypeCode(doc: JsonObject, pointer: string | null): string | null {
-  if (pointer === null) return null;
-  const m = /^\/queryTypes\/([0-9]+)(\/|$)/.exec(pointer);
-  const types = doc.queryTypes;
-  if (m === null || !Array.isArray(types)) return null;
-  const code = (types[Number(m[1])] as { code?: unknown } | undefined)?.code;
-  return typeof code === "string" ? code : null;
 }
 
 type Persona = "dispatcher" | "officer";
@@ -96,22 +86,30 @@ export function BuilderPreview({
     if (candidate !== null) setLastGood(candidate);
   }, [candidate]);
   const live = useCachedClientConfig();
+  const liveFailed = useCachedConfigFailed();
   const config = candidate ?? lastGood ?? live ?? null;
   const paused = candidate === null;
+  // Loading: there is no valid config to show yet and the live one is still on its way.
+  const loading = config === null && !liveFailed;
   const empty = selected !== null && topItem(selected) !== "queryTypes";
-  // The preview shows the type the tree selected; a later pick inside the preview is the user's.
-  const typeCode = selectedTypeCode(doc, selected);
-  const known = typeCode !== null && config?.queryTypes.some((q) => q.code === typeCode) === true;
-  useEffect(() => {
-    if (typeCode !== null && known) drafts.getState().select(typeCode);
-  }, [drafts, typeCode, known]);
-  // Focus that was inside the panel when it went inert would be lost: repair it (never otherwise).
+  // Focus that was inside the panel when it went inert would be lost: repair it (never otherwise),
+  // and give it back to the panel when the banner that took it goes away.
   const panelRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const goRef = useRef<HTMLButtonElement>(null);
+  const repaired = useRef(false);
   useLayoutEffect(() => {
-    if (paused && panelRef.current?.contains(document.activeElement))
-      (goRef.current ?? bannerRef.current)?.focus();
+    if (paused) {
+      if (panelRef.current?.contains(document.activeElement)) {
+        (goRef.current ?? bannerRef.current)?.focus();
+        repaired.current = true;
+      }
+      return;
+    }
+    const active = document.activeElement;
+    if (repaired.current && (active === null || active === document.body))
+      panelRef.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+    repaired.current = false;
   }, [paused]);
   const pausedText = parseError
     ? t("admin.preview.pausedJson")
@@ -122,12 +120,12 @@ export function BuilderPreview({
           }),
         })
       : t("admin.preview.pausedUnfit");
-  const showBanner = paused && !empty;
+  const showPanel = config !== null && !empty;
   return (
     <section
       className="qm-admin__preview qm-preview"
       aria-labelledby={headingId}
-      aria-busy={pending || config === null ? true : undefined}
+      aria-busy={pending || loading ? true : undefined}
     >
       <div className="qm-preview__head">
         <h3 id={headingId}>{t("admin.preview.title")}</h3>
@@ -148,9 +146,9 @@ export function BuilderPreview({
         </fieldset>
       </div>
       {empty && <p className="qm-preview__state">{t("admin.preview.empty")}</p>}
-      {showBanner && (
+      {paused && (
         <div ref={bannerRef} className="qm-preview__banner" tabIndex={-1}>
-          <p>{config === null ? pausedText : `${pausedText} ${t("admin.preview.showingLast")}`}</p>
+          <p>{showPanel ? `${pausedText} ${t("admin.preview.showingLast")}` : pausedText}</p>
           {onGoToError !== undefined && (
             <button ref={goRef} type="button" className="qm-button" onClick={onGoToError}>
               {t("admin.preview.goToError")}
@@ -158,7 +156,7 @@ export function BuilderPreview({
           )}
         </div>
       )}
-      {config === null && !empty && (
+      {loading && !empty && (
         <div className="qm-preview__skeleton" aria-busy="true">
           <VisuallyHidden>{t("admin.preview.loading")}</VisuallyHidden>
           <i aria-hidden="true" />

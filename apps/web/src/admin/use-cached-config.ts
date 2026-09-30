@@ -13,3 +13,16 @@ export function useCachedClientConfig(): ClientSiteConfig | undefined {
     queryClient.getQueryData<ClientSiteConfig>(["config"]),
   );
 }
+
+/** The cached config's fetch failed and left no data: the preview stops waiting for it. */
+export function useCachedConfigFailed(): boolean {
+  const { queryClient } = useServices();
+  const subscribe = useCallback(
+    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
+    [queryClient],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => queryClient.getQueryState(["config"])?.status === "error",
+  );
+}

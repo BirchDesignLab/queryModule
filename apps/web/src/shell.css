@@ -682,7 +682,7 @@ main[tabindex="-1"]:focus {
 /* Still under reduced motion: the pulse is opt-in. */
 @media (prefers-reduced-motion: no-preference) {
   .qm-preview__skeleton > i {
-    animation: qm-preview-pulse 1.2s ease-in-out infinite;
+    animation: qm-preview-pulse calc(var(--qm-motion-duration-normal) * 4) ease-in-out infinite;
   }
 }
 

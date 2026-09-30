@@ -221,6 +221,8 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
     const t = await openBuilder();
     await t.user.click(within(t.preview).getByRole("button", { name: "Officer" }));
     expect(setItem).not.toHaveBeenCalled();
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
     setItem.mockRestore();
   });
 
@@ -237,22 +239,6 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
     expect(within(t.preview).queryByText("Select a query type or field to preview it.")).toBeNull();
     expect(panelOf(t.preview)).not.toHaveAttribute("hidden");
     expect(within(t.preview).getByLabelText("Plate")).toHaveValue("ZZ-1234");
-  });
-
-  it("selecting a query type in the tree previews that type", async () => {
-    const t = await openBuilder();
-    expect(within(t.preview).getByRole("button", { name: "Vehicle" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    const nav = await screen.findByRole("navigation", { name: "Configuration items" });
-    await t.user.click(within(nav).getByRole("button", { name: /^Person PER/ }));
-    await waitFor(() =>
-      expect(within(t.preview).getByRole("button", { name: "Person" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
-    );
   });
 
   it("paused: the last valid preview stays, dimmed and inert, under a banner; never presented as current", async () => {
@@ -274,14 +260,39 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
     expect(panelOf(t.preview)).not.toHaveAttribute("inert");
   });
 
-  it("paused: the count follows the errors, singular and plural", async () => {
+  it("paused: the count is exact, singular and plural", async () => {
     const t = await openBuilder();
     await edit(t, (d) => ({ ...d, quickAccess: ["NOPE", "NOPE2"] }));
-    const text = await within(t.preview).findByText(/^Preview paused: \d+ errors?\. Showing/);
-    const n = Number(/paused: (\d+)/.exec(text.textContent ?? "")?.[1]);
-    expect(text.textContent).toContain(`${n} ${n === 1 ? "error" : "errors"}.`);
+    expect(
+      await within(t.preview).findByText(
+        "Preview paused: 2 errors. Showing the last valid version.",
+      ),
+    ).toBeInTheDocument();
   });
 
+  it("paused with a site item selected: the banner stays, and does not claim a version is shown", async () => {
+    const t = await openBuilder();
+    await edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
+    await selectBuilderItem(t.user, "commands");
+    expect(within(t.preview).getByText("Preview paused: 1 error.")).toBeInTheDocument();
+    expect(
+      within(t.preview).getByText("Select a query type or field to preview it."),
+    ).toBeVisible();
+    expect(within(t.preview).getByRole("button", { name: "Go to the error" })).toBeInTheDocument();
+  });
+
+  it("when the pause ends and the banner held the repaired focus, focus returns to the panel", async () => {
+    const t = await openBuilder();
+    await t.user.click(within(t.preview).getByLabelText("Plate"));
+    await edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
+    await waitFor(() =>
+      expect(within(t.preview).getByRole("button", { name: "Go to the error" })).toHaveFocus(),
+    );
+    await edit(t, (d) => ({ ...d, quickAccess: ["VEH", "PER"] }));
+    await waitFor(() =>
+      expect(panelOf(t.preview)).toContainElement(document.activeElement as HTMLElement),
+    );
+  });
   it("Go to the error selects the first error's item and focuses its control", async () => {
     const t = await openBuilder();
     await edit(t, (d) => ({ ...d, quickAccess: ["NOPE"] }));
@@ -339,5 +350,35 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
     // Paused with nothing to show: the banner does not claim a last valid version.
     expect(within(preview).getByText("Preview paused: 2 errors.")).toBeInTheDocument();
     expect(within(preview).queryByRole("button", { name: "Go to the error" })).toBeNull();
+  });
+
+  it("loading ends when the live config failed: no skeleton, not busy, the banner alone", async () => {
+    const services = testServices();
+    await services.queryClient
+      .fetchQuery({
+        queryKey: ["config"],
+        queryFn: () => Promise.reject(new Error("down")),
+        retry: false,
+      })
+      .catch(() => undefined);
+    render(
+      <ServicesProvider services={services}>
+        <I18nProvider translator={createTranslator("en", EN_BUNDLE)}>
+          <BuilderPreview
+            doc={{}}
+            labels={{}}
+            blocked
+            pending={false}
+            selected="/queryTypes/0"
+            errorCount={1}
+            parseError={false}
+          />
+        </I18nProvider>
+      </ServicesProvider>,
+    );
+    const preview = screen.getByRole("region", { name: "Live preview" });
+    expect(within(preview).queryByText("Loading the preview")).toBeNull();
+    expect(preview).not.toHaveAttribute("aria-busy");
+    expect(within(preview).getByText("Preview paused: 1 error.")).toBeInTheDocument();
   });
 });

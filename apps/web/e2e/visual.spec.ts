@@ -541,6 +541,29 @@ test.describe("A4 builder preview: persona switch and states (1440x900)", () => 
     });
   }
 
+  test("focus inside the preview when it pauses moves to the banner's Go to the error, in a real browser", async ({
+    page,
+  }) => {
+    await asUser(page, "admin@example.test", "day", async () => {
+      await page.goto("/admin/config");
+      await page.getByRole("tab", { name: "Raw JSON" }).click();
+      const preview = page.getByRole("region", { name: "Live preview" });
+      const plate = preview.getByLabel("Plate", { exact: true });
+      await plate.click();
+      await expect(plate).toBeFocused();
+      // The draft breaks from outside the preview: set the raw text without focusing its box.
+      await page.getByRole("textbox", { name: "Draft JSON" }).evaluate((el) => {
+        const box = el as HTMLTextAreaElement;
+        const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+        set?.call(box, `${box.value}xx`);
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await expect(preview.locator(".qm-preview__banner")).toBeVisible();
+      // A parse error has no Go to the error: the banner itself takes the focus.
+      await expect(preview.locator(".qm-preview__banner")).toBeFocused();
+    });
+  });
+
   test("a site item shows the empty state and hides the panel", async ({ page }) => {
     await asUser(page, "admin@example.test", "day", async () => {
       await page.goto("/admin/config");
