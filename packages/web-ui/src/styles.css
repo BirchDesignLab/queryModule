@@ -538,23 +538,104 @@ h1 {
   width: 100%;
 }
 
-/* Acknowledgment of the last query (spec 6.2). */
-.qm-ack {
-  margin-block-start: var(--qm-space-4);
+/* Requests this shift (B3, design target): a list of cards. Dispatch puts it in the right pane;
+   the officer layout keeps the latest one under the form. Status is always text (a badge); a
+   Sending row is dashed until its acknowledgment settles it. */
+.qm-panes {
+  display: grid;
+  gap: var(--qm-space-6);
+  align-items: start;
+}
+
+.qm-panes__panel {
+  min-inline-size: 0;
+}
+
+/* Two panes at desktop width: the query panel (about 640 px), then the requests. Width picks the
+   panes, never the density: the persona layout does that (spec 6.1). */
+.qm-query-panel:not(.qm-layout--mobile-unit) {
+  max-width: 90rem;
+}
+
+@media (min-width: 64rem) {
+  .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes {
+    grid-template-columns: minmax(0, 40rem) minmax(0, 1fr);
+  }
+}
+
+.qm-requests {
+  min-inline-size: 0;
+}
+
+.qm-requests__heading {
+  margin: 0 0 var(--qm-space-3);
+  font-size: var(--qm-type-size-lg);
+  font-weight: 600;
+}
+
+.qm-requests__empty {
+  margin: 0;
+  padding: var(--qm-space-8) var(--qm-space-4);
+  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  color: var(--qm-color-text-muted);
+  text-align: center;
+}
+
+.qm-requests__list {
+  display: grid;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-request {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--qm-space-1) var(--qm-space-3);
+  align-items: center;
   padding: var(--qm-space-3) var(--qm-space-4);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-panel);
-  background: var(--qm-color-surface-raised);
+  background: var(--qm-color-surface-base);
 }
 
-.qm-ack__heading {
-  margin: 0 0 var(--qm-space-2);
-  font-size: var(--qm-type-body-size);
+.qm-request--sending {
+  border-style: dashed;
 }
 
-.qm-ack__line {
-  margin: 0 0 var(--qm-space-2);
+/* The newest acknowledged request is marked until the next one arrives (design target). */
+.qm-requests__list > .qm-request--acknowledged:first-child {
+  border-color: var(--qm-color-accent);
+}
+
+.qm-request__type {
+  color: var(--qm-color-accent);
+  font-weight: 600;
+}
+
+.qm-request__summary {
+  font-family: var(--qm-type-family-data);
   overflow-wrap: anywhere;
+}
+
+.qm-request__meta {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-4);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-request__meta code {
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-request__failure {
+  color: var(--qm-field-required);
 }
 
 /* Terminal mode (FR-050, FR-055, spec 6.2) */
@@ -924,12 +1005,21 @@ h1 {
   padding-inline: var(--qm-space-6);
 }
 
-.qm-layout--mobile-unit .qm-ack {
-  margin-block-start: var(--qm-space-4);
-  padding: var(--qm-space-4) var(--qm-space-6);
-  background: var(--qm-color-surface-base);
+/* Officer: the last request is a second, quieter card under the form; nothing in it is muted. */
+.qm-layout--mobile-unit .qm-panes {
+  gap: var(--qm-space-4);
 }
 
-.qm-layout--mobile-unit .qm-ack__heading {
+.qm-layout--mobile-unit .qm-requests__heading {
   font-size: var(--qm-type-size-lg);
+}
+
+.qm-layout--mobile-unit .qm-requests__empty,
+.qm-layout--mobile-unit .qm-request__meta {
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-request {
+  padding: var(--qm-space-4) var(--qm-space-6);
 }

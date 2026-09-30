@@ -81,3 +81,27 @@ describe("B4 officer quick access: tiles, run button, no muted text", () => {
     for (const body of officerRules) expect(body).not.toMatch(/--qm-color-text-muted/);
   });
 });
+
+describe("B3 requests list: two panes on dispatch, a quiet last-request card for the officer", () => {
+  it("dispatch puts the panel and the list in two columns from 64 rem, the panel about 640 px", () => {
+    expect(css).toMatch(
+      /@media\s*\(min-width:\s*64rem\)\s*\{\s*\.qm-query-panel:not\(\.qm-layout--mobile-unit\)\s+\.qm-panes\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*40rem\)\s+minmax\(0,\s*1fr\)/,
+    );
+  });
+  it("the officer layout never gets the two columns", () => {
+    expect(css).not.toMatch(/\.qm-layout--mobile-unit\s+\.qm-panes\s*\{[^}]*grid-template-columns/);
+  });
+  it("the officer's row text is body colour at 16 px, not muted (spec 6.3)", () => {
+    const meta = rulesFor(".qm-layout--mobile-unit .qm-request__meta");
+    expect(meta).toMatch(/color:\s*var\(--qm-color-text-body\)/);
+    expect(meta).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+    expect(rulesFor(".qm-layout--mobile-unit .qm-requests__empty")).toMatch(
+      /color:\s*var\(--qm-color-text-body\)/,
+    );
+  });
+  it("a request row uses no literal colour or size (spec 6.5)", () => {
+    const rows = [".qm-request", ".qm-requests"].map(rulesFor).join("\n");
+    expect(rows).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    expect(rows).not.toMatch(/\d+px/);
+  });
+});

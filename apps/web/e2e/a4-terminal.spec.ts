@@ -40,7 +40,7 @@ test("[A4] VEH.ABC123..26 runs with State TX and Year 2026 (FR-050 to FR-056, FR
   const { parts } = (await reply.json()) as { parts: { queryType: string; status: string }[] };
   expect(parts[0]).toMatchObject({ queryType: "VEH", status: "dispatched" });
 
-  await expect(page.getByRole("region", { name: "Last query" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Requests this shift" })).toBeVisible();
   await expect(input).toBeFocused();
   await expectNoSeriousAxeViolations(page);
 });

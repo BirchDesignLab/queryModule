@@ -2,7 +2,6 @@ import type { DraftStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { resolveShortcuts } from "@querymodule/core/config";
 import {
-  AckStatus,
   ActionBar,
   blockedErrorCount,
   CommandEcho,
@@ -22,6 +21,7 @@ import {
 } from "@querymodule/web-ui";
 import { useEffect, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
+import { RequestsPane } from "./RequestsPane.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
 import { formToTerminal, useTerminal } from "./use-terminal.js";
 
@@ -277,26 +277,6 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
           </>
         )}
       </div>
-      <AckStatus
-        ack={
-          panel.lastAck === null
-            ? null
-            : {
-                queryTypeLabel: labelOfType(panel.lastAck.queryType),
-                correlationId: panel.lastAck.response.correlationId,
-                acknowledgedAt: panel.lastAck.response.acknowledgedAt,
-                skipped: panel.lastAck.response.parts
-                  .filter((part) => part.status === "skipped")
-                  .map((part) => ({
-                    queryTypeLabel: labelOfType(part.queryType),
-                    // The 202 carries no skip reason; claim none (#382 A1).
-                    reasonText: null,
-                  })),
-              }
-        }
-        onCopy={panel.copyReference}
-        t={t}
-      />
     </>
   );
 }
@@ -315,6 +295,11 @@ export interface QueryPanelViewProps {
   idPrefix: string;
   /** Live only: the config changed under a submit; the owner refetches it. */
   onConfigChanged?: () => void | Promise<void>;
+  /**
+   * Live only: shows this session's requests beside the panel ("list", dispatch) or the latest one
+   * below it ("last", officer). Omitted, the view is the panel alone (the builder's preview).
+   */
+  requests?: "list" | "last";
 }
 
 /** The one renderer of the query panel, from config alone (BR-001; ADR-0011 core loop). */
@@ -324,6 +309,7 @@ export function QueryPanelView({
   mode,
   idPrefix,
   onConfigChanged,
+  requests,
 }: QueryPanelViewProps) {
   const panel = useQueryPanel({ config, drafts, mode, onConfigChanged });
   // The preview's store is private and memory-only; it goes with the view (ADR-0011).
@@ -333,5 +319,13 @@ export function QueryPanelView({
     },
     [mode, drafts],
   );
-  return panel === null ? null : <ReadyPanel panel={panel} idPrefix={idPrefix} />;
+  if (panel === null) return null;
+  const ready = <ReadyPanel panel={panel} idPrefix={idPrefix} />;
+  if (requests === undefined) return ready;
+  return (
+    <div className="qm-panes">
+      <div className="qm-panes__panel">{ready}</div>
+      <RequestsPane config={panel.config} variant={requests} />
+    </div>
+  );
 }

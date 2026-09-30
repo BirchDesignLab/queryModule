@@ -294,7 +294,7 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
         );
         await page.getByRole("button", { name: "Run query" }).click();
         expect((await sent).status()).toBe(202);
-        const ack = page.locator(".qm-layout--mobile-unit .qm-ack");
+        const ack = page.locator(".qm-layout--mobile-unit .qm-requests");
         await expect(ack).toBeVisible();
         const [card, ackBox] = await Promise.all([
           page.locator(".qm-layout--mobile-unit .qm-panel__body").boundingBox(),
@@ -333,6 +333,44 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
       expect(await probe()).toBe(rgb("night", "color.text.body"));
     });
   });
+});
+
+test.describe("B3 dispatcher requests list beside the panel (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: two panes, rows with text status, the copy button 36 px, no overflow`, async ({
+      page,
+    }) => {
+      await asUser(page, "dispatcher@example.test", mode, async () => {
+        const plate = page.getByLabel("Plate", { exact: true });
+        for (const value of ["ZZ-0001", "ZZ-0002"]) {
+          await plate.fill(value);
+          const sent = page.waitForResponse(
+            (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
+          );
+          await plate.press("Enter");
+          expect((await sent).status()).toBe(202);
+        }
+        const list = page.getByRole("region", { name: "Requests this shift" });
+        await expect(list.getByRole("listitem")).toHaveCount(2);
+        await expect(list.getByText("Acknowledged")).toHaveCount(2);
+        const [panel, pane] = await Promise.all([
+          page.locator(".qm-panes__panel").boundingBox(),
+          list.boundingBox(),
+        ]);
+        expect(pane?.x ?? 0).toBeGreaterThanOrEqual((panel?.x ?? 0) + (panel?.width ?? 0));
+        expect(Math.round(panel?.width ?? 0)).toBeLessThanOrEqual(640);
+        const copy = await list
+          .getByRole("button", { name: /^Copy reference / })
+          .first()
+          .boundingBox();
+        expect(Math.round(copy?.height ?? 0)).toBeGreaterThanOrEqual(36);
+        expect(await overflowX(page), "dispatcher with requests").toBeLessThanOrEqual(0);
+        await capture(page, `dispatcher-1440x900-${mode}-requests`);
+      });
+    });
+  }
 });
 
 test.describe("D0 must-fixes from the design review (1440x900)", () => {

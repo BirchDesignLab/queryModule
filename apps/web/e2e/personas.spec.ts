@@ -138,10 +138,10 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
     );
     await page.keyboard.press("Enter");
     expect((await response).status()).toBe(202);
-    await expect(page.getByRole("heading", { name: "Last query" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Last request" })).toBeVisible();
 
     // The Copy reference button only exists after an acknowledgment, so measure again.
-    const copyBox = await page.getByRole("button", { name: "Copy reference" }).boundingBox();
+    const copyBox = await page.getByRole("button", { name: /^Copy reference / }).boundingBox();
     expect(copyBox?.width ?? 0).toBeGreaterThanOrEqual(MIN_TARGET - 0.5);
     expect(copyBox?.height ?? 0).toBeGreaterThanOrEqual(MIN_TARGET - 0.5);
     expect(await undersizedTargets(page, MIN_TARGET)).toEqual([]);
