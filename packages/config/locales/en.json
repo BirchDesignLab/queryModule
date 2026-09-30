@@ -297,6 +297,8 @@
   "admin.labels.newText": "Text",
   "admin.labels.add": "Add label",
   "admin.labels.needKey": "Enter a label key first.",
+  "admin.labels.keyExists": "This key already has a row. Edit it above.",
+  "admin.labels.englishUnknown": "not shown here",
   "admin.config.loading": "Loading the site config",
   "admin.config.issueCount": "Issues: {count}",
   "admin.config.shapeIssue": "{message}",

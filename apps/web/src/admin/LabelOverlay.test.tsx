@@ -48,6 +48,8 @@ describe("Labels and translations (A-D2 item 2)", () => {
     await t.user.type(within(sect).getByLabelText("Label key"), "site.custom");
     await t.user.type(within(sect).getByLabelText("Text"), "Custom");
     await t.user.click(within(sect).getByRole("button", { name: "Add label" }));
+    // Focus stays on the button (the list swapping in must not lose it).
+    expect(within(sect).getByRole("button", { name: "Add label" })).toHaveFocus();
     expect(store(t).labels).toEqual({ en: { "site.custom": "Custom" } });
     const input = within(sect).getByLabelText("site.custom");
     expect(input).toHaveValue("Custom");
@@ -75,12 +77,12 @@ describe("Labels and translations (A-D2 item 2)", () => {
 
   it("another locale's row shows the English text beside the key, and follows an English edit", async () => {
     const t = await openLabels();
+    server.use(http.get(`${API}/api/v1/locales/fr`, () => new HttpResponse(null, { status: 404 })));
     act(() => {
       store(t).setPath(["locales"], ["en", "fr"]);
       store(t).setLabel("en", "queryType.VEH", "Vehicle");
       store(t).setLabel("fr", "queryType.VEH", "Voiture");
     });
-    server.use(http.get(`${API}/api/v1/locales/fr`, () => new HttpResponse(null, { status: 404 })));
     const fr = await section("fr");
     const input = within(fr).getByLabelText("queryType.VEH");
     expect(input).toHaveValue("Voiture");
@@ -98,6 +100,7 @@ describe("Labels and translations (A-D2 item 2)", () => {
 
   it("a key with no English text says so", async () => {
     const t = await openLabels();
+    server.use(http.get(`${API}/api/v1/locales/fr`, () => new HttpResponse(null, { status: 404 })));
     act(() => {
       store(t).setPath(["locales"], ["en", "fr"]);
       store(t).setLabel("fr", "site.only.fr", "Seulement");
@@ -106,5 +109,30 @@ describe("Labels and translations (A-D2 item 2)", () => {
     expect(within(fr).getByLabelText("site.only.fr")).toHaveAccessibleDescription(
       "English text: none",
     );
+  });
+
+  it("an English text edited to empty shows none", async () => {
+    const t = await openLabels();
+    server.use(http.get(`${API}/api/v1/locales/fr`, () => new HttpResponse(null, { status: 404 })));
+    act(() => {
+      store(t).setPath(["locales"], ["en", "fr"]);
+      store(t).setLabel("en", "site.x", "");
+      store(t).setLabel("fr", "site.x", "X");
+    });
+    const fr = await section("fr");
+    expect(within(fr).getByLabelText("site.x")).toHaveAccessibleDescription("English text: none");
+  });
+
+  it("a key that already has a row cannot be added again: aria-disabled with the reason, nothing overwritten", async () => {
+    const t = await openLabels();
+    act(() => store(t).setLabel("en", "site.custom", "Custom"));
+    const sect = await section("en");
+    await t.user.type(within(sect).getByLabelText("Label key"), "site.custom");
+    await t.user.type(within(sect).getByLabelText("Text"), "Other");
+    const add = within(sect).getByRole("button", { name: "Add label" });
+    expect(add).toHaveAttribute("aria-disabled", "true");
+    expect(add).toHaveAccessibleDescription("This key already has a row. Edit it above.");
+    await t.user.click(add);
+    expect(store(t).labels).toEqual({ en: { "site.custom": "Custom" } });
   });
 });

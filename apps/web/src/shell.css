@@ -1074,7 +1074,6 @@ main[tabindex="-1"]:focus {
   padding-inline-start: 0;
 }
 
-/* Keys, label keys, patterns and the config location: collapsed until wanted. */
 /* Labels and translations (A-D2 item 2): each row's title is the key in mono in the 144 px label
    column, the English text beside it, this locale's input under both. */
 .qm-labels {
@@ -1128,8 +1127,16 @@ main[tabindex="-1"]:focus {
 
 .qm-labels + .qm-labels__add,
 .qm-labels__empty + .qm-labels__add {
+  margin-block-start: var(--qm-space-3);
   padding-block-start: var(--qm-space-3);
   border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+/* The generic control-row rule (.qm-admin__form :where(div):has(> label)) adds margins and its own
+   gap; the add form's grid spaces its fields itself. */
+.qm-admin__form div.qm-labels__field {
+  margin-block: 0;
+  gap: var(--qm-space-1);
 }
 
 .qm-labels__field {
@@ -1151,6 +1158,7 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-sm);
 }
 
+/* Keys, label keys, patterns and the config location: collapsed until wanted. */
 .qm-advanced {
   margin-block: var(--qm-space-3);
   padding-inline-start: var(--qm-space-3);

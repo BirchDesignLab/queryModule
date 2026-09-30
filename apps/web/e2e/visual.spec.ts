@@ -610,6 +610,19 @@ test.describe("A-D2 labels and translations (1440x900)", () => {
           ),
           "add form input",
         ).toBe(36);
+        // Even rhythm: 12 px between the rows and the form, its fields and the button (the generic
+        // control-row margins must not leak in).
+        const [lastInput, f1, f2, btn] = await Promise.all([
+          row.locator("input").boundingBox(),
+          sect.locator(".qm-labels__field").nth(0).boundingBox(),
+          sect.locator(".qm-labels__field").nth(1).boundingBox(),
+          add.boundingBox(),
+        ]);
+        const bottom = (b: { y: number; height: number } | null) => (b?.y ?? 0) + (b?.height ?? 0);
+        const formTop = (await sect.locator(".qm-labels__add").boundingBox())?.y ?? 0;
+        expect(Math.round(formTop - bottom(lastInput)), "rows to form").toBe(12);
+        expect(Math.round((f2?.y ?? 0) - bottom(f1)), "field to field").toBe(12);
+        expect(Math.round((btn?.y ?? 0) - bottom(f2)), "field to button").toBe(12);
         // The add form is set off from the rows by a rule in the subtle border colour.
         const form = sect.locator(".qm-labels__add");
         await expect(form).toHaveCSS("border-top-width", "1px");

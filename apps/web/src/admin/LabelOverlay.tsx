@@ -24,10 +24,14 @@ export function LabelOverlayEditor({
   const { labels } = useDraft();
   const store = configDraftStore(services);
   const translator = useTranslator();
-  // The English text a reader sees for a key: the draft's overlay, else the shipped text.
-  const englishText = (key: string): string =>
-    labels[REFERENCE_LOCALE]?.[key] ??
-    (translator.locale === REFERENCE_LOCALE && translator.has(key) ? translator.t(key) : "");
+  // The English text a reader sees for a key: the draft's overlay, else the shipped text. Null when
+  // it cannot be known here (the shipped English is not the loaded bundle).
+  const englishText = (key: string): string | null => {
+    const overlay = labels[REFERENCE_LOCALE]?.[key];
+    if (overlay !== undefined) return overlay;
+    if (translator.locale !== REFERENCE_LOCALE) return null;
+    return translator.has(key) ? translator.t(key) : "";
+  };
   return (
     <>
       {locales.map((locale) => (
@@ -55,7 +59,7 @@ function LocaleLabels({
   idPrefix: string;
   entries: Readonly<Record<string, string>>;
   /** Absent in the reference locale itself, whose input is the English text. */
-  englishText: ((key: string) => string) | undefined;
+  englishText: ((key: string) => string | null) | undefined;
   onSet(key: string, text: string): void;
 }) {
   const t = useT();
@@ -65,7 +69,9 @@ function LocaleLabels({
   const keyId = controlId(idPrefix, ["labelKey", locale]);
   const textId = controlId(idPrefix, ["labelNew", locale]);
   const rows = Object.entries(entries);
-  const blocked = key.trim() === "";
+  // A key that already has a row is edited there: adding it again would silently overwrite it.
+  const exists = Object.hasOwn(entries, key.trim());
+  const blocked = key.trim() === "" || exists;
   const add = () => {
     if (blocked) return;
     onSet(key.trim(), text);
@@ -90,7 +96,11 @@ function LocaleLabels({
                 {english !== undefined && (
                   <p id={enId} className="qm-label-row__en">
                     <VisuallyHidden>{t("admin.labels.englishText")}</VisuallyHidden>{" "}
-                    {english === "" ? t("admin.labels.englishNone") : english}
+                    {english === null
+                      ? t("admin.labels.englishUnknown")
+                      : english === ""
+                        ? t("admin.labels.englishNone")
+                        : english}
                   </p>
                 )}
                 <input
@@ -139,7 +149,7 @@ function LocaleLabels({
         </button>
         {blocked && (
           <p className="qm-labels__reason" id={reasonId}>
-            {t("admin.labels.needKey")}
+            {t(exists ? "admin.labels.keyExists" : "admin.labels.needKey")}
           </p>
         )}
       </div>
