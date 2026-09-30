@@ -485,6 +485,74 @@ test.describe("A3 builder editors in plain language (1440x900)", () => {
   }
 });
 
+test.describe("A4 builder preview: persona switch and states (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: Officer in the preview pane has 88 px tiles and a 64 px Run without sideways scroll; Dispatcher stays dense`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        const preview = page.getByRole("region", { name: "Live preview" });
+        const run = preview.getByRole("button", { name: "Run query" });
+        await expect(run).toBeVisible();
+        expect(Math.round((await run.boundingBox())?.height ?? 0), "dispatcher Run").toBe(36);
+        await preview.getByRole("button", { name: "Officer" }).click();
+        const pane = await preview.boundingBox();
+        expect(pane?.width ?? 0, "pane width").toBeGreaterThan(300);
+        expect(Math.round((await run.boundingBox())?.height ?? 0), "officer Run").toBe(64);
+        const tiles = await preview
+          .locator(".qm-quick-access button")
+          .evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
+        expect(tiles.length).toBeGreaterThanOrEqual(3);
+        for (const r of tiles) expect(Math.round(r.height)).toBeGreaterThanOrEqual(88);
+        // The preview scrolls inside its own pane: nothing pushes it wider than the pane.
+        const over = await preview.evaluate((el) => el.scrollWidth - el.clientWidth);
+        expect(over, "preview overflow").toBeLessThanOrEqual(0);
+        await captureCrop(page, preview, `a4-preview-officer-${mode}`);
+        await preview.getByRole("button", { name: "Dispatcher" }).click();
+        expect(Math.round((await run.boundingBox())?.height ?? 0), "back to dispatcher").toBe(36);
+      });
+    });
+
+    test(`${mode}: paused dims the last valid preview and keeps the banner in body text; focus stays where it was`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        await page.getByRole("tab", { name: "Raw JSON" }).click();
+        const raw = page.getByRole("textbox", { name: "Draft JSON" });
+        await raw.click();
+        await page.keyboard.press("Control+End");
+        await page.keyboard.type("xx");
+        const preview = page.getByRole("region", { name: "Live preview" });
+        const banner = preview.locator(".qm-preview__banner");
+        await expect(banner).toContainText("Preview paused: the JSON does not parse.");
+        const panel = preview.locator(".qm-preview__panel");
+        await expect(panel).toHaveAttribute("inert", "");
+        await expect(panel).toHaveCSS("opacity", "0.55");
+        await expect(banner).toHaveCSS("color", rgb(mode, "color.text.body"));
+        await expect(banner).toHaveCSS("background-color", rgb(mode, "color.surface.raised"));
+        // Nothing moved focus: the raw box still has it.
+        await expect(raw).toBeFocused();
+        await captureCrop(page, preview, `a4-preview-paused-${mode}`);
+      });
+    });
+  }
+
+  test("a site item shows the empty state and hides the panel", async ({ page }) => {
+    await asUser(page, "admin@example.test", "day", async () => {
+      await page.goto("/admin/config");
+      const tree = page.getByRole("navigation", { name: "Configuration items" });
+      await tree.getByRole("button", { name: /(^| )commands$/ }).click();
+      const preview = page.getByRole("region", { name: "Live preview" });
+      await expect(preview.getByText("Select a query type or field to preview it.")).toBeVisible();
+      await expect(preview.locator(".qm-preview__panel")).toBeHidden();
+    });
+  });
+});
+
 test.describe("every screen, viewport and theme: no horizontal overflow", () => {
   for (const viewport of VIEWPORTS) {
     for (const mode of MODES) {

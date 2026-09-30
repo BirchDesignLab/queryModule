@@ -1,9 +1,11 @@
 import { createDraftStore, createTranslator, type Translator } from "@querymodule/client";
 import { type ClientSiteConfig, ClientSiteConfigSchema } from "@querymodule/core/config";
-import { useEffect, useId, useMemo, useState } from "react";
+import { VisuallyHidden } from "@querymodule/web-ui";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { I18nProvider, useT, useTranslator } from "../app/i18n-context.js";
 import { QueryPanelView } from "../query/QueryPanelView.js";
 import type { JsonObject } from "./draft.js";
+import { topItem } from "./selection.js";
 import { useCachedClientConfig } from "./use-cached-config.js";
 
 /** A fixed hash: the preview never submits, so no server compares it (ADR-0011 item 4). */
@@ -30,29 +32,61 @@ function useOverlayTranslator(labels: Readonly<Record<string, Readonly<Record<st
   }, [base, overlay]);
 }
 
+/** The query type a tree pointer is in ("/queryTypes/2/fields/1" is the third type's code), if any. */
+function selectedTypeCode(doc: JsonObject, pointer: string | null): string | null {
+  if (pointer === null) return null;
+  const m = /^\/queryTypes\/([0-9]+)(\/|$)/.exec(pointer);
+  const types = doc.queryTypes;
+  if (m === null || !Array.isArray(types)) return null;
+  const code = (types[Number(m[1])] as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" ? code : null;
+}
+
+type Persona = "dispatcher" | "officer";
+const PERSONAS: readonly Persona[] = ["dispatcher", "officer"];
+
 /**
- * Task 32 (#357): the dispatcher's own panel (QueryPanelView, mode "preview") fed from the settled
- * draft. A draft with errors, or one that does not fit the client view, pauses the preview on the
- * last good config. The preview owns a private, memory-only draft store; submit validates like the
- * live form and never sends (Track B Task 19). The region is aria-busy while a builder edit has not
- * settled into it yet (#357: tests and assistive tech wait on it).
+ * Task 32 (#357) and A4: the dispatcher's own panel (QueryPanelView, mode "preview") fed from the
+ * settled draft, as the dispatcher or, with the touch layout class only, as the officer.
+ *
+ * - Empty: a site item is selected, so there is no query type to show. The panel stays mounted
+ *   (hidden), so what was typed in it survives.
+ * - Loading: no valid config to show yet (the live one is still loading): a busy skeleton.
+ * - Paused: the draft has errors. The last valid preview stays visible, dimmed and inert, under a
+ *   banner. The banner is not a live region: the builder's polite summary announces the counts.
+ *
+ * The preview owns a private, memory-only draft store; submit validates like the live form and
+ * never sends (Track B Task 19). The region is aria-busy while a builder edit has not settled
+ * into it yet (#357: tests and assistive tech wait on it).
  */
 export function BuilderPreview({
   doc,
   labels,
   blocked,
   pending,
+  selected,
+  errorCount,
+  parseError,
+  onGoToError,
 }: {
   doc: JsonObject;
   labels: Readonly<Record<string, Readonly<Record<string, string>>>>;
   blocked: boolean;
   /** The builder draft has changed since `doc` settled. */
   pending: boolean;
+  /** The pointer the tree selected (a site item or LABELS_ITEM shows the empty state). */
+  selected: string | null;
+  errorCount: number;
+  /** The Raw JSON text does not parse. */
+  parseError: boolean;
+  /** Goes to the first error the way the issue button does; absent when there is none to go to. */
+  onGoToError?: () => void;
 }) {
   const t = useT();
   const headingId = useId();
   const idPrefix = useId();
   const [drafts] = useState(createDraftStore);
+  const [persona, setPersona] = useState<Persona>("dispatcher");
   const translator = useOverlayTranslator(labels);
   const candidate = useMemo(() => (blocked ? null : previewConfig(doc)), [blocked, doc]);
   // The last good draft config, held in state (no render-phase writes); before there is one, for
@@ -64,19 +98,90 @@ export function BuilderPreview({
   const live = useCachedClientConfig();
   const config = candidate ?? lastGood ?? live ?? null;
   const paused = candidate === null;
+  const empty = selected !== null && topItem(selected) !== "queryTypes";
+  // The preview shows the type the tree selected; a later pick inside the preview is the user's.
+  const typeCode = selectedTypeCode(doc, selected);
+  const known = typeCode !== null && config?.queryTypes.some((q) => q.code === typeCode) === true;
+  useEffect(() => {
+    if (typeCode !== null && known) drafts.getState().select(typeCode);
+  }, [drafts, typeCode, known]);
+  // Focus that was inside the panel when it went inert would be lost: repair it (never otherwise).
+  const panelRef = useRef<HTMLDivElement>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const goRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (paused && panelRef.current?.contains(document.activeElement))
+      (goRef.current ?? bannerRef.current)?.focus();
+  }, [paused]);
+  const pausedText = parseError
+    ? t("admin.preview.pausedJson")
+    : errorCount > 0
+      ? t("admin.preview.pausedErrors", {
+          errors: t(errorCount === 1 ? "admin.issues.error" : "admin.issues.errors", {
+            count: errorCount,
+          }),
+        })
+      : t("admin.preview.pausedUnfit");
+  const showBanner = paused && !empty;
   return (
     <section
-      className="qm-admin__preview"
+      className="qm-admin__preview qm-preview"
       aria-labelledby={headingId}
-      aria-busy={pending ? true : undefined}
+      aria-busy={pending || config === null ? true : undefined}
     >
-      <h3 id={headingId}>{t("admin.preview.title")}</h3>
-      {paused && <p>{t("admin.preview.paused")}</p>}
-      {config !== null && (
-        <I18nProvider translator={translator}>
-          <QueryPanelView config={config} drafts={drafts} mode="preview" idPrefix={idPrefix} />
-        </I18nProvider>
+      <div className="qm-preview__head">
+        <h3 id={headingId}>{t("admin.preview.title")}</h3>
+        <fieldset className="qm-seg">
+          <legend>
+            <VisuallyHidden>{t("admin.preview.as")}</VisuallyHidden>
+          </legend>
+          {PERSONAS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              aria-pressed={persona === p}
+              onClick={() => setPersona(p)}
+            >
+              {t(p === "officer" ? "admin.preview.asOfficer" : "admin.preview.asDispatcher")}
+            </button>
+          ))}
+        </fieldset>
+      </div>
+      {empty && <p className="qm-preview__state">{t("admin.preview.empty")}</p>}
+      {showBanner && (
+        <div ref={bannerRef} className="qm-preview__banner" tabIndex={-1}>
+          <p>{config === null ? pausedText : `${pausedText} ${t("admin.preview.showingLast")}`}</p>
+          {onGoToError !== undefined && (
+            <button ref={goRef} type="button" className="qm-button" onClick={onGoToError}>
+              {t("admin.preview.goToError")}
+            </button>
+          )}
+        </div>
       )}
+      {config === null && !empty && (
+        <div className="qm-preview__skeleton" aria-busy="true">
+          <VisuallyHidden>{t("admin.preview.loading")}</VisuallyHidden>
+          <i aria-hidden="true" />
+          <i aria-hidden="true" />
+          <i aria-hidden="true" />
+        </div>
+      )}
+      {config !== null && (
+        <div
+          ref={panelRef}
+          className={
+            persona === "officer" ? "qm-preview__panel qm-layout--mobile-unit" : "qm-preview__panel"
+          }
+          hidden={empty}
+          inert={paused}
+          data-paused={paused ? "true" : undefined}
+        >
+          <I18nProvider translator={translator}>
+            <QueryPanelView config={config} drafts={drafts} mode="preview" idPrefix={idPrefix} />
+          </I18nProvider>
+        </div>
+      )}
+      <p className="qm-preview__note">{t("admin.preview.note")}</p>
     </section>
   );
 }

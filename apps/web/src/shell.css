@@ -595,6 +595,103 @@ main[tabindex="-1"]:focus {
   min-inline-size: 0;
 }
 
+/* Preview (A4): the head carries the Dispatcher or Officer switch; below it the panel, or one of
+   the three states. The panel sits in a sunken well like the mockup's preview body. */
+.qm-preview__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qm-space-2);
+  padding-block-end: var(--qm-space-3);
+}
+
+.qm-preview__head h3 {
+  margin: 0;
+  font-size: var(--qm-type-size-md);
+  font-weight: 600;
+}
+
+.qm-preview__panel {
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
+/* Paused: the last valid version stays in view but is plainly not current. */
+.qm-preview__panel[data-paused] {
+  opacity: 0.55;
+}
+
+.qm-preview__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--qm-space-3);
+  margin: 0;
+  padding: var(--qm-space-8) var(--qm-space-4);
+  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  color: var(--qm-color-text-muted);
+  text-align: center;
+}
+
+.qm-preview__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  margin-block-end: var(--qm-space-3);
+  padding: var(--qm-space-2) var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-raised);
+}
+
+.qm-preview__banner p {
+  flex: 1 1 calc(var(--qm-space-12) * 4);
+  margin: 0;
+}
+
+.qm-preview__note {
+  margin: var(--qm-space-2) 0 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-preview__skeleton {
+  display: grid;
+  gap: var(--qm-space-3);
+  padding: var(--qm-space-4);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-preview__skeleton > i {
+  display: block;
+  block-size: var(--qm-control-height-dense);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-raised);
+}
+
+.qm-preview__skeleton > i:first-of-type {
+  inline-size: 60%;
+}
+
+/* Still under reduced motion: the pulse is opt-in. */
+@media (prefers-reduced-motion: no-preference) {
+  .qm-preview__skeleton > i {
+    animation: qm-preview-pulse 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes qm-preview-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .qm-tree ul {
   margin: 0;
   padding: 0;

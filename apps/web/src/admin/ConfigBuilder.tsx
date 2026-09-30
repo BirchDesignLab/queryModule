@@ -270,6 +270,18 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
   const changed = useDraftChanged(doc, labels);
+  // The issue button and the preview's "Go to the error" share this path: select the issue's item,
+  // then focus its control (useMarkSelected). A whole-config issue has no item: keep the current
+  // one and focus its message.
+  const goToFirstIssue = useCallback(() => {
+    if (firstIssue === undefined) return;
+    onSelect(
+      isRootIssue(doc, firstIssue.pointer) ? (shown.pointer ?? fallback) : firstIssue.pointer,
+      firstIssue.pointer,
+    );
+  }, [doc, fallback, firstIssue, onSelect, shown.pointer]);
+  const canGoToError =
+    checks.status === "ready" && firstIssue !== undefined && raw.parseError === null;
   return (
     <ChecksContext.Provider value={checks}>
       {/* The section h2 sits just before this bar and reads as its title (design target, A2). */}
@@ -277,19 +289,11 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
         <p className="qm-builder__status" data-testid="draft-status">
           {t(changed ? "admin.config.status.changed" : "admin.config.status.unchanged")}
         </p>
-        {checks.status === "ready" && firstIssue !== undefined && raw.parseError === null && (
+        {canGoToError && (
           <button
             type="button"
             className={`qm-badge ${errorCount > 0 ? "qm-badge--critical" : "qm-badge--warning"} qm-builder__issues`}
-            onClick={() =>
-              // A whole-config issue has no item: keep the current one and focus its message.
-              onSelect(
-                isRootIssue(doc, firstIssue.pointer)
-                  ? (shown.pointer ?? fallback)
-                  : firstIssue.pointer,
-                firstIssue.pointer,
-              )
-            }
+            onClick={goToFirstIssue}
           >
             {issueWords(t, errorCount, warningCount)}
             <VisuallyHidden>. {t("admin.issues.goTo")}</VisuallyHidden>
@@ -376,6 +380,10 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
               labels={checks.labels}
               blocked={raw.parseError !== null || errorCount > 0}
               pending={checks.doc !== doc || checks.labels !== labels}
+              selected={shown.pointer}
+              errorCount={errorCount}
+              parseError={raw.parseError !== null}
+              onGoToError={canGoToError && errorCount > 0 ? goToFirstIssue : undefined}
             />
           )}
         </div>
