@@ -1499,8 +1499,12 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
     await page.setViewportSize(viewport);
     await page.goto(path);
     await expect(page.locator(".qm-admin__rail")).toBeVisible();
-    // The section's own heading: the page has rendered before anything is measured.
-    await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
+    // The section has rendered before anything is measured.
+    await expect(
+      path === "/admin/users"
+        ? page.getByRole("heading", { name: "Users and roles" })
+        : page.getByRole("tab", { name: "Form", exact: true }),
+    ).toBeVisible();
   };
 
   // The rail is beside the section from layout.stack up, stacked above it below.
