@@ -1424,7 +1424,7 @@ test.describe("Layout robustness (cloud3 item 3)", () => {
     { width: 800, height: 600 },
     { width: 683, height: 384 },
   ]) {
-    test(`${viewport.width}x${viewport.height}: the toolbar beside the heading stays inside the window`, async ({
+    test(`${viewport.width}x${viewport.height}: the toolbar stays inside the window`, async ({
       page,
     }) => {
       await page.setViewportSize(viewport);
@@ -1499,6 +1499,8 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
     await page.setViewportSize(viewport);
     await page.goto(path);
     await expect(page.locator(".qm-admin__rail")).toBeVisible();
+    // The section's own heading: the page has rendered before anything is measured.
+    await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
   };
 
   // The rail is beside the section from layout.stack up, stacked above it below.
@@ -1560,6 +1562,9 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
 
   // The heading and toolbar share a row once the section is layout.toolbar wide. The section is the
   // window minus its padding (stacked rail) or minus the rail and its padding (rail beside).
+  // The section's horizontal padding and the rail's outer width (content, padding, border). The
+  // cases are 4 px either side of a threshold and assume no classic scrollbar, which headless
+  // Chromium hides by default: the builder page does not scroll at this height.
   const PAD = 40;
   const RAIL = 241;
   for (const [width, shared] of [

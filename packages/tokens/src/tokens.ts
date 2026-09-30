@@ -75,8 +75,9 @@ export const SCALE_TOKENS = {
 } as const;
 
 /**
- * Fixed layout constants: emitted as CSS custom properties but not tokens (not in TOKEN_NAMES, no
- * theme or config override), because a breakpoint is a layout decision, never a theme one. A query
+ * Fixed layout constants: emitted as CSS custom properties (for script and test readers; a query
+ * condition cannot read them) but not tokens (not in TOKEN_NAMES, no theme or config override),
+ * because a breakpoint is a layout decision, never a theme one. A query
  * condition cannot read var(), so shell.css writes these values literally in its @media and
  * @container conditions; shell.css.test.ts accepts a literal length there only if it equals one.
  */

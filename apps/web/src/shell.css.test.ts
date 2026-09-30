@@ -8,17 +8,22 @@ import { describe, expect, it } from "vitest";
 // and a "?raw" CSS import resolves to "" under vitest, which would make this guard vacuous.
 const shellCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "shell.css"), "utf8");
 
-const LENGTH = /\b\d+(?:\.\d+)?(?:px|rem|em)\b/g;
-const QUERY_PRELUDE = /@(?:media|container)\b[^{]*\{/g;
+// A length in any spelling: case, exponent and leading point included.
+const LENGTH = /(?<![\w.])(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:px|rem|em)\b/gi;
+const COMMENT = /\/\*[\s\S]*?\*\//g;
+const QUERY_PRELUDE = /@(?:media|container)\b[^{;]*\{/gi;
 
 /**
- * Every literal length in `css` that is not allowed: any length outside a query condition, and in
- * a @media or @container condition any length that is not one of `allowed` (the layout constants).
- * A condition cannot read var(), so this is the only place a literal length may appear.
+ * Every literal length in `css` that is not allowed: any length in a comment or outside a query
+ * condition, and in a @media or @container condition any length that is not one of `allowed` (the
+ * layout constants). A condition cannot read var(), so that is the only place a literal length may
+ * appear. Comments are read apart from the code, so one cannot open or close a condition.
  */
 function forbiddenLengths(css: string, allowed: readonly string[]): string[] {
   const out: string[] = [];
-  const rest = css.replace(QUERY_PRELUDE, (prelude) => {
+  for (const [comment] of css.matchAll(COMMENT))
+    for (const [length] of comment.matchAll(LENGTH)) out.push(length);
+  const rest = css.replace(COMMENT, "").replace(QUERY_PRELUDE, (prelude) => {
     for (const [length] of prelude.matchAll(LENGTH))
       if (!allowed.includes(length)) out.push(length);
     return "{";
@@ -87,6 +92,23 @@ describe("literal lengths: only in a query condition, and only a layout constant
     ]);
     // A constant's value that is off by a digit is not the constant.
     expect(check("@media (min-width: 64.5rem) { .a { top: 0; } }")).toEqual(["64.5rem"]);
+  });
+
+  it("rejects a length however it is written: case, exponent, leading point", () => {
+    expect(check(".a { inline-size: 64REM; }")).toEqual(["64REM"]);
+    expect(check(".a { inline-size: 12Px; }")).toEqual(["12Px"]);
+    expect(check(".a { inline-size: 1e3px; }")).toEqual(["1e3px"]);
+    expect(check(".a { inline-size: .5rem; }")).toEqual([".5rem"]);
+    expect(check("@media (min-width: 50REM) { .a { top: 0; } }")).toEqual(["50REM"]);
+    expect(check("@MEDIA (min-width: 50rem) { .a { top: 0; } }")).toEqual(["50rem"]);
+  });
+
+  it("does not let a comment open a condition: a constant in a rule body still fails", () => {
+    const [wide = ""] = allowed;
+    expect(check(`.a { /* @media */ inline-size: ${wide}; } .b { top: 0; }`)).toEqual([wide]);
+    expect(check(`/* @container ( */ .a { inline-size: ${wide}; }`)).toEqual([wide]);
+    // A length in a comment is still a literal length.
+    expect(check("/* about 12px */ .a { top: 0; }")).toEqual(["12px"]);
   });
 
   it("rejects every literal length outside a condition, constant values included", () => {
