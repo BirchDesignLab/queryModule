@@ -56,3 +56,45 @@ test.describe("B1 app header (dispatch layout)", () => {
     await saved;
   });
 });
+
+// Persona flip (ruling): a newer config that changes the persona's layout swaps the header bar.
+// Focus stays on the button for the same theme mode in the new bar, with no announcement.
+test.describe("B1 theme focus survives a persona flip", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("focus on a theme button in the account menu lands on the same mode in the compact bar", async ({
+    page,
+  }) => {
+    let flipped = false;
+    await page.route("**/api/v1/config", async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as {
+        configHash: string;
+        personas: { layout: string }[];
+      };
+      if (flipped) {
+        body.configHash = "d".repeat(64);
+        for (const persona of body.personas) persona.layout = "mobileUnit";
+      }
+      await route.fulfill({ response, json: body });
+    });
+    await page.clock.install();
+    await signIn(page);
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+    const panel = await openAccountMenu(page);
+    // Focus a mode without pressing it, so the focused mode is not the pressed one.
+    const night = panel.getByRole("button", { name: "Night" });
+    await night.focus();
+    await expect(night).toBeFocused();
+
+    flipped = true;
+    await page.clock.fastForward(16_000);
+
+    const banner = page.getByRole("banner");
+    await expect(banner).toHaveClass(/qm-app-header--compact/);
+    await expect(
+      banner.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Night" }),
+    ).toBeFocused();
+    await expect(page.getByTestId("announcer-polite")).not.toContainText(/theme|night/i);
+  });
+});
