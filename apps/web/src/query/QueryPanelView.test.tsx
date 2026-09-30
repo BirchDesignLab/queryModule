@@ -513,16 +513,18 @@ describe("preview selectType: the builder picks the query type through the panel
     act(() => repick("VEH"));
     await waitFor(() => pressed("Vehicle"));
     expect(document.activeElement).toBe(before);
-    // A new seq for the type already shown is a no-op.
-    act(() => repick("VEH"));
-    pressed("Vehicle");
   });
 
-  it("the live panel ignores a new seq too", async () => {
-    renderPicker("live");
-    await screen.findByLabelText("Plate");
+  it("a new seq for the type already shown is a no-op: shown errors stay (a selection would reset them)", async () => {
+    const { user } = renderPicker("preview", "PER");
+    await waitFor(() => pressed("Person"));
+    await user.type(screen.getByLabelText(/Last name/), "{Enter}");
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true"),
+    );
     act(() => repick("PER"));
-    pressed("Vehicle");
+    pressed("Person");
+    expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
   });
 
   it("a pick present at first mount wins over the initial type (the fallback runs after it)", async () => {

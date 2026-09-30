@@ -149,8 +149,7 @@ function ReadyPanel({
   const { register: registerSheet } = useShortcutSheet();
   useEffect(() => {
     if (preview) return;
-    registerSheet(() => setSheetOpen(true));
-    return () => registerSheet(null);
+    return registerSheet(() => setSheetOpen(true));
   }, [preview, registerSheet]);
   const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
   const firstQuick = quickShortcut(bindings, 0);
