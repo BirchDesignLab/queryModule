@@ -1204,3 +1204,16 @@ main[tabindex="-1"]:focus {
   background: var(--qm-color-surface-sunken);
   color: var(--qm-color-text-body);
 }
+
+/* The officer's account menu and skip link read at body size and are 48 px targets (spec 6.3). */
+.qm-app-header--compact .qm-account__panel .qm-button {
+  font-size: var(--qm-type-body-size);
+}
+
+body:has(.qm-app-header--compact) .qm-skip-link {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--qm-target-min);
+  font-size: var(--qm-type-body-size);
+}

@@ -772,3 +772,84 @@ test.describe("parity: dispatcher and sign-in surfaces, type and states (1440x90
     });
   }
 });
+
+// Parity pass, officer (cloud2): the sunken page with the touch card on it, the skip link and the
+// account menu at officer size, and read-back data in mono by field properties only.
+test.describe("parity: officer surfaces, skip link and account menu (1024x768)", () => {
+  test.use({ viewport: { width: 1024, height: 768 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: sunken page, base card, 48 px skip link, 16 px menu, mono plate but sans names`, async ({
+      page,
+    }) => {
+      await asUser(page, "officer@example.test", mode, async () => {
+        await expect(page.locator(".qm-layout--mobile-unit")).toHaveCount(1);
+        const look = await page.evaluate(() => {
+          const s = (sel: string) => getComputedStyle(document.querySelector(sel) as Element);
+          return {
+            body: getComputedStyle(document.body).backgroundColor,
+            card: s(".qm-layout--mobile-unit .qm-panel__body").backgroundColor,
+            plate: s("main .qm-field__input--data").fontFamily,
+          };
+        });
+        expect(look.body).toBe(rgb(mode, "color.surface.sunken"));
+        expect(look.card).toBe(rgb(mode, "color.surface.base"));
+        expect(look.plate).toMatch(/^"IBM Plex Mono"/);
+
+        // A name is upper case but not code-like: it stays in the interface face.
+        await page.getByRole("button", { name: "Person", exact: true }).click();
+        const last = page.getByLabel(/Last name/);
+        await expect(last).not.toHaveClass(/qm-field__input--data/);
+        expect(await last.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(
+          /^"IBM Plex Sans"/,
+        );
+        // Property has a later section: in the card it keeps its top rule (the card strips boxes only).
+        await page.getByRole("button", { name: "Property", exact: true }).click();
+        const rule = await page
+          .locator(".qm-layout--mobile-unit .qm-query-form__section--disclosure")
+          .first()
+          .evaluate((el) => {
+            const s = getComputedStyle(el);
+            return { width: s.borderTopWidth, color: s.borderTopColor, side: s.borderLeftWidth };
+          });
+        expect(rule.width).toBe("1px");
+        expect(rule.color).toBe(rgb(mode, "color.border.subtle"));
+        expect(rule.side).toBe("0px");
+        await page.getByRole("button", { name: "Vehicle", exact: true }).click();
+
+        // The skip link, once focused, is a 48 px target at body size.
+        await page.goto("/");
+        await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+        await page.keyboard.press("Tab");
+        const skip = page.getByRole("link", { name: "Skip to query" });
+        await expect(skip).toBeFocused();
+        const skipBox = await skip.evaluate((el) => ({
+          h: el.getBoundingClientRect().height,
+          size: getComputedStyle(el).fontSize,
+        }));
+        expect(skipBox.h).toBeGreaterThanOrEqual(47.5);
+        expect(skipBox.size).toBe("16px");
+
+        // The account menu: every text at 16 px or more, the sign-out a 48 px target.
+        const panel = await openAccountMenu(page);
+        const signOut = panel.getByRole("button", { name: "Sign out" });
+        const menu = await signOut.evaluate((el) => ({
+          size: getComputedStyle(el).fontSize,
+          h: el.getBoundingClientRect().height,
+          small: [...(el.closest(".qm-account__panel") as Element).querySelectorAll("*")]
+            .filter(
+              (n) =>
+                n.getClientRects().length > 0 &&
+                Number.parseFloat(getComputedStyle(n).fontSize) < 16,
+            )
+            .map((n) => n.className.toString()),
+        }));
+        expect(menu.size).toBe("16px");
+        expect(menu.h).toBeGreaterThanOrEqual(47.5);
+        expect(menu.small).toEqual([]);
+        await page.keyboard.press("Escape");
+        await expect(panel).toBeHidden();
+      });
+    });
+  }
+});

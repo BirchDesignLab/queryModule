@@ -237,3 +237,13 @@ describe("parity pass, query surfaces (visual system: surfaces, type, controls a
     );
   });
 });
+
+describe("parity pass, officer card (design target: More details opens under a rule)", () => {
+  it("O2 a later section in the officer card keeps its top rule (the card rule strips the box only)", () => {
+    const officer = decls(".qm-layout--mobile-unit .qm-query-form__section--disclosure");
+    expect(officer).toMatch(
+      /border-block-start:\s*var\(--qm-border-width\) solid var\(--qm-color-border-subtle\)/,
+    );
+    expect(officer).toMatch(/padding-block-start:\s*var\(--qm-space-3\)/);
+  });
+});
