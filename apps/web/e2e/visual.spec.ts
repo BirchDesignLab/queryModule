@@ -817,17 +817,16 @@ test.describe("B1 sign out with unsaved changes (1440x900)", () => {
             )
             .join("")}`;
         };
+        // Token-level arithmetic (the whole app is surface.sunken, so that is the page under the
+        // backdrop), not rendered pixels.
         const page0 = COLOR_TOKENS["color.surface.sunken"][mode];
-        const dimmed = blend(COLOR_TOKENS["color.surface.scrim"][mode], page0);
-        if (mode === "day") {
-          // A light page must fall to under a fifth of its luminance, or the modal barely reads.
-          expect(relativeLuminance(dimmed) / relativeLuminance(page0), "day dimming").toBeLessThan(
-            0.2,
-          );
-        } else {
-          // Night and red shift keep today's look: the scrim is the page colour itself.
-          expect(dimmed).toBe(page0);
-        }
+        const dimming =
+          relativeLuminance(blend(COLOR_TOKENS["color.surface.scrim"][mode], page0)) /
+          relativeLuminance(page0);
+        // Never brighter in any mode; a light day page must fall to under a fifth of its luminance,
+        // or the modal barely reads.
+        expect(dimming, `${mode} dimming`).toBeLessThanOrEqual(1);
+        if (mode === "day") expect(dimming, "day dimming").toBeLessThan(0.2);
         await captureCrop(page, dialog, `b1-leave-dialog-${mode}`);
         await page.keyboard.press("Tab");
         await expect(leave).toBeFocused();

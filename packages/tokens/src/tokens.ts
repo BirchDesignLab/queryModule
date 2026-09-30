@@ -54,7 +54,8 @@ export const SCALE_TOKENS = {
   "type.body.size": "16px",
   "type.body.lineHeight": "1.5",
   "type.heading.size": "24px",
-  // How far inert content (a paused preview, a loading skeleton's pulse) recedes.
+  // How far inert content (a paused preview, a loading skeleton's pulse) recedes. Like every scale
+  // token it is not site-overridable: config overrides must be #rrggbb colours.
   "opacity.inert": "0.55",
   "border.width": "1px",
   "focus.ring.width": "2px",
@@ -76,7 +77,7 @@ export const SCALE_TOKENS = {
  * theme or config override), because a breakpoint is a layout decision, never a theme one.
  */
 export const LAYOUT_CONSTANTS = {
-  /** At or above this width the admin panes sit side by side; below it they flow as one column. */
+  /** At or above this width each admin pane scrolls on its own under the toolbar; below it the page flows as one column. */
   "layout.wide": "64rem",
 } as const;
 

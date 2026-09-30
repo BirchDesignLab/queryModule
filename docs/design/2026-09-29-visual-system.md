@@ -26,6 +26,7 @@ All values stay in `packages/tokens` (spec 6.5: components use no literal colour
 | `color.surface.base` | #10151c | #ffffff | #0d0000 | changed night; panels, inputs |
 | `color.surface.raised` | #161d26 | #f7f9fb | #1a0500 | changed night, day |
 | `color.surface.overlay` | #1e2733 | #ffffff | #240900 | new: menus, dialogs |
+| `color.surface.scrim` | #0a0e13 | #1c2430 | #080000 | modal backdrop, drawn at 0.8; day is dark so a white page dims |
 | `color.border` | #66768a | #7a8494 | #a05a00 | changed night, day; control edge 3:1 |
 | `color.border.subtle` | #263140 | #dde2e8 | #3a1600 | new: dividers (decorative) |
 | `color.text.body` | #e7ecf2 | #121820 | #ffb000 | changed night, day; 7:1 on every surface |
@@ -54,6 +55,8 @@ Contrast pairs (checked by the script for every mode; the tokens package tests t
 Scale (px): 12, 13, 14, 16, 20, 24, 32. New tokens `type.size.xs` to `type.size.3xl`, `type.family.label`, `type.family.data`. Fonts are OFL: self-host the woff2 files (no CDN at runtime; CJIS networks are often closed). Adding them is a `chore/deps-*` PR if we use `@fontsource`, or committed files under `apps/web/src/fonts/` with no dependency. System fallbacks stay in every stack.
 
 ### Spacing, radius, density
+
+`opacity.inert` (0.55) is how far inert content recedes: the paused preview and the skeleton pulse. `layout.wide` (64rem) is a fixed layout constant, not a token: at or above it the admin panes scroll on their own, below it the page flows as one column.
 
 4 px grid: existing `space.1` to `space.6` plus new `space.5` (20), `space.8` (32), `space.12` (48). Radius: `radius.sm` 4, new `radius.control` 6, `radius.md` 8 to `radius.panel` 10. Focus: `focus.ring.width` 3 to 2 px, offset stays 2 px.
 
