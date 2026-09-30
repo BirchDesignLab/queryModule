@@ -278,8 +278,10 @@ main[tabindex="-1"]:focus {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
-  /* Under the 52 px app bar, so the rail runs the whole column even on a short page. */
-  min-block-size: calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2);
+  /* Stacked above the section (narrow window, 200% zoom) the two lines keep their own height: the
+     rail is not stretched to half of the free height, and the free height sits under the section.
+     Beside it, the section's minimum height (below) makes the line, and so the rail, full height. */
+  align-content: flex-start;
   background: var(--qm-color-surface-sunken);
 }
 
@@ -376,6 +378,16 @@ main[tabindex="-1"]:focus {
 .qm-admin__main {
   flex: 999 1 calc(var(--qm-space-12) * 12);
   min-inline-size: 0;
+  /* The whole column under the 52 px app bar (the control height and 2 x space-2), padding
+     included, so the rail beside it runs the window even on a short page. */
+  min-block-size: calc(
+    100dvh -
+    var(--qm-control-height-dense) -
+    var(--qm-space-2) *
+    2 -
+    var(--qm-space-4) *
+    2
+  );
   padding: var(--qm-space-4) var(--qm-space-5);
 }
 
@@ -493,13 +505,29 @@ main[tabindex="-1"]:focus {
 
 /* Admin config builder (Task 32): the builder and the dispatcher preview side by side when there
    is room, stacked otherwise. */
-/* Builder toolbar (A2): the section h2 and the bar share one row, which wraps on narrow widths;
-   everything after the bar takes a full row. */
+/* Builder (A2): the section h2 and the toolbar share the first row; the panes take the rest. At
+   desktop width the section is as tall as the window under the app bar (never under a floor, so a
+   short window scrolls the page instead of collapsing the panes); below the wide layout constant
+   the two limits give way (the second term of each is huge) and the page flows as one column
+   (design lead). */
 .qm-builder {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   align-items: center;
   gap: var(--qm-space-3);
+  min-block-size: min(
+    max(
+      calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2 - var(--qm-space-4) * 2),
+      calc(var(--qm-space-12) * 10)
+    ),
+    calc((100vw - var(--qm-layout-wide)) * 1000)
+  );
+  max-block-size: max(
+    calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2 - var(--qm-space-4) * 2),
+    calc(var(--qm-space-12) * 10),
+    calc((var(--qm-layout-wide) - 100vw) * 1000)
+  );
 }
 
 .qm-builder > h2 {
@@ -514,7 +542,6 @@ main[tabindex="-1"]:focus {
 }
 
 .qm-builder__toolbar {
-  flex: 1 1 calc(var(--qm-space-12) * 10);
   box-sizing: border-box;
   display: flex;
   flex-wrap: wrap;
@@ -564,31 +591,38 @@ main[tabindex="-1"]:focus {
   margin-inline-start: auto;
 }
 
+/* The panes' column: what the row leaves, never more, so the panes inside can scroll. */
 .qm-builder__body {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
   min-inline-size: 0;
 }
 
 /* Three panes (A2): tree, editor, preview. Each keeps a basis and they wrap into rows on narrow
    viewports, so nothing scrolls sideways. */
 .qm-builder__panes {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  /* Where the panes wrap onto a second line (about 1024 to 1280 px) the lines scroll here, inside
+     the section, instead of spilling out below it. */
+  overflow-y: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
+  align-content: flex-start;
   gap: var(--qm-space-4);
   margin-block-start: var(--qm-space-3);
 }
 
-/* At desktop width the panes take the height under the toolbar and scroll on their own, so the
-   preview stays in view; below the wide layout constant the second max() term is huge (positive
-   once the viewport is narrower than it) and the page flows as one column (design lead). */
+/* Each pane is as tall as its content up to the panes area, then scrolls on its own, so the
+   preview stays in view; below the wide layout constant the cap gives way. */
 .qm-tree,
 .qm-builder__editor,
 .qm-builder__panes > .qm-admin__preview {
-  max-block-size: max(
-    calc(100dvh - var(--qm-space-12) * 3.9),
-    calc((var(--qm-layout-wide) - 100vw) * 1000)
-  );
+  max-block-size: max(100%, calc((var(--qm-layout-wide) - 100vw) * 1000));
   overflow-y: auto;
 }
 

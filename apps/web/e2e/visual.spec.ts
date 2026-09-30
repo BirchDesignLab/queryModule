@@ -1292,3 +1292,170 @@ test.describe("parity: officer surfaces, skip link and account menu (1024x768)",
     });
   }
 });
+
+test.describe("Layout robustness (cloud3 item 3)", () => {
+  const geometry = (page: Page) =>
+    page.evaluate(() => {
+      const box = (sel: string) => {
+        const el = document.querySelector(sel);
+        if (el === null) return null;
+        const r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, h: r.height };
+      };
+      const root = document.scrollingElement as Element;
+      return {
+        viewport: innerHeight,
+        overflowY: root.scrollHeight - root.clientHeight,
+        rail: box(".qm-admin__rail"),
+        toolbar: box(".qm-builder__toolbar"),
+        panes: box(".qm-builder__panes"),
+        tree: box(".qm-tree"),
+        editor: box(".qm-builder__editor"),
+        preview: box(".qm-builder__panes > .qm-admin__preview"),
+      };
+    });
+  const edit = async (page: Page) => {
+    await page
+      .getByRole("navigation", { name: "Configuration items" })
+      .getByRole("treeitem", { name: /^Terminal settings/ })
+      .click();
+    await page.getByRole("textbox", { name: "Delimiter", exact: true }).fill("~");
+    await page.getByRole("tab", { name: "Form", exact: true }).focus();
+  };
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+  ]) {
+    test(`${viewport.width}x${viewport.height}: the panes end at the same place with and without unpublished changes, one padding above the window edge`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await asUser(page, "admin@example.test", "day", async () => {
+        await page.goto("/admin/config");
+        await expect(page.getByRole("region", { name: "Live preview" })).toBeVisible();
+        const clean = await geometry(page);
+        await edit(page);
+        const changed = await geometry(page);
+        // The panes area fills what the toolbar leaves (a 16 px page padding under it), whatever
+        // the toolbar's height: no hand-tuned offset. No pane runs past it.
+        for (const g of [clean, changed]) {
+          expect(
+            Math.abs(viewport.height - 16 - (g.panes?.bottom ?? 0)),
+            "panes area",
+          ).toBeLessThan(2);
+          for (const part of ["tree", "editor", "preview"] as const)
+            expect(g[part]?.bottom ?? 0, part).toBeLessThanOrEqual((g.panes?.bottom ?? 0) + 1);
+        }
+        expect(clean.overflowY, "page scroll").toBeLessThanOrEqual(0);
+        expect(changed.overflowY, "page scroll with changes").toBeLessThanOrEqual(0);
+        // A pane with more content than room (the raw JSON) ends at that same place and scrolls.
+        await page.getByRole("tab", { name: "Raw JSON", exact: true }).click();
+        const raw = await geometry(page);
+        expect(
+          Math.abs(viewport.height - 16 - (raw.editor?.bottom ?? 0)),
+          "raw editor",
+        ).toBeLessThan(2);
+      });
+    });
+  }
+
+  for (const viewport of [
+    { width: 1100, height: 800 },
+    { width: 1024, height: 768 },
+  ]) {
+    test(`${viewport.width}x${viewport.height}: where the panes wrap, the preview stays inside the section and is reachable`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await asUser(page, "admin@example.test", "day", async () => {
+        await page.goto("/admin/config");
+        await expect(page.getByRole("region", { name: "Live preview" })).toBeAttached();
+        const g = await geometry(page);
+        // Nothing sticks out of the section: the page does not scroll, the panes area scrolls.
+        expect(g.overflowY, "page scroll").toBeLessThanOrEqual(0);
+        const preview = page.locator(".qm-builder__panes > .qm-admin__preview");
+        await preview.scrollIntoViewIfNeeded();
+        const after = await page.evaluate(() => {
+          const panes = document.querySelector(".qm-builder__panes")?.getBoundingClientRect();
+          const preview = document
+            .querySelector(".qm-builder__panes > .qm-admin__preview")
+            ?.getBoundingClientRect();
+          return {
+            paneTop: panes?.top ?? 0,
+            paneBottom: panes?.bottom ?? 0,
+            top: preview?.top ?? 0,
+          };
+        });
+        expect(after.top, "preview top inside the panes area").toBeGreaterThanOrEqual(
+          after.paneTop - 1,
+        );
+        expect(after.top, "preview top inside the panes area").toBeLessThan(after.paneBottom);
+      });
+    });
+  }
+
+  for (const viewport of [
+    { width: 1100, height: 180 },
+    { width: 1024, height: 200 },
+  ]) {
+    test(`${viewport.width}x${viewport.height}: a short window keeps usable panes and the page scrolls instead`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await asUser(page, "admin@example.test", "day", async () => {
+        await page.goto("/admin/config");
+        await expect(page.getByRole("tab", { name: "Form", exact: true })).toBeVisible();
+        const g = await geometry(page);
+        for (const part of ["tree", "editor"] as const)
+          expect(g[part]?.h ?? 0, `${part} height`).toBeGreaterThanOrEqual(240);
+        expect(g.overflowY, "the page scrolls").toBeGreaterThan(0);
+      });
+    });
+  }
+
+  for (const viewport of [
+    { width: 800, height: 600 },
+    { width: 683, height: 384 },
+  ]) {
+    test(`${viewport.width}x${viewport.height}: the toolbar beside the heading stays inside the window`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await asUser(page, "admin@example.test", "day", async () => {
+        await page.goto("/admin/config");
+        await expect(page.getByRole("tab", { name: "Form", exact: true })).toBeVisible();
+        await captureCrop(
+          page,
+          page.locator(".qm-builder__toolbar"),
+          `layout-toolbar-${viewport.width}`,
+        );
+        const g = await page.evaluate(() => {
+          const r = (sel: string) => document.querySelector(sel)?.getBoundingClientRect();
+          const root = document.scrollingElement as Element;
+          return {
+            heading: r(".qm-builder > h2"),
+            toolbar: r(".qm-builder__toolbar"),
+            overflowX: root.scrollWidth - root.clientWidth,
+          };
+        });
+        expect(g.overflowX, "sideways scroll").toBeLessThanOrEqual(0);
+        expect(g.toolbar?.right ?? 0, "toolbar right edge").toBeLessThanOrEqual(viewport.width);
+        expect(g.toolbar?.width ?? 0, "toolbar width").toBeGreaterThanOrEqual(380);
+        expect(g.toolbar?.top ?? 0, "toolbar top").toBeLessThan(viewport.height);
+      });
+    });
+  }
+
+  test("800x600: on a short page the stacked rail keeps its own height, not half the free height", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 800, height: 600 });
+    await asUser(page, "admin@example.test", "day", async () => {
+      await page.goto("/admin/users");
+      await expect(page.getByRole("heading", { name: "Users and roles" })).toBeVisible();
+      const g = await geometry(page);
+      expect((g.rail?.h ?? 0) / g.viewport, "rail share of the window").toBeLessThan(0.3);
+    });
+  });
+});

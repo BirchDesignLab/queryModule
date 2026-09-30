@@ -32,8 +32,29 @@ describe("admin parity: surfaces", () => {
   });
 
   it("the rail fills the column's height and its groups sit side by side once it stacks", () => {
-    expect(decls(".qm-admin")).toMatch(/min-block-size:/);
+    // The section is the window's height, so the stretched rail beside it is too; stacked, the
+    // lines keep their own height (the free height is not shared with the rail).
+    expect(decls(".qm-admin__main")).toMatch(/min-block-size:/);
+    expect(decls(".qm-admin")).toMatch(/align-content:\s*flex-start/);
     expect(decls(".qm-admin__rail")).toMatch(/grid-template-columns:\s*repeat\(auto-fit/);
+  });
+
+  it("the builder heading keeps its size, weight and no margin (they set the first row's height)", () => {
+    const h2 = decls(".qm-builder > h2");
+    expect(h2).toMatch(/margin:\s*0/);
+    expect(h2).toMatch(/font-size:\s*var\(--qm-type-size-xl\)/);
+    expect(h2).toMatch(/font-weight:\s*600/);
+  });
+
+  it("the panes are a flex column under the toolbar: no hand-tuned offset from the window height", () => {
+    const builder = decls(".qm-builder");
+    expect(builder).toMatch(/display:\s*grid/);
+    expect(builder).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\)/);
+    expect(decls(".qm-builder__body")).toMatch(/flex-direction:\s*column/);
+    expect(decls(".qm-builder__panes")).toMatch(/min-block-size:\s*0/);
+    for (const sel of [".qm-tree", ".qm-builder__editor"])
+      expect(css.slice(css.indexOf(`${sel},`))).not.toMatch(/100dvh\s*-\s*var\(--qm-space-12\)/);
+    expect(css).not.toMatch(/\*\s*3\.9/);
   });
 
   it("the toolbar, tree, editor and preview are panes on surface.base", () => {
