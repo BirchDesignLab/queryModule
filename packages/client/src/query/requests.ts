@@ -1,8 +1,15 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { SubmitOutcome, SubmitQueryResponse } from "./submit.js";
+import type { SubmitOutcome, SubmitQueryResponse, SubmitRequest } from "./submit.js";
 
 /** Why a request did not reach an acknowledgment: the submit outcome's kind, translated at render. */
 export type RequestFailure = Exclude<SubmitOutcome["kind"], "acknowledged">;
+
+/**
+ * What a request sent, kept with its row so a failed one can be sent again: the query type, the
+ * field values (the subtype is one of them), the sources and the mode. Memory only, cleared with
+ * the row (a reset, the 100-row cap). The config hash is not kept: a retry goes under the current one.
+ */
+export type SubmittedQuery = Omit<SubmitRequest, "configHash">;
 
 interface RequestBase {
   /** A local key, never reused, so a row keeps its identity from Sending to its final state. */
@@ -10,6 +17,8 @@ interface RequestBase {
   queryType: string;
   /** The command the request was built as; shown in mono. Memory only, cleared with the session. */
   summary: string;
+  /** Absent for a row begun without values; such a row cannot be retried. */
+  submitted?: SubmittedQuery;
 }
 
 export type RequestEntry = RequestBase &
@@ -29,7 +38,7 @@ export interface RequestsState {
   /** This session's requests, newest first. */
   items: readonly RequestEntry[];
   /** Adds a Sending row and returns its key. */
-  begin(request: { queryType: string; summary: string }): string;
+  begin(request: { queryType: string; summary: string; submitted?: SubmittedQuery }): string;
   /** Turns the row into Acknowledged or Failed; a row a reset already cleared is ignored. */
   settle(id: string, outcome: SubmitOutcome): void;
   reset(): void;
@@ -50,11 +59,23 @@ export function createRequestsStore(): RequestsStore {
   let counter = 0;
   return createStore<RequestsState>((set) => ({
     items: [],
-    begin({ queryType, summary }) {
+    begin({ queryType, summary, submitted }) {
       counter += 1;
       const id = `r${counter}`;
+      // A copy: the caller's objects (the draft's values) may change after the request left.
+      const kept =
+        submitted === undefined
+          ? {}
+          : {
+              submitted: {
+                queryType: submitted.queryType,
+                values: { ...submitted.values },
+                sourceIds: [...submitted.sourceIds],
+                mode: submitted.mode,
+              },
+            };
       set((s) => ({
-        items: [{ id, queryType, summary, status: "sending" as const }, ...s.items].slice(
+        items: [{ id, queryType, summary, ...kept, status: "sending" as const }, ...s.items].slice(
           0,
           MAX_ROWS,
         ),
@@ -65,7 +86,12 @@ export function createRequestsStore(): RequestsStore {
       set((s) => ({
         items: s.items.map((item): RequestEntry => {
           if (item.id !== id) return item;
-          const base = { id: item.id, queryType: item.queryType, summary: item.summary };
+          const base = {
+            id: item.id,
+            queryType: item.queryType,
+            summary: item.summary,
+            ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
+          };
           return outcome.kind === "acknowledged"
             ? {
                 ...base,

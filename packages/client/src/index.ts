@@ -67,8 +67,11 @@ export type {
   RequestFailure,
   RequestsState,
   RequestsStore,
+  SubmittedQuery,
 } from "./query/requests.js";
 export { createRequestsStore } from "./query/requests.js";
+export type { RetryResult } from "./query/retry.js";
+export { isRetryable, retryRequest } from "./query/retry.js";
 export type {
   SubmitController,
   SubmitControllerOptions,

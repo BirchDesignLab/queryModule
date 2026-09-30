@@ -555,15 +555,19 @@ h1 {
   min-inline-size: 0;
 }
 
-/* Two panes at desktop width: the query panel (about 640 px), then the requests. Width picks the
-   panes, never the density: the persona layout does that (spec 6.1). */
+/* Two panes at desktop width: the query panel, then the requests. The panel's content is 640 px
+   (682 with its padding and border): the five quick-access buttons, "Driver's license" included,
+   need 622 px and fit one row. Width picks the panes, never the density: the persona layout does
+   that (spec 6.1). */
 .qm-query-panel:not(.qm-layout--mobile-unit) {
   max-width: 90rem;
 }
 
 @media (min-width: 64rem) {
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes {
-    grid-template-columns: minmax(0, 40rem) minmax(0, 1fr);
+    grid-template-columns:
+      minmax(0, calc(40rem + var(--qm-space-5) * 2 + var(--qm-border-width) * 2))
+      minmax(0, 1fr);
   }
 }
 

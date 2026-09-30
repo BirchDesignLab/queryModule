@@ -11,7 +11,6 @@ import { evaluateForm, type FormState } from "@querymodule/core/rules";
 import {
   blockedErrorCount,
   focusFirstInvalid,
-  formatAckTime,
   formLevelMessages,
   type SubmitBlockReason,
 } from "@querymodule/web-ui";
@@ -26,6 +25,7 @@ import {
 } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { outcomeAnnouncement } from "./announce-outcome.js";
 import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { valuesToSend } from "./send-values.js";
@@ -376,13 +376,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const { state } = request;
     switch (outcome.kind) {
       case "acknowledged":
-        announcer.announce(
-          t("submit.acknowledged", {
-            queryType: typeLabel(outcome.queryType),
-            time: formatAckTime(outcome.response.acknowledgedAt),
-            reference: outcome.response.correlationId.slice(0, 8),
-          }),
-        );
+        announcer.announce(outcomeAnnouncement(outcome, t, typeLabel));
         return;
       case "invalid":
         setServerErrors(outcome.errors as ValidationError[]);
@@ -409,10 +403,8 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         announcer.announce(t("submit.configChanged"));
         return;
       case "rateLimited":
-        announcer.announce(t("submit.rateLimited", { seconds: outcome.retryAfterSeconds }));
-        return;
       default:
-        announcer.announce(t(`submit.${outcome.kind}`));
+        announcer.announce(outcomeAnnouncement(outcome, t, typeLabel));
     }
   };
 
@@ -420,20 +412,22 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     if (preview) return;
     // The list row is the same one from Sending to its outcome. A send that joins one already in
     // flight gets the same outcome, so it adds no row of its own.
+    // What goes out is kept with the row, so a failed one can be sent again (memory only).
+    const submitted = {
+      queryType: request.queryType,
+      values: valuesToSend(config, request.queryType, request.values, request.state, Date.now()),
+      sourceIds: request.sourceIds,
+      mode: request.state.mode,
+    };
     const rowId =
       submit.getState().status === "submitting"
         ? null
         : requests.getState().begin({
             queryType: request.queryType,
             summary: formToTerminal(config, request.queryType, request.values, Date.now()).text,
+            submitted,
           });
-    const outcome = await submit.getState().submit({
-      queryType: request.queryType,
-      values: valuesToSend(config, request.queryType, request.values, request.state, Date.now()),
-      sourceIds: request.sourceIds,
-      mode: request.state.mode,
-      configHash: config.configHash,
-    });
+    const outcome = await submit.getState().submit({ ...submitted, configHash: config.configHash });
     // The list outlives the panel, so the row settles even if the panel has unmounted.
     if (rowId !== null) requests.getState().settle(rowId, outcome);
     if (mounted.current) handleOutcome(outcome, request);
