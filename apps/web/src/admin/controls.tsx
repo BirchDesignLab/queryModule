@@ -571,9 +571,10 @@ export function Advanced({
 }
 
 /** A config key as words: "maxDurationMinutes" reads "Max duration minutes"; an index, "Item 2". */
-export function humanize(segment: PathSegment, itemWord: string): string {
-  if (typeof segment === "number") return `${itemWord} ${segment + 1}`;
+export function humanize(segment: PathSegment, item: (n: number) => string): string {
+  if (typeof segment === "number") return item(segment + 1);
   const words = segment
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .toLowerCase();

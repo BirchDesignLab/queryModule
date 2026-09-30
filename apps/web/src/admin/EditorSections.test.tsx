@@ -315,3 +315,65 @@ describe("A3 Advanced keeps its state across a move (critic, part 1a)", () => {
     expect(advanced(fieldBox("PER", "first")).open).toBe(false);
   });
 });
+
+describe("A3 rule sentences over every condition shape (critic, part 1b)", () => {
+  const TX = { field: "state", op: "eq", value: "TX" };
+  const Y = { field: "year", op: "gte", value: 2020 };
+  const cases: [string, Record<string, unknown>, string][] = [
+    [
+      "not around a group, one pair of parentheses",
+      { field: "plateType", effect: "show", when: { not: { all: [TX, Y] } } },
+      "Show Plate type when not (State is Texas and Year is 2020 or more).",
+    ],
+    [
+      "a group nested in a group",
+      {
+        field: "plateType",
+        effect: "hide",
+        when: { any: [{ field: "plate", op: "empty" }, { all: [TX, Y] }] },
+      },
+      "Hide Plate type when Plate is empty or (State is Texas and Year is 2020 or more).",
+    ],
+    [
+      "setDefault names the value by its list label",
+      {
+        field: "state",
+        effect: "setDefault",
+        value: "OK",
+        when: { field: "plate", op: "notEmpty" },
+      },
+      "Fill in State with Oklahoma when Plate is filled in.",
+    ],
+    [
+      "an unknown operator does not pretend to be equals",
+      { field: "plateType", effect: "show", when: { field: "state", op: "zz", value: "TX" } },
+      "Show Plate type when the condition is not finished.",
+    ],
+    [
+      "a blank field",
+      { field: "plateType", effect: "show", when: { field: "", op: "eq", value: "TX" } },
+      "Show Plate type when the condition is not finished.",
+    ],
+    [
+      "an empty group",
+      { field: "plateType", effect: "show", when: { all: [] } },
+      "Show Plate type when the condition is not finished.",
+    ],
+    [
+      "an empty value list",
+      { field: "plateType", effect: "show", when: { field: "state", op: "in", value: [] } },
+      "Show Plate type when the condition is not finished.",
+    ],
+  ];
+  it.each(cases)("%s", async (_name, rule, expected) => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "VEH");
+    act(() => {
+      const d = structuredClone(state(t).doc) as { queryTypes: QueryType[] };
+      const veh = d.queryTypes.find((q) => q.code === "VEH") as QueryType;
+      (veh.rules as unknown[])[0] = rule;
+      state(t).setDoc(d as never);
+    });
+    expect(sentence(group(typeBox("VEH"), "Rule 1"))).toBe(expected);
+  });
+});

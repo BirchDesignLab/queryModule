@@ -394,7 +394,11 @@ function FieldsEditor({
   // Advanced settings the user opened, by field key: rows remount on a move or remove, and the
   // disclosure the user was using comes back open (A3 critic).
   const openAdvanced = useRef(new Set<string>());
-  const onAdvanced = useCallback((key: string, open: boolean) => {
+  const onAdvanced = useCallback((key: string, open: boolean, from?: string) => {
+    // A rename moves the entry; a close or remove drops it.
+    if (from !== undefined) {
+      if (!openAdvanced.current.delete(from)) return;
+    }
     if (open) openAdvanced.current.add(key);
     else openAdvanced.current.delete(key);
   }, []);
@@ -416,6 +420,7 @@ function FieldsEditor({
   const onRemove = useCallback(
     (index: number) => {
       const { fields: list, path: at, owner: own, listOwner: add } = latest.current;
+      openAdvanced.current.delete(str(list[index]?.key));
       bump();
       const next = list.filter((_, j) => j !== index);
       setPath(at, next);
@@ -473,7 +478,8 @@ interface FieldRowProps {
   idPrefix: string;
   /** Mount-time only: whether this field's Advanced was open before a move remounted it. */
   advancedOpen: boolean;
-  onAdvanced(key: string, open: boolean): void;
+  /** Records the field's Advanced as open or closed; `from` is the key it had before a rename. */
+  onAdvanced(key: string, open: boolean, from?: string): void;
   onMove(from: number, to: number): void;
   onRemove(index: number): void;
 }
@@ -553,7 +559,7 @@ function FieldControls({
   picklistIds: readonly string[];
   idPrefix: string;
   advancedOpen: boolean;
-  onAdvanced(key: string, open: boolean): void;
+  onAdvanced(key: string, open: boolean, from?: string): void;
 }) {
   const t = useT();
   const { setPath } = useDraftSetters();
@@ -561,6 +567,13 @@ function FieldControls({
   const defaultPath = [...path, "defaultValue"];
   const defaultLabel = t("admin.config.field.defaultValue");
   const key = str(field.key);
+  // A rename carries the remembered open state to the new key.
+  const keyWas = useRef(key);
+  useEffect(() => {
+    if (keyWas.current === key) return;
+    onAdvanced(key, true, keyWas.current);
+    keyWas.current = key;
+  }, [key, onAdvanced]);
   return (
     <>
       <LabelTextControls idPrefix={idPrefix} path={path} labelKey={field.labelKey} owner={owner} />

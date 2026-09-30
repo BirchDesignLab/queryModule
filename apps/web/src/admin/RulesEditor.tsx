@@ -163,26 +163,42 @@ export function useConditionWords(type: Obj) {
         : t("admin.rule.siteDefaultOf", { field: info.name(v.$default) });
     if (typeof v === "boolean") return t(v ? "admin.config.yes" : "admin.config.no");
     const def = fields.find((f) => str(f.key) === str(field));
-    const list = lists.find((l) => str(l.id) === str(def?.picklist));
+    // Only a list field looks its value up, and only in its own list (critic: a blank list id).
+    const listId = def?.dataType === "picklist" ? str(def.picklist) : "";
+    const list = listId === "" ? undefined : lists.find((l) => str(l.id) === listId);
     const item = asObjects(list?.values).find((x) => str(x.code) === String(v));
     const text = item === undefined ? "" : labelText(item.labelKey);
     return text === "" ? String(v) : text;
   };
-  const when = (cond: unknown, nested = false): string => {
+  /** The condition in words, or null when a part of it is not finished (no guessing). */
+  const words = (cond: unknown, nested: boolean): string | null => {
     const c = (typeof cond === "object" && cond !== null ? cond : {}) as Obj;
     const kind = kindOf(c);
-    if (kind === "not") return t("admin.rule.not", { when: when(c.not, true) });
-    if (kind === "all" || kind === "any") {
-      const joined = childrenOf(c)
-        .map((x) => when(x, true))
-        .join(` ${t(kind === "all" ? "admin.rule.and" : "admin.rule.or")} `);
-      return nested && childrenOf(c).length > 1 ? `(${joined})` : joined;
+    if (kind === "not") {
+      // The not template brackets its operand itself.
+      const inner = words(c.not, false);
+      return inner === null ? null : t("admin.rule.not", { when: inner });
     }
-    const op = OPS.includes(c.op as (typeof OPS)[number]) ? str(c.op) : "eq";
-    const field = info.name(c.field);
-    const values = Array.isArray(c.value) ? c.value.map((x) => value(c.field, x)).join(", ") : "";
-    return t(`admin.rule.op.${op}`, { field, value: value(c.field, c.value), values });
+    if (kind === "all" || kind === "any") {
+      const parts = childrenOf(c).map((x) => words(x, true));
+      if (parts.length === 0 || parts.some((x) => x === null)) return null;
+      const joined = parts.join(` ${t(kind === "all" ? "admin.rule.and" : "admin.rule.or")} `);
+      return nested && parts.length > 1 ? t("admin.rule.group", { when: joined }) : joined;
+    }
+    if (!OPS.includes(c.op as (typeof OPS)[number]) || str(c.field) === "") return null;
+    const op = str(c.op);
+    const shape = shapeOf(op);
+    if (shape === "list" && (!Array.isArray(c.value) || c.value.length === 0)) return null;
+    const values = Array.isArray(c.value)
+      ? c.value.map((x) => value(c.field, x)).join(t("admin.rule.listSeparator"))
+      : "";
+    return t(`admin.rule.op.${op}`, {
+      field: info.name(c.field),
+      value: value(c.field, c.value),
+      values,
+    });
   };
+  const when = (cond: unknown): string => words(cond, false) ?? t("admin.rule.incomplete");
   return {
     rule: (rule: Obj): string => {
       const effect = EFFECTS.includes(rule.effect as (typeof EFFECTS)[number])

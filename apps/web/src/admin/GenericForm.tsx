@@ -24,7 +24,7 @@ function SettingName({ path }: { path: readonly PathSegment[] }) {
   const last = path[path.length - 1];
   return (
     <>
-      {last === undefined ? "" : humanize(last, t("admin.config.item"))}{" "}
+      {last === undefined ? "" : humanize(last, (n) => t("admin.config.item", { n }))}{" "}
       <VisuallyHidden>{pathText(path)}</VisuallyHidden>
     </>
   );
