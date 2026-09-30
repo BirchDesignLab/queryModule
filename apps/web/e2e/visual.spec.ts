@@ -942,6 +942,35 @@ test.describe("Admin parity (item 5)", () => {
             (b.label?.x ?? 0) + (b.label?.w ?? 0),
             "label column beside controls",
           ).toBeLessThanOrEqual(b.body1?.x ?? 0);
+          // The reasons for the disabled buttons share one row, under the buttons.
+          const reasons = await page.evaluate(() => {
+            const tops = [...document.querySelectorAll(".qm-builder__reason")].map(
+              (el) => el.getBoundingClientRect().top,
+            );
+            const publish = [...document.querySelectorAll(".qm-builder__toolbar button")]
+              .at(-1)
+              ?.getBoundingClientRect().bottom;
+            return { tops, publish: publish ?? 0 };
+          });
+          expect(reasons.tops.length, "reasons").toBeGreaterThan(0);
+          expect(Math.max(...reasons.tops) - Math.min(...reasons.tops), "one row").toBeLessThan(4);
+          expect(Math.min(...reasons.tops), "under the buttons").toBeGreaterThanOrEqual(
+            reasons.publish,
+          );
+          // With unpublished changes the status line is longer and the toolbar may wrap more: the
+          // panes still end inside the window and the page still does not scroll.
+          await page
+            .getByRole("navigation", { name: "Configuration items" })
+            .getByRole("treeitem", { name: /^Terminal settings/ })
+            .click();
+          await page.getByRole("textbox", { name: "Delimiter", exact: true }).fill("~");
+          await page.getByRole("tab", { name: "Form", exact: true }).focus();
+          const changed = await boxes(page);
+          expect(changed.overflowY, "page scroll with changes").toBeLessThanOrEqual(0);
+          for (const part of ["tree", "editor", "preview"] as const)
+            expect(changed[part]?.bottom ?? 0, `${part} bottom with changes`).toBeLessThanOrEqual(
+              viewport.height,
+            );
           // The preview's card is the dispatcher's: panel radius, sections without boxes.
           await expect(page.locator(".qm-preview__panel--dispatch .qm-preview__card")).toHaveCSS(
             "border-radius",

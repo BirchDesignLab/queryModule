@@ -63,6 +63,12 @@ describe("admin parity: layout", () => {
     );
   });
 
+  it("the status sits on the second row with the reasons, not beside the buttons", () => {
+    expect(decls(".qm-builder__status")).toMatch(/order:\s*2/);
+    expect(decls(".qm-builder__reason")).toMatch(/order:\s*3/);
+    expect(decls(".qm-builder__views")).toMatch(/margin-inline-start:\s*auto/);
+  });
+
   it("the reasons under the toolbar buttons share one row", () => {
     expect(decls(".qm-builder__reason")).not.toMatch(/flex-basis:\s*100%/);
   });

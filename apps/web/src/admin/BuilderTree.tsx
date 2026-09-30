@@ -259,8 +259,9 @@ export function BuilderTree({
   const searchRef = useRef<HTMLInputElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const q = query.trim().toLowerCase();
-  const shownTypes = filterNodes(types, q, text);
-  const shownSite = filterNodes(site, q, text);
+  // Without a search these are the nodes themselves, so the memoized rows see the same arrays.
+  const shownTypes = useMemo(() => filterNodes(types, q, text), [types, q, text]);
+  const shownSite = useMemo(() => filterNodes(site, q, text), [site, q, text]);
   // Only the selected type is expanded unless the user toggles one; a search shows every match.
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const selectedType =

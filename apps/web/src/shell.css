@@ -527,11 +527,20 @@ main[tabindex="-1"]:focus {
   border-radius: var(--qm-radius-panel);
 }
 
+/* The controls take the first row and the status the second, beside the reasons for the disabled
+   buttons: the status is the longest text in the bar, and beside the buttons it wrapped onto a
+   third row, which the panes' height does not allow for. */
 .qm-builder__status {
-  flex: 1 1 auto;
+  order: 2;
+  flex: 1 1 calc(var(--qm-space-12) * 6);
+  min-inline-size: 0;
   margin: 0;
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-sm);
+}
+
+.qm-builder__views {
+  margin-inline-start: auto;
 }
 
 /* Form or JSON: WAI-ARIA tabs drawn as the segmented control (design lead 09-29-26). */
@@ -543,6 +552,7 @@ main[tabindex="-1"]:focus {
 
 /* The reasons for disabled buttons share the row under the buttons; the first pushes them right. */
 .qm-builder__reason {
+  order: 3;
   flex: 0 1 auto;
   margin: 0;
   color: var(--qm-color-text-muted);
@@ -678,6 +688,9 @@ main[tabindex="-1"]:focus {
   background: var(--qm-color-surface-base);
 }
 
+/* These three rules copy the dispatcher's (packages/web-ui styles.css, .qm-query-panel .qm-query-form__section*),
+   which are scoped to .qm-query-panel on the page, not to the panel view the preview renders. A change
+   to those needs the same change here. */
 .qm-preview__panel--dispatch .qm-query-form__section {
   padding-inline: 0;
   border: 0;
