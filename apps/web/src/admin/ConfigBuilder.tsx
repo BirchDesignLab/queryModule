@@ -18,6 +18,7 @@ import { revealAndFocus } from "./controls.js";
 import { docFromClient, type JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
 import { hasPointer, parentPointer } from "./issues.js";
+import { LeaveGuard } from "./LeaveGuard.js";
 import { BuilderPreview } from "./Preview.js";
 import { type RawState, RawTab } from "./RawTab.js";
 import {
@@ -499,6 +500,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
                 blocked={raw.parseError !== null || errorCount > 0}
                 pending={checks.doc !== doc || checks.labels !== labels}
                 selected={shown.pointer}
+                selectSeq={shown.seq}
                 errorCount={errorCount}
                 parseError={raw.parseError !== null}
                 onGoToError={canGoToError && errorCount > 0 ? goToFirstIssue : undefined}
@@ -507,6 +509,12 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           </div>
         </div>
       </div>
+      <LeaveGuard
+        dirty={changed}
+        fallback={() =>
+          scopeRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null
+        }
+      />
     </ChecksContext.Provider>
   );
 }

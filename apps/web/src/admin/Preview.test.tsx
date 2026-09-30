@@ -336,6 +336,7 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
             blocked
             pending={false}
             selected="/queryTypes/0"
+            selectSeq={0}
             errorCount={2}
             parseError={false}
           />
@@ -370,6 +371,7 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
             blocked
             pending={false}
             selected="/queryTypes/0"
+            selectSeq={0}
             errorCount={1}
             parseError={false}
           />
@@ -420,8 +422,15 @@ describe("preview type follows the tree (selectType, #427)", () => {
     ).toBeInTheDocument();
   });
 
-  // Blocked on cloud 2's pick counter for selectType: an unchanged value is ignored, so clicking the
-  // tree's Vehicle again after the preview moved to Person does nothing. Written and failing first
-  // (tree Vehicle, preview quick access Person, tree Vehicle again must show Vehicle); no remount.
-  it.todo("re-pick: the tree's Vehicle again, after the preview moved to Person, shows Vehicle");
+  it("re-pick: tree Vehicle, then Person in the preview, then the tree's Vehicle again shows Vehicle", async () => {
+    const t = await openBuilder();
+    await t.user.click(within(nav()).getByRole("treeitem", { name: /^Vehicle VEH/ }));
+    await t.user.type(within(t.preview).getByLabelText("Plate"), "ZZ-1234");
+    await t.user.click(within(t.preview).getByRole("button", { name: "Person" }));
+    await waitFor(() => expect(pressed(t.preview, "Person")).toBeInTheDocument());
+    await t.user.click(within(nav()).getByRole("treeitem", { name: /^Vehicle VEH/ }));
+    await waitFor(() => expect(pressed(t.preview, "Vehicle")).toBeInTheDocument());
+    // No remount: what was typed under Vehicle is still there.
+    expect(within(t.preview).getByLabelText("Plate")).toHaveValue("ZZ-1234");
+  });
 });

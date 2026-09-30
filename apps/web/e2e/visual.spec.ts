@@ -564,6 +564,23 @@ test.describe("A4 builder preview: persona switch and states (1440x900)", () => 
     });
   });
 
+  test("picking the same type in the tree again after the preview moved shows it again, keeping typed values", async ({
+    page,
+  }) => {
+    await asUser(page, "admin@example.test", "day", async () => {
+      await page.goto("/admin/config");
+      const tree = page.getByRole("navigation", { name: "Configuration items" });
+      const preview = page.getByRole("region", { name: "Live preview" });
+      await tree.getByRole("treeitem", { name: /^Vehicle VEH/ }).click();
+      await preview.getByLabel("Plate", { exact: true }).fill("ZZ-1234");
+      await preview.getByRole("button", { name: "Person", exact: true }).click();
+      await expect(preview.getByRole("button", { name: "Person", pressed: true })).toBeVisible();
+      await tree.getByRole("treeitem", { name: /^Vehicle VEH/ }).click();
+      await expect(preview.getByRole("button", { name: "Vehicle", pressed: true })).toBeVisible();
+      await expect(preview.getByLabel("Plate", { exact: true })).toHaveValue("ZZ-1234");
+    });
+  });
+
   test("a site item shows the empty state and hides the panel", async ({ page }) => {
     await asUser(page, "admin@example.test", "day", async () => {
       await page.goto("/admin/config");
@@ -735,6 +752,56 @@ test.describe("B1 undo and redo in the builder toolbar (1440x900)", () => {
         await page.keyboard.press("Control+Shift+z");
         await expect(delimiter).toHaveValue("~");
         await captureCrop(page, page.locator(".qm-builder__toolbar"), `b1-undo-toolbar-${mode}`);
+      });
+    });
+  }
+});
+
+test.describe("B1 sign out with unsaved changes (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: the dialog opens on a dirty draft, Stay has the ringed focus, Tab wraps, Escape keeps the session; links are not guarded`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        const tree = page.getByRole("navigation", { name: "Configuration items" });
+        await tree.getByRole("treeitem", { name: /^Terminal settings/ }).click();
+        await page.getByRole("textbox", { name: "Delimiter", exact: true }).fill("~");
+        await page.getByRole("button", { name: "admin@example.test" }).click();
+        const signOut = page.getByRole("button", { name: "Sign out", exact: true });
+        // By keyboard, so the dialog's first focus is a keyboard focus and shows its ring.
+        await signOut.focus();
+        await page.keyboard.press("Enter");
+        const dialog = page.getByRole("dialog", { name: "Sign out and lose your changes?" });
+        await expect(dialog).toBeVisible();
+        const stay = dialog.getByRole("button", { name: "Stay signed in" });
+        const leave = dialog.getByRole("button", { name: "Sign out", exact: true });
+        await expect(stay).toBeFocused();
+        const ring = await stay.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return { style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor };
+        });
+        expect(ring.style).toBe("solid");
+        expect(ring.width).toBe("2px");
+        expect(ring.color).toBe(rgb(mode, "focus.ring"));
+        await expect(dialog).toHaveCSS("background-color", rgb(mode, "color.surface.overlay"));
+        expect(Math.round((await stay.boundingBox())?.height ?? 0), "button height").toBe(36);
+        await captureCrop(page, dialog, `b1-leave-dialog-${mode}`);
+        await page.keyboard.press("Tab");
+        await expect(leave).toBeFocused();
+        await page.keyboard.press("Tab");
+        await expect(stay).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+        await expect(page).toHaveURL(/\/admin\/config$/);
+        // The Sign out button went with the account panel: focus is on the selected view tab.
+        await expect(page.getByRole("tab", { name: "Form", exact: true })).toBeFocused();
+        // In-app navigation is not guarded: the draft survives it.
+        await page.getByRole("link", { name: "Status", exact: true }).click();
+        await expect(page).toHaveURL(/\/status$/);
+        await expect(page.getByRole("dialog")).toHaveCount(0);
       });
     });
   }

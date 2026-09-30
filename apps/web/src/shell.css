@@ -1231,3 +1231,36 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   min-height: var(--qm-target-min);
   font-size: var(--qm-type-body-size);
 }
+
+/* Leave the builder? (B1): a small modal over a dimmed page; the choices sit at the end. */
+.qm-leave-dialog {
+  box-sizing: border-box;
+  inline-size: min(calc(var(--qm-space-12) * 10), calc(100vw - var(--qm-space-8)));
+  padding: var(--qm-space-5);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-overlay);
+  color: var(--qm-color-text-body);
+}
+
+.qm-leave-dialog::backdrop {
+  background: var(--qm-color-surface-sunken);
+  opacity: 0.8;
+}
+
+.qm-leave-dialog h2 {
+  margin: 0 0 var(--qm-space-3);
+  font-size: var(--qm-type-size-xl);
+  font-weight: 600;
+}
+
+.qm-leave-dialog p {
+  margin: 0 0 var(--qm-space-5);
+}
+
+.qm-leave-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--qm-space-2);
+}
