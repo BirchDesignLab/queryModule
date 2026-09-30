@@ -74,7 +74,7 @@ Density is chosen by the persona layout (spec 6.1), never by width:
 - **Inputs and selects**: 1 px `color.border` edge on `surface.base`, 6 px radius; hover lifts the edge to `text.muted`; read-only is dashed on `surface.raised`.
 - **Focus and invalid (E1)**: focus is a 2 px `focus.ring` outline with a 2 px offset, outside the control. Invalid is a 2 px `field.required` edge inside the control (border plus inset shadow), an error icon and a message linked by `aria-describedby`. Both show together. Checkbox chips carry the ring on the chip.
 - **Required**: red asterisk (`aria-hidden`), visually hidden "required", `aria-required` (spec 6.2, UX-004). A site default shows a small "Default" tag (IBM Plex Sans Condensed 12 px, `type.size.xs`).
-- **Buttons**: primary (accent fill), secondary (raised, bordered), ghost (text only), danger (ghost with error colour). `aria-disabled` buttons stay focusable: dashed edge, muted text, visible reason (spec 6.2). Full-width buttons only on the sign-in panel and the officer's run action.
+- **Buttons**: primary (accent fill), secondary (raised, bordered), ghost (text only), danger (ghost with error colour). `aria-disabled` buttons stay focusable: dashed edge, muted text, visible reason (spec 6.2). Full-width buttons only on the sign-in panel. The officer's Run query is 64 px tall and shares its row with Clear and the status line.
 - **Segmented control**: a group of `aria-pressed` buttons in a sunken track; used for form or terminal, theme, preview persona, editor view.
 - **Source chips**: a checkbox inside a bordered label; checked fills with `accent.subtle`; each shows its timeout in mono.
 - **Badges**: condensed uppercase text; severity badges use the severity tokens; status badges (pending, acknowledged) are outlined.
@@ -88,11 +88,11 @@ Density is chosen by the persona layout (spec 6.1), never by width:
 
 ### Dispatcher query panel (Track B)
 
-Two panes at desktop width: the query panel (640 px of content, a 682 px card, so the five quick-access buttons fit one row) and "Requests this shift". Panel order: title with the form or terminal switch; quick access as a compact button row with the type code in mono (`aria-pressed`, `aria-keyshortcuts`, one Alt+1 to Alt+5 hint); the subtype bar as a segmented control when the type has a type field (Property); the command echo; the form on a 12-column grid (fields sized by content: state 2, plate 3, VIN 5); "More details" as a disclosure; sources as chips; a sticky action bar with Run query (Enter), Clear and the status line (validation count, spec 6.2). Terminal mode keeps the same draft and shows the command reference. The acknowledgment becomes an entry in the requests list (type, values in mono, ack time, correlation ID with copy, sources pending); response details arrive with M2 dispatch.
+Two panes at desktop width: the query panel (640 px of content, a 682 px card, so the five quick-access buttons fit one row) and "Requests this shift". Panel order: title with the form or terminal switch; quick access as a compact button row with the type code in mono (`aria-pressed`, `aria-keyshortcuts`, one Alt+1 to Alt+5 hint); the subtype bar as a segmented control when the type has a type field (Property); the command echo; the form on a 12-column grid (fields sized by content: state 4, because it shows the state's name, plate 3, VIN 5); "More details" as a disclosure; sources as chips; a sticky action bar with Run query (Enter), Clear and the status line (validation count, spec 6.2). Terminal mode keeps the same draft and shows the command reference. The acknowledgment becomes an entry in the requests list (type, values in mono, ack time, correlation ID with copy, sources pending); response details arrive with M2 dispatch.
 
 ### Officer, mobile unit (Track B)
 
-Designed at 1024x768 (spec 6.3). Header: unit ID, connection, theme, account; no navigation. Quick access becomes five 88 px tiles. One card holds the form at touch density, a 6-column grid, and a full-width 64 px Run query. The last request sits under it, condensed. Muted text is not used for anything the officer must read.
+Designed at 1024x768 (spec 6.3). Header: unit ID, connection, theme, account; no navigation. Quick access becomes five 88 px tiles. One card holds the form at touch density, a 6-column grid, and a 64 px Run query that shares its row with Clear and the status line (not full width). The last request sits under it, condensed. Muted text is not used for anything the officer must read.
 
 ### Admin shell (Track A)
 

@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
+import { escapeRegExp } from "../test/escape-regexp.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -65,7 +66,7 @@ async function openType(t: Opened, code: string) {
 const typeBox = (code: string) => group(document, `Query type ${code}`.trim());
 /** A3: a field's legend is its label with the key in hidden text ("Plate, field plate"). */
 const fieldBox = (code: string, key: string) =>
-  group(typeBox(code), key === "" ? "New field" : new RegExp(`field ${key}$`));
+  group(typeBox(code), key === "" ? "New field" : new RegExp(`field ${escapeRegExp(key)}$`));
 const picklistBox = (id: string) => group(document, `Picklist ${id}`.trim());
 
 describe("query type editor (Task 31 part 2, BR-001, FR-060, UX-004)", () => {

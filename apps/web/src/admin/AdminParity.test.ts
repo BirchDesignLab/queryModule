@@ -51,7 +51,12 @@ describe("admin parity: surfaces", () => {
   it("the panes are a flex column under the toolbar: no hand-tuned offset from the window height", () => {
     const builder = decls(".qm-builder");
     expect(builder).toMatch(/display:\s*grid/);
-    expect(builder).toMatch(/grid-template-rows:\s*auto auto minmax\(0, 1fr\)/);
+    // One column: the heading, the body; the toolbar's own row only where there is a toolbar (the
+    // loading and error states have none, and keep no empty row).
+    expect(builder).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\)/);
+    expect(css).toMatch(
+      /\.qm-builder:where\(:has\(\.qm-builder__toolbar\)\) \{[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\)/,
+    );
     // The heading and toolbar share a row by the section's width; the window caps the section from
     // layout.wide up.
     expect(css).toMatch(

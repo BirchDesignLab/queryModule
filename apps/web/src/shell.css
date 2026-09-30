@@ -587,9 +587,15 @@ main[tabindex="-1"]:focus {
 .qm-builder {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr);
+  /* The heading, then the body. The toolbar's own row exists only where there is a toolbar: the
+     loading and error states render a heading and one paragraph and keep no empty row. */
+  grid-template-rows: auto minmax(0, 1fr);
   align-items: center;
   gap: var(--qm-space-3);
+}
+
+.qm-builder:where(:has(.qm-builder__toolbar)) {
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 @container (min-width: 45rem) {

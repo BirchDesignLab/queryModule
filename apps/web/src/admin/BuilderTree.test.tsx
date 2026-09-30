@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { findSetting } from "../test/builder-tree.js";
+import { escapeRegExp } from "../test/escape-regexp.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -44,7 +45,7 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
       "Theme",
       "Labels and translations",
     ])
-      expect(item(new RegExp(`^${name}`))).toBeInTheDocument();
+      expect(item(new RegExp(`^${escapeRegExp(name)}`))).toBeInTheDocument();
     // Every site item has a plain name with its key in mono; schemaVersion is not a setting.
     expect(item(/^Terminal settings terminal$/)).toBeInTheDocument();
     expect(item(/^Keyword styles keywordSeverityStyles$/)).toBeInTheDocument();
