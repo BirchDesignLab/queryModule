@@ -181,6 +181,24 @@ describe("buildChangeGroups", () => {
     ).toMatchObject({ kind: "removed", before: { text: "Vehicle" } });
   });
 
+  it("reads reordered quick access as one order change, and a swapped button as a removal and an addition", () => {
+    expect(
+      entries(
+        groupsFor((d) => {
+          d.quickAccess = ["PER", "VEH"];
+        }),
+      ),
+    ).toEqual([expect.objectContaining({ kind: "moved", what: "admin.diff.order" })]);
+    const swapped = entries(
+      groupsFor((d) => {
+        d.quickAccess = ["VEH", "XYZ"];
+      }),
+    );
+    expect(swapped.map((e) => e.kind)).toEqual(["removed", "added"]);
+    expect(swapped[0]).toMatchObject({ before: { text: "PER" } });
+    expect(swapped[1]).toMatchObject({ after: { text: "XYZ" } });
+  });
+
   it("reports a rule whose condition changed shape as one changed rule, before and after", () => {
     const groups = groupsFor((d) => {
       const rule = d.queryTypes[0]?.rules[0] as { when: unknown };

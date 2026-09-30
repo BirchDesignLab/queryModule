@@ -163,6 +163,59 @@ describe("Changes view (item 4)", () => {
     expect(within(missing).getByText("query.nothing.here")).toBeInTheDocument();
   });
 
+  it("shows Was for an overlay text in any locale, from that locale's shipped bundle", async () => {
+    server.use(
+      http.get(`${API}/api/v1/locales/fr`, () =>
+        HttpResponse.json({ "queryType.VEH": "Véhicule", "site.same": "Pareil" }),
+      ),
+      http.get(`${API}/api/v1/locales/de`, () => new HttpResponse(null, { status: 404 })),
+    );
+    const t = await openBuilder();
+    const store = configDraftStore(t.services).getState();
+    act(() => {
+      store.setPath(["locales"], ["en", "fr", "de"]);
+      store.setLabel("en", "queryType.VEH", "Car");
+      store.setLabel("fr", "queryType.VEH", "Automobile");
+      store.setLabel("fr", "site.new", "Nouveau");
+      store.setLabel("de", "queryType.VEH", "Fahrzeug");
+    });
+    await openChanges(t);
+    const labels = await groupOf(/^Labels and translations/);
+    const entry = (language: string, key: string) =>
+      within(labels)
+        .getAllByRole("button")
+        .find((b) => b.textContent?.includes(`Text in ${language}`) && b.textContent.includes(key));
+    await waitFor(() =>
+      expect(entry("French", "queryType.VEH")).toHaveTextContent(/Was.*Véhicule/),
+    );
+    expect(entry("French", "queryType.VEH")).toHaveTextContent(/Changed.*Now.*Automobile/);
+    expect(entry("English", "queryType.VEH")).toHaveTextContent(/Was.*Vehicle/);
+    // No shipped text to replace: added, with no Was.
+    expect(entry("French", "site.new")).toHaveTextContent(/Added/);
+    expect(entry("French", "site.new")).not.toHaveTextContent("Was");
+    // A locale with no shipped bundle has nothing to compare with.
+    expect(entry("German", "queryType.VEH")).toHaveTextContent(/Added/);
+    expect(entry("German", "queryType.VEH")).not.toHaveTextContent("Was");
+  });
+
+  it("lists a label key named like an object member as added, never as a change to it", async () => {
+    const t = await openBuilder();
+    const store = configDraftStore(t.services).getState();
+    act(() => {
+      store.setLabel("en", "__proto__", "x");
+      store.setLabel("en", "toString", "y");
+      store.setLabel("en", "constructor", "z");
+    });
+    await openChanges(t);
+    const labels = await groupOf(/^Labels and translations/);
+    const entries = within(labels).getAllByRole("button");
+    expect(entries).toHaveLength(3);
+    for (const entry of entries) {
+      expect(entry).toHaveTextContent(/Added/);
+      expect(entry).not.toHaveTextContent("Was");
+    }
+  });
+
   it("is read-only: no request but reads, Publish stays disabled, and there is no live region", async () => {
     const t = await openBuilder();
     await setDelimiter(t, "~");

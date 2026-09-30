@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { applyChanges, type ConfigChange, diffConfig } from "./diff";
+import { applyChanges, type ConfigChange, diffConfig, VALUE_IDENTITY } from "./diff";
 
 /** Small alphabets, so two independent documents share keys and items and the diff has matches. */
 // "" is a new item whose code or key is not typed yet: several may exist at once.
@@ -41,14 +41,28 @@ const typeArb = fc.record({
   // Rules have no identity of their own and may repeat.
   rules: fc.array(ruleArb, { maxLength: 4 }),
 });
+/** Commands and response mappings carry two properties that could name them (an id or code, and a queryType). */
+const commandArb = fc.record({ code, queryType: code, presets: fc.dictionary(word, scalar) });
+const mappingArb = fc.record(
+  { id: word, queryType: code, sourceId: word },
+  { requiredKeys: ["id", "queryType"] },
+);
 /** Codes and keys may repeat (a typed duplicate): the lists are then matched by equality. */
 const dupConfigArb = fc.record({
   queryTypes: fc.array(typeArb, { maxLength: 3 }),
   quickAccess: fc.array(word, { maxLength: 4 }),
+  commands: fc.array(commandArb, { maxLength: 3 }),
+  responseMappings: fc.array(mappingArb, { maxLength: 3 }),
 });
 const configArb = fc.record({
   queryTypes: uniqueBy(fc.array(typeArb, { maxLength: 3 }), (t) => t.code),
-  quickAccess: fc.array(word, { maxLength: 4 }),
+  // Unique strings are matched by value; a repeat (below and in dupConfigArb) is matched by equality.
+  quickAccess: fc.oneof(
+    uniqueBy(fc.array(word, { maxLength: 4 }), (w) => w),
+    fc.array(word, { maxLength: 4 }),
+  ),
+  commands: uniqueBy(fc.array(commandArb, { maxLength: 3 }), (c) => c.code),
+  responseMappings: fc.array(mappingArb, { maxLength: 3 }),
   terminal: fc.record({ delimiter: word }, { requiredKeys: [] }),
   defaults: fc.dictionary(word, scalar),
 });
@@ -308,6 +322,123 @@ describe("diffConfig entries", () => {
       pointer: "/queryTypes/0/rules/0/effect",
       before: "show",
       after: "hide",
+    });
+  });
+
+  describe("lists of unique strings are keyed by value", () => {
+    it("reads a reordered quick access list as moved, not as removals and additions", () => {
+      const changes = diffConfig(
+        { quickAccess: ["VEH", "PER", "GUN"] },
+        { quickAccess: ["GUN", "VEH", "PER"] },
+      );
+      expect(changes).toEqual([
+        expect.objectContaining({
+          kind: "moved",
+          path: ["quickAccess"],
+          by: VALUE_IDENTITY,
+          order: ["GUN", "VEH", "PER"],
+        }),
+      ]);
+    });
+
+    it("reads an added and a removed value by the value itself, with no in-place change", () => {
+      const changes = diffConfig({ quickAccess: ["VEH", "PER"] }, { quickAccess: ["VEH", "GUN"] });
+      expect(changes).toEqual([
+        expect.objectContaining({
+          kind: "removed",
+          path: ["quickAccess", { by: VALUE_IDENTITY, is: "PER" }],
+          before: "PER",
+        }),
+        expect.objectContaining({
+          kind: "added",
+          path: ["quickAccess", { by: VALUE_IDENTITY, is: "GUN" }],
+          after: "GUN",
+          index: 1,
+        }),
+      ]);
+    });
+
+    it("applies a move together with an addition and a removal", () => {
+      const live = { quickAccess: ["VEH", "PER", "GUN"] };
+      const draft = { quickAccess: ["GUN", "PRO", "VEH"] };
+      expect(applyChanges(live, diffConfig(live, draft))).toEqual(draft);
+    });
+
+    it("falls back to equality when a value repeats or a list mixes strings with other values", () => {
+      for (const [a, b] of [
+        [["VEH", "VEH"], ["VEH"]],
+        [["VEH", 1], ["VEH"]],
+      ] as const) {
+        const changes = diffConfig({ list: a }, { list: b });
+        expect(changes.every((c) => c.path.every((seg) => typeof seg !== "object"))).toBe(true);
+        expect(applyChanges({ list: a }, changes)).toEqual({ list: b });
+      }
+    });
+  });
+
+  it("keeps a command's positions matched by slot: their order is their meaning", () => {
+    const live = { commands: [{ code: "V", queryType: "VEH", positions: ["plate", "state"] }] };
+    const swapped = { commands: [{ code: "V", queryType: "VEH", positions: ["state", "plate"] }] };
+    const keyed = (cs: ConfigChange[]) =>
+      cs.some(
+        (c) =>
+          c.kind === "moved" ||
+          c.path.some((seg) => typeof seg === "object" && seg.by === VALUE_IDENTITY),
+      );
+    expect(keyed(diffConfig(live, swapped))).toBe(false);
+    const replaced = { commands: [{ code: "V", queryType: "VEH", positions: ["vin", "state"] }] };
+    expect(diffConfig(live, replaced)).toEqual([
+      expect.objectContaining({
+        kind: "changed",
+        path: ["commands", { by: "code", is: "V" }, "positions", 0],
+        before: "plate",
+        after: "vin",
+      }),
+    ]);
+    for (const d of [swapped, replaced]) expect(applyChanges(live, diffConfig(live, d))).toEqual(d);
+  });
+
+  describe("one identity property per list", () => {
+    const named = (seg: unknown) => typeof seg === "object" && seg !== null && "by" in seg;
+
+    it("does not name response mappings from queryType or sourceId when their ids are duplicated", () => {
+      const live = {
+        responseMappings: [
+          { id: "m", queryType: "VEH", sourceId: "s1" },
+          { id: "m", queryType: "PER", sourceId: "s2" },
+        ],
+      };
+      const draft = { responseMappings: [live.responseMappings[1]] };
+      const changes = diffConfig(live, draft);
+      expect(changes).toHaveLength(1);
+      expect(changes.flatMap((c) => c.path).some(named)).toBe(false);
+      expect(applyChanges(live, changes)).toEqual(draft);
+    });
+
+    it("does not name commands from queryType when their codes are duplicated", () => {
+      const live = {
+        commands: [
+          { code: "V", queryType: "VEH" },
+          { code: "V", queryType: "PER" },
+        ],
+      };
+      const draft = { commands: [{ code: "V", queryType: "PER" }] };
+      const changes = diffConfig(live, draft);
+      expect(changes.flatMap((c) => c.path).some(named)).toBe(false);
+      expect(applyChanges(live, changes)).toEqual(draft);
+    });
+
+    it("still names them by the first property once it is unique", () => {
+      const live = {
+        commands: [
+          { code: "V", queryType: "VEH" },
+          { code: "P", queryType: "VEH" },
+        ],
+      };
+      const draft = { commands: [{ code: "P", queryType: "VEH" }] };
+      expect(diffConfig(live, draft)).toEqual([
+        expect.objectContaining({ kind: "removed", path: ["commands", { by: "code", is: "V" }] }),
+      ]);
     });
   });
 

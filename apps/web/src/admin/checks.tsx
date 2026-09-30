@@ -21,6 +21,13 @@ export interface DraftChecks {
   /** The settled (debounced) draft the issues were computed on; the preview renders this one. */
   doc: JsonObject | null;
   labels: ReturnType<typeof useDraft>["labels"];
+  /** The shipped strings the checks ran against: English, and each other draft locale's (empty when it ships none). Null until loaded. */
+  shipped: ShippedBundles | null;
+}
+
+export interface ShippedBundles {
+  en: Readonly<Record<string, string>>;
+  perLocale: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
 const NO_CHECKS: DraftChecks = {
@@ -30,6 +37,7 @@ const NO_CHECKS: DraftChecks = {
   byPointer: new Map(),
   doc: null,
   labels: {},
+  shipped: null,
 };
 export const ChecksContext = createContext<DraftChecks>(NO_CHECKS);
 const CHECK_DEBOUNCE_MS = 150;
@@ -64,7 +72,8 @@ export function useDraftChecks(
     const byPointer = new Map<string, DraftIssue[]>();
     for (const i of issues) byPointer.set(i.pointer, [...(byPointer.get(i.pointer) ?? []), i]);
     const groups = groupByControl(settledDoc, issues);
-    return { status: "ready", issues, groups, byPointer, ...settled };
+    const shipped = { en: bundleState.bundle, perLocale: bundleState.perLocale };
+    return { status: "ready", issues, groups, byPointer, shipped, ...settled };
   }, [bundleState, settledDoc, settledLabels]);
 }
 

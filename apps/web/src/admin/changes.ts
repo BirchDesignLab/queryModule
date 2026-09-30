@@ -1,5 +1,5 @@
 import type { Translator } from "@querymodule/client";
-import type { ConfigChange, DiffSegment } from "@querymodule/core/config";
+import { type ConfigChange, type DiffSegment, VALUE_IDENTITY } from "@querymodule/core/config";
 import type { JsonObject } from "./draft.js";
 import { defaultPointer, HIDDEN_KEYS, LABELS_ITEM } from "./selection.js";
 
@@ -91,7 +91,9 @@ function walk(doc: unknown, path: readonly DiffSegment[]): unknown {
   let node = doc;
   for (const seg of path) {
     if (typeof seg === "object") {
-      node = Array.isArray(node) ? node.find((i) => isObj(i) && i[seg.by] === seg.is) : undefined;
+      node = Array.isArray(node)
+        ? node.find((i) => (seg.by === VALUE_IDENTITY ? i : isObj(i) && i[seg.by]) === seg.is)
+        : undefined;
     } else if (typeof node === "object" && node !== null && Object.hasOwn(node, seg)) {
       node = (node as Record<string | number, unknown>)[seg];
     } else {
