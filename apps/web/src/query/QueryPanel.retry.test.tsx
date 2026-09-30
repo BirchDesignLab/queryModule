@@ -114,20 +114,46 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     expect(row?.submitted?.sourceIds.length).toBeGreaterThan(0);
   });
 
-  it("no Retry on a row the server refused for its values (400) or its user (403)", async () => {
-    server.use(
-      http.post(`${API}/api/v1/queries`, () =>
+  it.each([
+    [
+      "values refused (400)",
+      () =>
         HttpResponse.json(
           { error: { code: "VALIDATION", message: "no", errors: [] } },
           { status: 400 },
         ),
-      ),
-    );
+    ],
+    ["user refused (403)", () => new HttpResponse(null, { status: 403 })],
+    ["config changed (409)", () => new HttpResponse(null, { status: 409 })],
+  ])("no Retry on a row the same values cannot fix: %s", async (_name, answer) => {
+    server.use(http.post(`${API}/api/v1/queries`, answer));
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const row = await screen.findByRole("listitem");
     await waitFor(() => expect(row).toHaveTextContent("Failed"));
     expect(within(row).queryByRole("button", { name: /^Retry/ })).toBeNull();
+  });
+
+  it("a retry the server answers 409 is not announced by the list: the panel speaks for a config change", async () => {
+    const answers = { status: 503 };
+    server.use(
+      http.post(`${API}/api/v1/queries`, () => new HttpResponse(null, { status: answers.status })),
+    );
+    const { user, services } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const retry = await screen.findByRole("button", { name: /^Retry/ });
+    const announce = vi.spyOn(services.announcer, "announce");
+    answers.status = 409;
+    await user.click(retry);
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(2));
+    const newest = within(region).getAllByRole("listitem")[0] as HTMLElement;
+    await waitFor(() => expect(newest).toHaveTextContent("Failed"));
+    expect(
+      announce.mock.calls.filter(([text]) => /site configuration changed/.test(String(text))),
+    ).toHaveLength(0);
+    // A config change: the same values cannot help, so the new row offers nothing to retry.
+    expect(within(newest).queryByRole("button", { name: /^Retry/ })).toBeNull();
   });
 
   it("while the connection is down a Retry sends nothing and says so through the shared region", async () => {
@@ -159,16 +185,32 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: /^Retry/ })).toBeNull());
   });
 
-  it("a Retry that lands after a reset adds no row", async () => {
+  it("a Retry that lands after a reset adds no row and announces nothing", async () => {
     const answers = flaky();
     const { user, services } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const retry = await screen.findByRole("button", { name: /^Retry/ });
+    // Hold the second answer until after the reset.
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`${API}/api/v1/queries`, async () => {
+        await gate;
+        return HttpResponse.json(ACK_202, { status: 202 });
+      }),
+    );
     answers.failing = false;
+    const announce = vi.spyOn(services.announcer, "announce");
     await user.click(retry);
+    await waitFor(() => expect(services.submit.getState().status).toBe("submitting"));
     services.reset.resetAll();
+    announce.mockClear();
+    release();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(services.requests.getState().items).toEqual([]);
+    expect(announce).not.toHaveBeenCalled();
   });
 });
 

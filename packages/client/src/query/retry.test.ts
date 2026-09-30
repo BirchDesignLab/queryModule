@@ -1,8 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
+import { createApiClient } from "../api/create-api-client.js";
+import { createFakePlatform } from "../testing/fake-platform.js";
 import { createRequestsStore } from "./requests.js";
 import { isRetryable, retryRequest } from "./retry.js";
-import type { SubmitController, SubmitOutcome, SubmitRequest, SubmitState } from "./submit.js";
+import {
+  createSubmitController,
+  type SubmitController,
+  type SubmitOutcome,
+  type SubmitRequest,
+  type SubmitState,
+} from "./submit.js";
 
 const SUBMITTED = {
   queryType: "VEH",
@@ -14,6 +25,12 @@ const ACK: SubmitOutcome = {
   kind: "acknowledged",
   queryType: "VEH",
   response: { correlationId: "c-2", acknowledgedAt: 2, parts: [] },
+};
+
+const ACK_BODY = {
+  correlationId: "c-9",
+  acknowledgedAt: 9,
+  parts: [{ partId: 0, queryType: "VEH", status: "dispatched", sourceIds: ["state"] }],
 };
 
 function fakeSubmit(status: SubmitState["status"], outcome: SubmitOutcome = ACK) {
@@ -42,7 +59,7 @@ describe("isRetryable: a failed row whose values were kept, except where the sam
     ["unavailable", true],
     ["failed", true],
     ["rateLimited", true],
-    ["configChanged", true],
+    ["configChanged", false],
     ["invalid", false],
     ["forbidden", false],
   ] as const)("%s -> %s", (failure, expected) => {
@@ -76,12 +93,12 @@ describe("isRetryable: a failed row whose values were kept, except where the sam
   });
 });
 
-describe("retryRequest: the stored values go as a NEW request and add a new row", () => {
-  it("submits the stored values under a fresh key with the current config hash, keeps the failed row, settles the new one", async () => {
+describe("retryRequest: the stored values go as a new attempt and add a new row", () => {
+  it("submits the stored values under the current config hash, keeps the failed row, settles the new one", async () => {
     const { requests, id } = failedRow();
     const { store, submit } = fakeSubmit("idle");
     const result = await retryRequest({ requests, submit: store }, id, "h-now");
-    expect(submit).toHaveBeenCalledWith({ ...SUBMITTED, configHash: "h-now", freshKey: true });
+    expect(submit).toHaveBeenCalledWith({ ...SUBMITTED, configHash: "h-now" });
     expect(result).toEqual({ kind: "sent", outcome: ACK, rowId: expect.any(String) });
     const items = requests.getState().items;
     expect(items).toHaveLength(2);
@@ -143,5 +160,85 @@ describe("retryRequest: the stored values go as a NEW request and add a new row"
       kind: "unavailable",
     });
     expect(submit).not.toHaveBeenCalled();
+  });
+});
+
+describe("retryRequest with the real submit controller: the Idempotency-Key rule (spec 6.7)", () => {
+  const BASE = "http://api.test";
+  const server = setupServer();
+  beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+  afterEach(() => {
+    server.resetHandlers();
+    vi.useRealTimers();
+  });
+  afterAll(() => server.close());
+
+  function realSubmit() {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const platform = createFakePlatform();
+    const api = createApiClient({ baseUrl: BASE, platform, onUnauthenticated: () => undefined });
+    let n = 0;
+    return createSubmitController({
+      api,
+      queryClient: new QueryClient(),
+      online: platform.online,
+      newKey: () => `key-${++n}`,
+      random: () => 0,
+    });
+  }
+
+  function keysSeen(answer: () => Response): (string | null)[] {
+    const keys: (string | null)[] = [];
+    server.use(
+      http.post(`${BASE}/api/v1/queries`, ({ request }) => {
+        keys.push(request.headers.get("idempotency-key"));
+        return answer();
+      }),
+    );
+    return keys;
+  }
+
+  it("a request that got no answer is retried under the same key (the server may have it), as a new row", async () => {
+    let up = false;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () =>
+        up ? HttpResponse.json({ ok: true }) : HttpResponse.error(),
+      ),
+    );
+    const keys = keysSeen(() =>
+      up ? HttpResponse.json(ACK_BODY, { status: 202 }) : HttpResponse.error(),
+    );
+    const submit = realSubmit();
+    const requests = createRequestsStore();
+    const id = requests.getState().begin({ queryType: "VEH", summary: "s", submitted: SUBMITTED });
+    requests
+      .getState()
+      .settle(id, await submit.getState().submit({ ...SUBMITTED, configHash: "h" }));
+    expect(requests.getState().items[0]).toMatchObject({ status: "failed", failure: "noResponse" });
+    expect(submit.getState().status).toBe("noConnection");
+    // Down: the retry is gated and sends nothing.
+    expect(await retryRequest({ requests, submit }, id, "h")).toEqual({
+      kind: "gated",
+      status: "noConnection",
+    });
+    up = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(submit.getState().status).toBe("idle");
+    const result = await retryRequest({ requests, submit }, id, "h");
+    expect(result.kind).toBe("sent");
+    expect(keys).toEqual(["key-1", "key-1"]);
+    expect(requests.getState().items.map((r) => r.status)).toEqual(["acknowledged", "failed"]);
+  });
+
+  it("a request the server answered (503) is retried under a new key", async () => {
+    const keys = keysSeen(() => new HttpResponse(null, { status: 503 }));
+    const submit = realSubmit();
+    const requests = createRequestsStore();
+    const id = requests.getState().begin({ queryType: "VEH", summary: "s", submitted: SUBMITTED });
+    requests
+      .getState()
+      .settle(id, await submit.getState().submit({ ...SUBMITTED, configHash: "h" }));
+    await retryRequest({ requests, submit }, id, "h");
+    expect(keys).toEqual(["key-1", "key-2"]);
   });
 });

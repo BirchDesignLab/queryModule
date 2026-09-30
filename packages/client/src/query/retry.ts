@@ -4,8 +4,13 @@ import type { SubmitController, SubmitOutcome } from "./submit.js";
 /** A failed row whose values were kept, and whose failure the same values could get past. */
 export function isRetryable(entry: RequestEntry): boolean {
   if (entry.status !== "failed" || entry.submitted === undefined) return false;
-  // The server refused these values or this user: sending them again cannot change that.
-  return entry.failure !== "invalid" && entry.failure !== "forbidden";
+  // The server refused these values or this user, or the form itself changed under the request
+  // ("check the form and submit again"): sending the same values again cannot help.
+  return (
+    entry.failure !== "invalid" &&
+    entry.failure !== "forbidden" &&
+    entry.failure !== "configChanged"
+  );
 }
 
 export type RetryResult =
@@ -16,9 +21,12 @@ export type RetryResult =
   | { kind: "unavailable" };
 
 /**
- * Sends a failed row's stored values again as a NEW request: a fresh Idempotency-Key and a new
- * row, under the current config hash. The failed row stays. Memory only; nothing is announced or
- * focused here (the caller speaks through the shared announcer).
+ * Sends a failed row's stored values again as a new attempt and adds a new row, under the current
+ * config hash. The failed row stays. The submit controller keeps the Idempotency-Key rule (spec
+ * 6.7): a request that got no answer is retried under its own key, so a server that did receive it
+ * answers with the original acknowledgment rather than running the query twice; any answered
+ * failure got a new key already. Memory only; nothing is announced or focused here (the caller
+ * speaks through the shared announcer).
  */
 export async function retryRequest(
   deps: { requests: RequestsStore; submit: SubmitController },
@@ -33,9 +41,7 @@ export async function retryRequest(
   const newRow = deps.requests
     .getState()
     .begin({ queryType: entry.queryType, summary: entry.summary, submitted: entry.submitted });
-  const outcome = await deps.submit
-    .getState()
-    .submit({ ...entry.submitted, configHash, freshKey: true });
+  const outcome = await deps.submit.getState().submit({ ...entry.submitted, configHash });
   // The list outlives the panel, so the row settles even if the panel has unmounted.
   deps.requests.getState().settle(newRow, outcome);
   return { kind: "sent", outcome, rowId: newRow };

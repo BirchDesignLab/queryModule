@@ -903,7 +903,7 @@ test.describe("parity: dispatcher and sign-in surfaces, type and states (1440x90
         await expect(page.getByLabel("Plate", { exact: true })).toHaveClass(
           /qm-field__input--data/,
         );
-        // Quick access stays inside the card (it may wrap; the B3 block keeps the card at 640 px).
+        // Quick access stays inside the card (it fits one row; the B3 block keeps the card at 682 px).
         const inside = await page.evaluate(() => {
           const card = (
             document.querySelector(".qm-panes__panel") as Element

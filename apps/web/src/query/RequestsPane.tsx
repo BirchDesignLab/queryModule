@@ -90,7 +90,9 @@ export function RequestsPane({ config, variant }: RequestsPaneProps) {
             announcer.announce(
               t(result.status === "submitting" ? "form.submitting" : "form.noConnection"),
             );
-          else if (result.kind === "sent")
+          // A 409 makes the controller refetch the config, and the panel announces that change
+          // itself: a second sentence here would cut it off in the shared region.
+          else if (result.kind === "sent" && result.outcome.kind !== "configChanged")
             announcer.announce(outcomeAnnouncement(result.outcome, t, typeLabel));
         });
       }}

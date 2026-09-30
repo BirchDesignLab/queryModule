@@ -147,22 +147,6 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(seen.map((s) => s.headers.get("Idempotency-Key"))).toEqual(["key-1", "key-1", "key-2"]);
   });
 
-  it("freshKey sends an identical body under a new key, as a retry that is a new request", async () => {
-    server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.error()));
-    const seen = serveQueries(() => HttpResponse.error());
-    const { controller } = setup();
-    await controller.getState().submit(REQ);
-    await controller.getState().submit({ ...REQ, freshKey: true });
-    // The plain resubmit of the same body still reuses the kept key (the idempotent retry).
-    await controller.getState().submit({ ...REQ });
-    expect(seen.map((s) => s.headers.get("Idempotency-Key"))).toEqual(["key-1", "key-2", "key-2"]);
-    expect(seen.map((s) => (s.body as { freshKey?: unknown }).freshKey)).toEqual([
-      undefined,
-      undefined,
-      undefined,
-    ]);
-  });
-
   it("any response discards the kept key", async () => {
     let fail = true;
     const seen = serveQueries(() =>

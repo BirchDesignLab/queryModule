@@ -18,11 +18,6 @@ export interface SubmitRequest {
   sourceIds: readonly string[];
   mode: FormMode;
   configHash: string;
-  /**
-   * Send under a new Idempotency-Key even when the body matches a kept one: a user's retry is a new
-   * request, not the idempotent resend of one that may have reached the server.
-   */
-  freshKey?: boolean;
 }
 
 export type SubmitOutcome =
@@ -190,8 +185,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
     const run = async (req: SubmitRequest, gen: number): Promise<SubmitOutcome> => {
       const body = buildSubmitBody(req);
       const fingerprint = bodyFingerprint(body);
-      const key =
-        req.freshKey !== true && keptKey?.fingerprint === fingerprint ? keptKey.key : newKey();
+      const key = keptKey?.fingerprint === fingerprint ? keptKey.key : newKey();
       keptKey = { key, fingerprint };
       let result: Awaited<ReturnType<ApiClient["POST"]>>;
       try {
