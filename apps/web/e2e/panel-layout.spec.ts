@@ -165,7 +165,9 @@ test.describe("signed-in top bar (spec 6.2, 6.5)", () => {
       await chooseTheme(page, mode);
       await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
       const header = page.getByRole("banner");
-      const product = header.getByText("Query Module 2.0");
+      // The product block: the mark and the name beside it.
+      const product = header.locator(".qm-app-header__product");
+      await expect(product).toHaveText("Query Module 2.0");
       const status = header.getByRole("link", { name: "Status" });
       const account = header.locator(".qm-account__button");
       const [h, p, s, o] = await Promise.all(

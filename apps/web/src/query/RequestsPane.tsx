@@ -63,6 +63,12 @@ export function RequestsPane({ config, variant }: RequestsPaneProps) {
     <RequestList
       rows={shown.map(rowOf)}
       heading={t(variant === "last" ? "requests.lastHeading" : "requests.heading")}
+      // The officer sees one row; the dispatcher's list counts its rows once there are any.
+      countText={
+        variant === "list" && items.length > 0
+          ? t("requests.count", { count: items.length })
+          : undefined
+      }
       emptyText={t(variant === "last" ? "requests.emptyLast" : "requests.empty")}
       onCopy={(reference) => {
         // A failed copy (no permission, no clipboard) stays silent: the reference is on screen.

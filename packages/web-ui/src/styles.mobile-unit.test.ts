@@ -105,3 +105,19 @@ describe("B3 requests list: two panes on dispatch, a quiet last-request card for
     expect(rows).not.toMatch(/\d+px/);
   });
 });
+
+describe("B4 officer tiles: cleanup (#416 critic)", () => {
+  it("a tile that is not pressed lifts on hover; the tile rule no longer masks the base hover", () => {
+    const hover = rulesFor(".qm-layout--mobile-unit .qm-quick-access__button:hover");
+    expect(hover).toMatch(/background:\s*var\(--qm-color-surface-raised\)/);
+    expect(css).toMatch(
+      /\.qm-layout--mobile-unit\s+\.qm-quick-access__button:hover:not\(\[aria-pressed="true"\]\)/,
+    );
+  });
+
+  it("the touch layout's hidden keyboard hint carries no dead colour or size", () => {
+    const hint = rulesFor(".qm-layout--mobile-unit .qm-quick-access__hint");
+    expect(hint).toMatch(/display:\s*none/);
+    expect(hint).not.toMatch(/color:|font-size:/);
+  });
+});

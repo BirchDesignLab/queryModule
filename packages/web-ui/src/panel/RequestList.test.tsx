@@ -120,6 +120,19 @@ describe("spec 6.7 requests list (B3)", () => {
     expect(screen.getAllByRole("listitem")[0]).toBe(before);
   });
 
+  it("shows the count beside the heading, outside the heading's name, and none without it", () => {
+    const { rerender } = render(
+      <RequestList {...base} rows={[SENDING, ACKED]} countText="2 requests" />,
+    );
+    const section = screen.getByRole("region", { name: "Requests this shift" });
+    const heading = within(section).getByRole("heading", { name: "Requests this shift" });
+    const count = within(section).getByText("2 requests");
+    expect(heading).not.toContainElement(count);
+    expect(count.closest("[aria-live], [role=status]")).toBeNull();
+    rerender(<RequestList {...base} rows={[SENDING, ACKED]} />);
+    expect(screen.queryByText("2 requests")).toBeNull();
+  });
+
   it("gives each list its own heading id", () => {
     render(
       <>

@@ -104,6 +104,19 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     const rows = screen.getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("Person");
     expect(rows[1]).toHaveTextContent("Vehicle");
+    // The count sits beside the heading (design target), not in the region's name.
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    expect(region).toHaveTextContent("2 requests");
+  });
+
+  it("the dispatcher list shows no count before the first request; one request is singular", async () => {
+    const { user } = await openPanel();
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    expect(region).not.toHaveTextContent(/\d+ requests?\b/);
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    await screen.findByText("Acknowledged");
+    expect(region).toHaveTextContent("1 request");
+    expect(region).not.toHaveTextContent("1 requests");
   });
 
   it("a failed run is a Failed row with its reason, announced once by the existing message", async () => {
@@ -251,5 +264,7 @@ describe("B3 officer last request (spec 6.3)", () => {
     expect(
       within(region).getByRole("button", { name: /^Copy reference \S+ for VEH\.ZZ-0001/ }),
     ).toBeVisible();
+    // One row only: the officer's pane has no count.
+    expect(region).not.toHaveTextContent(/\d+ requests?\b/);
   });
 });

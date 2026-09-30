@@ -21,4 +21,15 @@ describe("UX-002 compact top bar in the mobile-unit layout (spec 6.3 v1 subset)"
     expect(rule).toMatch(/min-height:\s*var\(--qm-target-min\)/);
     expect(rule).toMatch(/min-width:\s*var\(--qm-target-min\)/);
   });
+
+  it("the officer bar hides the product name the visually-hidden way, never by zero font size", () => {
+    expect(css).not.toMatch(/font-size:\s*0\s*;/);
+    const rule =
+      css.match(/\.qm-app-header--compact\s+\.qm-app-header__name\s*[,{][^{]*\{([^}]*)\}/)?.[1] ??
+      "";
+    expect(rule).toMatch(/position:\s*absolute/);
+    expect(rule).toMatch(/clip-path:\s*inset\(50%\)/);
+    expect(rule).toMatch(/overflow:\s*hidden/);
+    expect(rule).toMatch(/white-space:\s*nowrap/);
+  });
 });

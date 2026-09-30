@@ -21,9 +21,10 @@ import {
 } from "@querymodule/web-ui";
 import { useEffect, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
+import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
-import { formToTerminal, useTerminal } from "./use-terminal.js";
+import { useTerminal } from "./use-terminal.js";
 
 const QUICK_TYPE_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 

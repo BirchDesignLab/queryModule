@@ -102,6 +102,8 @@
   "submit.partNotRun": "{queryType} was not run.",
   "requests.heading": "Requests this shift",
   "requests.lastHeading": "Last request",
+  "requests.count.one": "{count} request",
+  "requests.count.other": "{count} requests",
   "requests.empty": "No requests yet this shift. Run a query and its acknowledgment appears here.",
   "requests.emptyLast": "Nothing sent yet.",
   "requests.status.sending": "Sending",

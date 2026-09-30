@@ -92,7 +92,6 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     const { controller } = setup();
     const out = await controller.getState().submit(REQ);
     expect(out).toEqual({ kind: "acknowledged", response: ACK, queryType: "VEH" });
-    expect(controller.getState().lastAck).toEqual({ response: ACK, queryType: "VEH" });
     expect(controller.getState().status).toBe("idle");
     expect(seen[0]?.headers.get("Idempotency-Key")).toBe("key-1");
     expect(seen[0]?.headers.get("X-Requested-With")).toBe("querymodule");
@@ -266,7 +265,40 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(seen).toHaveLength(1);
   });
 
-  it("reset clears lastAck, the kept key and the health timer", async () => {
+  it("B3 once the status is idle again a new submit starts its own request, never joins the settled one", async () => {
+    const seen = serveQueries(() => HttpResponse.json(ACK, { status: 202 }));
+    const { controller } = setup();
+    let second: Promise<unknown> | null = null;
+    const first = controller.getState().submit(REQ);
+    // Called in the same tick the status turns idle, before the settled promise's handlers run.
+    const unsubscribe = controller.subscribe((s) => {
+      if (s.status === "idle" && second === null) second = s.submit({ ...REQ, configHash: "h2" });
+    });
+    await first;
+    unsubscribe();
+    expect(second).not.toBe(first);
+    await second;
+    expect(seen).toHaveLength(2);
+  });
+
+  it("B3 a submit made as the status turns noConnection starts its own request", async () => {
+    const seen = serveQueries(() => HttpResponse.error());
+    server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.error()));
+    const { controller } = setup();
+    let second: Promise<unknown> | null = null;
+    const first = controller.getState().submit(REQ);
+    const unsubscribe = controller.subscribe((s) => {
+      if (s.status === "noConnection" && second === null)
+        second = s.submit({ ...REQ, configHash: "h2" });
+    });
+    await first;
+    unsubscribe();
+    expect(second).not.toBe(first);
+    await second;
+    expect(seen).toHaveLength(2);
+  });
+
+  it("reset clears the kept key and the health timer", async () => {
     const seen = serveQueries(() => HttpResponse.error());
     let health = 0;
     server.use(
@@ -279,14 +311,13 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     await controller.getState().submit(REQ);
     controller.getState().reset();
     expect(controller.getState().status).toBe("idle");
-    expect(controller.getState().lastAck).toBeNull();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(health).toBe(0);
     await controller.getState().submit(REQ);
     expect(seen.map((s) => s.headers.get("Idempotency-Key"))).toEqual(["key-1", "key-2"]);
   });
 
-  it("a response arriving after reset does not set lastAck", async () => {
+  it("a response arriving after reset is not an acknowledgment and leaves the controller idle", async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => {
       release = r;
@@ -299,8 +330,7 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     const p = controller.getState().submit(REQ);
     controller.getState().reset();
     release();
-    await p;
-    expect(controller.getState().lastAck).toBeNull();
+    expect((await p).kind).toBe("failed");
     expect(controller.getState().status).toBe("idle");
   });
 
@@ -349,7 +379,6 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
       serveQueries(() => HttpResponse.json(body, { status: 202 }));
       const { controller } = setup();
       expect(await controller.getState().submit(REQ)).toEqual({ kind: "failed" });
-      expect(controller.getState().lastAck).toBeNull();
       server.resetHandlers();
     }
   });

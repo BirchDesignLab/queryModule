@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLIENT_CONFIG } from "../test/msw-server.js";
-import { formToTerminal, terminalToForm } from "./use-terminal.js";
+import { formToTerminal } from "./form-to-terminal.js";
+import { terminalToForm } from "./use-terminal.js";
 
 const NOW = Date.UTC(2026, 8, 29);
 

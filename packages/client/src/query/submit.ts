@@ -32,7 +32,6 @@ export type SubmitOutcome =
 
 export interface SubmitState {
   status: "idle" | "submitting" | "noConnection";
-  lastAck: { response: SubmitQueryResponse; queryType: string } | null;
   /** Ignored (returns the in-flight promise) while submitting. */
   submit(req: SubmitRequest): Promise<SubmitOutcome>;
   reset(): void;
@@ -196,6 +195,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
         });
       } catch {
         if (gen !== generation) return { kind: "noResponse" };
+        inFlight = null;
         enterNoConnection();
         return { kind: "noResponse" };
       }
@@ -225,18 +225,15 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
         outcome = { kind: "failed" };
       }
       settled(outcome);
-      set({
-        status: "idle",
-        ...(outcome.kind === "acknowledged"
-          ? { lastAck: { response: outcome.response, queryType: outcome.queryType } }
-          : {}),
-      });
+      // Cleared in the same tick the status leaves "submitting": a submit that sees the new status
+      // starts its own request instead of joining this settled one (B3: one list row per request).
+      inFlight = null;
+      set({ status: "idle" });
       return outcome;
     };
 
     return {
       status: "idle",
-      lastAck: null,
       submit(req) {
         if (inFlight !== null) return inFlight;
         const gen = generation;
@@ -252,7 +249,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
         keptKey = null;
         inFlight = null;
         stopPolling();
-        set({ status: "idle", lastAck: null });
+        set({ status: "idle" });
         // The platform signal outlives a reset (sign-out, user change): still offline stays gated.
         if (!disposed && options.online?.current() === false) goOffline();
       },

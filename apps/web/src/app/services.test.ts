@@ -87,16 +87,9 @@ describe("FR-056, SEC-006 draft store (spec 6.7)", () => {
 describe("FR-064, SEC-006 submit controller (spec 6.7)", () => {
   it("resetAll resets the submit controller", () => {
     const services = testServices();
-    services.submit.setState({
-      status: "noConnection",
-      lastAck: {
-        response: { correlationId: "c-1", acknowledgedAt: 1, parts: [] },
-        queryType: "VEH",
-      },
-    });
+    services.submit.setState({ status: "noConnection" });
     services.reset.resetAll();
     expect(services.submit.getState().status).toBe("idle");
-    expect(services.submit.getState().lastAck).toBeNull();
   });
 });
 
