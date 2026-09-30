@@ -17,7 +17,13 @@ export interface QueryFormProps {
   values: Readonly<Record<string, DraftValue>>;
   fieldConfig: ReadonlyMap<
     string,
-    { inputFormats?: readonly string[]; numberKind?: "integer" | "decimal"; maxLength?: number }
+    {
+      inputFormats?: readonly string[];
+      numberKind?: "integer" | "decimal";
+      maxLength?: number;
+      /** Read-back data: the field's text input is set in the monospace face. */
+      data?: boolean;
+    }
   >;
   /** True after a blocked submit. */
   showErrors: boolean;
@@ -30,6 +36,8 @@ export interface QueryFormProps {
   excludeKeys?: ReadonlySet<string>;
   /** Source checkboxes and the submit button. */
   children?: ReactNode;
+  /** Fields a rule revealed: a static, aria-hidden Shown tag and a one-time flash on their cell. */
+  revealed?: ReadonlySet<string>;
 }
 
 /** Errors per field, first one wins: missingRequired first, then errors by params.field (spec 6.2 blocked submit). */
@@ -208,6 +216,7 @@ export function QueryForm({
   idPrefix,
   excludeKeys,
   children,
+  revealed,
 }: QueryFormProps): JSX.Element {
   const errors = showErrors ? fieldErrors(formState) : new Map<string, ValidationError>();
   const sections = renderedSections(formState, excludeKeys);
@@ -258,11 +267,20 @@ export function QueryForm({
               {fields.map((field) => {
                 const error = errors.get(field.key);
                 const cfg = fieldConfig.get(field.key);
+                const shown = revealed?.has(field.key) === true;
+                const span = `qm-form-cell qm-span-${fieldSpan(field.dataType, cfg?.maxLength)}`;
                 return (
                   <div
                     key={field.key}
-                    className={`qm-form-cell qm-span-${fieldSpan(field.dataType, cfg?.maxLength)}`}
+                    className={shown ? `${span} qm-form-cell--revealed` : span}
+                    data-field-key={field.key}
                   >
+                    {/* The polite announcement is the spoken signal; the tag is for the eye only. */}
+                    {shown ? (
+                      <span className="qm-tag qm-tag--shown" aria-hidden="true">
+                        {t("form.tag.shown")}
+                      </span>
+                    ) : null}
                     <FieldRenderer
                       field={field}
                       userValue={values[field.key] ?? null}
@@ -276,6 +294,7 @@ export function QueryForm({
                       idPrefix={idPrefix}
                       inputFormats={cfg?.inputFormats}
                       numberKind={cfg?.numberKind}
+                      data={cfg?.data}
                     />
                   </div>
                 );

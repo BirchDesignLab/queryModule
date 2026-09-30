@@ -22,6 +22,8 @@ export interface FieldRendererProps {
   numberKind?: "integer" | "decimal";
   /** Picklists: "seg" draws a short list as a segmented control (the subtype bar); default is a select. */
   presentation?: "seg";
+  /** Read-back data (a code-like string, a year or a date): the text input uses the monospace face. */
+  data?: boolean;
 }
 
 /** Generic renderer: dataType picks the control; no per-query-type code (BR-001). */
@@ -35,6 +37,7 @@ export function FieldRenderer({
   inputFormats,
   numberKind,
   presentation,
+  data,
 }: FieldRendererProps): JSX.Element {
   const id = `${idPrefix}-${field.key}`;
   const label = t(field.labelKey);
@@ -90,6 +93,7 @@ export function FieldRenderer({
       type="text"
       inputMode={inputMode}
       description={description}
+      data={data}
       value={shown === null ? "" : String(shown)}
       onChange={(value) => onChange(field.key, value)}
     />

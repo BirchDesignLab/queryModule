@@ -83,7 +83,8 @@ h1 {
 }
 
 /* Read-back data (plates, VINs, commands) is monospace so 0/O and 1/I differ. */
-[data-terminal] .qm-field__input {
+[data-terminal] .qm-field__input,
+.qm-field__input--data {
   font-family: var(--qm-type-family-data);
 }
 
@@ -481,9 +482,12 @@ h1 {
   cursor: pointer;
 }
 
-.qm-quick-access__button:hover {
-  background: var(--qm-color-surface-raised);
-  color: var(--qm-color-text-body);
+/* Hover lifts only where a pointer can hover: a touch tap leaves no sticky hover behind. */
+@media (hover: hover) {
+  .qm-quick-access__button:hover {
+    background: var(--qm-color-surface-raised);
+    color: var(--qm-color-text-body);
+  }
 }
 
 .qm-quick-access__button[aria-pressed="true"] {
@@ -676,6 +680,37 @@ h1 {
   font-weight: 600;
 }
 
+/* Dispatcher (design target): the query panel is one surface.base card on the sunken page, the
+   requests beside it are cards of their own. Headings use a shipped weight (no Bold face ships).
+   Inside the card the sections lose their boxes (one card, not boxes in a box); a later section
+   ("More details") opens under a subtle rule. */
+.qm-query-panel h1,
+.qm-query-panel h2 {
+  font-weight: 600;
+}
+
+.qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes__panel {
+  padding: var(--qm-space-4) var(--qm-space-5) 0;
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-query-panel .qm-query-form__section {
+  padding-inline: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.qm-query-panel .qm-query-form__section legend {
+  padding-inline: 0;
+}
+
+.qm-query-panel .qm-query-form__section--disclosure {
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
 /* Mobile-unit layout, the officer on a vehicle laptop (spec 6.3, v1 subset pulled forward from
    M4 P1): single column, quick access first, 16 px text, 56 px controls and 48x48 targets. The
    persona selects the layout only (spec 6.1). Nothing the officer reads is muted or small. */
@@ -787,8 +822,10 @@ h1 {
 }
 
 /* The tile rule sets its own surface, so it restates the hover lift (the pressed tile keeps its fill). */
-.qm-layout--mobile-unit .qm-quick-access__button:hover:not([aria-pressed="true"]) {
-  background: var(--qm-color-surface-raised);
+@media (hover: hover) {
+  .qm-layout--mobile-unit .qm-quick-access__button:hover:not([aria-pressed="true"]) {
+    background: var(--qm-color-surface-raised);
+  }
 }
 
 .qm-layout--mobile-unit .qm-quick-access__button[aria-pressed="true"] {
@@ -854,8 +891,45 @@ h1 {
 }
 
 .qm-form-cell {
+  position: relative;
   grid-column: span 12;
   min-inline-size: 0;
+}
+
+/* A field a rule revealed: a static Shown tag beside its label (aria-hidden; the polite
+   announcement is the spoken signal) and one accent.subtle flash, dropped under reduced motion. */
+.qm-tag--shown {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  border-style: solid;
+  border-color: var(--qm-color-accent);
+  border-radius: var(--qm-radius-sm);
+  color: var(--qm-color-accent);
+  font-family: var(--qm-type-family-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.qm-form-cell--revealed {
+  border-radius: var(--qm-radius-control);
+  animation: qm-reveal calc(var(--qm-motion-duration-normal) * 4) ease-out 1;
+}
+
+@keyframes qm-reveal {
+  from {
+    background: var(--qm-color-accent-subtle);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-form-cell--revealed {
+    animation: none;
+  }
 }
 
 .qm-form-cell > .qm-field {

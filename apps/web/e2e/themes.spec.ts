@@ -11,8 +11,9 @@ test.describe("UX-002 three theme modes render (spec 6.5)", () => {
       await page.getByLabel("Theme").selectOption(mode);
       await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
       const { surface, background } = await page.evaluate(() => ({
+        // The sign-in page sits on the sunken app background (parity pass, visual system tokens).
         surface: getComputedStyle(document.documentElement).getPropertyValue(
-          "--qm-color-surface-base",
+          "--qm-color-surface-sunken",
         ),
         background: getComputedStyle(document.body).backgroundColor,
       }));

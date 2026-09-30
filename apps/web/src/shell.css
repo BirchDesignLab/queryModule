@@ -66,6 +66,13 @@ body {
   line-height: var(--qm-type-body-lineHeight);
 }
 
+/* The query and sign-in pages sit on the sunken app background (visual system tokens); panels and
+   the header are surface.base on it. Scoped to these pages: admin adopts it in its own pass. */
+body:has(.qm-query-panel),
+body:has(.qm-login) {
+  background: var(--qm-color-surface-sunken);
+}
+
 .qm-shell__header {
   padding: var(--qm-space-4);
   background: var(--qm-color-surface-raised);
@@ -444,6 +451,7 @@ main[tabindex="-1"]:focus {
 .qm-login__product {
   margin: 0 0 var(--qm-space-2);
   font-size: var(--qm-type-heading-size);
+  font-weight: 600;
   text-align: center;
 }
 

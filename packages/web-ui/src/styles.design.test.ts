@@ -186,3 +186,53 @@ describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)"
     expect(body).not.toMatch(/border:/);
   });
 });
+
+describe("parity pass, query surfaces (visual system: surfaces, type, controls and states)", () => {
+  it("G1 the dispatcher panel is a surface.base card on the sunken page", () => {
+    const panel = decls(".qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes__panel");
+    expect(panel).toMatch(/background:\s*var\(--qm-color-surface-base\)/);
+    expect(panel).toMatch(
+      /border:\s*var\(--qm-border-width\) solid var\(--qm-color-border-subtle\)/,
+    );
+    expect(panel).toMatch(/border-radius:\s*var\(--qm-radius-panel\)/);
+  });
+
+  it("G3 headings on the query panel use a shipped weight (600): no Bold face ships", () => {
+    expect(decls(".qm-query-panel h1")).toMatch(/font-weight:\s*600/);
+  });
+
+  it("G4 sections inside the dispatcher card lose their own box; later ones get a top rule", () => {
+    const section = decls(".qm-query-panel .qm-query-form__section");
+    expect(section).toMatch(/border:\s*0/);
+    expect(section).toMatch(/padding-inline:\s*0/);
+    expect(decls(".qm-query-panel .qm-query-form__section--disclosure")).toMatch(
+      /border-block-start:\s*var\(--qm-border-width\) solid var\(--qm-color-border-subtle\)/,
+    );
+  });
+
+  it("G5 the Shown tag is accent-outlined and static; the flash runs once and never under reduced motion", () => {
+    const tag = decls(".qm-tag--shown");
+    expect(tag).toMatch(/border-color:\s*var\(--qm-color-accent\)/);
+    expect(tag).toMatch(/color:\s*var\(--qm-color-accent\)/);
+    expect(tag).not.toMatch(/animation/);
+    const cell = decls(".qm-form-cell--revealed");
+    expect(cell).toMatch(/animation:\s*qm-reveal\b[^;]*\b1\b|animation:\s*qm-reveal[^;]*forwards/);
+    expect(css).toMatch(
+      /@keyframes qm-reveal\s*\{\s*from\s*\{\s*background:\s*var\(--qm-color-accent-subtle\)/,
+    );
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.qm-form-cell--revealed\s*\{\s*animation:\s*none/,
+    );
+  });
+
+  it("G7 quick-access hover lifts only where hover exists (no sticky hover on touch)", () => {
+    expect(decls(".qm-quick-access__button:hover")).toBe("");
+    expect(
+      decls('.qm-layout--mobile-unit .qm-quick-access__button:hover:not([aria-pressed="true"])'),
+    ).toBe("");
+    expect(css).toMatch(/@media \(hover: hover\)\s*\{\s*\.qm-quick-access__button:hover\s*\{/);
+    expect(css).toMatch(
+      /@media \(hover: hover\)\s*\{\s*\.qm-layout--mobile-unit \.qm-quick-access__button:hover:not\(\[aria-pressed="true"\]\)\s*\{/,
+    );
+  });
+});

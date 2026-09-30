@@ -21,6 +21,7 @@ import {
 } from "@querymodule/web-ui";
 import { useEffect, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
+import { isDataField } from "./data-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
@@ -66,15 +67,33 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
       new Map(
         (config.queryTypes.find((q) => q.code === queryType)?.fields ?? []).map((f) => [
           f.key,
-          { inputFormats: f.inputFormats, numberKind: f.numberKind, maxLength: f.maxLength },
+          {
+            inputFormats: f.inputFormats,
+            numberKind: f.numberKind,
+            maxLength: f.maxLength,
+            data: isDataField(f),
+          },
         ]),
       ),
     [config, queryType],
   );
   // The command the form is building, live (spec 4.4): the core formatter over the current draft.
+  // Focus on a revealed field clears its Shown tag (the field has been seen).
+  const { formContainerRef, dismissRevealed } = panel;
+  useEffect(() => {
+    const container = formContainerRef.current;
+    if (container === null) return;
+    const onFocusIn = (event: FocusEvent): void => {
+      const target = event.target instanceof Element ? event.target : null;
+      const key = target?.closest<HTMLElement>("[data-field-key]")?.dataset.fieldKey;
+      if (key !== undefined) dismissRevealed(key);
+    };
+    container.addEventListener("focusin", onFocusIn);
+    return () => container.removeEventListener("focusin", onFocusIn);
+  }, [formContainerRef, dismissRevealed]);
   const echo = useMemo(
-    () => formToTerminal(config, queryType, panel.values, Date.now()).text,
-    [config, queryType, panel.values],
+    () => formToTerminal(config, queryType, panel.values, panel.evaluatedAt).text,
+    [config, queryType, panel.values, panel.evaluatedAt],
   );
   const timeoutOf = (sourceId: string): string | undefined => {
     const ms = config.sources.find((x) => x.id === sourceId)?.timeoutMs;
@@ -245,6 +264,7 @@ function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: str
               t={t}
               idPrefix={idPrefix}
               excludeKeys={typeFieldKeys}
+              revealed={panel.revealed}
             >
               <SourceCheckboxes
                 sources={formState.sources}

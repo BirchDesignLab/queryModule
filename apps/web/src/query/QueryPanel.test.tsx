@@ -150,6 +150,77 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(screen.queryByLabelText(/Plate type/)).not.toBeInTheDocument();
   });
 
+  describe("G5 a field a rule reveals carries a Shown tag (visual system, Controls and states)", () => {
+    const shownTag = (label: RegExp) =>
+      screen.getByLabelText(label).closest(".qm-form-cell")?.querySelector(".qm-tag--shown") ??
+      null;
+
+    it("no tag on first render; the revealed field gets an aria-hidden Shown tag and the flash class", async () => {
+      const { user } = await openPanel();
+      expect(document.querySelector(".qm-tag--shown")).toBeNull();
+      await user.selectOptions(screen.getByLabelText("State"), "OK");
+      const tag = await waitFor(() => {
+        const found = shownTag(/Plate type/);
+        expect(found).not.toBeNull();
+        return found;
+      });
+      expect(tag).toHaveTextContent("Shown");
+      expect(tag).toHaveAttribute("aria-hidden", "true");
+      expect(screen.getByLabelText(/Plate type/).closest(".qm-form-cell")).toHaveClass(
+        "qm-form-cell--revealed",
+      );
+      // The announcement stays the only spoken signal.
+      expect(polite()).toHaveTextContent("Plate type is now shown and required.");
+    });
+
+    it("clears when the field is focused", async () => {
+      const { user } = await openPanel();
+      await user.selectOptions(screen.getByLabelText("State"), "OK");
+      await waitFor(() => expect(shownTag(/Plate type/)).not.toBeNull());
+      await user.click(screen.getByLabelText(/Plate type/));
+      await waitFor(() => expect(shownTag(/Plate type/)).toBeNull());
+    });
+
+    it("clears when the field is edited", async () => {
+      const { services } = await openPanel();
+      act(() => services.drafts.getState().setValue("state", "OK"));
+      await waitFor(() => expect(shownTag(/Plate type/)).not.toBeNull());
+      const code =
+        (screen.getByLabelText(/Plate type/) as HTMLSelectElement).options[1]?.value ?? "";
+      act(() => services.drafts.getState().setValue("plateType", code));
+      await waitFor(() => expect(shownTag(/Plate type/)).toBeNull());
+    });
+
+    it("clears on form reset (Clear)", async () => {
+      const { user, services } = await openPanel();
+      act(() => services.drafts.getState().setValue("state", "OK"));
+      await waitFor(() => expect(shownTag(/Plate type/)).not.toBeNull());
+      await user.click(screen.getByRole("button", { name: "Clear" }));
+      await waitFor(() => expect(document.querySelector(".qm-tag--shown")).toBeNull());
+    });
+
+    it("a field a new config adds is not a rule reveal: no Shown tag", async () => {
+      const { services } = await openPanel();
+      act(() =>
+        services.queryClient.setQueryData(["config"], {
+          ...CLIENT_CONFIG,
+          configHash: `${"0".repeat(63)}6`,
+          queryTypes: CLIENT_CONFIG.queryTypes.map((q) => {
+            const vin = q.fields.find((f) => f.key === "vin");
+            return q.code === "VEH" && vin !== undefined
+              ? {
+                  ...q,
+                  fields: [...q.fields, { ...vin, key: "zzNote", labelKey: "custom.zzNote" }],
+                }
+              : q;
+          }),
+        }),
+      );
+      expect(await screen.findByLabelText("custom.zzNote")).toBeInTheDocument();
+      expect(document.querySelector(".qm-tag--shown")).toBeNull();
+    });
+  });
+
   it("[A3] a blocked submit marks the first invalid field, describes it, focuses it and announces the count", async () => {
     const { user } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Person" }));
@@ -253,6 +324,15 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
     await user.click(screen.getByRole("button", { name: "Property" }));
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+  });
+
+  it("read-back data is monospace by field properties: Plate and VIN, not a picklist or free text", async () => {
+    const { user } = await openPanel();
+    expect(screen.getByLabelText("Plate")).toHaveClass("qm-field__input--data");
+    expect(screen.getByLabelText("VIN")).toHaveClass("qm-field__input--data");
+    expect(screen.getByLabelText("State")).not.toHaveClass("qm-field__input--data");
+    await user.click(screen.getByRole("button", { name: "Property" }));
+    expect(await screen.findByLabelText(/Description/)).not.toHaveClass("qm-field__input--data");
   });
 
   it("FR-007 quick access marks the current type and keeps the other type's draft", async () => {
@@ -543,6 +623,34 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
         expect(announce).toHaveBeenCalledWith("The form was updated by your administrator.");
       });
     }
+
+    it("T18-4 a focused field the new config moves into a closed disclosure counts as gone", async () => {
+      const { user, services } = await openPanel();
+      const vin = screen.getByLabelText("VIN");
+      await user.click(vin);
+      // The base section becomes the second one (a closed "Details" disclosure): VIN stays in the
+      // DOM, hidden, so the browser would drop its focus to <body>.
+      act(() =>
+        services.queryClient.setQueryData(["config"], {
+          ...CLIENT_CONFIG,
+          configHash: NEW_HASH,
+          queryTypes: CLIENT_CONFIG.queryTypes.map((q) =>
+            q.code !== "VEH"
+              ? q
+              : {
+                  ...q,
+                  sections: [...(q.sections ?? [])].reverse(),
+                  fields: q.fields.map((f) =>
+                    f.key === "plate" ? { ...f, section: "expanded" } : f,
+                  ),
+                },
+          ),
+        }),
+      );
+      await waitFor(() => expect(vin.closest("[hidden]")).not.toBeNull());
+      expect(vin.isConnected).toBe(true);
+      expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).toHaveFocus();
+    });
 
     it("T18-4 a focused quick-access button whose type is removed moves focus to the heading", async () => {
       const { user, services } = await openPanel();
