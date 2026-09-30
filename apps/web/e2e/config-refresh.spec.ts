@@ -1,5 +1,5 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { seededUser, signIn } from "./helpers.js";
 
 // ADR-0011 item 3 (#361): an open form follows a newer config within 15 s. The server keeps one
 // config here, so the "published" one is the same body with a new hash and one more field.
@@ -50,3 +50,51 @@ test("[#361] the open form picks up a newer config: new field, one polite announ
   expect(background.slice(1).every((h) => h === "1")).toBe(true);
   await expectNoSeriousAxeViolations(page);
 });
+
+// #382 T18-4: a newer config that removes the focused field hands focus to the panel heading
+// (never <body>, never another field); the polite update message stays the only announcement.
+for (const persona of [
+  { name: "dispatcher", email: undefined },
+  { name: "officer", email: "officer@example.test" },
+] as const) {
+  test(`[#382 T18-4] ${persona.name}: a removed focused field moves focus to the panel heading`, async ({
+    page,
+  }) => {
+    let stage: "extra" | "removed" = "extra";
+    let hash = "c".repeat(64);
+    await page.route("**/api/v1/config", async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as {
+        configHash: string;
+        queryTypes: { code: string; fields: { key: string; labelKey?: string }[] }[];
+      };
+      body.configHash = hash;
+      if (stage === "extra") {
+        for (const type of body.queryTypes) {
+          if (type.code !== "VEH") continue;
+          const vin = type.fields.find((f) => f.key === "vin");
+          if (vin !== undefined)
+            type.fields.push({ ...vin, key: "zzAgency", labelKey: "field.agency" });
+        }
+      }
+      await route.fulfill({ response, json: body });
+    });
+    await page.clock.install();
+    await signIn(page, persona.email === undefined ? undefined : seededUser(persona.email));
+    const agency = page.getByLabel("Agency");
+    await agency.focus();
+    await page.keyboard.type("ZZ");
+    await expect(agency).toBeFocused();
+
+    stage = "removed";
+    hash = "d".repeat(64);
+    await page.clock.fastForward(16_000);
+
+    await expect(agency).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
+    await expect(page.getByTestId("announcer-polite")).toHaveText(
+      "The form was updated by your administrator.",
+    );
+    await expectNoSeriousAxeViolations(page);
+  });
+}
