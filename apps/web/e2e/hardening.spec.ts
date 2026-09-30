@@ -20,8 +20,14 @@ const CONDITIONS = [
 
 /** Persona, seeded account, and the smallest interactive target its layout promises (spec 6.3). */
 const PERSONAS = [
-  { name: "dispatcher", email: "dispatcher@example.test", minTarget: 24, minControl: 36 },
-  { name: "officer", email: "officer@example.test", minTarget: 48, minControl: 56 },
+  {
+    name: "dispatcher",
+    email: "dispatcher@example.test",
+    minTarget: 24,
+    minControl: 36,
+    minRun: 36,
+  },
+  { name: "officer", email: "officer@example.test", minTarget: 48, minControl: 56, minRun: 64 },
 ] as const;
 
 interface Problems {
@@ -33,9 +39,12 @@ interface Problems {
 }
 
 /** One pass over the signed-in page: everything in the header and main must be reachable and whole. */
-async function audit(page: Page, minTarget: number, minControl: number): Promise<Problems> {
+async function audit(
+  page: Page,
+  { minTarget, minControl, minRun }: { minTarget: number; minControl: number; minRun: number },
+): Promise<Problems> {
   return page.evaluate(
-    ({ minTarget, minControl }) => {
+    ({ minTarget, minControl, minRun }) => {
       const vw = document.documentElement.clientWidth;
       const scroller = document.scrollingElement;
       const main = document.querySelector("main");
@@ -69,20 +78,29 @@ async function audit(page: Page, minTarget: number, minControl: number): Promise
           // A checkbox is drawn by its chip: the label is the target.
           const target = el.matches("input[type=checkbox]") ? (el.closest("label") ?? el) : el;
           const tb = target.getBoundingClientRect();
-          const isControl = el.matches("select, input:not([type=checkbox]), button[type=submit]");
-          const min = isControl ? minControl : minTarget;
+          // Controls in the page (fields, buttons, quick access) hold the persona's control height;
+          // the segmented switches and the header hold its target size; Run holds its own.
+          const isControl =
+            el.closest("main") !== null &&
+            el.closest(".qm-seg") === null &&
+            el.matches("select, input:not([type=checkbox]), .qm-button, .qm-quick-access__button");
+          const min = el.matches("button[type=submit]")
+            ? minRun
+            : isControl
+              ? minControl
+              : minTarget;
           if (tb.height + 0.5 < min || tb.width + 0.5 < min)
             small.push(`${label(el)} ${tb.width}x${tb.height} < ${min}`);
         }
       }
       return { overflow, outside, scrollRegions, clipped, small };
     },
-    { minTarget, minControl },
+    { minTarget, minControl, minRun },
   );
 }
 
 async function expectWhole(page: Page, where: string, persona: (typeof PERSONAS)[number]) {
-  const p = await audit(page, persona.minTarget, persona.minTarget === 48 ? 48 : 36);
+  const p = await audit(page, persona);
   expect(p.overflow, `${where}: horizontal overflow`).toBeLessThanOrEqual(0);
   expect(p.outside, `${where}: outside the viewport`).toEqual([]);
   expect(p.scrollRegions, `${where}: a sideways scroll region (WCAG 1.4.10)`).toEqual([]);
@@ -95,9 +113,10 @@ async function expectWhole(page: Page, where: string, persona: (typeof PERSONAS)
  * behind the sticky action bar (WCAG 2.4.11): at least one sample point of it hits the control
  * itself (or its chip). The loop ends when focus leaves <main>.
  */
-async function tabThroughNotObscured(page: Page): Promise<string[]> {
+async function tabThroughNotObscured(page: Page): Promise<{ obscured: string[]; stops: number }> {
   await page.getByRole("heading", { name: "Query Module", exact: true }).focus();
   const obscured: string[] = [];
+  let stops = 0;
   for (let stop = 0; stop < 60; stop++) {
     await page.keyboard.press("Tab");
     const state = await page.evaluate(() => {
@@ -135,9 +154,10 @@ async function tabThroughNotObscured(page: Page): Promise<string[]> {
       };
     });
     if (state === null) break;
+    stops++;
     if (state.seen === 0) obscured.push(`${state.name} under ${state.cover}`);
   }
-  return obscured;
+  return { obscured, stops };
 }
 
 for (const persona of PERSONAS) {
@@ -164,7 +184,16 @@ for (const persona of PERSONAS) {
         await page.getByLabel("VIN").fill("ZZ0000000000ZZ001");
         await expect(page.locator(".qm-command-echo__text code")).toContainText("ZZ-0001");
         await expectWhole(page, "panel with a long command", persona);
-        expect(await tabThroughNotObscured(page), "focus hidden behind the action bar").toEqual([]);
+        const first = await tabThroughNotObscured(page);
+        // Enough stops that the pass cannot be vacuous (mode, quick access, fields, sources, Run, Clear).
+        expect(first.stops, "Tab stops visited").toBeGreaterThan(8);
+        expect(first.obscured, "focus hidden behind the action bar").toEqual([]);
+        // The hook keeps the bar's height clear wherever the bar sticks; under 20rem tall it does not stick.
+        const padding = await page.evaluate(
+          () => document.documentElement.style.scrollPaddingBlockEnd,
+        );
+        if (condition.viewport.height >= 320) expect(padding).toContain("calc(");
+        else expect(padding).toBe("");
 
         const sent = page.waitForResponse(
           (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
@@ -173,7 +202,9 @@ for (const persona of PERSONAS) {
         expect((await sent).status()).toBe(202);
         await expect(page.getByText("Acknowledged").first()).toBeVisible();
         await expectWhole(page, "panel with a request row", persona);
-        expect(await tabThroughNotObscured(page), "focus hidden after a request").toEqual([]);
+        const second = await tabThroughNotObscured(page);
+        expect(second.stops, "Tab stops visited after a request").toBeGreaterThan(8);
+        expect(second.obscured, "focus hidden after a request").toEqual([]);
       });
     });
   }
