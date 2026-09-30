@@ -22,26 +22,32 @@ export function QueryPanel() {
   useEffect(() => {
     if (!freshLoad) headingRef.current?.focus();
   }, []);
-  // #382 T18-4 (spec 6.6, Revision 2 "Focus is never lost"): a newer config that removes the
-  // focused control leaves focus on <body>; hand it to the heading. The fields a config drops leave
-  // the DOM in the commit that brings the config, so this layout effect sees them gone. Focus
-  // anywhere that survived is left alone, and the config announcement stays the only one.
-  const lastFocused = useRef<Element | null>(null);
+  // #382 T18-4 (spec 6.6, Revision 2 "Focus is never lost"): a newer config (or a refetch that
+  // fails into the error state) that removes the focused control leaves focus on <body>; hand it to
+  // the heading. The render that sees the new hash notes what had focus in <main>; the controls the
+  // config drops leave the DOM in that same commit, so the layout effect sees them gone. Focus
+  // anywhere that survived, or already off the panel, is left alone; no announcement is added.
+  const mainRef = useRef<HTMLElement>(null);
   const configHash = live.status === "ready" ? live.config.configHash : null;
   const seenHash = useRef(configHash);
+  const focusedAtChange = useRef<Element | null>(null);
+  if (configHash !== seenHash.current) {
+    const active = typeof document === "undefined" ? null : document.activeElement;
+    focusedAtChange.current = active !== null && mainRef.current?.contains(active) ? active : null;
+  }
   useLayoutEffect(() => {
     const previous = seenHash.current;
     seenHash.current = configHash;
-    if (previous === null || configHash === null || previous === configHash) return;
-    const gone = lastFocused.current !== null && !lastFocused.current.isConnected;
+    const focused = focusedAtChange.current;
+    focusedAtChange.current = null;
+    if (previous === null || previous === configHash || focused === null) return;
     const active = document.activeElement;
-    if (gone && (active === null || active === document.body)) headingRef.current?.focus();
+    if (!focused.isConnected && (active === null || active === document.body))
+      headingRef.current?.focus();
   }, [configHash]);
   return (
     <main
-      onFocus={(event) => {
-        lastFocused.current = event.target;
-      }}
+      ref={mainRef}
       className={
         layout === "mobileUnit"
           ? "qm-page qm-query-panel qm-layout--mobile-unit"

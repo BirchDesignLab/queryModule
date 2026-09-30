@@ -538,7 +538,8 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
         );
         await waitFor(() => expect(screen.queryByLabelText("custom.zzNote")).toBeNull());
         expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).toHaveFocus();
-        await waitFor(() => expect(announce).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(polite()).toHaveTextContent("updated by your administrator"));
+        expect(announce).toHaveBeenCalledTimes(1);
         expect(announce).toHaveBeenCalledWith("The form was updated by your administrator.");
       });
     }
@@ -569,14 +570,51 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     });
 
     it("T18-4 a removal without a config change does not move focus", async () => {
-      const { user } = await openPanel();
-      await user.click(screen.getByRole("button", { name: "Person" }));
-      const last = screen.getByLabelText(/Last name/);
-      await user.click(last);
-      // A type switch by shortcut removes the focused field; not a config change, so hands off.
-      await user.keyboard("{Alt>}1{/Alt}");
-      await waitFor(() => expect(screen.queryByLabelText(/Last name/)).toBeNull());
+      const { user, services } = await openPanel();
+      // A non-default State reveals Plate type; focus it, then hide it again by the rule alone.
+      await user.selectOptions(screen.getByLabelText("State"), "OK");
+      const plateType = await screen.findByLabelText(/Plate type/);
+      await user.click(plateType);
+      expect(plateType).toHaveFocus();
+      act(() => services.drafts.getState().setValue("state", "TX"));
+      await waitFor(() => expect(screen.queryByLabelText(/Plate type/)).toBeNull());
+      // Focus really fell to <body>: only the missing config change keeps the heading out of it.
+      expect(document.activeElement).toBe(document.body);
       expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).not.toHaveFocus();
+    });
+
+    it("T18-4 a control the user had already left is not a reason to move focus", async () => {
+      const { user, services } = await openPanel();
+      act(() => services.queryClient.setQueryData(["config"], withExtraField(NEW_HASH)));
+      const note = await screen.findByLabelText("custom.zzNote");
+      await user.click(note);
+      act(() => note.blur());
+      expect(document.activeElement).toBe(document.body);
+      act(() =>
+        services.queryClient.setQueryData(["config"], {
+          ...CLIENT_CONFIG,
+          configHash: `${"0".repeat(63)}7`,
+        }),
+      );
+      await waitFor(() => expect(screen.queryByLabelText("custom.zzNote")).toBeNull());
+      expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).not.toHaveFocus();
+    });
+
+    it("T18-4 a 409 whose refetch fails keeps focus off <body>: the heading takes it", async () => {
+      server.use(
+        http.post(`${API}/api/v1/queries`, () =>
+          HttpResponse.json(
+            { error: { code: "configHashMismatch", currentConfigHash: NEW_HASH } },
+            { status: 409 },
+          ),
+        ),
+      );
+      const { user } = await openPanel();
+      server.use(http.get(`${API}/api/v1/config`, () => new HttpResponse(null, { status: 503 })));
+      await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      expect(await screen.findByRole("button", { name: "Retry" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).toHaveFocus();
     });
 
     it("after a 409 the refetched config changes the form without a second announcement", async () => {
