@@ -380,3 +380,93 @@ describe("preview never shows the Shown tag (a builder edit is not a rule reveal
     expect(document.querySelector(".qm-tag--shown")).toBeNull();
   });
 });
+
+describe("preview selectType: the builder picks the query type through the panel's own path", () => {
+  let pick: (code: string | undefined) => void = () => undefined;
+  function Picker({
+    drafts,
+    mode,
+  }: {
+    drafts: ReturnType<typeof createDraftStore>;
+    mode: "live" | "preview";
+  }) {
+    const [code, setCode] = useState<string | undefined>(undefined);
+    pick = setCode;
+    return (
+      <ShortcutProvider bindings={resolveShortcuts(CLIENT_CONFIG.shortcuts)}>
+        <QueryPanelView
+          config={CLIENT_CONFIG}
+          drafts={drafts}
+          mode={mode}
+          idPrefix="st"
+          selectType={code}
+        />
+      </ShortcutProvider>
+    );
+  }
+  const renderPicker = (mode: "live" | "preview" = "preview") => {
+    const drafts = createDraftStore();
+    return {
+      ...renderRoutes([{ path: "/", element: <Picker drafts={drafts} mode={mode} /> }]),
+      drafts,
+    };
+  };
+  const pressed = (name: string) =>
+    expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
+
+  it("form mode: selects the type, keeps other types' values, and resets shown errors like a click", async () => {
+    const { user } = renderPicker();
+    await user.type(await screen.findByLabelText("Plate"), "ZZ-0001");
+    act(() => pick("PER"));
+    await waitFor(() => pressed("Person"));
+    // A blocked run shows the required error on Last name.
+    await user.type(screen.getByLabelText(/Last name/), "{Enter}");
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true"),
+    );
+    act(() => pick("VEH"));
+    await waitFor(() => pressed("Vehicle"));
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    act(() => pick("PER"));
+    await waitFor(() => pressed("Person"));
+    expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("terminal mode: stays in the terminal, merges the typed command into its type, derives the new type's command", async () => {
+    const { user, drafts } = renderPicker();
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    const command = screen.getByRole("textbox", { name: "Command" });
+    await user.click(command);
+    await user.keyboard("{Control>}a{/Control}VEH.ZZ-0002");
+    act(() => pick("PER"));
+    await waitFor(() => expect(drafts.getState().queryType).toBe("PER"));
+    await waitFor(() =>
+      expect((screen.getByRole("textbox", { name: "Command" }) as HTMLInputElement).value).toMatch(
+        /^PER/,
+      ),
+    );
+    expect(drafts.getState().drafts.VEH?.values.plate).toBe("ZZ-0002");
+    expect(screen.queryByLabelText("Plate")).toBeNull();
+  });
+
+  it("never moves focus and ignores an unknown code", async () => {
+    const { user } = renderPicker();
+    const plate = await screen.findByLabelText("Plate");
+    await user.click(screen.getByRole("button", { name: "Form mode" }));
+    const before = document.activeElement;
+    act(() => pick("ZZNOPE"));
+    pressed("Vehicle");
+    act(() => pick("PER"));
+    await waitFor(() => pressed("Person"));
+    expect(document.activeElement).toBe(before);
+    expect(plate.isConnected).toBe(false);
+  });
+
+  it("live mode ignores the prop (preview only)", async () => {
+    renderPicker("live");
+    await screen.findByLabelText("Plate");
+    act(() => pick("PER"));
+    await new Promise((r) => setTimeout(r, 50));
+    pressed("Vehicle");
+  });
+});

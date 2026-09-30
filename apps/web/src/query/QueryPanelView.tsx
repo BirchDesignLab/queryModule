@@ -19,7 +19,7 @@ import {
   TypeFieldBar,
   useShortcutAction,
 } from "@querymodule/web-ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { isDataField } from "./data-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
@@ -49,11 +49,29 @@ function PanelShortcut({ action, run }: { action: string; run: () => void }) {
   return null;
 }
 
-function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: string }) {
+function ReadyPanel({
+  panel,
+  idPrefix,
+  selectType,
+}: {
+  panel: ReadyQueryPanel;
+  idPrefix: string;
+  selectType?: string | undefined;
+}) {
   const preview = panel.mode === "preview";
   const t = useT();
   const { config, formState, queryType } = panel;
   const terminal = useTerminal(panel);
+  // The host's pick, applied once per change (not on every render, so the user's own clicks in the
+  // preview still win until the host picks again).
+  const lastPick = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (selectType === lastPick.current) return;
+    lastPick.current = selectType;
+    if (selectType === undefined || selectType === queryType) return;
+    if (!config.queryTypes.some((q) => q.code === selectType)) return;
+    terminal.selectType(selectType);
+  }, [selectType, queryType, config, terminal]);
   const labelOfType = (code: string): string => {
     const labelKey = config.queryTypes.find((q) => q.code === code)?.labelKey;
     return labelKey === undefined ? code : t(labelKey);
@@ -321,6 +339,12 @@ export interface QueryPanelViewProps {
    * below it ("last", officer). Omitted, the view is the panel alone (the builder's preview).
    */
   requests?: "list" | "last";
+  /**
+   * Preview only: the host (the builder) picks this query type. Each change selects it through the
+   * panel's own path, as a quick-access click would (terminal text merged and re-derived, shown
+   * errors reset, other types' values kept). Focus never moves; an unknown code is ignored.
+   */
+  selectType?: string;
 }
 
 /** The one renderer of the query panel, from config alone (BR-001; ADR-0011 core loop). */
@@ -331,6 +355,7 @@ export function QueryPanelView({
   idPrefix,
   onConfigChanged,
   requests,
+  selectType,
 }: QueryPanelViewProps) {
   const panel = useQueryPanel({ config, drafts, mode, onConfigChanged });
   // The preview's store is private and memory-only; it goes with the view (ADR-0011).
@@ -341,7 +366,13 @@ export function QueryPanelView({
     [mode, drafts],
   );
   if (panel === null) return null;
-  const ready = <ReadyPanel panel={panel} idPrefix={idPrefix} />;
+  const ready = (
+    <ReadyPanel
+      panel={panel}
+      idPrefix={idPrefix}
+      selectType={mode === "preview" ? selectType : undefined}
+    />
+  );
   if (requests === undefined) return ready;
   return (
     <div className="qm-panes">
