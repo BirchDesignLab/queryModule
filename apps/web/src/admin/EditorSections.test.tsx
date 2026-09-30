@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { selectBuilderItem } from "../test/builder-tree.js";
+import { escapeRegExp } from "../test/escape-regexp.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -46,7 +47,8 @@ function group(root: ParentNode, name: string | RegExp): HTMLElement {
 
 const editor = () => document.querySelector(".qm-builder__editor") as HTMLElement;
 const typeBox = (code: string) => group(document, `Query type ${code}`);
-const fieldBox = (code: string, key: string) => group(typeBox(code), new RegExp(`field ${key}$`));
+const fieldBox = (code: string, key: string) =>
+  group(typeBox(code), new RegExp(`field ${escapeRegExp(key)}$`));
 /** The ruled section headed `title` (h4), up to its container. */
 function sect(root: ParentNode, title: string): HTMLElement {
   const h = [...root.querySelectorAll("h4")].find((x) => x.textContent === title);

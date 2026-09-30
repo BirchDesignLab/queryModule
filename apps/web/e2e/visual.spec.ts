@@ -1726,3 +1726,39 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
     });
   });
 });
+
+test.describe("Loose ends (cloud3)", () => {
+  // The loading and error states render the heading and one paragraph (class qm-builder__body) and
+  // no toolbar: the grid must not keep a third, empty row for the toolbar that is not there.
+  const tracks = (page: Page) =>
+    page.evaluate(() => {
+      const builder = document.querySelector(".qm-builder") as HTMLElement;
+      return getComputedStyle(builder).gridTemplateRows.split(" ").length;
+    });
+
+  for (const viewport of [
+    { width: 683, height: 600, loaded: 3 },
+    { width: 1024, height: 768, loaded: 2 },
+  ]) {
+    test(`${viewport.width}x${viewport.height}: the loading state has no empty grid row`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await asUser(page, "admin@example.test", "day", async () => {
+        await page.goto("/admin/config");
+        await expect(page.getByRole("tab", { name: "Form", exact: true })).toBeVisible();
+        expect(await tracks(page), "rows with the toolbar").toBe(viewport.loaded);
+        // Swap the toolbar and panes for the loading paragraph, as the builder renders it.
+        await page.evaluate(() => {
+          const builder = document.querySelector(".qm-builder") as HTMLElement;
+          builder.querySelector(".qm-builder__scope")?.remove();
+          const p = document.createElement("p");
+          p.className = "qm-builder__body";
+          p.textContent = "Loading";
+          builder.append(p);
+        });
+        expect(await tracks(page), "rows without the toolbar").toBe(2);
+      });
+    });
+  }
+});

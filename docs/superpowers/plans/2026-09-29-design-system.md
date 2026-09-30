@@ -41,7 +41,7 @@ D0 goes to Track B (it owns `packages/web-ui` and the shell). Track A starts A-D
 
 **Files:** `apps/web/src/fonts/` (IBM Plex Sans 400, 500, 600; Sans Condensed 600; Mono 400, 500; latin woff2 from the IBM Plex GitHub release, OFL; commit `OFL.txt` beside them), `@font-face` rules in `apps/web/src/shell.css` (`font-display: swap`), tests.
 **Step 0:** the developer approves the font download (source URL and total size stated in the ask).
-**Tests first:** `shell.css.test.ts` asserts one `@font-face` per shipped file, each `src` under `/fonts/`, and every font stack ends in a system fallback.
+**Tests first:** `shell.css.test.ts` asserts one `@font-face` per shipped file, each `src` bundled from `./fonts/` (the files live in `apps/web/src/fonts`, served under `/assets/`, not `public/`), and every font stack ends in a system fallback.
 
 ### D0.3 Primitives restyle (M)
 

@@ -1,5 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
+import { escapeRegExp } from "./escape-regexp.js";
 
 /**
  * Selects a builder item in its tree (A-D1 A2): the editor shows only the selected item. `key`
@@ -9,7 +10,9 @@ import type { UserEvent } from "@testing-library/user-event";
 export async function selectBuilderItem(user: UserEvent, key: string): Promise<void> {
   const nav = await screen.findByRole("navigation", { name: "Configuration items" });
   const name =
-    key === "Label text" ? /^Labels and translations(,|$)/ : new RegExp(`(^| )${key}(,.*)?$`);
+    key === "Label text"
+      ? /^Labels and translations(,|$)/
+      : new RegExp(`(^| )${escapeRegExp(key)}(,.*)?$`);
   await user.click(within(nav).getByRole("treeitem", { name }));
 }
 
