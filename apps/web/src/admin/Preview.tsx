@@ -32,6 +32,16 @@ function useOverlayTranslator(labels: Readonly<Record<string, Readonly<Record<st
   }, [base, overlay]);
 }
 
+/** The query type a tree pointer is in ("/queryTypes/2/fields/1" is the third type), if any. */
+function selectedTypeCode(doc: JsonObject, pointer: string | null): string | undefined {
+  if (pointer === null) return undefined;
+  const m = /^\/queryTypes\/([0-9]+)(\/|$)/.exec(pointer);
+  const types = doc.queryTypes;
+  if (m === null || !Array.isArray(types)) return undefined;
+  const code = (types[Number(m[1])] as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
 type Persona = "dispatcher" | "officer";
 const PERSONAS: readonly Persona[] = ["dispatcher", "officer"];
 
@@ -175,7 +185,13 @@ export function BuilderPreview({
           data-paused={paused ? "true" : undefined}
         >
           <I18nProvider translator={translator}>
-            <QueryPanelView config={config} drafts={drafts} mode="preview" idPrefix={idPrefix} />
+            <QueryPanelView
+              config={config}
+              drafts={drafts}
+              mode="preview"
+              idPrefix={idPrefix}
+              selectType={selectedTypeCode(doc, selected)}
+            />
           </I18nProvider>
         </div>
       )}

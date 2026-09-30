@@ -1,5 +1,5 @@
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
@@ -53,6 +53,7 @@ export function LabelOverlayEditor({
           entries={labels[locale] ?? {}}
           englishText={locale === REFERENCE_LOCALE ? undefined : englishText}
           onSet={(key, text) => store.getState().setLabel(locale, key, text)}
+          onRemove={(key) => store.getState().removeLabel(locale, key)}
         />
       ))}
     </>
@@ -65,6 +66,7 @@ function LocaleLabels({
   entries,
   englishText,
   onSet,
+  onRemove,
 }: {
   locale: string;
   idPrefix: string;
@@ -72,6 +74,7 @@ function LocaleLabels({
   /** Absent in the reference locale itself, whose input is the English text. */
   englishText: ((key: string) => string | null) | undefined;
   onSet(key: string, text: string): void;
+  onRemove(key: string): void;
 }) {
   const t = useT();
   const translator = useTranslator();
@@ -81,6 +84,20 @@ function LocaleLabels({
   const keyId = controlId(idPrefix, ["labelKey", locale]);
   const textId = controlId(idPrefix, ["labelNew", locale]);
   const rows = Object.entries(entries);
+  // After a removal focus stays in the list: the row that took its place, else the one before it,
+  // else the add form (a removal moves focus only because the button that had it is gone).
+  const [want, setWant] = useState<{ key: string } | "add" | null>(null);
+  useEffect(() => {
+    if (want === null) return;
+    setWant(null);
+    const target =
+      want === "add"
+        ? keyId
+        : want.key in entries
+          ? controlId(idPrefix, ["label", locale, want.key])
+          : keyId;
+    document.getElementById(target)?.focus();
+  }, [want, entries, idPrefix, locale, keyId]);
   // A key that already has a row is edited there: adding it again would silently overwrite it.
   const exists = Object.hasOwn(entries, key.trim());
   const blocked = key.trim() === "" || exists;
@@ -115,14 +132,28 @@ function LocaleLabels({
                         : english}
                   </p>
                 )}
-                <input
-                  id={id}
-                  type="text"
-                  className="qm-field__input qm-label-row__input"
-                  value={v}
-                  aria-describedby={english === undefined ? undefined : enId}
-                  onChange={(e) => onSet(k, e.target.value)}
-                />
+                <div className="qm-label-row__edit">
+                  <input
+                    id={id}
+                    type="text"
+                    className="qm-field__input qm-label-row__input"
+                    value={v}
+                    aria-describedby={english === undefined ? undefined : enId}
+                    onChange={(e) => onSet(k, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="qm-button qm-button--ghost"
+                    onClick={() => {
+                      const at = rows.findIndex(([key]) => key === k);
+                      const next = rows[at + 1] ?? rows[at - 1];
+                      setWant(next === undefined ? "add" : { key: next[0] });
+                      onRemove(k);
+                    }}
+                  >
+                    {t("admin.labels.remove")} <VisuallyHidden>{k}</VisuallyHidden>
+                  </button>
+                </div>
               </li>
             );
           })}

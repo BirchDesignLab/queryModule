@@ -157,4 +157,45 @@ describe("Labels and translations (A-D2 item 2)", () => {
     const sect = await section("x_y");
     expect(within(sect).getByRole("button", { name: "Add x_y label" })).toBeInTheDocument();
   });
+
+  it("a row can be removed: the text goes from the overlay, focus stays in the list, and Undo brings it back", async () => {
+    const t = await openLabels();
+    act(() => {
+      store(t).setLabel("en", "site.a", "A");
+      store(t).setLabel("en", "site.b", "B");
+      store(t).setLabel("en", "site.c", "C");
+    });
+    const sect = await section("en");
+    const remove = (key: string) => within(sect).getByRole("button", { name: `Remove ${key}` });
+    await t.user.click(remove("site.b"));
+    expect(store(t).labels).toEqual({ en: { "site.a": "A", "site.c": "C" } });
+    expect(within(sect).queryByLabelText("site.b")).toBeNull();
+    // Focus goes to the row that took its place.
+    expect(within(sect).getByLabelText("site.c")).toHaveFocus();
+    await t.user.click(remove("site.c"));
+    // The last row: focus goes to the row before it.
+    expect(within(sect).getByLabelText("site.a")).toHaveFocus();
+    await t.user.click(remove("site.a"));
+    // No rows left: focus goes to the add form, and the empty text shows.
+    expect(within(sect).getByLabelText("Label key")).toHaveFocus();
+    expect(within(sect).getByText("No text changes yet.")).toBeInTheDocument();
+    expect(store(t).labels.en).toEqual({});
+    await t.user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(store(t).labels).toEqual({ en: { "site.a": "A" } });
+    expect(within(sect).getByLabelText("site.a")).toHaveValue("A");
+  });
+
+  it("removing in one locale leaves the others", async () => {
+    const t = await openLabels();
+    server.use(http.get(`${API}/api/v1/locales/fr`, () => new HttpResponse(null, { status: 404 })));
+    act(() => {
+      store(t).setPath(["locales"], ["en", "fr"]);
+      store(t).setLabel("en", "site.k", "K");
+      store(t).setLabel("fr", "site.k", "Ka");
+    });
+    const fr = await section("fr");
+    await t.user.click(within(fr).getByRole("button", { name: "Remove site.k" }));
+    expect(store(t).labels.en).toEqual({ "site.k": "K" });
+    expect(store(t).labels.fr).toEqual({});
+  });
 });

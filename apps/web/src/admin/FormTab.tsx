@@ -5,7 +5,7 @@ import { configDraftStore } from "./builder-store.js";
 import { CommandsEditor, QuickAccessEditor } from "./CommandsEditor.js";
 import { ChecksContext, IssueMessages } from "./checks.js";
 import { asObjects, str, useLabelText } from "./controls.js";
-import { type JsonObject, type PathSegment, toPointer } from "./draft.js";
+import { type JsonObject, type PathSegment, type SetPathOptions, toPointer } from "./draft.js";
 import { EditorSection, NodeEditor } from "./GenericForm.js";
 import { LabelOverlayEditor } from "./LabelOverlay.js";
 import { PicklistsEditor } from "./PicklistEditor.js";
@@ -39,7 +39,8 @@ export function FormTab({ doc }: { doc: JsonObject }) {
   const idPrefix = useId();
   const store = configDraftStore(services);
   const onChange = useCallback(
-    (path: readonly PathSegment[], value: unknown) => store.getState().setPath(path, value),
+    (path: readonly PathSegment[], value: unknown, options?: SetPathOptions) =>
+      store.getState().setPath(path, value, options),
     [store],
   );
   const strings = Array.isArray(doc.locales)

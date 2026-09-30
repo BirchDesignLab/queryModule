@@ -200,10 +200,29 @@ function useDraftChanged(doc: JsonObject, labels: Readonly<Record<string, object
   return labelled || (liveText !== null && docText !== liveText);
 }
 
+/** A control that has its own text undo: text-like inputs, textareas and editable content. */
+function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target instanceof HTMLTextAreaElement) return true;
+  if (!(target instanceof HTMLInputElement)) return false;
+  return ![
+    "checkbox",
+    "radio",
+    "button",
+    "submit",
+    "reset",
+    "range",
+    "color",
+    "file",
+    "image",
+  ].includes(target.type);
+}
+
 function BuilderBody({ doc }: { doc: JsonObject }) {
   const t = useT();
   const uid = useId();
-  const { labels } = useDraft();
+  const { labels, undoCount, redoCount } = useDraft();
+  const { announcer } = useServices();
   const checks = useDraftChecks(doc, labels);
   const [tab, setTab] = useState<TabId>("form");
   const [raw, setRaw] = useState<RawState>(() => ({
@@ -280,112 +299,212 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
       firstIssue.pointer,
     );
   }, [doc, fallback, firstIssue, onSelect, shown.pointer]);
+  // The selection goes into each history step, so an undo can put it back (B1).
+  useEffect(() => {
+    store.getState().setMeta(shown.pointer);
+  }, [store, shown.pointer]);
+  const scopeRef = useRef<HTMLDivElement>(null);
+  // Focus lost to an undo (the item it was in went away) goes to the selected tree row; the keys
+  // work from there. `settle` waits for the restored selection to be on screen.
+  const settle = useRef<{ pointer: string | null } | null>(null);
+  const step = useCallback(
+    (direction: "undo" | "redo") => {
+      // The raw text follows the draft again: an undone step can bring back a document the raw
+      // tab made itself, which it would otherwise take for its own text and keep.
+      rawDoc.current = null;
+      const restored = direction === "undo" ? store.getState().undo() : store.getState().redo();
+      if (restored === null) return;
+      settle.current = { pointer: restored.meta };
+      // On the Raw tab there is no item to show: keep the tab, restore the selection under it.
+      if (restored.meta !== null) {
+        const pointer = restored.meta;
+        if (tab === "raw") setSelection((s) => ({ pointer, seq: s.seq + 1 }));
+        else onSelect(pointer);
+      }
+      // The shared live region only: the builder's own summary is not touched.
+      const { undoCount: undos, redoCount: redos } = store.getState();
+      announcer.announce(
+        direction === "undo"
+          ? t("admin.config.undone", { count: undos })
+          : t("admin.config.redone", { count: redos }),
+      );
+    },
+    [store, onSelect, announcer, t, tab],
+  );
+  useEffect(() => {
+    const waiting = settle.current;
+    if (waiting === null || (waiting.pointer !== null && shown.pointer !== waiting.pointer)) return;
+    settle.current = null;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body && active.isConnected) return;
+    scopeRef.current?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')?.focus();
+  });
+  // Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y (Command on a Mac) inside the builder only, and never in a text
+  // entry, where the browser's own undo belongs to the field (a native listener: the scope is a
+  // wrapper with no role, so a React key handler on it would be a lint error and a false widget).
+  useEffect(() => {
+    const scope = scopeRef.current;
+    if (scope === null) return;
+    const onKeys = (e: globalThis.KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      // The key by its letter, or by its place on the keyboard on a layout with no Latin letter.
+      const key = /^[a-z]$/i.test(e.key)
+        ? e.key.toLowerCase()
+        : e.code.replace("Key", "").toLowerCase();
+      const undo = key === "z" && !e.shiftKey;
+      // Ctrl+Y only: Cmd+Y is the browser's History on a Mac.
+      const redo =
+        (key === "z" && e.shiftKey) || (key === "y" && e.ctrlKey && !e.metaKey && !e.shiftKey);
+      if ((!undo && !redo) || isTextEntry(e.target)) return;
+      e.preventDefault();
+      step(undo ? "undo" : "redo");
+    };
+    scope.addEventListener("keydown", onKeys);
+    return () => scope.removeEventListener("keydown", onKeys);
+  }, [step]);
+  const historyReasonId = `${uid}-history-reason`;
+  const historyReason =
+    undoCount === 0 && redoCount === 0
+      ? t("admin.config.historyNone")
+      : undoCount === 0
+        ? t("admin.config.undoNone")
+        : redoCount === 0
+          ? t("admin.config.redoNone")
+          : null;
   const canGoToError =
     checks.status === "ready" && firstIssue !== undefined && raw.parseError === null;
   return (
     <ChecksContext.Provider value={checks}>
-      {/* The section h2 sits just before this bar and reads as its title (design target, A2). */}
-      <div className="qm-builder__toolbar">
-        <p className="qm-builder__status" data-testid="draft-status">
-          {t(changed ? "admin.config.status.changed" : "admin.config.status.unchanged")}
-        </p>
-        {canGoToError && (
+      <div ref={scopeRef} className="qm-builder__scope">
+        {/* The section h2 sits just before this bar and reads as its title (design target, A2). */}
+        <div className="qm-builder__toolbar">
+          <p className="qm-builder__status" data-testid="draft-status">
+            {t(changed ? "admin.config.status.changed" : "admin.config.status.unchanged")}
+          </p>
+          {canGoToError && (
+            <button
+              type="button"
+              className={`qm-badge ${errorCount > 0 ? "qm-badge--critical" : "qm-badge--warning"} qm-builder__issues`}
+              onClick={goToFirstIssue}
+            >
+              {issueWords(t, errorCount, warningCount)}
+              <VisuallyHidden>. {t("admin.issues.goTo")}</VisuallyHidden>
+            </button>
+          )}
+          <div
+            role="tablist"
+            aria-label={t("admin.config.tabsLabel")}
+            className="qm-seg qm-builder__views"
+          >
+            {TABS.map((id) => (
+              <button
+                key={id}
+                ref={(el) => {
+                  tabRefs.current[id] = el;
+                }}
+                type="button"
+                role="tab"
+                id={`${uid}-tab-${id}`}
+                aria-selected={tab === id}
+                aria-controls={`${uid}-panel`}
+                tabIndex={tab === id ? 0 : -1}
+                onClick={() => setTab(id)}
+                onKeyDown={onKeyDown}
+              >
+                {t(`admin.config.tab.${id}`)}
+              </button>
+            ))}
+          </div>
+          {/* Undo and redo stay focusable when there is nothing to do, with the reason (spec 6.2). */}
           <button
             type="button"
-            className={`qm-badge ${errorCount > 0 ? "qm-badge--critical" : "qm-badge--warning"} qm-builder__issues`}
-            onClick={goToFirstIssue}
+            className="qm-button qm-button--secondary"
+            aria-disabled={undoCount === 0 ? "true" : undefined}
+            aria-describedby={undoCount === 0 ? historyReasonId : undefined}
+            aria-keyshortcuts="Control+Z Meta+Z"
+            onClick={() => step("undo")}
           >
-            {issueWords(t, errorCount, warningCount)}
-            <VisuallyHidden>. {t("admin.issues.goTo")}</VisuallyHidden>
+            {t("admin.config.undo")}
           </button>
-        )}
-        <div
-          role="tablist"
-          aria-label={t("admin.config.tabsLabel")}
-          className="qm-seg qm-builder__views"
-        >
-          {TABS.map((id) => (
-            <button
-              key={id}
-              ref={(el) => {
-                tabRefs.current[id] = el;
-              }}
-              type="button"
-              role="tab"
-              id={`${uid}-tab-${id}`}
-              aria-selected={tab === id}
-              aria-controls={`${uid}-panel`}
-              tabIndex={tab === id ? 0 : -1}
-              onClick={() => setTab(id)}
-              onKeyDown={onKeyDown}
-            >
-              {t(`admin.config.tab.${id}`)}
-            </button>
-          ))}
-        </div>
-        {/* Spec 6.2: aria-disabled keeps both focusable, and one visible reason describes both. */}
-        <button
-          type="button"
-          className="qm-button qm-button--secondary"
-          aria-disabled="true"
-          aria-describedby={reasonId}
-        >
-          {t("admin.config.history")}
-        </button>
-        <button
-          type="button"
-          className="qm-button"
-          aria-disabled="true"
-          aria-describedby={reasonId}
-        >
-          {t("admin.config.publish")}
-        </button>
-        <p className="qm-builder__reason" id={reasonId}>
-          {t("admin.config.publishDisabled")}
-        </p>
-      </div>
-      <div className="qm-builder__body">
-        {/* The issue button shows the counts; this stays as the polite announcement (Task 33). */}
-        <div data-testid="draft-summary" aria-live="polite" style={visuallyHiddenStyle}>
-          {raw.parseError !== null ? (
-            <p>{t("admin.config.raw.notParsed")}</p>
-          ) : checks.status === "error" ? (
-            <p>{t("admin.config.raw.bundleError")}</p>
-          ) : checks.status === "loading" ? (
-            <p>{t("admin.config.raw.checksLoading")}</p>
-          ) : (
-            <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
-          )}
-        </div>
-        <div className="qm-builder__panes">
-          <BuilderTree doc={doc} selected={shown.pointer} onSelect={onSelect} />
-          <div
-            ref={panelRef}
-            className="qm-builder__editor"
-            role="tabpanel"
-            id={`${uid}-panel`}
-            aria-labelledby={`${uid}-tab-${tab}`}
+          <button
+            type="button"
+            className="qm-button qm-button--secondary"
+            aria-disabled={redoCount === 0 ? "true" : undefined}
+            aria-describedby={redoCount === 0 ? historyReasonId : undefined}
+            aria-keyshortcuts="Control+Shift+Z Control+Y Meta+Shift+Z"
+            onClick={() => step("redo")}
           >
-            {tab === "form" ? (
-              <SelectionContext.Provider value={shown}>
-                <FormTab doc={doc} />
-              </SelectionContext.Provider>
+            {t("admin.config.redo")}
+          </button>
+          {/* Spec 6.2: aria-disabled keeps both focusable, and one visible reason describes both. */}
+          <button
+            type="button"
+            className="qm-button qm-button--secondary"
+            aria-disabled="true"
+            aria-describedby={reasonId}
+          >
+            {t("admin.config.history")}
+          </button>
+          <button
+            type="button"
+            className="qm-button"
+            aria-disabled="true"
+            aria-describedby={reasonId}
+          >
+            {t("admin.config.publish")}
+          </button>
+          {historyReason !== null && (
+            <p className="qm-builder__reason" id={historyReasonId}>
+              {historyReason}
+            </p>
+          )}
+          <p className="qm-builder__reason" id={reasonId}>
+            {t("admin.config.publishDisabled")}
+          </p>
+        </div>
+        <div className="qm-builder__body">
+          {/* The issue button shows the counts; this stays as the polite announcement (Task 33). */}
+          <div data-testid="draft-summary" aria-live="polite" style={visuallyHiddenStyle}>
+            {raw.parseError !== null ? (
+              <p>{t("admin.config.raw.notParsed")}</p>
+            ) : checks.status === "error" ? (
+              <p>{t("admin.config.raw.bundleError")}</p>
+            ) : checks.status === "loading" ? (
+              <p>{t("admin.config.raw.checksLoading")}</p>
             ) : (
-              <RawTab raw={raw} setRaw={setRaw} onRawDoc={onRawDoc} />
+              <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
             )}
           </div>
-          {checks.doc !== null && (
-            <BuilderPreview
-              doc={checks.doc}
-              labels={checks.labels}
-              blocked={raw.parseError !== null || errorCount > 0}
-              pending={checks.doc !== doc || checks.labels !== labels}
-              selected={shown.pointer}
-              errorCount={errorCount}
-              parseError={raw.parseError !== null}
-              onGoToError={canGoToError && errorCount > 0 ? goToFirstIssue : undefined}
-            />
-          )}
+          <div className="qm-builder__panes">
+            <BuilderTree doc={doc} selected={shown.pointer} onSelect={onSelect} />
+            <div
+              ref={panelRef}
+              className="qm-builder__editor"
+              role="tabpanel"
+              id={`${uid}-panel`}
+              aria-labelledby={`${uid}-tab-${tab}`}
+            >
+              {tab === "form" ? (
+                <SelectionContext.Provider value={shown}>
+                  <FormTab doc={doc} />
+                </SelectionContext.Provider>
+              ) : (
+                <RawTab raw={raw} setRaw={setRaw} onRawDoc={onRawDoc} />
+              )}
+            </div>
+            {checks.doc !== null && (
+              <BuilderPreview
+                doc={checks.doc}
+                labels={checks.labels}
+                blocked={raw.parseError !== null || errorCount > 0}
+                pending={checks.doc !== doc || checks.labels !== labels}
+                selected={shown.pointer}
+                errorCount={errorCount}
+                parseError={raw.parseError !== null}
+                onGoToError={canGoToError && errorCount > 0 ? goToFirstIssue : undefined}
+              />
+            )}
+          </div>
         </div>
       </div>
     </ChecksContext.Provider>

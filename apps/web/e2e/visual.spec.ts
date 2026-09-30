@@ -700,6 +700,46 @@ test.describe("B1 builder tree keyboard (1440x900)", () => {
   });
 });
 
+test.describe("B1 undo and redo in the builder toolbar (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: the buttons are 36 px, dashed and focusable while empty, live after an edit; Ctrl+Z from a tree row undoes`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        const undo = page.getByRole("button", { name: "Undo", exact: true });
+        const redo = page.getByRole("button", { name: "Redo", exact: true });
+        await expect(undo).toHaveAttribute("aria-disabled", "true");
+        await expect(undo).toHaveCSS("border-top-style", "dashed");
+        expect(Math.round((await undo.boundingBox())?.height ?? 0), "undo height").toBe(36);
+        expect(Math.round((await redo.boundingBox())?.height ?? 0), "redo height").toBe(36);
+        await undo.focus();
+        await expect(undo).toBeFocused();
+        await expect(page.getByText("Nothing to undo or redo yet.")).toBeVisible();
+        // An edit in Terminal settings.
+        const tree = page.getByRole("navigation", { name: "Configuration items" });
+        await tree.getByRole("treeitem", { name: /^Terminal settings/ }).click();
+        const delimiter = page.getByRole("textbox", { name: "Delimiter", exact: true });
+        const before = await delimiter.inputValue();
+        await delimiter.fill("~");
+        await expect(undo).not.toHaveAttribute("aria-disabled");
+        await expect(undo).toHaveCSS("border-top-style", "solid");
+        // From a tree row the key is the draft's undo; the field is read again from the draft.
+        const row = tree.getByRole("treeitem", { name: /^Terminal settings/ });
+        await row.focus();
+        await page.keyboard.press("Control+z");
+        await expect(delimiter).toHaveValue(before);
+        await expect(row).toBeFocused();
+        await page.keyboard.press("Control+Shift+z");
+        await expect(delimiter).toHaveValue("~");
+        await captureCrop(page, page.locator(".qm-builder__toolbar"), `b1-undo-toolbar-${mode}`);
+      });
+    });
+  }
+});
+
 test.describe("every screen, viewport and theme: no horizontal overflow", () => {
   for (const viewport of VIEWPORTS) {
     for (const mode of MODES) {

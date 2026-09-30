@@ -3,14 +3,14 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
 import { controlId, humanize, NumberControl, useDraftSetters } from "./controls.js";
-import type { PathSegment } from "./draft.js";
+import type { PathSegment, SetPathOptions } from "./draft.js";
 import { issueWords } from "./selection.js";
 
 interface NodeEditorProps {
   value: unknown;
   path: readonly PathSegment[];
   idPrefix: string;
-  onChange(path: readonly PathSegment[], value: unknown): void;
+  onChange(path: readonly PathSegment[], value: unknown, options?: SetPathOptions): void;
 }
 
 const pathText = (path: readonly PathSegment[]): string => path.join(".");
@@ -237,7 +237,7 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
         value={typeof value === "string" ? value : ""}
         aria-invalid={invalid}
         aria-describedby={describedBy}
-        onChange={(e) => onChange(path, e.target.value)}
+        onChange={(e) => onChange(path, e.target.value, { coalesce: true })}
       />
       <IssueMessages id={issuesId} issues={issues} />
     </div>

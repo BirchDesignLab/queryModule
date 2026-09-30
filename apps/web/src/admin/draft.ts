@@ -131,14 +131,43 @@ export function validateDraft(
   return { ok: true, errors: result.errors, warnings: result.warnings };
 }
 
+/** What the draft, its labels and the builder's selection were at one moment. */
+interface Snapshot {
+  doc: JsonObject | null;
+  labels: LabelOverlay;
+  /** The builder's selection (a tree pointer) then; opaque to the store. */
+  meta: string | null;
+}
+
+/** What an undo or redo hands back: the selection to restore. */
+export interface Restored {
+  meta: string | null;
+}
+
+/** Steps kept for undo; older ones are dropped. */
+export const HISTORY_LIMIT = 100;
+
+export interface SetPathOptions {
+  coalesce?: boolean;
+}
+
 export interface ConfigDraftState {
   doc: JsonObject | null;
   labels: LabelOverlay;
+  /** Steps that can be undone and redone (memory only, cleared with the draft). */
+  undoCount: number;
+  redoCount: number;
   /** Seeds the draft once; a later call keeps the edits. */
   start(doc: JsonObject): void;
-  setPath(path: readonly PathSegment[], value: unknown): void;
+  /** `coalesce`: a text entry, whose consecutive edits of one control are one undo step. */
+  setPath(path: readonly PathSegment[], value: unknown, options?: SetPathOptions): void;
   setDoc(doc: JsonObject): void;
   setLabel(locale: string, key: string, text: string): void;
+  removeLabel(locale: string, key: string): void;
+  /** Records the builder's selection, so an undo can restore it. Not a step. */
+  setMeta(meta: string | null): void;
+  undo(): Restored | null;
+  redo(): Restored | null;
   reset(): void;
 }
 
@@ -147,30 +176,97 @@ export interface ConfigDraftStore {
   subscribe(listener: () => void): () => void;
 }
 
+const valueAt = (doc: unknown, path: readonly PathSegment[]): unknown =>
+  path.reduce<unknown>(
+    (node, key) =>
+      node === null || typeof node !== "object" ? undefined : (node as JsonObject)[key],
+    doc,
+  );
+
 export function createConfigDraftStore(): ConfigDraftStore {
   const listeners = new Set<() => void>();
   let state: ConfigDraftState;
-  const set = (patch: Partial<Pick<ConfigDraftState, "doc" | "labels">>): void => {
-    state = { ...state, ...patch };
+  let meta: string | null = null;
+  let past: Snapshot[] = [];
+  let future: Snapshot[] = [];
+  // The text entry that made the last step: consecutive edits of that one control are one step
+  // (typing is not a hundred undos). A structural edit, a toggle or a choice is always its own
+  // step; an undo, a redo or choosing another item ends the run.
+  let lastKey: string | null = null;
+  const publish = (patch: Partial<ConfigDraftState> = {}): void => {
+    state = { ...state, ...patch, undoCount: past.length, redoCount: future.length };
     for (const l of [...listeners]) l();
+  };
+  const snapshot = (): Snapshot => ({ doc: state.doc, labels: state.labels, meta });
+  /** Records the state before an edit as a step, unless it continues the same edit. */
+  const record = (key: string | null): void => {
+    if (key !== null && key === lastKey && past.length > 0) return;
+    past = [...past, snapshot()].slice(-HISTORY_LIMIT);
+    future = [];
+    lastKey = key;
+  };
+  const restore = (from: Snapshot): Restored => {
+    meta = from.meta;
+    lastKey = null;
+    publish({ doc: from.doc, labels: from.labels });
+    return { meta: from.meta };
   };
   state = {
     doc: null,
     labels: {},
+    undoCount: 0,
+    redoCount: 0,
     start(doc) {
-      if (state.doc === null) set({ doc });
+      if (state.doc === null) publish({ doc });
     },
-    setPath(path, value) {
-      if (state.doc !== null) set({ doc: setAtPath(state.doc, path, value) });
+    setPath(path, value, options) {
+      if (state.doc === null || Object.is(valueAt(state.doc, path), value)) return;
+      record(options?.coalesce === true ? `path:${path.join("\u0000")}` : null);
+      publish({ doc: setAtPath(state.doc, path, value) });
     },
     setDoc(doc) {
-      set({ doc });
+      if (Object.is(state.doc, doc)) return;
+      record("doc");
+      publish({ doc });
     },
     setLabel(locale, key, text) {
-      set({ labels: { ...state.labels, [locale]: { ...state.labels[locale], [key]: text } } });
+      if (state.labels[locale]?.[key] === text) return;
+      record(`label:${locale}\u0000${key}`);
+      publish({ labels: { ...state.labels, [locale]: { ...state.labels[locale], [key]: text } } });
+    },
+    removeLabel(locale, key) {
+      const own = state.labels[locale];
+      if (own === undefined || !(key in own)) return;
+      record(null);
+      const { [key]: _gone, ...rest } = own;
+      publish({ labels: { ...state.labels, [locale]: rest } });
+    },
+    setMeta(next) {
+      if (next !== meta) lastKey = null;
+      meta = next;
+    },
+    undo() {
+      const back = past.at(-1);
+      if (back === undefined) return null;
+      const current = snapshot();
+      past = past.slice(0, -1);
+      future = [...future, current];
+      return restore(back);
+    },
+    redo() {
+      const forward = future.at(-1);
+      if (forward === undefined) return null;
+      const current = snapshot();
+      future = future.slice(0, -1);
+      past = [...past, current];
+      return restore(forward);
     },
     reset() {
-      set({ doc: null, labels: {} });
+      meta = null;
+      past = [];
+      future = [];
+      lastKey = null;
+      publish({ doc: null, labels: {} });
     },
   };
   return {

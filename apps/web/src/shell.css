@@ -502,6 +502,11 @@ main[tabindex="-1"]:focus {
   font-weight: 600;
 }
 
+/* The undo keys' scope wraps the toolbar and panes without becoming a layout box. */
+.qm-builder__scope {
+  display: contents;
+}
+
 .qm-builder__toolbar {
   flex: 1 1 auto;
   display: flex;
@@ -1112,9 +1117,21 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-sm);
 }
 
-.qm-label-row__input {
+.qm-label-row__edit {
   grid-column: 1 / -1;
-  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+}
+
+.qm-label-row__edit .qm-button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.qm-label-row__input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
   box-sizing: border-box;
 }
 
