@@ -63,7 +63,9 @@ async function openType(t: Opened, code: string) {
 }
 
 const typeBox = (code: string) => group(document, `Query type ${code}`.trim());
-const fieldBox = (code: string, key: string) => group(typeBox(code), `Field ${key}`.trim());
+/** A3: a field's legend is its label with the key in hidden text ("Plate, field plate"). */
+const fieldBox = (code: string, key: string) =>
+  group(typeBox(code), key === "" ? "New field" : new RegExp(`field ${key}$`));
 const picklistBox = (id: string) => group(document, `Picklist ${id}`.trim());
 
 describe("query type editor (Task 31 part 2, BR-001, FR-060, UX-004)", () => {
@@ -109,12 +111,12 @@ describe("query type editor (Task 31 part 2, BR-001, FR-060, UX-004)", () => {
     expect(sections).toEqual(["base", ""]);
     const keys = within(typeBox("PER")).getAllByLabelText("Section key");
     await fill(t, keys[1] as HTMLElement, "extra");
-    const select = within(fieldBox("PER", "dob")).getByLabelText("Section");
+    const select = within(fieldBox("PER", "dob")).getByLabelText("Appears in section");
     expect(
       within(select)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toEqual(["(none)", "base", "extra"]);
+    ).toEqual(["(none)", "Details", "extra"]);
     await t.user.selectOptions(select, "extra");
     expect(typeOf(t, "PER").fields.find((f) => f.key === "dob")?.section).toBe("extra");
     await t.user.click(
@@ -130,11 +132,11 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await openSection(t, "queryTypes");
     await openType(t, "PER");
     const box = fieldBox("PER", "first");
-    expect(within(box).queryByLabelText("Picklist")).toBeNull();
+    expect(within(box).queryByLabelText("Choices come from")).toBeNull();
     await t.user.click(within(box).getByLabelText("Required"));
     expect(typeOf(t, "PER").fields.find((f) => f.key === "first")?.required).toBe(true);
-    await t.user.selectOptions(within(box).getByLabelText("Data type"), "picklist");
-    const picklist = within(fieldBox("PER", "first")).getByLabelText("Picklist");
+    await t.user.selectOptions(within(box).getByLabelText("Input type"), "picklist");
+    const picklist = within(fieldBox("PER", "first")).getByLabelText("Choices come from");
     expect(
       within(picklist)
         .getAllByRole("option")
@@ -155,7 +157,7 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     const box = fieldBox("PER", "sex");
     await fill(t, within(box).getByLabelText("Default value"), "F");
     expect(typeOf(t, "PER").fields.find((f) => f.key === "sex")?.defaultValue).toBe("F");
-    await t.user.selectOptions(within(box).getByLabelText("Data type"), "number");
+    await t.user.selectOptions(within(box).getByLabelText("Input type"), "number");
     const sex = typeOf(t, "PER").fields.find((f) => f.key === "sex") as Field;
     expect(sex.dataType).toBe("number");
     expect("picklist" in sex && sex.picklist !== undefined).toBe(false);
@@ -182,8 +184,8 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await openSection(t, "queryTypes");
     await openType(t, "VEH");
     const box = fieldBox("VEH", "vin");
-    await t.user.selectOptions(within(box).getByLabelText("Transform"), "upper");
-    const pattern = within(box).getByLabelText("Pattern");
+    await t.user.selectOptions(within(box).getByLabelText("Letter case"), "upper");
+    const pattern = within(box).getByLabelText("Allowed pattern");
     await t.user.clear(pattern);
     await t.user.type(pattern, "^[[A-Z0-9]+$");
     expect(typeOf(t, "VEH").fields.find((f) => f.key === "vin")).toMatchObject({
@@ -316,7 +318,7 @@ describe("critic fixes (Task 31 part 2 PR1)", () => {
     await openType(t, "VEH");
     // Both fields number-typed, so the same control type sits at the shifted index.
     await t.user.selectOptions(
-      within(fieldBox("VEH", "vin")).getByLabelText("Data type"),
+      within(fieldBox("VEH", "vin")).getByLabelText("Input type"),
       "number",
     );
     await fill(t, within(fieldBox("VEH", "year")).getByLabelText("Default value"), "abc");
@@ -345,34 +347,34 @@ describe("critic fixes (Task 31 part 2 PR1)", () => {
     const t = await openBuilder();
     await openSection(t, "queryTypes");
     await openType(t, "WNT");
-    const select = within(fieldBox("WNT", "dob")).getByLabelText("Section");
+    const select = within(fieldBox("WNT", "dob")).getByLabelText("Appears in section");
     expect(within(select).getAllByRole("option")[0]).toHaveTextContent("(none)");
   });
 });
 
 describe("focus after remove (#388)", () => {
-  it("removing a field focuses the next field's key; the last field, the previous one", async () => {
+  it("removing a field focuses the next field's first control (its label, A3); the last field, the previous one", async () => {
     const t = await openBuilder();
     await openSection(t, "queryTypes");
     await openType(t, "WNT");
     await t.user.click(
       within(fieldBox("WNT", "first")).getByRole("button", { name: "Remove field first" }),
     );
-    expect(within(fieldBox("WNT", "dob")).getByLabelText("Key")).toHaveFocus();
+    expect(within(fieldBox("WNT", "dob")).getByLabelText("Label (en)")).toHaveFocus();
     await t.user.click(
       within(fieldBox("WNT", "dob")).getByRole("button", { name: "Remove field dob" }),
     );
-    expect(within(fieldBox("WNT", "last")).getByLabelText("Key")).toHaveFocus();
+    expect(within(fieldBox("WNT", "last")).getByLabelText("Label (en)")).toHaveFocus();
   });
 
-  it("removing the only extra section focuses the base section key; removing a value focuses the next", async () => {
+  it("removing the only extra section focuses the base section's label (A3); removing a value focuses the next", async () => {
     const t = await openBuilder();
     await openSection(t, "queryTypes");
     await openType(t, "PER");
     await t.user.click(within(typeBox("PER")).getByRole("button", { name: "Add section" }));
     await t.user.click(within(typeBox("PER")).getByRole("button", { name: "Remove section" }));
     expect(
-      within(group(typeBox("PER"), "Section base")).getByLabelText("Section key"),
+      within(group(typeBox("PER"), /section base$/)).getByLabelText("Label (en)"),
     ).toHaveFocus();
     await openSection(t, "picklists");
     await t.user.click(

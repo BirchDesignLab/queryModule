@@ -187,12 +187,12 @@ describe("rules editor (Task 31 part 2, spec 4.2, FR-060, UX-004)", () => {
   it("a section condition can be added and removed", async () => {
     const t = await openBuilder();
     const type = await openType(t, "PER");
-    const section = group(type, "Section base");
+    const section = group(type, /section base$/);
     await t.user.click(within(section).getByRole("button", { name: "Add condition" }));
     const per = () => types(t).find((q) => q.code === "PER") as QueryType;
     expect(per().sections[0]?.when).toEqual({ field: "last", op: "notEmpty" });
     await t.user.click(
-      within(group(typeBoxOf("PER"), "Section base")).getByRole("button", {
+      within(group(typeBoxOf("PER"), /section base$/)).getByRole("button", {
         name: "Remove condition",
       }),
     );
@@ -204,7 +204,7 @@ describe("#388 diagnostics polish", () => {
   it("issue messages carry their level as text", async () => {
     const t = await openBuilder();
     await openType(t, "WNT");
-    const key = within(group(typeBoxOf("WNT"), "Field first")).getByLabelText("Key");
+    const key = within(group(typeBoxOf("WNT"), /field first$/)).getByLabelText("Key");
     await t.user.clear(key);
     await waitFor(() => expect(key).toHaveAttribute("aria-invalid", "true"));
     expect(key).toHaveAccessibleDescription(/^Error:/);
@@ -258,7 +258,7 @@ describe("PR2 critic fixes", () => {
   it("I4: adding a section condition focuses its type; removing it focuses Add condition", async () => {
     const t = await openBuilder();
     await openType(t, "PER");
-    const section = () => group(typeBoxOf("PER"), "Section base");
+    const section = () => group(typeBoxOf("PER"), /section base$/);
     await t.user.click(within(section()).getByRole("button", { name: "Add condition" }));
     expect(within(section()).getByLabelText("Condition type")).toHaveFocus();
     await t.user.click(within(section()).getByRole("button", { name: "Remove condition" }));

@@ -66,7 +66,8 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     await openBuilder();
     const form = screen.getByTestId("form-tab");
     expect(
-      within(form).getByRole("heading", { name: /^Query types queryTypes/, level: 3 }),
+      // A3: the heading is the type itself, under a Query types crumb.
+      within(form).getByRole("heading", { name: /^Vehicle VEH/, level: 3 }),
     ).toBeInTheDocument();
     expect(within(form).getByText("Query type VEH", { selector: "legend" })).toBeInTheDocument();
     expect(within(form).queryByText("Query type PER", { selector: "legend" })).toBeNull();
@@ -90,7 +91,10 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
       .getAllByRole("button")
       .filter((b) => b !== field && b.getAttribute("aria-current") === "true");
     expect(others).toEqual([]);
-    const legend = await screen.findByText("Field plateType", { selector: "legend" });
+    // A3: a field's legend is its label; the key follows in hidden text.
+    const legend = await screen.findByText(
+      (_, el) => el?.tagName === "LEGEND" && /field plateType$/.test(el.textContent ?? ""),
+    );
     const box = legend.closest("fieldset") as HTMLElement;
     await waitFor(() => expect(box).toHaveAttribute("data-selected", "true"));
     expect(screen.getByText("Query type VEH", { selector: "legend" })).toBeInTheDocument();

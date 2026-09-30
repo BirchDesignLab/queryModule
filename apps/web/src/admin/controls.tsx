@@ -1,4 +1,5 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { VisuallyHidden } from "@querymodule/web-ui";
+import { type ReactNode, useCallback, useContext, useEffect, useId, useState } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
@@ -112,7 +113,14 @@ export function TextControl({
   value,
   optional = false,
   owner,
-}: ControlProps & { value: unknown; optional?: boolean; owner?: string }) {
+  focusRole = "first",
+}: ControlProps & {
+  value: unknown;
+  optional?: boolean;
+  owner?: string;
+  /** The focus role under `owner`: "first" by default; "key" for a key under Advanced. */
+  focusRole?: string;
+}) {
   const { setPath } = useDraftSetters();
   const { id, invalid, describedBy, messages } = useControlIssues(idPrefix, path);
   return (
@@ -122,7 +130,7 @@ export function TextControl({
         id={id}
         type="text"
         data-owner={owner}
-        data-role={owner === undefined ? undefined : "first"}
+        data-role={owner === undefined ? undefined : focusRole}
         value={typeof value === "string" ? value : ""}
         aria-invalid={invalid}
         aria-describedby={describedBy}
@@ -286,11 +294,14 @@ export function LabelTextControls({
   idPrefix,
   path,
   labelKey,
+  owner,
 }: {
   idPrefix: string;
   /** The item that owns the label key; ids carry it, since items may share a key (critic I1). */
   path: readonly PathSegment[];
   labelKey: unknown;
+  /** As for TextControl: the first locale's input is the item's first control. */
+  owner?: string;
 }) {
   const t = useT();
   const translator = useTranslator();
@@ -300,8 +311,9 @@ export function LabelTextControls({
   const key = typeof labelKey === "string" ? labelKey : "";
   return (
     <>
-      {locales.map((locale) => {
+      {locales.map((locale, index) => {
         const id = controlId(idPrefix, [...path, "labelText", locale]);
+        const first = owner !== undefined && index === 0;
         const overlay = labels[locale]?.[key];
         const shipped =
           locale === translator.locale && translator.has(key) ? translator.t(key) : "";
@@ -311,6 +323,8 @@ export function LabelTextControls({
             <input
               id={id}
               type="text"
+              data-owner={first ? owner : undefined}
+              data-role={first ? "first" : undefined}
               value={overlay ?? shipped}
               disabled={key === ""}
               onChange={(e) => setLabel(locale, key, e.target.value)}
@@ -320,6 +334,16 @@ export function LabelTextControls({
       })}
     </>
   );
+}
+
+/**
+ * Focuses a control, first opening every disclosure around it: a closed <details> (an Advanced
+ * the user collapsed) would leave the control unfocusable (A3 critic).
+ */
+export function revealAndFocus(el: HTMLElement): void {
+  for (let d = el.closest("details"); d !== null; d = d.parentElement?.closest("details") ?? null)
+    d.open = true;
+  el.focus();
 }
 
 /**
@@ -336,7 +360,7 @@ export function useFocusRequest() {
         `[data-owner="${CSS.escape(owner)}"][data-role="${role}"]`,
       );
       if (el !== null && !(el as HTMLButtonElement).disabled) {
-        el.focus();
+        revealAndFocus(el);
         return;
       }
     }
@@ -345,7 +369,10 @@ export function useFocusRequest() {
   return useCallback((...targets: (readonly [string, string])[]) => setWant(targets), []);
 }
 
-/** Move up, move down and remove buttons for one list item. */
+/**
+ * Move up, move down and remove buttons for one list item. The visible text says what the button
+ * does; the item's key follows in hidden text, so each button still has its own name (A3).
+ */
 export function ItemButtons({
   owner,
   name,
@@ -366,7 +393,14 @@ export function ItemButtons({
   movable?: boolean;
 }) {
   const t = useT();
-  const suffix = name === "" ? "" : ` ${name}`;
+  // The space sits outside the hidden text: a name computation drops it inside (A3).
+  const suffix =
+    name === "" ? null : (
+      <>
+        {" "}
+        <VisuallyHidden>{name}</VisuallyHidden>
+      </>
+    );
   return (
     <div className="qm-admin__item-buttons">
       {movable && index > 0 && (
@@ -377,7 +411,8 @@ export function ItemButtons({
           data-role="up"
           onClick={() => onMove?.(index, index - 1)}
         >
-          {`${t("admin.config.moveUp")}${suffix}`}
+          {t("admin.config.moveUp")}
+          {suffix}
         </button>
       )}{" "}
       {movable && index < count - 1 && (
@@ -388,7 +423,8 @@ export function ItemButtons({
           data-role="down"
           onClick={() => onMove?.(index, index + 1)}
         >
-          {`${t("admin.config.moveDown")}${suffix}`}
+          {t("admin.config.moveDown")}
+          {suffix}
         </button>
       )}{" "}
       <button
@@ -398,7 +434,8 @@ export function ItemButtons({
         data-role="remove"
         onClick={() => onRemove(index)}
       >
-        {`${removeLabel}${suffix}`}
+        {removeLabel}
+        {suffix}
       </button>
     </div>
   );
@@ -420,4 +457,92 @@ export function moved<T>(items: readonly T[], from: number, to: number): T[] {
   const [item] = copy.splice(from, 1);
   copy.splice(to, 0, item as T);
   return copy;
+}
+
+/** The label text a user sees for a label key: the draft's overlay, else the shipped text. */
+export function useLabelText(): (labelKey: unknown) => string {
+  const translator = useTranslator();
+  const { labels } = useDraft();
+  return useCallback(
+    (labelKey: unknown) => {
+      const key = typeof labelKey === "string" ? labelKey : "";
+      if (key === "") return "";
+      const overlay = labels[translator.locale]?.[key];
+      if (overlay !== undefined) return overlay;
+      return translator.has(key) ? translator.t(key) : "";
+    },
+    [labels, translator],
+  );
+}
+
+/**
+ * A ruled section of an editor (A3, design target): its title and an optional hint in a label
+ * column, its controls beside them. The column wraps above the controls in a narrow pane.
+ */
+export function Sect({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="qm-sect">
+      <div className="qm-sect__label">
+        <h4 id={id}>{title}</h4>
+        {hint !== undefined && <p className="qm-sect__hint">{hint}</p>}
+      </div>
+      {/* Named by the title, so its lists (sections, fields, rules) keep a group name. */}
+      <fieldset className="qm-sect__body" aria-labelledby={id}>
+        {children}
+      </fieldset>
+    </div>
+  );
+}
+
+/**
+ * Keys, label keys, patterns and the item's place in the config (A3): closed by default, open while
+ * a setting in it has an issue or `attention` says one needs filling in (a new item's blank key),
+ * so the issue button and a new item's first control are never hidden in a closed disclosure.
+ */
+export function Advanced({
+  path,
+  keys,
+  attention = false,
+  children,
+}: {
+  path: readonly PathSegment[];
+  /** The item's keys edited in here, for their issues. */
+  keys: readonly string[];
+  attention?: boolean;
+  children: ReactNode;
+}) {
+  const t = useT();
+  const checks = useContext(ChecksContext);
+  const pointers = keys.map((k) => toPointer([...path, k]));
+  const flagged = checks.issues.some((i) =>
+    pointers.some((p) => i.pointer === p || i.pointer.startsWith(`${p}/`)),
+  );
+  const [open, setOpen] = useState(false);
+  const forced = flagged || attention;
+  // Latched: fixing the issue never closes it under the user's focus.
+  useEffect(() => {
+    if (forced) setOpen(true);
+  }, [forced]);
+  return (
+    <details
+      className="qm-advanced"
+      open={open || forced}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>{t("admin.config.advanced")}</summary>
+      {children}
+      <p className="qm-advanced__location">
+        {t("admin.config.advancedLocation")} <code>{toPointer(path)}</code>
+      </p>
+    </details>
+  );
 }

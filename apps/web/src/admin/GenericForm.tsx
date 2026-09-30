@@ -204,11 +204,17 @@ export function EditorSection({
   pointer,
   label,
   configKey,
+  crumb,
+  countPointer = pointer,
   children,
 }: {
   pointer: string;
   label: string;
   configKey?: string;
+  /** Where the item sits, above its heading (A3): "Query types" or "Site". */
+  crumb?: string;
+  /** The item whose issues the heading counts; the section's own pointer by default. */
+  countPointer?: string;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -216,12 +222,13 @@ export function EditorSection({
   let errors = 0;
   let warnings = 0;
   for (const i of checks.issues)
-    if (i.pointer === pointer || i.pointer.startsWith(`${pointer}/`)) {
+    if (i.pointer === countPointer || i.pointer.startsWith(`${countPointer}/`)) {
       if (i.level === "error") errors++;
       else warnings++;
     }
   return (
     <section className="qm-editor__section" data-path={pointer}>
+      {crumb !== undefined && <p className="qm-editor__crumb">{crumb}</p>}
       <h3 className="qm-editor__title">
         {label}
         {configKey !== undefined && configKey !== label && (
