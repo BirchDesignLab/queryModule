@@ -957,6 +957,9 @@ main[tabindex="-1"]:focus {
 .qm-sect__body {
   flex: 1 1 calc(var(--qm-space-12) * 5);
   min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .qm-sect__body > :first-child,

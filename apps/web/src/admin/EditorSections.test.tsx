@@ -163,4 +163,44 @@ describe("A3 query type editor: ruled sections", () => {
     await waitFor(() => expect(advanced(fieldBox("WNT", "last")).open).toBe(true));
     expect(advanced(fieldBox("WNT", "first")).open).toBe(false);
   });
+
+  it("stays open once the issue is fixed, with focus kept in its control", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "WNT");
+    await t.user.click(within(typeBox("WNT")).getByRole("button", { name: "Add field" }));
+    const box = group(typeBox("WNT"), "New field");
+    const key = within(advanced(box)).getByLabelText("Key");
+    expect(key).toHaveFocus();
+    await t.user.paste("extra");
+    const labelKey = within(advanced(box)).getByLabelText("Label key");
+    await t.user.click(labelKey);
+    await t.user.paste("field.last");
+    // No blank key and no issue now: still open, focus still where the user is.
+    const fieldBoxNow = fieldBox("WNT", "extra");
+    expect(advanced(fieldBoxNow).open).toBe(true);
+    expect(within(advanced(fieldBoxNow)).getByLabelText("Label key")).toHaveFocus();
+  });
+
+  it("the issue button reaches a control in an Advanced the user closed", async () => {
+    const t = await openBuilder();
+    const summary = screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary).toHaveTextContent(/Draft checks: 0 errors/));
+    await selectBuilderItem(t.user, "WNT");
+    act(() => {
+      const d = structuredClone(state(t).doc) as { queryTypes: QueryType[] };
+      const wnt = d.queryTypes.find((q) => q.code === "WNT") as QueryType;
+      (wnt.fields[0] as Field).pattern = "(";
+      state(t).setDoc(d as never);
+    });
+    const adv = () => advanced(fieldBox("WNT", "last"));
+    await waitFor(() => expect(adv().open).toBe(true));
+    await t.user.click(adv().querySelector("summary") as HTMLElement);
+    expect(adv().open).toBe(false);
+    await t.user.click(
+      screen.getByRole("button", { name: /^1 error, \d+ warnings?\. Go to the first issue\.$/ }),
+    );
+    const pattern = within(adv()).getByLabelText("Allowed pattern");
+    await waitFor(() => expect(pattern).toHaveFocus());
+    expect(adv().open).toBe(true);
+  });
 });

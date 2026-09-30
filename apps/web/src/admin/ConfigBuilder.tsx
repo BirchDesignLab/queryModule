@@ -14,6 +14,7 @@ import { useServices } from "../app/services-context.js";
 import { BuilderTree } from "./BuilderTree.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext, useDraftChecks } from "./checks.js";
+import { revealAndFocus } from "./controls.js";
 import { docFromClient, type JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
 import { hasPointer, parentPointer } from "./issues.js";
@@ -153,7 +154,7 @@ function useMarkSelected(
         const control = described?.matches("input, select, textarea, button, summary, [tabindex]")
           ? described
           : described?.querySelector<HTMLElement>("input, select, textarea, button");
-        control?.focus();
+        if (control) revealAndFocus(control);
       }
     };
     const now = ready();

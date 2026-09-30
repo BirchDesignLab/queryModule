@@ -1,6 +1,6 @@
 import { DATA_TYPES, type DataType } from "@querymodule/core/config";
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { memo, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import { ChecksContext } from "./checks.js";
@@ -85,6 +85,10 @@ function MoreSettings(props: Parameters<typeof OtherKeys>[0]) {
   const flagged = checks.issues.some((i) =>
     pointers.some((p) => i.pointer === p || i.pointer.startsWith(`${p}/`)),
   );
+  // Latched as Advanced is: fixing the setting never unmounts it under the user's focus.
+  useEffect(() => {
+    if (flagged) setOpen(true);
+  }, [flagged]);
   return (
     <details open={open || flagged} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>{t("admin.config.moreSettings")}</summary>

@@ -337,6 +337,16 @@ export function LabelTextControls({
 }
 
 /**
+ * Focuses a control, first opening every disclosure around it: a closed <details> (an Advanced
+ * the user collapsed) would leave the control unfocusable (A3 critic).
+ */
+export function revealAndFocus(el: HTMLElement): void {
+  for (let d = el.closest("details"); d !== null; d = d.parentElement?.closest("details") ?? null)
+    d.open = true;
+  el.focus();
+}
+
+/**
  * Focus after a list edit (UX-004): a list asks for elements by owner and role, and the first one
  * found takes focus once the edit has rendered. Owners are `data-owner` values unique per list item.
  */
@@ -350,7 +360,7 @@ export function useFocusRequest() {
         `[data-owner="${CSS.escape(owner)}"][data-role="${role}"]`,
       );
       if (el !== null && !(el as HTMLButtonElement).disabled) {
-        el.focus();
+        revealAndFocus(el);
         return;
       }
     }
@@ -485,7 +495,10 @@ export function Sect({
         <h4 id={id}>{title}</h4>
         {hint !== undefined && <p className="qm-sect__hint">{hint}</p>}
       </div>
-      <div className="qm-sect__body">{children}</div>
+      {/* Named by the title, so its lists (sections, fields, rules) keep a group name. */}
+      <fieldset className="qm-sect__body" aria-labelledby={id}>
+        {children}
+      </fieldset>
     </div>
   );
 }
