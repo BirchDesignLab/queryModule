@@ -3,6 +3,7 @@ export * from "./client-config";
 export * from "./conditions";
 export * from "./defaults";
 export * from "./diagnostic";
+export * from "./diff";
 export * from "./features";
 export * from "./merge";
 export * from "./migrate";

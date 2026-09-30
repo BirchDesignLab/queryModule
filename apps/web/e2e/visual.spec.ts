@@ -807,6 +807,69 @@ test.describe("B1 sign out with unsaved changes (1440x900)", () => {
   }
 });
 
+test.describe("Changes view (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: entries are 36 px rows in body colour with the ringed focus, and open their item`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        const tree = page.getByRole("navigation", { name: "Configuration items" });
+        await tree.getByRole("treeitem", { name: /^Terminal settings/ }).click();
+        await page.getByRole("textbox", { name: "Delimiter", exact: true }).fill("~");
+        await page.getByRole("tab", { name: "Changes", exact: true }).click();
+        const group = page
+          .getByRole("heading", { level: 4, name: /^Terminal settings/ })
+          .locator("xpath=..");
+        await expect(group).toBeVisible();
+        const entry = group.getByRole("button", { name: /Changed/ });
+        await expect(entry).toHaveCSS("color", rgb(mode, "color.text.body"));
+        expect(
+          Math.round((await entry.boundingBox())?.height ?? 0),
+          "entry height",
+        ).toBeGreaterThanOrEqual(36);
+        // No horizontal scroll in the pane, and nothing in it is a live region.
+        expect(await overflowX(page), "overflow").toBeLessThanOrEqual(0);
+        await expect(
+          page
+            .getByRole("region", { name: "Changes from the live version" })
+            .locator("[aria-live]"),
+        ).toHaveCount(0);
+        // By keyboard, so the focus is a keyboard focus and shows its ring.
+        await page.getByRole("tab", { name: "Changes", exact: true }).focus();
+        // The toolbar's buttons come first; Tab through them to the first entry.
+        for (
+          let i = 0;
+          i < 12 && !(await entry.evaluate((el) => el === document.activeElement));
+          i++
+        )
+          await page.keyboard.press("Tab");
+        await expect(entry).toBeFocused();
+        const ring = await entry.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return { style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor };
+        });
+        expect(ring.style).toBe("solid");
+        expect(ring.width).toBe("2px");
+        expect(ring.color).toBe(rgb(mode, "focus.ring"));
+        await captureCrop(page, page.getByRole("tabpanel"), `item4-changes-${mode}`);
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("tab", { name: "Form", exact: true })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
+        await expect
+          .poll(() =>
+            page.evaluate(() => document.activeElement?.closest(".qm-builder__editor") !== null),
+          )
+          .toBe(true);
+      });
+    });
+  }
+});
+
 test.describe("every screen, viewport and theme: no horizontal overflow", () => {
   for (const viewport of VIEWPORTS) {
     for (const mode of MODES) {

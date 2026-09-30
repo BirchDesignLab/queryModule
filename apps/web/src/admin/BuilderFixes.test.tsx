@@ -106,22 +106,27 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
     const t = await openBuilder();
     const form = screen.getByRole("tab", { name: "Form" });
     const raw = screen.getByRole("tab", { name: "Raw JSON" });
+    const changes = screen.getByRole("tab", { name: "Changes" });
     form.focus();
     await t.user.keyboard("{ArrowRight}");
     expect(raw).toHaveFocus();
-    await t.user.keyboard("{ArrowLeft}");
+    await t.user.keyboard("{ArrowRight}");
+    expect(changes).toHaveFocus();
+    await t.user.keyboard("{ArrowRight}");
     expect(form).toHaveFocus();
-    await t.user.keyboard("{End}");
-    expect(raw).toHaveFocus();
+    await t.user.keyboard("{ArrowLeft}");
+    expect(changes).toHaveFocus();
     await t.user.keyboard("{Home}");
     expect(form).toHaveFocus();
+    await t.user.keyboard("{End}");
+    expect(changes).toHaveFocus();
   });
 
   it("Q8: resetting the draft while the builder is open reseeds it from the config", async () => {
     const t = await openBuilder();
     act(() => configDraftStore(t.services).getState().reset());
     await waitFor(() => expect(configDraftStore(t.services).getState().doc).not.toBeNull());
-    expect(within(screen.getByRole("tablist")).getAllByRole("tab")).toHaveLength(2);
+    expect(within(screen.getByRole("tablist")).getAllByRole("tab")).toHaveLength(3);
   });
 });
 

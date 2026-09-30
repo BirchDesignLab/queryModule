@@ -6,7 +6,7 @@ import { configDraftStore, useDraft } from "./builder-store.js";
 import { controlId, Sect } from "./controls.js";
 
 /** A locale in words ("fr" reads "French") in the app's language; its code when the platform has no name. */
-function languageName(locale: string, inLocale: string): string {
+export function languageName(locale: string, inLocale: string): string {
   try {
     return (
       new Intl.DisplayNames([inLocale], { type: "language", fallback: "code" }).of(locale) ?? locale
