@@ -5,7 +5,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
 
-import { expect } from "./fixtures.js";
+import { expect, test } from "./fixtures.js";
 
 /** The seeded `smoke` user (spec 8.5). CI step 12 exports these; locally set them from the first `pnpm dev` output. */
 export function e2eUser(): { email: string; password: string } {
@@ -95,6 +95,11 @@ export async function signIn(
   const appHeading = page.getByRole("heading", { name: "Query Module", exact: true });
   await expect(signInHeading.or(appHeading)).toBeVisible();
   if (await signInHeading.isVisible()) {
+    // Each fallback spends an auth POST; say so, or the suite drifts back toward the limit.
+    test.info().annotations.push({
+      type: "warning",
+      description: `No live saved session for ${user.email}: signed in with the form`,
+    });
     await fillSignIn(page, user);
     return;
   }

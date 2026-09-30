@@ -25,7 +25,8 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
       await route.continue();
       served = true;
     });
-    await signIn(page);
+    // A form sign-in: the late navigation under test is the login page's own continuation.
+    await signIn(page, undefined, { fresh: true });
     await page.getByRole("link", { name: "Status" }).click();
     await expect(page).toHaveURL(/\/status$/);
     await expect.poll(() => served).toBe(true);
