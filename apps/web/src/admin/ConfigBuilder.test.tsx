@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
-import { selectBuilderItem } from "../test/builder-tree.js";
+import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -38,7 +38,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("edits in the generic form change the draft JSON", async () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "terminal");
-    const input = await screen.findByLabelText(/ terminal\.delimiter$/);
+    const input = await findSetting("terminal.delimiter");
     await t.user.clear(input);
     await t.user.type(input, ",");
     expect(draftDoc(t)?.terminal).toEqual({ delimiter: "," });
@@ -75,7 +75,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(status).not.toHaveAttribute("aria-live");
     expect(status).not.toHaveAttribute("role");
     await selectBuilderItem(t.user, "terminal");
-    const input = await screen.findByLabelText(/ terminal\.delimiter$/);
+    const input = await findSetting("terminal.delimiter");
     await t.user.clear(input);
     await t.user.type(input, ",");
     expect(status).toHaveTextContent("Draft: unpublished changes, kept in this tab only");
@@ -124,7 +124,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     );
     await t.user.type(sect.getByLabelText("Label key"), "site.custom");
     await t.user.type(sect.getByLabelText("Text"), "Custom");
-    await t.user.click(sect.getByRole("button", { name: "Add label" }));
+    await t.user.click(sect.getByRole("button", { name: "Add English label" }));
     expect(configDraftStore(t.services).getState().labels).toEqual({
       en: { "site.custom": "Custom" },
     });
@@ -215,7 +215,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("per-source timeoutMs is server-side and read-only in the generic form (CV1)", async () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "sources");
-    const field = await screen.findByLabelText(/ sources\.0\.timeoutMs$/);
+    const field = await findSetting("sources.0.timeoutMs");
     expect(field).toHaveAttribute("readonly");
     const before = JSON.stringify(draftDoc(t)?.sources);
     await t.user.type(field, "9");

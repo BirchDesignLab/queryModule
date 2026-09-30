@@ -1,4 +1,4 @@
-import { VisuallyHidden } from "@querymodule/web-ui";
+import { VisuallyHidden, visuallyHiddenStyle } from "@querymodule/web-ui";
 import {
   type ReactNode,
   useCallback,
@@ -237,12 +237,17 @@ export function NumberControl({
   optional = false,
   readOnly = false,
   note,
+  hint,
+  hintId,
   onChange,
 }: ControlProps & {
   value: unknown;
   optional?: boolean;
   readOnly?: boolean;
   note?: string;
+  /** Hidden description (the generic form's config path), with the id the input points to. */
+  hint?: string;
+  hintId?: string;
   /** Writes the value; the draft store by default. */
   onChange?(path: readonly PathSegment[], value: unknown): void;
 }) {
@@ -267,6 +272,11 @@ export function NumberControl({
   return (
     <div>
       <label htmlFor={id}>{label}</label>{" "}
+      {hint !== undefined && (
+        <span id={hintId} style={visuallyHiddenStyle}>
+          {hint}
+        </span>
+      )}
       <input
         id={id}
         type="text"
@@ -275,8 +285,13 @@ export function NumberControl({
         readOnly={readOnly}
         aria-invalid={invalid}
         aria-describedby={
-          [describedBy, note === undefined ? undefined : noteId].filter(Boolean).join(" ") ||
-          undefined
+          [
+            describedBy,
+            note === undefined ? undefined : noteId,
+            hint === undefined ? undefined : hintId,
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined
         }
         onChange={(e) => {
           const next = e.target.value;

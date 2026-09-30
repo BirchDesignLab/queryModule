@@ -5,6 +5,17 @@ import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { controlId, Sect } from "./controls.js";
 
+/** A locale in words ("fr" reads "French") in the app's language; its code when the platform has no name. */
+function languageName(locale: string, inLocale: string): string {
+  try {
+    return (
+      new Intl.DisplayNames([inLocale], { type: "language", fallback: "code" }).of(locale) ?? locale
+    );
+  } catch {
+    return locale;
+  }
+}
+
 /** The locale whose text sits beside every other locale's row for reference. */
 const REFERENCE_LOCALE = "en";
 
@@ -63,6 +74,7 @@ function LocaleLabels({
   onSet(key: string, text: string): void;
 }) {
   const t = useT();
+  const translator = useTranslator();
   const reasonId = useId();
   const [key, setKey] = useState("");
   const [text, setText] = useState("");
@@ -145,7 +157,7 @@ function LocaleLabels({
           aria-describedby={blocked ? reasonId : undefined}
           onClick={add}
         >
-          {t("admin.labels.add")}
+          {t("admin.labels.add", { language: languageName(locale, translator.locale) })}
         </button>
         {blocked && (
           <p className="qm-labels__reason" id={reasonId}>

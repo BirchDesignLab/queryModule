@@ -235,7 +235,7 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
     ).toBeInTheDocument();
     expect(panelOf(t.preview)).toHaveAttribute("hidden");
     const nav = await screen.findByRole("navigation", { name: "Configuration items" });
-    await t.user.click(within(nav).getByRole("button", { name: /^Vehicle VEH/ }));
+    await t.user.click(within(nav).getByRole("treeitem", { name: /^Vehicle VEH/ }));
     expect(within(t.preview).queryByText("Select a query type or field to preview it.")).toBeNull();
     expect(panelOf(t.preview)).not.toHaveAttribute("hidden");
     expect(within(t.preview).getByLabelText("Plate")).toHaveValue("ZZ-1234");
