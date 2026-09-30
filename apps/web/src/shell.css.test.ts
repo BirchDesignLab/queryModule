@@ -26,7 +26,7 @@ describe("shell.css uses token variables only (spec 6.5)", () => {
 
   it("dims through the shared tokens: one inert opacity, the scrim colour, the layout constant", () => {
     const rule = (selector: string) =>
-      new RegExp(`${selector.replaceAll(/[.[\]()]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
+      new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
         shellCss,
       )?.[1] ?? "";
     expect(rule(".qm-preview__panel[data-paused]")).toContain("opacity: var(--qm-opacity-inert)");
