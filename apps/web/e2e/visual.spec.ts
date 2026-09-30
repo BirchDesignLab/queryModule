@@ -803,6 +803,18 @@ test.describe("parity: officer surfaces, skip link and account menu (1024x768)",
         expect(await last.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(
           /^"IBM Plex Sans"/,
         );
+        // Property has a later section: in the card it keeps its top rule (the card strips boxes only).
+        await page.getByRole("button", { name: "Property", exact: true }).click();
+        const rule = await page
+          .locator(".qm-layout--mobile-unit .qm-query-form__section--disclosure")
+          .first()
+          .evaluate((el) => {
+            const s = getComputedStyle(el);
+            return { width: s.borderTopWidth, color: s.borderTopColor, side: s.borderLeftWidth };
+          });
+        expect(rule.width).toBe("1px");
+        expect(rule.color).toBe(rgb(mode, "color.border.subtle"));
+        expect(rule.side).toBe("0px");
         await page.getByRole("button", { name: "Vehicle", exact: true }).click();
 
         // The skip link, once focused, is a 48 px target at body size.
