@@ -46,6 +46,8 @@ export interface ReadyQueryPanel {
   drafts: DraftStore;
   queryType: string;
   formState: FormState;
+  /** The clock the form state was evaluated with; the command echo formats with the same one. */
+  evaluatedAt: number;
   values: Readonly<Record<string, DraftValue>>;
   checkedSources: readonly string[];
   showErrors: boolean;
@@ -55,6 +57,9 @@ export interface ReadyQueryPanel {
   /** Clears the current type's values (not its source choice) and any shown errors. */
   clearValues(): void;
   setValue(key: string, value: DraftValue): void;
+  /** Fields a rule revealed since the type opened: each shows a Shown tag until focused or edited. */
+  revealed: ReadonlySet<string>;
+  dismissRevealed(key: string): void;
   setSources(sourceIds: readonly string[]): void;
   onSubmitAttempt(): void;
   /**
@@ -92,6 +97,7 @@ const CONFIG_CHANGED_QUIET_MS = 10_000;
 const CONFIG_CHANGED_SETTLE_MS = 1000;
 
 const NO_VALUES: Readonly<Record<string, DraftValue>> = {};
+const NO_KEYS: ReadonlySet<string> = new Set();
 
 function initialQueryType(config: ClientSiteConfig): string | null {
   const codes = config.queryTypes.map((q) => q.code);
@@ -188,9 +194,25 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   const [showErrors, setShowErrors] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const [serverErrors, setServerErrors] = useState<readonly ValidationError[]>([]);
+  // Fields a rule revealed since the type opened (the Shown tag): cleared by focus, an edit or a reset.
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(NO_KEYS);
+  const dismissRevealed = useCallback(
+    (key: string): void =>
+      setRevealed((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      }),
+    [],
+  );
   const formContainerRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
-  const seen = useRef<{ queryType: string; visible: ReadonlySet<string> } | null>(null);
+  const seen = useRef<{
+    queryType: string;
+    visible: ReadonlySet<string>;
+    values: Readonly<Record<string, DraftValue>>;
+  } | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -254,17 +276,30 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     }
   }, [submitStatus, announcer, t]);
 
+  // An edit to a revealed field clears its Shown tag, whichever way the value arrived (form or terminal).
+  const lastValues = useRef(values);
+  useEffect(() => {
+    const before = lastValues.current;
+    lastValues.current = values;
+    if (before === values) return;
+    setRevealed((prev) => {
+      const edited = [...prev].filter((key) => before?.[key] !== values?.[key]);
+      return edited.length === 0 ? prev : new Set([...prev].filter((k) => !edited.includes(k)));
+    });
+  }, [values]);
+
   // Server validation errors describe the values that were sent; any edit or type change drops them.
   // biome-ignore lint/correctness/useExhaustiveDependencies: values and queryType are the triggers
   useEffect(() => setServerErrors([]), [values, queryType]);
 
-  const localFormState = useMemo(
-    () =>
-      queryType === null
-        ? null
-        : evaluateForm(config, queryType, values ?? NO_VALUES, { now: Date.now() }),
-    [config, queryType, values],
-  );
+  // One clock read per evaluation: the command echo formats with the same now (evaluatedAt), so a
+  // date or year the rules resolve against today reads the same in the form and the echo.
+  const evaluated = useMemo(() => {
+    if (queryType === null) return null;
+    const now = Date.now();
+    return { state: evaluateForm(config, queryType, values ?? NO_VALUES, { now }), now };
+  }, [config, queryType, values]);
+  const localFormState = evaluated?.state ?? null;
   const formState = useMemo(
     () =>
       localFormState === null || serverErrors.length === 0
@@ -287,18 +322,30 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const previous = seen.current;
     const configChanged = revealHash.current !== config.configHash;
     revealHash.current = config.configHash;
+    const current = values ?? NO_VALUES;
+    if (previous !== null && previous.queryType !== formState.queryType) setRevealed(NO_KEYS);
+    // A key a rule hid again leaves the set, so a later config that shows it is not a "reveal".
+    setRevealed((prev) => {
+      const kept = [...prev].filter((key) => visible.has(key));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
     if (!configChanged && previous !== null && previous.queryType === formState.queryType) {
-      const messages = formState.fields
-        .filter((f) => f.visible && !previous.visible.has(f.key))
-        .map((f) =>
-          t(f.required ? "form.fieldRevealedRequired" : "form.fieldRevealed", {
-            label: t(f.labelKey),
-          }),
-        );
+      const shown = formState.fields.filter((f) => f.visible && !previous.visible.has(f.key));
+      // Tagged only in the live panel (a builder edit in preview is not a dispatcher's reveal) and
+      // only when the same edit did not also fill the field (a terminal merge sets both).
+      const tagged = preview
+        ? []
+        : shown.filter((f) => previous.values[f.key] === current[f.key]).map((f) => f.key);
+      if (tagged.length > 0) setRevealed((prev) => new Set([...prev, ...tagged]));
+      const messages = shown.map((f) =>
+        t(f.required ? "form.fieldRevealedRequired" : "form.fieldRevealed", {
+          label: t(f.labelKey),
+        }),
+      );
       if (messages.length > 0) announcer.announce(messages.join(" "));
     }
-    seen.current = { queryType: formState.queryType, visible };
-  }, [formState, config.configHash, announcer, t]);
+    seen.current = { queryType: formState.queryType, visible, values: current };
+  }, [formState, config.configHash, announcer, t, preview, values]);
 
   // Errors render on the commit that follows a blocked submit, so focus moves after it.
   useEffect(() => {
@@ -307,7 +354,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     }
   }, [focusTick]);
 
-  if (queryType === null || formState === null) return null;
+  if (queryType === null || formState === null || evaluated === null) return null;
 
   const checkedSources = resolveCheckedSources(formState, draftSources);
 
@@ -402,6 +449,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
 
   // Ctrl+Enter calls requestSubmit() with no submitter, so the button's aria-disabled guard never
   // runs: while submitting or gated (spec 6.8) re-announce the reason and send nothing.
+
   const submitGated = (): boolean => {
     // Preview validates like live (ADR-0011: it shows what dispatchers see); sendChecked stops it.
     if (submitStatus === "idle") return false;
@@ -416,6 +464,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     drafts,
     queryType,
     formState,
+    evaluatedAt: evaluated.now,
     values: values ?? NO_VALUES,
     checkedSources,
     showErrors,
@@ -427,8 +476,11 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     clearValues() {
       drafts.getState().replaceValues(queryType, {});
       setShowErrors(false);
+      setRevealed(NO_KEYS);
     },
     setValue: (key, value) => drafts.getState().setValue(key, value),
+    revealed,
+    dismissRevealed,
     setSources: (sourceIds) => drafts.getState().setSources(sourceIds),
     onSubmitAttempt() {
       if (submitGated()) return;

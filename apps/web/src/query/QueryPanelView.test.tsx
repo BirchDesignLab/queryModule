@@ -368,3 +368,15 @@ describe("design B2 sources as chips and the sticky action bar", () => {
     await waitFor(() => expect(input).toHaveFocus());
   });
 });
+
+describe("preview never shows the Shown tag (a builder edit is not a rule reveal for the dispatcher)", () => {
+  it("a rule reveal in preview announces as before but draws no tag", async () => {
+    const VEH_DEFAULT = CLIENT_CONFIG.queryTypes.find((q) => q.code === "VEH");
+    if (VEH_DEFAULT === undefined) throw new Error("fixture: VEH missing");
+    const { drafts } = renderView({ config: CLIENT_CONFIG });
+    await screen.findByLabelText("Plate");
+    act(() => drafts.getState().setValue("state", "OK"));
+    expect(await screen.findByLabelText(/Plate type/)).toBeInTheDocument();
+    expect(document.querySelector(".qm-tag--shown")).toBeNull();
+  });
+});

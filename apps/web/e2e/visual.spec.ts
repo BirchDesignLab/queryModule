@@ -672,3 +672,103 @@ test("the density tokens are 36 px dense and 56 px touch", () => {
   expect(tokenValue("control.height.dense", "day")).toBe("36px");
   expect(tokenValue("control.height.touch", "day")).toBe("56px");
 });
+
+// Parity pass, query surfaces (cloud2): surfaces, heading weight, read-back data in mono, no boxes
+// inside the dispatcher card, the Shown tag on a rule-revealed field (static under reduced motion).
+test.describe("parity: dispatcher and sign-in surfaces, type and states (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: sunken page, base card and header, 600 headings, mono read-back data, Shown tag`, async ({
+      page,
+    }) => {
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+      await setTheme(page, mode);
+      const login = await page.evaluate(() => ({
+        body: getComputedStyle(document.body).backgroundColor,
+        product: getComputedStyle(document.querySelector(".qm-login__product") as Element)
+          .fontWeight,
+      }));
+      expect(login.body).toBe(rgb(mode, "color.surface.sunken"));
+      expect(login.product).toBe("600");
+
+      await asUser(page, "dispatcher@example.test", mode, async () => {
+        const look = await page.evaluate(() => {
+          const s = (sel: string) => getComputedStyle(document.querySelector(sel) as Element);
+          const plate = document.querySelector("main .qm-field__input--data") as HTMLElement;
+          return {
+            body: getComputedStyle(document.body).backgroundColor,
+            header: s(".qm-app-header").backgroundColor,
+            panel: s(".qm-panes__panel").backgroundColor,
+            panelEdge: s(".qm-panes__panel").borderTopColor,
+            h1: s("main h1").fontWeight,
+            h2: s(".qm-panel-head h2").fontWeight,
+            sectionEdge: s(".qm-query-form__section").borderTopWidth,
+            plateFont: getComputedStyle(plate).fontFamily,
+            selectFont: s("main select").fontFamily,
+          };
+        });
+        expect(look.body).toBe(rgb(mode, "color.surface.sunken"));
+        expect(look.header).toBe(rgb(mode, "color.surface.base"));
+        expect(look.panel).toBe(rgb(mode, "color.surface.base"));
+        expect(look.panelEdge).toBe(rgb(mode, "color.border.subtle"));
+        expect(look.h1).toBe("600");
+        expect(look.h2).toBe("600");
+        expect(look.sectionEdge).toBe("0px");
+        expect(look.plateFont).toMatch(/^"IBM Plex Mono"/);
+        expect(look.selectFont).toMatch(/^"IBM Plex Sans"/);
+        await expect(page.getByLabel("Plate", { exact: true })).toHaveClass(
+          /qm-field__input--data/,
+        );
+        // Quick access stays inside the card (it may wrap; the B3 block keeps the card at 640 px).
+        const inside = await page.evaluate(() => {
+          const card = (
+            document.querySelector(".qm-panes__panel") as Element
+          ).getBoundingClientRect();
+          return [...document.querySelectorAll(".qm-quick-access__button")].every(
+            (b) => b.getBoundingClientRect().right <= card.right,
+          );
+        });
+        expect(inside).toBe(true);
+
+        // A rule reveals Plate type: the Shown tag is static (no flash under reduced motion),
+        // accent-outlined, aria-hidden; focus stays on State.
+        const state = page.getByLabel("State", { exact: true });
+        await state.focus();
+        await state.selectOption("OK");
+        // State OK reveals Plate type (and Plate colour under More details): check Plate type's cell.
+        const cell = page.locator(".qm-form-cell--revealed", {
+          has: page.getByLabel(/Plate type/),
+        });
+        const tag = cell.locator(".qm-tag--shown");
+        await expect(tag).toHaveText(/shown/i);
+        await expect(tag).toHaveAttribute("aria-hidden", "true");
+        await expect(state).toBeFocused();
+        const shown = await tag.evaluate((el) => {
+          const s = getComputedStyle(el);
+          const label = el.closest(".qm-field__label") as Element;
+          const l = getComputedStyle(label);
+          const input = document.getElementById(label.getAttribute("for") ?? "") as Element;
+          // In the label's flow: the tag never overlaps the label's text or the control.
+          const tagBox = el.getBoundingClientRect();
+          const inputBox = input.getBoundingClientRect();
+          return {
+            color: s.color,
+            edge: s.borderTopColor,
+            animation: l.animationName,
+            belowTag: inputBox.top >= tagBox.bottom,
+          };
+        });
+        expect(shown.color).toBe(rgb(mode, "color.accent"));
+        expect(shown.edge).toBe(rgb(mode, "color.accent"));
+        expect(shown.animation).toBe("none");
+        expect(shown.belowTag).toBe(true);
+        await captureCrop(page, cell, `parity-shown-${mode}`);
+        await page.getByLabel(/Plate type/).focus();
+        await expect(tag).toHaveCount(0);
+        await state.selectOption("TX");
+      });
+    });
+  }
+});

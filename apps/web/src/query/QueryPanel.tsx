@@ -42,8 +42,15 @@ export function QueryPanel() {
     focusedAtChange.current = null;
     if (previous === null || previous === configHash || focused === null) return;
     const active = document.activeElement;
-    if (!focused.isConnected && (active === null || active === document.body))
-      headingRef.current?.focus();
+    const dropped = active === null || active === document.body;
+    // Removed, or still in the DOM but inside a closed disclosure ([hidden]): the browser drops the
+    // focus of a hidden element at its next rendering update, so it counts as gone too.
+    const removed = !focused.isConnected && dropped;
+    const hidden =
+      focused.isConnected &&
+      focused.closest("[hidden]") !== null &&
+      (dropped || active === focused);
+    if (removed || hidden) headingRef.current?.focus();
   }, [configHash]);
   return (
     <main

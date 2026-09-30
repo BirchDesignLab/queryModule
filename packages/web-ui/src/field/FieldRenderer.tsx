@@ -22,6 +22,10 @@ export interface FieldRendererProps {
   numberKind?: "integer" | "decimal";
   /** Picklists: "seg" draws a short list as a segmented control (the subtype bar); default is a select. */
   presentation?: "seg";
+  /** Read-back data (a code-like string, a year or a date): the text input uses the monospace face. */
+  data?: boolean;
+  /** A rule revealed this field: an aria-hidden "Shown" tag in the label (the announcement speaks). */
+  revealed?: boolean;
 }
 
 /** Generic renderer: dataType picks the control; no per-query-type code (BR-001). */
@@ -35,6 +39,8 @@ export function FieldRenderer({
   inputFormats,
   numberKind,
   presentation,
+  data,
+  revealed = false,
 }: FieldRendererProps): JSX.Element {
   const id = `${idPrefix}-${field.key}`;
   const label = t(field.labelKey);
@@ -43,7 +49,12 @@ export function FieldRenderer({
   // "" is no user value: core canonicalises it to null, so the default still applies (FR-004, FR-005).
   const hasUser = userValue !== null && userValue !== "";
   const shown = hasUser ? userValue : field.isDefault ? field.effectiveValue : null;
-  const common = { id, label, requiredText, required: field.required, error, tag };
+  const adornment = revealed ? (
+    <span className="qm-tag qm-tag--shown" aria-hidden="true">
+      {t("form.tag.shown")}
+    </span>
+  ) : undefined;
+  const common = { id, label, requiredText, required: field.required, error, tag, adornment };
 
   if (field.dataType === "boolean") {
     return (
@@ -90,6 +101,7 @@ export function FieldRenderer({
       type="text"
       inputMode={inputMode}
       description={description}
+      data={data}
       value={shown === null ? "" : String(shown)}
       onChange={(value) => onChange(field.key, value)}
     />

@@ -17,6 +17,10 @@ export interface TextFieldProps {
   description?: string | undefined;
   /** Visible text tag rendered after the input, e.g. "default" (spec 6.2). */
   tag?: ReactNode;
+  /** Shown inside the label after its text, e.g. an aria-hidden "Shown" tag (not part of the name). */
+  adornment?: ReactNode;
+  /** Read-back data (a plate, a VIN, a date): set in the monospace face. */
+  data?: boolean;
   ref?: Ref<HTMLInputElement>;
 }
 
@@ -34,6 +38,8 @@ export function TextField({
   error,
   description,
   tag,
+  adornment,
+  data = false,
   ref,
 }: TextFieldProps) {
   const ids = fieldIds(id, tag, description, error);
@@ -42,13 +48,14 @@ export function TextField({
       <label htmlFor={id} className="qm-field__label">
         {label}
         <RequiredMark required={required} requiredText={requiredText} />
+        {adornment}
       </label>
       <input
         ref={ref}
         id={id}
         name={id}
         type={type}
-        className="qm-field__input"
+        className={data ? "qm-field__input qm-field__input--data" : "qm-field__input"}
         value={value}
         autoComplete={autoComplete}
         inputMode={inputMode}

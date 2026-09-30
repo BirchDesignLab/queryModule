@@ -5,6 +5,8 @@ import {
   type FormEvent,
   type JSX,
   type ReactNode,
+  type RefObject,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -17,7 +19,13 @@ export interface QueryFormProps {
   values: Readonly<Record<string, DraftValue>>;
   fieldConfig: ReadonlyMap<
     string,
-    { inputFormats?: readonly string[]; numberKind?: "integer" | "decimal"; maxLength?: number }
+    {
+      inputFormats?: readonly string[];
+      numberKind?: "integer" | "decimal";
+      maxLength?: number;
+      /** Read-back data: the field's text input is set in the monospace face. */
+      data?: boolean;
+    }
   >;
   /** True after a blocked submit. */
   showErrors: boolean;
@@ -30,6 +38,8 @@ export interface QueryFormProps {
   excludeKeys?: ReadonlySet<string>;
   /** Source checkboxes and the submit button. */
   children?: ReactNode;
+  /** Fields a rule revealed: a static, aria-hidden Shown tag and a one-time flash on their cell. */
+  revealed?: ReadonlySet<string>;
 }
 
 /** Errors per field, first one wins: missingRequired first, then errors by params.field (spec 6.2 blocked submit). */
@@ -196,6 +206,36 @@ function useDisclosures(
   return { isOpen, toggle };
 }
 
+/**
+ * Revealed fields whose flash has run: their cell drops the flash class after its animation ends, so
+ * reopening a closed disclosure (display: none and back restarts CSS animations) never replays it.
+ * A key leaves the set when it leaves `revealed`, so a later reveal flashes again.
+ */
+function useFlashedOnce(
+  formRef: RefObject<HTMLFormElement | null>,
+  revealed: ReadonlySet<string> | undefined,
+): ReadonlySet<string> {
+  const [flashed, setFlashed] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    const form = formRef.current;
+    if (form === null) return;
+    const onEnd = (event: Event): void => {
+      const target = event.target instanceof Element ? event.target : null;
+      const key = target?.closest<HTMLElement>("[data-field-key]")?.dataset.fieldKey;
+      if (key !== undefined) setFlashed((prev) => (prev.has(key) ? prev : new Set([...prev, key])));
+    };
+    form.addEventListener("animationend", onEnd);
+    return () => form.removeEventListener("animationend", onEnd);
+  }, [formRef]);
+  useEffect(() => {
+    setFlashed((prev) => {
+      const kept = [...prev].filter((key) => revealed?.has(key) === true);
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }, [revealed]);
+  return flashed;
+}
+
 /** Renders only from FormState (BR-001): visible sections as fieldsets, visible fields in order (spec 6.2). */
 export function QueryForm({
   formState,
@@ -208,12 +248,15 @@ export function QueryForm({
   idPrefix,
   excludeKeys,
   children,
+  revealed,
 }: QueryFormProps): JSX.Element {
   const errors = showErrors ? fieldErrors(formState) : new Map<string, ValidationError>();
   const sections = renderedSections(formState, excludeKeys);
   const disclosures = useDisclosures(sections, showErrors, new Set(errors.keys()));
   const disclosureId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
   const formErrors = showErrors ? formLevelErrors(formState) : [];
+  const flashed = useFlashedOnce(formRef, revealed);
   const labelOf = (error: ValidationError): string | undefined => {
     const field = formState.fields.find((f) => f.key === error.params?.field);
     return field === undefined ? undefined : t(field.labelKey);
@@ -225,7 +268,7 @@ export function QueryForm({
   }
 
   return (
-    <form noValidate className="qm-query-form" onSubmit={onSubmit}>
+    <form ref={formRef} noValidate className="qm-query-form" onSubmit={onSubmit}>
       {sections.map((entry, index) => {
         const { section, fields } = entry;
         const open = index === 0 || disclosures.isOpen(entry);
@@ -258,10 +301,15 @@ export function QueryForm({
               {fields.map((field) => {
                 const error = errors.get(field.key);
                 const cfg = fieldConfig.get(field.key);
+                const shown = revealed?.has(field.key) === true;
+                const span = `qm-form-cell qm-span-${fieldSpan(field.dataType, cfg?.maxLength)}`;
                 return (
                   <div
                     key={field.key}
-                    className={`qm-form-cell qm-span-${fieldSpan(field.dataType, cfg?.maxLength)}`}
+                    className={
+                      shown && !flashed.has(field.key) ? `${span} qm-form-cell--revealed` : span
+                    }
+                    data-field-key={field.key}
                   >
                     <FieldRenderer
                       field={field}
@@ -276,6 +324,8 @@ export function QueryForm({
                       idPrefix={idPrefix}
                       inputFormats={cfg?.inputFormats}
                       numberKind={cfg?.numberKind}
+                      data={cfg?.data}
+                      revealed={shown}
                     />
                   </div>
                 );

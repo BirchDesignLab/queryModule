@@ -13,6 +13,8 @@ export interface SegFieldProps {
   error?: string | undefined;
   description?: string | undefined;
   tag?: ReactNode;
+  /** Shown inside the label after its text, e.g. an aria-hidden "Shown" tag (not part of the name). */
+  adornment?: ReactNode;
 }
 
 /**
@@ -32,6 +34,7 @@ export function SegField({
   error,
   description,
   tag,
+  adornment,
 }: SegFieldProps) {
   const ids = fieldIds(id, tag, description, error);
   return (
@@ -39,6 +42,7 @@ export function SegField({
       <legend className="qm-field__label">
         {label}
         <RequiredMark required={required} requiredText={requiredText} />
+        {adornment}
       </legend>
       <div className="qm-seg qm-seg--options">
         {options.map((o) => (

@@ -197,3 +197,15 @@ describe("UX-004 a picklist or checkbox in error carries the same border cue as 
     expect(block).toContain("border-color: var(--qm-field-required)");
   });
 });
+
+describe("read-back data in the monospace face (visual system Direction)", () => {
+  it("data marks the text input; without it the input keeps the interface face", () => {
+    setup({ dataType: "string" }, { data: true });
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveClass("qm-field__input--data");
+  });
+
+  it("no data flag, no data class", () => {
+    setup({ dataType: "string" });
+    expect(screen.getByRole("textbox", { name: "Name" })).not.toHaveClass("qm-field__input--data");
+  });
+});

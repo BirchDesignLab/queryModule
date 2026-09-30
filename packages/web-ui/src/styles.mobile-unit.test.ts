@@ -108,10 +108,9 @@ describe("B3 requests list: two panes on dispatch, a quiet last-request card for
 
 describe("B4 officer tiles: cleanup (#416 critic)", () => {
   it("a tile that is not pressed lifts on hover; the tile rule no longer masks the base hover", () => {
-    const hover = rulesFor(".qm-layout--mobile-unit .qm-quick-access__button:hover");
-    expect(hover).toMatch(/background:\s*var\(--qm-color-surface-raised\)/);
+    // Inside @media (hover: hover): a touch tap leaves no sticky hover (parity fold-in).
     expect(css).toMatch(
-      /\.qm-layout--mobile-unit\s+\.qm-quick-access__button:hover:not\(\[aria-pressed="true"\]\)/,
+      /@media \(hover: hover\)\s*\{\s*\.qm-layout--mobile-unit\s+\.qm-quick-access__button:hover:not\(\[aria-pressed="true"\]\)\s*\{[^}]*background:\s*var\(--qm-color-surface-raised\)/,
     );
   });
 

@@ -124,6 +124,7 @@
   "plan.tooManySources": "At most {max} source queries can run in one submit.",
   "plan.nestedNoSources": "The linked query has no sources to run.",
   "form.defaultTag": "default",
+  "form.tag.shown": "Shown",
   "form.required": "required",
   "form.fieldsNeedAttention.one": "{count} field needs attention.",
   "form.fieldsNeedAttention.other": "{count} fields need attention.",
