@@ -1,7 +1,13 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import { COLOR_TOKENS, relativeLuminance, type ThemeMode, tokenValue } from "@querymodule/tokens";
+import {
+  COLOR_TOKENS,
+  LAYOUT_CONSTANTS,
+  relativeLuminance,
+  type ThemeMode,
+  tokenValue,
+} from "@querymodule/tokens";
 import { expect, test } from "./fixtures.js";
 import { chooseTheme, hexToRgb, openAccountMenu, seededUser, signIn } from "./helpers.js";
 
@@ -803,7 +809,7 @@ test.describe("B1 sign out with unsaved changes (1440x900)", () => {
           return { background: s.backgroundColor, opacity: Number(s.opacity) };
         });
         expect(backdrop.background).toBe(rgb(mode, "color.surface.scrim"));
-        expect(backdrop.opacity).toBe(0.8);
+        expect(backdrop.opacity).toBe(Number(tokenValue("opacity.scrim", mode)));
         const blend = (over: string, under: string) => {
           const [o, u] = [over, under].map((hex) => hex.match(/[0-9a-f]{2}/gi) ?? []);
           return `#${(o ?? [])
@@ -1456,6 +1462,158 @@ test.describe("Layout robustness (cloud3 item 3)", () => {
       await expect(page.getByRole("heading", { name: "Users and roles" })).toBeVisible();
       const g = await geometry(page);
       expect((g.rail?.h ?? 0) / g.viewport, "rail share of the window").toBeLessThan(0.3);
+    });
+  });
+});
+
+test.describe("Queries at the layout constants (cloud3 item 4)", () => {
+  // Query conditions are the constants' rem values; a rem is 16 px in the test browser.
+  const px = (name: keyof typeof LAYOUT_CONSTANTS) =>
+    Number.parseFloat(LAYOUT_CONSTANTS[name]) * 16;
+  const parts = (page: Page) =>
+    page.evaluate(() => {
+      const r = (sel: string) => {
+        const box = document.querySelector(sel)?.getBoundingClientRect();
+        return box === undefined
+          ? null
+          : {
+              left: box.left,
+              right: box.right,
+              top: box.top,
+              bottom: box.bottom,
+              w: box.width,
+              h: box.height,
+            };
+      };
+      const root = document.scrollingElement as Element;
+      return {
+        viewport: innerWidth,
+        overflowY: root.scrollHeight - root.clientHeight,
+        rail: r(".qm-admin__rail"),
+        main: r(".qm-admin__main"),
+        heading: r(".qm-builder > h2"),
+        toolbar: r(".qm-builder__toolbar"),
+      };
+    });
+  const open = async (page: Page, viewport: { width: number; height: number }, path: string) => {
+    await page.setViewportSize(viewport);
+    await page.goto(path);
+    await expect(page.locator(".qm-admin__rail")).toBeVisible();
+  };
+
+  // The rail is beside the section from layout.stack up, stacked above it below.
+  for (const [width, beside] of [
+    [px("layout.stack") - 4, false],
+    [px("layout.stack") + 4, true],
+  ] as const) {
+    test(`${width}x700: the rail is ${beside ? "beside" : "stacked above"} the section`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", "day", async () => {
+        await open(page, { width, height: 700 }, "/admin/users");
+        const g = await parts(page);
+        if (beside) {
+          expect(g.rail?.w ?? 0, "rail width").toBeLessThan(320);
+          expect(g.main?.left ?? 0, "section starts after the rail").toBeGreaterThanOrEqual(
+            g.rail?.right ?? Number.POSITIVE_INFINITY,
+          );
+        } else {
+          expect(g.rail?.w ?? 0, "rail spans the window").toBeGreaterThan(width - 4);
+          expect(g.main?.top ?? 0, "section starts under the rail").toBeGreaterThanOrEqual(
+            (g.rail?.bottom ?? Number.POSITIVE_INFINITY) - 1,
+          );
+        }
+      });
+    });
+  }
+
+  // A short page: the stacked rail keeps its own height and the page does not scroll; beside the
+  // section the rail runs the whole window.
+  for (const [width, height] of [
+    [683, 600],
+    [800, 600],
+  ] as const) {
+    test(`${width}x${height} users: the stacked rail is natural height and the page does not scroll`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", "day", async () => {
+        await open(page, { width, height }, "/admin/users");
+        const g = await parts(page);
+        expect(g.overflowY, "page scroll").toBeLessThanOrEqual(0);
+        expect((g.rail?.h ?? 0) / height, "rail share of the window").toBeLessThan(0.3);
+        expect(
+          g.main?.bottom ?? 0,
+          "the section fills to the window bottom",
+        ).toBeGreaterThanOrEqual(height - 1);
+      });
+    });
+  }
+
+  test("1024x600 users: the rail beside the section runs the whole window", async ({ page }) => {
+    await asUser(page, "admin@example.test", "day", async () => {
+      await open(page, { width: 1024, height: 600 }, "/admin/users");
+      const g = await parts(page);
+      expect(g.overflowY, "page scroll").toBeLessThanOrEqual(0);
+      expect(g.rail?.bottom ?? 0, "rail bottom").toBeGreaterThanOrEqual(600 - 1);
+    });
+  });
+
+  // The heading and toolbar share a row once the section is layout.toolbar wide. The section is the
+  // window minus its padding (stacked rail) or minus the rail and its padding (rail beside).
+  const PAD = 40;
+  const RAIL = 241;
+  for (const [width, shared] of [
+    [px("layout.toolbar") + PAD - 4, false],
+    [px("layout.toolbar") + PAD + 4, true],
+    [px("layout.toolbar") + PAD + RAIL - 4, false],
+    [px("layout.toolbar") + PAD + RAIL + 4, true],
+  ] as const) {
+    test(`${width}x768: the toolbar is ${shared ? "beside" : "under"} the heading`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", "day", async () => {
+        await open(page, { width, height: 768 }, "/admin/config");
+        await expect(page.getByRole("tab", { name: "Form", exact: true })).toBeVisible();
+        const g = await parts(page);
+        if (shared) {
+          expect(g.toolbar?.left ?? 0, "toolbar starts after the heading").toBeGreaterThanOrEqual(
+            g.heading?.right ?? Number.POSITIVE_INFINITY,
+          );
+        } else {
+          expect(g.toolbar?.top ?? 0, "toolbar under the heading").toBeGreaterThanOrEqual(
+            (g.heading?.bottom ?? Number.POSITIVE_INFINITY) - 1,
+          );
+          // The toolbar has the section's whole width, not a squeezed column.
+          expect(g.toolbar?.w ?? 0, "toolbar width").toBeGreaterThanOrEqual(
+            (g.main?.w ?? 0) - 2 * 20 - 2,
+          );
+        }
+      });
+    });
+  }
+
+  test("683x384: the toolbar under the heading has the section's width and its controls fit three bands", async ({
+    page,
+  }) => {
+    await asUser(page, "admin@example.test", "day", async () => {
+      await open(page, { width: 683, height: 384 }, "/admin/config");
+      await expect(page.getByRole("tab", { name: "Form", exact: true })).toBeVisible();
+      // Bands: children grouped by their vertical centre, 6 px apart at most.
+      const bands = await page.evaluate(() => {
+        const centres = [...document.querySelectorAll(".qm-builder__toolbar > *")]
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            return r.top + r.height / 2;
+          })
+          .sort((a, b) => a - b);
+        const groups: number[] = [];
+        for (const c of centres)
+          if (groups.length === 0 || c - (groups.at(-1) ?? 0) > 6) groups.push(c);
+        return groups.length;
+      });
+      const g = await parts(page);
+      expect(bands, "bands of controls").toBeLessThanOrEqual(3);
+      expect(g.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(124);
     });
   });
 });

@@ -31,11 +31,13 @@ describe("admin parity: surfaces", () => {
     expect(css).not.toContain("body:has(.qm-login)");
   });
 
-  it("the rail fills the column's height and its groups sit side by side once it stacks", () => {
-    // The section is the window's height, so the stretched rail beside it is too; stacked, the
-    // lines keep their own height (the free height is not shared with the rail).
-    expect(decls(".qm-admin__main")).toMatch(/min-block-size:/);
-    expect(decls(".qm-admin")).toMatch(/align-content:\s*flex-start/);
+  it("the rail fills the column's height beside the section and keeps its own height stacked", () => {
+    // Stacked (the default) the section takes the rest of the window; from layout.stack the row
+    // stretches the rail to the window's height.
+    expect(decls(".qm-admin")).toMatch(/flex-direction:\s*column/);
+    expect(decls(".qm-admin")).toMatch(/min-block-size:/);
+    expect(decls(".qm-admin__main")).toMatch(/container-type:\s*inline-size/);
+    expect(css).toMatch(/@media \(min-width: 54rem\) \{\s*\.qm-admin \{\s*flex-direction:\s*row/);
     expect(decls(".qm-admin__rail")).toMatch(/grid-template-columns:\s*repeat\(auto-fit/);
   });
 
@@ -49,7 +51,13 @@ describe("admin parity: surfaces", () => {
   it("the panes are a flex column under the toolbar: no hand-tuned offset from the window height", () => {
     const builder = decls(".qm-builder");
     expect(builder).toMatch(/display:\s*grid/);
-    expect(builder).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\)/);
+    expect(builder).toMatch(/grid-template-rows:\s*auto auto minmax\(0, 1fr\)/);
+    // The heading and toolbar share a row by the section's width; the window caps the section from
+    // layout.wide up.
+    expect(css).toMatch(
+      /@container \(min-width: 45rem\) \{\s*\.qm-builder \{[^}]*auto minmax\(0, 1fr\)/,
+    );
+    expect(css).toMatch(/@media \(min-width: 64rem\) \{\s*\.qm-builder \{\s*block-size:/);
     expect(decls(".qm-builder__body")).toMatch(/flex-direction:\s*column/);
     expect(decls(".qm-builder__panes")).toMatch(/min-block-size:\s*0/);
     for (const sel of [".qm-tree", ".qm-builder__editor"])

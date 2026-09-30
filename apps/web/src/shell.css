@@ -273,22 +273,20 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-sm);
 }
 
-/* Admin console (design target, A1): a left rail beside the section. */
+/* Admin console (design target, A1): a left rail beside the section from the layout.stack
+   constant up, stacked above it below. Stacked, the rail keeps its own height and the section takes the rest of
+   the window, so a short page does not scroll; beside, the stretched rail runs the whole window. */
 .qm-admin {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: stretch;
-  /* Stacked above the section (narrow window, 200% zoom) the two lines keep their own height: the
-     rail is not stretched to half of the free height, and the free height sits under the section.
-     Beside it, the section's minimum height (below) makes the line, and so the rail, full height. */
-  align-content: flex-start;
+  /* Under the 52 px app bar (the control height and 2 x space-2). */
+  min-block-size: calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2);
   background: var(--qm-color-surface-sunken);
 }
 
-/* Sidebar pattern: the rail keeps its basis (about 220 px) while the section takes the rest; the
-   rail wraps to full width above the section once both cannot fit. */
 .qm-admin__rail {
-  flex: 1 1 calc(var(--qm-space-12) * 4.5);
+  flex: 0 0 auto;
   /* Beside the section it is one column; stacked above it (narrow window, 200% zoom) the way back
      and each group sit side by side instead of taking the whole screen. */
   display: grid;
@@ -297,7 +295,7 @@ main[tabindex="-1"]:focus {
   gap: var(--qm-space-1) var(--qm-space-4);
   padding: var(--qm-space-4) var(--qm-space-3);
   background: var(--qm-color-surface-base);
-  border-inline-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
 .qm-admin__rail .qm-admin__section {
@@ -375,20 +373,29 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-xs);
 }
 
+/* The section is a size container: the builder's heading and toolbar share a row by the section's
+   own width (layout.toolbar), whichever way the rail sits. */
 .qm-admin__main {
-  flex: 999 1 calc(var(--qm-space-12) * 12);
+  container-type: inline-size;
+  flex: 1 1 auto;
   min-inline-size: 0;
-  /* The whole column under the 52 px app bar (the control height and 2 x space-2), padding
-     included, so the rail beside it runs the window even on a short page. */
-  min-block-size: calc(
-    100dvh -
-    var(--qm-control-height-dense) -
-    var(--qm-space-2) *
-    2 -
-    var(--qm-space-4) *
-    2
-  );
   padding: var(--qm-space-4) var(--qm-space-5);
+}
+
+@media (min-width: 54rem) {
+  .qm-admin {
+    flex-direction: row;
+  }
+
+  .qm-admin__rail {
+    flex: 1 1 calc(var(--qm-space-12) * 4.5);
+    border-block-end: 0;
+    border-inline-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  }
+
+  .qm-admin__main {
+    flex: 999 1 calc(var(--qm-space-12) * 12);
+  }
 }
 
 /* Mobile-unit layout: the bar fits its 48 px targets and their focus rings (spec 6.3). */
@@ -505,29 +512,33 @@ main[tabindex="-1"]:focus {
 
 /* Admin config builder (Task 32): the builder and the dispatcher preview side by side when there
    is room, stacked otherwise. */
-/* Builder (A2): the section h2 and the toolbar share the first row; the panes take the rest. At
-   desktop width the section is as tall as the window under the app bar (never under a floor, so a
-   short window scrolls the page instead of collapsing the panes); below the wide layout constant
-   the two limits give way (the second term of each is huge) and the page flows as one column
-   (design lead). */
+/* Builder (A2): the section h2 and the toolbar share the first row once the section is
+   layout.toolbar wide, else the toolbar sits under the heading; the panes take the rest.
+   From layout.wide up the section is as tall as the window under the app bar (never under
+   a floor, so a short window scrolls the page instead of collapsing the panes); below it the page
+   flows as one column (design lead). */
 .qm-builder {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   align-items: center;
   gap: var(--qm-space-3);
-  min-block-size: min(
-    max(
+}
+
+@container (min-width: 45rem) {
+  .qm-builder {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 64rem) {
+  .qm-builder {
+    block-size: max(
       calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2 - var(--qm-space-4) * 2),
       calc(var(--qm-space-12) * 10)
-    ),
-    calc((100vw - var(--qm-layout-wide)) * 1000)
-  );
-  max-block-size: max(
-    calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2 - var(--qm-space-4) * 2),
-    calc(var(--qm-space-12) * 10),
-    calc((var(--qm-layout-wide) - 100vw) * 1000)
-  );
+    );
+  }
 }
 
 .qm-builder > h2 {
@@ -618,12 +629,19 @@ main[tabindex="-1"]:focus {
 }
 
 /* Each pane is as tall as its content up to the panes area, then scrolls on its own, so the
-   preview stays in view; below the wide layout constant the cap gives way. */
+   preview stays in view; below layout.wide the page flows and nothing is capped. */
 .qm-tree,
 .qm-builder__editor,
 .qm-builder__panes > .qm-admin__preview {
-  max-block-size: max(100%, calc((var(--qm-layout-wide) - 100vw) * 1000));
   overflow-y: auto;
+}
+
+@media (min-width: 64rem) {
+  .qm-tree,
+  .qm-builder__editor,
+  .qm-builder__panes > .qm-admin__preview {
+    max-block-size: 100%;
+  }
 }
 
 .qm-tree {
@@ -1354,7 +1372,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-leave-dialog::backdrop {
   background: var(--qm-color-surface-scrim);
-  opacity: 0.8;
+  opacity: var(--qm-opacity-scrim);
 }
 
 .qm-leave-dialog h2 {
