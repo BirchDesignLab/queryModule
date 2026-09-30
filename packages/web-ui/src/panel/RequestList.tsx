@@ -39,9 +39,13 @@ export function shortReference(reference: string): string {
   return reference.slice(0, 8);
 }
 
-/** MM-DD-YY HH:mm:ss in local time (spec 6.2). */
+let ackFormat: Intl.DateTimeFormat | undefined;
+
+/** MM-DD-YY HH:mm:ss in local time (spec 6.2). The formatter is built once: every row of the list
+ *  formats on every render, and constructing an Intl formatter costs far more than using one. It keeps
+ *  the time zone it resolved when first built: a zone changed while the tab is open shows after a reload. */
 export function formatAckTime(epochMs: number): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  ackFormat ??= new Intl.DateTimeFormat("en-US", {
     year: "2-digit",
     month: "2-digit",
     day: "2-digit",
@@ -49,7 +53,8 @@ export function formatAckTime(epochMs: number): string {
     minute: "2-digit",
     second: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(new Date(epochMs));
+  });
+  const parts = ackFormat.formatToParts(new Date(epochMs));
   const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("month")}-${get("day")}-${get("year")} ${pad(Number(get("hour")))}:${get("minute")}:${get("second")}`;
 }
