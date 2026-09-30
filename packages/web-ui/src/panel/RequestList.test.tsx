@@ -146,6 +146,17 @@ describe("spec 6.7 requests list (B3)", () => {
     expect(screen.getByRole("region", { name: "Last request" })).toBeInTheDocument();
   });
 
+  it("formatAckTime builds its Intl formatter once, not per call (a list of rows formats on every render)", () => {
+    const construct = vi.spyOn(Intl, "DateTimeFormat");
+    try {
+      for (let i = 0; i < 5; i += 1) formatAckTime(new Date(2026, 8, 29, 13, 4, i).getTime());
+      // At most the first call builds it; a module already used by an earlier test builds none.
+      expect(construct.mock.calls.length).toBeLessThanOrEqual(1);
+    } finally {
+      construct.mockRestore();
+    }
+  });
+
   it("formatAckTime is MM-DD-YY HH:mm:ss in local time (spec 6.2)", () => {
     expect(formatAckTime(new Date(2026, 8, 29, 13, 4, 5).getTime())).toBe("09-29-26 13:04:05");
   });

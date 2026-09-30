@@ -1,7 +1,7 @@
 import { isRetryable, type RequestEntry, retryRequest, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { RequestList, type RequestRowView } from "@querymodule/web-ui";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
@@ -17,8 +17,10 @@ export interface RequestsPaneProps {
  * shows a request whichever panel sent it. Announcements stay with the sender: this component
  * announces only that a reference was copied, on the user's own click, and the outcome of a retry
  * (the same sentences the form uses, through the shared region). Nothing here moves focus.
+ * Memoised: the panel beside it re-renders on every keystroke, and this list (a row per request,
+ * up to 100) reads its own store, so a keystroke has no reason to render it.
  */
-export function RequestsPane({ config, variant }: RequestsPaneProps) {
+export const RequestsPane = memo(function RequestsPane({ config, variant }: RequestsPaneProps) {
   const t = useT();
   const { announcer, requests, submit } = useServices();
   const mounted = useRef(true);
@@ -106,4 +108,4 @@ export function RequestsPane({ config, variant }: RequestsPaneProps) {
       t={t}
     />
   );
-}
+});

@@ -1,52 +1,65 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useActionBarClearance } from "./use-action-bar-clearance.js";
 
-let callbacks: Array<() => void> = [];
-let disconnected = 0;
+interface Entry {
+  target: Element;
+  borderBoxSize: Array<{ blockSize: number }>;
+}
+let observers: Array<{ callback: (entries: Entry[]) => void; disconnected: boolean }> = [];
+let short = false;
+let mediaListeners: Array<() => void> = [];
+let layoutReads = 0;
 
 beforeEach(() => {
-  callbacks = [];
-  disconnected = 0;
+  observers = [];
+  short = false;
+  mediaListeners = [];
+  layoutReads = 0;
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      constructor(cb: () => void) {
-        callbacks.push(cb);
+      private readonly record: { callback: (entries: Entry[]) => void; disconnected: boolean };
+      constructor(callback: (entries: Entry[]) => void) {
+        this.record = { callback, disconnected: false };
+        observers.push(this.record);
       }
       observe() {}
       disconnect() {
-        disconnected++;
+        this.record.disconnected = true;
       }
     },
   );
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    get matches() {
+      return short && query === "(max-height: 20rem)";
+    },
+    addEventListener: (_type: string, listener: () => void) => mediaListeners.push(listener),
+    removeEventListener: (_type: string, listener: () => void) => {
+      mediaListeners = mediaListeners.filter((l) => l !== listener);
+    },
+  }));
 });
 afterEach(() => {
   vi.unstubAllGlobals();
   document.documentElement.style.removeProperty("scroll-padding-block-end");
 });
 
-function Harness({
-  enabled,
-  mode,
-  height,
-  position = "sticky",
-}: {
-  enabled: boolean;
-  mode: string;
-  height: number;
-  position?: "sticky" | "static";
-}) {
+function Harness({ enabled, mode }: { enabled: boolean; mode: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useActionBarClearance(ref, enabled, mode);
   return (
     <div ref={ref}>
       <div
         className="qm-action-bar"
-        style={{ position }}
         ref={(el) => {
-          if (el !== null) el.getBoundingClientRect = () => ({ height }) as DOMRect;
+          if (el === null) return;
+          // A layout read here would force a synchronous layout in the middle of a commit.
+          el.getBoundingClientRect = () => {
+            layoutReads += 1;
+            return { height: 0 } as DOMRect;
+          };
         }}
       />
     </div>
@@ -55,53 +68,84 @@ function Harness({
 
 const published = () => document.documentElement.style.getPropertyValue("scroll-padding-block-end");
 const clear = (px: number) => `calc(${px}px + var(--qm-space-2))`;
+const resize = (height: number, at = observers.length - 1) =>
+  act(() => {
+    const observer = observers[at];
+    const target = document.querySelector(".qm-action-bar") as Element;
+    observer?.callback([{ target, borderBoxSize: [{ blockSize: height }] }]);
+  });
 
 describe("hardening: the action bar's height is published for scroll-padding (WCAG 2.4.11)", () => {
-  it("publishes the bar's height and follows a resize", () => {
-    render(<Harness enabled mode="form" height={61} />);
+  it("publishes the height the observer reports and follows a resize, with no layout read", () => {
+    render(<Harness enabled mode="form" />);
+    // Nothing is forced at mount: the observer's first callback (after layout) publishes.
+    expect(published()).toBe("");
+    resize(61);
     expect(published()).toBe(clear(61));
-    const el = document.querySelector<HTMLElement>(".qm-action-bar");
-    if (el === null) throw new Error("no bar");
-    el.getBoundingClientRect = () => ({ height: 89 }) as DOMRect;
-    for (const cb of callbacks) cb();
+    resize(89);
     expect(published()).toBe(clear(89));
+    expect(layoutReads).toBe(0);
   });
 
   it("removes the property and stops observing on unmount", () => {
-    const { unmount } = render(<Harness enabled mode="form" height={61} />);
+    const { unmount } = render(<Harness enabled mode="form" />);
+    resize(61);
     unmount();
     expect(published()).toBe("");
-    expect(disconnected).toBe(1);
+    expect(observers.every((o) => o.disconnected)).toBe(true);
+    expect(mediaListeners).toHaveLength(0);
   });
 
-  it("re-binds when the mode changes (the terminal mounts its own bar)", () => {
-    const { rerender } = render(<Harness enabled mode="form" height={61} />);
-    rerender(<Harness enabled mode="terminal" height={61} />);
-    expect(disconnected).toBe(1);
-    expect(callbacks).toHaveLength(2);
+  it("re-binds when the mode changes without dropping the value (no flicker on a type or mode switch)", () => {
+    const { rerender } = render(<Harness enabled mode="form" />);
+    resize(61);
+    rerender(<Harness enabled mode="terminal" />);
+    expect(observers).toHaveLength(2);
+    expect(observers[0]?.disconnected).toBe(true);
+    // Still set while the new bar has not reported yet: a removal and a re-set would restyle twice.
+    expect(published()).toBe(clear(61));
+    resize(61);
     expect(published()).toBe(clear(61));
   });
 
-  it("keeps nothing clear while the bar is not sticky (a short viewport), and re-checks on resize", () => {
-    render(<Harness enabled mode="form" height={61} position="static" />);
+  it("keeps nothing clear on a short viewport, where the bar does not stick, and follows the query", () => {
+    render(<Harness enabled mode="form" />);
+    resize(61);
+    short = true;
+    act(() => {
+      for (const listener of mediaListeners) listener();
+    });
     expect(published()).toBe("");
-    const bar = document.querySelector<HTMLElement>(".qm-action-bar");
-    if (bar === null) throw new Error("no bar");
-    bar.style.position = "sticky";
-    window.dispatchEvent(new Event("resize"));
+    short = false;
+    act(() => {
+      for (const listener of mediaListeners) listener();
+    });
     expect(published()).toBe(clear(61));
+  });
+
+  it("a short viewport at mount publishes nothing", () => {
+    short = true;
+    render(<Harness enabled mode="form" />);
+    resize(61);
+    expect(published()).toBe("");
   });
 
   it("does nothing for the preview (disabled)", () => {
-    render(<Harness enabled={false} mode="form" height={61} />);
+    render(<Harness enabled={false} mode="form" />);
     expect(published()).toBe("");
-    expect(callbacks).toHaveLength(0);
+    expect(observers).toHaveLength(0);
   });
 
   it("does nothing where ResizeObserver does not exist", () => {
-    vi.unstubAllGlobals();
     vi.stubGlobal("ResizeObserver", undefined);
-    render(<Harness enabled mode="form" height={61} />);
+    render(<Harness enabled mode="form" />);
     expect(published()).toBe("");
+  });
+
+  it("still publishes where matchMedia does not exist", () => {
+    vi.stubGlobal("matchMedia", undefined);
+    render(<Harness enabled mode="form" />);
+    resize(61);
+    expect(published()).toBe(clear(61));
   });
 });
