@@ -1,6 +1,7 @@
 import {
   clientConfigQuery,
   savePreferences,
+  THEME_PREFERENCES,
   type ThemeModePreference,
   useStore,
 } from "@querymodule/client";
@@ -13,6 +14,7 @@ import type { ThemeSelection } from "@querymodule/tokens";
 import { ShortcutProvider, ThemeModeSeg, usePersona, useThemeMode } from "@querymodule/web-ui";
 import {
   createContext,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -104,6 +106,46 @@ function BrandMark() {
   );
 }
 
+const THEME_GROUP = ".qm-seg";
+
+/** The mode of the theme button that has focus inside the header, or null (the seg renders THEME_PREFERENCES in order). */
+function focusedThemeMode(header: HTMLElement | null): ThemeModePreference | null {
+  if (header === null || typeof document === "undefined") return null;
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !header.contains(active)) return null;
+  const group = active.closest(THEME_GROUP);
+  if (group === null) return null;
+  const buttons: Element[] = [...group.querySelectorAll("button")];
+  const index = buttons.indexOf(active.closest("button") as Element);
+  return THEME_PREFERENCES[index] ?? null;
+}
+
+/**
+ * Keeps focus on a theme button across a flip between the two bars (persona ruling): the same
+ * mode's button in the compact bar's icon group; the account button when the group goes into the
+ * closed disclosure, where it does not exist yet. The read happens in render, while the old DOM
+ * is still there (it is idempotent, so a repeated render is harmless); the move in a layout
+ * effect, after the AccountMenu remount's own focus handling. No announcement.
+ */
+function useThemeFocusAcrossFlip(compact: boolean, header: RefObject<HTMLElement | null>) {
+  const laidOut = useRef(compact);
+  const carried = useRef<ThemeModePreference | null>(null);
+  if (laidOut.current !== compact) carried.current = focusedThemeMode(header.current);
+  useLayoutEffect(() => {
+    if (laidOut.current === compact) return;
+    laidOut.current = compact;
+    const mode = carried.current;
+    carried.current = null;
+    if (mode === null || header.current === null) return;
+    const buttons = header.current.querySelector(THEME_GROUP)?.querySelectorAll("button");
+    const target =
+      buttons === undefined
+        ? header.current.querySelector<HTMLElement>(".qm-account__button")
+        : (buttons[THEME_PREFERENCES.indexOf(mode)] ?? buttons[0]);
+    target?.focus();
+  }, [compact, header]);
+}
+
 /**
  * The signed-in header (D-B4, design B1): product mark and name, site name, the Main nav (Queries,
  * Status, Admin), then the account disclosure (user, role, theme, sign out). The mobile-unit bar
@@ -120,6 +162,8 @@ export function AppHeader() {
   const shortcutSheet = useShortcutSheet();
   const siteLabel = useSiteLabel();
   const compact = layout === "mobileUnit";
+  const headerRef = useRef<HTMLElement>(null);
+  useThemeFocusAcrossFlip(compact, headerRef);
   const changeTheme = (mode: ThemeModePreference) => {
     preferences.getState().setThemeMode(mode);
     void savePreferences(api, { themeMode: mode }).catch(() => false);
@@ -128,7 +172,10 @@ export function AppHeader() {
     void signOut();
   };
   return (
-    <header className={compact ? "qm-app-header qm-app-header--compact" : "qm-app-header"}>
+    <header
+      ref={headerRef}
+      className={compact ? "qm-app-header qm-app-header--compact" : "qm-app-header"}
+    >
       {/* Product name as plain text: each page owns its h1. */}
       <p className="qm-app-header__product">
         <BrandMark />

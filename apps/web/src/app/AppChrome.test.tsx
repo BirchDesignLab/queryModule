@@ -238,7 +238,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     await user.click(screen.getByRole("main"));
     expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
   });
-  it("B1 focus is not lost when the layout flips to the compact bar while the disclosure is open", async () => {
+  it("B1 focus stays on the same theme button when the layout flips to the compact bar", async () => {
     const { user, services } = await signIn();
     const panel = await openAccount(user);
     await user.click(within(panel).getByRole("button", { name: "Night" }));
@@ -246,10 +246,60 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     // The persona changes under the open menu (a config landing, a refresh): the dispatch
     // account menu unmounts with focus inside it.
     act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));
-    await waitFor(() => expect(screen.getByRole("banner")).toHaveClass("qm-app-header--compact"));
+    const banner = await waitFor(() => {
+      const el = screen.getByRole("banner");
+      expect(el).toHaveClass("qm-app-header--compact");
+      return el;
+    });
     expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
-    // Focus lands on the page's main landmark, not on <body>.
-    expect(screen.getByRole("main")).toHaveFocus();
+    // The same mode's button in the new bar, not <main> and not <body>.
+    expect(within(banner).getByRole("button", { name: "Night" })).toHaveFocus();
+  });
+  it("B1 the focused button's mode carries, not the pressed one, and nothing is announced", async () => {
+    const { user, services } = await signIn();
+    const panel = await openAccount(user);
+    await user.click(within(panel).getByRole("button", { name: "Night" }));
+    // Focus moves to Red shift without pressing it: Night stays the pressed mode.
+    within(panel).getByRole("button", { name: "Red shift" }).focus();
+    act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));
+    const banner = await waitFor(() => {
+      const el = screen.getByRole("banner");
+      expect(el).toHaveClass("qm-app-header--compact");
+      return el;
+    });
+    const red = within(banner).getByRole("button", { name: "Red shift" });
+    expect(red).toHaveFocus();
+    expect(red).toHaveAttribute("aria-pressed", "false");
+    expect(within(banner).getByRole("button", { name: "Night" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("announcer-polite")).toHaveTextContent(/^$/);
+  });
+  it("B1 the compact icon group is replaced by the account menu: focus goes to the account button", async () => {
+    const { user, services } = await signIn();
+    act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));
+    const banner = await waitFor(() => {
+      const el = screen.getByRole("banner");
+      expect(el).toHaveClass("qm-app-header--compact");
+      return el;
+    });
+    await user.click(within(banner).getByRole("button", { name: "Day" }));
+    expect(within(banner).getByRole("button", { name: "Day" })).toHaveFocus();
+    // The full bar keeps the theme inside the closed disclosure, so the group is gone.
+    act(() => services.preferences.getState().setPersonaOverride("dispatcher"));
+    await waitFor(() =>
+      expect(screen.getByRole("banner")).not.toHaveClass("qm-app-header--compact"),
+    );
+    expect(screen.getByRole("button", { name: TEST_USER.email })).toHaveFocus();
+  });
+  it("B1 a flip with focus outside the theme buttons leaves focus alone", async () => {
+    const { services } = await signIn();
+    const link = screen.getByRole("link", { name: "Status" });
+    link.focus();
+    act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));
+    await waitFor(() => expect(screen.getByRole("banner")).toHaveClass("qm-app-header--compact"));
+    expect(screen.getByRole("link", { name: "Status" })).toHaveFocus();
   });
   it("B4 the officer bar: theme as an icon group, the account disclosure without a second theme control", async () => {
     const { user, services } = await signIn();
