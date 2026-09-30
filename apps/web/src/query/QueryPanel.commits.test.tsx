@@ -1,12 +1,15 @@
-import type { SubmitQueryResponse } from "@querymodule/client";
+import { createTranslator, type SubmitQueryResponse } from "@querymodule/client";
 import { resolveShortcuts } from "@querymodule/core/config";
 import { ShortcutProvider } from "@querymodule/web-ui";
 import { act, screen, waitFor } from "@testing-library/react";
-import { Profiler } from "react";
+import { Profiler, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../app/i18n-context.js";
+import { EN_BUNDLE } from "../test/en-bundle.js";
 import { ACK_202, CLIENT_CONFIG, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
 import { QueryPanelView } from "./QueryPanelView.js";
+import { RequestsPane } from "./RequestsPane.js";
 
 // Keystroke cost (perf measurement, work queue item 3): a keystroke in a field never re-renders the
 // requests list beside the panel (a row per request, each formatting its time).
@@ -54,7 +57,7 @@ async function settle(commits: { n: number }) {
 }
 
 describe("keystroke cost: the requests list is left alone", () => {
-  it("does not re-render the requests rows on a keystroke (no date formatting per row)", async () => {
+  it("a keystroke builds no Intl formatter (whatever else re-renders)", async () => {
     const commits = { n: 0 };
     const { user, services } = await openPanel(commits);
     for (let i = 0; i < 5; i += 1) {
@@ -81,5 +84,42 @@ describe("keystroke cost: the requests list is left alone", () => {
     } finally {
       construct.mockRestore();
     }
+  });
+
+  it("RequestsPane itself bails out when its parent re-renders with the same props (the memo)", async () => {
+    // A stable translator whose t() counts the list's heading lookups: every render of the pane asks.
+    const base = createTranslator("en", EN_BUNDLE);
+    const asked = { n: 0 };
+    const translator = {
+      ...base,
+      t: ((key: string, params?: Parameters<typeof base.t>[1]) => {
+        if (key === "requests.heading") asked.n += 1;
+        return base.t(key, params);
+      }) as typeof base.t,
+    };
+    let bump: () => void = () => undefined;
+    function Parent() {
+      const [, setTick] = useState(0);
+      bump = () => setTick((n) => n + 1);
+      // What a keystroke does to the panel around the list: the parent re-renders, props unchanged.
+      return (
+        <I18nProvider translator={translator}>
+          <RequestsPane config={CLIENT_CONFIG} variant="list" />
+        </I18nProvider>
+      );
+    }
+    const services = testServices();
+    services.authStore.getState().setSignedIn(TEST_USER);
+    renderRoutes([{ path: "/", element: <Parent /> }], { services });
+    await screen.findByRole("region", { name: "Requests this shift" });
+    // Let the mount settle (the first render and its effects).
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    });
+    const before = asked.n;
+    expect(before).toBeGreaterThan(0);
+    act(() => bump());
+    act(() => bump());
+    expect(asked.n).toBe(before);
   });
 });

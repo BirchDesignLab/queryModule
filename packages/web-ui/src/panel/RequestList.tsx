@@ -42,7 +42,8 @@ export function shortReference(reference: string): string {
 let ackFormat: Intl.DateTimeFormat | undefined;
 
 /** MM-DD-YY HH:mm:ss in local time (spec 6.2). The formatter is built once: every row of the list
- *  formats on every render, and constructing an Intl formatter costs far more than using one. */
+ *  formats on every render, and constructing an Intl formatter costs far more than using one. It keeps
+ *  the time zone it resolved when first built: a zone changed while the tab is open shows after a reload. */
 export function formatAckTime(epochMs: number): string {
   ackFormat ??= new Intl.DateTimeFormat("en-US", {
     year: "2-digit",

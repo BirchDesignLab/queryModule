@@ -130,6 +130,28 @@ describe("hardening: the action bar's height is published for scroll-padding (WC
     expect(published()).toBe("");
   });
 
+  it("removes the property when the panel stops being live (enabled goes false)", () => {
+    const { rerender } = render(<Harness enabled mode="form" />);
+    resize(61);
+    expect(published()).toBe(clear(61));
+    rerender(<Harness enabled={false} mode="form" />);
+    expect(published()).toBe("");
+    expect(observers.every((o) => o.disconnected)).toBe(true);
+  });
+
+  it("a media change between a re-bind and the new bar's first report leaves the property to that report", () => {
+    const { rerender } = render(<Harness enabled mode="form" />);
+    resize(61);
+    rerender(<Harness enabled mode="terminal" />);
+    // The new observer has not reported: the media listener runs with no height yet.
+    act(() => {
+      for (const listener of mediaListeners) listener();
+    });
+    expect(published()).toBe("");
+    resize(61);
+    expect(published()).toBe(clear(61));
+  });
+
   it("does nothing for the preview (disabled)", () => {
     render(<Harness enabled={false} mode="form" />);
     expect(published()).toBe("");
