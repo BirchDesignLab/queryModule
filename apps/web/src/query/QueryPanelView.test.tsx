@@ -383,19 +383,29 @@ describe("preview never shows the Shown tag (a builder edit is not a rule reveal
 
 describe("preview selectType: the builder picks the query type through the panel's own path", () => {
   let pick: (code: string | undefined) => void = () => undefined;
+  let setBoth: (config: ClientSiteConfig, code: string | undefined) => void = () => undefined;
   function Picker({
     drafts,
     mode,
+    initial,
+    initialConfig = CLIENT_CONFIG,
   }: {
     drafts: ReturnType<typeof createDraftStore>;
     mode: "live" | "preview";
+    initial?: string;
+    initialConfig?: ClientSiteConfig;
   }) {
-    const [code, setCode] = useState<string | undefined>(undefined);
+    const [code, setCode] = useState<string | undefined>(initial);
+    const [config, setConfig] = useState(initialConfig);
     pick = setCode;
+    setBoth = (next, nextCode) => {
+      setConfig(next);
+      setCode(nextCode);
+    };
     return (
       <ShortcutProvider bindings={resolveShortcuts(CLIENT_CONFIG.shortcuts)}>
         <QueryPanelView
-          config={CLIENT_CONFIG}
+          config={config}
           drafts={drafts}
           mode={mode}
           idPrefix="st"
@@ -404,10 +414,21 @@ describe("preview selectType: the builder picks the query type through the panel
       </ShortcutProvider>
     );
   }
-  const renderPicker = (mode: "live" | "preview" = "preview") => {
+  const renderPicker = (
+    mode: "live" | "preview" = "preview",
+    initial?: string,
+    initialConfig?: ClientSiteConfig,
+  ) => {
     const drafts = createDraftStore();
     return {
-      ...renderRoutes([{ path: "/", element: <Picker drafts={drafts} mode={mode} /> }]),
+      ...renderRoutes([
+        {
+          path: "/",
+          element: (
+            <Picker drafts={drafts} mode={mode} initial={initial} initialConfig={initialConfig} />
+          ),
+        },
+      ]),
       drafts,
     };
   };
@@ -466,7 +487,44 @@ describe("preview selectType: the builder picks the query type through the panel
     renderPicker("live");
     await screen.findByLabelText("Plate");
     act(() => pick("PER"));
-    await new Promise((r) => setTimeout(r, 50));
     pressed("Vehicle");
+  });
+
+  it("a pick present at first mount wins over the initial type (the fallback runs after it)", async () => {
+    const { drafts } = renderPicker("preview", "PER");
+    expect(await screen.findByLabelText(/Last name/)).toBeInTheDocument();
+    await waitFor(() => pressed("Person"));
+    expect(drafts.getState().queryType).toBe("PER");
+  });
+
+  it("a pick the config does not have yet is applied once the config gains the type", async () => {
+    const WITHOUT = {
+      ...CLIENT_CONFIG,
+      queryTypes: CLIENT_CONFIG.queryTypes.filter((q) => q.code !== "PER"),
+      quickAccess: CLIENT_CONFIG.quickAccess.filter((c) => c !== "PER"),
+    };
+    renderPicker("preview", undefined, WITHOUT);
+    await screen.findByLabelText("Plate");
+    act(() => pick("PER"));
+    pressed("Vehicle");
+    act(() => setBoth(CLIENT_CONFIG, "PER"));
+    await waitFor(() => pressed("Person"));
+  });
+
+  it("a rename of the selected code, arriving with the new pick, lands on the new code", async () => {
+    const VEH_TYPE = CLIENT_CONFIG.queryTypes.find((q) => q.code === "VEH");
+    if (VEH_TYPE === undefined) throw new Error("fixture: VEH missing");
+    renderPicker("preview", "VEH");
+    await waitFor(() => pressed("Vehicle"));
+    const renamed = {
+      ...CLIENT_CONFIG,
+      queryTypes: [
+        { ...VEH_TYPE, code: "VHX", labelKey: "custom.vhx.label" },
+        ...CLIENT_CONFIG.queryTypes.filter((q) => q.code !== "VEH"),
+      ],
+      quickAccess: ["VHX", ...CLIENT_CONFIG.quickAccess.filter((c) => c !== "VEH")],
+    };
+    act(() => setBoth(renamed, "PER"));
+    await waitFor(() => pressed("Person"));
   });
 });
