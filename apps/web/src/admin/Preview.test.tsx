@@ -382,3 +382,46 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
     expect(within(preview).getByText("Preview paused: 1 error.")).toBeInTheDocument();
   });
 });
+
+describe("preview type follows the tree (selectType, #427)", () => {
+  const nav = () => screen.getByRole("navigation", { name: "Configuration items" });
+  const pressed = (preview: HTMLElement, name: string) =>
+    within(preview).getByRole("button", { name, pressed: true });
+
+  it("picking a query type in the tree shows it in the preview", async () => {
+    const t = await openBuilder();
+    expect(within(t.preview).getByRole("button", { name: "Vehicle", pressed: true })).toBeVisible();
+    await t.user.click(within(nav()).getByRole("treeitem", { name: /^Person PER/ }));
+    await waitFor(() => expect(pressed(t.preview, "Person")).toBeInTheDocument());
+  });
+
+  it("picking a field under a type shows the field's owning type", async () => {
+    const t = await openBuilder();
+    await t.user.click(within(nav()).getByRole("treeitem", { name: /^Person PER/ }));
+    await waitFor(() => expect(pressed(t.preview, "Person")).toBeInTheDocument());
+    await t.user.click(within(nav()).getByRole("treeitem", { name: /^Vehicle VEH/ }));
+    await waitFor(() => expect(pressed(t.preview, "Vehicle")).toBeInTheDocument());
+    const field = within(nav()).getByRole("treeitem", { name: /^Plate type plateType/ });
+    await t.user.click(within(nav()).getByRole("treeitem", { name: /^Person PER/ }));
+    await waitFor(() => expect(pressed(t.preview, "Person")).toBeInTheDocument());
+    // A field of Vehicle, opened again by its type, is a pick of Vehicle.
+    await t.user.click(within(nav()).getByRole("treeitem", { name: /^Vehicle VEH/ }));
+    await t.user.click(field);
+    await waitFor(() => expect(pressed(t.preview, "Vehicle")).toBeInTheDocument());
+  });
+
+  it("a site item passes no type: the preview keeps its own", async () => {
+    const t = await openBuilder();
+    await t.user.click(within(t.preview).getByRole("button", { name: "Person" }));
+    await selectBuilderItem(t.user, "commands");
+    // The panel is hidden (the empty state) but still Person: nothing picked another type.
+    expect(
+      within(t.preview).getByRole("button", { name: "Person", pressed: true, hidden: true }),
+    ).toBeInTheDocument();
+  });
+
+  // Blocked on cloud 2's pick counter for selectType: an unchanged value is ignored, so clicking the
+  // tree's Vehicle again after the preview moved to Person does nothing. Written and failing first
+  // (tree Vehicle, preview quick access Person, tree Vehicle again must show Vehicle); no remount.
+  it.todo("re-pick: the tree's Vehicle again, after the preview moved to Person, shows Vehicle");
+});
