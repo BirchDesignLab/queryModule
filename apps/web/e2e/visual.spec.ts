@@ -879,6 +879,170 @@ test.describe("Changes view (1440x900)", () => {
   }
 });
 
+test.describe("Admin parity (item 5)", () => {
+  const surface = (mode: ThemeMode, name: "sunken" | "base") =>
+    rgb(mode, `color.surface.${name}` as keyof typeof COLOR_TOKENS);
+  /** Boxes and backgrounds of the builder's parts, as the browser resolved them. */
+  const boxes = (page: Page) =>
+    page.evaluate(() => {
+      const one = (sel: string) => {
+        const el = document.querySelector(sel);
+        if (el === null) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          x: r.x,
+          y: r.y,
+          w: r.width,
+          h: r.height,
+          bottom: r.bottom,
+          bg: getComputedStyle(el).backgroundColor,
+        };
+      };
+      const root = document.scrollingElement as Element;
+      return {
+        body: getComputedStyle(document.body).backgroundColor,
+        overflowY: root.scrollHeight - root.clientHeight,
+        overflowX: root.scrollWidth - root.clientWidth,
+        rail: one(".qm-admin__rail"),
+        toolbar: one(".qm-builder__toolbar"),
+        tree: one(".qm-tree"),
+        editor: one(".qm-builder__editor"),
+        preview: one(".qm-builder__panes > .qm-admin__preview"),
+        well: one(".qm-preview__panel"),
+        card: one(".qm-preview__panel--dispatch .qm-preview__card"),
+        label: one(".qm-sect__label"),
+        body1: one(".qm-sect__body"),
+      };
+    });
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+  ]) {
+    for (const mode of MODES) {
+      test(`${viewport.width}x${viewport.height} ${mode}: sunken page, base panes, 440 px preview, panes inside the window`, async ({
+        page,
+      }) => {
+        await page.setViewportSize(viewport);
+        await asUser(page, "admin@example.test", mode, async () => {
+          await page.goto("/admin/config");
+          await expect(page.getByRole("region", { name: "Live preview" })).toBeVisible();
+          await expect(page.locator(".qm-preview__panel--dispatch")).toBeVisible();
+          await capture(page, `parity-builder-${mode}-${viewport.width}`);
+          const b = await boxes(page);
+          expect(b.body, "page").toBe(surface(mode, "sunken"));
+          for (const part of ["rail", "toolbar", "tree", "editor", "preview"] as const)
+            expect(b[part]?.bg, part).toBe(surface(mode, "base"));
+          expect(b.well?.bg, "preview well").toBe(surface(mode, "sunken"));
+          expect(b.card?.bg, "preview card").toBe(surface(mode, "base"));
+          // Panes end inside the window and the page itself does not scroll.
+          for (const part of ["tree", "editor", "preview"] as const)
+            expect(b[part]?.bottom ?? 0, `${part} bottom`).toBeLessThanOrEqual(viewport.height);
+          expect(b.overflowY, "page scroll").toBeLessThanOrEqual(0);
+          expect(b.overflowX, "page overflow").toBeLessThanOrEqual(0);
+          // Widths: the preview is about 440 px, the others keep room for their content.
+          expect(Math.round(b.preview?.w ?? 0), "preview width").toBeGreaterThanOrEqual(430);
+          expect(Math.round(b.preview?.w ?? 0), "preview width").toBeLessThanOrEqual(450);
+          expect(b.tree?.w ?? 0, "tree width").toBeGreaterThanOrEqual(230);
+          expect(b.editor?.w ?? 0, "editor width").toBeGreaterThanOrEqual(360);
+          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(90);
+          // A section's label column sits beside its controls, not above them.
+          expect(
+            (b.label?.x ?? 0) + (b.label?.w ?? 0),
+            "label column beside controls",
+          ).toBeLessThanOrEqual(b.body1?.x ?? 0);
+          // The reasons for the disabled buttons share one row, under the buttons.
+          const reasons = await page.evaluate(() => {
+            const tops = [...document.querySelectorAll(".qm-builder__reason")].map(
+              (el) => el.getBoundingClientRect().top,
+            );
+            const publish = [...document.querySelectorAll(".qm-builder__toolbar button")]
+              .at(-1)
+              ?.getBoundingClientRect().bottom;
+            return { tops, publish: publish ?? 0 };
+          });
+          expect(reasons.tops.length, "reasons").toBeGreaterThan(0);
+          expect(Math.max(...reasons.tops) - Math.min(...reasons.tops), "one row").toBeLessThan(4);
+          expect(Math.min(...reasons.tops), "under the buttons").toBeGreaterThanOrEqual(
+            reasons.publish,
+          );
+          // With unpublished changes the status line is longer and the toolbar may wrap more: the
+          // panes still end inside the window and the page still does not scroll.
+          await page
+            .getByRole("navigation", { name: "Configuration items" })
+            .getByRole("treeitem", { name: /^Terminal settings/ })
+            .click();
+          await page.getByRole("textbox", { name: "Delimiter", exact: true }).fill("~");
+          await page.getByRole("tab", { name: "Form", exact: true }).focus();
+          const changed = await boxes(page);
+          expect(changed.overflowY, "page scroll with changes").toBeLessThanOrEqual(0);
+          for (const part of ["tree", "editor", "preview"] as const)
+            expect(changed[part]?.bottom ?? 0, `${part} bottom with changes`).toBeLessThanOrEqual(
+              viewport.height,
+            );
+          // The preview's card is the dispatcher's: panel radius, sections without boxes.
+          await expect(page.locator(".qm-preview__panel--dispatch .qm-preview__card")).toHaveCSS(
+            "border-radius",
+            "10px",
+          );
+          await expect(
+            page.locator(".qm-preview__panel--dispatch .qm-query-form__section").first(),
+          ).toHaveCSS("border-top-width", "0px");
+        });
+      });
+    }
+  }
+
+  for (const viewport of [
+    { width: 800, height: 600 },
+    { width: 683, height: 384 },
+  ]) {
+    for (const mode of MODES) {
+      test(`${viewport.width}x${viewport.height} ${mode}: no sideways scroll; the rail leaves most of the window to the builder`, async ({
+        page,
+      }) => {
+        await page.setViewportSize(viewport);
+        await asUser(page, "admin@example.test", mode, async () => {
+          await page.goto("/admin/config");
+          await expect(page.getByRole("tab", { name: "Form", exact: true })).toBeVisible();
+          await capture(page, `parity-builder-${mode}-${viewport.width}`);
+          const b = await boxes(page);
+          expect(b.overflowX, "page overflow").toBeLessThanOrEqual(0);
+          expect(b.body, "page").toBe(surface(mode, "sunken"));
+          expect(b.rail?.bg, "rail").toBe(surface(mode, "base"));
+          // 298 px stacked before this pass (78% of a 200% zoomed window); now side by side.
+          expect((b.rail?.h ?? 0) / viewport.height, "rail share of the window").toBeLessThan(0.46);
+          // The toolbar starts inside the first screen.
+          expect(b.toolbar?.y ?? 0, "toolbar top").toBeLessThan(viewport.height);
+        });
+      });
+    }
+  }
+
+  for (const mode of MODES) {
+    test(`${mode}: the users placeholder and /status sit on the sunken page; the rail runs the column`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1366, height: 768 });
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/users");
+        await expect(page.getByRole("heading", { name: "Users and roles" })).toBeVisible();
+        await capture(page, `parity-users-${mode}`);
+        const users = await boxes(page);
+        expect(users.body, "users page").toBe(surface(mode, "sunken"));
+        expect(users.rail?.bottom ?? 0, "rail reaches the window bottom").toBeGreaterThanOrEqual(
+          768,
+        );
+        expect(users.overflowY, "page scroll").toBeLessThanOrEqual(0);
+        await page.goto("/status");
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        await capture(page, `parity-status-${mode}`);
+        expect((await boxes(page)).body, "status page").toBe(surface(mode, "sunken"));
+      });
+    });
+  }
+});
+
 test.describe("every screen, viewport and theme: no horizontal overflow", () => {
   for (const viewport of VIEWPORTS) {
     for (const mode of MODES) {

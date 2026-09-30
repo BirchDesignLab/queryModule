@@ -11,8 +11,11 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
+import { useServices } from "../app/services-context.js";
+import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext } from "./checks.js";
 import { asObjects, str } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
@@ -20,11 +23,19 @@ import { useItemName } from "./FormTab.js";
 import { HIDDEN_KEYS, isRootIssue, issueWords, LABELS_ITEM } from "./selection.js";
 import { type FlatItem, isTypeAheadKey, treeAction, typeAhead } from "./tree-nav.js";
 
+/**
+ * Counts of what rendered, for the test that pins the cost of a label keystroke: `rows` is the
+ * memoized rows, `labels` the row labels, each of which follows its own key in the draft.
+ */
+export const treeRenderStats = { rows: 0, labels: 0 };
+
 /** One row of the builder tree: a treeitem that selects `pointer`, and its children. */
 interface TreeNode {
   pointer: string;
-  /** Shown text: the label users see, or the key when there is none. */
+  /** Shown when the label key has no text: the key or code. */
   label: string;
+  /** The label key whose text the row shows (the draft's, else the shipped one). */
+  labelKey?: string;
   /** The config key or code beside it, in mono; omitted when it equals the label. */
   key?: string;
   children: TreeNode[];
@@ -33,7 +44,6 @@ interface TreeNode {
 }
 
 function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } {
-  const translator = useTranslator();
   const name = useItemName();
   const { issues } = useContext(ChecksContext);
   return useMemo(() => {
@@ -49,16 +59,13 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
         }
       return { errors, warnings };
     };
-    const label = (labelKey: unknown, fallback: string) => {
-      const k = str(labelKey);
-      return k !== "" && translator.has(k) ? translator.t(k) : fallback;
-    };
     const node = (
       pointer: string,
       text: string,
       key: string,
       children: TreeNode[] = [],
       rollUp = false,
+      labelKey = "",
     ): TreeNode => {
       const own = under(pointer);
       const counts = rollUp
@@ -70,7 +77,8 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
       return {
         pointer,
         label: text,
-        ...(key !== "" && key !== text ? { key } : {}),
+        ...(labelKey !== "" ? { labelKey } : {}),
+        ...(key !== "" ? { key } : {}),
         children,
         ...counts,
       };
@@ -80,7 +88,14 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
       const fields = asObjects(type.fields).map((f, j) => ({ f, j }));
       const sections = asObjects(type.sections);
       const fieldNode = ({ f, j }: { f: JsonObject; j: number }) =>
-        node(toPointer(["queryTypes", i, "fields", j]), label(f.labelKey, str(f.key)), str(f.key));
+        node(
+          toPointer(["queryTypes", i, "fields", j]),
+          str(f.key),
+          str(f.key),
+          [],
+          false,
+          str(f.labelKey),
+        );
       // A field without a section renders in the first one (QueryForm), so it is listed there.
       const firstKey = sections.length > 0 ? str(sections[0]?.key) : null;
       const children =
@@ -94,13 +109,14 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
               });
               return node(
                 toPointer(["queryTypes", i, "sections", k]),
-                label(section.labelKey, key),
+                key,
                 key,
                 own.map(fieldNode),
                 true,
+                str(section.labelKey),
               );
             });
-      return node(toPointer(["queryTypes", i]), label(type.labelKey, code), code, children);
+      return node(toPointer(["queryTypes", i]), code, code, children, false, str(type.labelKey));
     });
     // Every top-level key by its plain name, the key in mono beside it (design lead 09-29-26).
     const site = Object.keys(doc)
@@ -108,18 +124,62 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
       .map((k) => node(toPointer([k]), name(k), k));
     site.push(node(LABELS_ITEM, name(LABELS_ITEM), ""));
     return { types, site };
-  }, [doc, issues, name, translator]);
+  }, [doc, issues, name]);
+}
+
+/** A row's text as the editor shows it: the draft's text, else the shipped one, else the key. */
+type LabelText = (node: { label: string; labelKey?: string }) => string;
+
+function useLabelResolver(): LabelText {
+  const translator = useTranslator();
+  const { labels } = useDraft();
+  return useCallback(
+    (node) => {
+      const k = node.labelKey ?? "";
+      if (k === "") return node.label;
+      const text = labels[translator.locale]?.[k] ?? (translator.has(k) ? translator.t(k) : "");
+      return text === "" ? node.label : text;
+    },
+    [labels, translator],
+  );
+}
+
+/**
+ * One row's label. It follows its own key in the draft store, so a keystroke in one label
+ * re-renders the rows that show it and no others: the memoized rows around it stay as they are.
+ */
+function TreeLabel({ node }: { node: { label: string; labelKey?: string; key?: string } }) {
+  treeRenderStats.labels++;
+  const translator = useTranslator();
+  const store = configDraftStore(useServices());
+  const key = node.labelKey ?? "";
+  const draftText = useSyncExternalStore(store.subscribe, () =>
+    key === "" ? undefined : store.getState().labels[translator.locale]?.[key],
+  );
+  const text = draftText ?? (key !== "" && translator.has(key) ? translator.t(key) : "");
+  const shown = text === "" ? node.label : text;
+  return (
+    <>
+      <span className="qm-tree__label">{shown}</span>
+      {node.key !== undefined && node.key !== shown && (
+        <>
+          {" "}
+          <span className="qm-tree__key">{node.key}</span>
+        </>
+      )}
+    </>
+  );
 }
 
 /** Keeps nodes whose label or key contains `q`, with their ancestors; a match keeps its children. */
-function filterNodes(nodes: TreeNode[], q: string): TreeNode[] {
+function filterNodes(nodes: TreeNode[], q: string, text: LabelText): TreeNode[] {
   if (q === "") return nodes;
   const out: TreeNode[] = [];
   for (const n of nodes) {
-    const hit = `${n.label} ${n.key ?? ""}`.toLowerCase().includes(q);
+    const hit = `${text(n)} ${n.key ?? ""}`.toLowerCase().includes(q);
     if (hit) out.push(n);
     else {
-      const children = filterNodes(n.children, q);
+      const children = filterNodes(n.children, q, text);
       if (children.length > 0) out.push({ ...n, children });
     }
   }
@@ -134,6 +194,7 @@ function flattenVisible(
   groups: readonly TreeNode[][],
   expanded: ReadonlySet<string>,
   searching: boolean,
+  text: LabelText,
 ) {
   const out: FlatItem[] = [];
   const walk = (list: TreeNode[], level: number, parent: string | null, group: number) => {
@@ -143,7 +204,7 @@ function flattenVisible(
         n.children.length > 0 && (!(level === 1 && group === 0) || expanded.has(n.pointer));
       out.push({
         pointer: n.pointer,
-        label: n.label,
+        label: text(n),
         level,
         parent,
         hasChildren: n.children.length > 0,
@@ -187,6 +248,7 @@ export function BuilderTree({
   const t = useT();
   const uid = useId();
   const { types, site } = useTreeNodes(doc);
+  const text = useLabelResolver();
   // Whole-config issues have no row of their own: one line lists them, so the rows add up to the
   // toolbar total (critic I1).
   const { issues } = useContext(ChecksContext);
@@ -197,8 +259,9 @@ export function BuilderTree({
   const searchRef = useRef<HTMLInputElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const q = query.trim().toLowerCase();
-  const shownTypes = filterNodes(types, q);
-  const shownSite = filterNodes(site, q);
+  // Without a search these are the nodes themselves, so the memoized rows see the same arrays.
+  const shownTypes = useMemo(() => filterNodes(types, q, text), [types, q, text]);
+  const shownSite = useMemo(() => filterNodes(site, q, text), [site, q, text]);
   // Only the selected type is expanded unless the user toggles one; a search shows every match.
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const selectedType =
@@ -230,7 +293,7 @@ export function BuilderTree({
   // Keyboard: one Tab stop for both trees, so Tab comes back to the selected row (APG single-select
   // tree); when a search hides it, the row last focused, else the first. The rows on screen are
   // what the keys walk.
-  const flat = flattenVisible([shownTypes, shownSite], expanded, q !== "");
+  const flat = flattenVisible([shownTypes, shownSite], expanded, q !== "", text);
   const flatRef = useRef(flat);
   flatRef.current = flat;
   const [active, setActive] = useState<string | null>(null);
@@ -425,6 +488,7 @@ const TreeRows = memo(
     onToggle,
   }: TreeRowsProps) {
     const t = useT();
+    treeRenderStats.rows++;
     const renderNodes = (list: TreeNode[], level: number, by?: string, gid?: string) => {
       const top = level === 1 && expanded !== undefined;
       return (
@@ -459,13 +523,7 @@ const TreeRows = memo(
                     <span className="qm-tree__toggle" aria-hidden="true" data-open={open} />
                   )}
                   <span id={`${id}-name`} className="qm-tree__name">
-                    <span className="qm-tree__label">{n.label}</span>
-                    {n.key !== undefined && (
-                      <>
-                        {" "}
-                        <span className="qm-tree__key">{n.key}</span>
-                      </>
-                    )}
+                    <TreeLabel node={n} />
                     {n.errors + n.warnings > 0 && (
                       <>
                         <span

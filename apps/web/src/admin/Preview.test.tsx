@@ -205,11 +205,14 @@ describe("A4 preview: persona switch and states (M1 P3)", () => {
     expect(dispatcher).not.toHaveAttribute("tabindex");
     expect(officer).not.toHaveAttribute("tabindex");
     expect(panelOf(t.preview)).not.toHaveClass("qm-layout--mobile-unit");
+    // The dispatcher's card and sectionless look; the officer keeps the touch layout's own.
+    expect(panelOf(t.preview)).toHaveClass("qm-preview__panel--dispatch");
     await t.user.type(within(t.preview).getByLabelText("Plate"), "ZZ-1234");
     await t.user.click(officer);
     expect(officer).toHaveAttribute("aria-pressed", "true");
     expect(dispatcher).toHaveAttribute("aria-pressed", "false");
     expect(panelOf(t.preview)).toHaveClass("qm-layout--mobile-unit");
+    expect(panelOf(t.preview)).not.toHaveClass("qm-preview__panel--dispatch");
     // The panel is not remounted: what was typed stays.
     expect(within(t.preview).getByLabelText("Plate")).toHaveValue("ZZ-1234");
     await t.user.click(dispatcher);
