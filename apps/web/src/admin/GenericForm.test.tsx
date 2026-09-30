@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { selectBuilderItem } from "../test/builder-tree.js";
@@ -62,9 +62,14 @@ describe("generic form edge cases (#388, UX-004)", () => {
   it("label overlay controls get id-safe ids for keys with spaces", async () => {
     const t = await openBuilder();
     await openSection(t, "Label text");
-    await t.user.type(screen.getByLabelText("Label key (en)"), "odd key");
-    await t.user.type(screen.getByLabelText("Label text (en)"), "Odd");
-    await t.user.click(screen.getByRole("button", { name: "Add label (en)" }));
+    const sect = within(
+      (await screen.findByText("Texts for en", { selector: "h4" })).closest(
+        ".qm-sect",
+      ) as HTMLElement,
+    );
+    await t.user.type(sect.getByLabelText("Label key"), "odd key");
+    await t.user.type(sect.getByLabelText("Text"), "Odd");
+    await t.user.click(sect.getByRole("button", { name: "Add label" }));
     const input = screen.getByLabelText("odd key");
     expect(input.id).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(input).toHaveValue("Odd");

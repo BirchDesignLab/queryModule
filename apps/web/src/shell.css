@@ -1074,6 +1074,90 @@ main[tabindex="-1"]:focus {
   padding-inline-start: 0;
 }
 
+/* Labels and translations (A-D2 item 2): each row's title is the key in mono in the 144 px label
+   column, the English text beside it, this locale's input under both. */
+.qm-labels {
+  display: grid;
+  gap: var(--qm-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-label-row {
+  display: grid;
+  grid-template-columns: calc(var(--qm-space-12) * 3) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--qm-space-1) var(--qm-space-4);
+}
+
+.qm-label-row__key {
+  overflow-wrap: anywhere;
+}
+
+.qm-label-row__key code {
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-label-row__en {
+  grid-column: 2;
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-label-row__input {
+  grid-column: 1 / -1;
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+
+.qm-labels__empty {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+}
+
+/* The add form: stacked fields under the rows, set off by a rule. */
+.qm-labels__add {
+  display: grid;
+  gap: var(--qm-space-3);
+  justify-items: start;
+}
+
+.qm-labels + .qm-labels__add,
+.qm-labels__empty + .qm-labels__add {
+  margin-block-start: var(--qm-space-3);
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+/* The generic control-row rule (.qm-admin__form :where(div):has(> label)) adds margins and its own
+   gap; the add form's grid spaces its fields itself. */
+.qm-admin__form div.qm-labels__field {
+  margin-block: 0;
+  gap: var(--qm-space-1);
+}
+
+.qm-labels__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.qm-labels__field .qm-field__input {
+  box-sizing: border-box;
+  inline-size: 100%;
+}
+
+.qm-labels__reason {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
 /* Keys, label keys, patterns and the config location: collapsed until wanted. */
 .qm-advanced {
   margin-block: var(--qm-space-3);

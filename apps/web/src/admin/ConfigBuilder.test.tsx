@@ -117,9 +117,14 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("label text edits go to the locale overlay", async () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "Label text");
-    await t.user.type(await screen.findByLabelText("Label key (en)"), "site.custom");
-    await t.user.type(screen.getByLabelText("Label text (en)"), "Custom");
-    await t.user.click(screen.getByRole("button", { name: "Add label (en)" }));
+    const sect = within(
+      (await screen.findByText("Texts for en", { selector: "h4" })).closest(
+        ".qm-sect",
+      ) as HTMLElement,
+    );
+    await t.user.type(sect.getByLabelText("Label key"), "site.custom");
+    await t.user.type(sect.getByLabelText("Text"), "Custom");
+    await t.user.click(sect.getByRole("button", { name: "Add label" }));
     expect(configDraftStore(t.services).getState().labels).toEqual({
       en: { "site.custom": "Custom" },
     });
@@ -178,7 +183,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     await replaceRaw(t, JSON.stringify(doc));
     await t.user.click(screen.getByRole("tab", { name: "Form" }));
     await selectBuilderItem(t.user, "Label text");
-    expect(await screen.findByLabelText("Label key (en)")).toBeInTheDocument();
+    expect(await screen.findByText("Texts for en", { selector: "h4" })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Site configuration", level: 2 }),
     ).toBeInTheDocument();
