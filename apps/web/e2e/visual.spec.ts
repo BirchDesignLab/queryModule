@@ -689,12 +689,23 @@ test.describe("parity: dispatcher and sign-in surfaces, type and states (1440x90
         await expect(state).toBeFocused();
         const shown = await tag.evaluate((el) => {
           const s = getComputedStyle(el);
-          const c = getComputedStyle(el.closest(".qm-form-cell") as Element);
-          return { color: s.color, edge: s.borderTopColor, animation: c.animationName };
+          const label = el.closest(".qm-field__label") as Element;
+          const l = getComputedStyle(label);
+          const input = document.getElementById(label.getAttribute("for") ?? "") as Element;
+          // In the label's flow: the tag never overlaps the label's text or the control.
+          const tagBox = el.getBoundingClientRect();
+          const inputBox = input.getBoundingClientRect();
+          return {
+            color: s.color,
+            edge: s.borderTopColor,
+            animation: l.animationName,
+            belowTag: inputBox.top >= tagBox.bottom,
+          };
         });
         expect(shown.color).toBe(rgb(mode, "color.accent"));
         expect(shown.edge).toBe(rgb(mode, "color.accent"));
         expect(shown.animation).toBe("none");
+        expect(shown.belowTag).toBe(true);
         await captureCrop(page, cell, `parity-shown-${mode}`);
         await page.getByLabel(/Plate type/).focus();
         await expect(tag).toHaveCount(0);

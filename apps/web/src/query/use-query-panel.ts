@@ -208,7 +208,11 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   );
   const formContainerRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
-  const seen = useRef<{ queryType: string; visible: ReadonlySet<string> } | null>(null);
+  const seen = useRef<{
+    queryType: string;
+    visible: ReadonlySet<string>;
+    values: Readonly<Record<string, DraftValue>>;
+  } | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -318,10 +322,21 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const previous = seen.current;
     const configChanged = revealHash.current !== config.configHash;
     revealHash.current = config.configHash;
+    const current = values ?? NO_VALUES;
     if (previous !== null && previous.queryType !== formState.queryType) setRevealed(NO_KEYS);
+    // A key a rule hid again leaves the set, so a later config that shows it is not a "reveal".
+    setRevealed((prev) => {
+      const kept = [...prev].filter((key) => visible.has(key));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
     if (!configChanged && previous !== null && previous.queryType === formState.queryType) {
       const shown = formState.fields.filter((f) => f.visible && !previous.visible.has(f.key));
-      if (shown.length > 0) setRevealed((prev) => new Set([...prev, ...shown.map((f) => f.key)]));
+      // Tagged only in the live panel (a builder edit in preview is not a dispatcher's reveal) and
+      // only when the same edit did not also fill the field (a terminal merge sets both).
+      const tagged = preview
+        ? []
+        : shown.filter((f) => previous.values[f.key] === current[f.key]).map((f) => f.key);
+      if (tagged.length > 0) setRevealed((prev) => new Set([...prev, ...tagged]));
       const messages = shown.map((f) =>
         t(f.required ? "form.fieldRevealedRequired" : "form.fieldRevealed", {
           label: t(f.labelKey),
@@ -329,8 +344,8 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       );
       if (messages.length > 0) announcer.announce(messages.join(" "));
     }
-    seen.current = { queryType: formState.queryType, visible };
-  }, [formState, config.configHash, announcer, t]);
+    seen.current = { queryType: formState.queryType, visible, values: current };
+  }, [formState, config.configHash, announcer, t, preview, values]);
 
   // Errors render on the commit that follows a blocked submit, so focus moves after it.
   useEffect(() => {

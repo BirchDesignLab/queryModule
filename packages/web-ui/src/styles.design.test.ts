@@ -210,18 +210,19 @@ describe("parity pass, query surfaces (visual system: surfaces, type, controls a
     );
   });
 
-  it("G5 the Shown tag is accent-outlined and static; the flash runs once and never under reduced motion", () => {
+  it("G5 the Shown tag sits in the label's flow, accent-outlined and static; the label row flashes once, never under reduced motion", () => {
     const tag = decls(".qm-tag--shown");
     expect(tag).toMatch(/border-color:\s*var\(--qm-color-accent\)/);
     expect(tag).toMatch(/color:\s*var\(--qm-color-accent\)/);
-    expect(tag).not.toMatch(/animation/);
-    const cell = decls(".qm-form-cell--revealed");
-    expect(cell).toMatch(/animation:\s*qm-reveal\b[^;]*\b1\b|animation:\s*qm-reveal[^;]*forwards/);
+    expect(tag).not.toMatch(/position:\s*absolute|animation/);
+    const label = decls(".qm-form-cell--revealed .qm-field__label");
+    expect(label).toMatch(/animation:\s*qm-reveal\b[^;]*\b1;/);
+    expect(decls(".qm-form-cell--revealed")).toBe("");
     expect(css).toMatch(
       /@keyframes qm-reveal\s*\{\s*from\s*\{\s*background:\s*var\(--qm-color-accent-subtle\)/,
     );
     expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.qm-form-cell--revealed\s*\{\s*animation:\s*none/,
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.qm-form-cell--revealed \.qm-field__label,\s*\.qm-form-cell--revealed \.qm-checkbox\s*\{\s*animation:\s*none/,
     );
   });
 

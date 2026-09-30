@@ -199,6 +199,77 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       await waitFor(() => expect(document.querySelector(".qm-tag--shown")).toBeNull());
     });
 
+    it("the tag sits in the label's flow (never over it), aria-hidden so the name stays the label", async () => {
+      const { user } = await openPanel();
+      await user.selectOptions(screen.getByLabelText("State"), "OK");
+      const select = await screen.findByLabelText(/Plate type/);
+      await waitFor(() => expect(shownTag(/Plate type/)).not.toBeNull());
+      expect(shownTag(/Plate type/)?.closest(".qm-field__label")).not.toBeNull();
+      expect(select).toHaveAccessibleName(/^Plate type/);
+      expect(select).not.toHaveAccessibleName(/Shown/);
+    });
+
+    it("the flash runs once: the flash class drops after its animation ends; the tag stays", async () => {
+      const { user } = await openPanel();
+      await user.selectOptions(screen.getByLabelText("State"), "OK");
+      await waitFor(() => expect(shownTag(/Plate type/)).not.toBeNull());
+      const cell = screen.getByLabelText(/Plate type/).closest(".qm-form-cell") as HTMLElement;
+      expect(cell).toHaveClass("qm-form-cell--revealed");
+      act(() => {
+        cell.dispatchEvent(new Event("animationend", { bubbles: true }));
+      });
+      await waitFor(() => expect(cell).not.toHaveClass("qm-form-cell--revealed"));
+      expect(shownTag(/Plate type/)).not.toBeNull();
+    });
+
+    it("a field revealed and filled by the same edit (a terminal merge) gets no tag", async () => {
+      const { services } = await openPanel();
+      act(() => {
+        services.drafts.getState().setValue("state", "OK");
+        services.drafts.getState().setValue("plateType", "PC");
+      });
+      expect(await screen.findByLabelText(/Plate type/)).toBeInTheDocument();
+      expect(shownTag(/Plate type/)).toBeNull();
+    });
+
+    it("a type switch clears the tags", async () => {
+      const { user, services } = await openPanel();
+      act(() => services.drafts.getState().setValue("state", "OK"));
+      await waitFor(() => expect(shownTag(/Plate type/)).not.toBeNull());
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      await user.click(screen.getByRole("button", { name: "Vehicle" }));
+      expect(await screen.findByLabelText(/Plate type/)).toBeInTheDocument();
+      expect(shownTag(/Plate type/)).toBeNull();
+    });
+
+    it("a field a rule hid again leaves the set: a later config that shows it does not tag it", async () => {
+      const { services } = await openPanel();
+      act(() => services.drafts.getState().setValue("state", "OK"));
+      await waitFor(() => expect(shownTag(/Plate type/)).not.toBeNull());
+      act(() => services.drafts.getState().setValue("state", "TX"));
+      await waitFor(() => expect(screen.queryByLabelText(/Plate type/)).toBeNull());
+      // The new config shows Plate type always: a config change, not a rule reveal.
+      act(() =>
+        services.queryClient.setQueryData(["config"], {
+          ...CLIENT_CONFIG,
+          configHash: `${"0".repeat(63)}5`,
+          queryTypes: CLIENT_CONFIG.queryTypes.map((q) =>
+            q.code !== "VEH"
+              ? q
+              : {
+                  ...q,
+                  rules: [],
+                  fields: q.fields.map((f) =>
+                    f.key === "plateType" ? { ...f, visible: true } : f,
+                  ),
+                },
+          ),
+        }),
+      );
+      expect(await screen.findByLabelText(/Plate type/)).toBeInTheDocument();
+      expect(shownTag(/Plate type/)).toBeNull();
+    });
+
     it("a field a new config adds is not a rule reveal: no Shown tag", async () => {
       const { services } = await openPanel();
       act(() =>

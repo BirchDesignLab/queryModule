@@ -81,12 +81,14 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
   const derive = useCallback(
     (queryType: string): void => {
       const values = drafts.getState().drafts[queryType]?.values ?? {};
-      const derived = formToTerminal(config, queryType, values, Date.now());
+      // The panel's own clock for its type, so "Edit as command" writes what the echo shows.
+      const now = queryType === panel.queryType ? panel.evaluatedAt : Date.now();
+      const derived = formToTerminal(config, queryType, values, now);
       drafts.getState().setTerminalText(derived.text);
       setUnshown(derived.unshown);
       setErrors([]);
     },
-    [config, drafts],
+    [config, drafts, panel.queryType, panel.evaluatedAt],
   );
 
   const enterTerminal = useCallback((): void => {

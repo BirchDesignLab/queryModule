@@ -5,6 +5,8 @@ import {
   type FormEvent,
   type JSX,
   type ReactNode,
+  type RefObject,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -204,6 +206,36 @@ function useDisclosures(
   return { isOpen, toggle };
 }
 
+/**
+ * Revealed fields whose flash has run: their cell drops the flash class after its animation ends, so
+ * reopening a closed disclosure (display: none and back restarts CSS animations) never replays it.
+ * A key leaves the set when it leaves `revealed`, so a later reveal flashes again.
+ */
+function useFlashedOnce(
+  formRef: RefObject<HTMLFormElement | null>,
+  revealed: ReadonlySet<string> | undefined,
+): ReadonlySet<string> {
+  const [flashed, setFlashed] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    const form = formRef.current;
+    if (form === null) return;
+    const onEnd = (event: Event): void => {
+      const target = event.target instanceof Element ? event.target : null;
+      const key = target?.closest<HTMLElement>("[data-field-key]")?.dataset.fieldKey;
+      if (key !== undefined) setFlashed((prev) => (prev.has(key) ? prev : new Set([...prev, key])));
+    };
+    form.addEventListener("animationend", onEnd);
+    return () => form.removeEventListener("animationend", onEnd);
+  }, [formRef]);
+  useEffect(() => {
+    setFlashed((prev) => {
+      const kept = [...prev].filter((key) => revealed?.has(key) === true);
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }, [revealed]);
+  return flashed;
+}
+
 /** Renders only from FormState (BR-001): visible sections as fieldsets, visible fields in order (spec 6.2). */
 export function QueryForm({
   formState,
@@ -222,7 +254,9 @@ export function QueryForm({
   const sections = renderedSections(formState, excludeKeys);
   const disclosures = useDisclosures(sections, showErrors, new Set(errors.keys()));
   const disclosureId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
   const formErrors = showErrors ? formLevelErrors(formState) : [];
+  const flashed = useFlashedOnce(formRef, revealed);
   const labelOf = (error: ValidationError): string | undefined => {
     const field = formState.fields.find((f) => f.key === error.params?.field);
     return field === undefined ? undefined : t(field.labelKey);
@@ -234,7 +268,7 @@ export function QueryForm({
   }
 
   return (
-    <form noValidate className="qm-query-form" onSubmit={onSubmit}>
+    <form ref={formRef} noValidate className="qm-query-form" onSubmit={onSubmit}>
       {sections.map((entry, index) => {
         const { section, fields } = entry;
         const open = index === 0 || disclosures.isOpen(entry);
@@ -272,15 +306,11 @@ export function QueryForm({
                 return (
                   <div
                     key={field.key}
-                    className={shown ? `${span} qm-form-cell--revealed` : span}
+                    className={
+                      shown && !flashed.has(field.key) ? `${span} qm-form-cell--revealed` : span
+                    }
                     data-field-key={field.key}
                   >
-                    {/* The polite announcement is the spoken signal; the tag is for the eye only. */}
-                    {shown ? (
-                      <span className="qm-tag qm-tag--shown" aria-hidden="true">
-                        {t("form.tag.shown")}
-                      </span>
-                    ) : null}
                     <FieldRenderer
                       field={field}
                       userValue={values[field.key] ?? null}
@@ -295,6 +325,7 @@ export function QueryForm({
                       inputFormats={cfg?.inputFormats}
                       numberKind={cfg?.numberKind}
                       data={cfg?.data}
+                      revealed={shown}
                     />
                   </div>
                 );

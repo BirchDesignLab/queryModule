@@ -12,6 +12,8 @@ export interface CheckboxFieldProps {
   error?: string | undefined;
   description?: string | undefined;
   tag?: ReactNode;
+  /** Shown inside the label after its text, e.g. an aria-hidden "Shown" tag (not part of the name). */
+  adornment?: ReactNode;
   ref?: Ref<HTMLInputElement>;
 }
 
@@ -26,6 +28,7 @@ export function CheckboxField({
   error,
   description,
   tag,
+  adornment,
   ref,
 }: CheckboxFieldProps) {
   const ids = fieldIds(id, tag, description, error);
@@ -46,6 +49,7 @@ export function CheckboxField({
         <span className="qm-field__label">
           {label}
           <RequiredMark required={required} requiredText={requiredText} />
+          {adornment}
         </span>
       </label>
       <FieldMessages ids={ids} tag={tag} description={description} error={error} />

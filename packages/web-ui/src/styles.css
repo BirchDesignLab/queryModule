@@ -891,17 +891,15 @@ h1 {
 }
 
 .qm-form-cell {
-  position: relative;
   grid-column: span 12;
   min-inline-size: 0;
 }
 
-/* A field a rule revealed: a static Shown tag beside its label (aria-hidden; the polite
-   announcement is the spoken signal) and one accent.subtle flash, dropped under reduced motion. */
+/* A field a rule revealed: a static Shown tag in the label's flow, after its text (aria-hidden; the
+   polite announcement is the spoken signal), and one accent.subtle flash behind the label row,
+   dropped under reduced motion. The flash stays off the input, so its edge keeps 3:1. */
 .qm-tag--shown {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
+  margin-inline-start: var(--qm-space-2);
   border-style: solid;
   border-color: var(--qm-color-accent);
   border-radius: var(--qm-radius-sm);
@@ -912,8 +910,9 @@ h1 {
   text-transform: uppercase;
 }
 
-.qm-form-cell--revealed {
-  border-radius: var(--qm-radius-control);
+.qm-form-cell--revealed .qm-field__label,
+.qm-form-cell--revealed .qm-checkbox {
+  border-radius: var(--qm-radius-sm);
   animation: qm-reveal calc(var(--qm-motion-duration-normal) * 4) ease-out 1;
 }
 
@@ -927,7 +926,8 @@ h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .qm-form-cell--revealed {
+  .qm-form-cell--revealed .qm-field__label,
+  .qm-form-cell--revealed .qm-checkbox {
     animation: none;
   }
 }

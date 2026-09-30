@@ -13,6 +13,8 @@ export interface SelectFieldProps {
   error?: string | undefined;
   description?: string | undefined;
   tag?: ReactNode;
+  /** Shown inside the label after its text, e.g. an aria-hidden "Shown" tag (not part of the name). */
+  adornment?: ReactNode;
   ref?: Ref<HTMLSelectElement>;
 }
 
@@ -28,6 +30,7 @@ export function SelectField({
   error,
   description,
   tag,
+  adornment,
   ref,
 }: SelectFieldProps) {
   const ids = fieldIds(id, tag, description, error);
@@ -36,6 +39,7 @@ export function SelectField({
       <label htmlFor={id} className="qm-field__label">
         {label}
         <RequiredMark required={required} requiredText={requiredText} />
+        {adornment}
       </label>
       <select
         ref={ref}
