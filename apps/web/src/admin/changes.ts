@@ -394,9 +394,20 @@ export function buildChangeGroups(
             ...(kind === "added" || kind === "changed" ? { after: typeName(change.after) } : {}),
           }
         : {};
+    // A reordered list of plain strings (quick access): the order is the point, so show the whole
+    // list before and after, each code by the type's name.
+    const listText = (list: unknown): ChangeValue | undefined =>
+      Array.isArray(list) && list.every((x) => typeof x === "string")
+        ? { text: list.map((x) => (top === "quickAccess" ? typeName(x).text : x)).join(", ") }
+        : undefined;
+    const order =
+      change.kind === "moved" && change.by === VALUE_IDENTITY
+        ? { before: listText(before(p.length)), after: listText(after(segments.length)) }
+        : {};
     section(g, "own", null).entries.push({
       ...entry(what, p.map(segText).join(" "), !reordered),
       ...quick,
+      ...Object.fromEntries(Object.entries(order).filter(([, v]) => v !== undefined)),
     });
   }
 
