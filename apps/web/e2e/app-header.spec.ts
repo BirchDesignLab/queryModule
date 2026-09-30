@@ -1,5 +1,6 @@
+import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { chooseTheme, openAccountMenu, signIn } from "./helpers.js";
+import { chooseTheme, openAccountMenu, seededUser, signIn } from "./helpers.js";
 
 // B1 app shell and header (docs/design/2026-09-29-visual-system.md, app shell): a 52 px bar with
 // the Main nav and an account disclosure that holds the theme choice and sign out.
@@ -97,4 +98,112 @@ test.describe("B1 theme focus survives a persona flip", () => {
     ).toBeFocused();
     await expect(page.getByTestId("announcer-polite")).not.toContainText(/theme|night/i);
   });
+});
+
+// Header at 200% zoom (1366x768 at 200% is a 683x384 CSS viewport) and at 320 px: the bar keeps
+// its one row where it fits, the account button shrinks to its avatar (still named by the email)
+// instead of taking a second row, and nothing scrolls sideways. Officer targets stay 48 px.
+const ROW = { dispatch: 52, compact: 64 } as const;
+
+/** A longer site name than the seeded "Default site", so a squashed label shows up as truncation. */
+async function useLongSiteName(page: Page): Promise<void> {
+  await page.route("**/api/v1/config", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { site: { labelKey: string } };
+    body.site.labelKey = "site.exampleOk";
+    await route.fulfill({ response, json: body });
+  });
+}
+
+async function headerMetrics(page: Page) {
+  return page.evaluate(async () => {
+    // Fallback-font widths differ from Plex: measure after the fonts have loaded.
+    await document.fonts.ready;
+    const header = document.querySelector("header");
+    const scroller = document.scrollingElement;
+    const box = (el: Element) => el.getBoundingClientRect();
+    const targets = [...(header?.querySelectorAll("a, button") ?? [])].flatMap((el) => {
+      const b = box(el);
+      return b.width === 0 || b.height === 0
+        ? []
+        : [
+            {
+              name: el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "",
+              w: b.width,
+              h: b.height,
+            },
+          ];
+    });
+    const account = header?.querySelector(".qm-account__button");
+    const site = header?.querySelector(".qm-app-header__site");
+    return {
+      // The site name is either absent (officer bar) or shown in full: no ellipsis (WCAG 1.4.10).
+      siteTruncated: site ? site.scrollWidth > site.clientWidth : false,
+      siteWidth: site ? site.getBoundingClientRect().width : 0,
+      height: header === null || header === undefined ? 0 : box(header).height,
+      overflowX: scroller === null ? 0 : scroller.scrollWidth - scroller.clientWidth,
+      accountRight: account === null || account === undefined ? 0 : box(account).right,
+      accountWidth: account === null || account === undefined ? 0 : box(account).width,
+      targets,
+    };
+  });
+}
+
+for (const { persona, email, row, minTarget } of [
+  { persona: "dispatcher", email: "dispatcher@example.test", row: ROW.dispatch, minTarget: 36 },
+  { persona: "admin", email: "admin@example.test", row: ROW.dispatch, minTarget: 36 },
+  { persona: "officer", email: "officer@example.test", row: ROW.compact, minTarget: 48 },
+] as const) {
+  test.describe(`B1 header at 200% zoom and 320 px: ${persona}`, () => {
+    test(`683x384: one ${row} px row, account named by the email, targets hold`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 683, height: 384 });
+      await useLongSiteName(page);
+      await signIn(page, seededUser(email));
+      await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+      await expect(page.getByRole("button", { name: email })).toBeVisible();
+      const m = await headerMetrics(page);
+      expect(Math.round(m.height)).toBe(row);
+      expect(m.overflowX).toBeLessThanOrEqual(0);
+      // A long name may truncate here (the bar keeps its row) but stays readable, never a stub.
+      expect(m.siteWidth === 0 || m.siteWidth >= 100).toBe(true);
+      expect(m.accountRight).toBeLessThanOrEqual(683);
+      for (const t of m.targets) {
+        expect(t.w, `${t.name} width`).toBeGreaterThanOrEqual(minTarget - 0.5);
+        expect(t.h, `${t.name} height`).toBeGreaterThanOrEqual(minTarget - 0.5);
+      }
+    });
+
+    test("320 px: no sideways scroll, the account button stays on screen, targets hold", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 568 });
+      await useLongSiteName(page);
+      await signIn(page, seededUser(email));
+      await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+      const m = await headerMetrics(page);
+      expect(m.overflowX).toBeLessThanOrEqual(0);
+      expect(m.siteTruncated).toBe(false);
+      expect(m.accountRight).toBeLessThanOrEqual(320);
+      for (const t of m.targets) {
+        expect(t.w, `${t.name} width`).toBeGreaterThanOrEqual(minTarget - 0.5);
+        expect(t.h, `${t.name} height`).toBeGreaterThanOrEqual(minTarget - 0.5);
+      }
+    });
+  });
+}
+
+test("B1 header just above the shrink width: the widest bar (admin) is one row with the email shown", async ({
+  page,
+}) => {
+  // 52rem = 832 px: the full account button returns, and the bar must still fit on one row.
+  await page.setViewportSize({ width: 833, height: 600 });
+  await signIn(page, seededUser("admin@example.test"));
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+  const m = await headerMetrics(page);
+  expect(Math.round(m.height)).toBe(ROW.dispatch);
+  expect(m.overflowX).toBeLessThanOrEqual(0);
+  // The email text is in the button again, not clipped to the avatar.
+  expect(m.accountWidth).toBeGreaterThan(120);
 });

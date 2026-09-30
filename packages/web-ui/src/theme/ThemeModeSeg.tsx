@@ -60,6 +60,7 @@ export function ThemeModeSeg({ value, onChange, t, icons = false }: ThemeModeSeg
         <button
           key={mode}
           type="button"
+          data-theme-mode={mode}
           aria-pressed={mode === current}
           aria-label={icons ? t(`theme.${mode}`) : undefined}
           onClick={() => onChange(mode)}

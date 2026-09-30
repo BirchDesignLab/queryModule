@@ -1137,3 +1137,30 @@ h1 {
 .qm-layout--mobile-unit .qm-request {
   padding: var(--qm-space-4) var(--qm-space-6);
 }
+
+/* Dispatch app bar below 52rem (a 1366 px screen at 200% zoom is 683 px): one row, not two. The
+   account button shrinks to its avatar, its name kept for assistive technology the way the officer
+   bar keeps it. The seeded admin bar (longest nav, an 18-character email) needs about 790 px with
+   the full button, so the button stays whole above this width; a site name near its 32ch cap can
+   still wrap the bar above it. */
+@media (max-width: 52rem) {
+  .qm-app-header .qm-account__email {
+    position: absolute;
+    inline-size: var(--qm-border-width);
+    block-size: var(--qm-border-width);
+    margin: calc(var(--qm-border-width) * -1);
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* From 36rem the site name takes the room that is left and truncates, so the bar keeps its row; it
+   wraps to its own row rather than shrink under 12ch. Below 36rem (320 px reflow) it keeps its
+   full width and wraps, so the name is never cut there (WCAG 1.4.10). */
+@media (min-width: 36rem) and (max-width: 52rem) {
+  .qm-app-header .qm-app-header__site {
+    flex: 1 1 12ch;
+  }
+}
