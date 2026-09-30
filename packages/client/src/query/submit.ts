@@ -237,11 +237,13 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
       submit(req) {
         if (inFlight !== null) return inFlight;
         const gen = generation;
-        set({ status: "submitting" });
         const promise = run(req, gen).finally(() => {
           if (inFlight === promise) inFlight = null;
         });
+        // Assigned before the status changes: a submit from a subscriber reacting to "submitting"
+        // joins this request instead of starting a second one.
         inFlight = promise;
+        set({ status: "submitting" });
         return promise;
       },
       reset() {

@@ -8,7 +8,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
   test("after sign-in focus is on the panel heading and the next Tab is the panel head's Form mode button", async ({
     page,
   }) => {
-    await signIn(page);
+    await signIn(page, undefined, { fresh: true });
     const nav = page.getByRole("group", { name: "Quick access" });
     await expect(nav).toBeVisible();
     await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
@@ -25,7 +25,8 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
       await route.continue();
       served = true;
     });
-    await signIn(page);
+    // A form sign-in: the late navigation under test is the login page's own continuation.
+    await signIn(page, undefined, { fresh: true });
     await page.getByRole("link", { name: "Status" }).click();
     await expect(page).toHaveURL(/\/status$/);
     await expect.poll(() => served).toBe(true);

@@ -265,6 +265,21 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(seen).toHaveLength(1);
   });
 
+  it("B3 a submit made as the status turns submitting joins the in-flight request", async () => {
+    const seen = serveQueries(() => HttpResponse.json(ACK, { status: 202 }));
+    const { controller } = setup();
+    let second: Promise<unknown> | null = null;
+    // Called in the same tick the status turns submitting, before submit() has returned.
+    const unsubscribe = controller.subscribe((s) => {
+      if (s.status === "submitting" && second === null) second = s.submit(REQ);
+    });
+    const first = controller.getState().submit(REQ);
+    unsubscribe();
+    expect(second).toBe(first);
+    await first;
+    expect(seen).toHaveLength(1);
+  });
+
   it("B3 once the status is idle again a new submit starts its own request, never joins the settled one", async () => {
     const seen = serveQueries(() => HttpResponse.json(ACK, { status: 202 }));
     const { controller } = setup();

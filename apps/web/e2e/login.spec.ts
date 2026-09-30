@@ -4,7 +4,7 @@ import { e2eUser, signIn, signOutFromHeader } from "./helpers.js";
 test.describe("BR-002 login", () => {
   test("signs in with the seeded user and signs out", { tag: "@smoke" }, async ({ page }) => {
     const user = e2eUser();
-    await signIn(page, user);
+    await signIn(page, user, { fresh: true });
     await expect(page.getByRole("button", { name: user.email })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
     await signOutFromHeader(page);

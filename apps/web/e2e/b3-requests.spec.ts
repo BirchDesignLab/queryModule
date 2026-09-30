@@ -45,7 +45,7 @@ async function runPlate(page: Page, plate: string): Promise<string> {
 test("dispatcher: Sending, then Acknowledged with the ack's reference, newest first, cleared on sign-out", async ({
   page,
 }) => {
-  await signIn(page);
+  await signIn(page, undefined, { fresh: true });
   await panelReady(page);
   const list = page.getByRole("region", { name: "Requests this shift" });
   await expect(list).toContainText("No requests yet this shift.");
@@ -118,7 +118,7 @@ test("officer: the last request sits under the form, 48 px targets, and clears o
   page,
 }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
-  await signIn(page, seededUser("officer@example.test"));
+  await signIn(page, seededUser("officer@example.test"), { fresh: true });
   await panelReady(page);
   await expect(page.locator(".qm-layout--mobile-unit")).toHaveCount(1);
   const last = page.getByRole("region", { name: "Last request" });
