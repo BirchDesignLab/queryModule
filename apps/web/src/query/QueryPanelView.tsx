@@ -19,7 +19,7 @@ import {
   TypeFieldBar,
   useShortcutAction,
 } from "@querymodule/web-ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { isDataField } from "./data-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
@@ -49,11 +49,37 @@ function PanelShortcut({ action, run }: { action: string; run: () => void }) {
   return null;
 }
 
-function ReadyPanel({ panel, idPrefix }: { panel: ReadyQueryPanel; idPrefix: string }) {
+function ReadyPanel({
+  panel,
+  idPrefix,
+  selectType,
+}: {
+  panel: ReadyQueryPanel;
+  idPrefix: string;
+  selectType?: string | undefined;
+}) {
   const preview = panel.mode === "preview";
   const t = useT();
   const { config, formState, queryType } = panel;
   const terminal = useTerminal(panel);
+  // The host's pick, applied through the panel's own path until the panel shows it; only then is it
+  // settled, so the user's own clicks in the preview win until the host picks a different code. Not
+  // settled while unknown (the config may gain the type) or while the fallback for a removed type
+  // (use-query-panel, a parent effect that runs after this one) moves the panel elsewhere. `terminal`
+  // is a new object each render: the settled ref, not the dependency list, keeps this to one pick.
+  const settledPick = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (selectType === undefined || selectType === settledPick.current) {
+      settledPick.current = selectType;
+      return;
+    }
+    if (!config.queryTypes.some((q) => q.code === selectType)) return;
+    if (queryType === selectType) {
+      settledPick.current = selectType;
+      return;
+    }
+    terminal.selectType(selectType);
+  }, [selectType, queryType, config, terminal]);
   const labelOfType = (code: string): string => {
     const labelKey = config.queryTypes.find((q) => q.code === code)?.labelKey;
     return labelKey === undefined ? code : t(labelKey);
@@ -321,6 +347,15 @@ export interface QueryPanelViewProps {
    * below it ("last", officer). Omitted, the view is the panel alone (the builder's preview).
    */
   requests?: "list" | "last";
+  /**
+   * Preview only: the host (the builder) picks this query type. Each change selects it through the
+   * panel's own path, as a quick-access click would (terminal text merged and re-derived, shown
+   * errors reset, other types' values kept). Focus never moves. A code the config does not have is
+   * applied once it does. Picking the same code again is a no-op (the user's own click in between
+   * wins); a host that needs a re-pick changes the value or remounts the view. In terminal mode a
+   * half-typed command that does not parse is replaced, exactly as on a quick-access click.
+   */
+  selectType?: string;
 }
 
 /** The one renderer of the query panel, from config alone (BR-001; ADR-0011 core loop). */
@@ -331,6 +366,7 @@ export function QueryPanelView({
   idPrefix,
   onConfigChanged,
   requests,
+  selectType,
 }: QueryPanelViewProps) {
   const panel = useQueryPanel({ config, drafts, mode, onConfigChanged });
   // The preview's store is private and memory-only; it goes with the view (ADR-0011).
@@ -341,7 +377,13 @@ export function QueryPanelView({
     [mode, drafts],
   );
   if (panel === null) return null;
-  const ready = <ReadyPanel panel={panel} idPrefix={idPrefix} />;
+  const ready = (
+    <ReadyPanel
+      panel={panel}
+      idPrefix={idPrefix}
+      selectType={mode === "preview" ? selectType : undefined}
+    />
+  );
   if (requests === undefined) return ready;
   return (
     <div className="qm-panes">

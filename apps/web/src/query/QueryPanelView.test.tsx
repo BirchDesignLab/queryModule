@@ -380,3 +380,151 @@ describe("preview never shows the Shown tag (a builder edit is not a rule reveal
     expect(document.querySelector(".qm-tag--shown")).toBeNull();
   });
 });
+
+describe("preview selectType: the builder picks the query type through the panel's own path", () => {
+  let pick: (code: string | undefined) => void = () => undefined;
+  let setBoth: (config: ClientSiteConfig, code: string | undefined) => void = () => undefined;
+  function Picker({
+    drafts,
+    mode,
+    initial,
+    initialConfig = CLIENT_CONFIG,
+  }: {
+    drafts: ReturnType<typeof createDraftStore>;
+    mode: "live" | "preview";
+    initial?: string;
+    initialConfig?: ClientSiteConfig;
+  }) {
+    const [code, setCode] = useState<string | undefined>(initial);
+    const [config, setConfig] = useState(initialConfig);
+    pick = setCode;
+    setBoth = (next, nextCode) => {
+      setConfig(next);
+      setCode(nextCode);
+    };
+    return (
+      <ShortcutProvider bindings={resolveShortcuts(CLIENT_CONFIG.shortcuts)}>
+        <QueryPanelView
+          config={config}
+          drafts={drafts}
+          mode={mode}
+          idPrefix="st"
+          selectType={code}
+        />
+      </ShortcutProvider>
+    );
+  }
+  const renderPicker = (
+    mode: "live" | "preview" = "preview",
+    initial?: string,
+    initialConfig?: ClientSiteConfig,
+  ) => {
+    const drafts = createDraftStore();
+    return {
+      ...renderRoutes([
+        {
+          path: "/",
+          element: (
+            <Picker drafts={drafts} mode={mode} initial={initial} initialConfig={initialConfig} />
+          ),
+        },
+      ]),
+      drafts,
+    };
+  };
+  const pressed = (name: string) =>
+    expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
+
+  it("form mode: selects the type, keeps other types' values, and resets shown errors like a click", async () => {
+    const { user } = renderPicker();
+    await user.type(await screen.findByLabelText("Plate"), "ZZ-0001");
+    act(() => pick("PER"));
+    await waitFor(() => pressed("Person"));
+    // A blocked run shows the required error on Last name.
+    await user.type(screen.getByLabelText(/Last name/), "{Enter}");
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true"),
+    );
+    act(() => pick("VEH"));
+    await waitFor(() => pressed("Vehicle"));
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    act(() => pick("PER"));
+    await waitFor(() => pressed("Person"));
+    expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("terminal mode: stays in the terminal, merges the typed command into its type, derives the new type's command", async () => {
+    const { user, drafts } = renderPicker();
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    const command = screen.getByRole("textbox", { name: "Command" });
+    await user.click(command);
+    await user.keyboard("{Control>}a{/Control}VEH.ZZ-0002");
+    act(() => pick("PER"));
+    await waitFor(() => expect(drafts.getState().queryType).toBe("PER"));
+    await waitFor(() =>
+      expect((screen.getByRole("textbox", { name: "Command" }) as HTMLInputElement).value).toMatch(
+        /^PER/,
+      ),
+    );
+    expect(drafts.getState().drafts.VEH?.values.plate).toBe("ZZ-0002");
+    expect(screen.queryByLabelText("Plate")).toBeNull();
+  });
+
+  it("never moves focus and ignores an unknown code", async () => {
+    const { user } = renderPicker();
+    const plate = await screen.findByLabelText("Plate");
+    await user.click(screen.getByRole("button", { name: "Form mode" }));
+    const before = document.activeElement;
+    act(() => pick("ZZNOPE"));
+    pressed("Vehicle");
+    act(() => pick("PER"));
+    await waitFor(() => pressed("Person"));
+    expect(document.activeElement).toBe(before);
+    expect(plate.isConnected).toBe(false);
+  });
+
+  it("live mode ignores the prop (preview only)", async () => {
+    renderPicker("live");
+    await screen.findByLabelText("Plate");
+    act(() => pick("PER"));
+    pressed("Vehicle");
+  });
+
+  it("a pick present at first mount wins over the initial type (the fallback runs after it)", async () => {
+    const { drafts } = renderPicker("preview", "PER");
+    expect(await screen.findByLabelText(/Last name/)).toBeInTheDocument();
+    await waitFor(() => pressed("Person"));
+    expect(drafts.getState().queryType).toBe("PER");
+  });
+
+  it("a pick the config does not have yet is applied once the config gains the type", async () => {
+    const WITHOUT = {
+      ...CLIENT_CONFIG,
+      queryTypes: CLIENT_CONFIG.queryTypes.filter((q) => q.code !== "PER"),
+      quickAccess: CLIENT_CONFIG.quickAccess.filter((c) => c !== "PER"),
+    };
+    renderPicker("preview", undefined, WITHOUT);
+    await screen.findByLabelText("Plate");
+    act(() => pick("PER"));
+    pressed("Vehicle");
+    act(() => setBoth(CLIENT_CONFIG, "PER"));
+    await waitFor(() => pressed("Person"));
+  });
+
+  it("a rename of the selected code, arriving with the new pick, lands on the new code", async () => {
+    const VEH_TYPE = CLIENT_CONFIG.queryTypes.find((q) => q.code === "VEH");
+    if (VEH_TYPE === undefined) throw new Error("fixture: VEH missing");
+    renderPicker("preview", "VEH");
+    await waitFor(() => pressed("Vehicle"));
+    const renamed = {
+      ...CLIENT_CONFIG,
+      queryTypes: [
+        { ...VEH_TYPE, code: "VHX", labelKey: "custom.vhx.label" },
+        ...CLIENT_CONFIG.queryTypes.filter((q) => q.code !== "VEH"),
+      ],
+      quickAccess: ["VHX", ...CLIENT_CONFIG.quickAccess.filter((c) => c !== "VEH")],
+    };
+    act(() => setBoth(renamed, "PER"));
+    await waitFor(() => pressed("Person"));
+  });
+});
