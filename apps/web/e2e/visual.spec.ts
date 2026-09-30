@@ -576,6 +576,51 @@ test.describe("A4 builder preview: persona switch and states (1440x900)", () => 
   });
 });
 
+test.describe("A-D2 labels and translations (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: a row's title is the key in mono in the 144 px column; the add form is 36 px dense; no overflow`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        const tree = page.getByRole("navigation", { name: "Configuration items" });
+        await tree.getByRole("button", { name: /^Labels and translations/ }).click();
+        const sect = page.locator(".qm-sect", {
+          has: page.getByRole("heading", { name: "Texts for en" }),
+        });
+        const add = sect.getByRole("button", { name: "Add label" });
+        await expect(add).toHaveAttribute("aria-disabled", "true");
+        await expect(sect.getByText("Enter a label key first.")).toBeVisible();
+        await sect.getByLabel("Label key", { exact: true }).fill("site.testerson");
+        await sect.getByLabel("Text", { exact: true }).fill("Testerson");
+        await add.click();
+        const row = sect.locator(".qm-label-row").first();
+        const key = row.locator(".qm-label-row__key");
+        await expect(key).toBeVisible();
+        expect(Math.round((await key.boundingBox())?.width ?? 0), "key column").toBe(144);
+        expect(await key.locator("code").evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(
+          /Plex Mono/,
+        );
+        await expect(key.locator("code")).toHaveCSS("color", rgb(mode, "color.text.body"));
+        expect(
+          Math.round(
+            (await sect.getByLabel("Label key", { exact: true }).boundingBox())?.height ?? 0,
+          ),
+          "add form input",
+        ).toBe(36);
+        // The add form is set off from the rows by a rule in the subtle border colour.
+        const form = sect.locator(".qm-labels__add");
+        await expect(form).toHaveCSS("border-top-width", "1px");
+        await expect(form).toHaveCSS("border-top-color", rgb(mode, "color.border.subtle"));
+        expect(await overflowX(page), "labels screen").toBeLessThanOrEqual(0);
+        await captureCrop(page, sect, `labels-${mode}`);
+      });
+    });
+  }
+});
+
 test.describe("every screen, viewport and theme: no horizontal overflow", () => {
   for (const viewport of VIEWPORTS) {
     for (const mode of MODES) {
