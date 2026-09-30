@@ -378,7 +378,7 @@ export function buildChangeGroups(
           ? t(reordered ? "admin.diff.order" : "admin.diff.item.setting")
           : plain(rest);
     // Quick access holds query type codes: they read as the types' names.
-    const typeName = (code: unknown): ChangeValue => {
+    const typeName = (code: unknown): { text: string } => {
       const type = objsOf(draft.queryTypes)
         .concat(objsOf(live.queryTypes))
         .find((x) => x.code === code);
