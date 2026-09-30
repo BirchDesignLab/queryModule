@@ -274,6 +274,43 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
   }
 
   for (const mode of MODES) {
+    test(`${mode}: officer E1, focus ring outside a red invalid edge, both visible, 56 px input`, async ({
+      page,
+    }) => {
+      await asUser(page, "officer@example.test", mode, async () => {
+        await expect(page.locator(".qm-layout--mobile-unit")).toHaveCount(1);
+        await page.getByRole("button", { name: "Person", exact: true }).click();
+        await page.getByRole("button", { name: "Run query" }).click();
+        const last = page.getByLabel("Last name");
+        await expect(last).toHaveAttribute("aria-invalid", "true");
+        await expect(last).toBeFocused();
+        await expect
+          .poll(() => last.evaluate((el) => getComputedStyle(el).borderTopColor))
+          .toBe(rgb(mode, "field.required"));
+        const style = await last.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            outlineColor: s.outlineColor,
+            outlineWidth: s.outlineWidth,
+            outlineStyle: s.outlineStyle,
+            outlineOffset: s.outlineOffset,
+            boxShadow: s.boxShadow,
+            height: el.getBoundingClientRect().height,
+          };
+        });
+        expect(style.outlineStyle).toBe("solid");
+        expect(style.outlineWidth).toBe("2px");
+        expect(style.outlineOffset).toBe("2px");
+        expect(style.outlineColor).toBe(rgb(mode, "focus.ring"));
+        expect(style.boxShadow).toContain(rgb(mode, "field.required"));
+        expect(style.boxShadow).toContain("inset");
+        expect(Math.round(style.height)).toBeGreaterThanOrEqual(56);
+        await captureCrop(page, last, `e1-officer-invalid-focused-${mode}`);
+      });
+    });
+  }
+
+  for (const mode of MODES) {
     test(`${mode}: tiles are 88 px in one row, Run is 64 px, and the last request sits under the card`, async ({
       page,
     }) => {

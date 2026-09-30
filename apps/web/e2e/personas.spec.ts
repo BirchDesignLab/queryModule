@@ -31,8 +31,9 @@ async function undersizedTargets(page: Page, min: number): Promise<string[]> {
     const label = (el: Element): string =>
       `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 30)}"`;
     return els.flatMap((el) => {
-      // A checkbox inside a chip is clicked through the chip: the chip is its target (spec 6.3).
-      const box = (el.closest(".qm-chip") ?? el).getBoundingClientRect();
+      // A checkbox inside a chip is clicked through its label, which fills the chip's height but
+      // not the timeout beside it: the label is its target (spec 6.3).
+      const box = (el.closest(".qm-chip__label") ?? el).getBoundingClientRect();
       const visible =
         box.width > 0 && box.height > 0 && getComputedStyle(el).visibility !== "hidden";
       if (!visible) return [];
