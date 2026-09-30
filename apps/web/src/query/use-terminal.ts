@@ -7,34 +7,17 @@ import {
 } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { ValidationError } from "@querymodule/core/contracts";
-import {
-  checkTerminalSubmit,
-  formatCommand,
-  mergeDraft,
-  selectCommand,
-  tokenize,
-} from "@querymodule/core/terminal";
+import { checkTerminalSubmit, mergeDraft, tokenize } from "@querymodule/core/terminal";
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { firstField } from "./first-field.js";
+import { formToTerminal } from "./form-to-terminal.js";
 import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
 
-type Values = Readonly<Record<string, DraftValue>>;
+export { formToTerminal };
 
-/** Spec 4.4 Toggle, form to terminal: user values only; the fields the command cannot carry are counted. */
-export function formToTerminal(
-  config: ClientSiteConfig,
-  queryType: string,
-  values: Values,
-  now: number,
-): { text: string; unshown: number } {
-  const draft = toCoreDraft(values);
-  const cmd = selectCommand(config, queryType, draft, { now });
-  if (cmd === undefined) return { text: "", unshown: 0 };
-  const formatted = formatCommand(config, cmd.code, draft, { now });
-  return { text: formatted.text, unshown: formatted.unshownCount };
-}
+type Values = Readonly<Record<string, DraftValue>>;
 
 /**
  * Spec 4.4 Toggle, terminal to form: merges what the command read into the draft of its own type

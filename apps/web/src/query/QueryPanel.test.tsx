@@ -188,7 +188,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.click(await screen.findByRole("radio", { name: "Article" }));
     await user.type(screen.getByLabelText(/Description/), "TESTITEM");
     await user.click(screen.getByRole("button", { name: "Run query" }));
-    await screen.findByRole("region", { name: "Last query" });
+    await screen.findByRole("region", { name: "Requests this shift" });
     const active = document.activeElement as HTMLInputElement;
     expect(active.type === "radio" ? active.checked : true).toBe(true);
   });
@@ -197,7 +197,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
     await user.click(screen.getByRole("button", { name: "Run query" }));
-    await screen.findByRole("region", { name: "Last query" });
+    await screen.findByRole("region", { name: "Requests this shift" });
     expect(screen.getByLabelText("Plate")).toHaveFocus();
     (screen.getByLabelText("VIN") as HTMLElement).focus();
     await user.keyboard("{Enter}");
@@ -298,8 +298,8 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       mode: "plateOnly",
       sourceIds: ["stateSource", "nationalSource"],
     });
-    const ack = screen.getByRole("region", { name: "Last query" });
-    expect(ack).toHaveTextContent(ACK_202.correlationId);
+    const ack = screen.getByRole("region", { name: "Requests this shift" });
+    expect(ack).toHaveTextContent(ACK_202.correlationId.slice(0, 8));
     expect(ack).toHaveTextContent(/\d\d-\d\d-\d\d \d\d:\d\d:\d\d/);
     expect(plate).toHaveValue("ZZ-0001");
     expect(plate).toHaveFocus();
@@ -324,7 +324,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(screen.getByText("Submitting")).toBeInTheDocument();
     await user.keyboard("{Enter}");
     release();
-    await screen.findByRole("region", { name: "Last query" });
+    await screen.findByRole("region", { name: "Requests this shift" });
     expect(submitRecorder.calls).toHaveLength(1);
     expect(button).not.toHaveAttribute("aria-disabled");
   });
@@ -348,7 +348,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
     await user.keyboard("{Control>}{Enter}{/Control}");
     release();
-    await screen.findByRole("region", { name: "Last query" });
+    await screen.findByRole("region", { name: "Requests this shift" });
     await waitFor(() => expect(button).not.toHaveAttribute("aria-disabled"));
     expect(submitRecorder.calls).toHaveLength(1);
     const acks = announce.mock.calls.filter(([text]) => /query sent at/.test(String(text)));
@@ -629,7 +629,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       timeout: 4000,
     });
     await user.click(screen.getByRole("button", { name: "Run query" }));
-    await screen.findByRole("region", { name: "Last query" });
+    await screen.findByRole("region", { name: "Requests this shift" });
     expect(submitRecorder.calls).toHaveLength(2);
     expect(submitRecorder.calls[1]?.key).toBe(submitRecorder.calls[0]?.key);
     expect(submitRecorder.calls[0]?.key).toBeTruthy();
@@ -658,7 +658,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     );
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
-    const ack = await screen.findByRole("region", { name: "Last query" });
+    const ack = await screen.findByRole("region", { name: "Requests this shift" });
     expect(ack).toHaveTextContent("Wanted check was not run.");
     expect(ack).not.toHaveTextContent("linked query has no sources");
   });
@@ -666,7 +666,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   it("UX-004 Copy reference writes the correlation ID and announces it", async () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
-    await user.click(await screen.findByRole("button", { name: "Copy reference" }));
+    await user.click(await screen.findByRole("button", { name: /^Copy reference / }));
     expect(await navigator.clipboard.readText()).toBe(ACK_202.correlationId);
     await waitFor(() => expect(polite()).toHaveTextContent("Reference copied."));
   });
@@ -787,7 +787,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       await user.click(screen.getByRole("button", { name: "Property" }));
       await user.click(await screen.findByRole("radio", { name: "Boat" }));
       await user.click(screen.getByRole("button", { name: "Run query" }));
-      await screen.findByRole("region", { name: "Last query" });
+      await screen.findByRole("region", { name: "Requests this shift" });
       expect(submitRecorder.calls.at(-1)?.body).toMatchObject({
         queryType: "PRO",
         values: { propertyType: "BOAT" },
@@ -967,7 +967,7 @@ describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
     );
     await waitFor(() => expect(announce).toHaveBeenCalledWith("Submitting"));
     release();
-    await screen.findByRole("region", { name: "Last query" });
+    await screen.findByRole("region", { name: "Requests this shift" });
     expect(submitRecorder.calls).toHaveLength(1);
   });
 

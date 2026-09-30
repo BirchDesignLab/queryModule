@@ -63,6 +63,13 @@ export {
 } from "./preferences/preferences-store.js";
 export { createQueryClient, registerQueryCacheReset } from "./query/query-client.js";
 export type {
+  RequestEntry,
+  RequestFailure,
+  RequestsState,
+  RequestsStore,
+} from "./query/requests.js";
+export { createRequestsStore } from "./query/requests.js";
+export type {
   SubmitController,
   SubmitControllerOptions,
   SubmitOutcome,

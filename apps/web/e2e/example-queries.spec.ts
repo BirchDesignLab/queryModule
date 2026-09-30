@@ -34,7 +34,7 @@ async function runCommand(page: Page, command: string) {
   const sent = (await request).postDataJSON() as Sent;
   const reply = await response;
   const parts = ((await reply.json()) as { parts: { queryType: string; status: string }[] }).parts;
-  await expect(page.getByRole("region", { name: "Last query" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Requests this shift" })).toBeVisible();
   return { sent, status: reply.status(), parts };
 }
 

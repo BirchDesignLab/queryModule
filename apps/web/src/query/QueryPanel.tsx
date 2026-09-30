@@ -60,6 +60,7 @@ export function QueryPanel() {
           mode="live"
           idPrefix={ID_PREFIX}
           onConfigChanged={() => live.refetch()}
+          requests={layout === "mobileUnit" ? "last" : "list"}
         />
       ) : null}
     </main>

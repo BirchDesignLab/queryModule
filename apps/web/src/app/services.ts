@@ -13,11 +13,13 @@ import {
   createDraftStore,
   createPreferencesStore,
   createQueryClient,
+  createRequestsStore,
   createResetController,
   createSessionController,
   createSubmitController,
   type DraftStore,
   type PreferencesStore,
+  type RequestsStore,
   type ResetController,
   registerQueryCacheReset,
   type SessionController,
@@ -46,6 +48,8 @@ export interface Services {
   preferences: PreferencesStore;
   drafts: DraftStore;
   submit: SubmitController;
+  /** This session's requests and their acknowledgments, in memory only (spec 6.7). */
+  requests: RequestsStore;
   /** Keeps the cached config current while signed in (ADR-0011 item 3); AppShell starts it. */
   configRefresh: ConfigRefresh;
   reset: ResetController;
@@ -77,6 +81,7 @@ export function createServices(options: ServicesOptions): Services {
   const preferences = createPreferencesStore();
   const drafts = createDraftStore();
   const submit = createSubmitController({ api, queryClient, online: options.platform.online });
+  const requests = createRequestsStore();
   const configRefresh = createConfigRefresh({ api, queryClient, platform: options.platform });
   registerQueryCacheReset(reset, queryClient);
   reset.register(() => configRefresh.stop());
@@ -85,6 +90,7 @@ export function createServices(options: ServicesOptions): Services {
   reset.register(() => preferences.getState().reset());
   reset.register(() => drafts.getState().reset());
   reset.register(() => submit.getState().reset());
+  reset.register(() => requests.getState().reset());
   return {
     platform: options.platform,
     api,
@@ -96,6 +102,7 @@ export function createServices(options: ServicesOptions): Services {
     preferences,
     drafts,
     submit,
+    requests,
     configRefresh,
     reset,
     createSocket: options.createSocket ?? createBrowserSocket,

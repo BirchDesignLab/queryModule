@@ -41,12 +41,12 @@ test("[A1] the plate form shows Plate, State TX, Year and VIN, and Enter submits
   const { correlationId } = (await reply.json()) as { correlationId: string };
   expect(correlationId).not.toBe("");
 
-  // The polite region gives the short reference; the acknowledgment section shows the full ID.
+  // The polite region gives the short reference; the requests list shows the same short reference on its row.
   await expect(page.getByTestId("announcer-polite")).toHaveText(
     new RegExp(String.raw`Vehicle query sent at .+\. Reference ${correlationId.slice(0, 8)}\.`),
   );
-  const ack = page.getByRole("region", { name: "Last query" });
+  const ack = page.getByRole("region", { name: "Requests this shift" });
   await expect(ack).toBeVisible();
-  await expect(ack.locator("code")).toHaveText(correlationId);
+  await expect(ack.getByRole("listitem")).toContainText(correlationId.slice(0, 8));
   await expectNoSeriousAxeViolations(page);
 });

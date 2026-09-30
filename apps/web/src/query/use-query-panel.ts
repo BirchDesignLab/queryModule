@@ -3,7 +3,6 @@ import {
   type DraftStore,
   type DraftValue,
   type SubmitOutcome,
-  type SubmitQueryResponse,
   useStore,
 } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
@@ -28,6 +27,7 @@ import {
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { firstField } from "./first-field.js";
+import { formToTerminal } from "./form-to-terminal.js";
 import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
@@ -66,10 +66,6 @@ export interface ReadyQueryPanel {
   sendChecked(request: CheckedRequest): Promise<void>;
   /** Why the submit button is blocked, or null (spec 6.2). */
   submitReason: SubmitBlockReason | null;
-  /** The last acknowledgment, kept until the next one; null before the first. */
-  lastAck: { response: SubmitQueryResponse; queryType: string } | null;
-  /** Copies a correlation ID to the clipboard and announces it. */
-  copyReference(correlationId: string): void;
 }
 
 /** A request whose values were already validated against `state` (the terminal's FR-053 check). */
@@ -185,7 +181,7 @@ export interface QueryPanelSource {
  * submit controller is not consulted. Nothing here is per query type (BR-001).
  */
 export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null {
-  const { announcer, submit } = useServices();
+  const { announcer, submit, requests } = useServices();
   const { config, drafts, mode, onConfigChanged } = source;
   const preview = mode === "preview";
   const t = useT();
@@ -243,9 +239,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
 
   // Preview never reads the submit controller: its state belongs to the live panel.
   const liveStatus = useStore(submit, (s) => s.status);
-  const liveAck = useStore(submit, (s) => s.lastAck);
   const submitStatus = preview ? "idle" : liveStatus;
-  const lastAck = preview ? null : liveAck;
 
   // Spec 6.6: connection changes are announced politely; a screen reader user has no other signal
   // that the submit is held until the server answers again.
@@ -377,6 +371,15 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
 
   const sendChecked = async (request: CheckedRequest): Promise<void> => {
     if (preview) return;
+    // The list row is the same one from Sending to its outcome. A send that joins one already in
+    // flight gets the same outcome, so it adds no row of its own.
+    const rowId =
+      submit.getState().status === "submitting"
+        ? null
+        : requests.getState().begin({
+            queryType: request.queryType,
+            summary: formToTerminal(config, request.queryType, request.values, Date.now()).text,
+          });
     const outcome = await submit.getState().submit({
       queryType: request.queryType,
       values: valuesToSend(config, request.queryType, request.values, request.state, Date.now()),
@@ -384,6 +387,8 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       mode: request.state.mode,
       configHash: config.configHash,
     });
+    // The list outlives the panel, so the row settles even if the panel has unmounted.
+    if (rowId !== null) requests.getState().settle(rowId, outcome);
     if (mounted.current) handleOutcome(outcome, request);
   };
 
@@ -445,13 +450,5 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         : submitStatus === "noConnection"
           ? "noConnection"
           : null,
-    lastAck,
-    copyReference(correlationId) {
-      // A failed copy (no permission, no clipboard) stays silent: the ID is on screen to select.
-      void navigator.clipboard?.writeText(correlationId).then(
-        () => announcer.announce(t("submit.referenceCopied")),
-        () => undefined,
-      );
-    },
   };
 }

@@ -99,3 +99,13 @@ describe("FR-064, SEC-006 submit controller (spec 6.7)", () => {
     expect(services.submit.getState().lastAck).toBeNull();
   });
 });
+
+describe("spec 6.7 requests list (memory only)", () => {
+  it("resetAll clears this session's requests", () => {
+    const services = testServices();
+    services.requests.getState().begin({ queryType: "VEH", summary: "VEH.ZZ-0001.TX" });
+    expect(services.requests.getState().items).toHaveLength(1);
+    services.reset.resetAll();
+    expect(services.requests.getState().items).toEqual([]);
+  });
+});
