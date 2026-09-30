@@ -110,15 +110,32 @@ function commonRun(a: readonly unknown[], b: readonly unknown[]): [number, numbe
   return out;
 }
 
-/** Matches for a list with no identity: equal items, then the items between them pair up in order. */
+/** Whether an edited item can be the old one: objects that name the same field, or plain values. */
+function similar(a: unknown, b: unknown): boolean {
+  if (!isObject(a) || !isObject(b)) return !isObject(a) && !isObject(b);
+  return own(a, "field") === own(b, "field");
+}
+
+/**
+ * Matches for a list with no identity: equal items, then between them an item edited in place is
+ * paired with the next old item that could be it (same field). What has no partner is removed or
+ * added, so a deleted rule is not shown as the edited one.
+ */
 function pairByPosition(a: readonly unknown[], b: readonly unknown[]): [number, number][] {
   const anchors: [number, number][] = [...commonRun(a, b), [a.length, b.length]];
   const pairs: [number, number][] = [];
   let i = 0;
   let j = 0;
   for (const [ai, bj] of anchors) {
-    const n = Math.min(ai - i, bj - j);
-    for (let k = 0; k < n; k++) pairs.push([i + k, j + k]);
+    let next = i;
+    for (let k = j; k < bj; k++) {
+      let m = next;
+      while (m < ai && !similar(a[m], b[k])) m++;
+      if (m < ai) {
+        pairs.push([m, k]);
+        next = m + 1;
+      }
+    }
     if (ai < a.length) pairs.push([ai, bj]);
     i = ai + 1;
     j = bj + 1;

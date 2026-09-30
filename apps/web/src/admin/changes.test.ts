@@ -227,6 +227,38 @@ describe("buildChangeGroups", () => {
     expect(entries(groups)[0]?.what).toBe("Constructor");
   });
 
+  it("lists the rule edits of two types that share a code (the list can no longer be matched by code)", () => {
+    const l = {
+      queryTypes: [
+        { code: "VEH", labelKey: "", rules: [{ field: "a", effect: "show", value: 1 }] },
+        { code: "PER", labelKey: "", rules: [{ field: "a", effect: "show", value: 1 }] },
+      ],
+    };
+    const d = structuredClone(l);
+    (d.queryTypes[0]?.rules[0] as { value: number }).value = 2;
+    (d.queryTypes[1] as { code: string }).code = "VEH";
+    (d.queryTypes[1]?.rules[0] as { value: number }).value = 3;
+    const groups = buildChangeGroups(diffConfig(l, d), l, d, deps);
+    const rules = entries(groups).filter((e) => e.what === "admin.diff.item.rule");
+    expect(rules).toHaveLength(2);
+    expect(
+      rules.map((r) => (r.after as unknown as { rule: { value: number } }).rule.value).sort(),
+    ).toEqual([2, 3]);
+    // The second type's code edit is not filed under the first type.
+    expect(groups.length).toBe(2);
+    const ids = entries(groups).map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("labels a whole rules, fields or sections list that appears as such, not as an order", () => {
+    const groups = groupsFor((d) => {
+      delete (d.queryTypes[1] as { rules?: unknown }).rules;
+    });
+    const removed = entries(groups)[0];
+    expect(removed).toMatchObject({ kind: "removed" });
+    expect(removed?.what).not.toBe("admin.diff.order");
+  });
+
   it("keeps every entry id unique", () => {
     const groups = groupsFor((d) => {
       d.queryTypes[0]?.fields.reverse();
@@ -251,7 +283,10 @@ describe("labels", () => {
     );
     expect(g?.sections[0]?.entries).toEqual([
       expect.objectContaining({ kind: "changed", before: { text: "Plate" }, keyText: "f.plate" }),
-      expect.objectContaining({ kind: "changed", after: { text: "Plaque" }, target: "#labels" }),
+      // Not known here (another language): shown as added, with its text and no Was.
+      expect.objectContaining({ kind: "added", after: { text: "Plaque" }, target: "#labels" }),
+      // The same as the shipped text still counts as a draft change (the status says so).
+      expect.objectContaining({ kind: "added", after: { text: "State" }, keyText: "f.state" }),
       expect.objectContaining({ kind: "added", after: { text: "Brand new" } }),
     ]);
     expect(labelGroup([], (l) => l, t)).toBeNull();

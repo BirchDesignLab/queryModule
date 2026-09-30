@@ -213,8 +213,14 @@ export function buildChangeGroups(
       const ref = p[1] as DiffSegment;
       const code = typeof ref === "object" ? ref.is : str(type.code);
       const name = deps.labelText(type.labelKey);
+      // A type is known by its code, or by its place when the list cannot be matched by code
+      // (duplicate or blank codes); a type added whole is numbered in the draft, not the live list.
+      const typeKey =
+        typeof ref === "object"
+          ? ref.is
+          : `#${kind === "added" && p.length === 2 ? "d" : "l"}${ref}`;
       const g = group(
-        code === "" ? `type:new:${segText(ref)}` : `type:${code}`,
+        `type:${typeKey}`,
         name !== ""
           ? name
           : code !== ""
@@ -226,15 +232,20 @@ export function buildChangeGroups(
       if (p.length === 2) {
         section(g, "type", null).entries.push(entry(t("admin.diff.item.queryType"), code, false));
       } else if (area === "rules" && p.length === 3) {
+        // The list itself: reordered, or added or removed whole (a raw edit).
         section(g, "rules", t("admin.diff.section.rules")).entries.push(
-          entry(t("admin.diff.order"), "rules", false),
+          entry(
+            kind === "moved" ? t("admin.diff.order") : plain(p.slice(2)),
+            "rules",
+            kind !== "moved",
+          ),
         );
       } else if (area === "rules") {
         // One entry per rule, however many of its parts changed: the rule reads as a sentence.
         const index = segments[3];
         // A rule is known by its place in the live list; only a rule added whole has none.
         const whole = p.length === 4;
-        const key = `rule:${code}:${whole && kind === "added" ? `draft${index}` : segText(p[3] as DiffSegment)}`;
+        const key = `rule:${typeKey}:${whole && kind === "added" ? `draft${index}` : segText(p[3] as DiffSegment)}`;
         if (rulesSeen.has(key)) continue;
         rulesSeen.add(key);
         const liveRule = before(4);
@@ -255,7 +266,11 @@ export function buildChangeGroups(
         const isField = area === "fields";
         if (p.length === 3) {
           section(g, area, t(`admin.diff.section.${area}`)).entries.push(
-            entry(t("admin.diff.order"), area, false),
+            entry(
+              kind === "moved" ? t("admin.diff.order") : plain(p.slice(2)),
+              area,
+              kind !== "moved",
+            ),
           );
         } else {
           const item = (isObj(after(4)) ? after(4) : before(4)) as Obj | undefined;
@@ -265,7 +280,7 @@ export function buildChangeGroups(
           const inner = p.slice(4);
           const sect = section(
             g,
-            `${area}:${key === "" ? `new:${segText(ref4)}` : key}`,
+            `${area}:${typeof ref4 === "object" ? ref4.is : `#${kind === "added" && p.length === 4 ? "d" : "l"}${ref4}`}`,
             t(isField ? "admin.diff.fieldOf" : "admin.diff.sectionOf", {
               name: label !== "" ? label : key !== "" ? key : t("admin.diff.unnamedShort"),
             }),
@@ -401,8 +416,8 @@ export function labelGroup(
   language: (locale: string) => string,
   t: Translator["t"],
 ): ChangeGroup | null {
-  // Text the same as the shipped text changes nothing.
-  const kept = labels.filter((l) => l.shipped !== l.text);
+  // Every overlay entry is a draft change, even one the same as the shipped text.
+  const kept = labels;
   if (kept.length === 0) return null;
   return {
     id: "labels",
@@ -416,10 +431,13 @@ export function labelGroup(
         entries: kept.map((l) => {
           return {
             id: `label:${l.locale}:${l.key}`,
-            kind: l.shipped === "" ? "added" : "changed",
+            kind:
+              l.shipped !== null && l.shipped !== "" && l.shipped !== l.text ? "changed" : "added",
             what: t("admin.diff.labelText", { language: language(l.locale) }),
             keyText: l.key,
-            ...(l.shipped !== null && l.shipped !== "" ? { before: { text: l.shipped } } : {}),
+            ...(l.shipped !== null && l.shipped !== "" && l.shipped !== l.text
+              ? { before: { text: l.shipped } }
+              : {}),
             after: { text: l.text === "" ? t("admin.diff.empty") : l.text },
             target: LABELS_ITEM,
           } satisfies ChangeEntry;

@@ -12,10 +12,22 @@ const fieldArb = fc.record(
   { key: word, labelKey: word, required: fc.boolean(), maxLength: fc.integer({ min: 1, max: 3 }) },
   { requiredKeys: ["key"] },
 );
+type Cond = { [key: string]: unknown };
+const leafArb = fc.record({ field: word, op: fc.constantFrom("eq", "neq"), value: scalar });
+/** Conditions nest: all, any and not around leaves. */
+const conditionArb = fc.letrec<{ cond: Cond }>((tie) => ({
+  cond: fc.oneof(
+    { depthSize: "small", withCrossShrink: true },
+    leafArb,
+    fc.record({ all: fc.array(tie("cond"), { maxLength: 2 }) }),
+    fc.record({ any: fc.array(tie("cond"), { maxLength: 2 }) }),
+    fc.record({ not: tie("cond") }),
+  ),
+})).cond;
 const ruleArb = fc.record({
   field: word,
   effect: fc.constantFrom("show", "hide", "require"),
-  when: fc.record({ field: word, op: fc.constantFrom("eq", "neq"), value: scalar }),
+  when: conditionArb,
 });
 const uniqueBy = <T>(arb: fc.Arbitrary<T[]>, pick: (item: T) => string) =>
   arb.map((items) => {
@@ -28,6 +40,11 @@ const typeArb = fc.record({
   fields: uniqueBy(fc.array(fieldArb, { maxLength: 4 }), (f) => f.key),
   // Rules have no identity of their own and may repeat.
   rules: fc.array(ruleArb, { maxLength: 4 }),
+});
+/** Codes and keys may repeat (a typed duplicate): the lists are then matched by equality. */
+const dupConfigArb = fc.record({
+  queryTypes: fc.array(typeArb, { maxLength: 3 }),
+  quickAccess: fc.array(word, { maxLength: 4 }),
 });
 const configArb = fc.record({
   queryTypes: uniqueBy(fc.array(typeArb, { maxLength: 3 }), (t) => t.code),
@@ -74,6 +91,52 @@ describe("diffConfig properties", () => {
   it("applying diff(live, draft) to live gives the draft", () => {
     fc.assert(
       fc.property(configArb, configArb, (live, draft) => {
+        const l = freeze(structuredClone(live));
+        const d = freeze(structuredClone(draft));
+        expect(canon(applyChanges(l, diffConfig(l, d)))).toEqual(canon(d));
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it("holds when codes, keys and blanks repeat (lists that cannot be matched by identity)", () => {
+    fc.assert(
+      fc.property(dupConfigArb, dupConfigArb, (live, draft) => {
+        const l = freeze(structuredClone(live));
+        const d = freeze(structuredClone(draft));
+        expect(canon(applyChanges(l, diffConfig(l, d)))).toEqual(canon(d));
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it("holds when a kept type's rules and fields are edited, shuffled and dropped", () => {
+    const edited = configArb
+      .filter((c) => c.queryTypes.length > 0)
+      .chain((live) =>
+        fc
+          .tuple(
+            fc.shuffledSubarray(live.queryTypes[0]?.rules ?? []),
+            fc.array(ruleArb, { maxLength: 2 }),
+            fc.shuffledSubarray(live.queryTypes[0]?.fields ?? []),
+            word,
+            fc.boolean(),
+          )
+          .map(([rules, moreRules, fields, code, keep]) => {
+            const first = live.queryTypes[0] as (typeof live.queryTypes)[number];
+            const types = [...live.queryTypes];
+            types[0] = {
+              ...first,
+              // A blank code being filled in on a kept type, or a filled one cleared.
+              code: keep ? first.code : (code as typeof first.code),
+              rules: [...rules, ...moreRules],
+              fields: fields.map((f, i) => (i === 0 ? { ...f, required: !f.required } : f)),
+            };
+            return { live, draft: { ...live, queryTypes: types } };
+          }),
+      );
+    fc.assert(
+      fc.property(edited, ({ live, draft }) => {
         const l = freeze(structuredClone(live));
         const d = freeze(structuredClone(draft));
         expect(canon(applyChanges(l, diffConfig(l, d)))).toEqual(canon(d));
@@ -193,6 +256,36 @@ describe("diffConfig entries", () => {
     expect(changes.find((c) => c.kind === "removed")?.path).toEqual([
       "types",
       { by: "code", is: "C" },
+    ]);
+    expect(applyChanges(l, changes)).toEqual(d);
+  });
+
+  it("never matches an item with no code yet, on either side", () => {
+    const l = { types: [{ code: "" }, { code: "A" }] };
+    const d = { types: [{ code: "A" }, { code: "NEW" }] };
+    const changes = diffConfig(l, d);
+    expect(changes.map((c) => c.kind).sort()).toEqual(["added", "removed"]);
+    expect(changes.find((c) => c.kind === "removed")?.path).toEqual(["types", 0]);
+    expect(applyChanges(l, changes)).toEqual(d);
+  });
+
+  it("pairs an edited rule with its old self, not with a deleted neighbour", () => {
+    const l = {
+      rules: [
+        { field: "a", value: 1 },
+        { field: "b", value: 2 },
+      ],
+    };
+    const d = { rules: [{ field: "b", value: 9 }] };
+    const changes = diffConfig(l, d);
+    expect(changes).toEqual([
+      expect.objectContaining({ kind: "removed", path: ["rules", 0] }),
+      expect.objectContaining({
+        kind: "changed",
+        path: ["rules", 1, "value"],
+        before: 2,
+        after: 9,
+      }),
     ]);
     expect(applyChanges(l, changes)).toEqual(d);
   });
