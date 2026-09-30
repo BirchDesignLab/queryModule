@@ -47,9 +47,9 @@ describe("Labels and translations (A-D2 item 2)", () => {
     const sect = await section("en");
     await t.user.type(within(sect).getByLabelText("Label key"), "site.custom");
     await t.user.type(within(sect).getByLabelText("Text"), "Custom");
-    await t.user.click(within(sect).getByRole("button", { name: "Add label" }));
+    await t.user.click(within(sect).getByRole("button", { name: "Add English label" }));
     // Focus stays on the button (the list swapping in must not lose it).
-    expect(within(sect).getByRole("button", { name: "Add label" })).toHaveFocus();
+    expect(within(sect).getByRole("button", { name: "Add English label" })).toHaveFocus();
     expect(store(t).labels).toEqual({ en: { "site.custom": "Custom" } });
     const input = within(sect).getByLabelText("site.custom");
     expect(input).toHaveValue("Custom");
@@ -65,7 +65,7 @@ describe("Labels and translations (A-D2 item 2)", () => {
   it("Add label stays focusable and gives its reason while the key is empty, and does nothing", async () => {
     const t = await openLabels();
     const sect = await section("en");
-    const add = within(sect).getByRole("button", { name: "Add label" });
+    const add = within(sect).getByRole("button", { name: "Add English label" });
     expect(add).toHaveAttribute("aria-disabled", "true");
     expect(add).not.toBeDisabled();
     expect(add).toHaveAccessibleDescription("Enter a label key first.");
@@ -129,10 +129,32 @@ describe("Labels and translations (A-D2 item 2)", () => {
     const sect = await section("en");
     await t.user.type(within(sect).getByLabelText("Label key"), "site.custom");
     await t.user.type(within(sect).getByLabelText("Text"), "Other");
-    const add = within(sect).getByRole("button", { name: "Add label" });
+    const add = within(sect).getByRole("button", { name: "Add English label" });
     expect(add).toHaveAttribute("aria-disabled", "true");
     expect(add).toHaveAccessibleDescription("This key already has a row. Edit it above.");
     await t.user.click(add);
     expect(store(t).labels).toEqual({ en: { "site.custom": "Custom" } });
+  });
+
+  it("the Add button names its language in words, so sections do not repeat one name", async () => {
+    const t = await openLabels();
+    server.use(http.get(`${API}/api/v1/locales/fr`, () => new HttpResponse(null, { status: 404 })));
+    act(() => store(t).setPath(["locales"], ["en", "fr"]));
+    const fr = await section("fr");
+    expect(within(fr).getByRole("button", { name: "Add French label" })).toBeInTheDocument();
+    const en = await section("en");
+    expect(within(en).getByRole("button", { name: "Add English label" })).toBeInTheDocument();
+    // Whole-builder lookups are unambiguous now.
+    expect(screen.getAllByRole("button", { name: /^Add \w+ label$/ })).toHaveLength(2);
+  });
+
+  it("a locale code the platform cannot name is shown as its code", async () => {
+    const t = await openLabels();
+    server.use(
+      http.get(`${API}/api/v1/locales/x_y`, () => new HttpResponse(null, { status: 404 })),
+    );
+    act(() => store(t).setPath(["locales"], ["en", "x_y"]));
+    const sect = await section("x_y");
+    expect(within(sect).getByRole("button", { name: "Add x_y label" })).toBeInTheDocument();
   });
 });

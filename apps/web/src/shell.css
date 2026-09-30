@@ -712,7 +712,7 @@ main[tabindex="-1"]:focus {
   border-inline-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
-.qm-tree button {
+.qm-tree [role="treeitem"] {
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -720,7 +720,6 @@ main[tabindex="-1"]:focus {
   width: 100%;
   min-height: var(--qm-space-8);
   padding: 0 var(--qm-space-2);
-  border: 0;
   border-radius: var(--qm-radius-sm);
   background: transparent;
   color: var(--qm-color-text-body);
@@ -729,15 +728,24 @@ main[tabindex="-1"]:focus {
   cursor: pointer;
 }
 
-.qm-tree button:hover {
+.qm-tree [role="treeitem"]:hover {
   background: var(--qm-color-surface-raised);
 }
 
 /* The selected row: filled, accent edge and heavier text, so the state is not colour alone. */
-.qm-tree button[aria-current="true"] {
+.qm-tree [role="treeitem"][aria-selected="true"] {
   background: var(--qm-color-accent-subtle);
   box-shadow: inset calc(var(--qm-border-width) * 2) 0 0 var(--qm-color-accent);
   font-weight: 600;
+}
+
+/* The row's own text: label, key and issue count share one line (they name the row together). */
+.qm-tree__name {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--qm-space-2);
+  min-inline-size: 0;
 }
 
 .qm-tree__key {
@@ -747,7 +755,7 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-xs);
 }
 
-/* Issue count per row: the number is visual only; the words are visually hidden in the button. */
+/* Issue count per row: the number is visual only; the words are visually hidden in the row name. */
 .qm-tree__issues {
   flex: none;
   min-inline-size: var(--qm-space-4);
@@ -772,24 +780,13 @@ main[tabindex="-1"]:focus {
   cursor: pointer;
 }
 
-/* A query type row: its expand toggle, then the select button. */
-.qm-tree__top {
-  display: grid;
-  grid-template-columns: var(--qm-space-6) minmax(0, 1fr);
-  align-items: start;
-}
-
-.qm-tree .qm-tree__top > ul {
-  grid-column: 1 / -1;
-}
-
-.qm-tree__top > button:only-of-type {
-  grid-column: 2;
-}
-
-.qm-tree button.qm-tree__toggle {
+/* A query type row: the +/- mark (decorative; a mouse click on it opens or closes), then the name. */
+.qm-tree__toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
   justify-content: center;
-  padding: 0;
+  inline-size: var(--qm-space-6);
   color: var(--qm-color-text-muted);
 }
 
@@ -798,7 +795,7 @@ main[tabindex="-1"]:focus {
   font-family: var(--qm-type-family-data);
 }
 
-.qm-tree__toggle[aria-expanded="true"]::before {
+.qm-tree__toggle[data-open="true"]::before {
   content: "−";
 }
 

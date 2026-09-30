@@ -290,14 +290,14 @@ describe("A3 lists", () => {
 });
 
 describe("A3 generic form in plain words", () => {
-  it("a setting reads as its name; the config path is only hidden text", async () => {
+  it("a setting reads as its name; the config path is a hidden description, not in the name (B1)", async () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "delegation");
     const input = within(editor()).getByLabelText(/^Max duration minutes/);
     const label = document.querySelector(`label[for="${input.id}"]`) as HTMLElement;
-    const hidden = [...label.querySelectorAll("span")].map((s) => s.textContent).join("");
-    expect(label.textContent?.replace(hidden, "").trim()).toBe("Max duration minutes");
-    expect(hidden).toContain("delegation.maxDurationMinutes");
+    expect(label.textContent).toBe("Max duration minutes");
+    expect(input).toHaveAccessibleName("Max duration minutes");
+    expect(input).toHaveAccessibleDescription("Setting: delegation.maxDurationMinutes");
   });
 });
 

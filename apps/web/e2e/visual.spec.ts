@@ -466,7 +466,7 @@ test.describe("A3 builder editors in plain language (1440x900)", () => {
       await asUser(page, "admin@example.test", mode, async () => {
         await page.goto("/admin/config");
         const tree = page.getByRole("navigation", { name: "Configuration items" });
-        await tree.getByRole("button", { name: /^Property PRO/ }).click();
+        await tree.getByRole("treeitem", { name: /^Property PRO/ }).click();
         // The rule's own fieldset: the legend's parent (the type's fieldset holds it too).
         const rule = page.locator("legend", { hasText: /^Rule 1$/ }).locator("xpath=..");
         const sentence = rule.locator(":scope > .qm-rule__sentence");
@@ -568,7 +568,7 @@ test.describe("A4 builder preview: persona switch and states (1440x900)", () => 
     await asUser(page, "admin@example.test", "day", async () => {
       await page.goto("/admin/config");
       const tree = page.getByRole("navigation", { name: "Configuration items" });
-      await tree.getByRole("button", { name: /(^| )commands$/ }).click();
+      await tree.getByRole("treeitem", { name: /(^| )commands$/ }).click();
       const preview = page.getByRole("region", { name: "Live preview" });
       await expect(preview.getByText("Select a query type or field to preview it.")).toBeVisible();
       await expect(preview.locator(".qm-preview__panel")).toBeHidden();
@@ -586,11 +586,11 @@ test.describe("A-D2 labels and translations (1440x900)", () => {
       await asUser(page, "admin@example.test", mode, async () => {
         await page.goto("/admin/config");
         const tree = page.getByRole("navigation", { name: "Configuration items" });
-        await tree.getByRole("button", { name: /^Labels and translations/ }).click();
+        await tree.getByRole("treeitem", { name: /^Labels and translations/ }).click();
         const sect = page.locator(".qm-sect", {
           has: page.getByRole("heading", { name: "Texts for en" }),
         });
-        const add = sect.getByRole("button", { name: "Add label" });
+        const add = sect.getByRole("button", { name: "Add English label" });
         await expect(add).toHaveAttribute("aria-disabled", "true");
         await expect(sect.getByText("Enter a label key first.")).toBeVisible();
         await sect.getByLabel("Label key", { exact: true }).fill("site.testerson");
@@ -632,6 +632,72 @@ test.describe("A-D2 labels and translations (1440x900)", () => {
       });
     });
   }
+});
+
+test.describe("B1 builder tree keyboard (1440x900)", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const mode of MODES) {
+    test(`${mode}: Tab reaches one row, arrows move a ringed focus, Enter selects, the selected row is marked`, async ({
+      page,
+    }) => {
+      await asUser(page, "admin@example.test", mode, async () => {
+        await page.goto("/admin/config");
+        const tree = page.getByRole("navigation", { name: "Configuration items" });
+        await expect(tree.getByRole("treeitem").first()).toBeVisible();
+        // One Tab stop for the whole tree.
+        await expect(tree.locator('[role="treeitem"][tabindex="0"]')).toHaveCount(1);
+        await tree.getByRole("searchbox").focus();
+        await page.keyboard.press("Tab");
+        const vehicle = tree.getByRole("treeitem", { name: /^Vehicle VEH/ });
+        await expect(vehicle).toBeFocused();
+        const ring = await vehicle.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return { style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor };
+        });
+        expect(ring.style).toBe("solid");
+        expect(ring.width).toBe("2px");
+        expect(ring.color).toBe(rgb(mode, "focus.ring"));
+        expect(
+          Math.round((await vehicle.boundingBox())?.height ?? 0),
+          "row height",
+        ).toBeGreaterThanOrEqual(32);
+        await captureCrop(page, vehicle, `b1-tree-focus-${mode}`);
+        await page.keyboard.press("ArrowDown");
+        await expect(vehicle).not.toBeFocused();
+        await expect(vehicle).toHaveAttribute("aria-selected", "true");
+        // Type-ahead and Enter: select the Sources item from the keyboard alone.
+        // End of the query types, Down into the site items, then a letter (Vehicle has a State field).
+        await page.keyboard.press("End");
+        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("s");
+        const sources = tree.getByRole("treeitem", { name: /^Sources/ });
+        await expect(sources).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(sources).toHaveAttribute("aria-selected", "true");
+        await expect(sources).toBeFocused();
+        await expect(sources).toHaveCSS("font-weight", "600");
+        await expect(sources).toHaveCSS("background-color", rgb(mode, "color.accent.subtle"));
+        expect(await overflowX(page), "tree").toBeLessThanOrEqual(0);
+      });
+    });
+  }
+
+  test("clicking another type moves focus to it and closes the first (real Chromium)", async ({
+    page,
+  }) => {
+    await asUser(page, "admin@example.test", "day", async () => {
+      await page.goto("/admin/config");
+      const tree = page.getByRole("navigation", { name: "Configuration items" });
+      const field = tree.getByRole("treeitem", { name: /^Plate type plateType/ });
+      await field.focus();
+      // The click moves focus to the Person row before Vehicle closes (the repair path itself is
+      // covered where a row is removed under focus, in BuilderTree.test).
+      await tree.getByRole("treeitem", { name: /^Person PER/ }).click();
+      await expect(tree.getByRole("treeitem", { name: /^Person PER/ })).toBeFocused();
+      await expect(field).toHaveCount(0);
+    });
+  });
 });
 
 test.describe("every screen, viewport and theme: no horizontal overflow", () => {

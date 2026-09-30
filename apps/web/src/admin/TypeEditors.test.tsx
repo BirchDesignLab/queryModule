@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
-import { selectBuilderItem } from "../test/builder-tree.js";
+import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -249,7 +249,7 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     await openType(t, "PER");
     const box = fieldBox("PER", "last");
     await t.user.click(within(box).getByText("More settings", { selector: "summary" }));
-    const max = within(box).getByLabelText(/ queryTypes\.1\.fields\.0\.maxLength$/);
+    const max = await findSetting("queryTypes.1.fields.0.maxLength", box);
     await t.user.clear(max);
     await fill(t, max, "40");
     expect(typeOf(t, "PER").fields[0]?.maxLength).toBe(40);

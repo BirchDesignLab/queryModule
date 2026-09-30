@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
-import { selectBuilderItem } from "../test/builder-tree.js";
+import { findAddItem, findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -34,14 +34,14 @@ describe("generic form edge cases (#388, UX-004)", () => {
   it("a boolean leaf toggles through its checkbox", async () => {
     const t = await openBuilder();
     await openSection(t, "features");
-    await t.user.click(screen.getByLabelText(/ features\.credentials$/));
+    await t.user.click(await findSetting("features.credentials"));
     expect((doc(t).features as Record<string, boolean>).credentials).toBe(true);
   });
 
   it("non-numeric text in a number field is flagged and not written", async () => {
     const t = await openBuilder();
     await openSection(t, "delegation");
-    const input = screen.getByLabelText(/ delegation\.maxDurationMinutes$/);
+    const input = await findSetting("delegation.maxDurationMinutes");
     await t.user.type(input, "a");
     expect(input).toHaveValue("480a");
     expect(input).toHaveAttribute("aria-invalid", "true");
@@ -54,7 +54,7 @@ describe("generic form edge cases (#388, UX-004)", () => {
   it("a source timeout is read-only in the form and says it is a server setting", async () => {
     const t = await openBuilder();
     await openSection(t, "sources");
-    const input = screen.getByLabelText(/ sources\.0\.timeoutMs$/);
+    const input = await findSetting("sources.0.timeoutMs");
     expect(input).toHaveAttribute("readonly");
     expect(input).toHaveAccessibleDescription(/server setting/i);
   });
@@ -69,7 +69,7 @@ describe("generic form edge cases (#388, UX-004)", () => {
     );
     await t.user.type(sect.getByLabelText("Label key"), "odd key");
     await t.user.type(sect.getByLabelText("Text"), "Odd");
-    await t.user.click(sect.getByRole("button", { name: "Add label" }));
+    await t.user.click(sect.getByRole("button", { name: "Add English label" }));
     const input = screen.getByLabelText("odd key");
     expect(input.id).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(input).toHaveValue("Odd");
@@ -82,5 +82,71 @@ describe("#388 root issues", () => {
     act(() => configDraftStore(t.services).getState().setPath(["sources"], undefined));
     const form = await screen.findByTestId("form-tab");
     await waitFor(() => expect(form).toHaveAccessibleDescription(/^Error:/));
+  });
+});
+
+describe("B1: a setting's name is its words; the config path is a hidden description", () => {
+  it("the name has no dotted path, the description carries it, and legends keep names unique", async () => {
+    const t = await openBuilder();
+    await openSection(t, "terminal");
+    const input = await findSetting("terminal.delimiter");
+    expect(input).toHaveAccessibleName("Delimiter");
+    expect(input).toHaveAccessibleDescription(/Setting: terminal\.delimiter/);
+    // Group by legend: the same words under another legend are another control.
+    const group = input.closest("fieldset") as HTMLElement;
+    expect(within(group).getByRole("textbox", { name: "Delimiter" })).toBe(input);
+    expect(screen.getByText("Terminal", { selector: "legend" })).toBeInTheDocument();
+  });
+
+  it("a number and a checkbox are described the same way", async () => {
+    const t = await openBuilder();
+    await openSection(t, "delegation");
+    const number = await findSetting("delegation.maxDurationMinutes");
+    expect(number).toHaveAccessibleName("Max duration minutes");
+    expect(number).toHaveAccessibleDescription(/Setting: delegation\.maxDurationMinutes/);
+    await openSection(t, "features");
+    const check = await findSetting("features.credentials");
+    expect(check).toHaveAccessibleName("Credentials");
+    expect(check).toHaveAccessibleDescription(/Setting: features\.credentials/);
+  });
+
+  it("an issue and the path both describe a control", async () => {
+    const t = await openBuilder();
+    await openSection(t, "delegation");
+    const input = await findSetting("delegation.maxDurationMinutes");
+    await t.user.type(input, "a");
+    expect(input).toHaveAccessibleDescription(/Setting: delegation\.maxDurationMinutes/);
+    expect(input).toHaveAccessibleDescription(/enter a number/i);
+  });
+
+  it("I1: a setting named path keeps its own id and name (the hint ids cannot collide with a key)", async () => {
+    const t = await openBuilder();
+    await openSection(t, "responseMappings");
+    const input = await findSetting("responseMappings.0.elements.0.path");
+    expect(input).toHaveAccessibleName("Path");
+    // Every id in the editor is unique, and a label reaches its input.
+    const ids = [...document.querySelectorAll("[id]")].map((el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(document.querySelector(`label[for="${input.id}"]`)).toHaveTextContent("Path");
+  });
+
+  it("legends keep names unique: the same words in different items are in different groups", async () => {
+    const t = await openBuilder();
+    await openSection(t, "sources");
+    const ids = screen.getAllByRole("textbox", { name: "Id" });
+    expect(ids.length).toBeGreaterThan(1);
+    const legends = ids.map((el) => el.closest("fieldset")?.querySelector("legend")?.textContent);
+    expect(new Set(legends).size).toBe(ids.length);
+    expect(legends[0]).toMatch(/^Item 1/);
+  });
+
+  it("array buttons are named in words, with the path as their description", async () => {
+    const t = await openBuilder();
+    await openSection(t, "sources");
+    const remove = screen.getByRole("button", { name: "Remove Item 1" });
+    expect(remove).toHaveAccessibleDescription("Setting: sources.0");
+    const add = await findAddItem("sources");
+    expect(add).toHaveAccessibleName("Add item");
+    expect(add).toHaveAccessibleDescription("Setting: sources");
   });
 });

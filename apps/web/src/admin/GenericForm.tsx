@@ -1,4 +1,4 @@
-import { VisuallyHidden } from "@querymodule/web-ui";
+import { VisuallyHidden, visuallyHiddenStyle } from "@querymodule/web-ui";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
@@ -16,19 +16,31 @@ interface NodeEditorProps {
 const pathText = (path: readonly PathSegment[]): string => path.join(".");
 
 /**
- * A setting's name in words, with its config path only in hidden text (A3): "Max duration
- * minutes" is what shows; the path keeps each control's name unique.
+ * A setting's name in words ("Max duration minutes"). Its config path is not in the name (B1): it
+ * is a hidden description of the control (PathHint), and legends keep names unique.
  */
 function SettingName({ path }: { path: readonly PathSegment[] }) {
   const t = useT();
   const last = path[path.length - 1];
+  return <>{last === undefined ? "" : humanize(last, (n) => t("admin.config.item", { n }))}</>;
+}
+
+// "_path" cannot end a control id: idSegment escapes every "_" as "_<hex>_", and "p" is not hex, so a
+// setting whose key is "path" (a response mapping element) keeps its own id.
+const pathHintId = (idPrefix: string, path: readonly PathSegment[]) =>
+  `${controlId(idPrefix, path)}_path`;
+
+/** "Setting: terminal.delimiter", visually hidden: the description a control points to. */
+function PathHint({ idPrefix, path }: { idPrefix: string; path: readonly PathSegment[] }) {
+  const t = useT();
   return (
-    <>
-      {last === undefined ? "" : humanize(last, (n) => t("admin.config.item", { n }))}{" "}
-      <VisuallyHidden>{pathText(path)}</VisuallyHidden>
-    </>
+    <span id={pathHintId(idPrefix, path)} style={visuallyHiddenStyle}>
+      {t("admin.config.settingPath", { path: pathText(path) })}
+    </span>
   );
 }
+
+const describe = (...ids: (string | undefined)[]) => ids.filter(Boolean).join(" ") || undefined;
 
 /** Per-source timeoutMs is a server-side setting: shown in the client view, not editable here. */
 const isServerSideLeaf = (path: readonly PathSegment[]): boolean =>
@@ -57,7 +69,6 @@ function ArrayEditor({
   onChange,
 }: Omit<NodeEditorProps, "value"> & { items: readonly unknown[] }) {
   const t = useT();
-  const text = pathText(path);
   const checks = useContext(ChecksContext);
   const issues = issuesFor(checks, path);
   const issuesId = `${controlId(idPrefix, path)}-issues`;
@@ -85,10 +96,17 @@ function ArrayEditor({
     else addRef.current?.focus();
   }, [want, path]);
   return (
-    <fieldset ref={root} aria-describedby={issues === undefined ? undefined : issuesId}>
+    <fieldset
+      ref={root}
+      aria-describedby={describe(
+        issues === undefined ? undefined : issuesId,
+        pathHintId(idPrefix, path),
+      )}
+    >
       <legend>
         <SettingName path={path} />
       </legend>
+      <PathHint idPrefix={idPrefix} path={path} />
       <IssueMessages id={issuesId} issues={issues} />
       {items.map((item, i) => {
         const itemPath = [...path, i];
@@ -102,7 +120,8 @@ function ArrayEditor({
             <button
               type="button"
               className="qm-button qm-button--danger"
-              aria-label={`${t("admin.config.remove")} ${pathText(itemPath)}`}
+              aria-label={`${t("admin.config.remove")} ${humanize(i, (n) => t("admin.config.item", { n }))}`}
+              aria-describedby={pathHintId(idPrefix, itemPath)}
               onClick={() => {
                 const next = items.filter((_, j) => j !== i);
                 setWant(i < next.length ? { kind: "item", index: i } : { kind: "add" });
@@ -118,9 +137,8 @@ function ArrayEditor({
         ref={addRef}
         type="button"
         className="qm-button"
-        aria-label={`${t("admin.config.add")} ${text}`}
         disabled={empty}
-        aria-describedby={empty ? addReasonId : undefined}
+        aria-describedby={describe(pathHintId(idPrefix, path), empty ? addReasonId : undefined)}
         onClick={() => {
           setWant({ kind: "item", index: items.length });
           onChange(path, [...items, nextItem(items[items.length - 1])]);
@@ -146,7 +164,10 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
   const issues = issuesFor(checks, path);
   const issuesId = `${id}-issues`;
   const invalid = isError(issues);
-  const describedBy = issues === undefined ? undefined : issuesId;
+  const describedBy = describe(
+    issues === undefined ? undefined : issuesId,
+    pathHintId(idPrefix, path),
+  );
   if (Array.isArray(value)) {
     return <ArrayEditor items={value} path={path} idPrefix={idPrefix} onChange={onChange} />;
   }
@@ -156,6 +177,7 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
         <legend>
           <SettingName path={path} />
         </legend>
+        <PathHint idPrefix={idPrefix} path={path} />
         <IssueMessages id={issuesId} issues={issues} />
         {Object.entries(value as Record<string, unknown>).map(([key, child]) => (
           <NodeEditor
@@ -183,6 +205,7 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
         <label htmlFor={id}>
           <SettingName path={path} />
         </label>
+        <PathHint idPrefix={idPrefix} path={path} />
         <IssueMessages id={issuesId} issues={issues} />
       </div>
     );
@@ -193,6 +216,8 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
         idPrefix={idPrefix}
         path={path}
         label={<SettingName path={path} />}
+        hint={t("admin.config.settingPath", { path: pathText(path) })}
+        hintId={pathHintId(idPrefix, path)}
         value={value}
         readOnly={isServerSideLeaf(path)}
         note={isServerSideLeaf(path) ? t("admin.config.serverSetting") : undefined}
@@ -205,6 +230,7 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
       <label htmlFor={id}>
         <SettingName path={path} />
       </label>{" "}
+      <PathHint idPrefix={idPrefix} path={path} />
       <input
         id={id}
         type="text"
