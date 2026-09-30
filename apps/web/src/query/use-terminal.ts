@@ -15,8 +15,6 @@ import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
 
-export { formToTerminal };
-
 type Values = Readonly<Record<string, DraftValue>>;
 
 /**
