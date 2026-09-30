@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import { COLOR_TOKENS, type ThemeMode, tokenValue } from "@querymodule/tokens";
+import { COLOR_TOKENS, relativeLuminance, type ThemeMode, tokenValue } from "@querymodule/tokens";
 import { expect, test } from "./fixtures.js";
 import { chooseTheme, hexToRgb, openAccountMenu, seededUser, signIn } from "./helpers.js";
 
@@ -540,7 +540,7 @@ test.describe("A4 builder preview: persona switch and states (1440x900)", () => 
         await expect(banner).toContainText("Preview paused: the JSON does not parse.");
         const panel = preview.locator(".qm-preview__panel");
         await expect(panel).toHaveAttribute("inert", "");
-        await expect(panel).toHaveCSS("opacity", "0.55");
+        await expect(panel).toHaveCSS("opacity", tokenValue("opacity.inert", mode));
         await expect(banner).toHaveCSS("color", rgb(mode, "color.text.body"));
         await expect(banner).toHaveCSS("background-color", rgb(mode, "color.surface.raised"));
         // Nothing moved focus: the raw box still has it.
@@ -797,6 +797,37 @@ test.describe("B1 sign out with unsaved changes (1440x900)", () => {
         expect(ring.color).toBe(rgb(mode, "focus.ring"));
         await expect(dialog).toHaveCSS("background-color", rgb(mode, "color.surface.overlay"));
         expect(Math.round((await stay.boundingBox())?.height ?? 0), "button height").toBe(36);
+        // The scrim: the token's colour at 0.8, so the page (the sunken surface) ends up dimmer.
+        const backdrop = await dialog.evaluate((el) => {
+          const s = getComputedStyle(el, "::backdrop");
+          return { background: s.backgroundColor, opacity: Number(s.opacity) };
+        });
+        expect(backdrop.background).toBe(rgb(mode, "color.surface.scrim"));
+        expect(backdrop.opacity).toBe(0.8);
+        const blend = (over: string, under: string) => {
+          const [o, u] = [over, under].map((hex) => hex.match(/[0-9a-f]{2}/gi) ?? []);
+          return `#${(o ?? [])
+            .map((c, i) =>
+              Math.round(
+                backdrop.opacity * Number.parseInt(c, 16) +
+                  (1 - backdrop.opacity) * Number.parseInt(u?.[i] ?? "0", 16),
+              )
+                .toString(16)
+                .padStart(2, "0"),
+            )
+            .join("")}`;
+        };
+        const page0 = COLOR_TOKENS["color.surface.sunken"][mode];
+        const dimmed = blend(COLOR_TOKENS["color.surface.scrim"][mode], page0);
+        if (mode === "day") {
+          // A light page must fall to under a fifth of its luminance, or the modal barely reads.
+          expect(relativeLuminance(dimmed) / relativeLuminance(page0), "day dimming").toBeLessThan(
+            0.2,
+          );
+        } else {
+          // Night and red shift keep today's look: the scrim is the page colour itself.
+          expect(dimmed).toBe(page0);
+        }
         await captureCrop(page, dialog, `b1-leave-dialog-${mode}`);
         await page.keyboard.press("Tab");
         await expect(leave).toBeFocused();
