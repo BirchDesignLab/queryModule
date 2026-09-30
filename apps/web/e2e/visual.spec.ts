@@ -227,9 +227,12 @@ const textInColor = (page: Page, root: string, color: string): Promise<string[]>
       [...document.querySelectorAll(`${rootSel} *`)]
         .filter(
           (el) =>
+            // Text that is not rendered (display: none) is neither seen nor read.
+            el.getClientRects().length > 0 &&
             [...el.childNodes].some(
               (n) => n.nodeType === 3 && (n.textContent ?? "").trim() !== "",
-            ) && getComputedStyle(el).color === rgbColor,
+            ) &&
+            getComputedStyle(el).color === rgbColor,
         )
         .map(
           (el) => `${el.tagName.toLowerCase()}.${el.className}: ${(el.textContent ?? "").trim()}`,
@@ -241,7 +244,7 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
   test.use({ viewport: { width: 1024, height: 768 } });
 
   for (const mode of MODES) {
-    test(`${mode}: controls are 56 px, the header's buttons 48 px, and no muted text`, async ({
+    test(`${mode}: controls are 56 px, the header's buttons 48 px, no muted text, and E1`, async ({
       page,
     }) => {
       await asUser(page, "officer@example.test", mode, async () => {
@@ -263,22 +266,7 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
           await textInColor(page, ".qm-layout--mobile-unit", muted),
           "officer muted text",
         ).toEqual([]);
-        // The bar sits outside the layout: scan it with the account disclosure open.
-        await openAccountMenu(page);
-        expect(
-          await textInColor(page, ".qm-app-header--compact", muted),
-          "officer bar muted text",
-        ).toEqual([]);
-      });
-    });
-  }
-
-  for (const mode of MODES) {
-    test(`${mode}: officer E1, focus ring outside a red invalid edge, both visible, 56 px input`, async ({
-      page,
-    }) => {
-      await asUser(page, "officer@example.test", mode, async () => {
-        await expect(page.locator(".qm-layout--mobile-unit")).toHaveCount(1);
+        // E1 at touch density (no sign-in of its own: the suite stays under the auth rate limit).
         await page.getByRole("button", { name: "Person", exact: true }).click();
         await page.getByRole("button", { name: "Run query" }).click();
         const last = page.getByLabel("Last name");
@@ -287,25 +275,27 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
         await expect
           .poll(() => last.evaluate((el) => getComputedStyle(el).borderTopColor))
           .toBe(rgb(mode, "field.required"));
-        const style = await last.evaluate((el) => {
+        const e1 = await last.evaluate((el) => {
           const s = getComputedStyle(el);
           return {
+            outline: `${s.outlineStyle} ${s.outlineWidth} ${s.outlineOffset}`,
             outlineColor: s.outlineColor,
-            outlineWidth: s.outlineWidth,
-            outlineStyle: s.outlineStyle,
-            outlineOffset: s.outlineOffset,
             boxShadow: s.boxShadow,
             height: el.getBoundingClientRect().height,
           };
         });
-        expect(style.outlineStyle).toBe("solid");
-        expect(style.outlineWidth).toBe("2px");
-        expect(style.outlineOffset).toBe("2px");
-        expect(style.outlineColor).toBe(rgb(mode, "focus.ring"));
-        expect(style.boxShadow).toContain(rgb(mode, "field.required"));
-        expect(style.boxShadow).toContain("inset");
-        expect(Math.round(style.height)).toBeGreaterThanOrEqual(56);
+        expect(e1.outline).toBe("solid 2px 2px");
+        expect(e1.outlineColor).toBe(rgb(mode, "focus.ring"));
+        expect(e1.boxShadow).toContain(rgb(mode, "field.required"));
+        expect(e1.boxShadow).toContain("inset");
+        expect(Math.round(e1.height)).toBeGreaterThanOrEqual(56);
         await captureCrop(page, last, `e1-officer-invalid-focused-${mode}`);
+        // The bar sits outside the layout: scan it with the account disclosure open.
+        await openAccountMenu(page);
+        expect(
+          await textInColor(page, ".qm-app-header--compact", muted),
+          "officer bar muted text",
+        ).toEqual([]);
       });
     });
   }
