@@ -44,16 +44,18 @@ function AdminRail({ users }: { users: boolean }) {
       <Link className="qm-admin__back" to="/">
         {t("admin.nav.back")}
       </Link>
-      <p className="qm-admin__group" id={`${uid}-configure`}>
-        {t("admin.nav.configure")}
-      </p>
-      <ul aria-labelledby={`${uid}-configure`}>
-        <li>
-          <NavLink to="/admin/config">{t("admin.nav.config")}</NavLink>
-        </li>
-      </ul>
+      <div className="qm-admin__section">
+        <p className="qm-admin__group" id={`${uid}-configure`}>
+          {t("admin.nav.configure")}
+        </p>
+        <ul aria-labelledby={`${uid}-configure`}>
+          <li>
+            <NavLink to="/admin/config">{t("admin.nav.config")}</NavLink>
+          </li>
+        </ul>
+      </div>
       {users && (
-        <>
+        <div className="qm-admin__section">
           <p className="qm-admin__group" id={`${uid}-people`}>
             {t("admin.nav.people")}
           </p>
@@ -70,7 +72,7 @@ function AdminRail({ users }: { users: boolean }) {
               </span>
             </li>
           </ul>
-        </>
+        </div>
       )}
     </nav>
   );

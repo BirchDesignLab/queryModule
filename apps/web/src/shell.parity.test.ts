@@ -20,12 +20,11 @@ function decls(selector: string): string {
 }
 
 describe("parity pass: query surfaces (docs/design/2026-09-29-visual-system.md)", () => {
-  it("G1 the query panel and sign-in pages sit on surface.sunken; the header keeps surface.base", () => {
-    for (const sel of ["body:has(.qm-query-panel)", "body:has(.qm-login)"])
-      expect(decls(sel), sel).toMatch(/background:\s*var\(--qm-color-surface-sunken\)/);
+  it("G1 every page sits on surface.sunken (admin adopted it, so the body:has scoping is gone); the header keeps surface.base", () => {
+    expect(decls("body")).toMatch(/background:\s*var\(--qm-color-surface-sunken\)/);
+    expect(css).not.toContain("body:has(.qm-query-panel)");
+    expect(css).not.toContain("body:has(.qm-login)");
     expect(decls(".qm-app-header")).toMatch(/background:\s*var\(--qm-color-surface-base\)/);
-    // Scoped, not global: admin adopts sunken in its own pass.
-    expect(decls("body")).toMatch(/background:\s*var\(--qm-color-surface-base\)/);
   });
 
   it("G3 the sign-in product name uses a shipped weight (600), never a synthesised bold", () => {

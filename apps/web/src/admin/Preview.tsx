@@ -181,21 +181,25 @@ export function BuilderPreview({
         <div
           ref={panelRef}
           className={
-            persona === "officer" ? "qm-preview__panel qm-layout--mobile-unit" : "qm-preview__panel"
+            persona === "officer"
+              ? "qm-preview__panel qm-layout--mobile-unit"
+              : "qm-preview__panel qm-preview__panel--dispatch"
           }
           hidden={empty}
           inert={paused}
           data-paused={paused ? "true" : undefined}
         >
           <I18nProvider translator={translator}>
-            <QueryPanelView
-              config={config}
-              drafts={drafts}
-              mode="preview"
-              idPrefix={idPrefix}
-              selectType={selectedTypeCode(doc, selected)}
-              selectTypeSeq={selectSeq}
-            />
+            <div className="qm-preview__card">
+              <QueryPanelView
+                config={config}
+                drafts={drafts}
+                mode="preview"
+                idPrefix={idPrefix}
+                selectType={selectedTypeCode(doc, selected)}
+                selectTypeSeq={selectSeq}
+              />
+            </div>
           </I18nProvider>
         </div>
       )}

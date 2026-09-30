@@ -59,20 +59,15 @@
 
 body {
   margin: 0;
-  background: var(--qm-color-surface-base);
+  background: var(--qm-color-surface-sunken);
   color: var(--qm-color-text-body);
   font-family: var(--qm-type-family);
   font-size: var(--qm-type-body-size);
   line-height: var(--qm-type-body-lineHeight);
 }
 
-/* The query and sign-in pages sit on the sunken app background (visual system tokens); panels and
-   the header are surface.base on it. Scoped to these pages: admin adopts it in its own pass. */
-body:has(.qm-query-panel),
-body:has(.qm-login) {
-  background: var(--qm-color-surface-sunken);
-}
-
+/* Every page sits on the sunken app background (visual system tokens); panels, panes and the
+   header are surface.base on it. */
 .qm-shell__header {
   padding: var(--qm-space-4);
   background: var(--qm-color-surface-raised);
@@ -283,6 +278,8 @@ main[tabindex="-1"]:focus {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
+  /* Under the 52 px app bar, so the rail runs the whole column even on a short page. */
+  min-block-size: calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2);
   background: var(--qm-color-surface-sunken);
 }
 
@@ -290,12 +287,21 @@ main[tabindex="-1"]:focus {
    rail wraps to full width above the section once both cannot fit. */
 .qm-admin__rail {
   flex: 1 1 calc(var(--qm-space-12) * 4.5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--qm-space-1);
+  /* Beside the section it is one column; stacked above it (narrow window, 200% zoom) the way back
+     and each group sit side by side instead of taking the whole screen. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3.5), 1fr));
+  align-content: start;
+  gap: var(--qm-space-1) var(--qm-space-4);
   padding: var(--qm-space-4) var(--qm-space-3);
   background: var(--qm-color-surface-base);
   border-inline-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__rail .qm-admin__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
 }
 
 .qm-admin__rail ul {
@@ -492,7 +498,7 @@ main[tabindex="-1"]:focus {
 .qm-builder {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--qm-space-3);
 }
 
@@ -508,12 +514,17 @@ main[tabindex="-1"]:focus {
 }
 
 .qm-builder__toolbar {
-  flex: 1 1 auto;
+  flex: 1 1 calc(var(--qm-space-12) * 10);
+  box-sizing: border-box;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--qm-space-2) var(--qm-space-3);
+  align-items: center;
+  gap: var(--qm-space-1) var(--qm-space-3);
   min-inline-size: 0;
+  padding: var(--qm-space-2) var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
 }
 
 .qm-builder__status {
@@ -530,12 +541,17 @@ main[tabindex="-1"]:focus {
   font-weight: 600;
 }
 
+/* The reasons for disabled buttons share the row under the buttons; the first pushes them right. */
 .qm-builder__reason {
-  flex-basis: 100%;
+  flex: 0 1 auto;
   margin: 0;
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-xs);
   text-align: end;
+}
+
+:not(.qm-builder__reason) + .qm-builder__reason {
+  margin-inline-start: auto;
 }
 
 .qm-builder__body {
@@ -560,14 +576,20 @@ main[tabindex="-1"]:focus {
 .qm-builder__editor,
 .qm-builder__panes > .qm-admin__preview {
   max-block-size: max(
-    calc(100dvh - var(--qm-space-12) * 3),
+    calc(100dvh - var(--qm-space-12) * 3.9),
     calc((var(--qm-space-12) * 21.34 - 100vw) * 1000)
   );
   overflow-y: auto;
 }
 
 .qm-tree {
-  flex: 1 1 calc(var(--qm-space-12) * 5);
+  box-sizing: border-box;
+  /* The tree keeps 240 px; the editor takes what the preview leaves, so a section's label
+     column still sits beside its controls at 1366 wide. */
+  flex: 0 1 calc(var(--qm-space-12) * 5);
+  /* A scroll pane is the containing block of the hidden text inside it, so that text is clipped
+     with the rest instead of stretching the page. */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--qm-space-2);
@@ -578,8 +600,12 @@ main[tabindex="-1"]:focus {
 }
 
 .qm-builder__editor {
-  flex: 3 1 calc(var(--qm-space-12) * 7);
+  flex: 1 1 calc(var(--qm-space-12) * 6);
+  position: relative;
   min-inline-size: 0;
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
 }
 
 /* Scroll panes clip what overflows them, focus rings included: keep room for the ring inside the
@@ -587,7 +613,7 @@ main[tabindex="-1"]:focus {
 .qm-builder__editor,
 .qm-builder__panes > .qm-admin__preview {
   box-sizing: border-box;
-  padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+  padding: var(--qm-space-3);
   scroll-padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
 }
 
@@ -603,9 +629,14 @@ main[tabindex="-1"]:focus {
   padding: 0 var(--qm-space-2);
 }
 
+/* The preview keeps about 440 px and does not grow past it: the tree and the editor take the rest. */
 .qm-builder__panes > .qm-admin__preview {
-  flex: 2 1 calc(var(--qm-space-12) * 6);
+  flex: 0 1 calc(var(--qm-space-12) * 9.2);
+  position: relative;
   min-inline-size: 0;
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
 }
 
 /* Preview (A4): the head carries the Dispatcher or Officer switch; below it the panel, or one of
@@ -629,6 +660,37 @@ main[tabindex="-1"]:focus {
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-panel);
   background: var(--qm-color-surface-base);
+}
+
+/* With the dispatcher persona the panel is a sunken well holding the dispatcher's own card (one
+   surface.base card on the sunken page, its sections without boxes), so the preview reads as the
+   page the dispatcher sees. The officer's touch layout keeps its own bordered panel. */
+.qm-preview__panel--dispatch {
+  padding: var(--qm-space-3);
+  border: 0;
+  background: var(--qm-color-surface-sunken);
+}
+
+.qm-preview__panel--dispatch .qm-preview__card {
+  padding: var(--qm-space-4) var(--qm-space-5) 0;
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-preview__panel--dispatch .qm-query-form__section {
+  padding-inline: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.qm-preview__panel--dispatch .qm-query-form__section legend {
+  padding-inline: 0;
+}
+
+.qm-preview__panel--dispatch .qm-query-form__section--disclosure {
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
 /* Paused: the last valid version stays in view but is plainly not current. */
@@ -1062,7 +1124,7 @@ main[tabindex="-1"]:focus {
 }
 
 .qm-sect__body {
-  flex: 1 1 calc(var(--qm-space-12) * 5);
+  flex: 1 1 calc(var(--qm-space-12) * 3.5);
   min-inline-size: 0;
   margin: 0;
   padding: 0;
