@@ -68,14 +68,18 @@ export function useStatusChecks(): { checks: StatusChecks; run: () => void } {
     const gen = generation.current;
     let dropped = false;
     let socket: SocketLike | null = null;
+    // The probe's 10 s timer: a dropped check cancels it, so it does not outlive the page.
+    let cancelProbeTimer: () => void = () => undefined;
     const live = () => gen === generation.current && !dropped;
     const unregister = reset.register(() => {
       dropped = true;
+      cancelProbeTimer();
       socket?.close();
     });
     stopRun.current = () => {
       dropped = true;
       unregister();
+      cancelProbeTimer();
       socket?.close();
     };
     setChecks((s) => ({ ...s, checking: true }));
@@ -94,7 +98,8 @@ export function useStatusChecks(): { checks: StatusChecks; run: () => void } {
         nonce: crypto.randomUUID(),
         setTimer: (fn, ms) => {
           const id = window.setTimeout(fn, ms);
-          return () => window.clearTimeout(id);
+          cancelProbeTimer = () => window.clearTimeout(id);
+          return cancelProbeTimer;
         },
       }))().catch((): HeartbeatResult => ({ ok: false, reason: "error" }));
     const config = fetchClientConfig(api).then(

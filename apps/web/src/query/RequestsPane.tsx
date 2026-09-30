@@ -88,13 +88,23 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
         // current config hash, and the new row joins the list.
         void retryRequest({ requests, submit }, rowId, config.configHash).then((result) => {
           if (!mounted.current) return;
-          if (result.kind === "gated")
+          // A reset that leaves this pane mounted clears the rows: a late answer for a row that is
+          // gone is not announced (the new row for a sent retry, the failed row for a gated one).
+          const stillListed = (id: string): boolean =>
+            requests.getState().items.some((item) => item.id === id);
+          if (result.kind === "gated") {
+            if (!stillListed(rowId)) return;
             announcer.announce(
               t(result.status === "submitting" ? "form.submitting" : "form.noConnection"),
             );
+          }
           // A 409 makes the controller refetch the config, and the panel announces that change
           // itself: a second sentence here would cut it off in the shared region.
-          else if (result.kind === "sent" && result.outcome.kind !== "configChanged")
+          else if (
+            result.kind === "sent" &&
+            result.outcome.kind !== "configChanged" &&
+            stillListed(result.rowId)
+          )
             announcer.announce(outcomeAnnouncement(result.outcome, t, typeLabel));
         });
       }}

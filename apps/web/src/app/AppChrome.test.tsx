@@ -301,6 +301,11 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     await waitFor(() => expect(screen.getByRole("banner")).toHaveClass("qm-app-header--compact"));
     expect(screen.getByRole("link", { name: "Status" })).toHaveFocus();
   });
+  it("the site name in the header carries its full text as a title, for when it is truncated", async () => {
+    await signIn();
+    const site = await screen.findByText("Default site", { selector: ".qm-app-header__site" });
+    expect(site).toHaveAttribute("title", "Default site");
+  });
   it("B4 the officer bar: theme as an icon group, the account disclosure without a second theme control", async () => {
     const { user, services } = await signIn();
     act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));

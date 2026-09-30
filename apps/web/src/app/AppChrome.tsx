@@ -176,7 +176,11 @@ export function AppHeader() {
         <BrandMark />
         <span className="qm-app-header__name">{t("login.product")}</span>
       </p>
-      {compact || siteLabel === null ? null : <p className="qm-app-header__site">{siteLabel}</p>}
+      {compact || siteLabel === null ? null : (
+        <p className="qm-app-header__site" title={siteLabel}>
+          {siteLabel}
+        </p>
+      )}
       <nav className="qm-app-header__nav" aria-label={t("home.navLabel")}>
         <NavLink className="qm-app-header__link" to="/" end>
           {t("nav.queries")}
