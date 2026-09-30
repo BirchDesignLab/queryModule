@@ -294,13 +294,12 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     expect(screen.getByRole("button", { name: TEST_USER.email })).toHaveFocus();
   });
   it("B1 a flip with focus outside the theme buttons leaves focus alone", async () => {
-    const { user, services } = await signIn();
+    const { services } = await signIn();
     const link = screen.getByRole("link", { name: "Status" });
     link.focus();
     act(() => services.preferences.getState().setPersonaOverride("mobileUnit"));
     await waitFor(() => expect(screen.getByRole("banner")).toHaveClass("qm-app-header--compact"));
     expect(screen.getByRole("link", { name: "Status" })).toHaveFocus();
-    void user;
   });
   it("B4 the officer bar: theme as an icon group, the account disclosure without a second theme control", async () => {
     const { user, services } = await signIn();

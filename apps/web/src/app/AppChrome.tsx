@@ -110,11 +110,13 @@ const THEME_GROUP = ".qm-seg";
 
 /** The mode of the theme button that has focus inside the header, or null (the seg renders THEME_PREFERENCES in order). */
 function focusedThemeMode(header: HTMLElement | null): ThemeModePreference | null {
+  if (header === null || typeof document === "undefined") return null;
   const active = document.activeElement;
-  if (header === null || !(active instanceof HTMLElement) || !header.contains(active)) return null;
+  if (!(active instanceof HTMLElement) || !header.contains(active)) return null;
   const group = active.closest(THEME_GROUP);
   if (group === null) return null;
-  const index = [...group.querySelectorAll("button")].indexOf(active.closest("button") as never);
+  const buttons: Element[] = [...group.querySelectorAll("button")];
+  const index = buttons.indexOf(active.closest("button") as Element);
   return THEME_PREFERENCES[index] ?? null;
 }
 
