@@ -1,0 +1,198 @@
+import { diffConfig } from "@querymodule/core/config";
+import { VisuallyHidden } from "@querymodule/web-ui";
+import { useContext, useId, useMemo } from "react";
+import { useT, useTranslator } from "../app/i18n-context.js";
+import { useDraft } from "./builder-store.js";
+import {
+  buildChangeGroups,
+  type ChangeDeps,
+  type ChangeEntry,
+  type ChangeGroup,
+  type ChangeValue,
+  labelGroup,
+  missingLabels,
+  ownerName,
+} from "./changes.js";
+import { ChecksContext } from "./checks.js";
+import { useLabelText } from "./controls.js";
+import { docFromClient, type JsonObject } from "./draft.js";
+import { useItemName } from "./FormTab.js";
+import { languageName } from "./LabelOverlay.js";
+import { useConditionWords } from "./RulesEditor.js";
+import { useLiveConfig } from "./use-cached-config.js";
+
+/**
+ * Changes (item 4): what the draft changes against the live config, grouped by query type, list,
+ * command and quick access. Read-only: nothing here writes, and each entry opens its item in the
+ * builder. Plain names lead; keys are in hidden text. It adds no live region of its own.
+ */
+export function ChangesView({
+  doc,
+  onOpen,
+}: {
+  doc: JsonObject;
+  /** Opens an item in the Form view and puts focus in it (a user action, so focus may move). */
+  onOpen(pointer: string): void;
+}) {
+  const t = useT();
+  const translator = useTranslator();
+  const { config, check } = useLiveConfig();
+  const { labels } = useDraft();
+  const { issues, status } = useContext(ChecksContext);
+  const labelText = useLabelText();
+  const itemName = useItemName();
+  const headingId = useId();
+  const language = useMemo(
+    () => (locale: string) => languageName(locale, translator.locale),
+    [translator.locale],
+  );
+  const deps = useMemo<ChangeDeps>(() => ({ t, labelText, itemName }), [t, labelText, itemName]);
+  const live = useMemo(() => (config === undefined ? null : docFromClient(config)), [config]);
+  const groups = useMemo<ChangeGroup[]>(() => {
+    if (live === null) return [];
+    const list = buildChangeGroups(diffConfig(live, doc), live, doc, deps);
+    const overlay = labelGroup(
+      Object.entries(labels).flatMap(([locale, texts]) =>
+        Object.entries(texts).map(([key, text]) => ({
+          locale,
+          key,
+          text,
+          // The shipped text is only known for the language the app shows.
+          shipped: locale === translator.locale && translator.has(key) ? translator.t(key) : null,
+        })),
+      ),
+      language,
+      t,
+    );
+    return overlay === null ? list : [...list, overlay];
+  }, [live, doc, deps, labels, translator, language, t]);
+  const missing = useMemo(
+    () =>
+      missingLabels(
+        issues
+          .filter((i) => i.key === "config.missingLabel")
+          .map((i) => ({
+            labelKey: String(i.params.labelKey ?? ""),
+            locale: String(i.params.locale ?? ""),
+            pointer: i.pointer,
+          })),
+        doc,
+        language,
+        (pointer) => ownerName(doc, pointer, deps),
+      ),
+    [issues, doc, language, deps],
+  );
+  return (
+    <section className="qm-diff" aria-labelledby={headingId} aria-busy={check === "checking"}>
+      <h3 className="qm-editor__title" id={headingId}>
+        {t("admin.diff.title")}
+      </h3>
+      <p className="qm-diff__note">{t("admin.diff.note")}</p>
+      {check === "checking" && <p className="qm-diff__note">{t("admin.diff.checking")}</p>}
+      {check === "failed" && <p className="qm-diff__note">{t("admin.diff.failed")}</p>}
+      {live === null ? (
+        <p>{t("admin.diff.noLive")}</p>
+      ) : (
+        groups.length === 0 &&
+        check !== "checking" && <p data-testid="diff-empty">{t("admin.diff.noChanges")}</p>
+      )}
+      {groups.map((group) => (
+        <GroupView key={group.id} group={group} onOpen={onOpen} />
+      ))}
+      {status === "ready" && missing.length > 0 && (
+        <section className="qm-diff__group" aria-labelledby={`${headingId}-missing`}>
+          <h4 className="qm-diff__title" id={`${headingId}-missing`}>
+            {t("admin.diff.missing.title")}
+          </h4>
+          <p className="qm-diff__note">{t("admin.diff.missing.note")}</p>
+          <ul className="qm-diff__list">
+            {missing.map((row) => (
+              <li key={row.labelKey}>
+                <button
+                  type="button"
+                  className="qm-button qm-button--ghost qm-diff__entry"
+                  onClick={() => onOpen(row.target)}
+                >
+                  <span className="qm-diff__what">{row.owner}</span>
+                  <span className="qm-diff__values">
+                    {t("admin.diff.missing.in", { languages: row.languages.join(", ") })}
+                  </span>
+                  <VisuallyHidden>{row.labelKey}</VisuallyHidden>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </section>
+  );
+}
+
+function GroupView({ group, onOpen }: { group: ChangeGroup; onOpen(pointer: string): void }) {
+  const id = useId();
+  return (
+    <section className="qm-diff__group" aria-labelledby={id}>
+      <h4 className="qm-diff__title" id={id}>
+        {group.title}
+        <VisuallyHidden> {group.keyText}</VisuallyHidden>
+      </h4>
+      {group.sections.map((s) => (
+        <div key={s.id} className="qm-diff__section">
+          {s.title !== null && (
+            <h5 className="qm-diff__subtitle">
+              {s.title}
+              {s.keyText !== "" && <VisuallyHidden> {s.keyText}</VisuallyHidden>}
+            </h5>
+          )}
+          <ul className="qm-diff__list">
+            {s.entries.map((entry) => (
+              <li key={entry.id}>
+                <EntryButton entry={entry} onOpen={onOpen} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function EntryButton({ entry, onOpen }: { entry: ChangeEntry; onOpen(pointer: string): void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="qm-button qm-button--ghost qm-diff__entry"
+      onClick={() => onOpen(entry.target)}
+    >
+      <span className="qm-badge qm-diff__kind">{t(`admin.diff.kind.${entry.kind}`)}</span>
+      <span className="qm-diff__what">{entry.what}</span>
+      <span className="qm-diff__values">
+        {entry.before !== undefined && (
+          <span className="qm-diff__side">
+            <span className="qm-diff__tag">{t("admin.diff.was")}</span>{" "}
+            <Value value={entry.before} />
+          </span>
+        )}
+        {entry.after !== undefined && (
+          <span className="qm-diff__side">
+            <span className="qm-diff__tag">{t("admin.diff.now")}</span>{" "}
+            <Value value={entry.after} />
+          </span>
+        )}
+      </span>
+      <VisuallyHidden>{entry.keyText}</VisuallyHidden>
+    </button>
+  );
+}
+
+function Value({ value }: { value: ChangeValue }) {
+  if ("text" in value) return <span className="qm-diff__value">{value.text}</span>;
+  return <RuleSentence rule={value.rule} type={value.type} />;
+}
+
+/** A rule as the editor writes it: a sentence in plain words. */
+function RuleSentence({ rule, type }: { rule: JsonObject; type: JsonObject }) {
+  const words = useConditionWords(type);
+  return <span className="qm-diff__sentence">{words.rule(rule)}</span>;
+}

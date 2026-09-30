@@ -13,6 +13,8 @@ export interface Selection {
   seq: number;
   /** An issue's pointer: after opening, focus the control that shows it (the issue button). */
   focus?: string;
+  /** Opened from the Changes view: after opening, focus the item's first control. */
+  focusNode?: boolean;
   /** Selects another item (an editor that adds or removes a query type moves the selection). */
   select?(pointer: string): void;
 }

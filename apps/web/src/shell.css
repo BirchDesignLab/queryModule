@@ -1264,3 +1264,87 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   justify-content: flex-end;
   gap: var(--qm-space-2);
 }
+
+/* Changes (item 4): the draft against the live config. Entries are rows that open their item, so
+   each is a ghost button in body colour: the words Added, Removed, Changed and Was and Now carry the
+   meaning, not colour. */
+.qm-diff__note {
+  margin: 0 0 var(--qm-space-3);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-diff__group {
+  margin: 0 0 var(--qm-space-5);
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-diff__title {
+  margin: 0 0 var(--qm-space-2);
+  font-size: var(--qm-type-size-lg);
+  font-weight: 600;
+}
+
+.qm-diff__subtitle {
+  margin: var(--qm-space-2) 0 var(--qm-space-1);
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.qm-diff__list {
+  display: grid;
+  gap: var(--qm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-diff__entry.qm-button {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--qm-space-1) var(--qm-space-3);
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding-block: var(--qm-space-1);
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-size-md);
+  font-weight: 400;
+  text-align: start;
+}
+
+.qm-badge.qm-diff__kind {
+  flex: none;
+  border-color: var(--qm-color-border);
+}
+
+.qm-diff__what {
+  flex: none;
+  font-weight: 500;
+}
+
+.qm-diff__values {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: var(--qm-space-1) var(--qm-space-4);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.qm-diff__tag {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.qm-diff__value {
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-sm);
+}

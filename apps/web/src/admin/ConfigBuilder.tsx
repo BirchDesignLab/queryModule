@@ -13,6 +13,7 @@ import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { BuilderTree } from "./BuilderTree.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
+import { ChangesView } from "./ChangesView.js";
 import { ChecksContext, useDraftChecks } from "./checks.js";
 import { revealAndFocus } from "./controls.js";
 import { docFromClient, type JsonObject } from "./draft.js";
@@ -33,7 +34,7 @@ import { useCachedClientConfig } from "./use-cached-config.js";
 
 export { configDraftStore } from "./builder-store.js";
 
-export const TABS = ["form", "raw"] as const;
+export const TABS = ["form", "raw", "changes"] as const;
 type TabId = (typeof TABS)[number];
 
 /** Config builder part 1 (Task 31, #355): the generic form and the raw JSON tab over one draft. */
@@ -156,6 +157,18 @@ function useMarkSelected(
           ? described
           : described?.querySelector<HTMLElement>("input, select, textarea, button");
         if (control) revealAndFocus(control);
+      } else if (selection.focusNode === true) {
+        // Opened from the Changes view: the button that was clicked went with its view, so focus
+        // goes to the item's first control, else to the selected tree row.
+        const control = el.querySelector<HTMLElement>(
+          "input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled):not([aria-disabled=true]), summary",
+        );
+        if (control) revealAndFocus(control);
+        else
+          root
+            .closest(".qm-builder__scope")
+            ?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')
+            ?.focus();
       }
     };
     const now = ready();
@@ -246,7 +259,11 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
     if (doc === rawDoc.current) return;
     setRaw({ text: JSON.stringify(doc, null, 2), parseError: null });
   }, [doc]);
-  const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({ form: null, raw: null });
+  const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({
+    form: null,
+    raw: null,
+    changes: null,
+  });
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     // M4: WAI-ARIA tabs, arrows by direction with wrap, Home and End.
     const i = TABS.indexOf(tab);
@@ -269,6 +286,11 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   const onSelect = useCallback((pointer: string, focus?: string) => {
     setTab("form");
     setSelection((s) => ({ pointer, seq: s.seq + 1, ...(focus === undefined ? {} : { focus }) }));
+  }, []);
+  // An entry of the Changes view: open its item and focus it (the click is the user's action).
+  const onOpen = useCallback((pointer: string) => {
+    setTab("form");
+    setSelection((s) => ({ pointer, seq: s.seq + 1, focusNode: true }));
   }, []);
   // Errors outrank warnings: the button goes to the first error, else the first warning.
   const firstIssue = checks.issues.find((i) => i.level === "error") ?? checks.issues[0];
@@ -319,7 +341,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
       // On the Raw tab there is no item to show: keep the tab, restore the selection under it.
       if (restored.meta !== null) {
         const pointer = restored.meta;
-        if (tab === "raw") setSelection((s) => ({ pointer, seq: s.seq + 1 }));
+        if (tab !== "form") setSelection((s) => ({ pointer, seq: s.seq + 1 }));
         else onSelect(pointer);
       }
       // The shared live region only: the builder's own summary is not touched.
@@ -489,8 +511,10 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
                 <SelectionContext.Provider value={shown}>
                   <FormTab doc={doc} />
                 </SelectionContext.Provider>
-              ) : (
+              ) : tab === "raw" ? (
                 <RawTab raw={raw} setRaw={setRaw} onRawDoc={onRawDoc} />
+              ) : (
+                <ChangesView doc={doc} onOpen={onOpen} />
               )}
             </div>
             {checks.doc !== null && (
