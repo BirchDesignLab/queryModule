@@ -68,7 +68,10 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("the toolbar follows the section title and shows a draft status that is not a live region", async () => {
     const t = await openBuilder();
     const heading = screen.getByRole("heading", { name: "Site configuration", level: 2 });
-    const toolbar = heading.nextElementSibling as HTMLElement;
+    // Undo's key scope wraps the toolbar and panes (display: contents), so the toolbar is its first child.
+    const scope = heading.nextElementSibling as HTMLElement;
+    expect(scope).toHaveClass("qm-builder__scope");
+    const toolbar = scope.firstElementChild as HTMLElement;
     expect(toolbar).toHaveClass("qm-builder__toolbar");
     const status = within(toolbar).getByTestId("draft-status");
     expect(status).toHaveTextContent("Draft: no changes");

@@ -12,7 +12,7 @@ import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
-import { type PathSegment, toPointer } from "./draft.js";
+import { type PathSegment, type SetPathOptions, toPointer } from "./draft.js";
 
 /**
  * Controls shared by the purpose-built editors (Task 31 part 2, #355): each writes one draft path
@@ -36,7 +36,8 @@ export const controlId = (prefix: string, path: readonly PathSegment[]): string 
 export function useDraftSetters() {
   const store = configDraftStore(useServices());
   const setPath = useCallback(
-    (path: readonly PathSegment[], value: unknown) => store.getState().setPath(path, value),
+    (path: readonly PathSegment[], value: unknown, options?: SetPathOptions) =>
+      store.getState().setPath(path, value, options),
     [store],
   );
   const setLabel = useCallback(
@@ -144,7 +145,9 @@ export function TextControl({
         aria-invalid={invalid}
         aria-describedby={describedBy}
         onChange={(e) =>
-          setPath(path, optional && e.target.value === "" ? undefined : e.target.value)
+          setPath(path, optional && e.target.value === "" ? undefined : e.target.value, {
+            coalesce: true,
+          })
         }
       />
       {messages}
@@ -249,7 +252,7 @@ export function NumberControl({
   hint?: string;
   hintId?: string;
   /** Writes the value; the draft store by default. */
-  onChange?(path: readonly PathSegment[], value: unknown): void;
+  onChange?(path: readonly PathSegment[], value: unknown, options?: SetPathOptions): void;
 }) {
   const t = useT();
   const setters = useDraftSetters();
@@ -298,8 +301,8 @@ export function NumberControl({
           setText(next);
           const n = Number(next);
           if (next.trim() === "") {
-            if (optional) setPath(path, undefined);
-          } else if (Number.isFinite(n)) setPath(path, n);
+            if (optional) setPath(path, undefined, { coalesce: true });
+          } else if (Number.isFinite(n)) setPath(path, n, { coalesce: true });
         }}
       />
       {note !== undefined && (
