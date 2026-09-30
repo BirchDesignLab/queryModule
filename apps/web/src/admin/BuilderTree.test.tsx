@@ -298,7 +298,7 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     expect(vehicle.getAttribute("aria-label")).toBeNull();
   });
 
-  it("one Tab stop for both trees: the selected row, then whichever row was last focused", async () => {
+  it("one Tab stop for both trees: the selected row, so Tab re-enters where the selection is", async () => {
     const t = await openBuilder();
     const stops = () =>
       within(tree())
@@ -308,9 +308,24 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     await t.user.click(within(tree()).getByRole("searchbox", { name: "Find a field or setting" }));
     await t.user.tab();
     expect(item(/^Vehicle VEH/)).toHaveFocus();
+    // Browsing to another row does not move the stop; selecting does.
     focusItem(/^Sources/);
+    expect(stops()).toEqual([item(/^Vehicle VEH/)]);
+    await t.user.keyboard("{Enter}");
     expect(stops()).toEqual([item(/^Sources/)]);
     expect(stops()).toHaveLength(1);
+  });
+
+  it("a selection made outside the tree becomes the Tab stop", async () => {
+    const t = await openBuilder();
+    focusItem(/^Sources/);
+    await t.user.click(screen.getByRole("button", { name: "Add query type" }));
+    const stops = within(tree())
+      .getAllByRole("treeitem")
+      .filter((x) => x.getAttribute("tabindex") === "0");
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toHaveAttribute("aria-selected", "true");
+    expect(item(/^Sources/)).toHaveAttribute("tabindex", "-1");
   });
 
   it("Down and Up move through the rows without selecting, across both trees", async () => {
@@ -428,8 +443,9 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     expect(field).toHaveFocus();
   });
 
-  it("a focused row that goes away hands focus to the nearest row that is left", async () => {
+  it("a focused row that goes away hands focus to the row before it in its tree, not the top of the tree", async () => {
     const t = await openBuilder();
+    // Wanted check and Driver's license are the last two types: remove them under the focus.
     focusItem(/^Wanted check WNT/);
     const store = configDraftStore(t.services);
     act(() => {
@@ -440,8 +456,25 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     await waitFor(() =>
       expect(within(tree()).queryByRole("treeitem", { name: /^Wanted/ })).toBeNull(),
     );
-    expect(document.activeElement).not.toBe(document.body);
-    expect(tree()).toContainElement(document.activeElement as HTMLElement);
+    await waitFor(() => expect(item(/^Property PRO/)).toHaveFocus());
+  });
+
+  it("with the last site item gone, the site item before it has focus", async () => {
+    const t = await openBuilder();
+    const site = within(tree()).getByRole("tree", { name: "Site" });
+    const last = [...site.querySelectorAll<HTMLElement>('[role="treeitem"]')].at(-1) as HTMLElement;
+    act(() => last.focus());
+    const store = configDraftStore(t.services);
+    act(() => {
+      const d = structuredClone(store.getState().doc) as Record<string, unknown>;
+      // Remove the last config key: its row (the one before Labels and translations) goes.
+      const keys = Object.keys(d).filter((k) => k !== "queryTypes" && k !== "schemaVersion");
+      delete d[keys.at(-1) as string];
+      store.getState().setDoc(d as never);
+    });
+    await waitFor(() => expect(tree()).toContainElement(document.activeElement as HTMLElement));
+    expect(document.activeElement).not.toBe(item(/^Vehicle VEH/));
+    expect(site.contains(document.activeElement)).toBe(true);
   });
 
   it("a change never takes focus that is in the editor", async () => {

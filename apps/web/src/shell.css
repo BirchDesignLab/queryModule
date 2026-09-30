@@ -755,7 +755,7 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-xs);
 }
 
-/* Issue count per row: the number is visual only; the words are visually hidden in the button. */
+/* Issue count per row: the number is visual only; the words are visually hidden in the row name. */
 .qm-tree__issues {
   flex: none;
   min-inline-size: var(--qm-space-4);

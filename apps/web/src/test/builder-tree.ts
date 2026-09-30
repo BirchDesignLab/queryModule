@@ -14,15 +14,21 @@ export async function selectBuilderItem(user: UserEvent, key: string): Promise<v
 }
 
 /**
- * The input of a generic-form setting, found by its config path. The path is not in the control's
+ * The element of a generic-form setting, found by its config path. The path is not in the control's
  * name (B1): a visually hidden hint "Setting: <path>" describes it, so this looks the hint up and
- * returns the input it describes.
+ * returns the `selector` element it describes (the input by default).
  */
-export async function findSetting(path: string, root: HTMLElement = document.body) {
+export async function findSetting<T extends HTMLElement = HTMLInputElement>(
+  path: string,
+  root: HTMLElement = document.body,
+  selector = "input",
+): Promise<T> {
   const hint = await within(root).findByText(`Setting: ${path}`);
-  const input = root.querySelector<HTMLInputElement>(
-    `input[aria-describedby~="${CSS.escape(hint.id)}"]`,
-  );
-  if (input === null) throw new Error(`no input is described by "Setting: ${path}"`);
-  return input;
+  const el = root.querySelector<T>(`${selector}[aria-describedby~="${CSS.escape(hint.id)}"]`);
+  if (el === null) throw new Error(`no ${selector} is described by "Setting: ${path}"`);
+  return el;
 }
+
+/** The "Add item" button of the generic list at `path`. */
+export const findAddItem = (path: string, root: HTMLElement = document.body) =>
+  findSetting<HTMLButtonElement>(path, root, "button");

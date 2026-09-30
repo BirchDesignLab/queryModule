@@ -20,7 +20,7 @@ import { useItemName } from "./FormTab.js";
 import { HIDDEN_KEYS, isRootIssue, issueWords, LABELS_ITEM } from "./selection.js";
 import { type FlatItem, isTypeAheadKey, treeAction, typeAhead } from "./tree-nav.js";
 
-/** One row of the builder tree: a button that selects `pointer`, and its children. */
+/** One row of the builder tree: a treeitem that selects `pointer`, and its children. */
 interface TreeNode {
   pointer: string;
   /** Shown text: the label users see, or the key when there is none. */
@@ -161,8 +161,10 @@ function flattenVisible(
 }
 
 /** A DOM id for a pointer: pointers hold "/" and may hold spaces, which ids and idrefs cannot. */
+// Every character but a letter or digit is escaped ("-" and "_" too), so the "-name" and "-group"
+// suffixes cannot appear in an escaped pointer and two rows never share an id.
 const treeId = (uid: string, pointer: string) =>
-  `${uid}-${pointer.replace(/[^A-Za-z0-9_-]/g, (c) => `_${c.charCodeAt(0).toString(16)}`)}`;
+  `${uid}-${pointer.replace(/[^A-Za-z0-9]/g, (c) => `_${c.charCodeAt(0).toString(16)}`)}`;
 
 /**
  * The builder tree (A-D1 A2, design target; B1: WAI-ARIA tree pattern): query types with their
@@ -225,14 +227,15 @@ export function BuilderTree({
     [],
   );
 
-  // Keyboard: one Tab stop for both trees (the row last focused, else the selected row, else the
-  // first), and the rows on screen for the keys to walk.
+  // Keyboard: one Tab stop for both trees, so Tab comes back to the selected row (APG single-select
+  // tree); when a search hides it, the row last focused, else the first. The rows on screen are
+  // what the keys walk.
   const flat = flattenVisible([shownTypes, shownSite], expanded, q !== "");
   const flatRef = useRef(flat);
   flatRef.current = flat;
   const [active, setActive] = useState<string | null>(null);
   const has = (p: string | null): p is string => p !== null && flat.some((x) => x.pointer === p);
-  const tabStop = has(active) ? active : has(selected) ? selected : (flat[0]?.pointer ?? null);
+  const tabStop = has(selected) ? selected : has(active) ? active : (flat[0]?.pointer ?? null);
   // The row that has focus, so focus lost with its row (a type closing when another opens) can be
   // repaired: never moved otherwise.
   const focused = useRef<string | null>(null);
@@ -281,11 +284,18 @@ export function BuilderTree({
     if (at === null || has(at)) return;
     const el = document.activeElement;
     if (el !== null && el !== document.body) return;
-    // Focus was on a row that is gone: the nearest row still there, its ancestors first.
+    // Focus was on a row that is gone: its nearest ancestor still there, else the row that took its
+    // place in its own tree, else the one before it (the last row went), never the top of the tree.
     let next: string | null = before.find((x) => x.pointer === at)?.parent ?? null;
     while (next !== null && !has(next))
       next = before.find((x) => x.pointer === next)?.parent ?? null;
-    const target = next ?? flat[0]?.pointer ?? null;
+    const index = Math.max(
+      before.findIndex((x) => x.pointer === at),
+      0,
+    );
+    const group = before[index]?.group;
+    const same = flat[index]?.group === group ? flat[index] : undefined;
+    const target = next ?? (same ?? flat[index - 1] ?? flat[0])?.pointer ?? null;
     if (target !== null) focus(target);
   });
   return (

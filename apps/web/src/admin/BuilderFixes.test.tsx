@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
-import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
+import { findAddItem, findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -91,17 +91,15 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
   it("M5: Add item clears the new item's identity key; an empty list adds through Raw JSON", async () => {
     const t = await openBuilder();
     await openSection(t, "keywords");
-    await t.user.click(screen.getByRole("button", { name: "Add item keywords" }));
+    await t.user.click(await findAddItem("keywords"));
     const keywords = draft(t).keywords as { keyword: string }[];
     expect(keywords.at(-1)?.keyword).toBe("");
     expect(keywords.at(-2)?.keyword).not.toBe("");
     // Task 31 part 2: rules have a purpose-built editor; an emptied generic list shows the rule.
     act(() => configDraftStore(t.services).getState().setPath(["keywords"], []));
-    const add = screen.getByRole("button", { name: "Add item keywords" });
+    const add = await findAddItem("keywords");
     expect(add).toBeDisabled();
-    expect(document.getElementById(add.getAttribute("aria-describedby") ?? "")).toHaveTextContent(
-      "Add the first item in Raw JSON",
-    );
+    expect(add).toHaveAccessibleDescription(/Add the first item in Raw JSON/);
   });
 
   it("M4: ArrowLeft, ArrowRight, Home and End move between tabs by direction", async () => {

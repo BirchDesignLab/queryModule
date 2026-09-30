@@ -25,8 +25,10 @@ function SettingName({ path }: { path: readonly PathSegment[] }) {
   return <>{last === undefined ? "" : humanize(last, (n) => t("admin.config.item", { n }))}</>;
 }
 
+// "_path" cannot end a control id: idSegment escapes every "_" as "_<hex>_", and "p" is not hex, so a
+// setting whose key is "path" (a response mapping element) keeps its own id.
 const pathHintId = (idPrefix: string, path: readonly PathSegment[]) =>
-  `${controlId(idPrefix, path)}-path`;
+  `${controlId(idPrefix, path)}_path`;
 
 /** "Setting: terminal.delimiter", visually hidden: the description a control points to. */
 function PathHint({ idPrefix, path }: { idPrefix: string; path: readonly PathSegment[] }) {
@@ -67,7 +69,6 @@ function ArrayEditor({
   onChange,
 }: Omit<NodeEditorProps, "value"> & { items: readonly unknown[] }) {
   const t = useT();
-  const text = pathText(path);
   const checks = useContext(ChecksContext);
   const issues = issuesFor(checks, path);
   const issuesId = `${controlId(idPrefix, path)}-issues`;
@@ -119,7 +120,8 @@ function ArrayEditor({
             <button
               type="button"
               className="qm-button qm-button--danger"
-              aria-label={`${t("admin.config.remove")} ${pathText(itemPath)}`}
+              aria-label={`${t("admin.config.remove")} ${humanize(i, (n) => t("admin.config.item", { n }))}`}
+              aria-describedby={pathHintId(idPrefix, itemPath)}
               onClick={() => {
                 const next = items.filter((_, j) => j !== i);
                 setWant(i < next.length ? { kind: "item", index: i } : { kind: "add" });
@@ -135,9 +137,8 @@ function ArrayEditor({
         ref={addRef}
         type="button"
         className="qm-button"
-        aria-label={`${t("admin.config.add")} ${text}`}
         disabled={empty}
-        aria-describedby={empty ? addReasonId : undefined}
+        aria-describedby={describe(pathHintId(idPrefix, path), empty ? addReasonId : undefined)}
         onClick={() => {
           setWant({ kind: "item", index: items.length });
           onChange(path, [...items, nextItem(items[items.length - 1])]);

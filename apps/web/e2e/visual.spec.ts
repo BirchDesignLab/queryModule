@@ -683,7 +683,7 @@ test.describe("B1 builder tree keyboard (1440x900)", () => {
     });
   }
 
-  test("closing the focused type's parent keeps focus in the tree (real Chromium)", async ({
+  test("clicking another type moves focus to it and closes the first (real Chromium)", async ({
     page,
   }) => {
     await asUser(page, "admin@example.test", "day", async () => {
@@ -691,7 +691,8 @@ test.describe("B1 builder tree keyboard (1440x900)", () => {
       const tree = page.getByRole("navigation", { name: "Configuration items" });
       const field = tree.getByRole("treeitem", { name: /^Plate type plateType/ });
       await field.focus();
-      // Another type opens by mouse elsewhere in the tree, closing Vehicle under the focus.
+      // The click moves focus to the Person row before Vehicle closes (the repair path itself is
+      // covered where a row is removed under focus, in BuilderTree.test).
       await tree.getByRole("treeitem", { name: /^Person PER/ }).click();
       await expect(tree.getByRole("treeitem", { name: /^Person PER/ })).toBeFocused();
       await expect(field).toHaveCount(0);

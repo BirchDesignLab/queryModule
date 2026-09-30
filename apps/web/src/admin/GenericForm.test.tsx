@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
-import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
+import { findAddItem, findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -117,5 +117,36 @@ describe("B1: a setting's name is its words; the config path is a hidden descrip
     await t.user.type(input, "a");
     expect(input).toHaveAccessibleDescription(/Setting: delegation\.maxDurationMinutes/);
     expect(input).toHaveAccessibleDescription(/enter a number/i);
+  });
+
+  it("I1: a setting named path keeps its own id and name (the hint ids cannot collide with a key)", async () => {
+    const t = await openBuilder();
+    await openSection(t, "responseMappings");
+    const input = await findSetting("responseMappings.0.elements.0.path");
+    expect(input).toHaveAccessibleName("Path");
+    // Every id in the editor is unique, and a label reaches its input.
+    const ids = [...document.querySelectorAll("[id]")].map((el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(document.querySelector(`label[for="${input.id}"]`)).toHaveTextContent("Path");
+  });
+
+  it("legends keep names unique: the same words in different items are in different groups", async () => {
+    const t = await openBuilder();
+    await openSection(t, "sources");
+    const ids = screen.getAllByRole("textbox", { name: "Id" });
+    expect(ids.length).toBeGreaterThan(1);
+    const legends = ids.map((el) => el.closest("fieldset")?.querySelector("legend")?.textContent);
+    expect(new Set(legends).size).toBe(ids.length);
+    expect(legends[0]).toMatch(/^Item 1/);
+  });
+
+  it("array buttons are named in words, with the path as their description", async () => {
+    const t = await openBuilder();
+    await openSection(t, "sources");
+    const remove = screen.getByRole("button", { name: "Remove Item 1" });
+    expect(remove).toHaveAccessibleDescription("Setting: sources.0");
+    const add = await findAddItem("sources");
+    expect(add).toHaveAccessibleName("Add item");
+    expect(add).toHaveAccessibleDescription("Setting: sources");
   });
 });

@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
-import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
+import { findAddItem, findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -192,23 +192,23 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("removing an array item keeps focus in the list; adding focuses the new item (I3)", async () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "sources");
-    const count = () => screen.queryAllByRole("button", { name: /^Remove sources\.\d+$/ }).length;
+    const count = () => screen.queryAllByRole("button", { name: /^Remove Item \d+$/ }).length;
     const before = count();
     expect(before).toBeGreaterThan(1);
-    await t.user.click(screen.getByRole("button", { name: "Remove sources.0" }));
+    await t.user.click(screen.getByRole("button", { name: "Remove Item 1" }));
     expect(count()).toBe(before - 1);
     const active = document.activeElement as HTMLElement;
     expect(active).not.toBe(document.body);
     expect(active.closest(".qm-admin__item")).not.toBeNull();
     // adding focuses the new item
-    await t.user.click(screen.getByRole("button", { name: "Add item sources" }));
+    await t.user.click(await findAddItem("sources"));
     const added = document.querySelector(`.qm-admin__item[data-item-path='sources.${before - 1}']`);
     expect(added?.contains(document.activeElement)).toBe(true);
     // remove down to empty: Add is disabled (batch M5), so its reason text takes focus
     while (count() > 0) {
-      await t.user.click(screen.getByRole("button", { name: "Remove sources.0" }));
+      await t.user.click(screen.getByRole("button", { name: "Remove Item 1" }));
     }
-    expect(screen.getByRole("button", { name: "Add item sources" })).toBeDisabled();
+    expect(await findAddItem("sources")).toBeDisabled();
     expect(document.activeElement).toHaveTextContent("Add the first item in Raw JSON");
   });
 
