@@ -901,3 +901,104 @@ main[tabindex="-1"]:focus {
   padding: 0;
   border: 0;
 }
+
+/* A3 editor (design target): where the item sits, above its heading. */
+.qm-editor__crumb {
+  margin: 0 0 var(--qm-space-1);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* The query type is the editor's item: its heading names it, so its own group box and legend
+   step back (the legend stays for assistive technology, hidden the VisuallyHidden way). */
+.qm-admin__form fieldset.qm-admin__type {
+  padding: 0;
+  border: 0;
+}
+
+.qm-admin__type-legend {
+  position: absolute;
+  inline-size: var(--qm-border-width);
+  block-size: var(--qm-border-width);
+  margin: calc(var(--qm-border-width) * -1);
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Ruled sections with a label column (A3): the title and hint beside the controls, one thin rule
+   between sections; the label column wraps above the controls in a narrow pane (no media query). */
+.qm-sect {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-3) var(--qm-space-6);
+  padding: var(--qm-space-5) 0;
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-sect__label {
+  flex: 0 1 calc(var(--qm-space-12) * 3);
+  min-inline-size: 0;
+}
+
+.qm-sect__label h4 {
+  margin: 0;
+  font-size: var(--qm-type-size-md);
+  font-weight: 600;
+}
+
+.qm-sect__hint {
+  margin: var(--qm-space-1) 0 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-sect__body {
+  flex: 1 1 calc(var(--qm-space-12) * 5);
+  min-inline-size: 0;
+}
+
+.qm-sect__body > :first-child,
+.qm-sect__body > .qm-admin__list > :first-child {
+  margin-block-start: 0;
+}
+
+/* Items in a section's list (sections, fields, rules): divided by a thin rule, not boxed. */
+.qm-admin__list > .qm-admin__item:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.qm-admin__list > .qm-admin__item {
+  padding-inline-start: 0;
+}
+
+/* Keys, label keys, patterns and the config location: collapsed until wanted. */
+.qm-advanced {
+  margin-block: var(--qm-space-3);
+  padding-inline-start: var(--qm-space-3);
+  border-inline-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-admin__type > .qm-advanced {
+  margin-block: 0;
+  padding: var(--qm-space-2) 0;
+  border-inline-start: 0;
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-advanced > summary {
+  color: var(--qm-color-accent);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-advanced__location {
+  margin: var(--qm-space-2) 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-advanced__location code {
+  font-family: var(--qm-type-family-data);
+}

@@ -4,11 +4,19 @@ import { useServices } from "../app/services-context.js";
 import { configDraftStore } from "./builder-store.js";
 import { CommandsEditor, QuickAccessEditor } from "./CommandsEditor.js";
 import { ChecksContext, IssueMessages } from "./checks.js";
+import { asObjects, str, useLabelText } from "./controls.js";
 import { type JsonObject, type PathSegment, toPointer } from "./draft.js";
 import { EditorSection, NodeEditor } from "./GenericForm.js";
 import { LabelOverlayEditor } from "./LabelOverlay.js";
 import { PicklistsEditor } from "./PicklistEditor.js";
-import { HIDDEN_KEYS, isRootIssue, LABELS_ITEM, SelectionContext, topItem } from "./selection.js";
+import {
+  HIDDEN_KEYS,
+  isRootIssue,
+  LABELS_ITEM,
+  SelectionContext,
+  topItem,
+  useSelectedIndex,
+} from "./selection.js";
 import { QueryTypesEditor } from "./TypeEditors.js";
 
 /** The plain name of a top-level item (design lead 09-29-26); an unknown key shows as itself. */
@@ -50,6 +58,21 @@ export function FormTab({ doc }: { doc: JsonObject }) {
   const top = pointer === null ? null : topItem(pointer);
   const shown = top !== null && (top === LABELS_ITEM || (top in doc && !HIDDEN_KEYS.has(top)));
   const value = top === null ? undefined : doc[top];
+  // A query type's heading is the type itself (A3): its name, its code in mono, its issues.
+  const labelText = useLabelText();
+  const types = asObjects(doc.queryTypes);
+  const typeIndex = Math.min(useSelectedIndex("queryTypes") ?? 0, types.length - 1);
+  const type = top === "queryTypes" ? types[typeIndex] : undefined;
+  const typeName = type === undefined ? "" : labelText(type.labelKey);
+  const heading =
+    type === undefined
+      ? { label: top === null ? "" : name(top), configKey: top ?? undefined }
+      : {
+          label: typeName === "" ? str(type.code) : typeName,
+          configKey: str(type.code),
+          countPointer: toPointer(["queryTypes", typeIndex]),
+        };
+  const crumb = t(top === "queryTypes" ? "admin.tree.types" : "admin.tree.site");
   return (
     <fieldset
       className="qm-admin__form"
@@ -66,11 +89,11 @@ export function FormTab({ doc }: { doc: JsonObject }) {
       {!shown || top === null ? (
         <p>{t("admin.editor.empty")}</p>
       ) : top === LABELS_ITEM ? (
-        <EditorSection pointer={LABELS_ITEM} label={name(LABELS_ITEM)}>
+        <EditorSection pointer={LABELS_ITEM} label={name(LABELS_ITEM)} crumb={crumb}>
           <LabelOverlayEditor locales={locales} idPrefix={idPrefix} />
         </EditorSection>
       ) : (
-        <EditorSection key={top} pointer={toPointer([top])} label={name(top)} configKey={top}>
+        <EditorSection key={top} pointer={toPointer([top])} crumb={crumb} {...heading}>
           {top === "queryTypes" ? (
             <QueryTypesEditor value={value} idPrefix={idPrefix} />
           ) : top === "picklists" ? (

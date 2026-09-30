@@ -1,8 +1,11 @@
 import { DATA_TYPES, type DataType } from "@querymodule/core/config";
+import { VisuallyHidden } from "@querymodule/web-ui";
 import { memo, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
+import { ChecksContext } from "./checks.js";
 import {
+  Advanced,
   asObjects,
   CheckControl,
   controlId,
@@ -11,12 +14,14 @@ import {
   moved,
   NumberControl,
   type Obj,
+  Sect,
   SelectControl,
   str,
   TextControl,
   useDraftSetters,
   useFocusRequest,
   useGeneration,
+  useLabelText,
 } from "./controls.js";
 import { type JsonObject, type PathSegment, toPointer } from "./draft.js";
 import { OtherKeys } from "./GenericForm.js";
@@ -71,11 +76,19 @@ const kindOf = (t: unknown): "number" | "boolean" | "text" =>
 /** Settings without a purpose-built control, rendered when opened. */
 function MoreSettings(props: Parameters<typeof OtherKeys>[0]) {
   const t = useT();
+  const checks = useContext(ChecksContext);
   const [open, setOpen] = useState(false);
+  // Open while one of these settings has an issue, so the issue button can reach its control.
+  const pointers = Object.keys(props.item)
+    .filter((k) => !props.covered.has(k))
+    .map((k) => toPointer([...props.path, k]));
+  const flagged = checks.issues.some((i) =>
+    pointers.some((p) => i.pointer === p || i.pointer.startsWith(`${p}/`)),
+  );
   return (
-    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details open={open || flagged} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>{t("admin.config.moreSettings")}</summary>
-      {open && <OtherKeys {...props} />}
+      {(open || flagged) && <OtherKeys {...props} />}
     </details>
   );
 }
@@ -151,37 +164,54 @@ function QueryTypeEditor({
   const t = useT();
   const code = str(type.code);
   return (
-    <fieldset className="qm-admin__item" data-path={toPointer(path)}>
-      <legend>{t("admin.config.type.legend", { code })}</legend>
-      <TextControl
-        idPrefix={idPrefix}
-        path={[...path, "code"]}
-        label={t("admin.config.code")}
-        value={type.code}
-        owner={owner}
-      />
-      <TextControl
-        idPrefix={idPrefix}
-        path={[...path, "labelKey"]}
-        label={t("admin.config.labelKey")}
-        value={type.labelKey}
-      />
-      <LabelTextControls idPrefix={idPrefix} path={path} labelKey={type.labelKey} />
-      <CheckControl
-        idPrefix={idPrefix}
-        path={[...path, "allowPlateOnly"]}
-        label={t("admin.config.type.allowPlateOnly")}
-        value={type.allowPlateOnly}
-      />
-      <SectionsEditor
-        type={type}
-        sections={asObjects(type.sections)}
-        path={[...path, "sections"]}
-        idPrefix={idPrefix}
-      />
-      <FieldsEditor type={type} path={[...path, "fields"]} idPrefix={idPrefix} />
-      <RulesEditor type={type} path={[...path, "rules"]} idPrefix={idPrefix} />
-      <OtherKeys item={type} path={path} covered={TYPE_KEYS} idPrefix={idPrefix} />
+    <fieldset className="qm-admin__item qm-admin__type" data-path={toPointer(path)}>
+      {/* The editor heading shows the type's name and code; the group keeps its own name. */}
+      <legend className="qm-admin__type-legend">{t("admin.config.type.legend", { code })}</legend>
+      <Sect title={t("admin.config.sect.name")} hint={t("admin.config.sect.nameHint")}>
+        <LabelTextControls idPrefix={idPrefix} path={path} labelKey={type.labelKey} />
+        <TextControl
+          idPrefix={idPrefix}
+          path={[...path, "code"]}
+          label={t("admin.config.code")}
+          value={type.code}
+          owner={owner}
+        />
+      </Sect>
+      <Sect title={t("admin.config.sect.plateOnly")} hint={t("admin.config.sect.plateOnlyHint")}>
+        <CheckControl
+          idPrefix={idPrefix}
+          path={[...path, "allowPlateOnly"]}
+          label={t("admin.config.type.allowPlateOnly")}
+          value={type.allowPlateOnly}
+        />
+      </Sect>
+      <Sect title={t("admin.config.sect.sections")} hint={t("admin.config.sect.sectionsHint")}>
+        <SectionsEditor
+          type={type}
+          sections={asObjects(type.sections)}
+          path={[...path, "sections"]}
+          idPrefix={idPrefix}
+        />
+      </Sect>
+      <Sect title={t("admin.config.sect.fields")}>
+        <FieldsEditor type={type} path={[...path, "fields"]} idPrefix={idPrefix} />
+      </Sect>
+      <Sect title={t("admin.config.sect.rules")} hint={t("admin.config.sect.rulesHint")}>
+        <RulesEditor type={type} path={[...path, "rules"]} idPrefix={idPrefix} />
+      </Sect>
+      <Advanced
+        path={path}
+        keys={["labelKey", ...Object.keys(type).filter((k) => !TYPE_KEYS.has(k))]}
+        attention={str(type.labelKey) === ""}
+      >
+        <TextControl
+          idPrefix={idPrefix}
+          path={[...path, "labelKey"]}
+          label={t("admin.config.labelKey")}
+          value={type.labelKey}
+        />
+        <OtherKeys item={type} path={path} covered={TYPE_KEYS} idPrefix={idPrefix} />
+      </Advanced>
       <ItemButtons
         owner={owner}
         name={code}
@@ -192,6 +222,25 @@ function QueryTypeEditor({
         onRemove={onRemove}
       />
     </fieldset>
+  );
+}
+
+/** An item's legend: its label text, or "New ..." while it has none; the key in hidden text. */
+function ItemLegend({
+  labelKey,
+  keyText,
+  fallback,
+}: {
+  labelKey: unknown;
+  keyText: string;
+  fallback: string;
+}) {
+  const label = useLabelText()(labelKey);
+  return (
+    <legend>
+      {label === "" ? fallback : label}
+      <VisuallyHidden>{keyText === "" ? "" : `, ${keyText}`}</VisuallyHidden>
+    </legend>
   );
 }
 
@@ -212,9 +261,13 @@ function SectionsEditor({
   const [gen, bump] = useGeneration();
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
+  const first = (i: number) =>
+    [
+      [owner(i), "first"],
+      [owner(i), "key"],
+    ] as const;
   return (
-    <fieldset>
-      <legend>{t("admin.config.sections")}</legend>
+    <div className="qm-admin__list">
       {sections.map((section, i) => {
         const itemPath = [...path, i];
         const key = str(section.key);
@@ -224,23 +277,48 @@ function SectionsEditor({
             className="qm-admin__item"
             data-path={toPointer(itemPath)}
           >
-            <legend>{t("admin.config.section.legend", { key })}</legend>
-            <TextControl
+            <ItemLegend
+              labelKey={section.labelKey}
+              keyText={key === "" ? "" : t("admin.config.section.keyText", { key })}
+              fallback={t("admin.config.section.new")}
+            />
+            <LabelTextControls
               idPrefix={idPrefix}
-              path={[...itemPath, "key"]}
-              label={t("admin.config.section.key")}
-              value={section.key}
+              path={itemPath}
+              labelKey={section.labelKey}
               owner={owner(i)}
             />
-            <TextControl
-              idPrefix={idPrefix}
-              path={[...itemPath, "labelKey"]}
-              label={t("admin.config.labelKey")}
-              value={section.labelKey}
-            />
-            <LabelTextControls idPrefix={idPrefix} path={itemPath} labelKey={section.labelKey} />
             <SectionCondition section={section} path={itemPath} type={type} idPrefix={idPrefix} />
-            <OtherKeys item={section} path={itemPath} covered={SECTION_KEYS} idPrefix={idPrefix} />
+            <Advanced
+              path={itemPath}
+              keys={[
+                "key",
+                "labelKey",
+                ...Object.keys(section).filter((k) => !SECTION_KEYS.has(k)),
+              ]}
+              attention={key === "" || str(section.labelKey) === ""}
+            >
+              <TextControl
+                idPrefix={idPrefix}
+                path={[...itemPath, "key"]}
+                label={t("admin.config.section.key")}
+                value={section.key}
+                owner={owner(i)}
+                focusRole="key"
+              />
+              <TextControl
+                idPrefix={idPrefix}
+                path={[...itemPath, "labelKey"]}
+                label={t("admin.config.labelKey")}
+                value={section.labelKey}
+              />
+              <OtherKeys
+                item={section}
+                path={itemPath}
+                covered={SECTION_KEYS}
+                idPrefix={idPrefix}
+              />
+            </Advanced>
             <ItemButtons
               owner={owner(i)}
               name={key}
@@ -259,7 +337,7 @@ function SectionsEditor({
                 bump();
                 const next = sections.filter((_, j) => j !== at);
                 setPath(path, next);
-                focus([owner(Math.min(at, next.length - 1)), "first"], [listOwner, "add"]);
+                focus(...first(Math.min(at, next.length - 1)), [listOwner, "add"]);
               }}
             />
           </fieldset>
@@ -272,12 +350,12 @@ function SectionsEditor({
         data-role="add"
         onClick={() => {
           setPath(path, [...sections, { key: "", labelKey: "" }]);
-          focus([owner(sections.length), "first"]);
+          focus(...first(sections.length));
         }}
       >
         {t("admin.config.section.add")}
       </button>
-    </fieldset>
+    </div>
   );
 }
 
@@ -296,13 +374,14 @@ function FieldsEditor({
   const focus = useFocusRequest();
   const [gen, bump] = useGeneration();
   const fields = asObjects(type.fields);
-  const sectionKeys = [
-    ...new Set(
-      asObjects(type.sections)
-        .map((s) => str(s.key))
-        .filter((k) => k !== ""),
-    ),
-  ];
+  const labelText = useLabelText();
+  const sectionList = asObjects(type.sections);
+  const sectionKeys = [...new Set(sectionList.map((s) => str(s.key)).filter((k) => k !== ""))];
+  // A section reads as its label in the field's select; its key while it has none.
+  const sectionNames = sectionKeys.map((k) => {
+    const text = labelText(sectionList.find((s) => str(s.key) === k)?.labelKey);
+    return text === "" ? k : text;
+  });
   const picklistIds = asObjects((doc as JsonObject | null)?.picklists)
     .map((p) => str(p.id))
     .filter((id) => id !== "");
@@ -329,13 +408,13 @@ function FieldsEditor({
       bump();
       const next = list.filter((_, j) => j !== index);
       setPath(at, next);
-      focus([own(Math.min(index, next.length - 1)), "first"], [add, "add"]);
+      const k = own(Math.min(index, next.length - 1));
+      focus([k, "first"], [k, "key"], [add, "add"]);
     },
     [bump, setPath, focus],
   );
   return (
-    <fieldset>
-      <legend>{t("admin.config.fields")}</legend>
+    <div className="qm-admin__list">
       {fields.map((field, i) => (
         <FieldRow
           key={`${owner(i)}:${gen}`}
@@ -345,6 +424,7 @@ function FieldsEditor({
           index={i}
           count={fields.length}
           sectionKeys={sectionKeys}
+          sectionNames={sectionNames}
           picklistIds={picklistIds}
           idPrefix={idPrefix}
           onMove={onMove}
@@ -358,12 +438,12 @@ function FieldsEditor({
         data-role="add"
         onClick={() => {
           setPath(path, [...fields, newField(sectionKeys[0] ?? "base")]);
-          focus([owner(fields.length), "first"]);
+          focus([owner(fields.length), "first"], [owner(fields.length), "key"]);
         }}
       >
         {t("admin.config.field.add")}
       </button>
-    </fieldset>
+    </div>
   );
 }
 
@@ -374,6 +454,8 @@ interface FieldRowProps {
   index: number;
   count: number;
   sectionKeys: readonly string[];
+  /** What each section reads as, in sectionKeys order. */
+  sectionNames: readonly string[];
   picklistIds: readonly string[];
   idPrefix: string;
   onMove(from: number, to: number): void;
@@ -401,7 +483,13 @@ const FieldRow = memo(
     const t = useT();
     return (
       <fieldset className="qm-admin__item" data-path={toPointer(path)}>
-        <legend>{t("admin.config.field.legend", { key: str(field.key) })}</legend>
+        <ItemLegend
+          labelKey={field.labelKey}
+          keyText={
+            str(field.key) === "" ? "" : t("admin.config.field.keyText", { key: str(field.key) })
+          }
+          fallback={t("admin.config.field.new")}
+        />
         <FieldControls field={field} path={path} owner={owner} {...rest} />
         <ItemButtons
           owner={owner}
@@ -425,6 +513,7 @@ const FieldRow = memo(
     a.onRemove === b.onRemove &&
     sameList(a.path, b.path) &&
     sameList(a.sectionKeys, b.sectionKeys) &&
+    sameList(a.sectionNames, b.sectionNames) &&
     sameList(a.picklistIds, b.picklistIds),
 );
 
@@ -433,6 +522,7 @@ function FieldControls({
   path,
   owner,
   sectionKeys,
+  sectionNames,
   picklistIds,
   idPrefix,
 }: {
@@ -440,6 +530,7 @@ function FieldControls({
   path: readonly PathSegment[];
   owner: string;
   sectionKeys: readonly string[];
+  sectionNames: readonly string[];
   picklistIds: readonly string[];
   idPrefix: string;
 }) {
@@ -448,28 +539,17 @@ function FieldControls({
   const kind = kindOf(field.dataType);
   const defaultPath = [...path, "defaultValue"];
   const defaultLabel = t("admin.config.field.defaultValue");
+  const key = str(field.key);
   return (
     <>
-      <TextControl
-        idPrefix={idPrefix}
-        path={[...path, "key"]}
-        label={t("admin.config.field.key")}
-        value={field.key}
-        owner={owner}
-      />
-      <TextControl
-        idPrefix={idPrefix}
-        path={[...path, "labelKey"]}
-        label={t("admin.config.labelKey")}
-        value={field.labelKey}
-      />
-      <LabelTextControls idPrefix={idPrefix} path={path} labelKey={field.labelKey} />
+      <LabelTextControls idPrefix={idPrefix} path={path} labelKey={field.labelKey} owner={owner} />
       <SelectControl
         idPrefix={idPrefix}
         path={[...path, "dataType"]}
-        label={t("admin.config.field.dataType")}
+        label={t("admin.config.field.inputType")}
         value={field.dataType}
         options={DATA_TYPES}
+        optionLabel={(o) => t(`admin.config.dataType.${o}`)}
         onValue={(next) => {
           const dataType = (next ?? "string") as DataType;
           const { picklist, defaultValue, ...rest } = field;
@@ -481,6 +561,16 @@ function FieldControls({
           });
         }}
       />
+      {field.dataType === "picklist" && (
+        <SelectControl
+          idPrefix={idPrefix}
+          path={[...path, "picklist"]}
+          label={t("admin.config.field.choices")}
+          value={field.picklist}
+          options={picklistIds}
+          blank={t("admin.config.none")}
+        />
+      )}
       <CheckControl
         idPrefix={idPrefix}
         path={[...path, "required"]}
@@ -490,7 +580,7 @@ function FieldControls({
       <CheckControl
         idPrefix={idPrefix}
         path={[...path, "visible"]}
-        label={t("admin.config.field.visible")}
+        label={t("admin.config.field.shown")}
         value={field.visible}
       />
       {kind === "number" ? (
@@ -508,6 +598,7 @@ function FieldControls({
           label={defaultLabel}
           value={field.defaultValue === undefined ? "" : String(field.defaultValue)}
           options={["true", "false"]}
+          optionLabel={(o) => t(o === "true" ? "admin.config.yes" : "admin.config.no")}
           blank={t("admin.config.none")}
           onValue={(next) => setPath(defaultPath, next === undefined ? undefined : next === "true")}
         />
@@ -520,39 +611,57 @@ function FieldControls({
           optional
         />
       )}
-      {field.dataType === "picklist" && (
-        <SelectControl
-          idPrefix={idPrefix}
-          path={[...path, "picklist"]}
-          label={t("admin.config.field.picklist")}
-          value={field.picklist}
-          options={picklistIds}
-          blank={t("admin.config.none")}
-        />
-      )}
-      <SelectControl
-        idPrefix={idPrefix}
-        path={[...path, "transform"]}
-        label={t("admin.config.field.transform")}
-        value={field.transform ?? "none"}
-        options={TRANSFORMS}
-      />
-      <TextControl
-        idPrefix={idPrefix}
-        path={[...path, "pattern"]}
-        label={t("admin.config.field.pattern")}
-        value={field.pattern}
-        optional
-      />
       <SelectControl
         idPrefix={idPrefix}
         path={[...path, "section"]}
         label={t("admin.config.field.section")}
         value={field.section}
         options={sectionKeys}
+        optionLabel={(k) => sectionNames[sectionKeys.indexOf(k)] ?? k}
         blank={t("admin.config.none")}
       />
-      <MoreSettings item={field} path={path} covered={FIELD_KEYS} idPrefix={idPrefix} />
+      <Advanced
+        path={path}
+        keys={[
+          "key",
+          "labelKey",
+          "transform",
+          "pattern",
+          ...Object.keys(field).filter((k) => !FIELD_KEYS.has(k)),
+        ]}
+        attention={key === "" || str(field.labelKey) === ""}
+      >
+        <TextControl
+          idPrefix={idPrefix}
+          path={[...path, "key"]}
+          label={t("admin.config.field.key")}
+          value={field.key}
+          owner={owner}
+          focusRole="key"
+        />
+        <TextControl
+          idPrefix={idPrefix}
+          path={[...path, "labelKey"]}
+          label={t("admin.config.labelKey")}
+          value={field.labelKey}
+        />
+        <SelectControl
+          idPrefix={idPrefix}
+          path={[...path, "transform"]}
+          label={t("admin.config.field.transform")}
+          value={field.transform ?? "none"}
+          options={TRANSFORMS}
+          optionLabel={(o) => t(`admin.config.transform.${o}`)}
+        />
+        <TextControl
+          idPrefix={idPrefix}
+          path={[...path, "pattern"]}
+          label={t("admin.config.field.pattern")}
+          value={field.pattern}
+          optional
+        />
+        <MoreSettings item={field} path={path} covered={FIELD_KEYS} idPrefix={idPrefix} />
+      </Advanced>
     </>
   );
 }

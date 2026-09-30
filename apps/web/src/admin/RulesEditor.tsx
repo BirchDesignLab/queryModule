@@ -482,8 +482,7 @@ export function RulesEditor({
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
   return (
-    <fieldset>
-      <legend>{t("admin.config.rules")}</legend>
+    <div className="qm-admin__list">
       {rules.map((rule, i) => {
         const n = i + 1;
         const rulePath = [...path, i];
@@ -574,7 +573,7 @@ export function RulesEditor({
       >
         {t("admin.config.rule.add")}
       </button>
-    </fieldset>
+    </div>
   );
 }
 
