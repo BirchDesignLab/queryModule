@@ -105,8 +105,20 @@ test.describe("B1 theme focus survives a persona flip", () => {
 // instead of taking a second row, and nothing scrolls sideways. Officer targets stay 48 px.
 const ROW = { dispatch: 52, compact: 64 } as const;
 
+/** A longer site name than the seeded "Default site", so a squashed label shows up as truncation. */
+async function useLongSiteName(page: Page): Promise<void> {
+  await page.route("**/api/v1/config", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { site: { labelKey: string } };
+    body.site.labelKey = "site.exampleOk";
+    await route.fulfill({ response, json: body });
+  });
+}
+
 async function headerMetrics(page: Page) {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
+    // Fallback-font widths differ from Plex: measure after the fonts have loaded.
+    await document.fonts.ready;
     const header = document.querySelector("header");
     const scroller = document.scrollingElement;
     const box = (el: Element) => el.getBoundingClientRect();
@@ -123,7 +135,11 @@ async function headerMetrics(page: Page) {
           ];
     });
     const account = header?.querySelector(".qm-account__button");
+    const site = header?.querySelector(".qm-app-header__site");
     return {
+      // The site name is either absent (officer bar) or shown in full: no ellipsis (WCAG 1.4.10).
+      siteTruncated: site ? site.scrollWidth > site.clientWidth : false,
+      siteWidth: site ? site.getBoundingClientRect().width : 0,
       height: header === null || header === undefined ? 0 : box(header).height,
       overflowX: scroller === null ? 0 : scroller.scrollWidth - scroller.clientWidth,
       accountRight: account === null || account === undefined ? 0 : box(account).right,
@@ -143,12 +159,15 @@ for (const { persona, email, row, minTarget } of [
       page,
     }) => {
       await page.setViewportSize({ width: 683, height: 384 });
+      await useLongSiteName(page);
       await signIn(page, seededUser(email));
       await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
       await expect(page.getByRole("button", { name: email })).toBeVisible();
       const m = await headerMetrics(page);
       expect(Math.round(m.height)).toBe(row);
       expect(m.overflowX).toBeLessThanOrEqual(0);
+      // A long name may truncate here (the bar keeps its row) but stays readable, never a stub.
+      expect(m.siteWidth === 0 || m.siteWidth >= 100).toBe(true);
       expect(m.accountRight).toBeLessThanOrEqual(683);
       for (const t of m.targets) {
         expect(t.w, `${t.name} width`).toBeGreaterThanOrEqual(minTarget - 0.5);
@@ -160,10 +179,12 @@ for (const { persona, email, row, minTarget } of [
       page,
     }) => {
       await page.setViewportSize({ width: 320, height: 568 });
+      await useLongSiteName(page);
       await signIn(page, seededUser(email));
       await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
       const m = await headerMetrics(page);
       expect(m.overflowX).toBeLessThanOrEqual(0);
+      expect(m.siteTruncated).toBe(false);
       expect(m.accountRight).toBeLessThanOrEqual(320);
       for (const t of m.targets) {
         expect(t.w, `${t.name} width`).toBeGreaterThanOrEqual(minTarget - 0.5);

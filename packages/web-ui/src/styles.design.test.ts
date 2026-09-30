@@ -262,3 +262,17 @@ describe("hardening: reflow at 320 px and 400% zoom (WCAG 1.4.10, 2.4.11)", () =
     );
   });
 });
+
+describe("dispatch app bar keeps one row at 200% zoom (683 px)", () => {
+  it("below 52rem the account email is visually hidden, not removed", () => {
+    expect(css).toMatch(
+      /@media \(max-width: 52rem\)\s*\{\s*\.qm-app-header \.qm-account__email\s*\{[^}]*clip-path:\s*inset\(50%\)/,
+    );
+    expect(css).not.toMatch(/\.qm-account__email\s*\{[^}]*display:\s*none/);
+  });
+  it("from 36rem to 52rem the site name shrinks to a 12ch minimum; below 36rem it is left to wrap", () => {
+    expect(css).toMatch(
+      /@media \(min-width: 36rem\) and \(max-width: 52rem\)\s*\{\s*\.qm-app-header \.qm-app-header__site\s*\{\s*flex:\s*1 1 12ch/,
+    );
+  });
+});
