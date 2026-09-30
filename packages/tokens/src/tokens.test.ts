@@ -172,14 +172,27 @@ describe("inert opacity, scrim and layout constant (cloud3 item 1)", () => {
     expect(relativeLuminance(COLOR_TOKENS["color.surface.scrim"].day)).toBeLessThan(0.05);
   });
 
-  it("the wide breakpoint is a fixed layout constant: emitted once on :root, never a token", () => {
-    expect(LAYOUT_CONSTANTS["layout.wide"]).toBe("64rem");
-    expect(TOKEN_NAMES as readonly string[]).not.toContain("layout.wide");
+  it("the breakpoints are fixed layout constants: emitted once on :root, never tokens", () => {
+    expect(LAYOUT_CONSTANTS).toEqual({
+      "layout.wide": "64rem",
+      "layout.stack": "54rem",
+      "layout.toolbar": "45rem",
+    });
     const css = buildCss();
-    expect(css.match(/--qm-layout-wide:/g)).toHaveLength(1);
-    expect(css).toContain("--qm-layout-wide: 64rem;");
-    // Not repeated under a theme block, so a theme cannot move it.
     const themed = css.slice(css.indexOf(':root[data-theme="night"]'));
-    expect(themed).not.toContain("layout-wide");
+    for (const [name, value] of Object.entries(LAYOUT_CONSTANTS)) {
+      expect(TOKEN_NAMES as readonly string[], name).not.toContain(name);
+      const variable = cssVarName(name);
+      expect(css.match(new RegExp(`${variable}:`, "g")), name).toHaveLength(1);
+      expect(css).toContain(`${variable}: ${value};`);
+      // Not repeated under a theme block, so a theme cannot move it.
+      expect(themed, name).not.toContain(variable);
+    }
+  });
+
+  it("opacity.scrim is one scale token, 0.8 (night and red shift keep today's look)", () => {
+    expect(TOKEN_NAMES).toContain("opacity.scrim");
+    for (const mode of THEME_MODES) expect(tokenValue("opacity.scrim", mode)).toBe("0.8");
+    expect(buildCss()).toContain("--qm-opacity-scrim: 0.8;");
   });
 });

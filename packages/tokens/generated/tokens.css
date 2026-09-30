@@ -22,6 +22,7 @@
   --qm-type-body-lineHeight: 1.5;
   --qm-type-heading-size: 24px;
   --qm-opacity-inert: 0.55;
+  --qm-opacity-scrim: 0.8;
   --qm-border-width: 1px;
   --qm-focus-ring-width: 2px;
   --qm-focus-ring-offset: 2px;
@@ -35,6 +36,8 @@
   --qm-control-height-dense: 36px;
   --qm-control-height-touch: 56px;
   --qm-layout-wide: 64rem;
+  --qm-layout-stack: 54rem;
+  --qm-layout-toolbar: 45rem;
   --qm-color-text-body: #121820;
   --qm-color-text-muted: #4d5968;
   --qm-color-surface-sunken: #eceff3;

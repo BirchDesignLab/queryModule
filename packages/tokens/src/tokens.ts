@@ -10,7 +10,7 @@ export const COLOR_TOKENS = {
   "color.surface.base": { day: "#ffffff", night: "#10151c", redShift: "#0d0000" },
   "color.surface.raised": { day: "#f7f9fb", night: "#161d26", redShift: "#1a0500" },
   "color.surface.overlay": { day: "#ffffff", night: "#1e2733", redShift: "#240900" },
-  // The dim behind a modal, drawn at 0.8 opacity. Night and red shift keep the sunken surface;
+  // The dim behind a modal, drawn at opacity.scrim. Night and red shift keep the sunken surface;
   // day is dark, since a light scrim would leave a white page undimmed.
   "color.surface.scrim": { day: "#1c2430", night: "#0a0e13", redShift: "#080000" },
   "color.accent": { day: "#0b4a9e", night: "#8ab4ff", redShift: "#ff8c1a" },
@@ -57,6 +57,8 @@ export const SCALE_TOKENS = {
   // How far inert content (a paused preview, a loading skeleton's pulse) recedes. Like every scale
   // token it is not site-overridable: config overrides must be #rrggbb colours.
   "opacity.inert": "0.55",
+  // The modal backdrop's strength (color.surface.scrim drawn at this opacity); not site-overridable.
+  "opacity.scrim": "0.8",
   "border.width": "1px",
   "focus.ring.width": "2px",
   "focus.ring.offset": "2px",
@@ -73,12 +75,19 @@ export const SCALE_TOKENS = {
 } as const;
 
 /**
- * Fixed layout constants: emitted as CSS custom properties but not tokens (not in TOKEN_NAMES, no
- * theme or config override), because a breakpoint is a layout decision, never a theme one.
+ * Fixed layout constants: emitted as CSS custom properties (for script and test readers; a query
+ * condition cannot read them) but not tokens (not in TOKEN_NAMES, no theme or config override),
+ * because a breakpoint is a layout decision, never a theme one. A query
+ * condition cannot read var(), so shell.css writes these values literally in its @media and
+ * @container conditions; shell.css.test.ts accepts a literal length there only if it equals one.
  */
 export const LAYOUT_CONSTANTS = {
   /** At or above this width each admin pane scrolls on its own under the toolbar; below it the page flows as one column. */
   "layout.wide": "64rem",
+  /** At or above this width the admin rail sits beside the section; below it the rail is stacked above it. */
+  "layout.stack": "54rem",
+  /** At or above this section width the builder's heading and toolbar share a row; below it the toolbar sits under the heading. */
+  "layout.toolbar": "45rem",
 } as const;
 
 export type ColorTokenName = keyof typeof COLOR_TOKENS;
