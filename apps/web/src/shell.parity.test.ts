@@ -32,3 +32,17 @@ describe("parity pass: query surfaces (docs/design/2026-09-29-visual-system.md)"
     expect(decls(".qm-login__product")).toMatch(/font-weight:\s*600/);
   });
 });
+
+describe("parity pass: officer bar and account menu (spec 6.3: 48 px targets, 16 px text)", () => {
+  it("G6 the skip link is a 48 px target on the officer's pages", () => {
+    const skip = decls("body:has(.qm-app-header--compact) .qm-skip-link");
+    expect(skip).toMatch(/min-height:\s*var\(--qm-target-min\)/);
+    expect(skip).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+  });
+
+  it("O1 the officer's account menu reads at body size: the sign-out button is 16 px, not 14", () => {
+    expect(decls(".qm-app-header--compact .qm-account__panel .qm-button")).toMatch(
+      /font-size:\s*var\(--qm-type-body-size\)/,
+    );
+  });
+});

@@ -1087,6 +1087,12 @@ h1 {
   border: 0;
 }
 
+/* The card strips the boxes only: a later section ("More details") still opens under a rule. */
+.qm-layout--mobile-unit .qm-query-form__section--disclosure {
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
 .qm-layout--mobile-unit .qm-query-form__section legend {
   padding-inline: 0;
   color: var(--qm-color-text-body);
