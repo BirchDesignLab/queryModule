@@ -80,20 +80,23 @@ export function useStatusChecks(): { checks: StatusChecks; run: () => void } {
     };
     setChecks((s) => ({ ...s, checking: true }));
 
-    const connection = runHeartbeatProbe({
-      url: heartbeatUrl(window.location),
-      createSocket: (url) => {
-        socket = createSocket(url);
-        return socket;
-      },
-      timeoutMs: 10_000,
-      now: () => performance.now(),
-      nonce: crypto.randomUUID(),
-      setTimer: (fn, ms) => {
-        const id = window.setTimeout(fn, ms);
-        return () => window.clearTimeout(id);
-      },
-    });
+    // An async wrapper turns a throw while building the probe (no WebSocket, no crypto.randomUUID
+    // outside a secure context) into a failed check, not a page stuck on "Checking".
+    const connection = (async () =>
+      runHeartbeatProbe({
+        url: heartbeatUrl(window.location),
+        createSocket: (url) => {
+          socket = createSocket(url);
+          return socket;
+        },
+        timeoutMs: 10_000,
+        now: () => performance.now(),
+        nonce: crypto.randomUUID(),
+        setTimer: (fn, ms) => {
+          const id = window.setTimeout(fn, ms);
+          return () => window.clearTimeout(id);
+        },
+      }))().catch((): HeartbeatResult => ({ ok: false, reason: "error" }));
     const config = fetchClientConfig(api).then(
       (next): "done" | "failed" => {
         if (!live()) return "done";
@@ -110,7 +113,11 @@ export function useStatusChecks(): { checks: StatusChecks; run: () => void } {
     void Promise.all([connection, config]).then(([result, configResult]) => {
       unregister();
       if (gen === generation.current) inFlight.current = false;
-      if (!live()) return;
+      if (!live()) {
+        // Dropped by a reset with the page still mounted: unlock the button, say nothing.
+        if (gen === generation.current) setChecks((c) => ({ ...c, checking: false }));
+        return;
+      }
       const now = Date.now();
       setChecks({
         checking: false,

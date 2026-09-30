@@ -151,6 +151,8 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
     const chip = await screen.findByText("Unavailable", { selector: ".qm-badge" });
     expect(chip).toHaveClass("qm-badge--critical");
     expect(tile("Configuration").queryByText("Version hash")).toBeNull();
+    // The layout is not "Loading" for ever: it says what the configuration says.
+    expect(tile("Session").getByText("Layout").closest("div")).toHaveTextContent("Unavailable");
     await waitFor(() =>
       expect(screen.getByTestId("announcer-polite")).toHaveTextContent(
         "Connected, configuration check failed",
@@ -240,7 +242,7 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
     await t.user.click(button);
     expect(sockets).toHaveLength(1);
     expect(button).toHaveAttribute("aria-disabled", "true");
-    // h1 had focus on navigation; pressing a disabled-looking button does not move it elsewhere.
+    // The press lands on the button (a click focuses it) and stays there.
     expect(button).toHaveFocus();
   });
 
@@ -268,12 +270,36 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
     await waitFor(() => expect(config.queryByText("The last check failed.")).toBeNull());
   });
 
-  it("a reset during a check closes the socket and announces nothing", async () => {
+  it("a reset during a check closes the socket, drops the late answers and announces nothing", async () => {
+    // The socket answers hello but holds the pong; the config answer is held too, so both land after the reset.
     let socket: FakeSocket | null = null;
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
     let announce: ReturnType<typeof vi.spyOn> | undefined;
+    let requests = 0;
+    server.use(
+      http.get(`${API}/api/v1/config`, async () => {
+        requests += 1;
+        // The shell's own prefetch answers at once; the status check's request is the second.
+        if (requests > 1) await gate;
+        return HttpResponse.json(CLIENT_CONFIG);
+      }),
+    );
     const t = await openStatus(
       () => {
         socket = new FakeSocket();
+        socket.send = (data: string) => {
+          const message = JSON.parse(data) as { type: string };
+          if (message.type === "hello")
+            queueMicrotask(() =>
+              socket?.onmessage?.({
+                data: JSON.stringify({ v: 1, type: "welcome", latestSeq: 0 }),
+              }),
+            );
+        };
+        queueMicrotask(() => socket?.onopen?.());
         return socket;
       },
       (r) => {
@@ -281,11 +307,36 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
       },
     );
     await screen.findByRole("heading", { level: 1, name: "Status" });
+    await waitFor(() => expect(requests).toBeGreaterThan(1));
     act(() => t.services.reset.resetAll());
     expect((socket as unknown as FakeSocket).closed).toBe(true);
+    // The late answers: the pong (the probe settles ok) and the config.
     await act(async () => {
+      (socket as unknown as FakeSocket).onmessage?.({
+        data: JSON.stringify({ v: 1, type: "pong", nonce: "x", serverTime: 1 }),
+      });
+      release();
       await new Promise((r) => setTimeout(r, 30));
     });
     expect(announce).not.toHaveBeenCalled();
+    // The previous session's config is not written back into the cleared cache.
+    expect(t.services.queryClient.getQueryData(["config"])).toBeUndefined();
+  });
+
+  it("a socket that cannot be created is a failed check, not a stuck one", async () => {
+    await openStatus(() => {
+      throw new Error("SecurityError");
+    });
+    expect(await screen.findByText("Failed", { selector: ".qm-badge" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Connection failed: network error", { selector: "#status-text" }),
+    ).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Check again" });
+    expect(button).not.toHaveAttribute("aria-disabled", "true");
+    await waitFor(() =>
+      expect(screen.getByTestId("announcer-polite")).toHaveTextContent(
+        "Connection failed: network error, configuration loaded",
+      ),
+    );
   });
 });

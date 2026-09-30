@@ -232,7 +232,7 @@
   "status.config.schema.label": "Schema version",
   "status.config.checkFailed": "The last check failed.",
   "status.checked.label": "Last checked",
-  "status.checked.pending": "Checking",
+  "status.checked.pending": "Not yet",
   "status.checkAgain": "Check again",
   "status.session.title": "Session",
   "status.session.email.label": "Signed in as",

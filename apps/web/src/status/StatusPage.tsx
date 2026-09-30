@@ -93,7 +93,11 @@ export function StatusPage() {
   const role = user?.role ?? null;
   const layoutText =
     config === undefined
-      ? t("status.config.state.loading")
+      ? t(
+          unavailable || checks.config === "failed"
+            ? "status.config.state.unavailable"
+            : "status.config.state.loading",
+        )
       : t(
           layout === "mobileUnit"
             ? "status.session.layout.mobileUnit"

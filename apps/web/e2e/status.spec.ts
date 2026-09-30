@@ -26,7 +26,9 @@ test("Check again re-checks both, keeps focus on the button and announces once",
   await expect(button).not.toHaveAttribute("aria-disabled", "true");
   const configRequests: string[] = [];
   page.on("request", (r) => {
-    if (r.url().endsWith("/api/v1/config")) configRequests.push(r.url());
+    // The 15 s background refresh sends the same GET, marked X-Background: only the check counts.
+    if (r.url().endsWith("/api/v1/config") && r.headers()["x-background"] !== "1")
+      configRequests.push(r.url());
   });
   // Count every message the polite region receives from here on (each one remounts its span).
   await page.evaluate(() => {
