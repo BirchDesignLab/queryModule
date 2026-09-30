@@ -6,6 +6,10 @@ export interface ShortcutSheetProps {
   onClose(): void;
   bindings: Readonly<Record<string, readonly ShortcutBinding[]>>;
   t(key: string): string;
+  /** Where focus goes on close when the opener has left the page (a persona flip remounts the
+   *  account menu; a shortcut pressed inside an open menu closes it). Null or absent: focus stays
+   *  where the browser leaves it. Never used while the opener is still connected. */
+  returnFocus?(): HTMLElement | null;
 }
 
 const TITLE_ID = "qm-shortcut-sheet-title";
@@ -60,10 +64,19 @@ function useLayoutMap(open: boolean): LayoutMap | null {
 }
 
 /** Modal list of every bound action (spec 6.4, 6.2 dialogs): Escape closes, focus returns to the opener. */
-export function ShortcutSheet({ open, onClose, bindings, t }: ShortcutSheetProps): JSX.Element {
+export function ShortcutSheet({
+  open,
+  onClose,
+  bindings,
+  t,
+  returnFocus,
+}: ShortcutSheetProps): JSX.Element {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const opener = useRef<Element | null>(null);
   const layout = useLayoutMap(open);
+  // Read at close time only: a new function identity per render must not re-run the effect below.
+  const returnFocusRef = useRef(returnFocus);
+  returnFocusRef.current = returnFocus;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -77,8 +90,12 @@ export function ShortcutSheet({ open, onClose, bindings, t }: ShortcutSheetProps
       if (typeof dialog.close === "function") dialog.close();
       else dialog.removeAttribute("open");
     }
-    if (!open && opener.current instanceof HTMLElement) {
-      opener.current.focus();
+    if (!open && opener.current !== null) {
+      const target =
+        opener.current instanceof HTMLElement && opener.current.isConnected
+          ? opener.current
+          : (returnFocusRef.current?.() ?? null);
+      target?.focus();
       opener.current = null;
     }
   }, [open]);

@@ -858,10 +858,11 @@ h1 {
   flex: 1;
   min-inline-size: 0;
   margin: 0;
-  overflow-x: auto;
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-md);
-  white-space: nowrap;
+  /* Wraps rather than scrolls sideways: a scroll region takes no Tab stop and fails reflow at 320 px
+     (WCAG 1.4.10, axe scrollable-region-focusable). */
+  overflow-wrap: anywhere;
 }
 
 .qm-command-echo__prompt {
@@ -1023,6 +1024,15 @@ h1 {
   padding-block: var(--qm-space-3);
   background: var(--qm-color-surface-base);
   border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+/* On a viewport under 20rem tall (400% zoom of a laptop screen) the bar would cover most of it: it
+   flows with the form instead. Taller, the live panel keeps the page's scroll-padding as tall as the
+   bar (apps/web use-action-bar-clearance), so a focused field is never hidden behind it (WCAG 2.4.11). */
+@media (max-height: 20rem) {
+  .qm-action-bar {
+    position: static;
+  }
 }
 
 .qm-action-bar .qm-field__description {

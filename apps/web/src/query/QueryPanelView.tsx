@@ -21,10 +21,12 @@ import {
 } from "@querymodule/web-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
+import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useShortcutSheet } from "../app/shortcut-sheet-context.js";
 import { isDataField } from "./data-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
+import { useActionBarClearance } from "./use-action-bar-clearance.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
 import { useTerminal } from "./use-terminal.js";
 
@@ -144,6 +146,7 @@ function ReadyPanel({
     ? fieldErrorMessages(formState, t)
     : new Map<string, string>();
   const blockedCount = panel.showErrors ? blockedErrorCount(formState) : 0;
+  useActionBarClearance(panel.formContainerRef, !preview, `${terminal.mode}:${queryType}`);
   const [sheetOpen, setSheetOpen] = useState(false);
   // The live panel offers its sheet to the account menu ("Keyboard shortcuts"); preview never does.
   const { register: registerSheet } = useShortcutSheet();
@@ -196,6 +199,12 @@ function ReadyPanel({
             onClose={() => setSheetOpen(false)}
             bindings={bindings}
             t={t}
+            // The opener can leave the page while the sheet is open (an open account menu closes
+            // when the modal takes focus; a persona flip remounts it): the account button, else main.
+            returnFocus={() =>
+              document.querySelector<HTMLElement>(".qm-account__button") ??
+              document.getElementById(MAIN_LANDMARK.id)
+            }
           />
         </>
       )}

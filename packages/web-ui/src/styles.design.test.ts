@@ -247,3 +247,18 @@ describe("parity pass, officer card (design target: More details opens under a r
     expect(officer).toMatch(/padding-block-start:\s*var\(--qm-space-3\)/);
   });
 });
+
+describe("hardening: reflow at 320 px and 400% zoom (WCAG 1.4.10, 2.4.11)", () => {
+  it("the command echo wraps: no sideways scroll region, no nowrap", () => {
+    const echo = decls(".qm-command-echo__text");
+    expect(echo).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(echo).not.toMatch(/white-space:\s*nowrap/);
+    expect(echo).not.toMatch(/overflow-x:\s*(auto|scroll)/);
+  });
+
+  it("the action bar stops sticking on a viewport under 20rem tall (it would cover most of it)", () => {
+    expect(css).toMatch(
+      /@media \(max-height: 20rem\)\s*\{\s*\.qm-action-bar\s*\{\s*position:\s*static/,
+    );
+  });
+});

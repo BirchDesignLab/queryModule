@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
@@ -475,6 +475,25 @@ describe("the account menu opens the keyboard shortcut sheet (visual system, app
     await openAccount(user);
     await user.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
     const sheet = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    await user.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: TEST_USER.email })).toHaveFocus();
+  });
+
+  it("focus repair A: the shortcut pressed inside the open menu; closing the sheet lands on the account button, not <body>", async () => {
+    const { user } = await signIn();
+    const panel = await openAccount(user);
+    const night = within(panel).getByRole("button", { name: "Night" });
+    night.focus();
+    // Shift+/ from inside the menu: the sheet takes the theme button as its opener, then its own
+    // focus closes the menu (focus moved outside it), so that opener leaves the page.
+    fireEvent.keyDown(night, { code: "Slash", key: "?", shiftKey: true });
+    const sheet = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    // jsdom has no showModal, which is what moves focus into a real modal.
+    within(sheet).getByRole("button", { name: "Close" }).focus();
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Account" })).toBeNull());
     await user.click(within(sheet).getByRole("button", { name: "Close" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).toBeNull(),

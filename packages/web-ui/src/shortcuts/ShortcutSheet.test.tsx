@@ -105,6 +105,66 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
   });
 });
 
+describe("focus repair A: an opener that left the page (spec 6.4 focus is never lost)", () => {
+  function DetachedHarness({ withFallback }: { withFallback: boolean }) {
+    const [open, setOpen] = useState(false);
+    const [openerShown, setOpenerShown] = useState(true);
+    return (
+      <>
+        {openerShown ? (
+          <button type="button" onClick={() => setOpen(true)}>
+            opener
+          </button>
+        ) : null}
+        <button type="button" onClick={() => setOpenerShown(false)}>
+          remove opener
+        </button>
+        <button type="button">fallback</button>
+        <ShortcutSheet
+          open={open}
+          onClose={() => setOpen(false)}
+          bindings={resolveShortcuts()}
+          t={t}
+          returnFocus={
+            withFallback ? () => screen.getByRole("button", { name: "fallback" }) : undefined
+          }
+        />
+      </>
+    );
+  }
+
+  it("returns focus to the fallback when the opener was removed while the sheet was open", async () => {
+    const user = userEvent.setup();
+    render(<DetachedHarness withFallback />);
+    await user.click(screen.getByRole("button", { name: "opener" }));
+    const dialog = screen.getByRole("dialog");
+    // The opener leaves the page while the modal is open (a persona flip remounts the menu).
+    act(() => screen.getByRole("button", { name: "remove opener" }).click());
+    expect(screen.queryByRole("button", { name: "opener" })).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("button", { name: "fallback" })).toHaveFocus();
+  });
+
+  it("still prefers the opener when it is connected, even with a fallback", async () => {
+    const user = userEvent.setup();
+    render(<DetachedHarness withFallback />);
+    const opener = screen.getByRole("button", { name: "opener" });
+    await user.click(opener);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
+    expect(opener).toHaveFocus();
+  });
+
+  it("without a fallback nothing else takes focus (unchanged behaviour)", async () => {
+    const user = userEvent.setup();
+    render(<DetachedHarness withFallback={false} />);
+    await user.click(screen.getByRole("button", { name: "opener" }));
+    const dialog = screen.getByRole("dialog");
+    act(() => screen.getByRole("button", { name: "remove opener" }).click());
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("button", { name: "fallback" })).not.toHaveFocus();
+  });
+});
+
 describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
   const setKeyboard = (value: unknown) =>
     Object.defineProperty(navigator, "keyboard", { configurable: true, value });

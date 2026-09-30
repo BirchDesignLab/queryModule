@@ -37,6 +37,22 @@ export function AccountMenu({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const shortcutsRef = useRef<HTMLButtonElement>(null);
+  // Focus repair B: the page's sheet can go away (the panel unmounts) while its item has focus. The
+  // render that drops the item notes it, and the layout effect below finds focus on <body>, as the
+  // panel's config-change repair does (QueryPanel T18-4).
+  const shortcutsHadFocus = useRef(false);
+  if (onShowShortcuts === undefined && typeof document !== "undefined") {
+    const item = shortcutsRef.current;
+    if (item !== null && item === document.activeElement) shortcutsHadFocus.current = true;
+  }
+  // Every commit: a ref flag makes it a no-op unless the render above noted the loss.
+  useLayoutEffect(() => {
+    if (!shortcutsHadFocus.current) return;
+    shortcutsHadFocus.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body) buttonRef.current?.focus();
+  });
 
   // The menu can unmount with focus inside it (the persona layout flips to the compact bar when a
   // config lands, sign-out): hand focus to the page's main landmark, never to <body> (spec 6.4).
@@ -105,6 +121,7 @@ export function AccountMenu({
           {showTheme ? <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} /> : null}
           {onShowShortcuts === undefined ? null : (
             <button
+              ref={shortcutsRef}
               type="button"
               className="qm-button qm-button--ghost"
               onClick={() => {
