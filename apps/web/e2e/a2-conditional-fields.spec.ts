@@ -4,7 +4,8 @@ import { signIn } from "./helpers.js";
 test("[A2] a field revealed by a rule is announced and focus stays put (FR-002, FR-003, FR-011, UX-004)", async ({
   page,
 }) => {
-  await signIn(page);
+  // A form sign-in: the Tab walk below starts from the heading it focuses.
+  await signIn(page, undefined, { fresh: true });
   const state = page.getByLabel("State", { exact: true });
   const plateType = page.getByLabel("Plate type");
   await expect(plateType).toHaveCount(0);

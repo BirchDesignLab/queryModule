@@ -1,7 +1,10 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL as NodeURL } from "node:url";
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
+
+type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
+
 import { expect } from "./fixtures.js";
 
 /** The seeded `smoke` user (spec 8.5). CI step 12 exports these; locally set them from the first `pnpm dev` output. */
@@ -38,10 +41,31 @@ export function seededUser(email: string): { email: string; password: string } {
   };
 }
 
+/** The demo users whose signed-in state `auth.setup.ts` saves once per run (spec 8.5 seed). */
+export const DEMO_EMAILS = [
+  "dispatcher@example.test",
+  "officer@example.test",
+  "admin@example.test",
+] as const;
+
+/**
+ * Where the setup project keeps one signed-in storage state per user, in the gitignored `.dev`
+ * (a session cookie is a credential for the throwaway e2e database; never commit it).
+ */
+export function authStatePath(email: string): string {
+  return fileURLToPath(
+    new NodeURL(`../../../.dev/e2e-auth/${email.toLowerCase()}.json`, import.meta.url),
+  );
+}
+
 /** Enters at "/" only; the app routes client-side to /login (spec 5.1 lists "/" as a web route). */
-export async function signIn(page: Page, user = e2eUser()): Promise<void> {
+export async function signInWithForm(page: Page, user = e2eUser()): Promise<void> {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await fillSignIn(page, user);
+}
+
+async function fillSignIn(page: Page, user: { email: string; password: string }): Promise<void> {
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -49,6 +73,41 @@ export async function signIn(page: Page, user = e2eUser()): Promise<void> {
   // match a substring locator before the session exists (#328 CI).
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeHidden();
   await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeVisible();
+}
+
+/**
+ * Signs in as `user`, reusing the session the setup project saved for them: the auth routes allow
+ * 100 POSTs per IP per 15 minutes, and a form sign-in per test spent 99 of them. Falls back to the
+ * form when no saved session exists or the server no longer knows it. Pass `fresh: true` when the
+ * test signs out (sign-out deletes its session, and the shared one must outlive the test) or relies
+ * on what a form sign-in does (focus on the panel heading).
+ */
+export async function signIn(
+  page: Page,
+  user = e2eUser(),
+  { fresh = false }: { fresh?: boolean } = {},
+): Promise<void> {
+  if (fresh) return signInWithForm(page, user);
+  const cookies = savedCookies(user.email);
+  if (cookies.length > 0) await page.context().addCookies(cookies);
+  await page.goto("/");
+  const signInHeading = page.getByRole("heading", { name: "Sign in" });
+  const appHeading = page.getByRole("heading", { name: "Query Module", exact: true });
+  await expect(signInHeading.or(appHeading)).toBeVisible();
+  if (await signInHeading.isVisible()) {
+    await fillSignIn(page, user);
+    return;
+  }
+  await expect(signInHeading).toBeHidden();
+  await expect(appHeading).toBeVisible();
+}
+
+function savedCookies(email: string): StorageState["cookies"] {
+  try {
+    return (JSON.parse(readFileSync(authStatePath(email), "utf8")) as StorageState).cookies;
+  } catch {
+    return [];
+  }
 }
 
 const THEME_LABELS = {

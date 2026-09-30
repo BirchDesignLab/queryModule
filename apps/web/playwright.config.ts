@@ -14,5 +14,9 @@ export default defineConfig({
     trace: "retain-on-failure",
     bypassCSP: false,
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Signs each demo user in once and saves the session for `signIn` (e2e/helpers.ts) to reuse.
+    { name: "setup", testMatch: /auth\.setup\.ts$/, use: { ...devices["Desktop Chrome"] } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, dependencies: ["setup"] },
+  ],
 });
