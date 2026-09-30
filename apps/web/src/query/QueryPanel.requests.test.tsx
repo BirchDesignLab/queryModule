@@ -147,12 +147,46 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     expect(row).not.toHaveTextContent("linked query has no sources");
   });
 
+  it("two parts to one source show that source pending once", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          {
+            ...ACK_202,
+            parts: [
+              {
+                partId: 1,
+                queryType: "VEH",
+                status: "dispatched",
+                sourceIds: ["stateSource"],
+                droppedSourceIds: [],
+              },
+              {
+                partId: 2,
+                queryType: "WNT",
+                status: "dispatched",
+                sourceIds: ["stateSource"],
+                droppedSourceIds: [],
+              },
+            ],
+          },
+          { status: 202 },
+        ),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const row = await screen.findByRole("listitem");
+    await waitFor(() => expect(row).toHaveTextContent("Acknowledged"));
+    expect(within(row).getAllByText("State system: pending")).toHaveLength(1);
+  });
+
   it("Copy reference copies the full ID, names its row, and announces once", async () => {
     const { user, services } = await openPanel();
     const announce = vi.spyOn(services.announcer, "announce");
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     await user.click(
-      await screen.findByRole("button", { name: /^Copy reference for VEH\.ZZ-0001/ }),
+      await screen.findByRole("button", { name: /^Copy reference \S+ for VEH\.ZZ-0001/ }),
     );
     expect(await navigator.clipboard.readText()).toBe(ACK_202.correlationId);
     await waitFor(() => expect(polite()).toHaveTextContent("Reference copied."));
@@ -215,7 +249,7 @@ describe("B3 officer last request (spec 6.3)", () => {
     await waitFor(() => expect(submitRecorder.calls.length).toBeGreaterThanOrEqual(2));
     await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(1));
     expect(
-      within(region).getByRole("button", { name: /^Copy reference for VEH\.ZZ-0001/ }),
+      within(region).getByRole("button", { name: /^Copy reference \S+ for VEH\.ZZ-0001/ }),
     ).toBeVisible();
   });
 });

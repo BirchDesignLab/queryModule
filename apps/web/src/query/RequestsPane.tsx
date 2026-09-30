@@ -48,11 +48,15 @@ export function RequestsPane({ config, variant }: RequestsPaneProps) {
       acknowledgedAt: entry.acknowledgedAt,
       // The 202 only acknowledges: each source the query went to is pending, and a part that was
       // skipped says only that it was not run (#382 A1).
-      notes: entry.parts.flatMap((part) =>
-        part.status === "skipped"
-          ? [t("submit.partNotRun", { queryType: typeLabel(part.queryType) })]
-          : part.sourceIds.map((id) => t("requests.sourcePending", { source: sourceLabel(id) })),
-      ),
+      notes: [
+        ...entry.parts
+          .filter((part) => part.status === "skipped")
+          .map((part) => t("submit.partNotRun", { queryType: typeLabel(part.queryType) })),
+        // Two parts can go to one source: it is pending once.
+        ...[
+          ...new Set(entry.parts.filter((p) => p.status !== "skipped").flatMap((p) => p.sourceIds)),
+        ].map((id) => t("requests.sourcePending", { source: sourceLabel(id) })),
+      ],
     };
   };
   return (

@@ -9,7 +9,7 @@ const LABELS: Record<string, string> = {
   "requests.status.failed": "Failed",
   "requests.sentAt": "Sent {time}",
   "submit.reference": "Reference",
-  "requests.copyReferenceOf": "Copy reference for {summary}",
+  "requests.copyReferenceOf": "Copy reference {reference} for {summary}",
   "submit.copyReference": "Copy reference",
 };
 const t = (key: string, params?: Readonly<Record<string, string | number | boolean>>) =>
@@ -88,7 +88,9 @@ describe("spec 6.7 requests list (B3)", () => {
   it("Copy reference hands the full correlation ID to onCopy and names its row", async () => {
     const onCopy = vi.fn();
     render(<RequestList {...base} rows={[ACKED]} onCopy={onCopy} />);
-    const button = screen.getByRole("button", { name: "Copy reference for VEH.ZZ-0001.TX" });
+    const button = screen.getByRole("button", {
+      name: "Copy reference 0198a1b2 for VEH.ZZ-0001.TX",
+    });
     await userEvent.click(button);
     expect(onCopy).toHaveBeenCalledWith(ACKED.reference);
   });

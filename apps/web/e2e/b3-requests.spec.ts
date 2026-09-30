@@ -80,10 +80,10 @@ test("dispatcher: Sending, then Acknowledged with the ack's reference, newest fi
   // Keyboard: the copy buttons are ordinary buttons, told apart by their command (two references
   // minutes apart share their first eight characters).
   await expect(
-    list.getByRole("button", { name: /^Copy reference for VEH\.ZZ-0001/ }),
+    list.getByRole("button", { name: /^Copy reference \S+ for VEH\.ZZ-0001/ }),
   ).toBeVisible();
   await expect(
-    list.getByRole("button", { name: /^Copy reference for VEH\.ZZ-0002/ }),
+    list.getByRole("button", { name: /^Copy reference \S+ for VEH\.ZZ-0002/ }),
   ).toBeVisible();
 
   await signOutFromHeader(page);

@@ -97,8 +97,11 @@ export function RequestList({
                         type="button"
                         className="qm-button qm-button--ghost"
                         // The first eight characters of a UUIDv7 are a timestamp, so two rows can
-                        // share them: the command tells the copy buttons apart.
-                        aria-label={t("requests.copyReferenceOf", { summary: row.summary })}
+                        // share them: the command tells the copy buttons apart too.
+                        aria-label={t("requests.copyReferenceOf", {
+                          reference: shortReference(row.reference),
+                          summary: row.summary === "" ? row.typeLabel : row.summary,
+                        })}
                         onClick={() => onCopy(row.reference as string)}
                       >
                         {t("submit.copyReference")}
@@ -108,8 +111,9 @@ export function RequestList({
                   {row.failureText === undefined ? null : (
                     <span className="qm-request__failure">{row.failureText}</span>
                   )}
-                  {row.notes.map((note) => (
-                    <span key={note} className="qm-badge qm-badge--status">
+                  {row.notes.map((note, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: notes are static text; two may match
+                    <span key={index} className="qm-badge qm-badge--status">
                       {note}
                     </span>
                   ))}
