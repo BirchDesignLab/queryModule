@@ -323,6 +323,29 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
     expect(t.services.queryClient.getQueryData(["config"])).toBeUndefined();
   });
 
+  it("a dropped check cancels the probe's 10 s timer", async () => {
+    const timeouts = new Map<number, number>();
+    const realSet = window.setTimeout.bind(window);
+    const setSpy = vi.spyOn(window, "setTimeout").mockImplementation(((
+      fn: () => void,
+      ms?: number,
+    ) => {
+      const id = realSet(fn, ms) as unknown as number;
+      if (ms === 10_000) timeouts.set(id, ms);
+      return id;
+    }) as typeof window.setTimeout);
+    const clearSpy = vi.spyOn(window, "clearTimeout");
+    const t = await openStatus(() => new FakeSocket());
+    await screen.findByRole("heading", { level: 1, name: "Status" });
+    await waitFor(() => expect(timeouts.size).toBeGreaterThan(0));
+    const [probeTimer] = [...timeouts.keys()].slice(-1);
+    clearSpy.mockClear();
+    act(() => t.services.reset.resetAll());
+    expect(clearSpy).toHaveBeenCalledWith(probeTimer);
+    setSpy.mockRestore();
+    clearSpy.mockRestore();
+  });
+
   it("a socket that cannot be created is a failed check, not a stuck one", async () => {
     await openStatus(() => {
       throw new Error("SecurityError");
