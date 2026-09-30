@@ -564,6 +564,23 @@ test.describe("A4 builder preview: persona switch and states (1440x900)", () => 
     });
   });
 
+  test("picking the same type in the tree again after the preview moved shows it again, keeping typed values", async ({
+    page,
+  }) => {
+    await asUser(page, "admin@example.test", "day", async () => {
+      await page.goto("/admin/config");
+      const tree = page.getByRole("navigation", { name: "Configuration items" });
+      const preview = page.getByRole("region", { name: "Live preview" });
+      await tree.getByRole("treeitem", { name: /^Vehicle VEH/ }).click();
+      await preview.getByLabel("Plate", { exact: true }).fill("ZZ-1234");
+      await preview.getByRole("button", { name: "Person", exact: true }).click();
+      await expect(preview.getByRole("button", { name: "Person", pressed: true })).toBeVisible();
+      await tree.getByRole("treeitem", { name: /^Vehicle VEH/ }).click();
+      await expect(preview.getByRole("button", { name: "Vehicle", pressed: true })).toBeVisible();
+      await expect(preview.getByLabel("Plate", { exact: true })).toHaveValue("ZZ-1234");
+    });
+  });
+
   test("a site item shows the empty state and hides the panel", async ({ page }) => {
     await asUser(page, "admin@example.test", "day", async () => {
       await page.goto("/admin/config");

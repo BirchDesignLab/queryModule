@@ -500,6 +500,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
                 blocked={raw.parseError !== null || errorCount > 0}
                 pending={checks.doc !== doc || checks.labels !== labels}
                 selected={shown.pointer}
+                selectSeq={shown.seq}
                 errorCount={errorCount}
                 parseError={raw.parseError !== null}
                 onGoToError={canGoToError && errorCount > 0 ? goToFirstIssue : undefined}

@@ -65,6 +65,7 @@ export function BuilderPreview({
   blocked,
   pending,
   selected,
+  selectSeq,
   errorCount,
   parseError,
   onGoToError,
@@ -76,6 +77,8 @@ export function BuilderPreview({
   pending: boolean;
   /** The pointer the tree selected (a site item or LABELS_ITEM shows the empty state). */
   selected: string | null;
+  /** Changes on every tree selection, so picking the same type again re-applies it. */
+  selectSeq: number;
   errorCount: number;
   /** The Raw JSON text does not parse. */
   parseError: boolean;
@@ -191,6 +194,7 @@ export function BuilderPreview({
               mode="preview"
               idPrefix={idPrefix}
               selectType={selectedTypeCode(doc, selected)}
+              selectTypeSeq={selectSeq}
             />
           </I18nProvider>
         </div>
