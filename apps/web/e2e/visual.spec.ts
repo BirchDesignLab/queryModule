@@ -1293,6 +1293,106 @@ test.describe("parity: officer surfaces, skip link and account menu (1024x768)",
   }
 });
 
+// The status page (Connection, Configuration, Session) in three themes and both layouts, as numbers:
+// the sunken page, the ruled tiles, chips by text plus their semantic tokens, control and text
+// sizes per persona, stacked rows for the officer, no overflow.
+test.describe("Status page (three tiles)", () => {
+  for (const persona of [
+    { name: "dispatcher", email: "dispatcher@example.test", officer: false },
+    { name: "officer", email: "officer@example.test", officer: true },
+  ] as const) {
+    for (const mode of MODES) {
+      test(`${persona.name} ${mode}: tiles, chips, sizes`, async ({ page }) => {
+        await page.setViewportSize({ width: 1024, height: 768 });
+        // The socket answers until told to fail, so one visit shows Connected, then Failed.
+        let failing = false;
+        await page.routeWebSocket("**/api/v1/ws", (ws) => {
+          if (failing) void ws.close();
+          else ws.connectToServer();
+        });
+        await asUser(page, persona.email, mode, async () => {
+          await page.goto("/status");
+          await expect(page.getByRole("heading", { level: 1, name: "Status" })).toBeVisible();
+          await expect(page.getByText("Connected", { exact: true }).first()).toBeVisible();
+          await capture(page, `status-${persona.name}-${mode}`);
+
+          const read = () =>
+            page.evaluate(() => {
+              const main = document.querySelector("main") as HTMLElement;
+              const root = document.scrollingElement as Element;
+              const css = (el: Element, p: string) => getComputedStyle(el).getPropertyValue(p);
+              const tiles = [...main.querySelectorAll(".qm-status__tile")];
+              const chip = (i: number) => {
+                const el = tiles[i]?.querySelector(".qm-badge");
+                return el === null || el === undefined
+                  ? null
+                  : {
+                      text: el.textContent,
+                      color: css(el, "color"),
+                      border: css(el, "border-top-color"),
+                      bg: css(el, "background-color"),
+                    };
+              };
+              const row = main.querySelector(".qm-status__row");
+              const dt = row?.querySelector("dt")?.getBoundingClientRect();
+              const dd = row?.querySelector("dd")?.getBoundingClientRect();
+              const button = main.querySelector(".qm-status__tile button") as HTMLElement;
+              const sizes = [...main.querySelectorAll("p, dt, dd, button, .qm-badge, a")].map(
+                (el) => Number.parseFloat(css(el, "font-size")),
+              );
+              return {
+                overflowX: root.scrollWidth - root.clientWidth,
+                body: css(document.body, "background-color"),
+                h2: tiles.map((t) => t.querySelector("h2")?.textContent),
+                rule: tiles.map((t) => css(t, "border-top-width")),
+                chips: [chip(0), chip(1), chip(2)],
+                stacked: dt !== undefined && dd !== undefined ? dd.y > dt.bottom - 1 : null,
+                button: { h: button.getBoundingClientRect().height },
+                minFont: Math.min(...sizes),
+                dtColor: row === null ? "" : css(row.querySelector("dt") as Element, "color"),
+              };
+            });
+
+          const ok = await read();
+          expect(ok.overflowX, "page overflow").toBeLessThanOrEqual(0);
+          expect(ok.body, "sunken page").toBe(rgb(mode, "color.surface.sunken"));
+          expect(ok.h2).toEqual(["Connection", "Configuration", "Session"]);
+          expect(ok.rule.every((w) => w === "1px")).toBe(true);
+          // Chips: Connected and Loaded in the ok colour, text always present; Session has none.
+          expect(ok.chips[0]?.text).toBe("Connected");
+          expect(ok.chips[0]?.color).toBe(rgb(mode, "color.status.ok"));
+          expect(ok.chips[0]?.border).toBe(rgb(mode, "color.status.ok"));
+          expect(ok.chips[1]?.text).toBe("Loaded");
+          expect(ok.chips[1]?.color).toBe(rgb(mode, "color.status.ok"));
+          expect(ok.chips[2]).toBeNull();
+          // Density per persona (spec 6.3): 36 px dispatch; officer 56 px button, 16 px text, stacked
+          // rows and no muted label.
+          if (persona.officer) {
+            expect(ok.button.h, "Check again").toBeGreaterThanOrEqual(55.5);
+            expect(ok.minFont, "smallest text").toBeGreaterThanOrEqual(16);
+            expect(ok.stacked, "stacked rows").toBe(true);
+            expect(ok.dtColor, "label colour").toBe(rgb(mode, "color.text.body"));
+          } else {
+            expect(Math.round(ok.button.h), "Check again").toBe(36);
+            expect(ok.stacked, "side by side").toBe(false);
+            expect(ok.dtColor, "label colour").toBe(rgb(mode, "color.text.muted"));
+          }
+
+          // A failed check: the error chip, by text and by the critical tokens.
+          failing = true;
+          await page.getByRole("button", { name: "Check again" }).click();
+          await expect(page.getByText("Failed", { exact: true })).toBeVisible();
+          const failed = await read();
+          expect(failed.chips[0]?.text).toBe("Failed");
+          expect(failed.chips[0]?.bg).toBe(rgb(mode, "color.severity.critical.bg"));
+          expect(failed.chips[0]?.color).toBe(rgb(mode, "color.severity.critical.fg"));
+          expect(failed.overflowX, "page overflow").toBeLessThanOrEqual(0);
+        });
+      });
+    }
+  }
+});
+
 test.describe("Layout robustness (cloud3 item 3)", () => {
   const geometry = (page: Page) =>
     page.evaluate(() => {

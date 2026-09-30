@@ -447,6 +447,73 @@ main[tabindex="-1"]:focus {
   margin-block-end: 0;
 }
 
+/* Status page: ruled sections, one per tile (Connection, Configuration, Session). Each has a name, a
+   status chip with text and label/value rows; the officer layout stacks label over value and drops
+   the muted label colour (spec 6.3). */
+.qm-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-4);
+}
+
+.qm-status__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qm-space-3);
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-status__tile > * {
+  margin: 0;
+}
+
+.qm-status__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-3);
+}
+
+.qm-status__head h2 {
+  margin: 0;
+  font-size: var(--qm-type-size-lg);
+}
+
+.qm-status__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  inline-size: 100%;
+  margin: 0;
+}
+
+.qm-status__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--qm-space-4);
+}
+
+.qm-status__row dt {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-status__row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.qm-layout--mobile-unit .qm-status__row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--qm-space-1);
+}
+
+.qm-layout--mobile-unit .qm-status__row dt {
+  color: var(--qm-color-text-body);
+  font-weight: 600;
+}
+
 /* Sign-in screen: one raised panel, centred both ways; nine touch targets wide. */
 .qm-login {
   box-sizing: border-box;

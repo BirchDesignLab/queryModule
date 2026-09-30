@@ -33,7 +33,7 @@ import { ShortcutSheetProvider, useShortcutSheet } from "./shortcut-sheet-contex
 import { useSignOut } from "./use-sign-out.js";
 
 /** The cached GET /api/v1/config (key ["config"], filled by the query panel), or undefined before sign-in and after reset. */
-function useCachedConfig(): ClientSiteConfig | undefined {
+export function useCachedConfig(): ClientSiteConfig | undefined {
   const { queryClient } = useServices();
   const subscribe = useCallback(
     (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),

@@ -32,7 +32,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     await expect.poll(() => served).toBe(true);
     // The sign-in continuation runs right after the response; give a late navigation time to land.
     await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
-    await expect(page.getByRole("heading", { name: "Connection status" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Status", level: 1 })).toBeVisible();
     await expect(page).toHaveURL(/\/status$/);
   });
 
@@ -43,7 +43,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     await page.getByRole("link", { name: "Status" }).click();
     // Wait for the status page itself: Back before it renders leaves the panel mounted, so no
     // navigation to the panel happens at all.
-    await expect(page.getByRole("heading", { name: "Connection status" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Status", level: 1 })).toBeVisible();
     await page.goBack();
     await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
   });
@@ -58,7 +58,7 @@ test.describe("tab order and focus on the signed-in panel (spec 6.4)", () => {
     await page.getByRole("link", { name: "Status" }).click();
     // Wait for the status page itself: Back before it renders leaves the panel mounted, so no
     // navigation to the panel happens at all.
-    await expect(page.getByRole("heading", { name: "Connection status" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Status", level: 1 })).toBeVisible();
     await page.goBack();
     await expect(page.getByRole("heading", { name: "Query Module", exact: true })).toBeFocused();
   });
