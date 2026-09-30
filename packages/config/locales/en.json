@@ -119,6 +119,8 @@
   "requests.failure.unavailable": "The server was restarting.",
   "requests.failure.noResponse": "The server did not answer.",
   "requests.failure.failed": "The query was not sent.",
+  "requests.retry": "Retry",
+  "requests.retryOf": "Retry {summary}",
   "plan.sourceNotAllowed": "A selected source cannot run this query.",
   "plan.noPlateOnlySource": "None of the selected sources accepts a plate-only query.",
   "plan.tooManySources": "At most {max} source queries can run in one submit.",

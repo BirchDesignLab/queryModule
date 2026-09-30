@@ -1,8 +1,10 @@
-import { type RequestEntry, useStore } from "@querymodule/client";
+import { isRetryable, type RequestEntry, retryRequest, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { RequestList, type RequestRowView } from "@querymodule/web-ui";
+import { useEffect, useRef } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { outcomeAnnouncement } from "./announce-outcome.js";
 
 export interface RequestsPaneProps {
   config: ClientSiteConfig;
@@ -13,11 +15,19 @@ export interface RequestsPaneProps {
 /**
  * This session's requests and their acknowledgments (B3). It reads the requests store, so it
  * shows a request whichever panel sent it. Announcements stay with the sender: this component
- * announces only that a reference was copied, on the user's own click.
+ * announces only that a reference was copied, on the user's own click, and the outcome of a retry
+ * (the same sentences the form uses, through the shared region). Nothing here moves focus.
  */
 export function RequestsPane({ config, variant }: RequestsPaneProps) {
   const t = useT();
-  const { announcer, requests } = useServices();
+  const { announcer, requests, submit } = useServices();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const items = useStore(requests, (s) => s.items);
   const shown = variant === "last" ? items.slice(0, 1) : items;
   const labelOf = (labelKey: string | undefined, fallback: string): string =>
@@ -37,6 +47,7 @@ export function RequestsPane({ config, variant }: RequestsPaneProps) {
       return {
         ...base,
         status: "failed",
+        retryable: isRetryable(entry),
         failureText: t(`requests.failure.${entry.failure}`),
         notes: [],
       };
@@ -70,6 +81,19 @@ export function RequestsPane({ config, variant }: RequestsPaneProps) {
           : undefined
       }
       emptyText={t(variant === "last" ? "requests.emptyLast" : "requests.empty")}
+      onRetry={(rowId) => {
+        // The failed row keeps its place; the values it kept go as a new request under the panel's
+        // current config hash, and the new row joins the list.
+        void retryRequest({ requests, submit }, rowId, config.configHash).then((result) => {
+          if (!mounted.current) return;
+          if (result.kind === "gated")
+            announcer.announce(
+              t(result.status === "submitting" ? "form.submitting" : "form.noConnection"),
+            );
+          else if (result.kind === "sent")
+            announcer.announce(outcomeAnnouncement(result.outcome, t, typeLabel));
+        });
+      }}
       onCopy={(reference) => {
         // A failed copy (no permission, no clipboard) stays silent: the reference is on screen.
         void navigator.clipboard?.writeText(reference).then(

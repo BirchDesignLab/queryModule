@@ -127,7 +127,8 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     const row = await screen.findByRole("listitem");
     await waitFor(() => expect(row).toHaveTextContent("Failed"));
     expect(row).toHaveTextContent("The server was restarting.");
-    expect(within(row).queryByRole("button")).toBeNull();
+    // A restarting server is worth another try: the row offers Retry (see QueryPanel.retry.test).
+    expect(within(row).getByRole("button", { name: /^Retry/ })).toBeInTheDocument();
     expect(announce).toHaveBeenCalledWith("The server is restarting. Try again shortly.");
     expect(announce).toHaveBeenCalledTimes(1);
   });

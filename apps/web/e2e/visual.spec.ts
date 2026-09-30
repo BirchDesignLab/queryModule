@@ -366,7 +366,7 @@ test.describe("B3 dispatcher requests list beside the panel (1440x900)", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   for (const mode of MODES) {
-    test(`${mode}: two panes, rows with text status, the copy button 36 px, no overflow`, async ({
+    test(`${mode}: two panes, rows with text status, quick access on one row, the copy button 36 px, no overflow`, async ({
       page,
     }) => {
       await asUser(page, "dispatcher@example.test", mode, async () => {
@@ -387,7 +387,16 @@ test.describe("B3 dispatcher requests list beside the panel (1440x900)", () => {
           list.boundingBox(),
         ]);
         expect(pane?.x ?? 0).toBeGreaterThanOrEqual((panel?.x ?? 0) + (panel?.width ?? 0));
-        expect(Math.round(panel?.width ?? 0)).toBeLessThanOrEqual(640);
+        // 640 px of content, 682 with the card's padding and border (the quick-access row needs 622).
+        expect(Math.round(panel?.width ?? 0)).toBeLessThanOrEqual(682);
+        // The five quick-access buttons, "Driver's license" included, sit on one row.
+        const rows = await page
+          .getByRole("group", { name: "Quick access" })
+          .getByRole("button")
+          .evaluateAll(
+            (els) => new Set(els.map((el) => Math.round(el.getBoundingClientRect().y))).size,
+          );
+        expect(rows, "quick-access rows").toBe(1);
         const copy = await list
           .getByRole("button", { name: /^Copy reference / })
           .first()

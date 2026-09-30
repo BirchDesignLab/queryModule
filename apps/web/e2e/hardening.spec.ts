@@ -297,3 +297,52 @@ test.describe("focus repair A in a real browser: the sheet opened from inside th
     await expect(account).toBeFocused();
   });
 });
+
+// The dispatcher's panel column is 682 px (640 of content), so the five quick-access buttons, the
+// widest being "Driver's license", sit on one row (they need 622 px). What it costs the requests pane.
+for (const [width, minRequests] of [
+  [1024, 280],
+  [1366, 600],
+  [1440, 680],
+] as const) {
+  test.describe(`dispatcher panel column at ${width}`, () => {
+    test.use({ viewport: { width, height: 768 } });
+
+    test("682 px card, quick access on one row, requests pane still readable, no overflow", async ({
+      page,
+    }) => {
+      await signIn(page, seededUser("dispatcher@example.test"));
+      await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+      const m = await page.evaluate(() => {
+        const box = (sel: string) =>
+          (document.querySelector(sel) as HTMLElement).getBoundingClientRect();
+        const rows = new Set(
+          [...document.querySelectorAll(".qm-quick-access button")].map((b) =>
+            Math.round(b.getBoundingClientRect().y),
+          ),
+        );
+        return {
+          panel: Math.round(box(".qm-panes__panel").width),
+          requests: Math.round(box(".qm-requests").width),
+          rows: rows.size,
+        };
+      });
+      test.info().annotations.push({ type: "measured", description: JSON.stringify(m) });
+      expect(m.panel).toBe(682);
+      expect(m.rows, "quick-access rows").toBe(1);
+      expect(m.requests, "requests pane width").toBeGreaterThanOrEqual(minRequests);
+      // A row of the requests pane fits it: no overflow with a request in the list.
+      const plate = page.getByLabel("Plate", { exact: true });
+      await plate.fill("ZZ-0001");
+      const sent = page.waitForResponse(
+        (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
+      );
+      await plate.press("Enter");
+      expect((await sent).status()).toBe(202);
+      await expect(page.getByText("Acknowledged").first()).toBeVisible();
+      const overflow = await audit(page, { minTarget: 24, minControl: 36, minRun: 36 });
+      expect(overflow.overflow, "horizontal overflow").toBeLessThanOrEqual(0);
+      expect(overflow.outside, "outside the viewport").toEqual([]);
+    });
+  });
+}

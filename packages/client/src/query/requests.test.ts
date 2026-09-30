@@ -98,4 +98,59 @@ describe("spec 6.7 requests this session (memory only)", () => {
     expect(items[0]?.summary).toBe("r104");
     expect(items[99]?.summary).toBe("r5");
   });
+
+  describe("the submitted values stay with the row for a retry (memory only)", () => {
+    const SUBMITTED = {
+      queryType: "PRO",
+      values: { type: "gun", make: "ZZ-Make", serial: "" },
+      sourceIds: ["state"],
+      mode: "normal" as const,
+    };
+
+    it("begin keeps a copy of what was submitted, and settle keeps it through every outcome", () => {
+      const store = createRequestsStore();
+      const values: Record<string, string> = { ...SUBMITTED.values };
+      const id = store
+        .getState()
+        .begin({ queryType: "PRO", summary: "PRO.GUN", submitted: { ...SUBMITTED, values } });
+      // Later edits to the caller's object never reach the row.
+      values.make = "changed";
+      expect(store.getState().items[0]?.submitted).toEqual(SUBMITTED);
+      store.getState().settle(id, { kind: "noResponse" });
+      expect(store.getState().items[0]).toMatchObject({
+        status: "failed",
+        failure: "noResponse",
+        submitted: SUBMITTED,
+      });
+    });
+
+    it("an acknowledged row keeps them too", () => {
+      const store = createRequestsStore();
+      const id = store
+        .getState()
+        .begin({ queryType: "PRO", summary: "PRO.GUN", submitted: SUBMITTED });
+      store.getState().settle(id, { kind: "acknowledged", response: RESPONSE, queryType: "PRO" });
+      expect(store.getState().items[0]?.submitted).toEqual(SUBMITTED);
+    });
+
+    it("reset drops them with the rows", () => {
+      const store = createRequestsStore();
+      store.getState().begin({ queryType: "PRO", summary: "PRO.GUN", submitted: SUBMITTED });
+      store.getState().reset();
+      expect(store.getState().items).toEqual([]);
+    });
+
+    it("the 100-row cap drops the oldest row's values with it", () => {
+      const store = createRequestsStore();
+      for (let i = 0; i < 101; i += 1)
+        store.getState().begin({
+          queryType: "PRO",
+          summary: `r${i}`,
+          submitted: { ...SUBMITTED, values: { i: `${i}` } },
+        });
+      const items = store.getState().items;
+      expect(items).toHaveLength(100);
+      expect(items.at(-1)?.submitted?.values).toEqual({ i: "1" });
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { type JSX, useId } from "react";
+import { type JSX, useId, useLayoutEffect, useRef } from "react";
 
 export interface RequestRowView {
   /** Stable across Sending, Acknowledged and Failed, so a row is never rebuilt (spec 6.6). */
@@ -15,6 +15,8 @@ export interface RequestRowView {
   failureText?: string;
   /** Short lines under the row, for example "State source: pending". */
   notes: readonly string[];
+  /** A failed row the owner can send again; shows a Retry button when the list has onRetry. */
+  retryable?: boolean;
 }
 
 export interface RequestListProps {
@@ -25,6 +27,8 @@ export interface RequestListProps {
   countText?: string;
   emptyText: string;
   onCopy(reference: string): void;
+  /** Sends a retryable failed row's values again as a new request; the owner adds the new row. */
+  onRetry?(rowId: string): void;
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
 }
 
@@ -67,13 +71,32 @@ export function RequestList({
   countText,
   emptyText,
   onCopy,
+  onRetry,
   t,
 }: RequestListProps): JSX.Element {
   const headingId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // The Retry button that had focus when it was pressed. Where a retry replaces its own row (the
+  // officer's "last request" shows one row), the button leaves the page with focus on it; then, and
+  // only then, focus goes to this heading (spec 6.4). Where the row stays, nothing moves.
+  const retryFocus = useRef<Element | null>(null);
+  // Every commit: a no-op until a Retry was pressed while it had focus.
+  useLayoutEffect(() => {
+    const pressed = retryFocus.current;
+    if (pressed === null) return;
+    if (pressed.isConnected) {
+      // Still there (the list variant): the next commit judges it again only if it is pressed again.
+      retryFocus.current = null;
+      return;
+    }
+    retryFocus.current = null;
+    const active = document.activeElement;
+    if (active === null || active === document.body) headingRef.current?.focus();
+  });
   return (
     <section aria-labelledby={headingId} className="qm-requests">
       <div className="qm-requests__head">
-        <h2 id={headingId} className="qm-requests__heading">
+        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
           {heading}
         </h2>
         {countText === undefined ? null : <p className="qm-requests__count">{countText}</p>}
@@ -117,6 +140,25 @@ export function RequestList({
                   {row.failureText === undefined ? null : (
                     <span className="qm-request__failure">{row.failureText}</span>
                   )}
+                  {row.status === "failed" && row.retryable === true && onRetry !== undefined ? (
+                    <button
+                      type="button"
+                      className="qm-button qm-button--secondary"
+                      // The command tells the buttons of two failed rows apart.
+                      aria-label={t("requests.retryOf", {
+                        summary: row.summary === "" ? row.typeLabel : row.summary,
+                      })}
+                      onClick={(event) => {
+                        retryFocus.current =
+                          document.activeElement === event.currentTarget
+                            ? event.currentTarget
+                            : null;
+                        onRetry(row.id);
+                      }}
+                    >
+                      {t("requests.retry")}
+                    </button>
+                  ) : null}
                   {row.notes.map((note, index) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: notes are static text; two may match
                     <span key={index} className="qm-badge qm-badge--status">

@@ -11,6 +11,8 @@ const LABELS: Record<string, string> = {
   "submit.reference": "Reference",
   "requests.copyReferenceOf": "Copy reference {reference} for {summary}",
   "submit.copyReference": "Copy reference",
+  "requests.retry": "Retry",
+  "requests.retryOf": "Retry {summary}",
 };
 const t = (key: string, params?: Readonly<Record<string, string | number | boolean>>) =>
   Object.entries(params ?? {}).reduce(
@@ -146,5 +148,82 @@ describe("spec 6.7 requests list (B3)", () => {
 
   it("formatAckTime is MM-DD-YY HH:mm:ss in local time (spec 6.2)", () => {
     expect(formatAckTime(new Date(2026, 8, 29, 13, 4, 5).getTime())).toBe("09-29-26 13:04:05");
+  });
+});
+
+describe("failed-row retry (the list only shows the button; the owner sends)", () => {
+  const RETRYABLE: RequestRowView = { ...FAILED, retryable: true };
+
+  it("a retryable failed row has a Retry button that names its command and calls onRetry with the row", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    render(<RequestList {...base} rows={[RETRYABLE]} onRetry={onRetry} />);
+    const button = screen.getByRole("button", { name: "Retry VEH.ZZ-0002.TX" });
+    // The visible text is inside the accessible name (WCAG 2.5.3).
+    expect(button).toHaveTextContent("Retry");
+    await user.click(button);
+    expect(onRetry).toHaveBeenCalledWith("r0");
+  });
+
+  it("names the type when the command is empty", () => {
+    render(
+      <RequestList {...base} rows={[{ ...RETRYABLE, summary: "" }]} onRetry={() => undefined} />,
+    );
+    expect(screen.getByRole("button", { name: "Retry Vehicle" })).toBeInTheDocument();
+  });
+
+  it("no button on a row that is not retryable, sending, acknowledged, or when there is no handler", () => {
+    const { rerender } = render(
+      <RequestList {...base} rows={[FAILED, SENDING, ACKED]} onRetry={() => undefined} />,
+    );
+    expect(screen.queryByRole("button", { name: /^Retry/ })).toBeNull();
+    rerender(<RequestList {...base} rows={[RETRYABLE]} />);
+    expect(screen.queryByRole("button", { name: /^Retry/ })).toBeNull();
+  });
+
+  it("the failure text stays beside the button, and the list stays free of live regions", () => {
+    render(<RequestList {...base} rows={[RETRYABLE]} onRetry={() => undefined} />);
+    expect(screen.getByText("The server did not answer.")).toBeInTheDocument();
+    expect(document.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
+  });
+
+  it("focus stays on the button when the failed row stays (the list variant)", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const { rerender } = render(<RequestList {...base} rows={[RETRYABLE]} onRetry={onRetry} />);
+    const button = screen.getByRole("button", { name: /^Retry/ });
+    await user.click(button);
+    rerender(
+      <RequestList {...base} rows={[{ ...SENDING, id: "r9" }, RETRYABLE]} onRetry={onRetry} />,
+    );
+    expect(button).toHaveFocus();
+  });
+
+  it("repairs lost focus: a retry that replaces the only row (the officer's last request) moves focus to the heading, once", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const props = { ...base, heading: "Last request", onRetry };
+    const { rerender } = render(<RequestList {...props} rows={[RETRYABLE]} />);
+    await user.click(screen.getByRole("button", { name: /^Retry/ }));
+    // The list now shows only the newest row: the button is gone with its row.
+    rerender(<RequestList {...props} rows={[{ ...SENDING, id: "r9" }]} />);
+    const heading = screen.getByRole("heading", { name: "Last request" });
+    expect(heading).toHaveFocus();
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    // A later change never pulls focus back once the user has moved on.
+    heading.blur();
+    rerender(<RequestList {...props} rows={[{ ...ACKED, id: "r9" }]} />);
+    expect(heading).not.toHaveFocus();
+  });
+
+  it("leaves focus alone when the retry button was not the focused element", async () => {
+    const onRetry = vi.fn();
+    const props = { ...base, onRetry };
+    const { rerender } = render(<RequestList {...props} rows={[RETRYABLE]} />);
+    // A click that never focused the button (some browsers do not focus a clicked button).
+    screen.getByRole("button", { name: /^Retry/ }).click();
+    expect(document.body).toHaveFocus();
+    rerender(<RequestList {...props} rows={[{ ...SENDING, id: "r9" }]} />);
+    expect(document.body).toHaveFocus();
   });
 });
