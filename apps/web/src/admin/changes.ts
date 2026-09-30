@@ -396,10 +396,15 @@ export function buildChangeGroups(
         : {};
     // A reordered list of plain strings (quick access): the order is the point, so show the whole
     // list before and after, each code by the type's name.
-    const listText = (list: unknown): ChangeValue | undefined =>
-      Array.isArray(list) && list.every((x) => typeof x === "string")
-        ? { text: list.map((x) => (top === "quickAccess" ? typeName(x).text : x)).join(", ") }
-        : undefined;
+    const listText = (list: unknown): ChangeValue | undefined => {
+      if (!Array.isArray(list) || !list.every((x) => typeof x === "string")) return undefined;
+      const joined = list
+        .map((x) =>
+          x === "" ? t("admin.diff.empty") : top === "quickAccess" ? typeName(x).text : x,
+        )
+        .join(", ");
+      return { text: joined.length > MAX_SHOWN ? `${joined.slice(0, MAX_SHOWN - 1)}…` : joined };
+    };
     const order =
       change.kind === "moved" && change.by === VALUE_IDENTITY
         ? { before: listText(before(p.length)), after: listText(after(segments.length)) }

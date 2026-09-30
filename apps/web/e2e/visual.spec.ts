@@ -1361,6 +1361,41 @@ test.describe("Layout robustness (cloud3 item 3)", () => {
   }
 
   for (const viewport of [
+    { width: 1100, height: 800 },
+    { width: 1024, height: 768 },
+  ]) {
+    test(`${viewport.width}x${viewport.height}: where the panes wrap, the preview stays inside the section and is reachable`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await asUser(page, "admin@example.test", "day", async () => {
+        await page.goto("/admin/config");
+        await expect(page.getByRole("region", { name: "Live preview" })).toBeAttached();
+        const g = await geometry(page);
+        // Nothing sticks out of the section: the page does not scroll, the panes area scrolls.
+        expect(g.overflowY, "page scroll").toBeLessThanOrEqual(0);
+        const preview = page.locator(".qm-builder__panes > .qm-admin__preview");
+        await preview.scrollIntoViewIfNeeded();
+        const after = await page.evaluate(() => {
+          const panes = document.querySelector(".qm-builder__panes")?.getBoundingClientRect();
+          const preview = document
+            .querySelector(".qm-builder__panes > .qm-admin__preview")
+            ?.getBoundingClientRect();
+          return {
+            paneTop: panes?.top ?? 0,
+            paneBottom: panes?.bottom ?? 0,
+            top: preview?.top ?? 0,
+          };
+        });
+        expect(after.top, "preview top inside the panes area").toBeGreaterThanOrEqual(
+          after.paneTop - 1,
+        );
+        expect(after.top, "preview top inside the panes area").toBeLessThan(after.paneBottom);
+      });
+    });
+  }
+
+  for (const viewport of [
     { width: 1100, height: 180 },
     { width: 1024, height: 200 },
   ]) {

@@ -39,6 +39,13 @@ describe("admin parity: surfaces", () => {
     expect(decls(".qm-admin__rail")).toMatch(/grid-template-columns:\s*repeat\(auto-fit/);
   });
 
+  it("the builder heading keeps its size, weight and no margin (they set the first row's height)", () => {
+    const h2 = decls(".qm-builder > h2");
+    expect(h2).toMatch(/margin:\s*0/);
+    expect(h2).toMatch(/font-size:\s*var\(--qm-type-size-xl\)/);
+    expect(h2).toMatch(/font-weight:\s*600/);
+  });
+
   it("the panes are a flex column under the toolbar: no hand-tuned offset from the window height", () => {
     const builder = decls(".qm-builder");
     expect(builder).toMatch(/display:\s*grid/);

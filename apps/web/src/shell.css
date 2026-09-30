@@ -530,6 +530,12 @@ main[tabindex="-1"]:focus {
   );
 }
 
+.qm-builder > h2 {
+  margin: 0;
+  font-size: var(--qm-type-size-xl);
+  font-weight: 600;
+}
+
 /* The undo keys' scope wraps the toolbar and panes without becoming a layout box. */
 .qm-builder__scope {
   display: contents;
@@ -600,6 +606,9 @@ main[tabindex="-1"]:focus {
 .qm-builder__panes {
   flex: 1 1 auto;
   min-block-size: 0;
+  /* Where the panes wrap onto a second line (about 1024 to 1280 px) the lines scroll here, inside
+     the section, instead of spilling out below it. */
+  overflow-y: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
