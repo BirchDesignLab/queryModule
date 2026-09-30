@@ -25,9 +25,14 @@ import { type FlatItem, isTypeAheadKey, treeAction, typeAhead } from "./tree-nav
 
 /**
  * Counts of what rendered, for the test that pins the cost of a label keystroke: `rows` is the
- * memoized rows, `labels` the row labels, each of which follows its own key in the draft.
+ * memoized rows, `labels` the row labels, each of which follows its own key in the draft. Counted
+ * in development and test builds only: in production `count` is dead code and the object is
+ * dropped from the bundle.
  */
 export const treeRenderStats = { rows: 0, labels: 0 };
+function count(kind: keyof typeof treeRenderStats): void {
+  if (import.meta.env.DEV) treeRenderStats[kind]++;
+}
 
 /** One row of the builder tree: a treeitem that selects `pointer`, and its children. */
 interface TreeNode {
@@ -149,7 +154,7 @@ function useLabelResolver(): LabelText {
  * re-renders the rows that show it and no others: the memoized rows around it stay as they are.
  */
 function TreeLabel({ node }: { node: { label: string; labelKey?: string; key?: string } }) {
-  treeRenderStats.labels++;
+  count("labels");
   const translator = useTranslator();
   const store = configDraftStore(useServices());
   const key = node.labelKey ?? "";
@@ -488,7 +493,7 @@ const TreeRows = memo(
     onToggle,
   }: TreeRowsProps) {
     const t = useT();
-    treeRenderStats.rows++;
+    count("rows");
     const renderNodes = (list: TreeNode[], level: number, by?: string, gid?: string) => {
       const top = level === 1 && expanded !== undefined;
       return (

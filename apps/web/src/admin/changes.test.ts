@@ -188,7 +188,15 @@ describe("buildChangeGroups", () => {
           d.quickAccess = ["PER", "VEH"];
         }),
       ),
-    ).toEqual([expect.objectContaining({ kind: "moved", what: "admin.diff.order" })]);
+    ).toEqual([
+      // The order is the point: the whole list before and after, by the types' names.
+      expect.objectContaining({
+        kind: "moved",
+        what: "admin.diff.order",
+        before: { text: "Vehicle, PER" },
+        after: { text: "PER, Vehicle" },
+      }),
+    ]);
     const swapped = entries(
       groupsFor((d) => {
         d.quickAccess = ["VEH", "XYZ"];
@@ -197,6 +205,35 @@ describe("buildChangeGroups", () => {
     expect(swapped.map((e) => e.kind)).toEqual(["removed", "added"]);
     expect(swapped[0]).toMatchObject({ before: { text: "PER" } });
     expect(swapped[1]).toMatchObject({ after: { text: "XYZ" } });
+  });
+
+  it("shows a moved list of plain strings as the whole list, before and after", () => {
+    const l = { ...live(), locales: ["en", "fr"] };
+    const d = { ...live(), locales: ["fr", "en"] };
+    expect(entries(buildChangeGroups(diffConfig(l, d), l, d, deps))).toEqual([
+      expect.objectContaining({
+        kind: "moved",
+        before: { text: "en, fr" },
+        after: { text: "fr, en" },
+      }),
+    ]);
+  });
+
+  it("names blank items in a moved list and keeps a long list to one short line", () => {
+    const blank = { ...live(), locales: ["a", "", "b"] };
+    const blankMoved = { ...live(), locales: ["b", "", "a"] };
+    const moved = entries(
+      buildChangeGroups(diffConfig(blank, blankMoved), blank, blankMoved, deps),
+    ).find((e) => e.kind === "moved");
+    expect(moved?.before).toEqual({ text: "a, admin.diff.empty, b" });
+    const many = Array.from({ length: 60 }, (_, i) => `locale-${i}`);
+    const long = { ...live(), locales: many };
+    const longMoved = { ...live(), locales: [...many].reverse() };
+    const text = entries(
+      buildChangeGroups(diffConfig(long, longMoved), long, longMoved, deps),
+    ).find((e) => e.kind === "moved")?.before as { text: string } | undefined;
+    expect(text?.text.length).toBeLessThanOrEqual(120);
+    expect(text?.text.endsWith("…")).toBe(true);
   });
 
   it("reports a rule whose condition changed shape as one changed rule, before and after", () => {

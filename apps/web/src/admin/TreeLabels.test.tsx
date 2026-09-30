@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
@@ -9,6 +9,7 @@ import { configDraftStore } from "./ConfigBuilder.js";
 import type { JsonObject } from "./draft.js";
 
 beforeAll(preloadAdminRoutes);
+afterEach(() => vi.unstubAllEnvs());
 
 // Item 5: the tree's rows follow the draft's label edits, and a keystroke in one label re-renders
 // only the rows that show that label, not every row of a big config.
@@ -83,5 +84,17 @@ describe("tree rows and draft label edits", () => {
     // the open type's rows are on screen: a few rows per keystroke, never the whole tree.
     expect(rows).toBeLessThanOrEqual(4 * 3);
     expect(treeRenderStats.rows).toBe(before.rows);
+  });
+
+  it("counts nothing in a production build (import.meta.env.DEV is false)", async () => {
+    vi.stubEnv("DEV", false);
+    const t = await openBuilder();
+    const before = { ...treeRenderStats };
+    act(() => store(t).getState().setLabel("en", plateKey(t), "Licence"));
+    await waitFor(() => expect(store(t).getState().labels.en?.[plateKey(t)]).toBe("Licence"));
+    expect(treeRenderStats).toEqual(before);
+    vi.stubEnv("DEV", true);
+    act(() => store(t).getState().setLabel("en", plateKey(t), "Licence plate"));
+    await waitFor(() => expect(treeRenderStats.labels).toBeGreaterThan(before.labels));
   });
 });
