@@ -27,6 +27,7 @@ import { AccountMenu } from "./AccountMenu.js";
 import { useT } from "./i18n-context.js";
 import { MAIN_LANDMARK } from "./main-landmark.js";
 import { useServices } from "./services-context.js";
+import { ShortcutSheetProvider, useShortcutSheet } from "./shortcut-sheet-context.js";
 import { useSignOut } from "./use-sign-out.js";
 
 /** The cached GET /api/v1/config (key ["config"], filled by the query panel), or undefined before sign-in and after reset. */
@@ -116,6 +117,7 @@ export function AppHeader() {
   const user = useStore(authStore, (s) => s.user);
   const themeMode = useStore(preferences, (s) => s.themeMode);
   const layout = usePersonaLayout();
+  const shortcutSheet = useShortcutSheet();
   const siteLabel = useSiteLabel();
   const compact = layout === "mobileUnit";
   const changeTheme = (mode: ThemeModePreference) => {
@@ -153,6 +155,7 @@ export function AppHeader() {
           onThemeChange={changeTheme}
           onSignOut={doSignOut}
           showTheme={!compact}
+          onShowShortcuts={shortcutSheet.open ?? undefined}
         />
       </div>
     </header>
@@ -218,9 +221,11 @@ export function AppShell() {
   return (
     <ShortcutProvider bindings={bindings}>
       <OnLoadEntry.Provider value={onLoadEntry}>
-        <SkipLink />
-        <AppHeader />
-        <Outlet />
+        <ShortcutSheetProvider>
+          <SkipLink />
+          <AppHeader />
+          <Outlet />
+        </ShortcutSheetProvider>
       </OnLoadEntry.Provider>
     </ShortcutProvider>
   );

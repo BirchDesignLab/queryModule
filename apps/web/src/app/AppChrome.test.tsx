@@ -217,6 +217,9 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     await user.tab();
     await user.tab();
     await user.tab();
+    // The design's order: theme, then Keyboard shortcuts, then Sign out.
+    expect(within(panel).getByRole("button", { name: "Keyboard shortcuts" })).toHaveFocus();
+    await user.tab();
     expect(within(panel).getByRole("button", { name: "Sign out" })).toHaveFocus();
   });
   it("B1 Esc closes the disclosure and returns focus to the account button", async () => {
@@ -448,5 +451,42 @@ describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
     withSite({ defaultMode: "auto", auto: "time" }, null);
     await signIn();
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
+  });
+});
+
+describe("the account menu opens the keyboard shortcut sheet (visual system, app shell)", () => {
+  it("on the query panel, Keyboard shortcuts sits before Sign out and opens the sheet only when chosen", async () => {
+    const { user } = await signIn();
+    expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).toBeNull();
+    const panel = await openAccount(user);
+    const buttons = within(panel)
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    const item = within(panel).getByRole("button", { name: "Keyboard shortcuts" });
+    expect(buttons.indexOf("Keyboard shortcuts")).toBe(buttons.indexOf("Sign out") - 1);
+    await user.click(item);
+    expect(await screen.findByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+    // The menu closed; the sheet's opener is the account button.
+    expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
+  });
+
+  it("closing the sheet returns focus to the account button", async () => {
+    const { user } = await signIn();
+    await openAccount(user);
+    await user.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    const sheet = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    await user.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: TEST_USER.email })).toHaveFocus();
+  });
+
+  it("off the panel (Status) there is no sheet to open, so the menu has no such item", async () => {
+    const { user } = await signIn();
+    await user.click(screen.getByRole("link", { name: "Status" }));
+    await screen.findByRole("heading", { name: "Connection status" });
+    const panel = await openAccount(user);
+    expect(within(panel).queryByRole("button", { name: "Keyboard shortcuts" })).toBeNull();
   });
 });

@@ -13,6 +13,8 @@ export interface AccountMenuProps {
   onSignOut(): void;
   /** The officer's bar carries the theme icons itself; the disclosure then omits the second control. */
   showTheme?: boolean;
+  /** Opens the page's keyboard shortcut sheet; omitted where the page has none (no item). */
+  onShowShortcuts?(): void;
 }
 
 /**
@@ -28,6 +30,7 @@ export function AccountMenu({
   onThemeChange,
   onSignOut,
   showTheme = true,
+  onShowShortcuts,
 }: AccountMenuProps) {
   const t = useT();
   const panelId = useId();
@@ -100,6 +103,21 @@ export function AccountMenu({
             </p>
           )}
           {showTheme ? <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} /> : null}
+          {onShowShortcuts === undefined ? null : (
+            <button
+              type="button"
+              className="qm-button qm-button--ghost"
+              onClick={() => {
+                // Closed first, with focus on the account button: the sheet takes that as its
+                // opener, so closing the sheet puts focus back on the button (spec 6.2 dialogs).
+                setOpen(false);
+                buttonRef.current?.focus();
+                onShowShortcuts();
+              }}
+            >
+              {t("shortcut.sheetTitle")}
+            </button>
+          )}
           <button type="button" className="qm-button qm-button--ghost" onClick={onSignOut}>
             {t("home.signOut")}
           </button>

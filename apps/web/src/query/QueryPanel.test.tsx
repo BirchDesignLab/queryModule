@@ -36,6 +36,10 @@ function renderPanel(personaOverride: string | null = null) {
 async function openPanel(personaOverride: string | null = null) {
   const view = renderPanel(personaOverride);
   await screen.findByLabelText("Plate");
+  // The panel renders the fallback type before its passive effect selects it in the draft store;
+  // findBy can resolve in between, and a store write while no type is selected is dropped
+  // (draft-store setValue). Tests that write to the store directly need the selection in place.
+  await waitFor(() => expect(view.services.drafts.getState().queryType).not.toBeNull());
   return view;
 }
 

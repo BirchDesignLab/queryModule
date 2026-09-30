@@ -1,7 +1,7 @@
 import { createDraftStore } from "@querymodule/client";
 import { resolveShortcuts } from "@querymodule/core/config";
 import { ShortcutProvider } from "@querymodule/web-ui";
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLIENT_CONFIG } from "../test/msw-server.js";
 import { renderRoutes } from "../test/render-routes.js";
@@ -57,6 +57,9 @@ describe("the command echo and the form read one clock (design fold-in, #415 cri
       },
     ]);
     await screen.findByLabelText("Plate");
+    // The type is selected in the store by a passive effect after the first commit (findBy can
+    // resolve before it); a store write before then is dropped.
+    await waitFor(() => expect(drafts.getState().queryType).not.toBeNull());
     expect(seen.echo.at(-1)).toBe(seen.evaluate.at(-1));
     act(() => drafts.getState().setValue("plate", "ZZ-0001"));
     await screen.findByText("VEH.ZZ-0001", { exact: false });
