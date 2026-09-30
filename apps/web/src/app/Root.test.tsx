@@ -65,7 +65,7 @@ describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
         screen.getByText("This app needs an update before you can continue.", { exact: false }),
       ).toBeInTheDocument();
       expect(screen.queryByRole("heading", { name: "Query Module" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("heading", { name: "Connection status" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Status", level: 1 })).not.toBeInTheDocument();
     });
   }
   it("#242: sign-out from the update gate ends on the sign-in page", async () => {

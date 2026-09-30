@@ -72,14 +72,14 @@ describe("sign-in: a slow preferences load does not pull the user back", () => {
     await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
     await t.user.click(screen.getByRole("button", { name: "Sign in" }));
     await t.user.click(await screen.findByRole("link", { name: "Status" }));
-    await screen.findByRole("heading", { name: "Connection status" });
+    await screen.findByRole("heading", { name: "Status", level: 1 });
     release();
     await waitFor(() => expect(served).toBe(true));
     // Let the sign-in's continuation run (it used to navigate to "/" here).
     await act(async () => {
       await new Promise((r) => setTimeout(r, 50));
     });
-    expect(screen.getByRole("heading", { name: "Connection status" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Status", level: 1 })).toBeInTheDocument();
   });
 });
 
@@ -178,7 +178,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     );
     expect(within(nav).getByRole("link", { name: "Status" })).not.toHaveAttribute("aria-current");
     await user.click(within(nav).getByRole("link", { name: "Status" }));
-    await screen.findByRole("heading", { name: "Connection status" });
+    await screen.findByRole("heading", { name: "Status", level: 1 });
     expect(within(nav).getByRole("link", { name: "Status" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -330,7 +330,7 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
   it("D-B4 the header stays on the status page", async () => {
     const { user } = await signIn();
     await user.click(screen.getByRole("link", { name: "Status" }));
-    expect(await screen.findByRole("heading", { name: "Connection status" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Status", level: 1 })).toBeInTheDocument();
     expect(
       within(screen.getByRole("banner")).getByRole("button", { name: TEST_USER.email }),
     ).toBeInTheDocument();
@@ -477,7 +477,7 @@ describe("UX-002 site theme from GET /api/v1/config (spec 6.5, #175)", () => {
     withSite({ defaultMode: "night", auto: "off" }, null);
     await signIn();
     const reloaded = renderRoot({ path: "/status" });
-    await within(reloaded.container).findByRole("heading", { name: "Connection status" });
+    await within(reloaded.container).findByRole("heading", { name: "Status", level: 1 });
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("night"));
   });
   it("after sign-out the OS scheme decides again", async () => {
@@ -554,7 +554,7 @@ describe("the account menu opens the keyboard shortcut sheet (visual system, app
   it("off the panel (Status) there is no sheet to open, so the menu has no such item", async () => {
     const { user } = await signIn();
     await user.click(screen.getByRole("link", { name: "Status" }));
-    await screen.findByRole("heading", { name: "Connection status" });
+    await screen.findByRole("heading", { name: "Status", level: 1 });
     const panel = await openAccount(user);
     expect(within(panel).queryByRole("button", { name: "Keyboard shortcuts" })).toBeNull();
   });
