@@ -21,6 +21,7 @@ import {
 } from "@querymodule/web-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
+import { useShortcutSheet } from "../app/shortcut-sheet-context.js";
 import { isDataField } from "./data-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
@@ -53,33 +54,37 @@ function ReadyPanel({
   panel,
   idPrefix,
   selectType,
+  selectTypeSeq,
 }: {
   panel: ReadyQueryPanel;
   idPrefix: string;
   selectType?: string | undefined;
+  selectTypeSeq?: number | undefined;
 }) {
   const preview = panel.mode === "preview";
   const t = useT();
   const { config, formState, queryType } = panel;
   const terminal = useTerminal(panel);
-  // The host's pick, applied through the panel's own path until the panel shows it; only then is it
-  // settled, so the user's own clicks in the preview win until the host picks a different code. Not
-  // settled while unknown (the config may gain the type) or while the fallback for a removed type
-  // (use-query-panel, a parent effect that runs after this one) moves the panel elsewhere. `terminal`
-  // is a new object each render: the settled ref, not the dependency list, keeps this to one pick.
+  // The host's pick (code and seq), applied through the panel's own path until the panel shows it;
+  // only then is it settled, so the user's own clicks in the preview win until the host picks again
+  // (a new code or a new seq). Not settled while unknown (the config may gain the type) or while the
+  // fallback for a removed type (use-query-panel, a parent effect that runs after this one) moves the
+  // panel elsewhere. `terminal` is a new object each render: the settled ref, not the dependency
+  // list, keeps this to one pick.
+  const pickKey = selectType === undefined ? undefined : `${selectType}\u0000${selectTypeSeq ?? 0}`;
   const settledPick = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (selectType === undefined || selectType === settledPick.current) {
-      settledPick.current = selectType;
+    if (selectType === undefined || pickKey === settledPick.current) {
+      settledPick.current = pickKey;
       return;
     }
     if (!config.queryTypes.some((q) => q.code === selectType)) return;
     if (queryType === selectType) {
-      settledPick.current = selectType;
+      settledPick.current = pickKey;
       return;
     }
     terminal.selectType(selectType);
-  }, [selectType, queryType, config, terminal]);
+  }, [selectType, pickKey, queryType, config, terminal]);
   const labelOfType = (code: string): string => {
     const labelKey = config.queryTypes.find((q) => q.code === code)?.labelKey;
     return labelKey === undefined ? code : t(labelKey);
@@ -140,6 +145,12 @@ function ReadyPanel({
     : new Map<string, string>();
   const blockedCount = panel.showErrors ? blockedErrorCount(formState) : 0;
   const [sheetOpen, setSheetOpen] = useState(false);
+  // The live panel offers its sheet to the account menu ("Keyboard shortcuts"); preview never does.
+  const { register: registerSheet } = useShortcutSheet();
+  useEffect(() => {
+    if (preview) return;
+    return registerSheet(() => setSheetOpen(true));
+  }, [preview, registerSheet]);
   const bindings = useMemo(() => resolveShortcuts(config.shortcuts), [config]);
   const firstQuick = quickShortcut(bindings, 0);
   const lastQuick = quickShortcut(bindings, quickCodes.length - 1);
@@ -351,11 +362,17 @@ export interface QueryPanelViewProps {
    * Preview only: the host (the builder) picks this query type. Each change selects it through the
    * panel's own path, as a quick-access click would (terminal text merged and re-derived, shown
    * errors reset, other types' values kept). Focus never moves. A code the config does not have is
-   * applied once it does. Picking the same code again is a no-op (the user's own click in between
-   * wins); a host that needs a re-pick changes the value or remounts the view. In terminal mode a
-   * half-typed command that does not parse is replaced, exactly as on a quick-access click.
+   * applied once it does. The same code again is a no-op (the user's own click in between wins)
+   * unless `selectTypeSeq` changes. In terminal mode a half-typed command that does not parse is
+   * replaced, exactly as on a quick-access click.
    */
   selectType?: string;
+  /**
+   * Preview only: a change re-applies `selectType` even when the code is unchanged (the builder's
+   * tree picks the same type again after the user clicked another in the preview). A no-op when the
+   * panel already shows that type.
+   */
+  selectTypeSeq?: number;
 }
 
 /** The one renderer of the query panel, from config alone (BR-001; ADR-0011 core loop). */
@@ -367,6 +384,7 @@ export function QueryPanelView({
   onConfigChanged,
   requests,
   selectType,
+  selectTypeSeq,
 }: QueryPanelViewProps) {
   const panel = useQueryPanel({ config, drafts, mode, onConfigChanged });
   // The preview's store is private and memory-only; it goes with the view (ADR-0011).
@@ -382,6 +400,7 @@ export function QueryPanelView({
       panel={panel}
       idPrefix={idPrefix}
       selectType={mode === "preview" ? selectType : undefined}
+      selectTypeSeq={mode === "preview" ? selectTypeSeq : undefined}
     />
   );
   if (requests === undefined) return ready;

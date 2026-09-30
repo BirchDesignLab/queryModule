@@ -375,6 +375,9 @@ describe("preview never shows the Shown tag (a builder edit is not a rule reveal
     if (VEH_DEFAULT === undefined) throw new Error("fixture: VEH missing");
     const { drafts } = renderView({ config: CLIENT_CONFIG });
     await screen.findByLabelText("Plate");
+    // The type is selected in the store by a passive effect after the first commit (findBy can
+    // resolve before it); a store write before then is dropped.
+    await waitFor(() => expect(drafts.getState().queryType).not.toBeNull());
     act(() => drafts.getState().setValue("state", "OK"));
     expect(await screen.findByLabelText(/Plate type/)).toBeInTheDocument();
     expect(document.querySelector(".qm-tag--shown")).toBeNull();
@@ -384,6 +387,7 @@ describe("preview never shows the Shown tag (a builder edit is not a rule reveal
 describe("preview selectType: the builder picks the query type through the panel's own path", () => {
   let pick: (code: string | undefined) => void = () => undefined;
   let setBoth: (config: ClientSiteConfig, code: string | undefined) => void = () => undefined;
+  let repick: (code: string) => void = () => undefined;
   function Picker({
     drafts,
     mode,
@@ -397,7 +401,12 @@ describe("preview selectType: the builder picks the query type through the panel
   }) {
     const [code, setCode] = useState<string | undefined>(initial);
     const [config, setConfig] = useState(initialConfig);
+    const [seq, setSeq] = useState(0);
     pick = setCode;
+    repick = (next) => {
+      setCode(next);
+      setSeq((n) => n + 1);
+    };
     setBoth = (next, nextCode) => {
       setConfig(next);
       setCode(nextCode);
@@ -410,6 +419,7 @@ describe("preview selectType: the builder picks the query type through the panel
           mode={mode}
           idPrefix="st"
           selectType={code}
+          selectTypeSeq={seq}
         />
       </ShortcutProvider>
     );
@@ -488,6 +498,33 @@ describe("preview selectType: the builder picks the query type through the panel
     await screen.findByLabelText("Plate");
     act(() => pick("PER"));
     pressed("Vehicle");
+  });
+
+  it("a re-pick of the same code with a new seq wins over the user's click in between (tree VEH, preview PER, tree VEH)", async () => {
+    const { user } = renderPicker("preview", "VEH");
+    await waitFor(() => pressed("Vehicle"));
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    await waitFor(() => pressed("Person"));
+    // The same code without a new seq changes nothing (the user's click stands) ...
+    act(() => pick("VEH"));
+    pressed("Person");
+    // ... a new seq re-applies it, through the same path; focus stays where it was.
+    const before = document.activeElement;
+    act(() => repick("VEH"));
+    await waitFor(() => pressed("Vehicle"));
+    expect(document.activeElement).toBe(before);
+  });
+
+  it("a new seq for the type already shown is a no-op: shown errors stay (a selection would reset them)", async () => {
+    const { user } = renderPicker("preview", "PER");
+    await waitFor(() => pressed("Person"));
+    await user.type(screen.getByLabelText(/Last name/), "{Enter}");
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true"),
+    );
+    act(() => repick("PER"));
+    pressed("Person");
+    expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
   });
 
   it("a pick present at first mount wins over the initial type (the fallback runs after it)", async () => {
