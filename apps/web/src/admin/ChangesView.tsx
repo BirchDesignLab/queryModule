@@ -13,13 +13,20 @@ import {
   missingLabels,
   ownerName,
 } from "./changes.js";
-import { ChecksContext } from "./checks.js";
+import { ChecksContext, type ShippedBundles } from "./checks.js";
 import { useLabelText } from "./controls.js";
 import { docFromClient, type JsonObject } from "./draft.js";
 import { useItemName } from "./FormTab.js";
 import { languageName } from "./LabelOverlay.js";
 import { useConditionWords } from "./RulesEditor.js";
 import { useLiveConfig } from "./use-cached-config.js";
+
+/** What a locale ships for a label key: "" when nothing, null while the bundles are not loaded. */
+function shippedText(shipped: ShippedBundles | null, locale: string, key: string): string | null {
+  if (shipped === null) return null;
+  const bundle = locale === "en" ? shipped.en : shipped.perLocale[locale];
+  return bundle === undefined ? null : (bundle[key] ?? "");
+}
 
 /**
  * Changes (item 4): what the draft changes against the live config, grouped by query type, list,
@@ -38,7 +45,7 @@ export function ChangesView({
   const translator = useTranslator();
   const { config, check } = useLiveConfig();
   const { labels } = useDraft();
-  const { issues, status } = useContext(ChecksContext);
+  const { issues, status, shipped } = useContext(ChecksContext);
   const labelText = useLabelText();
   const itemName = useItemName();
   const headingId = useId();
@@ -57,16 +64,15 @@ export function ChangesView({
           locale,
           key,
           text,
-          // The shipped text is only known for the language the app shows.
-          shipped:
-            locale !== translator.locale ? null : translator.has(key) ? translator.t(key) : "",
+          // The shipped text of that language: "" when it has none, unknown until the bundles load.
+          shipped: shippedText(shipped, locale, key),
         })),
       ),
       language,
       t,
     );
     return overlay === null ? list : [...list, overlay];
-  }, [live, doc, deps, labels, translator, language, t]);
+  }, [live, doc, deps, labels, shipped, language, t]);
   const missing = useMemo(
     () =>
       missingLabels(

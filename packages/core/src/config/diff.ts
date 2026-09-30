@@ -5,9 +5,13 @@
  *
  * Lists of objects that carry an identity (a query type's `code`, a field's `key`, a picklist's
  * `id`) are matched by it, so removing the first query type is one removal, not a change to every
- * item after it. Lists with no identity (rules, scalars) are matched by equality, and an item
- * edited in place is paired with its old self so it reads as a change.
+ * item after it. So are lists of unique strings (quick access), matched by the value itself.
+ * Lists with no identity (rules, repeated values) are matched by equality, and an item edited in
+ * place is paired with its old self so it reads as a change.
  */
+
+/** `by` for a list of strings: the item is its own identity (`{ by: VALUE_IDENTITY, is: "VEH" }`). */
+export const VALUE_IDENTITY = "$value";
 
 /** An item of a keyed list, addressed by its identity: `{ by: "code", is: "VEH" }`. */
 export interface KeyRef {
@@ -34,7 +38,7 @@ export type ConfigChange =
   /** The kept items of a keyed list changed their order; `order` is the draft's, by `by`. */
   | (Base & { kind: "moved"; by: string; order: readonly string[] });
 
-/** Properties that name an item, in the order they are tried. */
+/** Properties that name an item. A list is named by the first one every item carries. */
 const IDENTITY_PROPS = ["code", "key", "id", "sourceId", "keyword", "queryType"];
 
 type Json = { [key: string]: unknown };
@@ -62,30 +66,42 @@ function deepEqual(a: unknown, b: unknown): boolean {
 const escapePointer = (s: string): string => s.replaceAll("~", "~0").replaceAll("/", "~1");
 const parentOf = (pointer: string): string => pointer.slice(0, pointer.lastIndexOf("/"));
 
+/** An item's identity under `prop`: the value itself for strings, else the property's string. */
+function idOf(item: unknown, prop: string): string | undefined {
+  if (prop === VALUE_IDENTITY) return typeof item === "string" ? item : undefined;
+  if (!isObject(item)) return undefined;
+  const id = own(item, prop);
+  return typeof id === "string" ? id : undefined;
+}
+
 /**
- * The property that identifies the items of both lists: every item is an object with a string
- * there, and the ones that are filled in are unique. An item whose value is still blank (a new
- * type with no code yet) has no identity and is never matched.
+ * The one property that identifies the items of both lists: for strings the value itself, for
+ * objects the first of IDENTITY_PROPS that every item carries as a string. It names the list only
+ * if the filled-in values are unique. A list that repeats them (a typed duplicate) is matched by
+ * equality: it never falls through to another property, which would name items by something else
+ * (a command by its query type). An item whose value is still blank (a new type with no code yet)
+ * has no identity and is never matched.
  */
 function identityProp(a: readonly unknown[], b: readonly unknown[]): string | null {
   const items = [...a, ...b];
-  if (items.length === 0 || !items.every(isObject)) return null;
-  for (const prop of IDENTITY_PROPS) {
-    const unique = (list: readonly unknown[]) => {
-      const seen = new Set<string>();
-      return list.every((item) => {
-        const id = own(item as Json, prop);
-        if (typeof id !== "string") return false;
-        if (id === "") return true;
-        if (seen.has(id)) return false;
-        seen.add(id);
-        return true;
-      });
-    };
-    const named = items.some((item) => own(item as Json, prop) !== "");
-    if (named && unique(a) && unique(b)) return prop;
-  }
-  return null;
+  if (items.length === 0) return null;
+  const prop = items.every((i) => typeof i === "string")
+    ? VALUE_IDENTITY
+    : items.every(isObject)
+      ? IDENTITY_PROPS.find((p) => items.every((i) => idOf(i, p) !== undefined))
+      : undefined;
+  if (prop === undefined || items.every((i) => idOf(i, prop) === "")) return null;
+  const unique = (list: readonly unknown[]) => {
+    const seen = new Set<string>();
+    return list.every((item) => {
+      const id = idOf(item, prop);
+      if (id === undefined || id === "") return id === "";
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  };
+  return unique(a) && unique(b) ? prop : null;
 }
 
 /** Index pairs (live, draft) of the longest run of equal items, in order. */
@@ -153,7 +169,7 @@ function diffArray(
   const by = identityProp(a, b);
   // An item with no identity yet is addressed by its place in its own list.
   const seg = (list: readonly unknown[], i: number): DiffSegment => {
-    const id = by === null ? "" : String(own(list[i] as Json, by));
+    const id = by === null ? "" : (idOf(list[i], by) ?? "");
     return by === null || id === "" ? i : { by, is: id };
   };
   let pairs: [number, number][];
@@ -162,12 +178,12 @@ function diffArray(
   } else {
     const at = new Map<string, number>();
     a.forEach((item, i) => {
-      const id = own(item as Json, by) as string;
+      const id = idOf(item, by) ?? "";
       if (id !== "") at.set(id, i);
     });
     pairs = [];
     b.forEach((item, j) => {
-      const i = at.get(own(item as Json, by) as string);
+      const i = at.get(idOf(item, by) ?? "");
       if (i !== undefined) pairs.push([i, j]);
     });
   }
@@ -184,7 +200,7 @@ function diffArray(
       path,
       pointer,
       by,
-      order: pairs.map(([i]) => String(own(a[i] as Json, by))),
+      order: pairs.map(([i]) => idOf(a[i], by) ?? ""),
     });
   }
   for (const [i, j] of pairs) diffValue(a[i], b[j], [...path, seg(a, i)], `${pointer}/${j}`, out);
@@ -243,7 +259,7 @@ interface Pending {
 function indexOfSegment(list: readonly unknown[], segment: DiffSegment): number {
   if (typeof segment === "number") return segment;
   if (typeof segment === "string") return -1;
-  return list.findIndex((item) => isObject(item) && own(item, segment.by) === segment.is);
+  return list.findIndex((item) => idOf(item, segment.by) === segment.is);
 }
 
 function applyToArray(list: readonly unknown[], pending: readonly Pending[]): unknown[] {
@@ -268,7 +284,7 @@ function applyToArray(list: readonly unknown[], pending: readonly Pending[]): un
   });
   if (moved !== null) {
     const { by, order } = moved;
-    const rank = (item: unknown) => (isObject(item) ? order.indexOf(String(own(item, by))) : -1);
+    const rank = (item: unknown) => order.indexOf(idOf(item, by) ?? "");
     kept = kept
       .map((item, i) => ({ item, i }))
       .sort((x, y) => rank(x.item) - rank(y.item) || x.i - y.i)
