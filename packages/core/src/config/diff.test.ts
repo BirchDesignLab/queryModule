@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, type ConfigChange, diffConfig } from "./diff";
 
 /** Small alphabets, so two independent documents share keys and items and the diff has matches. */
-const code = fc.constantFrom("VEH", "PER", "PRO", "GUN");
-const word = fc.constantFrom("a", "b", "c", "d");
+// "" is a new item whose code or key is not typed yet: several may exist at once.
+const code = fc.constantFrom("VEH", "PER", "PRO", "GUN", "");
+const word = fc.constantFrom("a", "b", "c", "d", "");
 const scalar = fc.oneof(word, fc.integer({ min: 0, max: 3 }), fc.boolean(), fc.constant(null));
 
 const fieldArb = fc.record(
@@ -19,7 +20,7 @@ const ruleArb = fc.record({
 const uniqueBy = <T>(arb: fc.Arbitrary<T[]>, pick: (item: T) => string) =>
   arb.map((items) => {
     const seen = new Set<string>();
-    return items.filter((i) => !seen.has(pick(i)) && seen.add(pick(i)));
+    return items.filter((i) => pick(i) === "" || (!seen.has(pick(i)) && seen.add(pick(i))));
   });
 const typeArb = fc.record({
   code,
@@ -181,6 +182,19 @@ describe("diffConfig entries", () => {
       after: { key: "dob" },
       index: 0,
     });
+  });
+
+  it("keeps matching by identity when a new item has no code yet", () => {
+    // Live A, B, C; the draft drops C and adds a type whose code is still blank.
+    const l = { types: [{ code: "A" }, { code: "B" }, { code: "C" }] };
+    const d = { types: [{ code: "A" }, { code: "B" }, { code: "" }] };
+    const changes = diffConfig(l, d);
+    expect(changes.map((c) => c.kind).sort()).toEqual(["added", "removed"]);
+    expect(changes.find((c) => c.kind === "removed")?.path).toEqual([
+      "types",
+      { by: "code", is: "C" },
+    ]);
+    expect(applyChanges(l, changes)).toEqual(d);
   });
 
   it("reports a reordered keyed list as moved", () => {

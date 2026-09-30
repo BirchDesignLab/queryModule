@@ -44,9 +44,11 @@ export function useLiveConfig(): { config: ClientSiteConfig | undefined; check: 
     fetchClientConfig(api).then(
       (next) => {
         if (!open) return;
+        // No cached config means a reset (sign-out, a 401) cleared it while this was in flight:
+        // an answer for the previous session is dropped, not written back.
         const current = queryClient.getQueryData<ClientSiteConfig>(["config"]);
-        if (current === undefined || current.configHash !== next.configHash)
-          queryClient.setQueryData(["config"], next);
+        if (current === undefined) return;
+        if (current.configHash !== next.configHash) queryClient.setQueryData(["config"], next);
         setCheck("done");
       },
       () => {

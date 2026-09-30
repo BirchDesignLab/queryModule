@@ -62,7 +62,11 @@ function deepEqual(a: unknown, b: unknown): boolean {
 const escapePointer = (s: string): string => s.replaceAll("~", "~0").replaceAll("/", "~1");
 const parentOf = (pointer: string): string => pointer.slice(0, pointer.lastIndexOf("/"));
 
-/** The property that identifies the items of both lists, when every item has a unique one. */
+/**
+ * The property that identifies the items of both lists: every item is an object with a string
+ * there, and the ones that are filled in are unique. An item whose value is still blank (a new
+ * type with no code yet) has no identity and is never matched.
+ */
 function identityProp(a: readonly unknown[], b: readonly unknown[]): string | null {
   const items = [...a, ...b];
   if (items.length === 0 || !items.every(isObject)) return null;
@@ -71,12 +75,15 @@ function identityProp(a: readonly unknown[], b: readonly unknown[]): string | nu
       const seen = new Set<string>();
       return list.every((item) => {
         const id = own(item as Json, prop);
-        if (typeof id !== "string" || id === "" || seen.has(id)) return false;
+        if (typeof id !== "string") return false;
+        if (id === "") return true;
+        if (seen.has(id)) return false;
         seen.add(id);
         return true;
       });
     };
-    if (unique(a) && unique(b)) return prop;
+    const named = items.some((item) => own(item as Json, prop) !== "");
+    if (named && unique(a) && unique(b)) return prop;
   }
   return null;
 }
@@ -127,13 +134,20 @@ function diffArray(
   out: ConfigChange[],
 ): void {
   const by = identityProp(a, b);
-  const seg = (list: readonly unknown[], i: number): DiffSegment =>
-    by === null ? i : { by, is: String(own(list[i] as Json, by)) };
+  // An item with no identity yet is addressed by its place in its own list.
+  const seg = (list: readonly unknown[], i: number): DiffSegment => {
+    const id = by === null ? "" : String(own(list[i] as Json, by));
+    return by === null || id === "" ? i : { by, is: id };
+  };
   let pairs: [number, number][];
   if (by === null) {
     pairs = pairByPosition(a, b);
   } else {
-    const at = new Map(a.map((item, i) => [own(item as Json, by) as string, i]));
+    const at = new Map<string, number>();
+    a.forEach((item, i) => {
+      const id = own(item as Json, by) as string;
+      if (id !== "") at.set(id, i);
+    });
     pairs = [];
     b.forEach((item, j) => {
       const i = at.get(own(item as Json, by) as string);

@@ -1,7 +1,7 @@
 import type { Translator } from "@querymodule/client";
 import type { ConfigChange, DiffSegment } from "@querymodule/core/config";
 import type { JsonObject } from "./draft.js";
-import { defaultPointer, LABELS_ITEM } from "./selection.js";
+import { defaultPointer, HIDDEN_KEYS, LABELS_ITEM } from "./selection.js";
 
 /**
  * The Changes view's model (item 4): the core diff of the live config and the draft, as
@@ -49,6 +49,7 @@ export interface ChangeDeps {
 }
 
 type Obj = JsonObject;
+const objsOf = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : []);
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const segText = (s: DiffSegment): string => (typeof s === "object" ? s.is : String(s));
@@ -116,7 +117,10 @@ export function targetOf(pointer: string, doc: Obj): string | null {
   const parts = pointer.split("/").slice(1);
   const top = parts[0];
   if (top === undefined) return null;
-  if (top !== "queryTypes") return `/${top}`;
+  // A setting the draft no longer has (deleted in the raw view), or one the builder hides, has no
+  // item to open: the builder's own default is the nearest place.
+  if (top !== "queryTypes")
+    return top in doc && !HIDDEN_KEYS.has(top) ? `/${top}` : defaultPointer(doc);
   const index = parts[1];
   if (index === undefined || !/^[0-9]+$/.test(index)) return defaultPointer(doc);
   const type = `/queryTypes/${index}`;
@@ -164,12 +168,10 @@ export function buildChangeGroups(
   const propName = (s: DiffSegment): string => {
     if (typeof s === "number") return t("admin.diff.itemN", { n: s + 1 });
     if (typeof s === "object") return s.is;
-    const key = PROP_KEYS[s];
-    return key === undefined ? words(s) : t(key);
+    return Object.hasOwn(PROP_KEYS, s) ? t(PROP_KEYS[s] as string) : words(s);
   };
   const plain = (path: readonly DiffSegment[]) => path.map(propName).join(" › ");
   const rulesSeen = new Set<string>();
-  let seq = 0;
 
   for (const change of changes) {
     const p = change.path;
@@ -182,9 +184,12 @@ export function buildChangeGroups(
     const after = (n: number) =>
       n <= segments.length ? pointerNode(draft, segments.slice(0, n)) : undefined;
     const kind = change.kind;
-    const id = `${kind}:${seq++}`;
+    const id = `${kind}:${JSON.stringify(p)}`;
     const target =
-      targetOf(change.pointer, draft) ?? (top === "queryTypes" ? defaultPointer(draft) : `/${top}`);
+      targetOf(change.pointer, draft) ??
+      (top === "queryTypes" || !(top in draft) || HIDDEN_KEYS.has(top)
+        ? defaultPointer(draft)
+        : `/${top}`);
     const values: { before?: ChangeValue; after?: ChangeValue } =
       kind === "moved"
         ? {}
@@ -208,7 +213,15 @@ export function buildChangeGroups(
       const ref = p[1] as DiffSegment;
       const code = typeof ref === "object" ? ref.is : str(type.code);
       const name = deps.labelText(type.labelKey);
-      const g = group(`type:${code}`, name === "" ? code : name, code);
+      const g = group(
+        code === "" ? `type:new:${segText(ref)}` : `type:${code}`,
+        name !== ""
+          ? name
+          : code !== ""
+            ? code
+            : t("admin.diff.unnamed", { what: t("admin.diff.item.queryType") }),
+        code,
+      );
       const area = p[2];
       if (p.length === 2) {
         section(g, "type", null).entries.push(entry(t("admin.diff.item.queryType"), code, false));
@@ -219,12 +232,13 @@ export function buildChangeGroups(
       } else if (area === "rules") {
         // One entry per rule, however many of its parts changed: the rule reads as a sentence.
         const index = segments[3];
-        const key = `rule:${code}:${kind === "added" ? `draft${index}` : String(segText(p[3] as DiffSegment))}`;
+        // A rule is known by its place in the live list; only a rule added whole has none.
+        const whole = p.length === 4;
+        const key = `rule:${code}:${whole && kind === "added" ? `draft${index}` : segText(p[3] as DiffSegment)}`;
         if (rulesSeen.has(key)) continue;
         rulesSeen.add(key);
-        const whole = p.length === 4;
         const liveRule = before(4);
-        const draftRule = kind === "removed" ? undefined : after(4);
+        const draftRule = whole && kind === "removed" ? undefined : after(4);
         const rule: ChangeEntry = {
           id: key,
           kind: whole ? kind : "changed",
@@ -251,9 +265,9 @@ export function buildChangeGroups(
           const inner = p.slice(4);
           const sect = section(
             g,
-            `${area}:${key}`,
+            `${area}:${key === "" ? `new:${segText(ref4)}` : key}`,
             t(isField ? "admin.diff.fieldOf" : "admin.diff.sectionOf", {
-              name: label === "" ? key : label,
+              name: label !== "" ? label : key !== "" ? key : t("admin.diff.unnamedShort"),
             }),
             key,
           );
@@ -290,11 +304,14 @@ export function buildChangeGroups(
 
     if ((top === "picklists" || top === "commands") && p.length >= 2) {
       const ref = p[1] as DiffSegment;
-      const id1 = segText(ref);
+      // A new list or command has no id or code yet: it is known by its place, and named so.
+      const id1 = typeof ref === "object" ? ref.is : "";
       const isList = top === "picklists";
       const g = group(
-        `${top}:${id1}`,
-        t(isList ? "admin.diff.list" : "admin.diff.command", { name: id1 }),
+        `${top}:${id1 === "" ? `new:${segText(ref)}` : id1}`,
+        t(isList ? "admin.diff.list" : "admin.diff.command", {
+          name: id1 !== "" ? id1 : t("admin.diff.unnamedShort"),
+        }),
         id1,
       );
       const detail = p.slice(2);
@@ -312,12 +329,14 @@ export function buildChangeGroups(
       } else {
         const value = (isObj(after(4)) ? after(4) : before(4)) as Obj | undefined;
         const text = deps.labelText(value?.labelKey);
-        const code = segText(valueRef);
+        const code = typeof valueRef === "object" ? valueRef.is : "";
         const inner = detail.slice(2);
         section(
           g,
-          `value:${code}`,
-          t("admin.diff.value", { name: text === "" ? code : text }),
+          `value:${code === "" ? `new:${segText(valueRef)}` : code}`,
+          t("admin.diff.value", {
+            name: text !== "" ? text : code !== "" ? code : t("admin.diff.unnamedShort"),
+          }),
           code,
         ).entries.push(
           entry(
@@ -332,13 +351,36 @@ export function buildChangeGroups(
 
     const g = group(`site:${top}`, deps.itemName(top), top);
     const rest = p.slice(1);
+    // A list that only changed its order has nothing else to name.
+    const reordered =
+      kind === "moved" || (rest.length === 0 && kind !== "added" && kind !== "removed");
     const what =
-      top === "quickAccess"
+      top === "quickAccess" && !reordered
         ? t("admin.diff.item.button")
-        : rest.length === 0
-          ? t("admin.diff.item.setting")
+        : reordered || rest.length === 0
+          ? t(reordered ? "admin.diff.order" : "admin.diff.item.setting")
           : plain(rest);
-    section(g, "own", null).entries.push(entry(what, p.map(segText).join(" "), kind !== "moved"));
+    // Quick access holds query type codes: they read as the types' names.
+    const typeName = (code: unknown): ChangeValue => {
+      const type = objsOf(draft.queryTypes)
+        .concat(objsOf(live.queryTypes))
+        .find((x) => x.code === code);
+      const name = type === undefined ? "" : deps.labelText(type.labelKey);
+      return { text: name !== "" ? name : String(code) };
+    };
+    const quick: { before?: ChangeValue; after?: ChangeValue } =
+      top === "quickAccess" && kind !== "moved"
+        ? {
+            ...(kind === "removed" || kind === "changed"
+              ? { before: typeName(change.before) }
+              : {}),
+            ...(kind === "added" || kind === "changed" ? { after: typeName(change.after) } : {}),
+          }
+        : {};
+    section(g, "own", null).entries.push({
+      ...entry(what, p.map(segText).join(" "), !reordered),
+      ...quick,
+    });
   }
 
   return [...groups.values()];
@@ -349,7 +391,7 @@ export interface LabelChange {
   locale: string;
   key: string;
   text: string;
-  /** The shipped text this replaces, when it is known here. */
+  /** The shipped text this replaces: "" when there is none, null when it is not known here. */
   shipped: string | null;
 }
 
@@ -359,7 +401,9 @@ export function labelGroup(
   language: (locale: string) => string,
   t: Translator["t"],
 ): ChangeGroup | null {
-  if (labels.length === 0) return null;
+  // Text the same as the shipped text changes nothing.
+  const kept = labels.filter((l) => l.shipped !== l.text);
+  if (kept.length === 0) return null;
   return {
     id: "labels",
     title: t("admin.config.site.labels"),
@@ -369,14 +413,13 @@ export function labelGroup(
         id: "own",
         title: null,
         keyText: "",
-        entries: labels.map((l, i) => {
-          const changed = l.shipped !== null && l.shipped !== l.text;
+        entries: kept.map((l) => {
           return {
-            id: `label:${l.locale}:${l.key}:${i}`,
-            kind: changed ? "changed" : "added",
+            id: `label:${l.locale}:${l.key}`,
+            kind: l.shipped === "" ? "added" : "changed",
             what: t("admin.diff.labelText", { language: language(l.locale) }),
             keyText: l.key,
-            ...(changed ? { before: { text: l.shipped ?? "" } } : {}),
+            ...(l.shipped !== null && l.shipped !== "" ? { before: { text: l.shipped } } : {}),
             after: { text: l.text === "" ? t("admin.diff.empty") : l.text },
             target: LABELS_ITEM,
           } satisfies ChangeEntry;

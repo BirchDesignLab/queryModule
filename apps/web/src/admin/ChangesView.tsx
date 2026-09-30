@@ -58,7 +58,8 @@ export function ChangesView({
           key,
           text,
           // The shipped text is only known for the language the app shows.
-          shipped: locale === translator.locale && translator.has(key) ? translator.t(key) : null,
+          shipped:
+            locale !== translator.locale ? null : translator.has(key) ? translator.t(key) : "",
         })),
       ),
       language,
@@ -100,10 +101,8 @@ export function ChangesView({
         <GroupView key={group.id} group={group} onOpen={onOpen} />
       ))}
       {status === "ready" && missing.length > 0 && (
-        <section className="qm-diff__group" aria-labelledby={`${headingId}-missing`}>
-          <h4 className="qm-diff__title" id={`${headingId}-missing`}>
-            {t("admin.diff.missing.title")}
-          </h4>
+        <section className="qm-diff__group">
+          <h4 className="qm-diff__title">{t("admin.diff.missing.title")}</h4>
           <p className="qm-diff__note">{t("admin.diff.missing.note")}</p>
           <ul className="qm-diff__list">
             {missing.map((row) => (
@@ -129,10 +128,9 @@ export function ChangesView({
 }
 
 function GroupView({ group, onOpen }: { group: ChangeGroup; onOpen(pointer: string): void }) {
-  const id = useId();
   return (
-    <section className="qm-diff__group" aria-labelledby={id}>
-      <h4 className="qm-diff__title" id={id}>
+    <section className="qm-diff__group">
+      <h4 className="qm-diff__title">
         {group.title}
         <VisuallyHidden> {group.keyText}</VisuallyHidden>
       </h4>

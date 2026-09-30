@@ -820,7 +820,9 @@ test.describe("Changes view (1440x900)", () => {
         await tree.getByRole("treeitem", { name: /^Terminal settings/ }).click();
         await page.getByRole("textbox", { name: "Delimiter", exact: true }).fill("~");
         await page.getByRole("tab", { name: "Changes", exact: true }).click();
-        const group = page.getByRole("region", { name: /^Terminal settings/ });
+        const group = page
+          .getByRole("heading", { level: 4, name: /^Terminal settings/ })
+          .locator("xpath=..");
         await expect(group).toBeVisible();
         const entry = group.getByRole("button", { name: /Changed/ });
         await expect(entry).toHaveCSS("color", rgb(mode, "color.text.body"));

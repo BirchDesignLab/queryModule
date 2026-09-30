@@ -307,6 +307,8 @@
   "admin.diff.noLive": "The live version has not loaded yet.",
   "admin.diff.noChanges": "No differences from the live version.",
   "admin.diff.none": "(none)",
+  "admin.diff.unnamed": "New {what}",
+  "admin.diff.unnamedShort": "(new, no name yet)",
   "admin.diff.empty": "(empty)",
   "admin.diff.kind.added": "Added",
   "admin.diff.kind.removed": "Removed",

@@ -50,6 +50,11 @@ async function setDelimiter(t: Opened, value: string) {
   await t.user.type(input, value);
 }
 const openChanges = (t: Opened) => t.user.click(screen.getByRole("tab", { name: "Changes" }));
+/** A group of the view: the section that holds the heading. */
+async function groupOf(name: RegExp | string): Promise<HTMLElement> {
+  const heading = await screen.findByRole("heading", { level: 4, name });
+  return heading.closest("section") as HTMLElement;
+}
 const view = () => screen.getByRole("region", { name: "Changes from the live version" });
 
 describe("Changes view (item 4)", () => {
@@ -91,7 +96,7 @@ describe("Changes view (item 4)", () => {
       ),
     );
     await openChanges(t);
-    const group = await screen.findByRole("region", { name: /Terminal settings/ });
+    const group = await groupOf(/Terminal settings/);
     expect(within(group).getByText("|")).toBeInTheDocument();
     expect(within(group).getByText(".")).toBeInTheDocument();
   });
@@ -100,7 +105,7 @@ describe("Changes view (item 4)", () => {
     const t = await openBuilder();
     await setDelimiter(t, "~");
     await openChanges(t);
-    const group = await screen.findByRole("region", { name: /Terminal settings/ });
+    const group = await groupOf(/Terminal settings/);
     const entry = within(group).getByRole("button", { name: /Changed/ });
     expect(entry).toHaveTextContent("Was");
     expect(entry).toHaveTextContent("Now");
@@ -119,7 +124,7 @@ describe("Changes view (item 4)", () => {
         !CLIENT_CONFIG.queryTypes[0]?.fields[0]?.required,
       );
     await openChanges(t);
-    const type = await screen.findByRole("region", { name: /Vehicle/ });
+    const type = await groupOf(/Vehicle/);
     const field = within(type).getByRole("heading", { level: 5 });
     expect(field).toHaveTextContent(/Field/);
     expect(within(type).getByRole("button", { name: /Required/ })).toHaveTextContent(/Was.*Now/);
@@ -151,9 +156,9 @@ describe("Changes view (item 4)", () => {
     store.setLabel("en", "field.plate.label", "Licence plate");
     store.setPath(["queryTypes", 0, "labelKey"], "query.nothing.here");
     await openChanges(t);
-    const labels = await screen.findByRole("region", { name: /^Labels and translations/ });
+    const labels = await groupOf(/^Labels and translations/);
     expect(within(labels).getByText("Licence plate")).toBeInTheDocument();
-    const missing = await screen.findByRole("region", { name: "Labels with no text" });
+    const missing = await groupOf("Labels with no text");
     expect(within(missing).getByRole("button")).toHaveTextContent(/No text in English/);
     expect(within(missing).getByText("query.nothing.here")).toBeInTheDocument();
   });
@@ -165,10 +170,10 @@ describe("Changes view (item 4)", () => {
       "[aria-live], [role=status], [role=alert]",
     ).length;
     await openChanges(t);
-    await screen.findByRole("region", { name: /Terminal settings/ });
+    await groupOf(/Terminal settings/);
     await t.user.click(screen.getByRole("button", { name: /Changed/ }));
     await openChanges(t);
-    await screen.findByRole("region", { name: /Terminal settings/ });
+    await groupOf(/Terminal settings/);
     expect(writes).toEqual([]);
     expect(screen.getByRole("button", { name: "Publish" })).toHaveAttribute(
       "aria-disabled",
@@ -186,14 +191,74 @@ describe("Changes view (item 4)", () => {
     server.use(http.get(`${API}/api/v1/config`, () => HttpResponse.error()));
     await openChanges(t);
     expect(await screen.findByText(/could not be checked/)).toBeInTheDocument();
-    expect(await screen.findByRole("region", { name: /Terminal settings/ })).toBeInTheDocument();
+    expect(await groupOf(/Terminal settings/)).toBeInTheDocument();
+  });
+
+  it("moves focus into the item only when an entry opens it, not when the tabs are used later", async () => {
+    const t = await openBuilder();
+    await setDelimiter(t, "~");
+    await openChanges(t);
+    await t.user.click(await screen.findByRole("button", { name: /Changed/ }));
+    await waitFor(() =>
+      expect(document.activeElement?.closest(".qm-builder__editor")).not.toBeNull(),
+    );
+    // Back to the tab row and around the tabs: focus follows the tabs, not the old entry.
+    const form = screen.getByRole("tab", { name: "Form" });
+    form.focus();
+    await t.user.keyboard("{ArrowRight}");
+    await t.user.keyboard("{ArrowLeft}");
+    expect(form).toHaveFocus();
+  });
+
+  it("opens a removed top-level setting at the builder's default and keeps focus in the builder", async () => {
+    const t = await openBuilder();
+    act(() => configDraftStore(t.services).getState().setPath(["theme"], undefined));
+    await openChanges(t);
+    const entry = await screen.findByRole("button", { name: /Removed/ });
+    await t.user.click(entry);
+    await waitFor(() => {
+      expect(document.activeElement).not.toBe(document.body);
+      expect(document.activeElement?.closest(".qm-builder__scope")).not.toBeNull();
+    });
+  });
+
+  it("shows an edited rule as one entry with a Was and a Now", async () => {
+    const t = await openBuilder();
+    const store = configDraftStore(t.services).getState();
+    const types = (store.doc?.queryTypes ?? []) as { rules: { when: unknown }[] }[];
+    expect(types[0]?.rules.length).toBeGreaterThan(0);
+    store.setPath(["queryTypes", 0, "rules", 0, "when"], {
+      all: [{ field: "state", op: "notEmpty" }],
+    });
+    await openChanges(t);
+    const group = await groupOf(/Vehicle/);
+    const rule = within(group).getAllByRole("button", { name: /Rule/ });
+    expect(rule).toHaveLength(1);
+    expect(rule[0]).toHaveTextContent(/Changed.*Was.*Now/);
+  });
+
+  it("keeps a new query type with no code yet apart from the one that was removed", async () => {
+    const t = await openBuilder();
+    const store = configDraftStore(t.services).getState();
+    const types = (store.doc?.queryTypes as { code: string }[]) ?? [];
+    const last = types[types.length - 1]?.code ?? "";
+    store.setPath(["queryTypes"], [...types.slice(0, -1), { ...types[0], code: "" }]);
+    await openChanges(t);
+    await groupOf(new RegExp(last));
+    expect(await groupOf(/^New Query type|^Vehicle/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Removed/ }).length).toBeGreaterThan(0);
+    expect(
+      screen
+        .getAllByRole("heading", { level: 4 })
+        .every((h) => (h.textContent ?? "").trim() !== ""),
+    ).toBe(true);
   });
 
   it("keeps the view when a step is undone from it", async () => {
     const t = await openBuilder();
     await setDelimiter(t, "~");
     await openChanges(t);
-    await screen.findByRole("region", { name: /Terminal settings/ });
+    await groupOf(/Terminal settings/);
     await t.user.click(screen.getByRole("button", { name: "Undo" }));
     expect(screen.getByRole("tab", { name: "Changes" })).toHaveAttribute("aria-selected", "true");
     await waitFor(() =>

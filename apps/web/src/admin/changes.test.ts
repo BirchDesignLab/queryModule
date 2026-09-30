@@ -151,6 +151,82 @@ describe("buildChangeGroups", () => {
     expect(targetOf("", l)).toBeNull();
   });
 
+  it("reads a reordered list as an order change, and quick access by the types' names", () => {
+    const reordered = entries(
+      groupsFor((d) => {
+        d.queryTypes.reverse();
+      }),
+    );
+    expect(reordered).toEqual([
+      expect.objectContaining({ kind: "moved", what: "admin.diff.order" }),
+    ]);
+    const quick = entries(
+      groupsFor((d) => {
+        d.quickAccess = ["VEH", "PER", "XYZ"];
+      }),
+    );
+    expect(quick).toEqual([
+      expect.objectContaining({
+        kind: "added",
+        what: "admin.diff.item.button",
+        after: { text: "XYZ" },
+      }),
+    ]);
+    expect(
+      entries(
+        groupsFor((d) => {
+          d.quickAccess = ["PER"];
+        }),
+      )[0],
+    ).toMatchObject({ kind: "removed", before: { text: "Vehicle" } });
+  });
+
+  it("reports a rule whose condition changed shape as one changed rule, before and after", () => {
+    const groups = groupsFor((d) => {
+      const rule = d.queryTypes[0]?.rules[0] as { when: unknown };
+      rule.when = { all: [{ field: "plate", op: "notEmpty" }] };
+    });
+    const rules = entries(groups);
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({
+      kind: "changed",
+      before: { rule: { when: { op: "notEmpty" } } },
+      after: { rule: { when: { all: expect.any(Array) } } },
+    });
+  });
+
+  it("names a new type with no code yet, and keeps the removed type's entry", () => {
+    const groups = groupsFor((d) => {
+      d.queryTypes[1] = {
+        code: "",
+        labelKey: "",
+        fields: [{ key: "x", labelKey: "", required: false }],
+        rules: [],
+      } as never;
+    });
+    expect(groups.map((g) => g.title)).toEqual(
+      expect.arrayContaining(['admin.diff.unnamed {"what":"admin.diff.item.queryType"}']),
+    );
+    expect(entries(groups).map((e) => e.kind)).toEqual(
+      expect.arrayContaining(["added", "removed"]),
+    );
+    expect(groups.every((g) => g.title.trim() !== "")).toBe(true);
+  });
+
+  it("sends a removed or hidden top-level setting to the default item", () => {
+    const l = live();
+    expect(targetOf("/theme", l)).toBe("/queryTypes/0");
+    expect(targetOf("/schemaVersion", { ...l, schemaVersion: 1 })).toBe("/queryTypes/0");
+    expect(targetOf("/terminal", l)).toBe("/terminal");
+  });
+
+  it("does not read a property name from the prototype", () => {
+    const l = { defaults: {} };
+    const d = { defaults: { constructor: "x" } };
+    const groups = buildChangeGroups(diffConfig(l, d), l, d, deps);
+    expect(entries(groups)[0]?.what).toBe("Constructor");
+  });
+
   it("keeps every entry id unique", () => {
     const groups = groupsFor((d) => {
       d.queryTypes[0]?.fields.reverse();
@@ -167,13 +243,16 @@ describe("labels", () => {
       [
         { locale: "en", key: "f.plate", text: "Licence plate", shipped: "Plate" },
         { locale: "fr", key: "f.plate", text: "Plaque", shipped: null },
+        { locale: "en", key: "f.state", text: "State", shipped: "State" },
+        { locale: "en", key: "f.new", text: "Brand new", shipped: "" },
       ],
       (l) => l,
       t,
     );
     expect(g?.sections[0]?.entries).toEqual([
       expect.objectContaining({ kind: "changed", before: { text: "Plate" }, keyText: "f.plate" }),
-      expect.objectContaining({ kind: "added", after: { text: "Plaque" }, target: "#labels" }),
+      expect.objectContaining({ kind: "changed", after: { text: "Plaque" }, target: "#labels" }),
+      expect.objectContaining({ kind: "added", after: { text: "Brand new" } }),
     ]);
     expect(labelGroup([], (l) => l, t)).toBeNull();
   });

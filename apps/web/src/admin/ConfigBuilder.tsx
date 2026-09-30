@@ -112,6 +112,9 @@ function useMarkSelected(
   selection: Selection,
   tab: TabId,
 ) {
+  // The seq whose Changes-view open already took focus: coming back to the Form tab later, with
+  // that selection still current, must not pull focus into the item again.
+  const focused = useRef(-1);
   useEffect(() => {
     const root = panel.current;
     const pointer = selection.pointer;
@@ -157,7 +160,8 @@ function useMarkSelected(
           ? described
           : described?.querySelector<HTMLElement>("input, select, textarea, button");
         if (control) revealAndFocus(control);
-      } else if (selection.focusNode === true) {
+      } else if (selection.focusNode === true && focused.current !== selection.seq) {
+        focused.current = selection.seq;
         // Opened from the Changes view: the button that was clicked went with its view, so focus
         // goes to the item's first control, else to the selected tree row.
         const control = el.querySelector<HTMLElement>(
@@ -188,7 +192,16 @@ function useMarkSelected(
     const fallback = setTimeout(() => {
       stop();
       const el = nearest(parentPointer(pointer));
-      if (el !== null) apply(el, undefined);
+      if (el !== null) {
+        apply(el, undefined);
+      } else if (selection.focusNode === true && focused.current !== selection.seq) {
+        // Nothing to open: the clicked entry has gone, so focus goes to the selected tree row.
+        focused.current = selection.seq;
+        root
+          .closest(".qm-builder__scope")
+          ?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')
+          ?.focus();
+      }
     }, 3000);
     const stop = () => {
       observer.disconnect();
