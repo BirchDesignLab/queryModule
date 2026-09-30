@@ -5,13 +5,17 @@
  *
  * Lists of objects that carry an identity (a query type's `code`, a field's `key`, a picklist's
  * `id`) are matched by it, so removing the first query type is one removal, not a change to every
- * item after it. So are lists of unique strings (quick access), matched by the value itself.
+ * item after it. So are lists of unique strings (quick access), matched by the value itself,
+ * except lists whose order is their meaning (POSITIONAL_LISTS).
  * Lists with no identity (rules, repeated values) are matched by equality, and an item edited in
  * place is paired with its old self so it reads as a change.
  */
 
 /** `by` for a list of strings: the item is its own identity (`{ by: VALUE_IDENTITY, is: "VEH" }`). */
 export const VALUE_IDENTITY = "$value";
+
+/** Lists of strings whose order is their meaning (a command's positional defaults, FR-050 to FR-055): matched by slot. */
+const POSITIONAL_LISTS: ReadonlySet<string> = new Set(["positions"]);
 
 /** An item of a keyed list, addressed by its identity: `{ by: "code", is: "VEH" }`. */
 export interface KeyRef {
@@ -166,7 +170,8 @@ function diffArray(
   pointer: string,
   out: ConfigChange[],
 ): void {
-  const by = identityProp(a, b);
+  const named = identityProp(a, b);
+  const by = named === VALUE_IDENTITY && POSITIONAL_LISTS.has(String(path.at(-1))) ? null : named;
   // An item with no identity yet is addressed by its place in its own list.
   const seg = (list: readonly unknown[], i: number): DiffSegment => {
     const id = by === null ? "" : (idOf(list[i], by) ?? "");

@@ -24,9 +24,14 @@ import { useLiveConfig } from "./use-cached-config.js";
 /** What a locale ships for a label key: "" when nothing, null while the bundles are not loaded. */
 function shippedText(shipped: ShippedBundles | null, locale: string, key: string): string | null {
   if (shipped === null) return null;
-  const bundle = locale === "en" ? shipped.en : shipped.perLocale[locale];
-  return bundle === undefined ? null : (bundle[key] ?? "");
+  // Own properties only: a key named like an object member ("constructor") is not shipped text.
+  const bundle = locale === "en" ? shipped.en : own(shipped.perLocale, locale);
+  if (bundle === undefined) return null;
+  const text = own(bundle, key);
+  return typeof text === "string" ? text : "";
 }
+const own = <T,>(o: Readonly<Record<string, T>>, key: string): T | undefined =>
+  Object.hasOwn(o, key) ? o[key] : undefined;
 
 /**
  * Changes (item 4): what the draft changes against the live config, grouped by query type, list,

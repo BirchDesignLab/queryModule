@@ -198,6 +198,24 @@ describe("Changes view (item 4)", () => {
     expect(entry("German", "queryType.VEH")).not.toHaveTextContent("Was");
   });
 
+  it("lists a label key named like an object member as added, never as a change to it", async () => {
+    const t = await openBuilder();
+    const store = configDraftStore(t.services).getState();
+    act(() => {
+      store.setLabel("en", "__proto__", "x");
+      store.setLabel("en", "toString", "y");
+      store.setLabel("en", "constructor", "z");
+    });
+    await openChanges(t);
+    const labels = await groupOf(/^Labels and translations/);
+    const entries = within(labels).getAllByRole("button");
+    expect(entries).toHaveLength(3);
+    for (const entry of entries) {
+      expect(entry).toHaveTextContent(/Added/);
+      expect(entry).not.toHaveTextContent("Was");
+    }
+  });
+
   it("is read-only: no request but reads, Publish stays disabled, and there is no live region", async () => {
     const t = await openBuilder();
     await setDelimiter(t, "~");

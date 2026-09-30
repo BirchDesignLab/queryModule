@@ -376,6 +376,28 @@ describe("diffConfig entries", () => {
     });
   });
 
+  it("keeps a command's positions matched by slot: their order is their meaning", () => {
+    const live = { commands: [{ code: "V", queryType: "VEH", positions: ["plate", "state"] }] };
+    const swapped = { commands: [{ code: "V", queryType: "VEH", positions: ["state", "plate"] }] };
+    const keyed = (cs: ConfigChange[]) =>
+      cs.some(
+        (c) =>
+          c.kind === "moved" ||
+          c.path.some((seg) => typeof seg === "object" && seg.by === VALUE_IDENTITY),
+      );
+    expect(keyed(diffConfig(live, swapped))).toBe(false);
+    const replaced = { commands: [{ code: "V", queryType: "VEH", positions: ["vin", "state"] }] };
+    expect(diffConfig(live, replaced)).toEqual([
+      expect.objectContaining({
+        kind: "changed",
+        path: ["commands", { by: "code", is: "V" }, "positions", 0],
+        before: "plate",
+        after: "vin",
+      }),
+    ]);
+    for (const d of [swapped, replaced]) expect(applyChanges(live, diffConfig(live, d))).toEqual(d);
+  });
+
   describe("one identity property per list", () => {
     const named = (seg: unknown) => typeof seg === "object" && seg !== null && "by" in seg;
 
