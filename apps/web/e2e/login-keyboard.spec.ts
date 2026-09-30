@@ -20,8 +20,10 @@ test("keyboard-only sign-in and sign-out (spec 2, 6.4)", async ({ page }) => {
   await expect(account).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(account).toHaveAttribute("aria-expanded", "true");
-  // Four theme buttons, then Sign out: the fifth Tab.
+  // Four theme buttons, then Keyboard shortcuts, then Sign out: the sixth Tab.
   for (let i = 0; i < 5; i++) await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Keyboard shortcuts" })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Sign out" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
