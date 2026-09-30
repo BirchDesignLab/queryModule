@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useIsFreshLoad, usePersonaLayout } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
@@ -22,8 +22,26 @@ export function QueryPanel() {
   useEffect(() => {
     if (!freshLoad) headingRef.current?.focus();
   }, []);
+  // #382 T18-4 (spec 6.6, Revision 2 "Focus is never lost"): a newer config that removes the
+  // focused control leaves focus on <body>; hand it to the heading. The fields a config drops leave
+  // the DOM in the commit that brings the config, so this layout effect sees them gone. Focus
+  // anywhere that survived is left alone, and the config announcement stays the only one.
+  const lastFocused = useRef<Element | null>(null);
+  const configHash = live.status === "ready" ? live.config.configHash : null;
+  const seenHash = useRef(configHash);
+  useLayoutEffect(() => {
+    const previous = seenHash.current;
+    seenHash.current = configHash;
+    if (previous === null || configHash === null || previous === configHash) return;
+    const gone = lastFocused.current !== null && !lastFocused.current.isConnected;
+    const active = document.activeElement;
+    if (gone && (active === null || active === document.body)) headingRef.current?.focus();
+  }, [configHash]);
   return (
     <main
+      onFocus={(event) => {
+        lastFocused.current = event.target;
+      }}
       className={
         layout === "mobileUnit"
           ? "qm-page qm-query-panel qm-layout--mobile-unit"

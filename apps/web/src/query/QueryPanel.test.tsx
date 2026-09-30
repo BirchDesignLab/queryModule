@@ -520,6 +520,65 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       );
     });
 
+    // #382 T18-4 (spec 6.6, visual system Revision 2 "Focus is never lost"): a focused control the
+    // new config removes hands focus to the panel heading, never to <body> or another field.
+    for (const persona of [null, "mobileUnit"] as const) {
+      it(`T18-4 ${persona ?? "dispatch"}: a removed focused field moves focus to the heading, one announcement`, async () => {
+        const { user, services } = await openPanel(persona);
+        act(() => services.queryClient.setQueryData(["config"], withExtraField(NEW_HASH)));
+        const note = await screen.findByLabelText("custom.zzNote");
+        await user.click(note);
+        expect(note).toHaveFocus();
+        const announce = vi.spyOn(services.announcer, "announce");
+        act(() =>
+          services.queryClient.setQueryData(["config"], {
+            ...CLIENT_CONFIG,
+            configHash: `${"0".repeat(63)}7`,
+          }),
+        );
+        await waitFor(() => expect(screen.queryByLabelText("custom.zzNote")).toBeNull());
+        expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).toHaveFocus();
+        await waitFor(() => expect(announce).toHaveBeenCalledTimes(1));
+        expect(announce).toHaveBeenCalledWith("The form was updated by your administrator.");
+      });
+    }
+
+    it("T18-4 a focused quick-access button whose type is removed moves focus to the heading", async () => {
+      const { user, services } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      expect(screen.getByRole("button", { name: "Person" })).toHaveFocus();
+      act(() =>
+        services.queryClient.setQueryData(["config"], {
+          ...CLIENT_CONFIG,
+          configHash: NEW_HASH,
+          queryTypes: CLIENT_CONFIG.queryTypes.filter((q) => q.code !== "PER"),
+          quickAccess: ["VEH", "PRO", "WNT", "DL"],
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Person" })).toBeNull());
+      expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).toHaveFocus();
+    });
+
+    it("T18-4 focus on a control the new config keeps stays put", async () => {
+      const { user, services } = await openPanel();
+      const plate = screen.getByLabelText("Plate");
+      await user.click(plate);
+      act(() => services.queryClient.setQueryData(["config"], withExtraField(NEW_HASH)));
+      expect(await screen.findByLabelText("custom.zzNote")).toBeInTheDocument();
+      expect(plate).toHaveFocus();
+    });
+
+    it("T18-4 a removal without a config change does not move focus", async () => {
+      const { user } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      const last = screen.getByLabelText(/Last name/);
+      await user.click(last);
+      // A type switch by shortcut removes the focused field; not a config change, so hands off.
+      await user.keyboard("{Alt>}1{/Alt}");
+      await waitFor(() => expect(screen.queryByLabelText(/Last name/)).toBeNull());
+      expect(screen.getByRole("heading", { level: 1, name: "Query Module" })).not.toHaveFocus();
+    });
+
     it("after a 409 the refetched config changes the form without a second announcement", async () => {
       server.use(
         http.post(`${API}/api/v1/queries`, () =>
