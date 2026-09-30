@@ -567,10 +567,26 @@ h1 {
   min-inline-size: 0;
 }
 
+/* The heading with the row count beside it (design target: "3 requests"). */
+.qm-requests__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--qm-space-1) var(--qm-space-3);
+  margin-block-end: var(--qm-space-3);
+}
+
 .qm-requests__heading {
-  margin: 0 0 var(--qm-space-3);
+  margin: 0;
   font-size: var(--qm-type-size-lg);
   font-weight: 600;
+}
+
+.qm-requests__count {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
 }
 
 .qm-requests__empty {
@@ -751,8 +767,6 @@ h1 {
 
 .qm-layout--mobile-unit .qm-quick-access__hint {
   display: none;
-  color: var(--qm-color-text-body);
-  font-size: var(--qm-type-body-size);
 }
 
 /* Nothing the officer reads is muted or small (spec 6.3). */
@@ -770,6 +784,11 @@ h1 {
   font-size: var(--qm-type-size-xl);
   font-weight: 600;
   text-align: start;
+}
+
+/* The tile rule sets its own surface, so it restates the hover lift (the pressed tile keeps its fill). */
+.qm-layout--mobile-unit .qm-quick-access__button:hover:not([aria-pressed="true"]) {
+  background: var(--qm-color-surface-raised);
 }
 
 .qm-layout--mobile-unit .qm-quick-access__button[aria-pressed="true"] {
@@ -1015,6 +1034,7 @@ h1 {
 }
 
 .qm-layout--mobile-unit .qm-requests__empty,
+.qm-layout--mobile-unit .qm-requests__count,
 .qm-layout--mobile-unit .qm-request__meta {
   color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);

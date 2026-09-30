@@ -83,7 +83,7 @@ describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", (
     "requests.failure.noResponse",
     "requests.failure.failed",
   ];
-  const plural = ["terminal.fieldsNotShown", "terminal.problems"];
+  const plural = ["terminal.fieldsNotShown", "terminal.problems", "requests.count"];
   it("every key exists", () => {
     expect(single.filter((k) => !(k in en))).toEqual([]);
   });

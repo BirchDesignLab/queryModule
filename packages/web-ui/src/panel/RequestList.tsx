@@ -21,6 +21,8 @@ export interface RequestListProps {
   rows: readonly RequestRowView[];
   /** The visible heading, for example "Requests this shift". */
   heading: string;
+  /** Shown beside the heading, for example "3 requests"; not part of the section's name. */
+  countText?: string;
   emptyText: string;
   onCopy(reference: string): void;
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
@@ -62,6 +64,7 @@ const BADGE_CLASS = {
 export function RequestList({
   rows,
   heading,
+  countText,
   emptyText,
   onCopy,
   t,
@@ -69,9 +72,12 @@ export function RequestList({
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="qm-requests">
-      <h2 id={headingId} className="qm-requests__heading">
-        {heading}
-      </h2>
+      <div className="qm-requests__head">
+        <h2 id={headingId} className="qm-requests__heading">
+          {heading}
+        </h2>
+        {countText === undefined ? null : <p className="qm-requests__count">{countText}</p>}
+      </div>
       {rows.length === 0 ? (
         <p className="qm-requests__empty">{emptyText}</p>
       ) : (
