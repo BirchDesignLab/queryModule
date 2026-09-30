@@ -130,7 +130,7 @@ export function AppHeader() {
       {/* Product name as plain text: each page owns its h1. */}
       <p className="qm-app-header__product">
         <BrandMark />
-        {t("login.product")}
+        <span className="qm-app-header__name">{t("login.product")}</span>
       </p>
       {compact || siteLabel === null ? null : <p className="qm-app-header__site">{siteLabel}</p>}
       <nav className="qm-app-header__nav" aria-label={t("home.navLabel")}>

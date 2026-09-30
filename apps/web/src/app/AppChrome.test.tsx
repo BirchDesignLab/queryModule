@@ -153,7 +153,8 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
   it("B1 the header is a banner with the product name, site name, a Main nav and the account button", async () => {
     await signIn();
     const header = screen.getByRole("banner");
-    expect(within(header).getByText("Query Module 2.0")).toBeInTheDocument();
+    // Its own element, so the officer bar can hide it visually and keep it for screen readers.
+    expect(within(header).getByText("Query Module 2.0")).toHaveClass("qm-app-header__name");
     expect(within(header).queryByRole("heading")).toBeNull();
     expect(await within(header).findByText("Default site")).toBeInTheDocument();
     const nav = within(header).getByRole("navigation", { name: "Main" });

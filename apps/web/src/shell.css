@@ -382,12 +382,9 @@ main[tabindex="-1"]:focus {
 }
 
 /* Officer bar (design target): the mark alone, the account as its initial, nothing muted (spec 6.3).
-   The names stay in the accessibility tree: the product name at zero size beside the mark, the
-   account email hidden the way VisuallyHidden hides it. */
-.qm-app-header--compact .qm-app-header__product {
-  font-size: 0;
-}
-
+   The names stay in the accessibility tree: the product name and the account email are hidden the
+   way VisuallyHidden hides them. */
+.qm-app-header--compact .qm-app-header__name,
 .qm-app-header--compact .qm-account__email {
   position: absolute;
   inline-size: var(--qm-border-width);
