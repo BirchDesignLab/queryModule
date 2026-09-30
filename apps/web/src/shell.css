@@ -580,14 +580,14 @@ main[tabindex="-1"]:focus {
 }
 
 /* At desktop width the panes take the height under the toolbar and scroll on their own, so the
-   preview stays in view; at 1024 and below the second max() term is huge (positive once the
-   viewport is narrower than about 1024 px) and the page flows as one column (design lead). */
+   preview stays in view; below the wide layout constant the second max() term is huge (positive
+   once the viewport is narrower than it) and the page flows as one column (design lead). */
 .qm-tree,
 .qm-builder__editor,
 .qm-builder__panes > .qm-admin__preview {
   max-block-size: max(
     calc(100dvh - var(--qm-space-12) * 3.9),
-    calc((var(--qm-space-12) * 21.34 - 100vw) * 1000)
+    calc((var(--qm-layout-wide) - 100vw) * 1000)
   );
   overflow-y: auto;
 }
@@ -708,7 +708,7 @@ main[tabindex="-1"]:focus {
 
 /* Paused: the last valid version stays in view but is plainly not current. */
 .qm-preview__panel[data-paused] {
-  opacity: 0.55;
+  opacity: var(--qm-opacity-inert);
 }
 
 .qm-preview__state {
@@ -776,7 +776,7 @@ main[tabindex="-1"]:focus {
 
 @keyframes qm-preview-pulse {
   50% {
-    opacity: 0.5;
+    opacity: var(--qm-opacity-inert);
   }
 }
 
@@ -1319,7 +1319,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-leave-dialog::backdrop {
-  background: var(--qm-color-surface-sunken);
+  background: var(--qm-color-surface-scrim);
   opacity: 0.8;
 }
 

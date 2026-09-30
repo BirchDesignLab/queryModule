@@ -10,6 +10,9 @@ export const COLOR_TOKENS = {
   "color.surface.base": { day: "#ffffff", night: "#10151c", redShift: "#0d0000" },
   "color.surface.raised": { day: "#f7f9fb", night: "#161d26", redShift: "#1a0500" },
   "color.surface.overlay": { day: "#ffffff", night: "#1e2733", redShift: "#240900" },
+  // The dim behind a modal, drawn at 0.8 opacity. Night and red shift keep the sunken surface;
+  // day is dark, since a light scrim would leave a white page undimmed.
+  "color.surface.scrim": { day: "#1c2430", night: "#0a0e13", redShift: "#080000" },
   "color.accent": { day: "#0b4a9e", night: "#8ab4ff", redShift: "#ff8c1a" },
   "color.accent.fill": { day: "#0b4a9e", night: "#8ab4ff", redShift: "#ff8c1a" },
   "color.accent.onFill": { day: "#ffffff", night: "#0a0e13", redShift: "#0d0000" },
@@ -51,6 +54,9 @@ export const SCALE_TOKENS = {
   "type.body.size": "16px",
   "type.body.lineHeight": "1.5",
   "type.heading.size": "24px",
+  // How far inert content (a paused preview, a loading skeleton's pulse) recedes. Like every scale
+  // token it is not site-overridable: config overrides must be #rrggbb colours.
+  "opacity.inert": "0.55",
   "border.width": "1px",
   "focus.ring.width": "2px",
   "focus.ring.offset": "2px",
@@ -64,6 +70,15 @@ export const SCALE_TOKENS = {
   // Density is set by the persona layout, never by width (spec 6.1, 6.3).
   "control.height.dense": "36px",
   "control.height.touch": "56px",
+} as const;
+
+/**
+ * Fixed layout constants: emitted as CSS custom properties but not tokens (not in TOKEN_NAMES, no
+ * theme or config override), because a breakpoint is a layout decision, never a theme one.
+ */
+export const LAYOUT_CONSTANTS = {
+  /** At or above this width each admin pane scrolls on its own under the toolbar; below it the page flows as one column. */
+  "layout.wide": "64rem",
 } as const;
 
 export type ColorTokenName = keyof typeof COLOR_TOKENS;

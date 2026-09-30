@@ -21,6 +21,7 @@
   --qm-type-body-size: 16px;
   --qm-type-body-lineHeight: 1.5;
   --qm-type-heading-size: 24px;
+  --qm-opacity-inert: 0.55;
   --qm-border-width: 1px;
   --qm-focus-ring-width: 2px;
   --qm-focus-ring-offset: 2px;
@@ -33,12 +34,14 @@
   --qm-target-min: 48px;
   --qm-control-height-dense: 36px;
   --qm-control-height-touch: 56px;
+  --qm-layout-wide: 64rem;
   --qm-color-text-body: #121820;
   --qm-color-text-muted: #4d5968;
   --qm-color-surface-sunken: #eceff3;
   --qm-color-surface-base: #ffffff;
   --qm-color-surface-raised: #f7f9fb;
   --qm-color-surface-overlay: #ffffff;
+  --qm-color-surface-scrim: #1c2430;
   --qm-color-accent: #0b4a9e;
   --qm-color-accent-fill: #0b4a9e;
   --qm-color-accent-onFill: #ffffff;
@@ -62,6 +65,7 @@
   --qm-color-surface-base: #10151c;
   --qm-color-surface-raised: #161d26;
   --qm-color-surface-overlay: #1e2733;
+  --qm-color-surface-scrim: #0a0e13;
   --qm-color-accent: #8ab4ff;
   --qm-color-accent-fill: #8ab4ff;
   --qm-color-accent-onFill: #0a0e13;
@@ -85,6 +89,7 @@
   --qm-color-surface-base: #0d0000;
   --qm-color-surface-raised: #1a0500;
   --qm-color-surface-overlay: #240900;
+  --qm-color-surface-scrim: #080000;
   --qm-color-accent: #ff8c1a;
   --qm-color-accent-fill: #ff8c1a;
   --qm-color-accent-onFill: #0d0000;

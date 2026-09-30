@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cssVarName, TOKEN_NAMES } from "@querymodule/tokens";
+import { cssVarName, LAYOUT_CONSTANTS, TOKEN_NAMES } from "@querymodule/tokens";
 import { describe, expect, it } from "vitest";
 
 // Read from disk (T20/IC1 precedent): jsdom's global URL breaks readFileSync(new URL(...)),
@@ -17,9 +17,26 @@ describe("shell.css uses token variables only (spec 6.5)", () => {
     );
     expect(shellCss).not.toMatch(/\b\d+(\.\d+)?(px|rem|em)\b/);
     expect(shellCss).not.toMatch(/var\(--[\w-]+\s*,/);
-    const known = new Set(TOKEN_NAMES.map((n) => cssVarName(n)));
+    const known = new Set(
+      [...TOKEN_NAMES, ...Object.keys(LAYOUT_CONSTANTS)].map((n) => cssVarName(n)),
+    );
     for (const [, name] of shellCss.matchAll(/var\((--[\w-]+)\)/g))
       expect(known.has(name ?? ""), name).toBe(true);
+  });
+
+  it("dims through the shared tokens: one inert opacity, the scrim colour, the layout constant", () => {
+    const rule = (selector: string) =>
+      new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
+        shellCss,
+      )?.[1] ?? "";
+    expect(rule(".qm-preview__panel[data-paused]")).toContain("opacity: var(--qm-opacity-inert)");
+    expect(shellCss).toMatch(
+      /@keyframes qm-preview-pulse\s*\{\s*50%\s*\{\s*opacity: var\(--qm-opacity-inert\);/,
+    );
+    expect(rule(".qm-leave-dialog::backdrop")).toContain("var(--qm-color-surface-scrim)");
+    // The breakpoint is the emitted constant, not a hand-tuned multiple of a spacing token.
+    expect(shellCss).toContain("var(--qm-layout-wide)");
+    expect(shellCss).not.toContain("21.34");
   });
 });
 

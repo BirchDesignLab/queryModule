@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CONTRAST_PAIRS, contrastFailures, contrastRatio, relativeLuminance } from "./contrast";
 import { buildCss, cssVarName } from "./css";
 import { buildTheme } from "./theme";
-import { COLOR_TOKENS, THEME_MODES, TOKEN_NAMES, tokenValue } from "./tokens";
+import { COLOR_TOKENS, LAYOUT_CONSTANTS, THEME_MODES, TOKEN_NAMES, tokenValue } from "./tokens";
 
 describe("UX-011 UX-002 tokens (spec 6.5)", () => {
   it("modes match the core config schema", () => {
@@ -148,5 +148,38 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
       buildTheme("day", { "color.surface.base": "#fafafa" }).colors["color.surface.base"],
     ).toBe("#fafafa");
     expect(buildTheme("day").scale["target.min"]).toBe("48px");
+  });
+});
+
+describe("inert opacity, scrim and layout constant (cloud3 item 1)", () => {
+  it("opacity.inert is one scale token, ~0.55, in TOKEN_NAMES and the generated CSS", () => {
+    expect(TOKEN_NAMES).toContain("opacity.inert");
+    for (const mode of THEME_MODES) expect(tokenValue("opacity.inert", mode)).toBe("0.55");
+    expect(buildCss()).toContain("--qm-opacity-inert: 0.55;");
+  });
+
+  it("surface.scrim is a #rrggbb colour per mode; night and red shift keep the sunken surface", () => {
+    expect(TOKEN_NAMES).toContain("color.surface.scrim");
+    for (const mode of THEME_MODES)
+      expect(COLOR_TOKENS["color.surface.scrim"][mode], mode).toMatch(/^#[0-9a-f]{6}$/);
+    expect(COLOR_TOKENS["color.surface.scrim"].night).toBe(
+      COLOR_TOKENS["color.surface.sunken"].night,
+    );
+    expect(COLOR_TOKENS["color.surface.scrim"].redShift).toBe(
+      COLOR_TOKENS["color.surface.sunken"].redShift,
+    );
+    // Day: a dark scrim, unlike the light sunken surface, so the page visibly dims.
+    expect(relativeLuminance(COLOR_TOKENS["color.surface.scrim"].day)).toBeLessThan(0.05);
+  });
+
+  it("the wide breakpoint is a fixed layout constant: emitted once on :root, never a token", () => {
+    expect(LAYOUT_CONSTANTS["layout.wide"]).toBe("64rem");
+    expect(TOKEN_NAMES as readonly string[]).not.toContain("layout.wide");
+    const css = buildCss();
+    expect(css.match(/--qm-layout-wide:/g)).toHaveLength(1);
+    expect(css).toContain("--qm-layout-wide: 64rem;");
+    // Not repeated under a theme block, so a theme cannot move it.
+    const themed = css.slice(css.indexOf(':root[data-theme="night"]'));
+    expect(themed).not.toContain("layout-wide");
   });
 });
