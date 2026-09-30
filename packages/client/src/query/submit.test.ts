@@ -281,6 +281,23 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(seen).toHaveLength(2);
   });
 
+  it("B3 a submit made as the status turns noConnection starts its own request", async () => {
+    const seen = serveQueries(() => HttpResponse.error());
+    server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.error()));
+    const { controller } = setup();
+    let second: Promise<unknown> | null = null;
+    const first = controller.getState().submit(REQ);
+    const unsubscribe = controller.subscribe((s) => {
+      if (s.status === "noConnection" && second === null)
+        second = s.submit({ ...REQ, configHash: "h2" });
+    });
+    await first;
+    unsubscribe();
+    expect(second).not.toBe(first);
+    await second;
+    expect(seen).toHaveLength(2);
+  });
+
   it("reset clears the kept key and the health timer", async () => {
     const seen = serveQueries(() => HttpResponse.error());
     let health = 0;
