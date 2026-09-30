@@ -2,7 +2,7 @@ import { VisuallyHidden } from "@querymodule/web-ui";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext, IssueMessages, isError, issuesFor } from "./checks.js";
-import { controlId, NumberControl, useDraftSetters } from "./controls.js";
+import { controlId, humanize, NumberControl, useDraftSetters } from "./controls.js";
 import type { PathSegment } from "./draft.js";
 import { issueWords } from "./selection.js";
 
@@ -14,6 +14,21 @@ interface NodeEditorProps {
 }
 
 const pathText = (path: readonly PathSegment[]): string => path.join(".");
+
+/**
+ * A setting's name in words, with its config path only in hidden text (A3): "Max duration
+ * minutes" is what shows; the path keeps each control's name unique.
+ */
+function SettingName({ path }: { path: readonly PathSegment[] }) {
+  const t = useT();
+  const last = path[path.length - 1];
+  return (
+    <>
+      {last === undefined ? "" : humanize(last, (n) => t("admin.config.item", { n }))}{" "}
+      <VisuallyHidden>{pathText(path)}</VisuallyHidden>
+    </>
+  );
+}
 
 /** Per-source timeoutMs is a server-side setting: shown in the client view, not editable here. */
 const isServerSideLeaf = (path: readonly PathSegment[]): boolean =>
@@ -71,7 +86,9 @@ function ArrayEditor({
   }, [want, path]);
   return (
     <fieldset ref={root} aria-describedby={issues === undefined ? undefined : issuesId}>
-      <legend>{text}</legend>
+      <legend>
+        <SettingName path={path} />
+      </legend>
       <IssueMessages id={issuesId} issues={issues} />
       {items.map((item, i) => {
         const itemPath = [...path, i];
@@ -124,7 +141,6 @@ function ArrayEditor({
 /** The generic schema-driven form: one control per JSON leaf, labelled with its path. */
 export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps) {
   const t = useT();
-  const text = pathText(path);
   const id = controlId(idPrefix, path);
   const checks = useContext(ChecksContext);
   const issues = issuesFor(checks, path);
@@ -137,7 +153,9 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
   if (typeof value === "object" && value !== null) {
     return (
       <fieldset aria-describedby={describedBy}>
-        <legend>{text}</legend>
+        <legend>
+          <SettingName path={path} />
+        </legend>
         <IssueMessages id={issuesId} issues={issues} />
         {Object.entries(value as Record<string, unknown>).map(([key, child]) => (
           <NodeEditor
@@ -162,7 +180,9 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
           aria-describedby={describedBy}
           onChange={(e) => onChange(path, e.target.checked)}
         />{" "}
-        <label htmlFor={id}>{text}</label>
+        <label htmlFor={id}>
+          <SettingName path={path} />
+        </label>
         <IssueMessages id={issuesId} issues={issues} />
       </div>
     );
@@ -172,7 +192,7 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
       <NumberControl
         idPrefix={idPrefix}
         path={path}
-        label={text}
+        label={<SettingName path={path} />}
         value={value}
         readOnly={isServerSideLeaf(path)}
         note={isServerSideLeaf(path) ? t("admin.config.serverSetting") : undefined}
@@ -182,7 +202,9 @@ export function NodeEditor({ value, path, idPrefix, onChange }: NodeEditorProps)
   }
   return (
     <div>
-      <label htmlFor={id}>{text}</label>{" "}
+      <label htmlFor={id}>
+        <SettingName path={path} />
+      </label>{" "}
       <input
         id={id}
         type="text"

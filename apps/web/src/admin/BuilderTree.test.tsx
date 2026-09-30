@@ -110,7 +110,7 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     // The editor shows only this item, so the item itself is not tinted (only a part inside is).
     expect(heading.closest("section")).not.toHaveAttribute("data-selected");
     await t.user.click(item(/^Terminal settings terminal/));
-    expect(await screen.findByLabelText("terminal.delimiter")).toBeInTheDocument();
+    expect(await screen.findByLabelText(/ terminal\.delimiter$/)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^Terminal commands/, level: 3 })).toBeNull();
     expect(screen.queryByText("Query type VEH", { selector: "legend" })).toBeNull();
   });

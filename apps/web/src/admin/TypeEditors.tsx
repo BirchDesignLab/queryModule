@@ -391,6 +391,17 @@ function FieldsEditor({
     .filter((id) => id !== "");
   const owner = (i: number) => controlId(idPrefix, [...path, i]);
   const listOwner = controlId(idPrefix, path);
+  // Advanced settings the user opened, by field key: rows remount on a move or remove, and the
+  // disclosure the user was using comes back open (A3 critic).
+  const openAdvanced = useRef(new Set<string>());
+  const onAdvanced = useCallback((key: string, open: boolean, from?: string) => {
+    // A rename moves the entry; a close or remove drops it.
+    if (from !== undefined) {
+      if (!openAdvanced.current.delete(from)) return;
+    }
+    if (open) openAdvanced.current.add(key);
+    else openAdvanced.current.delete(key);
+  }, []);
   // Row handlers read the latest list, so memoized rows never act on a stale copy.
   const latest = useRef({ fields, path, owner, listOwner });
   // Written after commit (the #392 pattern), so a discarded render never leaks into a handler.
@@ -409,6 +420,7 @@ function FieldsEditor({
   const onRemove = useCallback(
     (index: number) => {
       const { fields: list, path: at, owner: own, listOwner: add } = latest.current;
+      openAdvanced.current.delete(str(list[index]?.key));
       bump();
       const next = list.filter((_, j) => j !== index);
       setPath(at, next);
@@ -431,6 +443,8 @@ function FieldsEditor({
           sectionNames={sectionNames}
           picklistIds={picklistIds}
           idPrefix={idPrefix}
+          advancedOpen={openAdvanced.current.has(str(field.key))}
+          onAdvanced={onAdvanced}
           onMove={onMove}
           onRemove={onRemove}
         />
@@ -462,6 +476,10 @@ interface FieldRowProps {
   sectionNames: readonly string[];
   picklistIds: readonly string[];
   idPrefix: string;
+  /** Mount-time only: whether this field's Advanced was open before a move remounted it. */
+  advancedOpen: boolean;
+  /** Records the field's Advanced as open or closed; `from` is the key it had before a rename. */
+  onAdvanced(key: string, open: boolean, from?: string): void;
   onMove(from: number, to: number): void;
   onRemove(index: number): void;
 }
@@ -515,6 +533,7 @@ const FieldRow = memo(
     a.idPrefix === b.idPrefix &&
     a.onMove === b.onMove &&
     a.onRemove === b.onRemove &&
+    a.onAdvanced === b.onAdvanced &&
     sameList(a.path, b.path) &&
     sameList(a.sectionKeys, b.sectionKeys) &&
     sameList(a.sectionNames, b.sectionNames) &&
@@ -529,6 +548,8 @@ function FieldControls({
   sectionNames,
   picklistIds,
   idPrefix,
+  advancedOpen,
+  onAdvanced,
 }: {
   field: Obj;
   path: readonly PathSegment[];
@@ -537,6 +558,8 @@ function FieldControls({
   sectionNames: readonly string[];
   picklistIds: readonly string[];
   idPrefix: string;
+  advancedOpen: boolean;
+  onAdvanced(key: string, open: boolean, from?: string): void;
 }) {
   const t = useT();
   const { setPath } = useDraftSetters();
@@ -544,6 +567,13 @@ function FieldControls({
   const defaultPath = [...path, "defaultValue"];
   const defaultLabel = t("admin.config.field.defaultValue");
   const key = str(field.key);
+  // A rename carries the remembered open state to the new key.
+  const keyWas = useRef(key);
+  useEffect(() => {
+    if (keyWas.current === key) return;
+    onAdvanced(key, true, keyWas.current);
+    keyWas.current = key;
+  }, [key, onAdvanced]);
   return (
     <>
       <LabelTextControls idPrefix={idPrefix} path={path} labelKey={field.labelKey} owner={owner} />
@@ -634,6 +664,8 @@ function FieldControls({
           ...Object.keys(field).filter((k) => !FIELD_KEYS.has(k)),
         ]}
         attention={key === "" || str(field.labelKey) === ""}
+        defaultOpen={advancedOpen}
+        onOpenChange={(open) => onAdvanced(key, open)}
       >
         <TextControl
           idPrefix={idPrefix}

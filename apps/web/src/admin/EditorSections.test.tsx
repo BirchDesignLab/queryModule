@@ -204,3 +204,176 @@ describe("A3 query type editor: ruled sections", () => {
     expect(adv().open).toBe(true);
   });
 });
+
+// A-D2 part 1b: the other editors in the same pattern.
+
+const sentence = (root: HTMLElement) => root.querySelector(".qm-rule__sentence")?.textContent;
+
+describe("A3 rules read as sentences (no new condition syntax)", () => {
+  it("each rule states what it does in plain words, from the schema Condition", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "VEH");
+    expect(sentence(group(typeBox("VEH"), "Rule 1"))).toBe(
+      "Show Plate type when State is not its site default.",
+    );
+    expect(sentence(group(typeBox("VEH"), "Rule 2"))).toBe(
+      "Require Plate type when State is not its site default.",
+    );
+    await selectBuilderItem(t.user, "PRO");
+    expect(sentence(group(typeBox("PRO"), "Rule 1"))).toBe(
+      "Show Make when Property type is one of Firearm, Electronics.",
+    );
+    await selectBuilderItem(t.user, "DL");
+    expect(sentence(group(typeBox("DL"), "Rule 1"))).toBe(
+      "Require License number when Last name is empty.",
+    );
+  });
+
+  it("the sentence follows an edit; groups read with and / or", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "VEH");
+    const rule = () => group(typeBox("VEH"), "Rule 1");
+    await t.user.selectOptions(within(rule()).getByLabelText("Effect"), "hide");
+    await t.user.selectOptions(within(rule()).getByLabelText("Condition type"), "any");
+    expect(sentence(rule())).toBe("Hide Plate type when State is not its site default.");
+    await t.user.click(within(rule()).getByRole("button", { name: "Add condition" }));
+    expect(sentence(rule())).toMatch(
+      /^Hide Plate type when State is not its site default or .+\.$/,
+    );
+  });
+
+  it("field selects in rules name fields by their label; the value is the key", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "VEH");
+    const target = within(group(typeBox("VEH"), "Rule 1")).getByLabelText("Target field");
+    expect(within(target).getByRole("option", { name: "Plate type" })).toHaveValue("plateType");
+  });
+
+  it("a section's condition reads as a sentence too", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "PER");
+    const base = group(typeBox("PER"), /section base$/);
+    await t.user.click(within(base).getByRole("button", { name: "Add condition" }));
+    expect(sentence(group(typeBox("PER"), /section base$/))).toBe(
+      "Shown when Last name is filled in.",
+    );
+  });
+});
+
+describe("A3 terminal commands and quick access in plain words", () => {
+  it("query type and field selects name types and fields; values stay codes and keys", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "commands");
+    const veh = group(editor(), "Command VEH");
+    const type = within(veh).getByLabelText("Query type");
+    expect(within(type).getByRole("option", { name: "Vehicle (VEH)" })).toHaveValue("VEH");
+    const first = group(veh, "Position 1");
+    const field = within(first).getByLabelText("Field");
+    expect(within(field).getByRole("option", { name: "Plate" })).toHaveValue("plate");
+    await selectBuilderItem(t.user, "quickAccess");
+    const slot = within(editor()).getByLabelText("Button 1");
+    expect(within(slot).getByRole("option", { name: "Vehicle (VEH)" })).toHaveValue("VEH");
+  });
+});
+
+describe("A3 lists", () => {
+  it("a value's label key sits under a closed Advanced; code, label and enabled stay in view", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "picklists");
+    const value = group(group(editor(), "Picklist sex"), "Value F");
+    const adv = advanced(value);
+    expect(adv.open).toBe(false);
+    expect(within(adv).getByLabelText("Label key")).toBeInTheDocument();
+    expect(adv.contains(within(value).getByLabelText("Code"))).toBe(false);
+    expect(adv.contains(within(value).getByLabelText("Label (en)"))).toBe(false);
+  });
+});
+
+describe("A3 generic form in plain words", () => {
+  it("a setting reads as its name; the config path is only hidden text", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "delegation");
+    const input = within(editor()).getByLabelText(/^Max duration minutes/);
+    const label = document.querySelector(`label[for="${input.id}"]`) as HTMLElement;
+    const hidden = [...label.querySelectorAll("span")].map((s) => s.textContent).join("");
+    expect(label.textContent?.replace(hidden, "").trim()).toBe("Max duration minutes");
+    expect(hidden).toContain("delegation.maxDurationMinutes");
+  });
+});
+
+describe("A3 Advanced keeps its state across a move (critic, part 1a)", () => {
+  it("an Advanced the user opened on a field stays open when another field moves", async () => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "PER");
+    const dob = () => fieldBox("PER", "dob");
+    await t.user.click(advanced(dob()).querySelector("summary") as HTMLElement);
+    expect(advanced(dob()).open).toBe(true);
+    await t.user.click(
+      within(fieldBox("PER", "first")).getByRole("button", { name: "Move up first" }),
+    );
+    expect(advanced(dob()).open).toBe(true);
+    expect(advanced(fieldBox("PER", "first")).open).toBe(false);
+  });
+});
+
+describe("A3 rule sentences over every condition shape (critic, part 1b)", () => {
+  const TX = { field: "state", op: "eq", value: "TX" };
+  const Y = { field: "year", op: "gte", value: 2020 };
+  const cases: [string, Record<string, unknown>, string][] = [
+    [
+      "not around a group, one pair of parentheses",
+      { field: "plateType", effect: "show", when: { not: { all: [TX, Y] } } },
+      "Show Plate type when not (State is Texas and Year is 2020 or more).",
+    ],
+    [
+      "a group nested in a group",
+      {
+        field: "plateType",
+        effect: "hide",
+        when: { any: [{ field: "plate", op: "empty" }, { all: [TX, Y] }] },
+      },
+      "Hide Plate type when Plate is empty or (State is Texas and Year is 2020 or more).",
+    ],
+    [
+      "setDefault names the value by its list label",
+      {
+        field: "state",
+        effect: "setDefault",
+        value: "OK",
+        when: { field: "plate", op: "notEmpty" },
+      },
+      "Fill in State with Oklahoma when Plate is filled in.",
+    ],
+    [
+      "an unknown operator does not pretend to be equals",
+      { field: "plateType", effect: "show", when: { field: "state", op: "zz", value: "TX" } },
+      "Show Plate type when the condition is not finished.",
+    ],
+    [
+      "a blank field",
+      { field: "plateType", effect: "show", when: { field: "", op: "eq", value: "TX" } },
+      "Show Plate type when the condition is not finished.",
+    ],
+    [
+      "an empty group",
+      { field: "plateType", effect: "show", when: { all: [] } },
+      "Show Plate type when the condition is not finished.",
+    ],
+    [
+      "an empty value list",
+      { field: "plateType", effect: "show", when: { field: "state", op: "in", value: [] } },
+      "Show Plate type when the condition is not finished.",
+    ],
+  ];
+  it.each(cases)("%s", async (_name, rule, expected) => {
+    const t = await openBuilder();
+    await selectBuilderItem(t.user, "VEH");
+    act(() => {
+      const d = structuredClone(state(t).doc) as { queryTypes: QueryType[] };
+      const veh = d.queryTypes.find((q) => q.code === "VEH") as QueryType;
+      (veh.rules as unknown[])[0] = rule;
+      state(t).setDoc(d as never);
+    });
+    expect(sentence(group(typeBox("VEH"), "Rule 1"))).toBe(expected);
+  });
+});

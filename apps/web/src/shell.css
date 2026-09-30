@@ -1005,3 +1005,13 @@ main[tabindex="-1"]:focus {
 .qm-advanced__location code {
   font-family: var(--qm-type-family-data);
 }
+
+/* A rule in plain words (A3, design target): read-only, above the controls that write it. */
+.qm-rule__sentence {
+  margin: var(--qm-space-2) 0;
+  padding: var(--qm-space-2) var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-sunken);
+  color: var(--qm-color-text-body);
+}

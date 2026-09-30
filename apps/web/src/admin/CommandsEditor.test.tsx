@@ -65,7 +65,7 @@ describe("commands editor (Task 31 part 2, FR-050, FR-051, FR-060, UX-004)", () 
       within(type)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toContain("WNT");
+    ).toContain("Wanted check (WNT)");
     await t.user.selectOptions(type, "WNT");
     expect(command(t, "NAM").queryType).toBe("WNT");
     const code = within(box("NAM")).getByLabelText("Code");
@@ -192,7 +192,7 @@ describe("quick access editor (Task 31 part 2, FR-060, UX-004)", () => {
       within(group(document, "Quick access")).getByRole("button", { name: "Add quick access" }),
     );
     expect(quick(t)).toEqual(["VEH", "PER", "WNT", "PRO", "DL"]);
-    const selects = within(group(document, "Quick access")).getAllByLabelText(/^Quick access \d$/);
+    const selects = within(group(document, "Quick access")).getAllByLabelText(/^Button \d$/);
     await t.user.selectOptions(selects[0] as HTMLElement, "PRO");
     expect(quick(t)[0]).toBe("PRO");
   });

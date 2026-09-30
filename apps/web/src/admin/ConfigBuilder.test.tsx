@@ -38,7 +38,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("edits in the generic form change the draft JSON", async () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "terminal");
-    const input = await screen.findByLabelText("terminal.delimiter");
+    const input = await screen.findByLabelText(/ terminal\.delimiter$/);
     await t.user.clear(input);
     await t.user.type(input, ",");
     expect(draftDoc(t)?.terminal).toEqual({ delimiter: "," });
@@ -75,7 +75,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(status).not.toHaveAttribute("aria-live");
     expect(status).not.toHaveAttribute("role");
     await selectBuilderItem(t.user, "terminal");
-    const input = await screen.findByLabelText("terminal.delimiter");
+    const input = await screen.findByLabelText(/ terminal\.delimiter$/);
     await t.user.clear(input);
     await t.user.type(input, ",");
     expect(status).toHaveTextContent("Draft: unpublished changes, kept in this tab only");
@@ -210,7 +210,7 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("per-source timeoutMs is server-side and read-only in the generic form (CV1)", async () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "sources");
-    const field = await screen.findByLabelText("sources.0.timeoutMs");
+    const field = await screen.findByLabelText(/ sources\.0\.timeoutMs$/);
     expect(field).toHaveAttribute("readonly");
     const before = JSON.stringify(draftDoc(t)?.sources);
     await t.user.type(field, "9");
