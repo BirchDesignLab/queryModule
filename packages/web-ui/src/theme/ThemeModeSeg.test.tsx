@@ -31,6 +31,16 @@ describe("UX-002 theme mode segmented control (visual system: controls and state
     ]);
     expect(group).toHaveClass("qm-seg");
   });
+  it("names each button's mode in data-theme-mode, in both the text and the icon form", () => {
+    const { rerender } = render(<ThemeModeSeg value={null} onChange={() => undefined} t={t} />);
+    const modes = () =>
+      within(screen.getByRole("group", { name: "Theme" }))
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("data-theme-mode"));
+    expect(modes()).toEqual(["auto", "day", "night", "redShift"]);
+    rerender(<ThemeModeSeg value={null} onChange={() => undefined} t={t} icons />);
+    expect(modes()).toEqual(["auto", "day", "night", "redShift"]);
+  });
   it("presses only the chosen mode", () => {
     render(<ThemeModeSeg value="night" onChange={() => undefined} t={t} />);
     expect(screen.getByRole("button", { name: "Night" })).toHaveAttribute("aria-pressed", "true");

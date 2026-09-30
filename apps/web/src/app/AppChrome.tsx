@@ -106,18 +106,13 @@ function BrandMark() {
   );
 }
 
-const THEME_GROUP = ".qm-seg";
-
-/** The mode of the theme button that has focus inside the header, or null (the seg renders THEME_PREFERENCES in order). */
+/** The mode of the theme button that has focus inside the header, or null (ThemeModeSeg's data-theme-mode). */
 function focusedThemeMode(header: HTMLElement | null): ThemeModePreference | null {
   if (header === null || typeof document === "undefined") return null;
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || !header.contains(active)) return null;
-  const group = active.closest(THEME_GROUP);
-  if (group === null) return null;
-  const buttons: Element[] = [...group.querySelectorAll("button")];
-  const index = buttons.indexOf(active.closest("button") as Element);
-  return THEME_PREFERENCES[index] ?? null;
+  const mode = active.closest<HTMLElement>("[data-theme-mode]")?.dataset.themeMode;
+  return THEME_PREFERENCES.find((m) => m === mode) ?? null;
 }
 
 /**
@@ -137,11 +132,11 @@ function useThemeFocusAcrossFlip(compact: boolean, header: RefObject<HTMLElement
     const mode = carried.current;
     carried.current = null;
     if (mode === null || header.current === null) return;
-    const buttons = header.current.querySelector(THEME_GROUP)?.querySelectorAll("button");
+    const group = header.current.querySelectorAll<HTMLElement>("[data-theme-mode]");
     const target =
-      buttons === undefined
+      group.length === 0
         ? header.current.querySelector<HTMLElement>(".qm-account__button")
-        : (buttons[THEME_PREFERENCES.indexOf(mode)] ?? buttons[0]);
+        : (header.current.querySelector<HTMLElement>(`[data-theme-mode="${mode}"]`) ?? group[0]);
     target?.focus();
   }, [compact, header]);
 }

@@ -1137,3 +1137,24 @@ h1 {
 .qm-layout--mobile-unit .qm-request {
   padding: var(--qm-space-4) var(--qm-space-6);
 }
+
+/* Dispatch app bar below 52rem (a 1366 px screen at 200% zoom is 683 px): one row, not two. The
+   account button shrinks to its avatar, its name kept for assistive technology the way the officer
+   bar keeps it, and the site name takes the room that is left and truncates. The widest bar (admin,
+   a 24-character email) needs about 760 px, so the full button stays above this width. */
+@media (max-width: 52rem) {
+  .qm-app-header .qm-account__email {
+    position: absolute;
+    inline-size: var(--qm-border-width);
+    block-size: var(--qm-border-width);
+    margin: calc(var(--qm-border-width) * -1);
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .qm-app-header .qm-app-header__site {
+    flex: 1 1 0;
+  }
+}
