@@ -1085,7 +1085,10 @@ await test("wr: minors-only: a fixes verdict with only minor findings stops at m
     ["M1", "M2"],
   );
   assert.deepEqual(r.labels, ["reviewer"]);
-  assert.ok(r.logs.some((l) => l.includes("no fix pass for minor findings")), r.logs.join("\n"));
+  assert.ok(
+    r.logs.some((l) => l.includes("no fix pass for minor findings")),
+    r.logs.join("\n"),
+  );
   // one important finding still runs the normal flow, minors riding along
   const n = await run(
     wr,
