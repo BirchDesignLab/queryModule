@@ -1070,6 +1070,32 @@ const reviewWith = (findings) => ({
   artifactWritten: false,
 });
 
+// #391 (wave-review side): minor findings alone never start the paid fix pass.
+await test("wr: minors-only: a fixes verdict with only minor findings stops at minorsOnly, no ruler, fixer or re-reviewer", async () => {
+  const r = await run(
+    wr,
+    WBASE,
+    wrResponder({ reviewer: reviewWith([WF("M1", "minor"), WF("M2", "minor")]) }),
+  );
+  assert.equal(r.res.verdict, "fixes");
+  assert.equal(r.res.stopped, "minorsOnly");
+  assert.equal(r.res.artifactWritten, false);
+  assert.deepEqual(
+    r.res.residual.map((f) => f.id),
+    ["M1", "M2"],
+  );
+  assert.deepEqual(r.labels, ["reviewer"]);
+  assert.ok(r.logs.some((l) => l.includes("no fix pass for minor findings")), r.logs.join("\n"));
+  // one important finding still runs the normal flow, minors riding along
+  const n = await run(
+    wr,
+    WBASE,
+    wrResponder({ reviewer: reviewWith([WF("I1", "important"), WF("M1", "minor")]) }),
+  );
+  assert.equal(n.res.stopped, undefined);
+  assert.ok(n.labels.includes("fixer"));
+});
+
 // #222: wave-review reads reviewedSha and the fix head from git, never from an agent field.
 await test("wr: fabricated-head: the fix head and reviewedSha come from git, not the progress checker or re-reviewer", async () => {
   const LIE = "2e31c7761aecdcf5d0f0a1e0a3f9e1a5f6c5e6a1";

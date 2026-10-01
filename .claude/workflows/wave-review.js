@@ -86,6 +86,9 @@
  *                    escalated); decisions settle them, text goes to the fixer and re-reviewer.
  *     "fixer"        questions from a BLOCKED or NEEDS_CONTEXT fixer; text goes to the fixer.
  *     "re-review"    the re-reviewer returned nothing; text goes to the re-reviewer.
+ *     "minorsOnly"   (#391) the reviewer returned fixes with no critical or important finding;
+ *                    no fix pass runs and no artifact is written. File the residual minors, then
+ *                    re-run the review fresh (it approves when the minors are known).
  *   strayArtifact set: an artifact file was written without a final approve; delete it.
  * Answering a stop: re-run with resumeFromRunId and the SAME args plus
  *   answers: a list, one entry per answered stop, appended across re-runs, never replaced:
@@ -748,6 +751,13 @@ if (review.verdict === 'approve' && firstBlocking.length === 0) {
   return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)), strayArtifact: badArtifact ? ARTIFACT : undefined })
 }
 if (review.verdict === 'approve') log(`review: verdict approve but ${firstBlocking.length} critical/important finding(s); treating as fixes`)
+// #391: minor findings alone never start the paid fix pass (ruler, fixer, progress checker,
+// re-reviewer). The reviewer was told to approve in that case; a fixes verdict anyway stops here
+// with the minors as residual for the controller to file, and no artifact (re-run the review).
+if (firstBlocking.length === 0) {
+  log(`review: verdict ${review.verdict} with no critical/important finding; no fix pass for minor findings (stopped minorsOnly)`)
+  return done({ verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'minorsOnly', findings: review.findings, residual: review.findings, strayArtifact: review.artifactWritten || review.rawArtifactWritten ? ARTIFACT : undefined })
+}
 // rawArtifactWritten catches a write by any slice (not only the last one the merge credits), so a
 // stray write is never masked away by the merge that computes the success-path artifactWritten
 // (#92 C1).
