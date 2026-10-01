@@ -737,7 +737,10 @@ await test("sdd: default maxRounds is 1 on ordinary and 2 on gate and critical (
   const o = await run(sdd, noCap, notAddressed);
   assert.ok(o.labels.includes("fixer-r1") && !o.labels.includes("fixer-r2"), o.labels.join(","));
   assert.equal(o.res.rounds, 1);
-  assert.ok(o.logs.some((l) => /cap: maxRounds 1 reached/.test(l)), o.logs.join(" | "));
+  assert.ok(
+    o.logs.some((l) => /cap: maxRounds 1 reached/.test(l)),
+    o.logs.join(" | "),
+  );
   const r = await run(
     sdd,
     { ...noCap, tier: "gate" },
@@ -2820,7 +2823,10 @@ await test("sdd FP-M5 (#391): criticFocus alone shapes the reviewer's critic len
     { ...BASE, roles: { critic: { model: "sonnet", effort: "low" } } },
     sddResponder(),
   );
-  assert.ok(ovr.logs.some((l) => l.includes("roles.critic ignored (#391")), ovr.logs.join(" | "));
+  assert.ok(
+    ovr.logs.some((l) => l.includes("roles.critic ignored (#391")),
+    ovr.logs.join(" | "),
+  );
 });
 
 await test("append-ledger FP-M7: an already-appended block is skipped; UTF-16 and UTF-8 BOM input decode", async () => {
@@ -3426,8 +3432,7 @@ await test("tiers: reviewer, critic and re-reviewer prompts are diff-scoped", as
     /^(combined|spec|quality|critic)-review$|^re-review-r/.test(x.label),
   );
   const seen = new Set(calls.map((x) => x.label));
-  for (const l of ["combined-review", "re-review-r1"])
-    assert.ok(seen.has(l), `no ${l} call`);
+  for (const l of ["combined-review", "re-review-r1"]) assert.ok(seen.has(l), `no ${l} call`);
   for (const x of calls) {
     const rr = x.label.startsWith("re-review");
     if (rr) {
