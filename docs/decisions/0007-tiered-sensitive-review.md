@@ -58,3 +58,14 @@ Context: review spend on a demo-scale prototype on mock data was out of proporti
 - **Context diet and cross-cutting budget.** Reviewers get a controller excerpt (`contextPath`) of the rulings and spec lines that touch the changed files, and at most 3 cross-cutting checks outside the diff, each for a named risk.
 - **Board data.** Issue numbers, titles, bodies and follow-ups live in `docs/board/board-data.json` (ordinary, schema-checked); the script that writes to GitHub stays in `scripts/ops/` (gate).
 - Consequence: an Opus high review may miss what xhigh would have caught on critical code. Accepted for the prototype; revisit before real CJIS data or a production pilot.
+
+## Amendment 10-01-26 (#391): lean per-task review
+
+Context: run data from M0 to M1 P3 showed the Opus critic found the real defects (W4: 9 of 12 fixes, the spec reviewer 0) while the Sonnet reviewer, ruler and fix loops produced mostly minors and every cap hit. Developer decision 09-29-26, built 10-01-26.
+
+- **One reviewer per task.** `sdd-task` runs one Opus 5.5 medium reviewer on every tier, with the spec, quality and critic lenses in one prompt; it cites requirement IDs verbatim. The Sonnet combined reviewer, the critical tier's split spec and quality reviewers and the separate critic are gone. Findings keep a kind (spec, quality, critic) for the ledger.
+- **Minors never start a fix round.** In `sdd-task` they go straight to `deferredMinors` (already so); in `wave-review` a fixes verdict with only minor findings stops at `minorsOnly` without the ruler, fixer, progress checker or re-reviewer.
+- **Rounds.** `maxRounds` defaults to 1 on ordinary tasks and 2 on gate and critical tasks.
+- **Unchanged:** the per-PR tier reviews (`wave-review`, critical Opus high, gate Opus medium), the ruler's triggers (implementer concerns, contested, plan-mandated and needs-judgment items), the fix-diff-scoped re-reviewer, the progress checker, verifyHead, the gates, caps never raised.
+- **Not done:** folding the progress checker into the re-reviewer. It is the cheapest role (Sonnet low) and feeds the head, test-count and gate-weakening checks; the fold would cost more than it saves.
+- Consequence: a clean task is 4 agents on every tier (gate was 5, critical 6); an ordinary task stops after one fix round.

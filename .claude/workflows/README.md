@@ -12,7 +12,7 @@ Saved Workflow scripts that run implementation plans in place of hand-dispatched
 | `../../scripts/sdd/workflow-harness.mjs` | Mock harness: runs both scripts against stubbed agents |
 | `../../scripts/sdd/append-ledger.mjs` | Appends an `sdd-task` result's `ledgerLines` to the SDD ledger (controller step) |
 
-Vocabulary: **role** (implementer, reviewer (the combined spec and quality reviewer), spec reviewer, quality reviewer, critic, checker, ruler, fixer, escalated fixer, progress checker, re-reviewer, gate; in `wave-review`, reviewer and the rest). Not "seat".
+Vocabulary: **role** (implementer, reviewer (the one reviewer: spec, quality and critic lenses, #391), checker, ruler, fixer, escalated fixer, progress checker, re-reviewer, gate; in `wave-review`, reviewer and the rest). Not "seat".
 
 ## Script facts
 
@@ -35,10 +35,10 @@ Vocabulary: **role** (implementer, reviewer (the combined spec and quality revie
   ledgerPath,                              // optional; only named in the log (the controller appends)
   tier: "ordinary",                        // optional: "ordinary" (default) | "gate" | "critical" (see Review tiers)
   sensitive: false, ui: false,             // sensitive: true is an alias for tier "critical"
-  critic: false,                           // optional boolean: critic on for an ordinary task
+  critic: false,                           // optional boolean: kept for compatibility (#391: the reviewer always carries the critic lens)
   criticFocus: "<focus sentence>",         // optional non-empty string (see Roles)
   ids: "BR-001, FR-032",
-  specRefs: "spec 4.1 lines 140-260; ...", // what the spec reviewer and the ruler read
+  specRefs: "spec 4.1 lines 140-260; ...", // what the reviewer and the ruler read
   requirementsDoc,                         // optional; default the repo-root Requirements Definition
   globalConstraints: "<product and code constraints>", // required, non-empty (see below)
   carries: "<controller rulings and interfaces the brief cannot know>",
@@ -46,7 +46,7 @@ Vocabulary: **role** (implementer, reviewer (the combined spec and quality revie
   roles: { ... optional overrides ... },
   maxAgents: 18,                           // agent budget per run; default by tier (ordinary 18, gate 20,
                                            // critical 24); coerced like maxRounds (logged); at least 1
-  maxRounds: 2,                            // default 2; numeric strings and floats are coerced (logged); clamped to 1..8
+  maxRounds: 2,                            // default 1 ordinary, 2 gate and critical (#391); coerced (logged); clamped to 1..8
   answers: [{ at, text?, decisions?, noCode? }], // only on a re-run after a stop: one entry per answered stop
   implemented: { head: "<full sha>" }      // optional: review stages only (see Fallbacks)
 }
@@ -60,9 +60,9 @@ Required: `task`, `title`, `repoDir`, `branch`, `base`, `briefPath`, `reportPath
 
 `tier` follows ADR-0007 and the P0 review-roles retro (`docs/retros/2026-09-26-p0-review-roles.md`): **ordinary** for work outside `.github/sensitive-paths`, **gate** for work on `[gate]` paths (CI, check scripts, ops scripts, lint, test and TypeScript config, `package.json`), **critical** for `[critical]` paths (credentials, audit, dispatch, adapters, delegation, the terminal parser, write-back, delete-from-view, migrations, contracts, the sensitive-review gate). `sensitive: true` is still accepted as an alias for `tier: "critical"` (the log says so); `sensitive` and `tier` given together must agree (`sensitive: true` with a tier other than critical, or `sensitive: false` with critical, throws). An unknown tier throws. Default: ordinary.
 
-- **ordinary and gate** run one **combined reviewer** (role `reviewer`) in place of the spec and quality reviewers. It does both reviews in one pass: the spec-compliance checks (requirement IDs cited verbatim, FR-, UX-, SEC-, BR-, NFR- and the rest; the fixture policy; RED evidence) and the quality checks. It writes `workDir/task-<n>-review.md` and tags every finding and cannot-verify item with `kind: spec | quality`, so ids read `spec:S1`, `quality:Q1`, `spec:CV1` as with the split reviewers, and the ledger and rulings stay readable.
-- **critical** keeps the split spec reviewer and quality reviewer (`task-<n>-review-spec.md`, `task-<n>-review-quality.md`) exactly as before.
-- The **critic** runs on gate and critical tasks, on UI tasks and with `critic: true`. Its focus follows the tier: sensitive-code risk (critical), gate-tier risk (gate: fail-open checks, git or tool failures read as pass, shallow clones, empty inputs, rename or path bypasses, a weakened threshold), UI risk (`ui`).
+- **Every tier runs one reviewer (#391, ADR-0007 amendment 10-01-26)**, role `reviewer`, Opus 5.5 `medium`, with the critic's adversarial read in the same pass; a `roles.specReviewer`, `roles.qualityReviewer` or `roles.critic` override is logged and ignored. Findings may also carry `kind: critic` (ids `critic:C1`). Before #391, ordinary and gate ran one **combined reviewer** in place of the spec and quality reviewers. It does both reviews in one pass: the spec-compliance checks (requirement IDs cited verbatim, FR-, UX-, SEC-, BR-, NFR- and the rest; the fixture policy; RED evidence) and the quality checks. It writes `workDir/task-<n>-review.md` and tags every finding and cannot-verify item with `kind: spec | quality`, so ids read `spec:S1`, `quality:Q1`, `spec:CV1` as with the split reviewers, and the ledger and rulings stay readable.
+- **critical** no longer splits the review (#391): the one reviewer writes `task-<n>-review.md` with the sensitive-code focus; the critical `wave-review` (Opus `high`) stays.
+- The **critic lens** is part of the one reviewer on every tier (#391). Its focus follows the tier: sensitive-code risk (critical), gate-tier risk (gate: fail-open checks, git or tool failures read as pass, shallow clones, empty inputs, rename or path bypasses, a weakened threshold), UI risk (`ui`).
 - The **sensitive ruler rule** (below) and the script's rule (c) apply to gate and critical tasks.
 
 ### Roles and defaults
@@ -72,10 +72,7 @@ A `roles` override still wins per role.
 | Role | ordinary | gate | critical |
 |---|---|---|---|
 | implementer (also `implementer-continue`, `implementer-retry`) | sonnet / medium | sonnet / medium | opus / medium |
-| reviewer (combined spec and quality) | sonnet / high | sonnet / high | not used |
-| specReviewer | not used | not used | sonnet / medium |
-| qualityReviewer | not used | not used | sonnet / high |
-| critic | only with `critic: true` or `ui`: opus / medium | opus / medium | opus / medium |
+| reviewer (spec, quality and critic lenses, #391) | opus / medium | opus / medium | opus / medium |
 | checker (only when cannot-verify items remain after controller decisions) | sonnet / low | sonnet / low | sonnet / low |
 | ruler | opus / low | opus / low | opus / medium |
 | fixer (rounds 1 to 3) | same as implementer | same as implementer | same as implementer |
@@ -87,13 +84,13 @@ A `roles` override still wins per role.
 
 There is no ledger role: the script returns `ledgerLines` and the controller appends them. An old `roles.ledger` override is logged as ignored, not an error.
 
-`critic: true` turns the critic on for an ordinary task without changing any tier or ruler rule (the sensitive ruler rule still follows the tier only). Its focus, when the tier is ordinary and `ui` is not set: "correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail". `criticFocus` replaces that sentence; on a gate, critical or UI task the usual focus stays and `criticFocus` is appended. A non-boolean `critic` or an empty `criticFocus` throws at start.
+`critic: true` is kept for compatibility and changes nothing (#391: the critic lens is always on); no tier or ruler rule changes with it. The lens focus, when the tier is ordinary and `ui` is not set: "correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail". `criticFocus` replaces that sentence; on a gate, critical or UI task the usual focus stays and `criticFocus` is appended. A non-boolean `critic` or an empty `criticFocus` throws at start.
 
 Step-up ladder: haiku to sonnet/medium; sonnet/low to sonnet/medium; sonnet/medium to sonnet/high; sonnet/high or xhigh to opus/medium; opus/low to opus/medium; opus/medium to opus/high; opus/high stays opus/high (no step to xhigh, developer decision 09-26-26, #92). No default role in this table is xhigh or max; a `roles` override may still ask for one, and the script logs one warning line per role overridden that way.
 
 ### Flow
 
-Every `sdd-task` agent can run shell commands, so every `sdd-task` prompt carries this line through the shared rules (implementer and its continue and retry, reviewers, critic, checker, rulers, fixers, progress checker, re-reviewer, gate); in `wave-review`, the fixer carries it: "Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote." (W2 incident: an implementer pushed and opened a PR after reading project memory.)
+Every `sdd-task` agent can run shell commands, so every `sdd-task` prompt carries this line through the shared rules (implementer and its continue and retry, reviewer, checker, rulers, fixers, progress checker, re-reviewer, gate); in `wave-review`, the fixer carries it: "Never run git push, gh pr (any subcommand), gh api writes, or git merge into another branch; the controller and the developer own the remote." (W2 incident: an implementer pushed and opened a PR after reading project memory.)
 
 1. **Implement.** The implementer reads the brief, checks the precondition (branch is `branch`, HEAD is `base`, clean tree), works TDD, commits only its files with the brief's message and the trailer, and writes `reportPath`. Before each commit it runs `pnpm lint` (fixing formatting with `pnpm exec biome format --write <files>` or `pnpm exec biome check --write <files>` on the changed files only), `pnpm typecheck` (vitest does not typecheck test files; W3 Task 14's gate-0 was red on tsc errors in a test) and `pnpm coverage`, never commits on red, and reports all three. Returns `{ status, commits, head, testSummary, concerns:[{kind: planVsSpec|correctness|observation, text}], questions }`. The `head` it reports is never used: `verifyHead` (below) reads the head from git right after the implementer. Git also decides whether it committed (#300, B5 Task 17): HEAD still at `base` stops the run at `implementer` (with the question "implementer listed commits but git HEAD is still the base" when it listed any), and a HEAD that moved while the implementer listed no commits continues, logs it and records the git head as the commit `(from git; implementer listed none)`.
    - **Heads come from git (#222).** Every head the script uses (`expectedHead`, `reviewHead`, the gate heads, the carried `base`, the returned `head`) comes from `verifyHead`, never from an implementer, fixer, progress checker or gate field. `verifyHead` is a Haiku 4.5 agent (role `verifyHead`, model only) that runs `git rev-parse HEAD` and `git cat-file -e <sha>^{commit}` in `repoDir` and returns the raw stdout of each (`revParse`, `catFile`); its prompt never carries the sha an earlier agent reported. The script accepts only a value that matches `^[0-9a-f]{40}$` and that `cat-file` confirmed for that same sha: the second command prints `EXISTS <sha>` and the script requires the printed sha to equal `revParse`, so a mis-copied or invented `revParse` cannot pass. It runs after the implementer (`verify-head-impl`, also on the `implemented.head` path), after the pre-review fixer's progress check (`verify-head-pre`) and after each fix round's progress check (`verify-head-r<r>`). A head an agent reported that differs from git (a prefix of at least 7 hex is not a difference) is logged as `agent-reported head <first 16 hex>... differs from git; using git` and the git value is used. The one exception is `implemented.head`: the controller named it, so a difference stops the run at `precondition:verifyHead` instead of reviewing a range nobody named. A `verifyHead` stop keeps the implementer's questions and returns open findings as `parked`, like a budget stop. A gate's `head` is no longer read at all: its precondition already required HEAD to equal the verified expected head. An invalid answer (not 40 hex, or the commit is missing) stops the run (`stopped: "precondition"`, `stopPoint: "precondition:verifyHead"`, `problem` naming `verifyHead`); answer there and it re-runs once as `verify-head-...-retry`. `verifyHead` counts against `maxAgents`.
@@ -102,11 +99,11 @@ Every `sdd-task` agent can run shell commands, so every `sdd-task` prompt carrie
    - BLOCKED or NEEDS_CONTEXT: stop (`stopped: "implementer"`), unless `answers` is given (below).
    - A planVsSpec or correctness concern goes to the ruler (`ruler-concerns`). A `fix` ruling gets one pre-review fixer and progress check; progress problems there are passed to the reviewers.
    - Observations become deferred minors.
-2. **Review and gate-0** (parallel, on the same head `reviewHead`): the combined reviewer (ordinary and gate) or the spec and quality reviewers (critical), the critic on gate, critical, UI or `critic: true` tasks, and `gate-0`. Each reviewer builds its own diff file in its scratch path, reads it once, writes its review file (`workDir/task-<n>-review.md` for the combined reviewer, `task-<n>-review-<spec|quality|critic>.md` otherwise) and returns `{ verdict: pass|fail, findings:[{id, severity, file, line, summary, fix, planMandated, contestsRuling, kind?}], cannotVerify:[{item, check, kind?}] }` (`kind` from the combined reviewer only).
+2. **Review and gate-0** (parallel, on the same head `reviewHead`): the one reviewer (#391) and `gate-0`. Each reviewer builds its own diff file in its scratch path, reads it once, writes its review file (`workDir/task-<n>-review.md` for the combined reviewer, `task-<n>-review-<spec|quality|critic>.md` otherwise) and returns `{ verdict: pass|fail, findings:[{id, severity, file, line, summary, fix, planMandated, contestsRuling, kind?}], cannotVerify:[{item, check, kind?}] }` (`kind` from the combined reviewer only).
    - **Diff scope.** Reviewer and critic prompts say: after the diff, read outside the diff only files that call or are called by the changed code, and only for a concrete risk you can name, one focused check per risk; the spec lines in `specRefs` and the rulings in force still apply; do not read unrelated files. The re-reviewer has its own scope: the fix diff, and a caller or callee of the changed code only for a named risk, under the same limits. Each names every file it read outside the diff and the risk that sent it there.
    - Rulers and fixers find the review files as `task-<n>-review*.md`, which matches the combined `task-<n>-review.md` and the split `task-<n>-review-<spec|quality|critic>.md`.
    - Reviewers see the rulings in force. A finding that contradicts one sets `contestsRuling` to its id.
-   - The spec reviewer (or the combined reviewer) cites requirement IDs verbatim, checks fixtures against the fixture policy, and treats missing or implausible RED evidence as important.
+   - The reviewer cites requirement IDs verbatim, checks fixtures against the fixture policy, and treats missing or implausible RED evidence as important.
    - Reviewers are told the gate runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` on the same head, so they never list lint, typecheck, tests, coverage or the report's test counts as cannot-verify.
    - A null reviewer stops the run (`stopped: "review"`).
    - `gate-0` problems become open findings (`gate-0:<k>`) next to the reviewer findings. A `gate-0` precondition failure (branch or HEAD mismatch) stops the run after the reviewers return (`stopped: "precondition"`, `stopPoint: "precondition:gate-0"`); a null `gate-0` stops it (`stopped: "gate-0"`).
@@ -129,16 +126,16 @@ Every `sdd-task` agent can run shell commands, so every `sdd-task` prompt carrie
 6. **Gate.** `gate-0` ran in step 2; a clean review plus a green `gate-0` completes the task with no further gate. After a fix loop that ends clean, `gate-r<r>` runs. Each gate runs `pnpm lint`, `pnpm typecheck` and `pnpm coverage` (the full suite with the coverage thresholds) once each in `repoDir`, confirms the branch and that HEAD equals the expected head, and that the tree is clean. Returns `{ ok, head, problems, preconditionFailed? }` (`head` is informational; the script keeps the `verifyHead` value). A branch or HEAD mismatch is a precondition failure and stops the run. A red gate with no problem listed counts as one problem. Problems become open findings and go back through the fix loop within `maxRounds`. `complete` needs a green gate.
 7. **Return** (below). The script computes the ledger lines and returns them as `ledgerLines`; no agent writes the ledger. With `ledgerPath` it logs "ledger: controller appends N lines to <ledgerPath>".
 
-`maxRounds` defaults to 2 (developer rule 09-27-26): a task still open after fix round 2 parks, the controller rules on each parked finding (fix inline, "stands" with a follow-up issue, or a no-code ruling answered with `noCode: true`), and a follow-on run continues. An explicit `maxRounds` (1..8) still wins.
+`maxRounds` defaults to 1 on ordinary tasks and 2 on gate and critical tasks (#391; developer rule 09-27-26 for the 2): a task still open after its last round parks, the controller rules on each parked finding (fix inline, "stands" with a follow-up issue, or a no-code ruling answered with `noCode: true`), and a follow-on run continues. An explicit `maxRounds` (1..8) still wins.
 
-Agent counts at the default maxRounds 2 (no budget stop):
+Agent counts at maxRounds 2 (no budget stop; #391: one reviewer on every tier, so the tiers count alike; an ordinary task defaults to maxRounds 1 and ends after round 1):
 
 | | ordinary | gate | critical |
 |---|---|---|---|
-| Clean task | 4 (implementer, verifyHead, combined reviewer, gate-0) | 5 (plus the critic) | 6 (implementer, verifyHead, spec, quality, critic, gate-0) |
-| One fix round on reviewer findings | 9 | 10 | 11 |
-| Worst case | 19 (20 with `ui` or `critic: true`) | 20 | 21 |
-| Worst case at an explicit maxRounds 5 | 31 (32 with `ui` or `critic: true`) | 32 | 33 |
+| Clean task | 4 (implementer, verifyHead, reviewer, gate-0) | 4 | 4 |
+| One fix round on reviewer findings | 9 | 9 | 9 |
+| Worst case | 19 | 19 | 19 |
+| Worst case at an explicit maxRounds 5 | 31 | 31 | 31 |
 
 - A cannot-verify item adds the checker; a `needsJudgment` item or a plan-mandated finding adds the ruler. One mechanical round after a red `gate-0` adds 4 (fixer, progress, verifyHead, gate-r1). `verifyHead` adds one call after the implementer, one after the pre-review fixer and one per fix round (up to 4 at maxRounds 2, 7 at maxRounds 5).
 - Worst case: implementer, concern ruler, pre-review fixer and progress check, the reviewers, critic and `gate-0`, checker, review ruler, round 1 on a reviewer finding with fixer, progress, re-review and a red gate-r1, then one mechanical round (four at maxRounds 5) of fixer, progress, verifyHead and a red gate, with a verifyHead after the implementer and after the pre-review fixer. A run whose findings are never addressed parks after round 2 at 17, 18, 19 (29, 30, 31 at maxRounds 5; one more with a checker). An answered implementer or precondition stop adds one `implementer-continue` or retry agent (`implementer-retry`, `checker-retry`, `ruler-review-retry`, `gate-...-retry`). Controller decisions can remove the checker or a ruler call.

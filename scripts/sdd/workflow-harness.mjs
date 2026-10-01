@@ -244,24 +244,26 @@ function sddResponder(over = {}) {
     return r;
   };
 }
-// Ordinary and gate tasks run one combined reviewer ("combined-review") in place of the spec and
-// quality reviewers. Unless a test overrides "combined-review" itself, the fixture answers it by
-// merging the "spec-review" and "quality-review" answers (PASS when not overridden), each finding
-// and cannot-verify item tagged with its kind, so a scenario reads the same on every tier.
+// Every tier runs one reviewer ("combined-review", #391) carrying the spec, quality and critic
+// lenses. Unless a test overrides "combined-review" itself, the fixture answers it by merging the
+// "spec-review", "quality-review" and "critic-review" answers (PASS when not overridden), each
+// finding and cannot-verify item tagged with its kind, so a scenario reads the same on every tier.
 function combineReviews(get) {
-  const s = get("spec-review");
-  const q = get("quality-review");
-  if (!s || !q) return null;
+  const parts = [
+    [get("spec-review"), "spec"],
+    [get("quality-review"), "quality"],
+    [get("critic-review"), "critic"],
+  ];
+  if (parts.some(([r]) => !r)) return null;
   const tag = (r, kind) => ({
     findings: r.findings.map((f) => ({ ...f, kind })),
     cannotVerify: r.cannotVerify.map((c) => ({ ...c, kind })),
   });
-  const a = tag(s, "spec");
-  const b = tag(q, "quality");
+  const tagged = parts.map(([r, kind]) => tag(r, kind));
   return {
-    verdict: s.verdict === "fail" || q.verdict === "fail" ? "fail" : "pass",
-    findings: [...a.findings, ...b.findings],
-    cannotVerify: [...a.cannotVerify, ...b.cannotVerify],
+    verdict: parts.some(([r]) => r.verdict === "fail") ? "fail" : "pass",
+    findings: tagged.flatMap((t) => t.findings),
+    cannotVerify: tagged.flatMap((t) => t.cannotVerify),
   };
 }
 function sddBase(over, ctx = { lastHead: BASE.base }) {
@@ -484,7 +486,7 @@ await test("sdd: a failing gate opens findings that go through the fix loop, the
 // and gate-0 in parallel, checker (needsJudgment), ruler-review, then round 1 with a review finding (fixer, progress,
 // re-review, red gate-r1) and four mechanical rounds (fixer, progress, red gate), plus verifyHead
 // after the implementer, the pre-review fixer and each of the five rounds (7, #222).
-await test("sdd: gate failing every round parks at the cap (worst case 33 agents at maxRounds 5)", async () => {
+await test("sdd: gate failing every round parks at the cap (worst case 31 agents at maxRounds 5; #391 one reviewer)", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true, maxAgents: 40 },
@@ -507,7 +509,7 @@ await test("sdd: gate failing every round parks at the cap (worst case 33 agents
       "gate*": { ok: false, head: "hg", problems: ["tests red"] },
     }),
   );
-  assert.equal(r.calls.length, 33, r.labels.join(","));
+  assert.equal(r.calls.length, 31, r.labels.join(","));
   assert.equal(r.verifyLabels.length, 7, r.verifyLabels.join(","));
   assert.equal(r.labels.filter((l) => l.startsWith("re-review")).join(","), "re-review-r1");
   assert.equal(r.labels.filter((l) => l.startsWith("gate")).length, 6);
@@ -515,7 +517,7 @@ await test("sdd: gate failing every round parks at the cap (worst case 33 agents
   assert.equal(r.res.rounds, 5);
 });
 
-await test("sdd: worst case with every finding NOT ADDRESSED is 31 agents; escalated fixer after a repeat", async () => {
+await test("sdd: worst case with every finding NOT ADDRESSED is 29 agents (#391 one reviewer); escalated fixer after a repeat", async () => {
   const r = await run(
     sdd,
     { ...BASE, sensitive: true, ui: true, maxAgents: 40 },
@@ -535,7 +537,7 @@ await test("sdd: worst case with every finding NOT ADDRESSED is 31 agents; escal
       }),
     }),
   );
-  assert.equal(r.calls.length, 31, r.labels.join(","));
+  assert.equal(r.calls.length, 29, r.labels.join(","));
   assert.equal(r.res.status, "parked");
   assert.equal(r.find("fixer-r2").effort, "medium");
   assert.equal(r.find("fixer-r3").effort, "high");
@@ -720,13 +722,25 @@ await test("sdd: required args throw clearly, including globalConstraints", asyn
   }
 });
 
-// Developer rule 09-27-26: with no maxRounds arg a task still open after fix round 2 parks for a
-// controller ruling (no round 3).
-await test("sdd: default maxRounds is 2; findings open after round 2 park", async () => {
+// Developer rule 09-27-26, #391: with no maxRounds arg an ordinary task parks after fix round 1 and a
+// gate or critical task after round 2.
+await test("sdd: default maxRounds is 1 on ordinary and 2 on gate and critical (#391); open findings then park", async () => {
   const { maxRounds: _unset, ...noCap } = BASE;
+  const notAddressed = sddResponder({
+    "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
+    "re-review*": (p) => ({
+      verdicts: ids(p).map((id) => ({ id, verdict: "NOT ADDRESSED", evidence: "a.ts:1" })),
+      newFindings: [],
+      outOfScope: [],
+    }),
+  });
+  const o = await run(sdd, noCap, notAddressed);
+  assert.ok(o.labels.includes("fixer-r1") && !o.labels.includes("fixer-r2"), o.labels.join(","));
+  assert.equal(o.res.rounds, 1);
+  assert.ok(o.logs.some((l) => /cap: maxRounds 1 reached/.test(l)), o.logs.join(" | "));
   const r = await run(
     sdd,
-    noCap,
+    { ...noCap, tier: "gate" },
     sddResponder({
       "spec-review": { verdict: "fail", findings: [F("S1", "important")], cannotVerify: [] },
       "re-review*": (p) => ({
@@ -758,7 +772,7 @@ await test("sdd: maxRounds is coerced and logged (numeric string, float, junk)",
   const b = await run(sdd, { ...BASE, maxRounds: 2.7 }, sddResponder());
   assert.ok(b.logs.some((l) => /maxRounds 2\.7 coerced to 2/.test(l)));
   const c = await run(sdd, { ...BASE, maxRounds: "abc" }, sddResponder());
-  assert.ok(c.logs.some((l) => /maxRounds "abc" is not a number; using 2/.test(l)));
+  assert.ok(c.logs.some((l) => /maxRounds "abc" is not a number; using 1/.test(l)));
   const d = await run(sdd, { ...BASE, maxRounds: 99 }, sddResponder());
   assert.ok(d.logs.some((l) => /clamped to 8/.test(l)));
 });
@@ -840,7 +854,7 @@ await test("sdd N1: an answered critical-stands closes without a ruler or fix lo
     decisions: [{ item: "critic:C1", decision: "stands", reason: "false positive" }],
   };
   const second = await run(sdd, { ...BASE, sensitive: true, answers }, resp);
-  for (const l of ["implementer", "spec-review", "quality-review", "critic-review"]) {
+  for (const l of ["implementer", "combined-review"]) {
     assert.equal(second.find(l).prompt, first.find(l).prompt, `${l} prompt changed`);
   }
   assert.ok(!second.labels.includes("ruler-review"), second.labels.join(","));
@@ -1734,7 +1748,7 @@ await test("sdd P1: every gate runs pnpm lint, pnpm typecheck and pnpm coverage,
 
 await test("sdd P2: reviewers are told the gate runs lint, typecheck and coverage; never cannot-verify", async () => {
   const r = await run(sdd, { ...BASE, sensitive: true }, sddResponder());
-  for (const l of ["spec-review", "quality-review", "critic-review"]) {
+  for (const l of ["combined-review"]) {
     const p = r.find(l).prompt;
     assert.ok(
       p.includes(
@@ -1793,7 +1807,7 @@ await test("sdd P8: implementer, continue, retry and every fixer self-check lint
   }
 });
 
-await test("sdd P4: critic: true turns the critic on for an ordinary task with the default focus, tiers unchanged", async () => {
+await test("sdd P4 (#391): the one Opus reviewer carries the critic lens with the default focus on an ordinary task; tiers unchanged", async () => {
   const r = await run(
     sdd,
     { ...BASE, critic: true },
@@ -1805,8 +1819,9 @@ await test("sdd P4: critic: true turns the critic on for an ordinary task with t
       },
     }),
   );
-  const c = r.find("critic-review");
+  const c = r.find("combined-review");
   assert.ok(c, r.labels.join(","));
+  assert.ok(!r.labels.includes("critic-review"), r.labels.join(","));
   assert.equal(`${c.model}/${c.effort}`, "opus/medium");
   assert.ok(
     c.prompt.includes(
@@ -1817,20 +1832,22 @@ await test("sdd P4: critic: true turns the critic on for an ordinary task with t
   assert.equal(`${r.find("implementer").model}/${r.find("implementer").effort}`, "sonnet/medium");
   assert.equal(`${r.find("ruler-review").model}/${r.find("ruler-review").effort}`, "opus/low");
   assert.ok(!r.find("ruler-review").prompt.includes(SENSITIVE_RULE));
+  // without critic: true the lens is still there: no separate critic call on any tier
   const off = await run(sdd, BASE, sddResponder());
   assert.ok(!off.labels.includes("critic-review"));
+  assert.ok(off.find("combined-review").prompt.includes("Critic lens:"));
 });
 
 await test("sdd P4: criticFocus replaces the default focus, and is appended on sensitive or UI tasks", async () => {
   const o = await run(sdd, { ...BASE, critic: true, criticFocus: "ZZ-FOCUS" }, sddResponder());
-  const op = o.find("critic-review").prompt;
+  const op = o.find("combined-review").prompt;
   assert.ok(op.includes("Focus: ZZ-FOCUS."), op);
   assert.ok(!op.includes("fail-open paths, data that crosses"));
   const s = await run(sdd, { ...BASE, sensitive: true, criticFocus: "ZZ-FOCUS" }, sddResponder());
-  const sp = s.find("critic-review").prompt;
+  const sp = s.find("combined-review").prompt;
   assert.ok(sp.includes("sensitive-code risk") && sp.includes("; ZZ-FOCUS."), sp);
   const u = await run(sdd, { ...BASE, ui: true }, sddResponder());
-  assert.ok(u.find("critic-review").prompt.includes("Focus: UI risk"));
+  assert.ok(u.find("combined-review").prompt.includes("Focus: UI risk"));
 });
 
 await test("sdd P4: critic must be a boolean and criticFocus a non-empty string", async () => {
@@ -2766,9 +2783,7 @@ await test("sdd FP-M3: every sdd-task agent that can run shell commands carries 
   );
   const all = calls.concat(crit.calls);
   const want = [
-    "spec-review",
-    "quality-review",
-    "critic-review",
+    "combined-review",
     "checker",
     "ruler-concerns",
     "ruler-review",
@@ -2795,15 +2810,17 @@ await test("sdd FP-M4: review-stages-only text names coverage, not test", async 
   assert.ok(r.logs.some((l) => /re-runs lint, typecheck and coverage/.test(l)));
 });
 
-await test("sdd FP-M5: criticFocus with the critic off logs a warning and runs no critic", async () => {
+await test("sdd FP-M5 (#391): criticFocus alone shapes the reviewer's critic lens; no separate critic runs", async () => {
   const r = await run(sdd, { ...BASE, criticFocus: "ZZ" }, sddResponder());
   assert.ok(!r.labels.includes("critic-review"));
-  assert.ok(
-    r.logs.some((l) => /criticFocus ignored/.test(l)),
-    r.logs.join(" | "),
+  assert.ok(r.find("combined-review").prompt.includes("Focus: ZZ."));
+  assert.ok(!r.logs.some((l) => /criticFocus ignored/.test(l)), r.logs.join(" | "));
+  const ovr = await run(
+    sdd,
+    { ...BASE, roles: { critic: { model: "sonnet", effort: "low" } } },
+    sddResponder(),
   );
-  const on = await run(sdd, { ...BASE, critic: true, criticFocus: "ZZ" }, sddResponder());
-  assert.ok(!on.logs.some((l) => /criticFocus ignored/.test(l)));
+  assert.ok(ovr.logs.some((l) => l.includes("roles.critic ignored (#391")), ovr.logs.join(" | "));
 });
 
 await test("append-ledger FP-M7: an already-appended block is skipped; UTF-16 and UTF-8 BOM input decode", async () => {
@@ -3215,7 +3232,10 @@ await test("sdd-wave: per-task options pass through; wave roles merge under task
   });
   assert.equal(a18.maxRounds, 3);
   assert.ok(!("sensitive" in r.childArgs[0].args), "unset options are not passed");
-  assert.ok(r.labels.includes("critic-review"), r.labels.join(","));
+  assert.ok(!r.labels.includes("critic-review"), r.labels.join(","));
+  // #391: the sensitive task's one reviewer carries the critic lens with its focus
+  const crit = r.calls.filter((c) => c.label === "combined-review")[1];
+  assert.ok(crit.prompt.includes("sensitive-code risk") && crit.prompt.includes("audit rows"));
 });
 
 await test("sdd-wave: argument validation", async () => {
@@ -3246,7 +3266,7 @@ const twiceNotAddressed = () => {
   return (p) => (++n <= 2 ? neverAddressed(p) : addressAll(p));
 };
 
-await test("tiers: ordinary defaults, one combined reviewer, no critic", async () => {
+await test("tiers (#391): ordinary defaults, one Opus reviewer with the critic lens, no separate critic", async () => {
   const r = await run(
     sdd,
     { ...BASE, maxAgents: 40 },
@@ -3257,7 +3277,7 @@ await test("tiers: ordinary defaults, one combined reviewer, no critic", async (
   assert.equal(r.labels.slice(0, 3).join(","), "implementer,combined-review,gate-0");
   const want = {
     implementer: "sonnet/medium",
-    "combined-review": "sonnet/high",
+    "combined-review": "opus/medium",
     "gate-0": "sonnet/low",
     "fixer-r1": "sonnet/medium",
     "progress-r1": "sonnet/low",
@@ -3271,24 +3291,23 @@ await test("tiers: ordinary defaults, one combined reviewer, no critic", async (
   assert.equal(tierOf(pm.find("ruler-review")), "opus/low");
   assert.ok(!pm.find("ruler-review").prompt.includes(SENSITIVE_RULE));
   const crit = await run(sdd, { ...BASE, critic: true }, sddResponder());
-  assert.equal(tierOf(crit.find("critic-review")), "opus/medium");
+  assert.ok(!crit.labels.includes("critic-review"), crit.labels.join(","));
 });
 
-await test("tiers: gate defaults (combined reviewer, Opus medium critic, sensitive ruler rule)", async () => {
+await test("tiers (#391): gate defaults (one Opus reviewer with the gate critic focus, sensitive ruler rule)", async () => {
   const r = await run(
     sdd,
     { ...BASE, tier: "gate", maxAgents: 40 },
     sddResponder({ ...specQ(), "re-review*": twiceNotAddressed() }),
   );
   assert.equal(
-    r.labels.slice(0, 4).join(","),
-    "implementer,combined-review,critic-review,gate-0",
+    r.labels.slice(0, 3).join(","),
+    "implementer,combined-review,gate-0",
     r.labels.join(","),
   );
   const want = {
     implementer: "sonnet/medium",
-    "combined-review": "sonnet/high",
-    "critic-review": "opus/medium",
+    "combined-review": "opus/medium",
     "fixer-r1": "sonnet/medium",
     "re-review-r1": "sonnet/high",
     "fixer-r3": "opus/medium",
@@ -3296,7 +3315,7 @@ await test("tiers: gate defaults (combined reviewer, Opus medium critic, sensiti
     "progress-r1": "sonnet/low",
   };
   for (const [l, t] of Object.entries(want)) assert.equal(tierOf(r.find(l)), t, l);
-  assert.ok(r.find("critic-review").prompt.includes("gate-tier risk"), "gate critic focus");
+  assert.ok(r.find("combined-review").prompt.includes("gate-tier risk"), "gate critic focus");
   const pm = await run(
     sdd,
     { ...BASE, tier: "gate" },
@@ -3317,18 +3336,17 @@ await test("tiers: gate defaults (combined reviewer, Opus medium critic, sensiti
   assert.equal(pm.res.escalated[0].item, "spec:S1");
 });
 
-await test("tiers: critical keeps today's sensitive roles and the split reviewers", async () => {
+await test("tiers (#391): critical keeps the sensitive roles; one Opus reviewer replaces the split reviewers and the critic", async () => {
   const r = await run(
     sdd,
     { ...BASE, tier: "critical", maxAgents: 40 },
     sddResponder({ ...specQ({ planMandated: true }), "re-review*": twiceNotAddressed() }),
   );
-  assert.ok(!r.labels.includes("combined-review"), r.labels.join(","));
+  for (const gone of ["spec-review", "quality-review", "critic-review"])
+    assert.ok(!r.labels.includes(gone), r.labels.join(","));
   const want = {
     implementer: "opus/medium",
-    "spec-review": "sonnet/medium",
-    "quality-review": "sonnet/high",
-    "critic-review": "opus/medium",
+    "combined-review": "opus/medium",
     "ruler-review": "opus/medium",
     "fixer-r1": "opus/medium",
     "re-review-r1": "opus/medium",
@@ -3337,7 +3355,7 @@ await test("tiers: critical keeps today's sensitive roles and the split reviewer
   };
   for (const [l, t] of Object.entries(want)) assert.equal(tierOf(r.find(l)), t, l);
   assert.ok(r.find("ruler-review").prompt.includes(SENSITIVE_RULE));
-  assert.ok(r.find("critic-review").prompt.includes("sensitive-code risk"));
+  assert.ok(r.find("combined-review").prompt.includes("sensitive-code risk"));
   const ov = await run(
     sdd,
     { ...BASE, tier: "gate", roles: { reviewer: { model: "opus", effort: "low" } } },
@@ -3382,7 +3400,7 @@ await test("tiers: sensitive is an alias for critical (logged); a conflict or an
     s.logs.some((l) => /sensitive: true is an alias for tier "critical"/.test(l)),
     s.logs.join(" | "),
   );
-  assert.ok(s.labels.includes("spec-review") && s.labels.includes("critic-review"));
+  assert.ok(s.labels.includes("combined-review") && !s.labels.includes("spec-review"));
   const both = await run(sdd, { ...BASE, sensitive: true, tier: "critical" }, sddResponder());
   assert.equal(both.res.status, "complete");
   await assert.rejects(
@@ -3408,13 +3426,7 @@ await test("tiers: reviewer, critic and re-reviewer prompts are diff-scoped", as
     /^(combined|spec|quality|critic)-review$|^re-review-r/.test(x.label),
   );
   const seen = new Set(calls.map((x) => x.label));
-  for (const l of [
-    "combined-review",
-    "spec-review",
-    "quality-review",
-    "critic-review",
-    "re-review-r1",
-  ])
+  for (const l of ["combined-review", "re-review-r1"])
     assert.ok(seen.has(l), `no ${l} call`);
   for (const x of calls) {
     const rr = x.label.startsWith("re-review");
