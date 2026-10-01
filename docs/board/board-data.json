@@ -1405,6 +1405,19 @@
       "reqIds": "none",
       "title": "Backup upload: R2 answers the first attempt with 501 NotImplemented",
       "body": "The 09-30-26 host backup (`qm-20260930T175552Z.tar.age`) got `501 NotImplemented` from R2 on rclone's first copy attempt; the retry succeeded. Most likely an rclone setting R2 does not support.\n\n- [ ] Find the request R2 rejects (rclone `-vv` on the host) and set the matching rclone option in the backup config.\n- [ ] A clean first attempt in the backup log."
+    },
+    {
+      "number": 488,
+      "milestone": "M1 Forms and terminal",
+      "parent": 42,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "project-sync: a board-dates override for issues filed after the fact",
+      "body": "project-sync sets a leaf item's Start and Finish from the issue's own created and closed dates (`.github/workflows/project-sync.yml` ~:283-286), and GitHub never lets those change. Issues filed after the fact therefore show the filing date: the 29 retroactive PR issues #447 to #475 (PRs #418 to #446, merged 2026-09-30) show 2026-10-01.\n\nDeveloper ruling (10-01-26): gate tier; rides the next gate or critical wave PR (AC1), no review run of its own.\n\n- [ ] project-sync: an optional body marker `<!-- board-dates start=YYYY-MM-DD finish=YYYY-MM-DD -->` overrides the leaf dates (finish only for an issue closed as completed); otherwise today's rule. Same rule in `scripts/ops/board-model.mjs` `leafDates`; parity cases in `scripts/ci/project-sync.test.ts`. TDD.\n- [ ] `scripts/board/cloud-catchup-2026-10-01.mjs`: add the marker (2026-09-30 both) to #447 to #475, then one project-sync run; #42's roll-up follows.\n",
+      "labels": ["platform", "p3", "follow-up"]
     }
   ]
 }
