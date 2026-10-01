@@ -1114,6 +1114,40 @@ await test("wr: minors-only: a fixes verdict with only minor findings stops at m
   );
   assert.equal(n.res.stopped, undefined);
   assert.ok(n.labels.includes("fixer"));
+  // the reviewer prompt says minors alone are an approve
+  assert.ok(r.find("reviewer").prompt.includes("Minor findings alone are an approve (#391)"));
+});
+
+await test("wr: minors-only on the slice path: a gate slice with only minors and an approving critical slice stop at minorsOnly; a stray artifact surfaces", async () => {
+  const slice = (verdict, findings, artifactWritten = false) => ({
+    verdict,
+    reviewedSha: hex40("h0full"),
+    preconditionFailed: "",
+    findings,
+    answers: [],
+    declined: [],
+    artifactWritten,
+  });
+  const r = await run(
+    wr,
+    { ...WBASE, gateFiles: ["g.ts"], criticalFiles: ["c.ts"] },
+    wrResponder({
+      "reviewer-gate": slice("fixes", [WF("M1", "minor", { file: "g.ts" })]),
+      "reviewer-critical": slice("approve", [], true),
+    }),
+  );
+  assert.equal(r.res.stopped, "minorsOnly");
+  assert.deepEqual(
+    r.res.residual.map((f) => f.id),
+    ["G-M1"],
+  );
+  assert.equal(r.res.strayArtifact, "docs/reviews/pr-32.md");
+  for (const l of ["reviewer-gate", "reviewer-critical"])
+    assert.ok(r.find(l).prompt.includes("Minor findings alone are an approve (#391)"), l);
+  assert.ok(
+    !r.labels.some((l) => /^(ruler|fixer|progress|re-reviewer)/.test(l)),
+    r.labels.join(","),
+  );
 });
 
 // #222: wave-review reads reviewedSha and the fix head from git, never from an agent field.

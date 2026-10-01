@@ -36,7 +36,7 @@
  * logging, docs style). Never process bullets (model and effort plan, PR and push steps, commit
  * trailers, branch naming): every agent treats globalConstraints as binding.
  * Tiers (#391): every tier runs one reviewer (role reviewer, Opus medium) with the spec, quality and
- * critic lenses; findings keep kind spec | quality. critic: true, criticFocus and ui shape the critic
+ * critic lenses; findings keep kind spec | quality | critic. critic: true, criticFocus and ui shape the critic
  * lens's focus. The sensitive ruler rule applies on gate and critical. Minor findings are deferred and
  * never open a fix round. maxRounds defaults to 1 on ordinary, 2 on gate and critical. The reviewer and
  * re-reviewers are diff-scoped.
@@ -128,11 +128,11 @@ if (hasTier && hasSensitive && !!A.sensitive !== (A.tier === 'critical')) {
 const TIER = hasTier ? A.tier : A.sensitive ? 'critical' : 'ordinary'
 if (!hasTier && A.sensitive) log('tier: sensitive: true is an alias for tier "critical"')
 // SENSITIVE: the critical tier (Opus implementer, sensitive critic focus). GUARDED: gate or critical
-// (critic on, the sensitive ruler rule and the script's rule (c)).
+// (the gate or sensitive critic-lens focus, the sensitive ruler rule and the script's rule (c)).
 const SENSITIVE = TIER === 'critical'
 const GUARDED = TIER !== 'ordinary'
 const UI = !!A.ui
-// critic: true turns the critic on without a gate or critical tier or ui; no tier or ruler rule changes with it.
+// critic: true is accepted for compatibility (#391: the critic lens is always on); no tier or ruler rule changes with it.
 if (A.critic !== undefined && A.critic !== null && typeof A.critic !== 'boolean') {
   throw new Error(`sdd-task: critic must be a boolean (true or false), got ${JSON.stringify(A.critic)}`)
 }
@@ -1255,8 +1255,8 @@ const SPEC_CHECKS = [
 ]
 const QUALITY_CHECKS = "Code quality: separation of concerns, error handling, DRY without premature abstraction, edge cases; tests verify real behaviour and cover the task's edge cases; each file has one responsibility and follows the plan's file structure; flag new files that are already large or files this change grew a lot."
 // #391: one reviewer on every tier (role reviewer, Opus 5.5 medium by default) does the spec,
-// quality and critic reviews in one pass. Findings keep kind spec | quality, so ids read spec:S1,
-// quality:Q1 and the ledger and rulings stay readable.
+// quality and critic reviews in one pass. Findings keep kind spec | quality | critic, so ids read
+// spec:S1, quality:Q1, critic:C1 and the ledger and rulings stay readable.
 const focusParts = []
 if (SENSITIVE) focusParts.push('sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)')
 if (TIER === 'gate') focusParts.push('gate-tier risk (CI workflows, check scripts, config and tooling that guard the verify gate: fail-open checks, git or tool failures read as pass, shallow clones, empty inputs, rename or path bypasses, a weakened threshold)')
@@ -1278,7 +1278,7 @@ const reviewers = [
       'Tag every finding and every cannotVerify item with kind: spec (spec compliance: requirements, IDs, fixtures, RED evidence), kind: quality (code quality) or kind: critic (a defect the critic lens found, with its failure path). Use S1, Q1 and C1 style ids.',
       'Minor findings never start a fix round: they are deferred to the controller. Spend your effort on critical and important defects.',
       `Write your full review to ${wjoin(`task-${N}-review.md`)}: Spec Compliance (verdict, file:line per finding, per-ID verdicts), Code Quality and Critic (Strengths; Issues by severity with file:line, failure path, how to fix), Cannot verify, Assessment. No preamble.`,
-      'verdict: pass only with no critical or important finding of either kind.',
+      'verdict: pass only with no critical or important finding of any kind.',
     ].join('\n'),
   },
 ]
@@ -1307,7 +1307,7 @@ reviewers.forEach((r, i) => {
   const rv = reviews[i]
   log(`review: ${r.key} ${rv.verdict}, ${rv.findings.length} finding(s), ${rv.cannotVerify.length} cannot-verify`)
   for (const f of rv.findings) {
-    // the combined reviewer's findings keep their kind: spec:<id> or quality:<id>
+    // the reviewer's findings keep their kind: spec:<id>, quality:<id> or critic:<id>
     const g = Object.assign({}, f, { id: `${r.combined ? f.kind : r.key}:${f.id}` })
     const contests = (g.contestsRuling || '').trim()
     const text = `${where(g)} ${g.summary} (reviewer fix: ${g.fix})`
