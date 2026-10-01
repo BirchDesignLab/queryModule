@@ -131,12 +131,12 @@ credential handling or audit logging is a compliance failure, not a bug.
 | Opus 5.5 | `max` | Only when the developer asks for it by name. One agent, never a fleet. |
 | Opus 5.5 | `xhigh` | Only when the developer asks for it by name (developer decision 09-26-26, #92: no xhigh anywhere by default; this is a demo-scale prototype on mock data). |
 | Opus 5.5 | `high` | Whole-branch review (`wave-review`) of a PR that touches a critical-tier path, its critical slice and re-reviewer (ADR-0007 as amended by #92). Deep debugging across the query pipeline (field rules, source adapters, response mapping), the terminal parser and the audit trail. Hard finders, design and judge panels. Design questions from the spec's open-questions list (rule condition language, form/terminal value carry-over, scan auto-submit). |
-| Opus 5.5 | `medium` | Whole-branch review of a gate-tier PR, and the gate slice of a mixed PR. Implementing a critical-tier task from a plan (ruler and re-reviewer on it too). The critic role on a gate-tier or critical-tier task and on a UI-building workflow. Synthesizing several agents' reports into one answer. |
+| Opus 5.5 | `medium` | Whole-branch review of a gate-tier PR, and the gate slice of a mixed PR. Implementing a critical-tier task from a plan (ruler and re-reviewer on it too). The one per-task `sdd-task` reviewer on every tier (spec, quality and critic lenses, #391), and the critic on a UI-building workflow. Synthesizing several agents' reports into one answer. |
 | Opus 5.5 | `low` | A narrow judgment call that needs Opus-grade reasoning but no exploration ("is this credential-storage change CJIS-safe, given these three lines"). |
 | Sonnet 5.5 | `max` | Not used. Work that hard goes to Opus. |
 | Sonnet 5.5 | `xhigh` | Not used by default (#92). Work that long goes to Sonnet `high` in smaller pieces, or to Opus. |
-| Sonnet 5.5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task; the combined spec and quality reviewer on an ordinary or gate-tier task (and the re-reviewer on a gate-tier task). |
-| Sonnet 5.5 | `medium` | Implementing one ordinary or gate-tier plan task with its tests (TDD) in one to three files; routine finders over a bounded area; spec-compliance review of one critical-tier task against its FR/UX/SEC IDs. |
+| Sonnet 5.5 | `high` | Implementation that needs judgment across several files; finders in unfamiliar code; code-quality review of one task; the re-reviewer on a gate-tier task. |
+| Sonnet 5.5 | `medium` | Implementing one ordinary or gate-tier plan task with its tests (TDD) in one to three files; routine finders over a bounded area; the re-reviewer on an ordinary task. |
 | Sonnet 5.5 | `low` | Verify or refute one claim against named files; a fully specified mechanical edit (a rename, one function to a given spec); run the suite and report. |
 | Haiku 4.5 | n/a | Enumeration and extraction: list, grep, pull fields, summarize one file, pull requirement IDs out of the spec. |
 
@@ -168,11 +168,11 @@ Plans run task by task through the saved workflow `.claude/workflows/sdd-task.js
 
 Each task runs at the review tier of the highest `.github/sensitive-paths` tier it touches (`sdd-task` `tier`; README "Review tiers"):
 
-| Task tier | Implementer | Review | Critic | Ruler |
+| Task tier | Implementer | Review (#391: one reviewer, critic lens included) | Max rounds | Ruler |
 |---|---|---|---|---|
-| Ordinary (no sensitive path) | Sonnet `medium` | one combined spec and quality reviewer, Sonnet `high` | only for UI or `critic: true` | Opus `low` |
-| Gate | Sonnet `medium` | one combined spec and quality reviewer, Sonnet `high` | Opus `medium` | Opus `low`, sensitive ruler rule |
-| Critical | Opus `medium` | spec reviewer Sonnet `medium` and quality reviewer Sonnet `high` | Opus `medium` | Opus `medium`, sensitive ruler rule |
+| Ordinary (no sensitive path) | Sonnet `medium` | one reviewer, Opus `medium` (spec, quality and critic lenses) | 1 | Opus `low` |
+| Gate | Sonnet `medium` | one reviewer, Opus `medium`, gate-risk focus | 2 | Opus `low`, sensitive ruler rule |
+| Critical | Opus `medium` | one reviewer, Opus `medium`, sensitive-code focus (the critical `wave-review` at Opus `high` stays) | 2 | Opus `medium`, sensitive ruler rule |
 
 Controller rules for every workflow run:
 

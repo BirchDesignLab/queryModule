@@ -87,6 +87,10 @@
  *     "fixer"        questions from a BLOCKED or NEEDS_CONTEXT fixer; text goes to the fixer.
  *     "re-review"    the re-reviewer returned nothing; text goes to the re-reviewer.
  *   strayArtifact set: an artifact file was written without a final approve; delete it.
+ *   stopped "minorsOnly" (#391) is not a stop point for answers: the reviewer returned fixes with
+ *   no critical or important finding (its prompt says minors alone are an approve), so no fix pass
+ *   ran and no artifact was written. File the residual minors, then run the review again fresh
+ *   (no resumeFromRunId: a resume replays the same review from cache).
  * Answering a stop: re-run with resumeFromRunId and the SAME args plus
  *   answers: a list, one entry per answered stop, appended across re-runs, never replaced:
  *   [{ at: <the stopped value, or stopPoint for a precondition>, text: "...", decisions: [{ item,
@@ -625,7 +629,7 @@ if (usingSlices) {
       `Write your full report to ${out}: Strengths, Issues (Critical, Important, Minor), Cross-cutting checks, Answers, Declined to judge, Assessment (approve or fixes, with reasoning).`,
       artifactClause,
       HOUSE,
-      'verdict: approve only with no critical or important finding. preconditionFailed: "" when the precondition holds.',
+      'verdict: approve only with no critical or important finding. Minor findings alone are an approve (#391): verdict approve, list them under Remaining Minors. preconditionFailed: "" when the precondition holds.',
     ].filter(Boolean).join('\n')
     let res = await agent(prompt, { label, phase: 'Review', schema: REVIEW, ...roleObj })
     const pre = res && res.preconditionFailed ? preconditionAnswers('reviewer') : ''
@@ -698,7 +702,7 @@ if (usingSlices) {
     `Write your full report to ${REVIEW_FILE}: Strengths, Issues (Critical, Important, Minor), Cross-cutting checks, Answers, Declined to judge, Assessment (approve or fixes, with reasoning).`,
     artifactRule(roleObj, 'reviewed head', FAST_PATH ? { mode: 'fast' } : {}),
     HOUSE,
-    'verdict: approve only with no critical or important finding. preconditionFailed: "" when the precondition holds.',
+    'verdict: approve only with no critical or important finding. Minor findings alone are an approve (#391): verdict approve, list them under Remaining Minors. preconditionFailed: "" when the precondition holds.',
   ].filter(Boolean).join('\n')
   review = await agent(reviewPrompt, { label: 'reviewer', phase: 'Review', schema: REVIEW, ...roleObj })
 
@@ -748,6 +752,14 @@ if (review.verdict === 'approve' && firstBlocking.length === 0) {
   return done({ verdict: 'approve', reviewedSha: review.reviewedSha, artifactWritten: review.artifactWritten, findings: review.findings, residual: review.findings.filter((f) => !blocking(f)), strayArtifact: badArtifact ? ARTIFACT : undefined })
 }
 if (review.verdict === 'approve') log(`review: verdict approve but ${firstBlocking.length} critical/important finding(s); treating as fixes`)
+// #391: minor findings alone never start the paid fix pass (ruler, fixer, progress checker,
+// re-reviewer). Every reviewer prompt says minors alone are an approve; a fixes verdict anyway stops
+// here with the minors as residual for the controller to file, and no artifact. minorsOnly is not
+// an answerable stop point: re-run the review fresh (a resume replays this review from cache).
+if (firstBlocking.length === 0) {
+  log(`review: verdict ${review.verdict} with no critical/important finding; no fix pass for minor findings (stopped minorsOnly; file the minors and re-run fresh, not with resumeFromRunId)`)
+  return done({ verdict: 'fixes', reviewedSha: review.reviewedSha, artifactWritten: false, stopped: 'minorsOnly', findings: review.findings, residual: review.findings, strayArtifact: review.artifactWritten || review.rawArtifactWritten ? ARTIFACT : undefined })
+}
 // rawArtifactWritten catches a write by any slice (not only the last one the merge credits), so a
 // stray write is never masked away by the merge that computes the success-path artifactWritten
 // (#92 C1).

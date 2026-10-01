@@ -12,7 +12,7 @@
  *                                            // appends ledgerLines (scripts/sdd/append-ledger.mjs)
  *   tier: "ordinary",                        // optional: "ordinary" (default) | "gate" | "critical" (ADR-0007)
  *   sensitive: false, ui: false,             // sensitive: true is an alias for tier "critical"; the two must agree
- *   critic: false, criticFocus: "...",       // optional: critic on for an ordinary task; focus text
+ *   critic: false, criticFocus: "...",       // optional: shape the reviewer's critic lens (#391)
  *   ids: "BR-001, FR-032", specRefs: "spec 4.1 lines 140-260; ...",
  *   requirementsDoc,                         // optional; default the repo-root Requirements Definition
  *   globalConstraints: "<product and code constraints>",   // required, non-empty; see below
@@ -22,8 +22,8 @@
  *   maxAgents: 18,                           // agent budget (every agent() call); default by tier: ordinary 18,
  *                                            // gate 20, critical 24; coerced like maxRounds;
  *                                            // past it the run stops at "budget"
- *   maxRounds: 2,                            // fix-round cap, default 2 (developer rule 09-27-26: a task
- *                                            // open after round 2 parks for a controller ruling);
+ *   maxRounds: 2,                            // fix-round cap, default 1 ordinary, 2 gate and critical
+ *                                            // (#391; a task still open after the cap parks for a ruling);
  *                                            // numeric strings and floats are coerced (logged), then
  *                                            // clamped to 1..8
  *   answers: [{ at, text?, decisions?, noCode? }],    // only on a re-run after a stop (below)
@@ -35,12 +35,14 @@
  * globalConstraints carries product and code constraints only (runtime, TDD, purity, fixtures,
  * logging, docs style). Never process bullets (model and effort plan, PR and push steps, commit
  * trailers, branch naming): every agent treats globalConstraints as binding.
- * Tiers: ordinary and gate run one combined reviewer (role reviewer: spec and quality, findings keep
- * kind spec | quality); critical keeps specReviewer and qualityReviewer. The critic runs on gate,
- * critical, ui or critic: true; the sensitive ruler rule on gate and critical. Reviewers, critic and
+ * Tiers (#391): every tier runs one reviewer (role reviewer, Opus medium) with the spec, quality and
+ * critic lenses; findings keep kind spec | quality | critic. critic: true, criticFocus and ui shape the critic
+ * lens's focus. The sensitive ruler rule applies on gate and critical. Minor findings are deferred and
+ * never open a fix round. maxRounds defaults to 1 on ordinary, 2 on gate and critical. The reviewer and
  * re-reviewers are diff-scoped.
- * Roles: implementer, reviewer, specReviewer, qualityReviewer, critic, checker, ruler, fixer, escalatedFixer,
- * progressChecker, reReviewer, gate. There is no ledger role (roles.ledger is logged and ignored).
+ * Roles: implementer, reviewer, checker, ruler, fixer, escalatedFixer, progressChecker, reReviewer, gate.
+ * There is no ledger role; roles.ledger, roles.specReviewer, roles.qualityReviewer and roles.critic
+ * are logged and ignored.
  * gate-0 runs in parallel with the reviewers; cannot-verify items go to the checker; a fix round
  * with only gate or progress findings skips the re-reviewer.
  * Effort caps (developer decision 09-26-26, #92): no role default is xhigh or max anywhere, and
@@ -92,12 +94,12 @@
  */
 export const meta = {
   name: 'sdd-task',
-  description: 'Implement one plan task with TDD, review it (spec and quality, critic by tier), rule, fix and gate it to a clean head',
+  description: 'Implement one plan task with TDD, review it (one Opus reviewer: spec, quality and critic lenses), rule, fix and gate it to a clean head',
   whenToUse: 'Running one task of an implementation plan on a wave branch in place of hand-dispatched subagent-driven development',
   phases: [
     { title: 'Implement', detail: 'implementer builds the task from its brief with TDD and commits' },
     { title: 'Rule', detail: 'ruler decides implementer concerns, plan-mandated or contested findings and cannot-verify items the checker could not settle' },
-    { title: 'Review', detail: 'combined reviewer (ordinary, gate) or spec and quality reviewers (critical), critic (gate, critical, UI or critic: true) and gate-0 in parallel' },
+    { title: 'Review', detail: 'one reviewer (spec, quality and critic lenses, #391) and gate-0 in parallel' },
     { title: 'Check', detail: 'checker runs the suggested check for each cannot-verify item' },
     { title: 'Fix', detail: 'fixer, progress checker and re-reviewer per round, up to maxRounds' },
     { title: 'Gate', detail: 'independent lint, typecheck, coverage, head and clean-tree check' },
@@ -125,12 +127,12 @@ if (hasTier && hasSensitive && !!A.sensitive !== (A.tier === 'critical')) {
 }
 const TIER = hasTier ? A.tier : A.sensitive ? 'critical' : 'ordinary'
 if (!hasTier && A.sensitive) log('tier: sensitive: true is an alias for tier "critical"')
-// SENSITIVE: the critical tier (split reviewers, Opus implementer). GUARDED: gate or critical
-// (critic on, the sensitive ruler rule and the script's rule (c)).
+// SENSITIVE: the critical tier (Opus implementer, sensitive critic focus). GUARDED: gate or critical
+// (the gate or sensitive critic-lens focus, the sensitive ruler rule and the script's rule (c)).
 const SENSITIVE = TIER === 'critical'
 const GUARDED = TIER !== 'ordinary'
 const UI = !!A.ui
-// critic: true turns the critic on without a gate or critical tier or ui; no tier or ruler rule changes with it.
+// critic: true is accepted for compatibility (#391: the critic lens is always on); no tier or ruler rule changes with it.
 if (A.critic !== undefined && A.critic !== null && typeof A.critic !== 'boolean') {
   throw new Error(`sdd-task: critic must be a boolean (true or false), got ${JSON.stringify(A.critic)}`)
 }
@@ -138,13 +140,15 @@ if (A.criticFocus !== undefined && A.criticFocus !== null && (typeof A.criticFoc
   throw new Error('sdd-task: criticFocus must be a non-empty string when given')
 }
 const CRITIC_FOCUS = A.criticFocus ? A.criticFocus.trim() : ''
-const CRITIC = GUARDED || UI || A.critic === true
-if (CRITIC_FOCUS && !CRITIC) log('review: criticFocus ignored (critic off: set critic: true, a gate or critical tier, or ui to run it)')
+// #391: there is no separate critic agent. The one Opus reviewer always reads with the critic lens;
+// critic: true and criticFocus only shape that lens's focus (see the review stage).
+if (A.critic === true) log('review: critic: true kept for compatibility; the reviewer always carries the critic lens (#391)')
 const DEFAULT_CRITIC_FOCUS = 'correctness and security risk: fail-open paths, data that crosses a trust boundary (server to client, config to audit), contract drift from the spec, tests that cannot fail'
 const REQ_DOC = A.requirementsDoc || 'Requirements Definition - Query Module Usability Enhancements.md'
 
 // Developer rule 09-27-26: a task still open after fix round 2 parks for a controller ruling.
-const DEFAULT_MAX_ROUNDS = 2
+// #391: ordinary tasks get one round; gate and critical keep two.
+const DEFAULT_MAX_ROUNDS = TIER === 'ordinary' ? 1 : 2
 let MAX_ROUNDS = DEFAULT_MAX_ROUNDS
 if (A.maxRounds !== undefined && A.maxRounds !== null) {
   const raw = A.maxRounds
@@ -294,14 +298,12 @@ if (A.implemented !== undefined && A.implemented !== null) {
 // ---------- roles ----------
 const MODELS = ['haiku', 'sonnet', 'opus']
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
-// Per tier (README "Roles and defaults"). ordinary and gate run one combined reviewer (reviewer);
-// critical keeps the split specReviewer and qualityReviewer. A roles override still wins per role.
+// Per tier (README "Roles and defaults"). #391: every tier runs one reviewer (role reviewer, Opus
+// medium) carrying the spec, quality and critic lenses; the split spec and quality reviewers and the
+// separate critic are gone. A roles override still wins per role.
 const COMMON_ROLES = {
   implementer: { model: 'sonnet', effort: 'medium' },
-  reviewer: { model: 'sonnet', effort: 'high' },
-  specReviewer: { model: 'sonnet', effort: 'medium' },
-  qualityReviewer: { model: 'sonnet', effort: 'high' },
-  critic: { model: 'opus', effort: 'medium' },
+  reviewer: { model: 'opus', effort: 'medium' },
   ruler: { model: 'opus', effort: 'low' },
   checker: { model: 'sonnet', effort: 'low' },
   progressChecker: { model: 'sonnet', effort: 'low' },
@@ -328,6 +330,13 @@ const OVR = Object.assign({}, A.roles || {})
 if (OVR.ledger !== undefined) {
   log('roles: roles.ledger ignored (no ledger agent; the controller appends ledgerLines)')
   delete OVR.ledger
+}
+// #391: these roles were folded into the one reviewer; an old override is ignored, not an error.
+for (const gone of ['specReviewer', 'qualityReviewer', 'critic']) {
+  if (OVR[gone] !== undefined) {
+    log(`roles: roles.${gone} ignored (#391: one reviewer carries the spec, quality and critic lenses; override roles.reviewer)`)
+    delete OVR[gone]
+  }
 }
 
 function stepUp(r) {
@@ -462,9 +471,9 @@ const REVIEW = {
   },
   required: ['verdict', 'findings', 'cannotVerify'],
 }
-// The combined reviewer (ordinary and gate tiers) tags each finding and cannot-verify item with its
-// kind; ids become spec:<id> or quality:<id>, as with the split reviewers.
-const KIND = { type: 'string', enum: ['spec', 'quality'], description: 'spec: spec compliance; quality: code quality' }
+// The reviewer tags each finding and cannot-verify item with its kind; ids become spec:<id>,
+// quality:<id> or critic:<id> (#391: the critic lens is part of the one reviewer).
+const KIND = { type: 'string', enum: ['spec', 'quality', 'critic'], description: 'spec: spec compliance; quality: code quality; critic: a defect found by the adversarial critic lens' }
 const REVIEW_COMBINED = {
   type: 'object',
   properties: {
@@ -1062,7 +1071,7 @@ try {
 // ================= 1. Implement =================
 phase('Implement')
 log(`task ${N} "${A.title}" on ${A.branch} from ${String(A.base).slice(0, 7)}; tier ${TIER}${UI ? ', UI' : ''}; maxRounds ${MAX_ROUNDS}; maxAgents ${MAX_AGENTS}`)
-log(`roles: implementer ${tier('implementer')}, ${SENSITIVE ? `spec ${tier('specReviewer')}, quality ${tier('qualityReviewer')}` : `reviewer (spec and quality) ${tier('reviewer')}`}, critic ${CRITIC ? tier('critic') : 'off'}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}`)
+log(`roles: implementer ${tier('implementer')}, reviewer (spec, quality and critic lenses) ${tier('reviewer')}, ruler ${tier('ruler')}, fixer ${tier('fixer')}, escalated fixer ${tier('escalatedFixer')}, checker ${tier('checker')}, progress ${tier('progressChecker')}, re-review ${tier('reReviewer')}, gate ${tier('gate')}`)
 
 // The implementer prompt never carries answers, so a re-run with answers replays it from cache.
 const implPrompt = [
@@ -1237,8 +1246,7 @@ const common = (roleLabel) => [
   HOUSE,
 ].filter(Boolean).join('\n')
 
-// Spec and quality instructions, shared by the split reviewers (critical) and the combined reviewer
-// (ordinary and gate).
+// Spec and quality instructions for the one reviewer (#391), which also carries the critic lens.
 const SPEC_CHECKS = [
   `Spec compliance: compare the diff with the brief and with the spec sections ${A.specRefs}. Requirement IDs: ${A.ids || '(none given)'}; cite each ID verbatim as it appears in "${REQ_DOC}" (read the IDs there; FR-, UX-, SEC-, BR-, NFR- and the rest), never a paraphrase.`,
   'Report Missing (skipped or claimed without implementing), Extra (unrequested features, over-engineering) and Misunderstood (right feature built wrong). If the brief lists several files each with its own change, check every listed file has its hunk; an untouched listed file is a Missing finding.',
@@ -1246,73 +1254,34 @@ const SPEC_CHECKS = [
   'TDD evidence: missing or implausible RED evidence for a behavioural change is an important finding.',
 ]
 const QUALITY_CHECKS = "Code quality: separation of concerns, error handling, DRY without premature abstraction, edge cases; tests verify real behaviour and cover the task's edge cases; each file has one responsibility and follows the plan's file structure; flag new files that are already large or files this change grew a lot."
-const reviewers = SENSITIVE
-  ? [
-      {
-        key: 'spec',
-        roleName: 'specReviewer',
-        prompt: [
-          `You are the spec reviewer for Task ${N}: ${A.title}. Task-scoped gate, not a merge review.`,
-          common('spec-review'),
-          '',
-          "Spec compliance only (code quality is another reviewer's job).",
-          ...SPEC_CHECKS,
-          `Write your full review to ${wjoin(`task-${N}-review-spec.md`)}: Spec Compliance verdict with file:line per finding, per-ID verdicts, Cannot verify, Strengths, Issues by severity. No preamble.`,
-          'verdict: pass only with no critical or important finding.',
-        ].join('\n'),
-      },
-      {
-        key: 'quality',
-        roleName: 'qualityReviewer',
-        prompt: [
-          `You are the quality reviewer for Task ${N}: ${A.title}. Task-scoped gate, not a merge review.`,
-          common('quality-review'),
-          '',
-          `${QUALITY_CHECKS} Code quality only (spec compliance is another reviewer's job).`,
-          `Write your full review to ${wjoin(`task-${N}-review-quality.md`)}: Strengths, Issues (Critical, Important, Minor) with file:line, why it matters, how to fix; Assessment. No preamble.`,
-          'verdict: pass only with no critical or important finding.',
-        ].join('\n'),
-      },
-    ]
-  : [
-      {
-        key: 'combined',
-        roleName: 'reviewer',
-        combined: true,
-        prompt: [
-          `You are the reviewer for Task ${N}: ${A.title}. You do both the spec-compliance review and the code-quality review. Task-scoped gate, not a merge review.`,
-          common('combined-review'),
-          '',
-          ...SPEC_CHECKS,
-          QUALITY_CHECKS,
-          'Tag every finding and every cannotVerify item with kind: spec (spec compliance: requirements, IDs, fixtures, RED evidence) or kind: quality (code quality). Use S1, S2 ids for spec findings and Q1, Q2 for quality findings.',
-          `Write your full review to ${wjoin(`task-${N}-review.md`)}: Spec Compliance (verdict, file:line per finding, per-ID verdicts), Code Quality (Strengths; Issues by severity with file:line, why it matters, how to fix), Cannot verify, Assessment. No preamble.`,
-          'verdict: pass only with no critical or important finding of either kind.',
-        ].join('\n'),
-      },
-    ]
-if (CRITIC) {
-  const focusParts = []
-  if (SENSITIVE) focusParts.push('sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)')
-  if (TIER === 'gate') focusParts.push('gate-tier risk (CI workflows, check scripts, config and tooling that guard the verify gate: fail-open checks, git or tool failures read as pass, shallow clones, empty inputs, rename or path bypasses, a weakened threshold)')
-  if (UI) focusParts.push('UI risk (accessibility, keyboard paths, focus, states the brief names, regressions to existing components, tokens instead of literals)')
-  if (CRITIC_FOCUS) focusParts.push(CRITIC_FOCUS)
-  if (!focusParts.length) focusParts.push(DEFAULT_CRITIC_FOCUS)
-  reviewers.push({
-    key: 'critic',
-    roleName: 'critic',
+// #391: one reviewer on every tier (role reviewer, Opus 5.5 medium by default) does the spec,
+// quality and critic reviews in one pass. Findings keep kind spec | quality | critic, so ids read
+// spec:S1, quality:Q1, critic:C1 and the ledger and rulings stay readable.
+const focusParts = []
+if (SENSITIVE) focusParts.push('sensitive-code risk (credential handling, audit logging that can be skipped, rewritten or deleted, query dispatch and correlation, terminal parser, write-back, soft delete, the verify gate; CJIS and GDPR exposure; fail-open paths; secrets or real-looking records in fixtures)')
+if (TIER === 'gate') focusParts.push('gate-tier risk (CI workflows, check scripts, config and tooling that guard the verify gate: fail-open checks, git or tool failures read as pass, shallow clones, empty inputs, rename or path bypasses, a weakened threshold)')
+if (UI) focusParts.push('UI risk (accessibility, keyboard paths, focus, states the brief names, regressions to existing components, tokens instead of literals)')
+if (CRITIC_FOCUS) focusParts.push(CRITIC_FOCUS)
+if (!focusParts.length) focusParts.push(DEFAULT_CRITIC_FOCUS)
+const reviewers = [
+  {
+    key: 'combined',
+    roleName: 'reviewer',
+    combined: true,
     prompt: [
-      `You are the critic for Task ${N}: ${A.title}. Read the whole diff adversarially: assume something is wrong and try to find it. Focus: ${focusParts.join('; ')}.`,
-      common('critic'),
+      `You are the reviewer for Task ${N}: ${A.title}. You are the only reviewer of this task: you do the spec-compliance review, the code-quality review and the critic's adversarial read in one pass. Task-scoped gate, not a merge review.`,
+      common('combined-review'),
       '',
-      'Report only real defects with a concrete failure path; say how it fails. Spec gaps you notice go in too, with the spec citation.',
-      `Write your full critique to ${wjoin(`task-${N}-review-critic.md`)}: Issues by severity with file:line and failure path, Assessment. No preamble.`,
-      'verdict: pass only with no critical or important finding.',
+      ...SPEC_CHECKS,
+      QUALITY_CHECKS,
+      `Critic lens: read the whole diff adversarially; assume something is wrong and try to find it. Focus: ${focusParts.join('; ')}. Report only real defects with a concrete failure path; say how it fails.`,
+      'Tag every finding and every cannotVerify item with kind: spec (spec compliance: requirements, IDs, fixtures, RED evidence), kind: quality (code quality) or kind: critic (a defect the critic lens found, with its failure path). Use S1, Q1 and C1 style ids.',
+      'Minor findings never start a fix round: they are deferred to the controller. Spend your effort on critical and important defects.',
+      `Write your full review to ${wjoin(`task-${N}-review.md`)}: Spec Compliance (verdict, file:line per finding, per-ID verdicts), Code Quality and Critic (Strengths; Issues by severity with file:line, failure path, how to fix), Cannot verify, Assessment. No preamble.`,
+      'verdict: pass only with no critical or important finding of any kind.',
     ].join('\n'),
-  })
-} else {
-  log('review: critic off (ordinary tier, not UI, and critic is not set)')
-}
+  },
+]
 
 // gate-0 runs in parallel with the reviewers on the same head (reviewHead).
 log(`review: ${reviewers.map((r) => r.key).join(', ')} and gate-0 in parallel on ${String(reviewHead).slice(0, 7)}`)
@@ -1338,7 +1307,7 @@ reviewers.forEach((r, i) => {
   const rv = reviews[i]
   log(`review: ${r.key} ${rv.verdict}, ${rv.findings.length} finding(s), ${rv.cannotVerify.length} cannot-verify`)
   for (const f of rv.findings) {
-    // the combined reviewer's findings keep their kind: spec:<id> or quality:<id>
+    // the reviewer's findings keep their kind: spec:<id>, quality:<id> or critic:<id>
     const g = Object.assign({}, f, { id: `${r.combined ? f.kind : r.key}:${f.id}` })
     const contests = (g.contestsRuling || '').trim()
     const text = `${where(g)} ${g.summary} (reviewer fix: ${g.fix})`

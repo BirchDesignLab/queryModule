@@ -64,3 +64,4 @@ Backups hold superseded and deleted credential ciphertext for up to 30 days, rec
 - Lost `DATA_KEY`: `scripts/ops/lost-data-key.ts` (steps in its header).
 - Lost `DB_ENCRYPTION_KEY`: restore from the offline copy of the key; there is no other path.
 - Roles: `docker compose run --rm app node scripts/ops/grant-role.js <email> <role> [--revoke]`.
+- Sign-ins: `docker compose run --rm app node scripts/ops/login-stats.js [--since YYYY-MM-DD]` prints, per account, the sign-in count, distinct client IPs and last sign-in (UTC) from the audit's `loginSucceeded` rows; IP values are never printed. Read only.
