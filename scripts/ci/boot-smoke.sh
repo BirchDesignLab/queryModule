@@ -5,7 +5,7 @@
 #
 # Before the service container starts, `up` also proves every compiled ops CLI in the image
 # (#130 carry, A-offload wave 2): existence, check-triggers on a fresh migrated db and after one
-# audit_event trigger is dropped, audit-stats with and without --up-to and on a bad --up-to,
+# audit_event trigger is dropped, audit-stats with and without --up-to and on a bad --up-to, login-stats likewise with --since,
 # backup's outDir guard, grant-role's bad-arg exit, and both lost-key runbooks recovering onto a
 # volume the app then boots on. Every ops check runs on its own throwaway volume via
 # `docker run --rm`, never on the qm-smoke service volume.
@@ -82,7 +82,7 @@ ops_checks() {
   chmod 777 "$backup_out"
 
   # --- existence: every compiled ops CLI is in the image at its documented path ---
-  for cli in audit-stats backup check-triggers grant-role lost-data-key lost-key seed; do
+  for cli in audit-stats backup check-triggers grant-role login-stats lost-data-key lost-key seed; do
     code=0
     docker run --rm --entrypoint sh "$image" -c "test -f /app/scripts/ops/$cli.js" || code=$?
     assert_exit "ops CLI present: $cli.js" 0 "$code"
@@ -106,6 +106,17 @@ ops_checks() {
   code=0
   ops_run "$ops_vol" "$sec" node scripts/ops/audit-stats.js --up-to not-a-number || code=$?
   assert_exit "audit-stats (bad --up-to)" 2 "$code"
+
+  # --- login-stats: 0 with and without --since, 2 on a bad --since ---
+  code=0
+  ops_run "$ops_vol" "$sec" node scripts/ops/login-stats.js || code=$?
+  assert_exit "login-stats (no --since)" 0 "$code"
+  code=0
+  ops_run "$ops_vol" "$sec" node scripts/ops/login-stats.js --since 2026-10-01 || code=$?
+  assert_exit "login-stats (--since)" 0 "$code"
+  code=0
+  ops_run "$ops_vol" "$sec" node scripts/ops/login-stats.js --since yesterday || code=$?
+  assert_exit "login-stats (bad --since)" 2 "$code"
 
   # --- backup: refuses an outDir inside DATA_DIR, writes one mounted outside it ---
   code=0
