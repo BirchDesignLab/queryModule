@@ -18,7 +18,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | M0 | P0 contracts | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | n/a | done · [plan](2026-09-25-p0-contracts.md) · [issues][m0-p0] | done · Typecheck and CI green; contracts frozen · [all][m0-p0] |
 | M0 | P1 foundation | done · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | done · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | done · in B plan · [issues][m0-p1-c] | done · M0 exit · [all][m0-p1] |
 | M1 | P2 engine | done · [plan](2026-09-28-track-a-p2.md) · [issues][m1-p2-a] | done · [plan](2026-09-28-track-b-p2.md) · [issues][m1-p2-b] | n/a | done · in A and B plans · [issues][m1-p2-c] | done · Form on `GET config`; parser property tests · [all][m1-p2] |
-| M1 | P3 flow | planned · [plan](2026-09-29-track-a-p3.md), UI-first re-plan (ADR-0011, ADR-0012) · [issues][m1-p3-a] | planned · [plan](2026-09-29-track-b-p3.md), UI-first re-plan (ADR-0012) · [issues][m1-p3-b] | n/a | n/a | planned · M1 exit (v1 demo, ADR-0012) · [all][m1-p3] |
+| M1 | P3 flow | active · [plan](2026-09-29-track-a-p3.md), UI-first re-plan (ADR-0011, ADR-0012); AC0, client-only builder and preview, design system and cloud pass done (#384 to #446); next AC1 (#349, #350) · [issues][m1-p3-a] | active · [plan](2026-09-29-track-b-p3.md), UI-first re-plan (ADR-0012); waves B1 to B8, design system and cloud pass done (#344 to #446); open #377, #382 · [issues][m1-p3-b] | n/a | n/a | planned · M1 exit (v1 demo, ADR-0012); needs AC1, AC2 and the core-loop e2e (#362) · [all][m1-p3] |
 | M2 | P0 contracts | n/a | n/a | n/a | planned · `<date>-m2-p0-contracts.md` · [issues][m2-p0] | planned · Contracts frozen; OpenAPI diff reviewed · [all][m2-p0] |
 | M2 | P0.5 dispatch (ADR-0012) | planned · `<date>-m2-track-a-p0-5.md` · [issues][m2-p05-a] | planned · `<date>-m2-track-b-p0-5.md` · [issues][m2-p05-b] | n/a | n/a | planned · A4 clean no-record; smoke 1 to 5 · [all][m2-p05] |
 | M2 | P1 feed | planned · `<date>-m2-track-a-p1.md` · [issues][m2-p1-a] | planned · `<date>-m2-track-b-p1.md` · [issues][m2-p1-b] | n/a | planned · in B plan · [issues][m2-p1-c] | planned · A6; replay test · [all][m2-p1] |
@@ -37,10 +37,11 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
-| Linux laptop | Host lane (host steps only) | M1 P2 | idle | 09-28-26 14:32 |
-| Windows 11 | B (`C:\git\queryModule`) | M1 P3 | held (re-plan) | 09-29-26 |
-| Windows 11 | A (`C:\git\queryModule-a4`; `-a` retired for P3) | M1 P3 | held (re-plan) | 09-29-26 |
-| Windows 11 | Planning (`C:\git\queryModule-plan`) | M1 P3 | running (UI-first re-plan) | 09-29-26 |
+| Linux laptop | Host lane (host steps only) | M1 P3 | idle (15b83d2 promoted, smoke green) | 09-30-26 |
+| Windows 11 | B (`C:\git\queryModule`) | M1 P3 | paused | 10-01-26 14:38 |
+| Windows 11 | A (`C:\git\queryModule-a4`; `-a` retired for P3) | M1 P3 | paused (next: AC1) | 10-01-26 14:38 |
+| Windows 11 | Checker (`C:\git\queryModule-checker-p3`) | M1 P3 | running | 10-01-26 14:38 |
+| Cloud (claude.ai/code) | UI lanes, ordinary tier only | M1 P3 | paused until AC2 | 09-30-26 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -50,7 +51,23 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
+- Issue: #349 Versioned config store and startup from it (BR-001, SEC-010, ADR-0011)
+- Branch / PR: none (AC1 not started)
+- Last green: `pnpm verify` at d2450cd on main
+- Next step: "Step 25.1: Failing tests: empty store boots from the file and holds version 1"
+- Blocked by: none
+- Local-only state: none
+- Notes: AC1 is Tasks 25 and 26 (critical) and carries the gate rider #488 (#338 and `login-stats` proposed); AC2 then unblocks A-D3, the users UI (#359) and the core-loop e2e (#362).
+
 ### Track B
+
+- Issue: #377 Terminal test minors from B2 and AX reviews
+- Branch / PR: none
+- Last green: `pnpm verify` at d2450cd on main
+- Next step: #377 on a local session (critical tier); #382's remaining minors after it
+- Blocked by: none
+- Local-only state: none
+- Notes: the cloud UI lanes (#418 to #446) are paused until AC2; their handover briefs are in the M1P3 MANAGER 3 chat.
 
 ### Track D
 
