@@ -6,10 +6,9 @@ import type { AppEnv } from "../http/types";
 import { acknowledge } from "./acknowledge";
 import { admitSubmit, replayResponse } from "./admission";
 import { sanitizeSubmitError } from "./errors";
+import { prepareSubmit } from "./prepare";
 
 export { SubmitTransactionError, sanitizeSubmitError } from "./errors";
-
-import { prepareSubmit } from "./prepare";
 
 /**
  * The idempotency guard a concurrent duplicate trips when it loses the race (spec 5.2 step 1):

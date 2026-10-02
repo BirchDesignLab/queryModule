@@ -83,6 +83,9 @@ export async function replayResponse(
     return await readReplay(db, userId, idempotencyKey);
   } catch (e) {
     if (e instanceof ReplayIntegrityError) throw e;
+    // A ZodError is a stored-data fault, not a driver one; its issues quote the row's values.
+    if (e instanceof z.ZodError)
+      throw new ReplayIntegrityError("replay: stored row failed its schema");
     throw sanitizeSubmitError(e, "replay");
   }
 }
