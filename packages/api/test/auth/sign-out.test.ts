@@ -128,6 +128,18 @@ describe("SEC-006 sign-out ends the server session or says it did not (#246, spe
     expect(ended).toHaveBeenCalledTimes(1);
   });
 
+  it("the app's fallback clear and Better Auth's clear emit byte-identical session Set-Cookie lines (#339 G-G-m1)", async () => {
+    const line = (res: Response, t: TestApp) =>
+      res.headers.getSetCookie().find((c) => c.startsWith(`${sessionCookieName(t.env)}=`));
+    const a = await signedIn();
+    const primary = line(await signOut(a.t, a.cookie), a.t);
+    const b = await signedIn();
+    vi.spyOn(b.t.deps.auth, "handler").mockRejectedValueOnce(new Error("better auth down"));
+    const fallback = line(await signOut(b.t, b.cookie), b.t);
+    expect(primary).toBeDefined();
+    expect(fallback).toBe(primary);
+  });
+
   it("a retry after the fault clears signs out once and audits one logout", async () => {
     const { t, cookie, sessionId, ended } = await signedIn();
     await t.deps.db.$client.execute(
@@ -226,6 +238,23 @@ describe("SEC-010 sign-out deletes the session and writes logout in one transact
     expect(clearsSessionCookie(res, t)).toBe(true);
     expect(await t.auditRows("logout")).toHaveLength(0);
     expect(ended).not.toHaveBeenCalled();
+  });
+
+  it("an idle-expired session whose row still exists signs out with one logout row and no row left (#337)", async () => {
+    const { t, cookie, sessionId, ended } = await signedIn();
+    t.clock.advance(31 * 60_000);
+    const res = await signOut(t, cookie);
+    expect(res.status).toBe(200);
+    expect(clearsSessionCookie(res, t)).toBe(true);
+    const rows = await t.auditRows("logout");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.details.sessionId).toBe(sessionId);
+    const left = await t.deps.db.$client.execute({
+      sql: "SELECT id FROM session WHERE id = ?",
+      args: [sessionId],
+    });
+    expect(left.rows).toHaveLength(0);
+    expect(ended).toHaveBeenCalledTimes(1);
   });
 
   it("condition 4: two parallel sign-outs on one session write at most one logout row", async () => {
