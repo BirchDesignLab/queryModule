@@ -15,7 +15,7 @@ import type { Principal } from "../seams";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
-/** Upgrade attempts per client IP per window (decision D-A9, SEC-014, NFR-003). */
+/** Upgrade attempts per client IP per window (decision D-A9, spec 5.3; no FR/SEC ID covers it). */
 export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
 export const WS_LOCAL_CLOSE = { idle: 4000, badMessage: 1008, shutdown: 1001 } as const;
 export interface WsHandle {
@@ -36,12 +36,12 @@ function rejectLimited(socket: Duplex, retryAfterSeconds: number): void {
 }
 function toRequest(req: IncomingMessage, origin: string): Request {
   const headers = new Headers();
-  // When Origin is absent and an Authorization header is present, only a signed bearer token
-  // may authenticate the upgrade (carry-forward A3 T14): forwarding the cookie here would let an
-  // unsigned bearer (which better-auth's requireSignature rejects outright, leaving the cookie
-  // header untouched) silently authenticate through the cookie instead (I2). A cookie forwarded
-  // on its own (no Authorization header at all) is unaffected: it can still resolve a session,
-  // and the Origin check downstream then rejects it with 403, not 401, when Origin is absent.
+  // Reached only after the Origin gate in handle(): an upgrade with no Origin got this far
+  // because it carries an Authorization: Bearer header, and then only a signed bearer token may
+  // authenticate it (carry-forward A3 T14). Forwarding the cookie would let an unsigned bearer
+  // (which better-auth's requireSignature rejects outright, leaving the cookie header
+  // untouched) silently authenticate through the cookie instead (I2). A cookie with no Origin
+  // and no bearer never gets here: the gate answers 403 first.
   const hasOrigin = typeof req.headers.origin === "string";
   const dropCookie = !hasOrigin && typeof req.headers.authorization === "string";
   for (const [k, v] of Object.entries(req.headers)) {
@@ -154,11 +154,13 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     if (url.search !== "") return reject(socket, 400);
     // Cheapest checks first, and no session lookup until both pass (SEC-014, NFR-003): the
     // per-IP limiter (one rate_limit write), then Origin, then identity.resolve.
+    // Production sits behind Cloudflare, which always sets CF-Connecting-IP. A production upgrade
+    // without a usable one is misrouted traffic: trustedClientIp yields "unknown" and all such
+    // upgrades share the one ws:ip:unknown bucket, throttled together (fail closed, #315).
+    const cf = req.headers["cf-connecting-ip"];
     const ip = trustedClientIp(
       d.env,
-      typeof req.headers["cf-connecting-ip"] === "string"
-        ? req.headers["cf-connecting-ip"]
-        : undefined,
+      typeof cf === "string" ? cf : undefined,
       () => req.socket.remoteAddress ?? "local",
     );
     const hit = await d.limiter.hit(
