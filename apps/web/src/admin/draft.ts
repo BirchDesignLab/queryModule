@@ -7,6 +7,7 @@ import {
   SiteConfigSchema,
   validateSiteConfig,
 } from "@querymodule/core/config";
+import type { ConfigDocument } from "@querymodule/core/contracts";
 
 /**
  * The config builder's draft (Task 31, BR-001, FR-060). It is memory only: never localStorage,
@@ -147,6 +148,36 @@ export interface Restored {
 /** Steps kept for undo; older ones are dropped. */
 export const HISTORY_LIMIT = 100;
 
+/**
+ * What the builder knows of the server's copy (Task 33 part 2a, ADR-0011): the live version it is
+ * based on, the live view (for the unpublished-changes count and the diff), and the saved draft.
+ * Memory only; the ResetController clears it with the draft.
+ */
+export interface ServerBase {
+  /** The document the draft was loaded from or last saved as: what unchanged sections keep. */
+  document: ConfigDocument;
+  /** The live version the draft is based on (the optimistic lock of PUT /admin/config/draft). */
+  baseVersion: number;
+  /** The saved draft's version; null while the server has none. */
+  draftVersion: number | null;
+  liveDoc: JsonObject;
+  liveLabels: LabelOverlay;
+  /** The edits as last loaded or saved: what "unsaved" is measured against. */
+  savedDoc: JsonObject;
+  savedLabels: LabelOverlay;
+}
+
+/** The edits at one moment. */
+export interface EditState {
+  doc: JsonObject;
+  labels: LabelOverlay;
+}
+
+export interface StartOptions {
+  labels?: LabelOverlay;
+  server?: ServerBase;
+}
+
 export interface SetPathOptions {
   coalesce?: boolean;
 }
@@ -157,8 +188,17 @@ export interface ConfigDraftState {
   /** Steps that can be undone and redone (memory only, cleared with the draft). */
   undoCount: number;
   redoCount: number;
+  /** What the server holds, once the builder has loaded it. */
+  server: ServerBase | null;
   /** Seeds the draft once; a later call keeps the edits. */
-  start(doc: JsonObject): void;
+  start(doc: JsonObject, options?: StartOptions): void;
+  /** Replaces the draft with the server's copy (reload after a conflict or a publish); clears undo. */
+  load(doc: JsonObject, labels: LabelOverlay, server: ServerBase): void;
+  /**
+   * The draft was saved as `document`, from the edits `saved` (what was sent, which may be older
+   * than the edits now): it is the new merge base and the new saved copy.
+   */
+  markSaved(draftVersion: number, document: ConfigDocument, saved: EditState): void;
   /** `coalesce`: a text entry, whose consecutive edits of one control are one undo step. */
   setPath(path: readonly PathSegment[], value: unknown, options?: SetPathOptions): void;
   setDoc(doc: JsonObject): void;
@@ -216,8 +256,29 @@ export function createConfigDraftStore(): ConfigDraftStore {
     labels: {},
     undoCount: 0,
     redoCount: 0,
-    start(doc) {
-      if (state.doc === null) publish({ doc });
+    server: null,
+    start(doc, options) {
+      if (state.doc === null)
+        publish({ doc, labels: options?.labels ?? {}, server: options?.server ?? null });
+    },
+    load(doc, labels, server) {
+      meta = null;
+      past = [];
+      future = [];
+      lastKey = null;
+      publish({ doc, labels, server });
+    },
+    markSaved(draftVersion, document, saved) {
+      if (state.server === null) return;
+      publish({
+        server: {
+          ...state.server,
+          document,
+          draftVersion,
+          savedDoc: saved.doc,
+          savedLabels: saved.labels,
+        },
+      });
     },
     setPath(path, value, options) {
       if (state.doc === null || Object.is(valueAt(state.doc, path), value)) return;
@@ -266,7 +327,7 @@ export function createConfigDraftStore(): ConfigDraftStore {
       past = [];
       future = [];
       lastKey = null;
-      publish({ doc: null, labels: {} });
+      publish({ doc: null, labels: {}, server: null });
     },
   };
   return {

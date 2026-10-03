@@ -62,7 +62,7 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
 
   it("M8: a failed config load shows an error, not an endless loading state", async () => {
     server.use(
-      http.get(`${API}/api/v1/config`, () =>
+      http.get(`${API}/api/v1/admin/config`, () =>
         HttpResponse.json(
           { error: { code: "internal", requestId: "r1" } },
           {

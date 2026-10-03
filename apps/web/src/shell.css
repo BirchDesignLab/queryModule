@@ -675,6 +675,17 @@ main[tabindex="-1"]:focus {
   margin-inline-start: auto;
 }
 
+/* Save, conflict and publish results sit above the panes: an alert for what needs action, a plain
+   line for what was done. */
+.qm-builder__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  margin: 0 0 var(--qm-space-2);
+  font-size: var(--qm-type-size-sm);
+}
+
 /* The panes' column: what the row leaves, never more, so the panes inside can scroll. */
 .qm-builder__body {
   grid-column: 1 / -1;
@@ -1458,6 +1469,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin: 0 0 var(--qm-space-5);
 }
 
+/* The publish dialog's list of changes scrolls inside the dialog, never the page behind it. */
+.qm-leave-dialog__content {
+  max-block-size: 50vh;
+  margin-block-end: var(--qm-space-5);
+  overflow-y: auto;
+}
+
 .qm-leave-dialog__actions {
   display: flex;
   flex-wrap: wrap;
@@ -1503,7 +1521,8 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   list-style: none;
 }
 
-.qm-diff__entry.qm-button {
+.qm-diff__entry.qm-button,
+.qm-diff__entry--static {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;

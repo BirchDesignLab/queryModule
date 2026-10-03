@@ -44,20 +44,19 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(draftDoc(t)?.terminal).toEqual({ delimiter: "," });
   });
 
-  it("labels server-only sections; publish and history are aria-disabled, focusable, with one reason", async () => {
+  it("labels server-only sections; history is aria-disabled and focusable with its reason; publish needs changes", async () => {
     const t = await openBuilder();
     expect(
       screen.getByText(/server settings: available after the config store lands/i),
     ).toBeInTheDocument();
-    const publish = screen.getByRole("button", { name: "Publish" });
+    const publish = screen.getByRole("button", { name: "Review and publish" });
     const history = screen.getByRole("button", { name: "History" });
     for (const b of [publish, history]) {
       expect(b).not.toBeDisabled();
       expect(b).toHaveAttribute("aria-disabled", "true");
-      expect(b).toHaveAccessibleDescription("Publish and history arrive with the config store.");
     }
-    expect(history.getAttribute("aria-describedby")).toBe(publish.getAttribute("aria-describedby"));
-    const reason = document.getElementById(publish.getAttribute("aria-describedby") ?? "");
+    expect(history).toHaveAccessibleDescription(/version history arrives/i);
+    const reason = document.getElementById(history.getAttribute("aria-describedby") ?? "");
     expect(reason).not.toHaveAttribute("tabindex");
     const before = JSON.stringify(draftDoc(t));
     await t.user.click(publish);
@@ -74,15 +73,16 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     const toolbar = scope.firstElementChild as HTMLElement;
     expect(toolbar).toHaveClass("qm-builder__toolbar");
     const status = within(toolbar).getByTestId("draft-status");
-    expect(status).toHaveTextContent("Draft: no changes");
+    expect(status).toHaveTextContent("Draft, based on version 1. No unpublished changes.");
     expect(status).not.toHaveAttribute("aria-live");
     expect(status).not.toHaveAttribute("role");
     await selectBuilderItem(t.user, "terminal");
     const input = await findSetting("terminal.delimiter");
     await t.user.clear(input);
     await t.user.type(input, ",");
-    expect(status).toHaveTextContent("Draft: unpublished changes, kept in this tab only");
-    expect(status).not.toHaveTextContent(/saved|version/i);
+    expect(status).toHaveTextContent(
+      "Draft, based on version 1. 1 unpublished change. Not saved yet.",
+    );
   });
 
   it("the raw JSON tab shows the draft and a valid edit updates it", async () => {

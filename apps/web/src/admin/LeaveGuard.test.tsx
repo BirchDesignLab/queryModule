@@ -50,7 +50,7 @@ async function signOutViaMenu(t: Opened) {
   await t.user.click(screen.getByRole("button", { name: TEST_USER.email }));
   await t.user.click(screen.getByRole("button", { name: "Sign out" }));
 }
-const dialog = () => screen.getByRole("dialog", { name: "Sign out and lose your changes?" });
+const dialog = () => screen.getByRole("dialog", { name: "Sign out with unsaved edits?" });
 const stay = () => within(dialog()).getByRole("button", { name: "Stay signed in" });
 const leave = () => within(dialog()).getByRole("button", { name: "Sign out" });
 
@@ -67,7 +67,7 @@ describe("dirty-draft guard (B1)", () => {
     await makeChange(t);
     await signOutViaMenu(t);
     expect(dialog()).toBeInTheDocument();
-    expect(dialog()).toHaveAccessibleDescription(/kept in this tab only.*discards them/i);
+    expect(dialog()).toHaveAccessibleDescription(/not saved.*discarded.*saved draft stays/i);
     expect(signOuts).toBe(0);
     expect(screen.getByRole("tab", { name: "Form" })).toBeInTheDocument();
     // Focus starts on the safe choice.
@@ -219,7 +219,7 @@ describe("LeaveGuard when the dialog goes another way", () => {
       </ServicesProvider>,
     );
     const answer = leaveGuards(services).confirm();
-    await screen.findByRole("dialog", { name: "Sign out and lose your changes?" });
+    await screen.findByRole("dialog", { name: "Sign out with unsaved edits?" });
     view.unmount();
     // Not confirmed by the user: the sign-out stays undone, and the next one goes straight through.
     expect(await answer).toBe(false);

@@ -7,20 +7,21 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
+import { fetchAdminConfig, startOf } from "./admin-config.js";
 import { BuilderTree } from "./BuilderTree.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChangesView } from "./ChangesView.js";
-import { ChecksContext, useDraftChecks } from "./checks.js";
+import { ChecksContext, useDraftChecks, withServerIssues } from "./checks.js";
 import { revealAndFocus } from "./controls.js";
-import { docFromClient, type JsonObject } from "./draft.js";
+import type { JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
 import { hasPointer, parentPointer } from "./issues.js";
 import { LeaveGuard } from "./LeaveGuard.js";
 import { BuilderPreview } from "./Preview.js";
+import { PublishButtons, PublishDialogs, PublishNotices, usePublishFlow } from "./PublishFlow.js";
 import { type RawState, RawTab } from "./RawTab.js";
 import {
   defaultPointer,
@@ -30,26 +31,44 @@ import {
   SelectionContext,
   topItem,
 } from "./selection.js";
-import { useCachedClientConfig } from "./use-cached-config.js";
 
 export { configDraftStore } from "./builder-store.js";
 
 export const TABS = ["form", "raw", "changes"] as const;
 type TabId = (typeof TABS)[number];
 
-/** Config builder part 1 (Task 31, #355): the generic form and the raw JSON tab over one draft. */
+/**
+ * The config builder (Task 31 and Task 33 part 2a): the generic form and the raw JSON tab over one
+ * draft that comes from, and is saved to, the server (GET and PUT /admin/config). The browser keeps
+ * nothing: the draft is in memory, and the saved copy is on the server (spec 6.7).
+ */
 export function ConfigBuilder() {
   const t = useT();
   const services = useServices();
-  const config = useCachedClientConfig();
-  const failed = useConfigLoadFailed();
   const { doc } = useDraft();
   const seeded = doc !== null;
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     // Q8: also reseeds after a reset while the builder stays open.
-    if (config !== undefined && !seeded)
-      configDraftStore(services).getState().start(docFromClient(config));
-  }, [config, services, seeded]);
+    if (seeded) return;
+    let open = true;
+    setFailed(false);
+    fetchAdminConfig(services.api).then(
+      (config) => {
+        if (!open) return;
+        const next = startOf(config);
+        configDraftStore(services)
+          .getState()
+          .start(next.doc, { labels: next.labels, server: next.server });
+      },
+      () => {
+        if (open) setFailed(true);
+      },
+    );
+    return () => {
+      open = false;
+    };
+  }, [services, seeded]);
   if (doc === null && failed)
     return (
       <p className="qm-builder__body" role="alert">
@@ -63,19 +82,6 @@ export function ConfigBuilder() {
       </p>
     );
   return <BuilderBody doc={doc} />;
-}
-
-/** M8: the cached GET /api/v1/config failed, so the builder has nothing to start from. */
-function useConfigLoadFailed(): boolean {
-  const { queryClient } = useServices();
-  const subscribe = useCallback(
-    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
-    [queryClient],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () => queryClient.getQueryState(["config"])?.status === "error",
-  );
 }
 
 /** A top-level item's own pointer ("/commands", "/queryTypes/2"), which the editor shows whole. */
@@ -212,21 +218,6 @@ function useMarkSelected(
   }, [panel, selection, tab]);
 }
 
-/**
- * Whether the draft differs from the live config (design lead 09-29-26: no count and no "saved"
- * before the config store, AC2). Label overlay entries count as changes.
- */
-function useDraftChanged(doc: JsonObject, labels: Readonly<Record<string, object>>): boolean {
-  const live = useCachedClientConfig();
-  const liveText = useMemo(
-    () => (live === undefined ? null : JSON.stringify(docFromClient(live))),
-    [live],
-  );
-  const docText = useMemo(() => JSON.stringify(doc), [doc]);
-  const labelled = Object.values(labels).some((l) => Object.keys(l).length > 0);
-  return labelled || (liveText !== null && docText !== liveText);
-}
-
 /** A control that has its own text undo: text-like inputs, textareas and editable content. */
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -248,9 +239,15 @@ function isTextEntry(target: EventTarget | null): boolean {
 function BuilderBody({ doc }: { doc: JsonObject }) {
   const t = useT();
   const uid = useId();
-  const { labels, undoCount, redoCount } = useDraft();
+  const { labels, undoCount, redoCount, server } = useDraft();
   const { announcer } = useServices();
-  const checks = useDraftChecks(doc, labels);
+  const localChecks = useDraftChecks(doc, labels);
+  const flow = usePublishFlow();
+  // Issues the server found when the draft was last checked join the browser's own, until an edit.
+  const checks = useMemo(
+    () => withServerIssues(localChecks, flow.serverIssues),
+    [localChecks, flow.serverIssues],
+  );
   const [tab, setTab] = useState<TabId>("form");
   const [raw, setRaw] = useState<RawState>(() => ({
     text: JSON.stringify(doc, null, 2),
@@ -321,10 +318,9 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
     const next = existingPointer(doc, p);
     if (next !== p) setSelection((s) => ({ pointer: next, seq: s.seq }));
   }, [doc, selection.pointer]);
-  const reasonId = `${uid}-publish-reason`;
+  const reasonId = `${uid}-history-disabled`;
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
-  const changed = useDraftChanged(doc, labels);
   // The issue button and the preview's "Go to the error" share this path: select the issue's item,
   // then focus its control (useMarkSelected). A whole-config issue has no item: keep the current
   // one and focus its message.
@@ -335,6 +331,13 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
       firstIssue.pointer,
     );
   }, [doc, fallback, firstIssue, onSelect, shown.pointer]);
+  // The server found errors on Review and publish: go to the first, as the issue button does.
+  const seenIssues = useRef(flow.issueSeq);
+  useEffect(() => {
+    if (flow.issueSeq === seenIssues.current || flow.serverIssues === null) return;
+    seenIssues.current = flow.issueSeq;
+    goToFirstIssue();
+  }, [flow.issueSeq, flow.serverIssues, goToFirstIssue]);
   // The selection goes into each history step, so an undo can put it back (B1).
   useEffect(() => {
     store.getState().setMeta(shown.pointer);
@@ -415,7 +418,19 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
         {/* The section h2 sits just before this bar and reads as its title (design target, A2). */}
         <div className="qm-builder__toolbar">
           <p className="qm-builder__status" data-testid="draft-status">
-            {t(changed ? "admin.config.status.changed" : "admin.config.status.unchanged")}
+            {server === null
+              ? ""
+              : `${t("admin.config.status.draft", {
+                  version: server.baseVersion,
+                  changes: t(
+                    flow.changeCount === 0
+                      ? "admin.config.status.none"
+                      : flow.changeCount === 1
+                        ? "admin.config.status.one"
+                        : "admin.config.status.many",
+                    { count: flow.changeCount },
+                  ),
+                })}${flow.unsaved ? ` ${t("admin.config.status.unsaved")}` : ""}`}
           </p>
           {canGoToError && (
             <button
@@ -472,7 +487,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           >
             {t("admin.config.redo")}
           </button>
-          {/* Spec 6.2: aria-disabled keeps both focusable, and one visible reason describes both. */}
+          {/* Spec 6.2: aria-disabled keeps each focusable, and its visible reason describes it. */}
           <button
             type="button"
             className="qm-button qm-button--secondary"
@@ -481,24 +496,18 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           >
             {t("admin.config.history")}
           </button>
-          <button
-            type="button"
-            className="qm-button"
-            aria-disabled="true"
-            aria-describedby={reasonId}
-          >
-            {t("admin.config.publish")}
-          </button>
+          <PublishButtons flow={flow} parseError={raw.parseError !== null} />
           {historyReason !== null && (
             <p className="qm-builder__reason" id={historyReasonId}>
               {historyReason}
             </p>
           )}
           <p className="qm-builder__reason" id={reasonId}>
-            {t("admin.config.publishDisabled")}
+            {t("admin.config.historyDisabled")}
           </p>
         </div>
         <div className="qm-builder__body">
+          <PublishNotices flow={flow} />
           {/* The issue button shows the counts; this stays as the polite announcement (Task 33). */}
           <div data-testid="draft-summary" aria-live="polite" style={visuallyHiddenStyle}>
             {raw.parseError !== null ? (
@@ -546,8 +555,15 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           </div>
         </div>
       </div>
+      <PublishDialogs
+        flow={flow}
+        doc={doc}
+        fallback={() =>
+          scopeRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null
+        }
+      />
       <LeaveGuard
-        dirty={changed}
+        dirty={flow.unsaved}
         fallback={() =>
           scopeRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null
         }

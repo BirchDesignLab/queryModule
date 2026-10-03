@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { leaveGuards } from "../app/leave-guard.js";
 import { useServices } from "../app/services-context.js";
@@ -90,6 +90,9 @@ export function LeaveDialog({
   onStay,
   onLeave,
   fallback,
+  children,
+  leavePrimary = false,
+  busy = false,
 }: {
   open: boolean;
   title: string;
@@ -100,6 +103,12 @@ export function LeaveDialog({
   onLeave(): void;
   /** Focus target when the opener is gone. */
   fallback?: (() => HTMLElement | null) | undefined;
+  /** More to read between the text and the buttons (the publish dialog's list of changes). */
+  children?: ReactNode;
+  /** The second button is the main action (publish), not the way out. */
+  leavePrimary?: boolean;
+  /** An action is under way: both buttons stay focusable but do nothing (spec 6.2). */
+  busy?: boolean;
 }) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -161,15 +170,23 @@ export function LeaveDialog({
     >
       <h2 id={`${id}-title`}>{title}</h2>
       <p id={`${id}-body`}>{body}</p>
+      {children}
       <div className="qm-leave-dialog__actions">
-        <button ref={stayRef} type="button" className="qm-button" onClick={onStay}>
+        <button
+          ref={stayRef}
+          type="button"
+          className={leavePrimary ? "qm-button qm-button--secondary" : "qm-button"}
+          aria-disabled={busy ? "true" : undefined}
+          onClick={busy ? undefined : onStay}
+        >
           {stayLabel}
         </button>
         <button
           ref={leaveRef}
           type="button"
-          className="qm-button qm-button--secondary"
-          onClick={onLeave}
+          className={leavePrimary ? "qm-button" : "qm-button qm-button--secondary"}
+          aria-disabled={busy ? "true" : undefined}
+          onClick={busy ? undefined : onLeave}
         >
           {leaveLabel}
         </button>

@@ -2,7 +2,14 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
-import { API, CLIENT_CONFIG, server, TEST_USER } from "../test/msw-server.js";
+import {
+  API,
+  adminConfigBody,
+  CLIENT_CONFIG,
+  RAW_SITE,
+  server,
+  TEST_USER,
+} from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
@@ -23,7 +30,7 @@ afterEach(() => {
 });
 
 async function openBuilder(
-  live: () => Response | Promise<Response> = () => HttpResponse.json(CLIENT_CONFIG),
+  live: () => Response | Promise<Response> = () => HttpResponse.json(adminConfigBody()),
 ) {
   const user = { ...TEST_USER, role: "implementer" };
   configGets = 0;
@@ -32,7 +39,7 @@ async function openBuilder(
     http.get(`${API}/api/v1/auth/get-session`, () =>
       HttpResponse.json({ session: { id: "s1" }, user }),
     ),
-    http.get(`${API}/api/v1/config`, () => {
+    http.get(`${API}/api/v1/admin/config`, () => {
       configGets++;
       return live();
     }),
@@ -69,14 +76,14 @@ describe("Changes view (item 4)", () => {
     expect(await screen.findByText("No differences from the live version.")).toBeInTheDocument();
   });
 
-  it("checks the live version when it opens, and ignores the config hash", async () => {
+  it("checks the live version when it opens, and a version bump alone is not a change", async () => {
     const t = await openBuilder();
     const before = configGets;
     // The server now serves the same config under a new hash: a version bump is not a change.
     server.use(
-      http.get(`${API}/api/v1/config`, () => {
+      http.get(`${API}/api/v1/admin/config`, () => {
         configGets++;
-        return HttpResponse.json({ ...CLIENT_CONFIG, configHash: "f".repeat(64) });
+        return HttpResponse.json(adminConfigBody({ liveVersion: 2 }));
       }),
     );
     await openChanges(t);
@@ -87,12 +94,13 @@ describe("Changes view (item 4)", () => {
   it("compares with the live version as it is now, not as it was when the builder opened", async () => {
     const t = await openBuilder();
     server.use(
-      http.get(`${API}/api/v1/config`, () =>
-        HttpResponse.json({
-          ...CLIENT_CONFIG,
-          configHash: "e".repeat(64),
-          terminal: { delimiter: "|" },
-        }),
+      http.get(`${API}/api/v1/admin/config`, () =>
+        HttpResponse.json(
+          adminConfigBody({
+            liveVersion: 2,
+            siteConfig: { ...RAW_SITE, terminal: { delimiter: "|" } },
+          }),
+        ),
       ),
     );
     await openChanges(t);
@@ -216,7 +224,7 @@ describe("Changes view (item 4)", () => {
     }
   });
 
-  it("is read-only: no request but reads, Publish stays disabled, and there is no live region", async () => {
+  it("is read-only: no request but reads, and there is no live region", async () => {
     const t = await openBuilder();
     await setDelimiter(t, "~");
     const liveRegions = document.querySelectorAll(
@@ -228,10 +236,6 @@ describe("Changes view (item 4)", () => {
     await openChanges(t);
     await groupOf(/Terminal settings/);
     expect(writes).toEqual([]);
-    expect(screen.getByRole("button", { name: "Publish" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
     expect(view().querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
     expect(document.querySelectorAll("[aria-live], [role=status], [role=alert]")).toHaveLength(
       liveRegions,
@@ -241,7 +245,7 @@ describe("Changes view (item 4)", () => {
   it("says when the live version could not be checked and compares with what it has", async () => {
     const t = await openBuilder();
     await setDelimiter(t, "~");
-    server.use(http.get(`${API}/api/v1/config`, () => HttpResponse.error()));
+    server.use(http.get(`${API}/api/v1/admin/config`, () => HttpResponse.error()));
     await openChanges(t);
     expect(await screen.findByText(/could not be checked/)).toBeInTheDocument();
     expect(await groupOf(/Terminal settings/)).toBeInTheDocument();
