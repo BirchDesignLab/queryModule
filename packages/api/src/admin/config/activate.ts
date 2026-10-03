@@ -37,6 +37,9 @@ export async function activate(d: AppDeps, version: number, event?: AuditEvent):
   });
   if (config.siteConfig.site.id !== siteId)
     throw new ConfigLoadError(label, "/siteConfig/site/id", "config.siteMismatch");
+  // Same refusal as the startup MFA guard (startup.ts, T19 spec:CV1); removed with it in #216.
+  if (config.siteConfig.auth.mfaRequired !== false)
+    throw new ConfigLoadError(label, "/siteConfig/auth/mfaRequired", "config.mfaNotEnforced");
   await withTransaction(d.db, async (tx) => {
     await tx
       .update(siteConfigVersion)

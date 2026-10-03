@@ -295,6 +295,28 @@ describe("spec 5.8 ADR-0011 item 2 a failed activation leaves the old snapshot l
     await expectUnchanged(t, before, t.deps.config.current().configHash);
   });
 
+  it("refuses a draft with auth.mfaRequired set, as the startup guard would (#216)", async () => {
+    const { t } = await setup();
+    const [live] = await rows(t);
+    const doc = ConfigDocumentSchema.parse(JSON.parse(String(live?.document)));
+    const auth = { ...(doc.siteConfig.auth as object), mfaRequired: true };
+    const draft = await insertDraft(
+      t,
+      JSON.stringify({ ...doc, siteConfig: { ...doc.siteConfig, auth } }),
+    );
+    const before = await rows(t);
+    const hash = t.deps.config.current().configHash;
+    const loaded = (await t.auditRows("configLoaded")).length;
+    const e = await activate(t.deps, draft.version, stubEvent(t, draft.id, STUB_HASH)).catch(
+      (x: unknown) => x,
+    );
+    expect(e).toBeInstanceOf(ConfigLoadError);
+    expect(String((e as Error).message)).toContain("config.mfaNotEnforced");
+    await expectUnchanged(t, before, hash);
+    expect(await t.auditRows("configLoaded")).toHaveLength(loaded);
+    expect(await t.auditRows("configPublished")).toEqual([]);
+  });
+
   it("refuses an unknown version and a version that is not a draft", async () => {
     const { t } = await setup();
     const before = await rows(t);
