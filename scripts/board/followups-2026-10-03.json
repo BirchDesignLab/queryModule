@@ -1,0 +1,68 @@
+[
+  {
+    "number": 492,
+    "milestone": "M4 Mobile and host integration",
+    "parent": 52,
+    "phase": "P1",
+    "track": "Platform (A)",
+    "size": "S",
+    "priority": "Low",
+    "reqIds": "none",
+    "labels": ["mobile", "p1", "follow-up"]
+  },
+  {
+    "number": 493,
+    "milestone": "M2 Results and audit",
+    "parent": 44,
+    "phase": "P1",
+    "track": "Platform (A)",
+    "size": "S",
+    "priority": "Medium",
+    "reqIds": "none",
+    "labels": ["platform", "p1", "follow-up"]
+  },
+  {
+    "number": 494,
+    "milestone": "M1 Forms and terminal",
+    "parent": 42,
+    "phase": "P3",
+    "track": "Platform (A)",
+    "size": "S",
+    "priority": "Low",
+    "reqIds": "SEC-010",
+    "labels": ["platform", "p3", "follow-up", "sensitive"]
+  },
+  {
+    "number": 497,
+    "milestone": "M1 Forms and terminal",
+    "parent": 42,
+    "phase": "P3",
+    "track": "Platform (A)",
+    "size": "S",
+    "priority": "Medium",
+    "reqIds": "SEC-010",
+    "labels": ["platform", "p3", "follow-up", "sensitive"]
+  },
+  {
+    "number": 499,
+    "milestone": "M1 Forms and terminal",
+    "parent": 42,
+    "phase": "P3",
+    "track": "Web (B)",
+    "size": "S",
+    "priority": "Medium",
+    "reqIds": "none",
+    "labels": ["web", "p3", "follow-up", "bug"]
+  },
+  {
+    "number": 503,
+    "milestone": "M2 Results and audit",
+    "parent": 45,
+    "phase": "P2",
+    "track": "Platform (A)",
+    "size": "S",
+    "priority": "Low",
+    "reqIds": "none",
+    "labels": ["platform", "p2", "follow-up"]
+  }
+]
