@@ -25,7 +25,9 @@ esac
 `;
 const AGE = `#!/usr/bin/env bash
 echo "age $*" >> "$STUB_LOG"
-# age -d -i <identity> -o <out> <in>
+# age -d -i <identity> -o <out> <in>: the identity path must hold the real key (so a leak of its
+# contents would be possible), checked here without echoing it.
+[ "$(cat "$3")" = "AGE-SECRET-KEY-TEST" ] || { echo "age: identity is not the test key" >&2; exit 3; }
 [ -z "\${STUB_AGE_FAIL:-}" ] || { echo "age: decryption failed" >&2; exit 1; }
 cp "$6" "$5"
 `;
@@ -224,7 +226,7 @@ describe("restore-test.sh (spec 8.6, NFR-003, SEC-010)", { timeout: 30_000 }, ()
     expect(r.stdout).not.toContain("restore test ok");
   });
 
-  it.skipIf(process.platform === "win32")(
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "mounts SEED_PASSWORD_SECRET when the secrets dir is not searchable by the caller (C1)",
     () => {
       backup("20260928T020000Z", 3, 7);
@@ -270,6 +272,25 @@ describe("restore-test.sh (spec 8.6, NFR-003, SEC-010)", { timeout: 30_000 }, ()
       false,
     );
     expect(args.join(" ")).not.toContain("TUNNEL_TOKEN");
+  });
+
+  it("treats a directory named SEED_PASSWORD_SECRET as absent, not as a file to mount (#315)", () => {
+    rmSync(join(dir, "secrets", "SEED_PASSWORD_SECRET"));
+    mkdirSync(join(dir, "secrets", "SEED_PASSWORD_SECRET"));
+    backup("20260928T020000Z", 3, 7);
+    const r = run(okEnv());
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout + r.stderr).toContain("restore-test: SEED_PASSWORD_SECRET absent, not mounted");
+    expect(runArgs().join(" ")).not.toContain("SEED_PASSWORD_SECRET");
+  });
+
+  it("says so when cleanup cannot remove the volume, instead of hiding the daemon error (#315)", () => {
+    backup("20260928T020000Z", 3, 7);
+    const r = run({ ...okEnv(), STUB_VOLRM_FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("restore-test: could not remove volume qm-restore-test-data");
+    // The daemon's own message still reaches stderr (it is not sent to /dev/null).
+    expect(r.stderr).toContain("volume is in use");
   });
 
   it("skips the optional SEED_PASSWORD_SECRET with a note when its file is absent (M1)", () => {

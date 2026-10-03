@@ -9,7 +9,13 @@ image=${1:-ghcr.io/birchdesignlab/querymodule:release}
 name=qm-restore-test
 vol=qm-restore-test-data
 work=$(mktemp -d)
-cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm -f "$vol" >/dev/null 2>&1 || true; rm -rf "$work"; }
+# Cleanup keeps going on a failure but never hides it: docker's own error stays on stderr, and a
+# line names what was left behind (a leftover volume is removed again at the next run's start).
+cleanup() {
+  docker rm -f "$name" >/dev/null || echo "restore-test: could not remove container $name" >&2
+  docker volume rm -f "$vol" >/dev/null || echo "restore-test: could not remove volume $vol" >&2
+  rm -rf "$work"
+}
 trap cleanup EXIT
 
 newest=$(rclone lsf "$QM_RCLONE_REMOTE/" --include 'qm-*.tar.age' | sort | tail -n1)
@@ -36,9 +42,10 @@ docker run --rm -v "$vol:/data" -v "$dir:/src:ro" alpine:3 sh -c 'cp /src/querym
 # with a note when absent. TUNNEL_TOKEN belongs to cloudflared and is not mounted.
 secret_mounts=()
 for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSWORD_SECRET; do
-  # -x guards the skip: a root mode 700 dir hides files from a non-root caller, so -e alone would
-  # skip a secret that exists. Unsearchable dir: mount anyway, Docker's bind-source error decides.
-  if [ "$k" = SEED_PASSWORD_SECRET ] && [ -x "$QM_SECRETS_DIR" ] && [ ! -e "$QM_SECRETS_DIR/$k" ]; then
+  # -x guards the skip: a root mode 700 dir hides files from a non-root caller, so the -f test
+  # alone would skip a secret that exists. -f, not -e: a directory of that name is no secret file.
+  # Unsearchable dir: mount anyway, Docker's bind-source error decides.
+  if [ "$k" = SEED_PASSWORD_SECRET ] && [ -x "$QM_SECRETS_DIR" ] && [ ! -f "$QM_SECRETS_DIR/$k" ]; then
     echo "restore-test: SEED_PASSWORD_SECRET absent, not mounted"
     continue
   fi

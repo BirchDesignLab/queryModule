@@ -313,8 +313,9 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
 });
 
 /**
- * Step 12 no-echo guard (G-m2): no xtrace in any spelling, and the derived password `$pw` appears
- * only on the mask line and the export line. Returns the offending lines.
+ * Step 12 no-echo guard (G-m2, #315): no xtrace in any spelling, the derived password `$pw` appears
+ * only on the mask line and the export line, and nothing names `$E2E_USER_PASSWORD` or dumps the
+ * environment (env, printenv, export, declare, set with no arguments). Returns the offending lines.
  */
 function step12Violations(run: string): string[] {
   const bad: string[] = [];
@@ -323,9 +324,19 @@ function step12Violations(run: string): string[] {
     if (/^set\s+(-[a-zA-Z]*x[a-zA-Z]*|.*-o\s+xtrace)/.test(l) || /xtrace/.test(l)) bad.push(l);
     else if (/\$\{?pw(?![A-Za-z_])/.test(l)) {
       const isMask = l === 'echo "::add-mask::$pw"';
-      const isExport = /^export E2E_USER_EMAIL=\S+ E2E_USER_PASSWORD="\$pw"$/.test(l);
+      const isExport = /^export E2E_USER_EMAIL=smoke@example\.test E2E_USER_PASSWORD="\$pw"$/.test(
+        l,
+      );
       if (!isMask && !isExport) bad.push(l);
-    }
+    } else if (
+      // The variable by name, and every spelling that dumps the environment (#315).
+      /\$\{?E2E_USER_PASSWORD(?![A-Za-z_])/.test(l) ||
+      /(^|[|;&(]\s*)(env|printenv|export(\s+-\S+)?|declare(\s+-\S+)?|typeset(\s+-\S+)?|set)\s*($|[|;&>)])/.test(
+        l,
+      ) ||
+      /\bprintenv\b/.test(l)
+    )
+      bad.push(l);
   }
   return bad;
 }
@@ -368,6 +379,20 @@ describe("ci.yml step 12: the M0 Playwright suite against the boot-smoke contain
     ["printf of the password", 'printf "$pw"'],
     ["printf into GITHUB_ENV", 'printf "PW=$pw" >> "$GITHUB_ENV"'],
     ["braced reference", `cat <<< "$` + `{pw}"`],
+    ["the exported variable by name", 'echo "$E2E_USER_PASSWORD"'],
+    ["the exported variable, braced", `echo "$` + `{E2E_USER_PASSWORD}"`],
+    ["env", "env"],
+    ["env piped", "env | sort"],
+    ["printenv", "printenv"],
+    ["printenv of the variable", "printenv E2E_USER_PASSWORD"],
+    ["export -p", "export -p"],
+    ["bare export", "export"],
+    ["declare -x", "declare -x"],
+    ["set with no arguments", "set"],
+    [
+      "an export that smuggles $pw into the email",
+      'export E2E_USER_EMAIL=$pw E2E_USER_PASSWORD="$pw"',
+    ],
   ])("the no-echo guard rejects %s", (_name, line) => {
     const run = String(step()?.run ?? "");
     expect(
