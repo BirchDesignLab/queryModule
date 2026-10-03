@@ -98,6 +98,8 @@ interface Call {
   headers?: Record<string, string>;
   /** The status an allowed caller gets, in the table's order on one fresh app. */
   ok: number;
+  /** The error code an allowed caller's non-2xx ok status must carry (#505 T29 Q1). */
+  okCode?: string;
 }
 
 /**
@@ -115,7 +117,7 @@ const CALLS: Record<string, Call> = {
     ok: 200,
   },
   // No Idempotency-Key: an allowed caller gets 400 validationFailed, so no query is recorded.
-  submitQuery: { body: () => ({}), ok: 400 },
+  submitQuery: { body: () => ({}), ok: 400, okCode: "validationFailed" },
   getAdminConfig: { ok: 200 },
   putAdminConfigDraft: { body: (f) => ({ baseVersion: 1, document: f.doc }), ok: 200 },
   validateAdminConfig: { body: (f) => ({ document: f.doc }), ok: 200 },
@@ -163,7 +165,11 @@ async function runMatrix(who: Who, flagsOn: boolean) {
     sql: "SELECT id FROM session WHERE user_id = ?",
     args: [targetId],
   });
-  const f: Fixture = { doc, targetId, targetSessionId: String(s.rows[0]?.id) };
+  const targetSessionId = s.rows[0]?.id;
+  // #505 T29 Q2: a missing target session is a setup failure, not a confusing row failure.
+  if (targetSessionId === undefined || targetSessionId === null)
+    throw new Error("route-matrix setup: the target user has no session");
+  const f: Fixture = { doc, targetId, targetSessionId: String(targetSessionId) };
 
   let send: (method: string, path: string, body?: unknown) => Promise<Response>;
   if (who === "mustChangePassword") {
@@ -197,12 +203,12 @@ async function runMatrix(who: Who, flagsOn: boolean) {
     const want = expectedFor(who, op, flagsOn);
     const status = want === "ok" ? call.ok : want.status;
     let got = `${r.status}`;
-    if (want !== "ok" && want.code !== undefined && r.status === want.status) {
+    const code = want === "ok" ? call.okCode : want.code;
+    if (code !== undefined && r.status === status) {
       const parsed = ApiErrorSchema.safeParse(await r.json());
       got += ` ${parsed.success ? parsed.data.error.code : "unparsed"}`;
     }
-    const wanted =
-      want === "ok" || want.code === undefined ? `${status}` : `${status} ${want.code}`;
+    const wanted = code === undefined ? `${status}` : `${status} ${code}`;
     if (got !== wanted) failures.push(`${who} ${op.key}: want ${wanted}, got ${got}`);
   }
   // Better Auth's own session route stays open to every caller, a flagged one included.

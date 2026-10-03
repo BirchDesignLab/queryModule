@@ -15,7 +15,7 @@ import { createTestApp, type TestApp } from "../helpers/test-app";
  * ADR-0011 item 3, spec 5.8 (overridden by ADR-0011), 6.7: publish activates a stored version in
  * process. One transaction marks it published (the previous one superseded) and writes
  * configLoaded with the caller's event; the snapshot swaps only after commit. A submit planned
- * before the swap commits on its own snapshot; a stale submit gets 409. BR-001, SEC-010, FR-064.
+ * before the swap commits on its own snapshot; a stale submit gets 409. BR-001, FR-064; ADR-0011 items 3 and 7.
  */
 
 const PASSWORD = "correct-horse-battery-1";

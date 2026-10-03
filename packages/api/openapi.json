@@ -114,6 +114,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Session refused: the temporary password is not yet changed (passwordChangeRequired)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -135,6 +145,16 @@
           },
           "401": {
             "description": "No session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Session refused: the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -181,6 +201,16 @@
           },
           "401": {
             "description": "No session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Session refused: the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -249,7 +279,7 @@
             }
           },
           "403": {
-            "description": "Role, query type or source not allowed for the caller (forbidden)",
+            "description": "Role, query type or source not allowed for the caller (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -338,7 +368,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -397,7 +427,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -476,7 +506,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -545,7 +575,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -604,7 +634,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -665,7 +695,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -746,7 +776,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -795,7 +825,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -852,7 +882,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -912,7 +942,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1002,7 +1032,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1082,7 +1112,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1145,7 +1175,7 @@
             }
           },
           "403": {
-            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden)",
+            "description": "Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired)",
             "content": {
               "application/json": {
                 "schema": {

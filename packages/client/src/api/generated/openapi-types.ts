@@ -1102,6 +1102,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
+            /** @description Session refused: the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
     };
     getMePreferences: {
@@ -1124,6 +1133,15 @@ export interface operations {
             };
             /** @description No session */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Session refused: the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1166,6 +1184,15 @@ export interface operations {
             };
             /** @description No session */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Session refused: the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1217,7 +1244,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role, query type or source not allowed for the caller (forbidden) */
+            /** @description Role, query type or source not allowed for the caller (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1300,7 +1327,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1351,7 +1378,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1420,7 +1447,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1480,7 +1507,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1536,7 +1563,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1585,7 +1612,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1652,7 +1679,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1699,7 +1726,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1750,7 +1777,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1799,7 +1826,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1870,7 +1897,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1937,7 +1964,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1993,7 +2020,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden) */
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
             403: {
                 headers: {
                     [name: string]: unknown;

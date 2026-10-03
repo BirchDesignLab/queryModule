@@ -97,10 +97,15 @@ export type UserPreference = z.infer<typeof UserPreferenceSchema>;
 
 const error = (description: string): RouteResponse => ({ description, schema: ApiErrorSchema });
 
+/** D-A26: every session route answers this while an admin-created user keeps the temporary password. */
+const PASSWORD_CHANGE = "the temporary password is not yet changed (passwordChangeRequired)";
+
 /** Admin console routes (ADR-0011): config routes live (Task 27); user routes live (Task 28). */
 const adminErrors = {
   401: error("No session"),
-  403: error("Role not allowed, or missing X-Requested-With on a write (forbidden)"),
+  403: error(
+    `Role not allowed, or missing X-Requested-With on a write (forbidden); or ${PASSWORD_CHANGE}`,
+  ),
 };
 const ROUTE_DEFS = [
   {
@@ -153,6 +158,7 @@ const ROUTE_DEFS = [
     responses: {
       200: { description: "Client config", schema: ClientSiteConfigSchema },
       401: error("No session"),
+      403: error(`Session refused: ${PASSWORD_CHANGE}`),
     },
   },
   {
@@ -167,6 +173,7 @@ const ROUTE_DEFS = [
     responses: {
       200: { description: "Preferences", schema: UserPreferenceSchema },
       401: error("No session"),
+      403: error(`Session refused: ${PASSWORD_CHANGE}`),
     },
   },
   {
@@ -183,6 +190,7 @@ const ROUTE_DEFS = [
       200: { description: "Preferences", schema: UserPreferenceSchema },
       400: error("Malformed preferences body (validationFailed)"),
       401: error("No session"),
+      403: error(`Session refused: ${PASSWORD_CHANGE}`),
     },
   },
   {
@@ -202,7 +210,9 @@ const ROUTE_DEFS = [
       202: { description: "Acknowledged", schema: SubmitQueryResponseSchema },
       400: error("Malformed body or failed validation or plan (validationFailed, errors[])"),
       401: error("No session"),
-      403: error("Role, query type or source not allowed for the caller (forbidden)"),
+      403: error(
+        `Role, query type or source not allowed for the caller (forbidden); or ${PASSWORD_CHANGE}`,
+      ),
       409: error("Stale config hash (configHashMismatch, currentConfigHash)"),
       413: error("Body over the size cap (payloadTooLarge)"),
       429: error("Rate limited (rateLimited, Retry-After)"),

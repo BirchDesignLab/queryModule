@@ -16,7 +16,7 @@ import { removeTempDirs } from "../helpers/temp-dirs";
 /*
  * ADR-0011 item 1 and 2, spec 5.8 (overridden by ADR-0011): the SITE_CONFIG file is the bootstrap;
  * an empty store seeds version 1 from it and the store is the live source afterwards. Every boot
- * runs the full spec 5.8 chain on the stored document (fail closed). BR-001, BR-004, SEC-010.
+ * runs the full spec 5.8 chain on the stored document (fail closed). BR-001; ADR-0011 items 1-2.
  */
 
 const bundled = resolve(import.meta.dirname, "../../../config");
@@ -390,7 +390,7 @@ describe("spec 5.8 fail closed: an invalid stored document refuses startup namin
   });
 });
 
-describe("SEC-010 ADR-0011 item 1: published history is never rewritten (migration 0007)", () => {
+describe("ADR-0011 item 1: published history is never rewritten (migration 0007)", () => {
   async function seeded() {
     const file = siteCopy();
     const db = await migratedDb(testEnv({ SITE_CONFIG: file }));

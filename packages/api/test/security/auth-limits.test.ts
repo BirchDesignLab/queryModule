@@ -42,7 +42,7 @@ describe("SEC-005 auth limits and lockout", () => {
       reason: "lockedOut",
     });
   });
-  it("G-I2/C-I1: a disabled account locks like an active one, hashes, and audits accountDisabled", async () => {
+  it("G-I2/C-I1: a disabled account locks like an active one, verifies, and audits accountDisabled", async () => {
     const t = await createTestApp();
     const id = await t.createUser(EMAIL, PW);
     await t.deps.db.$client.execute({
