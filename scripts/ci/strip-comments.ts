@@ -4,7 +4,16 @@ function regexAllowedAfter(out: string): boolean {
   let k = out.length - 1;
   while (k >= 0 && (out[k] === " " || out[k] === "\t")) k -= 1;
   if (k < 0) return true;
-  return "(,=:[!&|?{};+-*%>~^".includes(out[k] ?? "");
+  const ch = out[k] ?? "";
+  // Postfix `i++ / 2` ends an operand: the slash divides (#220 G-M1).
+  if ((ch === "+" || ch === "-") && out[k - 1] === ch) return false;
+  if ("(,=:[!&|?{};+-*%>~^".includes(ch)) return true;
+  // A keyword that takes an expression starts one: `return /a\//` (#220 G-M2). A longer
+  // identifier that merely ends in one (`noreturn / 2`) is an operand.
+  const word = /(?:^|[^\w$])(return|typeof|case|in|of|void|delete|throw)$/.exec(
+    out.slice(0, k + 1),
+  );
+  return word !== null;
 }
 
 /** Index just past the regex literal starting at `start` (slash), or -1 when the line has none. */
