@@ -28,6 +28,9 @@ export const user = sqliteTable(
       .notNull()
       .default("user"),
     disabledAt: integer(),
+    /** Task 28 (D-A26): an admin-created user must change the one-time password before any
+     * non-auth route. Defaults to false so every existing and seeded user is unaffected. */
+    mustChangePassword: integer({ mode: "boolean" }).notNull().default(false),
     identitySource: text({ enum: ["local", "host"] })
       .notNull()
       .default("local"),

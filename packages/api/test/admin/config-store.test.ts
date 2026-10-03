@@ -391,6 +391,15 @@ describe("SEC-010 ADR-0011 item 1: published history is never rewritten (migrati
       /never rewritten/,
     );
   });
+  it("a superseded row never returns to published, even with none live (#497 C-m1, 0008)", async () => {
+    const db = await seeded();
+    await exec(db, "UPDATE site_config_version SET status = 'superseded'");
+    for (const status of ["published", "draft"])
+      await expect(exec(db, `UPDATE site_config_version SET status = '${status}'`)).rejects.toThrow(
+        /never rewritten/,
+      );
+    expect((await rows(db)).map((r) => [r.version, r.status])).toEqual([[1, "superseded"]]);
+  });
   it("a published row cannot return to draft, change identity, or be deleted", async () => {
     const db = await seeded();
     for (const set of [
