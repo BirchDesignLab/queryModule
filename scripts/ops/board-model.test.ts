@@ -198,9 +198,9 @@ describe("leafDates: board-dates body marker overrides an after-the-fact issue's
         state_reason: "completed",
         body,
       });
-    expect(issue("<!-- board-dates finish=2026-09-30 -->")).toEqual({
+    expect(issue("<!-- board-dates finish=2026-10-01 -->")).toEqual({
       start: "2026-10-01",
-      finish: "2026-09-30",
+      finish: "2026-10-01",
     });
     expect(issue("<!-- board-dates start=2026-09-01 -->")).toEqual({
       start: "2026-09-25",
@@ -228,9 +228,15 @@ describe("leafDates: board-dates body marker overrides an after-the-fact issue's
       start: "2026-10-01",
       finish: "2026-10-02",
     });
+    // The marker finish precedes the effective start (created_at), so it is ignored
+    // and the closed date applies (#497 round 1 S1).
     expect(issue("<!-- board-dates start=2026-02-30 finish=2026-09-30 -->")).toEqual({
       start: "2026-10-01",
-      finish: "2026-09-30",
+      finish: "2026-10-02",
+    });
+    expect(issue("<!-- board-dates finish=2026-09-30 -->")).toEqual({
+      start: "2026-10-01",
+      finish: "2026-10-02",
     });
     expect(boardDatesMarker("<!-- board-dates start=2026-13-45 finish=2026-00-10 -->")).toEqual({});
   });

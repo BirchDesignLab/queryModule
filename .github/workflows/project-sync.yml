@@ -301,7 +301,10 @@ jobs:
               const start = clampToFloor(marker.start ?? item.createdAt);
               const completed =
                 item.state === "CLOSED" && (item.stateReason === "COMPLETED" || item.stateReason == null);
-              const closedAt = marker.finish ?? item.closedAt;
+              // A marker finish before the effective start is ignored (#497 round 1 S1).
+              const markerFinish =
+                marker.finish && clampToFloor(marker.finish) >= start ? marker.finish : undefined;
+              const closedAt = markerFinish ?? item.closedAt;
               const finish = completed && closedAt ? clampToFloor(closedAt) : null;
               return { start, finish };
             }

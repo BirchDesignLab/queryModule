@@ -4,7 +4,7 @@ function regexAllowedAfter(out: string): boolean {
   let k = out.length - 1;
   while (k >= 0 && (out[k] === " " || out[k] === "\t")) k -= 1;
   if (k < 0) return true;
-  return "(,=:[!&|?{};+-*%<>~^\n".includes(out[k] ?? "");
+  return "(,=:[!&|?{};+-*%>~^".includes(out[k] ?? "");
 }
 
 /** Index just past the regex literal starting at `start` (slash), or -1 when the line has none. */

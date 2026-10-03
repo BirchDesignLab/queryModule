@@ -48,4 +48,17 @@ describe("stripComments (item 7)", () => {
     expect(stripComments("x = a / b; // real\n")).toBe("x = a / b; \n");
     expect(stripComments("x = [/[/]//]; // real\n")).toBe("x = [/[/]//]; \n");
   });
+
+  it("strips a comment after a JSX closing tag or a line-leading division (round 1 C1)", () => {
+    const tagged = 'it("[A1] x", () => {})';
+    expect(
+      stripComments(`render(<p>hi</p>); // ${tagged}
+`),
+    ).not.toContain(tagged);
+    expect(
+      stripComments(`const a = b
+/ c; // ${tagged}
+`),
+    ).not.toContain(tagged);
+  });
 });

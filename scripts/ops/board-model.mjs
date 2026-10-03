@@ -121,7 +121,11 @@ export function leafDates(issue, floor = FLOOR) {
   const start = clampToFloor(marker.start ?? issue.created_at, floor);
   const completed =
     issue.state === "closed" && (issue.state_reason === "completed" || issue.state_reason == null);
-  const closedAt = marker.finish ?? issue.closed_at;
+  // A marker finish before the effective start (created_at when the marker start is
+  // absent or dropped) is ignored, as boardDatesMarker does between its own attributes.
+  const markerFinish =
+    marker.finish && clampToFloor(marker.finish, floor) >= start ? marker.finish : undefined;
+  const closedAt = markerFinish ?? issue.closed_at;
   const finish = completed && closedAt ? clampToFloor(closedAt, floor) : null;
   return { start, finish };
 }
