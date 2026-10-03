@@ -54,6 +54,22 @@ export function sessionCookieName(env: DeployEnv): "__Host-qm_session" | "qm_ses
   return env.nodeEnv === "development" ? "qm_session" : "__Host-qm_session";
 }
 
+/** The session cookie's attributes: Better Auth's config and the app's own clear share them. */
+const SESSION_COOKIE_ATTRIBUTES = {
+  httpOnly: true,
+  secure: true,
+  sameSite: "lax",
+  path: "/",
+} as const;
+
+/**
+ * The Set-Cookie line that clears the session cookie, byte-identical to Better Auth's own clear
+ * (#339 G-G-m1; sign-out.test.ts pins the parity). Used when the app clears it itself.
+ */
+export function clearSessionCookie(env: DeployEnv): string {
+  return `${sessionCookieName(env)}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax`;
+}
+
 /**
  * Better Auth's own telemetry gate is `getBooleanEnvVar("BETTER_AUTH_TELEMETRY", false) ||
  * options.telemetry.enabled` (@better-auth/telemetry/dist/index.mjs `isEnabled`): the env var
@@ -205,7 +221,7 @@ export function createAuth(o: {
       cookies: {
         session_token: {
           name: sessionCookieName(o.env),
-          attributes: { httpOnly: true, secure: true, sameSite: "lax", path: "/" },
+          attributes: SESSION_COOKIE_ATTRIBUTES,
         },
       },
       database: { generateId: () => uuidv7() },

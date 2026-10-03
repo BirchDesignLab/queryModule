@@ -3,6 +3,7 @@ import {
   GrantRoleUsageError,
   grantRole,
   parseGrantRoleArgs,
+  ROLES,
   UnknownUserError,
 } from "../../src/ops/grant-role";
 import { createTestApp } from "../helpers/test-app";
@@ -125,5 +126,10 @@ describe("SEC-010 grant-role CLI arguments", () => {
     ]) {
       expect(() => parseGrantRoleArgs(argv)).toThrow(GrantRoleUsageError);
     }
+  });
+  it("names every role in its usage text, built from ROLES (#339 m1)", () => {
+    expect(new GrantRoleUsageError().message).toBe(
+      `usage: grant-role <email> <${ROLES.join("|")}> [--revoke]`,
+    );
   });
 });

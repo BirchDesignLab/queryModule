@@ -120,6 +120,16 @@ describe("SEC-006 logger redaction: wave review fixes", () => {
     log.child({ req: 2 }).child({ n: 3 }).info("grandchild", { plate: "ZZ-3" });
     expect(lines.join("\n")).not.toMatch(/ZZ-\d/);
   });
+  it("addRedactKeys extends the set for the root and every child, made before or after", () => {
+    const lines: string[] = [];
+    const log = createLogger({ sink: (l) => lines.push(l), redactKeys: ["plate"] });
+    const early = log.child({ req: 1 });
+    log.addRedactKeys(["Tattoo"]);
+    log.info("root", { tattoo: "ZZ-1", plate: "ZZ-2" });
+    early.info("early", { TATTOO: "ZZ-3" });
+    log.child({ req: 2 }).child({ n: 3 }).info("late", { tattoo: "ZZ-4" });
+    expect(lines.join("\n")).not.toMatch(/ZZ-\d/);
+  });
   it("does not let a field overwrite level, time or msg (G-M1)", () => {
     const { lines, log } = capture();
     log.error("real", { level: "debug", time: 0, msg: "forged" });

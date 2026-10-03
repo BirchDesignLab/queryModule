@@ -1,19 +1,44 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { loadLiveConfig } from "./admin/config/store";
 import { createAuditService } from "./audit/service";
 import { type Auth, createAuth } from "./auth/auth";
 import { type AppIdentityService, createIdentityService } from "./auth/identity";
 import { createRateLimiter, type RateLimiter } from "./auth/rate-limit";
 import { type Clock, type MonotonicClock, systemClock, systemMonotonic } from "./clock";
-import { type LoadedConfig, loadSiteConfig } from "./config/load";
+import type { LoadedConfig } from "./config/load";
 import { type Db, openDatabase } from "./db/client";
-import { checkAuditTriggers, checkQueryTriggers, runMigrations } from "./db/migrate";
+import {
+  checkAuditTriggers,
+  checkConfigVersionTriggers,
+  checkQueryTriggers,
+  runMigrations,
+} from "./db/migrate";
 import type { DeployEnv } from "./env";
 import { type AppEventBus, createEventBus } from "./events/bus";
 import { checkKeyCanaries } from "./keys/canary";
-import { createLogger, type Logger } from "./log/logger";
+import { createLogger, type RootLogger } from "./log/logger";
 import type { AuditService } from "./seams";
 import type { Secrets } from "./secrets";
+
+/**
+ * The live config snapshot (ADR-0011 item 3). Readers call current() at use and keep that one
+ * snapshot for the rest of their work; swap replaces it atomically for the next reader.
+ */
+export interface ConfigHolder {
+  current(): LoadedConfig;
+  swap(next: LoadedConfig): void;
+}
+
+export function createConfigHolder(initial: LoadedConfig): ConfigHolder {
+  let live = initial;
+  return {
+    current: () => live,
+    swap(next) {
+      live = next;
+    },
+  };
+}
 
 export interface AppDeps {
   env: DeployEnv;
@@ -22,8 +47,9 @@ export interface AppDeps {
   identity: AppIdentityService;
   audit: AuditService;
   limiter: RateLimiter;
-  logger: Logger;
-  config: LoadedConfig;
+  /** Root logger: activate extends its redaction keys with each published version's fields. */
+  logger: RootLogger;
+  config: ConfigHolder;
   clock: Clock;
   /** Durations for audit details (spec 4.7). */
   monotonic: MonotonicClock;
@@ -45,8 +71,11 @@ export async function buildDeps(o: {
     await runMigrations(db, o.env.migrationsDir);
     await checkAuditTriggers(db);
     await checkQueryTriggers(db);
+    await checkConfigVersionTriggers(db);
     await checkKeyCanaries(db, o.secrets, clock);
-    const config = await loadSiteConfig(o.env.siteConfigFile, {
+    // ADR-0011: the store is the live source; an empty store seeds version 1 from the file.
+    const config = await loadLiveConfig(db, {
+      siteConfigFile: o.env.siteConfigFile,
       allowMockSources: o.env.allowMockSources,
       now: clock.now(),
     });
@@ -62,13 +91,22 @@ export async function buildDeps(o: {
         ...(s.seedPasswordSecret ? [s.seedPasswordSecret] : []),
       ],
     });
+    const site = config.siteConfig.site.id;
+    if (config.seeded) logger.info("config store seeded", { site, version: config.version });
+    if (config.fileIgnored)
+      logger.warn("site config file ignored", {
+        file: o.env.siteConfigFile,
+        site,
+        version: config.version,
+      });
     for (const w of config.warnings) logger.warn("config warning", { key: w.key, path: w.path });
-    const limits = config.siteConfig.auth.session;
+    const holder = createConfigHolder(config);
+    // Better Auth's own expiry is fixed at boot; the app limits below are read at use.
     const auth = createAuth({
       db,
       env: o.env,
       secret: s.betterAuthSecret,
-      session: limits,
+      session: config.siteConfig.auth.session,
       log: logger,
     });
     return {
@@ -79,8 +117,14 @@ export async function buildDeps(o: {
       monotonic: systemMonotonic,
       dataKey: s.dataKey,
       logger,
-      config,
-      identity: createIdentityService({ db, auth, limits, clock, log: logger }),
+      config: holder,
+      identity: createIdentityService({
+        db,
+        auth,
+        limits: () => holder.current().siteConfig.auth.session,
+        clock,
+        log: logger,
+      }),
       audit: createAuditService(clock),
       limiter: createRateLimiter(db, clock),
       eventBus: createEventBus({ log: logger }),

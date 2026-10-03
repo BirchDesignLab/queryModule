@@ -28,7 +28,7 @@ async function setup(email = "dispatcher@example.test") {
   });
   const clock = createTestClock();
   const log = captureLogger();
-  const identity = createIdentityService({ db, auth, limits, clock, log });
+  const identity = createIdentityService({ db, auth, limits: () => limits, clock, log });
   const r = await auth.handler(
     new Request("http://localhost:3000/api/v1/auth/sign-in/email", {
       method: "POST",
@@ -104,7 +104,7 @@ describe("SEC-005 session limits", () => {
         getSession: () => Promise.reject(new RangeError("database unavailable")),
       },
     } as unknown as Auth;
-    const identity = createIdentityService({ db, auth: broken, limits, clock, log });
+    const identity = createIdentityService({ db, auth: broken, limits: () => limits, clock, log });
     expect(await identity.resolve(req())).toBeNull();
     expect(log.entries).toHaveLength(1);
     expect(log.entries[0]).toMatchObject({

@@ -1,4 +1,4 @@
-import { SYSTEM_ACTOR } from "@querymodule/core/contracts";
+import { type AuditActor, type Role, SYSTEM_ACTOR } from "@querymodule/core/contracts";
 import { eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { session, user } from "../db/schema";
@@ -7,7 +7,7 @@ import type { AppDeps } from "../deps";
 import { apiError, rateLimited } from "../http/errors";
 import type { AppEnv } from "../http/types";
 import { actorOf } from "../seams";
-import { sessionCookieName } from "./auth";
+import { clearSessionCookie } from "./auth";
 import { auditEmail, BACKGROUND_HEADER } from "./identity";
 import { AUTH_LIMITS, clientIp } from "./rate-limit";
 
@@ -134,6 +134,35 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
 type SignOutOutcome = "deleted" | "alreadyGone" | "rowSurvived";
 
 /**
+ * The session a sign-out ends (#337): a live one through IdentityService, else an idle-expired
+ * one whose row still exists. resolve() refuses an idle-expired session (the idle clock is ours,
+ * Better Auth only enforces the absolute limit), but its row and cookie remain, so sign-out still
+ * deletes the row and records logout through the same transaction.
+ */
+async function signOutTarget(
+  c: Context<AppEnv>,
+  d: AppDeps,
+): Promise<{ sessionId: string; actor: AuditActor } | null> {
+  const headers = new Headers(c.req.raw.headers);
+  headers.set(BACKGROUND_HEADER, "1");
+  const p = await d.identity.resolve(new Request(c.req.url, { headers }));
+  if (p) return { sessionId: p.sessionId, actor: actorOf(p) };
+  const s = await d.auth.api
+    .getSession({ headers, query: { disableRefresh: true } })
+    .catch(() => null);
+  if (!s) return null;
+  const [u] = await d.db
+    .select({ id: user.id, email: user.email, role: user.role })
+    .from(user)
+    .where(eq(user.id, s.user.id));
+  if (!u) return null;
+  return {
+    sessionId: s.session.id,
+    actor: { id: u.id, email: auditEmail(u.email), role: u.role as Role },
+  };
+}
+
+/**
  * #289 (SEC-010, SEC-012): the app, not Better Auth, deletes the session, in one transaction
  * with its logout audit row. requireRequestedWith (http/security.ts) has already refused a
  * header-less sign-out, so Better Auth's origin check no longer has to guard this delete.
@@ -146,9 +175,7 @@ type SignOutOutcome = "deleted" | "alreadyGone" | "rowSurvived";
  * and still answers 200, because the session is gone.
  */
 async function signOut(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
-  const headers = new Headers(c.req.raw.headers);
-  headers.set(BACKGROUND_HEADER, "1");
-  const p = await d.identity.resolve(new Request(c.req.url, { headers }));
+  const p = await signOutTarget(c, d);
   if (!p) return d.auth.handler(c.req.raw);
   let outcome: SignOutOutcome;
   try {
@@ -160,7 +187,7 @@ async function signOut(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
       if (gone.length === 1) {
         await d.audit.record(tx, {
           type: "logout",
-          actor: actorOf(p),
+          actor: p.actor,
           identitySource: "local",
           details: { sessionId: p.sessionId },
         });
@@ -198,7 +225,7 @@ async function signOut(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
     status: 200,
     headers: {
       "content-type": "application/json",
-      "set-cookie": `${sessionCookieName(d.env)}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax`,
+      "set-cookie": clearSessionCookie(d.env),
     },
   });
 }

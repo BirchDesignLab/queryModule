@@ -8,6 +8,7 @@ import {
   admitSubmit,
   MAX_VALUE_BYTES,
   QUERY_LIMIT,
+  ReplayIntegrityError,
   replayResponse,
 } from "../../src/queries/admission";
 import type { TestClock } from "../helpers/fixture";
@@ -317,6 +318,17 @@ describe("FR-064 SEC-014 replayResponse", () => {
     await expect(replayResponse(t.deps.db, userId, KEY)).rejects.toThrow(
       "replay: acknowledged audit row missing",
     );
+  });
+
+  it("a stored row that fails its schema throws a fixed-text ReplayIntegrityError (#339 C-C-m1)", async () => {
+    const { t, userId } = await stubApp();
+    const bad = { ...TWO_SOURCES, dropped: "ZZSECRET" as unknown as string[] };
+    await seed(t.deps.db, { userId, cid: CID, key: KEY, parts: [bad], ack: true });
+    const err = await replayResponse(t.deps.db, userId, KEY).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ReplayIntegrityError);
+    expect(err).toMatchObject({ message: "replay: stored row failed its schema" });
+    expect((err as Error).cause).toBeUndefined();
+    expect(String((err as Error).stack)).not.toContain("ZZSECRET");
   });
 
   it("answers the original 202 on a repeated key, through the per-user limiter", async () => {

@@ -108,6 +108,16 @@ export function redact(value: unknown, keys: ReadonlySet<string>): unknown {
   return walk(value, { keys, secrets: [], ancestors: new WeakSet(), nodes: 0 });
 }
 
+/**
+ * The root logger. addRedactKeys extends the key set shared by this logger and every child,
+ * made before or after the call (critic C1: a field key from a published config version is
+ * redacted from its activation on, spec 5.9). Keys are never removed: over-redaction is safe.
+ */
+export interface RootLogger extends Logger {
+  addRedactKeys(keys: Iterable<string>): void;
+  child(f: Record<string, unknown>): RootLogger;
+}
+
 export function createLogger(
   o: {
     sink?: (line: string) => void;
@@ -116,18 +126,38 @@ export function createLogger(
     secretValues?: string[];
     base?: Record<string, unknown>;
   } = {},
-): Logger {
-  const sink = o.sink ?? ((l: string) => process.stdout.write(`${l}\n`));
+): RootLogger {
   // Materialised once: a one-shot iterator (Map.keys(), a generator) is read here only.
-  const keys = new Set([
-    ...ALWAYS_REDACTED,
-    ...[...(o.redactKeys ?? [])].map((k) => k.toLowerCase()),
-  ]);
+  const keys = new Set(ALWAYS_REDACTED);
+  for (const k of o.redactKeys ?? []) keys.add(k.toLowerCase());
   const secrets = (o.secretValues ?? []).filter((s) => s.length >= MIN_SECRET_VALUE_LENGTH);
-  // A secret with a quote, backslash or control character appears escaped in the line.
-  const escaped = secrets.map((s) => JSON.stringify(s).slice(1, -1));
-  const min = ORDER[o.level ?? "info"];
-  const base = o.base ?? {};
+  return build({
+    sink:
+      o.sink ??
+      ((l: string) =>
+        process.stdout.write(`${l}
+`)),
+    keys,
+    secrets,
+    // A secret with a quote, backslash or control character appears escaped in the line.
+    escaped: secrets.map((s) => JSON.stringify(s).slice(1, -1)),
+    min: ORDER[o.level ?? "info"],
+    base: o.base ?? {},
+  });
+}
+
+interface LoggerState {
+  sink: (line: string) => void;
+  /** Shared by the root and all its children, so addRedactKeys reaches every one. */
+  keys: Set<string>;
+  secrets: readonly string[];
+  escaped: readonly string[];
+  min: number;
+  base: Record<string, unknown>;
+}
+
+function build(st: LoggerState): RootLogger {
+  const { sink, keys, secrets, escaped, min, base } = st;
   const serialise = (level: LogLevel, msg: string, f: Record<string, unknown>): string => {
     const head = { level, time: Date.now(), msg: scrub(msg, secrets) };
     try {
@@ -150,13 +180,9 @@ export function createLogger(
     info: (m, f) => emit("info", m, f),
     warn: (m, f) => emit("warn", m, f),
     error: (m, f) => emit("error", m, f),
-    child: (f) =>
-      createLogger({
-        ...o,
-        sink,
-        secretValues: secrets,
-        redactKeys: keys,
-        base: { ...base, ...f },
-      }),
+    child: (f) => build({ ...st, base: { ...base, ...f } }),
+    addRedactKeys(more) {
+      for (const k of more) keys.add(k.toLowerCase());
+    },
   };
 }

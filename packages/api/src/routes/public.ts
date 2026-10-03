@@ -18,7 +18,7 @@ export function mountPublicRoutes(app: Hono<AppEnv>, d: AppDeps): void {
         apiVersion: API_VERSION,
         coreVersion: CORE_VERSION,
         configSchemaVersion: CONFIG_SCHEMA_VERSION,
-        configHash: d.config.configHash,
+        configHash: d.config.current().configHash,
         minClientVersion: d.env.minClientVersion,
       }),
     ),
@@ -26,7 +26,8 @@ export function mountPublicRoutes(app: Hono<AppEnv>, d: AppDeps): void {
   app.get("/api/v1/locales/:locale", (c) => {
     const locale = c.req.param("locale");
     if (!LOCALE_PATTERN.test(locale)) return apiError(c, "validationFailed");
-    if (!Object.hasOwn(d.config.locales, locale)) return apiError(c, "notFound");
-    return c.json(d.config.locales[locale]);
+    const { locales } = d.config.current();
+    if (!Object.hasOwn(locales, locale)) return apiError(c, "notFound");
+    return c.json(locales[locale]);
   });
 }
