@@ -1,4 +1,5 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useId, useRef } from "react";
+import { useDialog } from "./use-dialog.js";
 
 const STOPS = 'button:not([aria-disabled="true"]), input, select, textarea, [tabindex="0"]';
 
@@ -6,7 +7,7 @@ const STOPS = 'button:not([aria-disabled="true"]), input, select, textarea, [tab
  * A modal dialog that exists only while it is open (spec 6.2): the parent mounts it to open it
  * and unmounts it to close it, so nothing it showed (a one-time password) stays in the DOM.
  * Focus goes to `initialFocus` (default: the first control), Tab wraps inside, Escape asks
- * `onClose`, and on unmount focus returns to what had it, or to `fallback` when that is gone.
+ * `onClose` (unless `busy` or `persistent`), and on unmount focus returns to what had it, or to `fallback` when that is gone.
  * Native <dialog> where the engine has it, the same behaviour by hand where it does not.
  */
 export function Modal({
@@ -15,6 +16,8 @@ export function Modal({
   onClose,
   initialFocus,
   fallback,
+  busy = false,
+  persistent = false,
   children,
 }: {
   title: string;
@@ -23,63 +26,34 @@ export function Modal({
   /** The control that takes focus on open; the first focusable one when omitted. */
   initialFocus?: string | undefined;
   fallback?: (() => HTMLElement | null) | undefined;
+  /** An action is under way and cannot be called off: Escape and a native close do not close it. */
+  busy?: boolean;
+  /** Only its own buttons close it (a one-time password): Escape and a native close do not. */
+  persistent?: boolean;
   children: ReactNode;
 }) {
   const id = useId();
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  const fallbackRef = useRef(fallback);
-  fallbackRef.current = fallback;
   // Read once, at open: the content swaps (a form, then its result) and must not move focus again.
   const focusRef = useRef(initialFocus);
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog === null) return;
-    const opener = document.activeElement;
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
-    const first =
+  const { dialogRef, dialogProps } = useDialog({
+    open: true,
+    onDismiss: onClose,
+    keepOpen: busy || persistent,
+    stops: STOPS,
+    initialFocus: (dialog) =>
       (focusRef.current === undefined
         ? null
         : dialog.querySelector<HTMLElement>(focusRef.current)) ??
-      dialog.querySelector<HTMLElement>(STOPS);
-    first?.focus();
-    return () => {
-      if (typeof dialog.close === "function" && dialog.open) dialog.close();
-      else dialog.removeAttribute("open");
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
-      else fallbackRef.current?.()?.focus();
-    };
-  }, []);
-  const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeRef.current();
-    } else if (e.key === "Tab") {
-      const stops = dialogRef.current?.querySelectorAll<HTMLElement>(STOPS);
-      const first = stops?.[0];
-      const last = stops?.[stops.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first?.focus();
-      }
-    }
-  };
+      dialog.querySelector<HTMLElement>(STOPS),
+    fallback,
+  });
   return (
     <dialog
       ref={dialogRef}
       className="qm-leave-dialog"
       aria-labelledby={`${id}-title`}
       aria-describedby={description === undefined ? undefined : `${id}-body`}
-      onKeyDown={onKeyDown}
-      onCancel={(e) => {
-        e.preventDefault();
-        closeRef.current();
-      }}
+      {...dialogProps}
     >
       <h2 id={`${id}-title`}>{title}</h2>
       {description === undefined ? null : <p id={`${id}-body`}>{description}</p>}

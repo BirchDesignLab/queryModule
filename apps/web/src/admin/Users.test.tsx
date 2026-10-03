@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { API, server, TEST_USER } from "../test/msw-server.js";
@@ -87,7 +87,7 @@ let users: UserRow[];
 type Handlers = {
   role?: (id: string, role: string) => Response | undefined;
   disable?: (id: string) => Response | undefined;
-  create?: () => Response | undefined;
+  create?: () => Response | Promise<Response | undefined> | undefined;
 };
 
 const apiError = (code: string, status: number) =>
@@ -125,7 +125,7 @@ async function openUsers(initial: UserRow[] = [SELF, ROSE, NEWBIE, GONE], handle
     http.post(`${API}/api/v1/admin/users`, async ({ request }) => {
       const body = (await request.json()) as { email: string; name: string; role: UserRow["role"] };
       calls.creates.push(body);
-      const refused = handlers.create?.();
+      const refused = await handlers.create?.();
       if (refused !== undefined) return refused;
       const made = row({
         id: "user-0100",
@@ -409,6 +409,69 @@ describe("create user (the temporary password is shown once)", () => {
     await waitFor(() => expect(email).toHaveAccessibleDescription("That email is already in use."));
     expect(email).toHaveAttribute("aria-invalid", "true");
     expect(email).toHaveFocus();
+  });
+
+  it("Escape and Cancel are ignored while the create request is under way; then the password shows (C1)", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const t = await openUsers(undefined, {
+      create: async () => {
+        await gate;
+        return undefined;
+      },
+    });
+    const dialog = await openDialog(t);
+    await fillForm(t, dialog);
+    await t.user.click(within(dialog).getByRole("button", { name: "Create" }));
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveAttribute("aria-disabled", "true");
+    expect(cancel).toHaveAccessibleDescription(/./);
+    await t.user.keyboard("{Escape}");
+    await t.user.click(cancel);
+    expect(screen.getByRole("dialog", { name: "Create user" })).toBeInTheDocument();
+    release();
+    const reveal = await screen.findByRole("dialog", { name: REVEAL });
+    expect(within(reveal).getByText(TEMPORARY)).toBeInTheDocument();
+    expect(await screen.findByRole("rowheader", { name: "Mia Records" })).toBeInTheDocument();
+  });
+
+  it("a close the browser makes on its own closes the form, and Create user works again (C2)", async () => {
+    const t = await openUsers();
+    const dialog = await openDialog(t);
+    dialog.removeAttribute("open");
+    fireEvent(dialog, new Event("close"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await openDialog(t)).toBeInTheDocument();
+  });
+
+  it("a close the browser makes on its own does not lose the password: the dialog opens again (C2)", async () => {
+    const t = await openUsers();
+    const dialog = await openDialog(t);
+    await fillForm(t, dialog);
+    await t.user.click(within(dialog).getByRole("button", { name: "Create" }));
+    const reveal = await screen.findByRole("dialog", { name: REVEAL });
+    reveal.removeAttribute("open");
+    fireEvent(reveal, new Event("close"));
+    expect(reveal).toHaveAttribute("open");
+    expect(within(reveal).getByRole("button", { name: "Done" })).toBeInTheDocument();
+  });
+
+  it("a malformed email or a too long name shows at its field before anything is sent (S1)", async () => {
+    const t = await openUsers();
+    const dialog = await openDialog(t);
+    await t.user.type(within(dialog).getByLabelText(/^Email/), "abc");
+    await t.user.type(within(dialog).getByLabelText(/^Name/), "n".repeat(129));
+    await t.user.selectOptions(within(dialog).getByLabelText(/^Role/), "trainingOfficer");
+    await t.user.click(within(dialog).getByRole("button", { name: "Create" }));
+    const email = within(dialog).getByLabelText(/^Email/);
+    const name = within(dialog).getByLabelText(/^Name/);
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveAccessibleDescription("Email is not in the expected format.");
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(name).toHaveAccessibleDescription("Name allows at most 128 characters.");
+    expect(calls.creates).toEqual([]);
   });
 
   it("shows the temporary password once with Copy; it is gone from the DOM, the state and the cache after Done", async () => {

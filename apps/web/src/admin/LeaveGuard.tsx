@@ -1,7 +1,8 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { leaveGuards } from "../app/leave-guard.js";
 import { useServices } from "../app/services-context.js";
+import { useDialog } from "./use-dialog.js";
 
 /**
  * Asks before sign-out wipes a draft with changes (B1), and asks the browser to before a tab close
@@ -117,68 +118,25 @@ export function LeaveDialog({
   hideLeave?: boolean;
 }) {
   const id = useId();
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const stayRef = useRef<HTMLButtonElement>(null);
   const leaveRef = useRef<HTMLButtonElement>(null);
-  const opener = useRef<Element | null>(null);
-  const openRef = useRef(open);
-  openRef.current = open;
-  // Read by the key and cancel handlers: once the action is under way it cannot be called off, so
-  // Escape must not look like a cancel while the request still completes.
-  const busyRef = useRef(busy);
-  busyRef.current = busy;
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog === null) return;
-    if (open && !dialog.open) {
-      opener.current = document.activeElement;
-      if (typeof dialog.showModal === "function") dialog.showModal();
-      else dialog.setAttribute("open", "");
-      stayRef.current?.focus();
-    } else if (!open && dialog.open) {
-      if (typeof dialog.close === "function") dialog.close();
-      else dialog.removeAttribute("open");
-      const back = opener.current;
-      opener.current = null;
-      if (back instanceof HTMLElement && back.isConnected) back.focus();
-      else fallback?.()?.focus();
-    }
-  }, [open, fallback]);
-  const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      if (!busyRef.current) onStay();
-    } else if (e.key === "Tab") {
-      // Wrap between the first and last focusable (the buttons, and a scrollable list of changes
-      // when there is one), whatever the engine's own trap does.
-      const stops = dialogRef.current?.querySelectorAll<HTMLElement>('button, [tabindex="0"]');
-      const first = stops?.[0];
-      const last = stops?.[stops.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first?.focus();
-      }
-    }
-  };
+  // Once the action is under way it cannot be called off, so Escape must not look like a cancel
+  // while the request still completes.
+  const { dialogRef, dialogProps } = useDialog({
+    open,
+    onDismiss: onStay,
+    keepOpen: busy,
+    stops: 'button, [tabindex="0"]',
+    initialFocus: () => stayRef.current,
+    fallback,
+  });
   return (
     <dialog
       ref={dialogRef}
       className="qm-leave-dialog"
       aria-labelledby={`${id}-title`}
       aria-describedby={`${id}-body`}
-      onKeyDown={onKeyDown}
-      onCancel={(e) => {
-        e.preventDefault();
-        if (!busyRef.current) onStay();
-      }}
-      // Closed by the browser on its own (a second close request the page cannot cancel): still a
-      // Stay, so the sign-out that is waiting on the answer is never left hanging.
-      onClose={() => {
-        if (openRef.current && !busyRef.current) onStay();
-      }}
+      {...dialogProps}
     >
       <h2 id={`${id}-title`}>{title}</h2>
       <p id={`${id}-body`}>{body}</p>

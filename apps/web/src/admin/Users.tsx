@@ -1,4 +1,9 @@
-import { type AdminUser, ROLES, type Role } from "@querymodule/core/contracts";
+import {
+  type AdminUser,
+  CreateUserBodySchema,
+  ROLES,
+  type Role,
+} from "@querymodule/core/contracts";
 import { focusFirstInvalid, SelectField, TextField } from "@querymodule/web-ui";
 import { type FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
@@ -367,6 +372,26 @@ function CreateUserDialog({
     if (email.trim() === "") found.email = required("admin.users.create.email");
     if (name.trim() === "") found.name = required("admin.users.create.name");
     if (!isRole(role)) found.role = required("admin.users.create.role");
+    if (Object.keys(found).length === 0) {
+      // The contract's own check, so each field says what is wrong before anything is sent.
+      const checked = CreateUserBodySchema.safeParse({
+        email: email.trim(),
+        name: name.trim(),
+        role,
+      });
+      if (!checked.success) {
+        for (const issue of checked.error.issues) {
+          const field = issue.path[0];
+          if (field !== "email" && field !== "name" && field !== "role") continue;
+          if (found[field] !== undefined) continue;
+          const label = t(`admin.users.create.${field}`);
+          found[field] =
+            issue.code === "too_big"
+              ? t("validation.tooLong", { label, max: String(issue.maximum) })
+              : t("validation.patternMismatch", { label });
+        }
+      }
+    }
     setErrors(found);
     setFormError(null);
     const count = Object.keys(found).length;
@@ -413,6 +438,7 @@ function CreateUserDialog({
         title={t("admin.users.reveal.title", { name: issued.name })}
         description={t("admin.users.reveal.body", { name: issued.name })}
         onClose={() => undefined}
+        persistent
         fallback={fallback}
       >
         <p className="qm-users__password">
@@ -440,7 +466,12 @@ function CreateUserDialog({
     );
   }
   return (
-    <Modal title={t("admin.users.create.title")} onClose={onClose} fallback={fallback}>
+    <Modal
+      title={t("admin.users.create.title")}
+      onClose={onClose}
+      busy={submitting}
+      fallback={fallback}
+    >
       <form ref={formRef} noValidate onSubmit={(event) => void onSubmit(event)}>
         <TextField
           id="create-user-email"
@@ -478,9 +509,19 @@ function CreateUserDialog({
             {formError}
           </p>
         )}
-        {submitting && <p className="qm-builder__reason">{t("admin.users.create.submitting")}</p>}
+        {submitting && (
+          <p id="create-user-busy" className="qm-builder__reason">
+            {t("admin.users.create.submitting")}
+          </p>
+        )}
         <div className="qm-leave-dialog__actions">
-          <button type="button" className="qm-button qm-button--secondary" onClick={onClose}>
+          <button
+            type="button"
+            className="qm-button qm-button--secondary"
+            aria-disabled={submitting ? "true" : undefined}
+            aria-describedby={submitting ? "create-user-busy" : undefined}
+            onClick={submitting ? undefined : onClose}
+          >
             {t("admin.users.cancel")}
           </button>
           <button
