@@ -4,7 +4,10 @@
  * was cut is not read as a removal. Fail closed: any git failure fails; skip only when the merge
  * base lists no openapi.json.
  *
- * CLI: pnpm tsx scripts/ci/openapi-base.ts <base-ref> <out>
+ * CLI: pnpm tsx scripts/ci/openapi-base.ts <base-ref> <out> [<head-ref> <head-out>]
+ * With <head-ref> and <head-out>, the head's own openapi.json is read from that ref (not the
+ * working tree, which in CI is a merge checkout) and written to <head-out> too; one without the
+ * other is bad usage.
  * Exit 0 with <out> written and a "base: <sha>" line; exit 3 with no <out> (prints "skip:") when
  * the merge base has no openapi.json; exit 1 on any git failure; exit 2 on bad usage. The
  * workflow treats only 3 as skip, so a silent no-op cannot pass as a skip.
