@@ -209,7 +209,12 @@ export const AUDIT_DETAILS_SCHEMAS = {
   loginFailed: LoginFailedDetailsSchema,
   logout: LogoutDetailsSchema,
   roleChanged: RoleChangedDetailsSchema,
-  /** Spec 4.7 admin and ops table, spec 5.8 step 7: one row per successful config load. One overlay level (spec 4.1). */
+  /**
+   * Spec 4.7 admin and ops table, spec 5.8 step 7: one row per successful config load. One overlay
+   * level (spec 4.1). extendsChain is always [] for a load from the config store (ADR-0011): the
+   * stored document is the resolved site, extends already merged, and the store keeps no chain
+   * (developer ruling 10-03-26, #494; a chain is recorded later only if needed).
+   */
   configLoaded: z.strictObject({
     siteId: BoundedIdSchema,
     configHash: Sha256HexSchema,
