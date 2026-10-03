@@ -1628,3 +1628,63 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   gap: var(--qm-space-2);
   margin-inline-start: auto;
 }
+
+/* Users and roles (Task 34): one table in a scroll region, so a narrow window scrolls the table
+   and not the page. Status is a badge with words, never colour alone. */
+.qm-users__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: var(--qm-space-3);
+}
+
+.qm-users__scroll {
+  overflow-x: auto;
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-users__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-users__table th,
+.qm-users__table td {
+  padding: var(--qm-space-2) var(--qm-space-3);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.qm-users__table thead th {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qm-users__table tbody th {
+  font-weight: 600;
+}
+
+.qm-users__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+}
+
+/* The one-time password: set in the data face and selectable, so it can be copied by hand. */
+.qm-users__password {
+  margin: 0 0 var(--qm-space-4);
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-sunken);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  font-family: var(--qm-type-family-data);
+  overflow-wrap: anywhere;
+  user-select: all;
+}

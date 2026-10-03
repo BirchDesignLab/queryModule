@@ -75,6 +75,8 @@ export function createServices(options: ServicesOptions): Services {
     baseUrl: options.baseUrl,
     platform: options.platform,
     onUnauthenticated: () => session.handleUnauthenticated(),
+    // D-A26: a temporary password must be changed before any other screen shows.
+    onPasswordChangeRequired: () => authStore.getState().setPasswordChangeRequired(true),
   });
   const queryClient = createQueryClient();
   const announcer = createAnnouncer();

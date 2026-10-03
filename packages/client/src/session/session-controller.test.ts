@@ -27,6 +27,7 @@ function setup(api: Partial<AuthApi> = {}, signOutMarker = memoryMarker()) {
     signInEmail: async () => ({ ok: true, user: A }),
     signOut: vi.fn(async () => undefined),
     getSession: async () => null,
+    changePassword: async () => ({ ok: true }),
     ...api,
   };
   const authStore = createAuthStore();

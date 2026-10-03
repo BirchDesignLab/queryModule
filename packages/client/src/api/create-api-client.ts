@@ -12,6 +12,8 @@ export interface ApiClientOptions {
   platform: ClientPlatform;
   /** Called on any 401; the session controller resets client state (spec 6.7). */
   onUnauthenticated: () => void;
+  /** Called on a 403 passwordChangeRequired (D-A26): the user must choose a new password first. */
+  onPasswordChangeRequired?: () => void;
   fetch?: (request: Request) => Promise<Response>;
 }
 
@@ -37,8 +39,16 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   });
   const middleware: Middleware = {
     onRequest: ({ request }) => applyRequestHeaders(request, options.platform),
-    onResponse: ({ response }) => {
+    onResponse: async ({ response }) => {
       if (response.status === 401) options.onUnauthenticated();
+      else if (response.status === 403 && options.onPasswordChangeRequired !== undefined) {
+        const body: unknown = await response
+          .clone()
+          .json()
+          .catch(() => null);
+        const code = (body as { error?: { code?: unknown } } | null)?.error?.code;
+        if (code === "passwordChangeRequired") options.onPasswordChangeRequired();
+      }
       return response;
     },
   };
