@@ -8,7 +8,7 @@ import { buildSubmitBody, createSubmitController, type SubmitRequest } from "./s
 
 const BASE = "http://api.test";
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }));
@@ -58,13 +58,12 @@ function setup(
 interface Seen {
   headers: Headers;
   body: unknown;
-  cache: RequestCache;
 }
 function serveQueries(respond: () => Response | Promise<Response>) {
   const seen: Seen[] = [];
   server.use(
     http.post(`${BASE}/api/v1/queries`, async ({ request }) => {
-      seen.push({ headers: request.headers, body: await request.json(), cache: request.cache });
+      seen.push({ headers: request.headers, body: await request.json() });
       return respond();
     }),
   );
@@ -89,13 +88,17 @@ describe("FR-064 buildSubmitBody (spec 5.2 step 1)", () => {
 describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
   it("acknowledges a 202 and sends the key, CSRF header and no-store", async () => {
     const seen = serveQueries(() => HttpResponse.json(ACK, { status: 202 }));
+    // msw 3 hands handlers a rebuilt Request without the cache mode, so read it where it is sent.
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     const { controller } = setup();
     const out = await controller.getState().submit(REQ);
     expect(out).toEqual({ kind: "acknowledged", response: ACK, queryType: "VEH" });
     expect(controller.getState().status).toBe("idle");
     expect(seen[0]?.headers.get("Idempotency-Key")).toBe("key-1");
     expect(seen[0]?.headers.get("X-Requested-With")).toBe("querymodule");
-    expect(seen[0]?.cache).toBe("no-store");
+    const sent = fetchSpy.mock.calls[0]?.[0];
+    expect(sent instanceof Request ? sent.cache : null).toBe("no-store");
+    fetchSpy.mockRestore();
     expect(seen[0]?.body).not.toHaveProperty("values.state");
   });
 
