@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { ADMIN_CONFIG_LARGE_BODY_PATHS, mountAdminConfigRoutes } from "./admin/config/routes";
+import { mountAdminUserRoutes } from "./admin/users/routes";
 import { mountAuthRoutes } from "./auth/routes";
 import type { AppDeps } from "./deps";
 import { apiError } from "./http/errors";
@@ -11,6 +12,7 @@ import {
   requireRequestedWith,
   securityHeaders,
 } from "./http/security";
+import { requirePasswordChanged } from "./http/session";
 import type { AppEnv } from "./http/types";
 import { mountWeb } from "./http/web";
 import { mountQueriesRoute } from "./queries/route";
@@ -59,7 +61,10 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   mountConfigRoute(app, d);
   mountQueriesRoute(app, d);
   mountPreferencesRoute(app, d);
+  // D-A26: no admin route for a user who still holds a temporary password.
+  app.use("/api/v1/admin/*", requirePasswordChanged(d.identity));
   mountAdminConfigRoutes(app, d);
+  mountAdminUserRoutes(app, d);
   mountWeb(app, d);
   app.notFound((c) => apiError(c, "notFound"));
   app.onError((err, c) => {

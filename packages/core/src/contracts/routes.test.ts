@@ -32,7 +32,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     }
   });
 
-  it("ships the M0/M1 skeleton; submitQuery is live (D-A3, #285); admin config routes live (Task 27), user routes planned (ADR-0011)", () => {
+  it("ships the M0/M1 skeleton; submitQuery is live (D-A3, #285); admin config routes live (Task 27), user routes live (Task 28)", () => {
     expect(ROUTES.map((r) => [r.id, r.method, r.path, r.access, r.since, r.status])).toEqual([
       ["getHealth", "get", "/api/v1/health", "public", "m0", "planned"],
       ["getMeta", "get", "/api/v1/meta", "public", "m0", "planned"],
@@ -76,26 +76,12 @@ describe("BR-007 route contracts (spec 5.1)", () => {
         "m1",
         "live",
       ],
-      ["listAdminUsers", "get", "/api/v1/admin/users", "admin", "m1", "planned"],
-      ["createAdminUser", "post", "/api/v1/admin/users", "admin", "m1", "planned"],
-      ["disableAdminUser", "post", "/api/v1/admin/users/{id}/disable", "admin", "m1", "planned"],
-      ["setAdminUserRole", "put", "/api/v1/admin/users/{id}/role", "admin", "m1", "planned"],
-      [
-        "listAdminUserSessions",
-        "get",
-        "/api/v1/admin/users/{id}/sessions",
-        "admin",
-        "m1",
-        "planned",
-      ],
-      [
-        "revokeAdminSession",
-        "delete",
-        "/api/v1/admin/sessions/{sessionId}",
-        "admin",
-        "m1",
-        "planned",
-      ],
+      ["listAdminUsers", "get", "/api/v1/admin/users", "admin", "m1", "live"],
+      ["createAdminUser", "post", "/api/v1/admin/users", "admin", "m1", "live"],
+      ["disableAdminUser", "post", "/api/v1/admin/users/{id}/disable", "admin", "m1", "live"],
+      ["setAdminUserRole", "put", "/api/v1/admin/users/{id}/role", "admin", "m1", "live"],
+      ["listAdminUserSessions", "get", "/api/v1/admin/users/{id}/sessions", "admin", "m1", "live"],
+      ["revokeAdminSession", "delete", "/api/v1/admin/sessions/{sessionId}", "admin", "m1", "live"],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);

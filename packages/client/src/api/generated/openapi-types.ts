@@ -315,7 +315,7 @@ export interface components {
         ApiError: {
             error: {
                 /** @enum {string} */
-                code: "validationFailed" | "unauthenticated" | "stepUpRequired" | "mfaEnrollmentRequired" | "forbidden" | "notFound" | "configHashMismatch" | "delegationCredentialsMissing" | "draftConflict" | "lastAdmin" | "payloadTooLarge" | "rateLimited" | "internal" | "unavailable";
+                code: "validationFailed" | "unauthenticated" | "stepUpRequired" | "mfaEnrollmentRequired" | "forbidden" | "notFound" | "configHashMismatch" | "delegationCredentialsMissing" | "draftConflict" | "lastAdmin" | "passwordChangeRequired" | "payloadTooLarge" | "rateLimited" | "internal" | "unavailable";
                 params?: {
                     [key: string]: string | number;
                 };
@@ -913,6 +913,9 @@ export interface components {
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
+                signInCount: number;
+                lastSignInAt: number | null;
+                distinctIps: number;
             }[];
         };
         createAdminUser201: {
@@ -926,6 +929,9 @@ export interface components {
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
+                signInCount: number;
+                lastSignInAt: number | null;
+                distinctIps: number;
             };
             temporaryPassword: string;
         };
@@ -947,6 +953,9 @@ export interface components {
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
+                signInCount: number;
+                lastSignInAt: number | null;
+                distinctIps: number;
             };
             sessionsRevoked: number;
         };
@@ -960,6 +969,9 @@ export interface components {
             disabled: boolean;
             mustChangePassword: boolean;
             createdAt: number;
+            signInCount: number;
+            lastSignInAt: number | null;
+            distinctIps: number;
         };
         setAdminUserRoleBody: {
             /** @enum {string} */

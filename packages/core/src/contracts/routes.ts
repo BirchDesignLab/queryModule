@@ -97,7 +97,7 @@ export type UserPreference = z.infer<typeof UserPreferenceSchema>;
 
 const error = (description: string): RouteResponse => ({ description, schema: ApiErrorSchema });
 
-/** Admin console routes (ADR-0011): config routes live (Task 27); user routes planned (Task 28). */
+/** Admin console routes (ADR-0011): config routes live (Task 27); user routes live (Task 28). */
 const adminErrors = {
   401: error("No session"),
   403: error("Role not allowed, or missing X-Requested-With on a write (forbidden)"),
@@ -344,7 +344,7 @@ const ROUTE_DEFS = [
     summary: "Users with role and state; no secrets",
     access: "admin",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminUsers",
     requiresRequestedWith: false,
     responses: {
@@ -359,7 +359,7 @@ const ROUTE_DEFS = [
     summary: "Create a user; the one-time password is returned once",
     access: "admin",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminUsers",
     requiresRequestedWith: true,
     request: { body: CreateUserBodySchema },
@@ -378,7 +378,7 @@ const ROUTE_DEFS = [
     summary: "Disable a user and revoke their sessions in one transaction",
     access: "admin",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminUsers",
     requiresRequestedWith: true,
     request: { params: UserParamsSchema },
@@ -399,7 +399,7 @@ const ROUTE_DEFS = [
     summary: "Change a user role",
     access: "admin",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminUsers",
     requiresRequestedWith: true,
     request: { params: UserParamsSchema, body: SetRoleBodySchema },
@@ -420,7 +420,7 @@ const ROUTE_DEFS = [
     summary: "A user's live sessions by row id; never tokens",
     access: "admin",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminUsers",
     requiresRequestedWith: false,
     request: { params: UserParamsSchema },
@@ -438,7 +438,7 @@ const ROUTE_DEFS = [
     summary: "Revoke one session",
     access: "admin",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminUsers",
     requiresRequestedWith: true,
     request: { params: SessionParamsSchema },

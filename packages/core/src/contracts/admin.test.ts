@@ -39,6 +39,9 @@ const adminUser = {
   disabled: false,
   mustChangePassword: true,
   createdAt: 1_790_000_000_000,
+  signInCount: 3,
+  lastSignInAt: 1_790_000_500_000,
+  distinctIps: 2,
 } as const;
 
 describe("ADR-0011 admin config contracts (BR-001, FR-060)", () => {
@@ -104,6 +107,15 @@ describe("ADR-0011 admin user contracts (SEC-005, SEC-014)", () => {
       expect(AdminUserSchema.safeParse({ ...adminUser, [leak]: "x" }).success, leak).toBe(false);
   });
 
+  it("a user row carries sign-in stats as counts and a time, never an IP value (developer ruling 10-01-26)", () => {
+    expect(AdminUserSchema.safeParse({ ...adminUser, lastSignInAt: null }).success).toBe(true);
+    expect(AdminUserSchema.safeParse({ ...adminUser, signInCount: -1 }).success).toBe(false);
+    expect(AdminUserSchema.safeParse({ ...adminUser, distinctIps: 1.5 }).success).toBe(false);
+    expect(AdminUserSchema.safeParse({ ...adminUser, clientIp: "x" }).success).toBe(false);
+    const { signInCount: _s, ...without } = adminUser;
+    expect(AdminUserSchema.safeParse(without).success).toBe(false);
+  });
+
   it("only the create response carries the one-time password (ADR-0011 item 8)", () => {
     expect(
       CreateUserResponseSchema.safeParse({
@@ -148,8 +160,8 @@ describe("ADR-0011 admin routes (SEC-014)", () => {
       const config = r.path.startsWith("/api/v1/admin/config");
       expect(r.access, r.id).toBe(config ? "configEditor" : "admin");
       expect(r.feature, r.id).toBe(config ? "adminConfig" : "adminUsers");
-      // Task 27 mounts the config routes; the user routes stay planned until Task 28.
-      expect(r.status, r.id).toBe(config ? "live" : "planned");
+      // Task 27 mounted the config routes and Task 28 the user routes: all live.
+      expect(r.status, r.id).toBe("live");
       expect(r.since, r.id).toBe("m1");
       expect(r.responses[401], r.id).toBeDefined();
       expect(r.responses[403], r.id).toBeDefined();

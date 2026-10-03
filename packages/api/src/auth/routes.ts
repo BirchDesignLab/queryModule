@@ -17,11 +17,13 @@ type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut";
 // (revoke-session, revoke-sessions, revoke-other-sessions, change-password, sign-up, ...) would
 // end or change a session with no sessionRevoked/logout audit row and no eventBus.endSession,
 // breaking spec 5.6/4.7/SEC-010. Add a path here only once it has its own audit and
-// eventBus.endSession wiring, like sign-in/email and sign-out below.
+// eventBus.endSession wiring, like sign-in/email and sign-out below. change-password (D-A26)
+// ends no session: changePassword() refuses revokeOtherSessions, the one option that would.
 const ALLOWED_AUTH_PATHS = new Set([
   "/api/v1/auth/sign-in/email",
   "/api/v1/auth/sign-out",
   "/api/v1/auth/get-session",
+  "/api/v1/auth/change-password",
 ]);
 
 export function mountAuthRoutes(app: Hono<AppEnv>, d: AppDeps): void {
@@ -38,6 +40,7 @@ export function mountAuthRoutes(app: Hono<AppEnv>, d: AppDeps): void {
       if (!gate.allowed) return rateLimited(c, gate.retryAfterSeconds);
       if (c.req.path === "/api/v1/auth/sign-in/email") return signIn(c, d, ip);
       if (c.req.path === "/api/v1/auth/sign-out") return signOut(c, d);
+      if (c.req.path === "/api/v1/auth/change-password") return changePassword(c, d);
     }
     return d.auth.handler(c.req.raw);
   });
@@ -85,6 +88,13 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     await auditFailure(d, target?.id ?? null, "lockedOut", ip, null);
     return rateLimited(c, (locked - d.clock.now()) / 1000);
   }
+  // A disabled account never gets a session (D-A26). The answer is Better Auth's own bad-
+  // credentials 401, so it does not tell a caller which accounts are disabled; it is audited as
+  // badPassword (the closest loginFailed reason) and does not count toward the lockout.
+  if (target?.disabledAt != null) {
+    await auditFailure(d, target.id, "badPassword", ip, null);
+    return c.json({ code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" }, 401);
+  }
   const res = await d.auth.handler(c.req.raw);
   if (res.ok) {
     const token = ((await res.clone().json()) as { token?: string }).token ?? "";
@@ -129,6 +139,22 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     );
   }
   return res;
+}
+
+/**
+ * D-A26: Better Auth's change-password with revokeOtherSessions would delete the user's other
+ * sessions with no sessionRevoked row and no eventBus.endSession (SEC-010), so that option is
+ * refused. Every other body goes to Better Auth, which verifies the current password and
+ * clears must_change_password through the hook in auth.ts.
+ */
+async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
+  const body = (await c.req.raw
+    .clone()
+    .json()
+    .catch(() => null)) as { revokeOtherSessions?: unknown } | null;
+  if (body === null || typeof body !== "object" || body.revokeOtherSessions !== undefined)
+    return apiError(c, "validationFailed");
+  return d.auth.handler(c.req.raw);
 }
 
 type SignOutOutcome = "deleted" | "alreadyGone" | "rowSurvived";

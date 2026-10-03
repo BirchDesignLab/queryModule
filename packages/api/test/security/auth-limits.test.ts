@@ -154,7 +154,7 @@ describe("SEC-005 auth limits and lockout", () => {
     expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("validationFailed");
     expect(await t.auditRows("loginFailed")).toHaveLength(0);
   });
-  it("critic:C3 returns 404 for Better Auth session-revocation and password-change paths", async () => {
+  it("critic:C3 returns 404 for Better Auth session-revocation paths (change-password is allowed since D-A26)", async () => {
     const t = await createTestApp();
     await t.createUser(EMAIL, PW);
     const cookie = await t.cookieFor(EMAIL, PW);
@@ -162,7 +162,6 @@ describe("SEC-005 auth limits and lockout", () => {
       "/api/v1/auth/revoke-session",
       "/api/v1/auth/revoke-sessions",
       "/api/v1/auth/revoke-other-sessions",
-      "/api/v1/auth/change-password",
     ]) {
       const r = await t.request(path, {
         method: "POST",

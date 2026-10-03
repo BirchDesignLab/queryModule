@@ -30,6 +30,41 @@ export function parseLoginStatsArgs(argv: string[]): { since: number | undefined
   return { since };
 }
 
+/** One account's sign-in figures, keyed by user id for the admin console (Task 28). */
+export interface UserSignInStats {
+  signIns: number;
+  distinctIps: number;
+  lastSignIn: number | null;
+}
+
+async function queryStats(
+  db: Db,
+  since: number | undefined,
+  userId: string | undefined,
+): Promise<(LoginStatsRow & { id: string })[]> {
+  const r = await db.$client.execute({
+    sql: `SELECT u.id AS id,
+                 u.email AS email,
+                 count(a.id) AS sign_ins,
+                 count(DISTINCT json_extract(a.details, '$.clientIp')) AS distinct_ips,
+                 max(a.at) AS last_at
+            FROM user u
+            LEFT JOIN audit_event a
+              ON a.actor_user_id = u.id AND a.type = 'loginSucceeded' AND a.at >= ?
+           WHERE (? IS NULL OR u.id = ?)
+           GROUP BY u.id
+           ORDER BY u.email`,
+    args: [since ?? 0, userId ?? null, userId ?? null],
+  });
+  return r.rows.map((row) => ({
+    id: String(row.id),
+    email: String(row.email),
+    signIns: Number(row.sign_ins),
+    distinctIps: Number(row.distinct_ips),
+    lastSignIn: row.last_at === null ? null : Number(row.last_at),
+  }));
+}
+
 /**
  * Sign-ins per account from the append-only audit (SEC-010): the loginSucceeded count, the number
  * of distinct client IPs and the latest sign-in, for every user, ordered by email. Read only; the
@@ -37,24 +72,30 @@ export function parseLoginStatsArgs(argv: string[]): { since: number | undefined
  * client addresses.
  */
 export async function loginStats(db: Db, since?: number): Promise<LoginStatsRow[]> {
-  const r = await db.$client.execute({
-    sql: `SELECT u.email AS email,
-                 count(a.id) AS sign_ins,
-                 count(DISTINCT json_extract(a.details, '$.clientIp')) AS distinct_ips,
-                 max(a.at) AS last_at
-            FROM user u
-            LEFT JOIN audit_event a
-              ON a.actor_user_id = u.id AND a.type = 'loginSucceeded' AND a.at >= ?
-           GROUP BY u.id
-           ORDER BY u.email`,
-    args: [since ?? 0],
-  });
-  return r.rows.map((row) => ({
-    email: String(row.email),
-    signIns: Number(row.sign_ins),
-    distinctIps: Number(row.distinct_ips),
-    lastSignIn: row.last_at === null ? null : Number(row.last_at),
+  const rows = await queryStats(db, since, undefined);
+  return rows.map(({ email, signIns, distinctIps, lastSignIn }) => ({
+    email,
+    signIns,
+    distinctIps,
+    lastSignIn,
   }));
+}
+
+/**
+ * The same figures for the admin user routes (developer ruling 10-01-26), by user id: every
+ * user, or just `userId`. Counts and a time only, never an address.
+ */
+export async function loginStatsByUser(
+  db: Db,
+  userId?: string,
+): Promise<Map<string, UserSignInStats>> {
+  const rows = await queryStats(db, undefined, userId);
+  return new Map(
+    rows.map(({ id, signIns, distinctIps, lastSignIn }) => [
+      id,
+      { signIns, distinctIps, lastSignIn },
+    ]),
+  );
 }
 
 /** Tab-separated table for the operator console, one line per account, times in UTC. */

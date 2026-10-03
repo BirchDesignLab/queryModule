@@ -101,6 +101,11 @@ export const AdminUserSchema = z.strictObject({
   /** A created user must change the temporary password at first sign-in. */
   mustChangePassword: z.boolean(),
   createdAt: EpochMsSchema,
+  /** Developer ruling 10-01-26: loginSucceeded rows for this user, from the audit. */
+  signInCount: z.int().min(0),
+  lastSignInAt: EpochMsSchema.nullable(),
+  /** A count only: IP values never leave the audit (spec 5.9). */
+  distinctIps: z.int().min(0),
 });
 export type AdminUser = z.infer<typeof AdminUserSchema>;
 
