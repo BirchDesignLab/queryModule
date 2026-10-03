@@ -55,17 +55,20 @@ test.afterAll(async ({ browser }) => {
     const origin = new URL(page.url()).origin;
     const headers = { "X-Requested-With": "querymodule", Origin: origin };
     const list = await context.request.get(`${origin}/api/v1/admin/config/versions`);
-    const body = (await list.json()) as unknown;
-    const versions = (Array.isArray(body) ? body : (body as { versions: unknown[] }).versions) as {
-      version: number;
-      status: string;
-    }[];
+    expect(list.ok(), `versions list answered ${list.status()}`).toBe(true);
+    const { versions } = (await list.json()) as {
+      versions: { version: number; status: string }[];
+    };
+    expect(versions.length).toBeGreaterThan(0);
     const first = Math.min(...versions.map((v) => v.version));
     const live = versions.find((v) => v.status === "published");
-    if (live !== undefined && live.version !== first)
-      await context.request.post(`${origin}/api/v1/admin/config/versions/${first}/rollback`, {
-        headers,
-      });
+    if (live !== undefined && live.version !== first) {
+      const back = await context.request.post(
+        `${origin}/api/v1/admin/config/versions/${first}/rollback`,
+        { headers },
+      );
+      expect(back.ok(), `rollback to version ${first}: ${await back.text()}`).toBe(true);
+    }
   } finally {
     await context.close();
   }
@@ -252,7 +255,8 @@ test("[#362] a new type-role value in the subtype bar changes the required field
   });
   await selectInTree(page, /^Property/);
   const inPreview = preview(page);
-  await inPreview.getByRole("radio", { name: "Boat" }).check();
+  await inPreview.getByRole("radio", { name: "Boat" }).focus();
+  await page.keyboard.press("Space");
   await expect(inPreview.getByLabel("Serial number")).toHaveAttribute("aria-required", "true");
   await publish(page);
 
@@ -305,7 +309,7 @@ test("[#362] a new terminal command parses in the dispatcher's terminal", async 
   });
   await selectInTree(page, /^Vehicle/);
   const inPreview = preview(page);
-  await inPreview.getByRole("button", { name: "Terminal mode" }).click();
+  await inPreview.getByRole("button", { name: "Terminal mode" }).press("Enter");
   const previewInput = inPreview.getByRole("textbox", { name: "Command" });
   const problems = inPreview.getByRole("list", { name: "Command problems" });
   // The preview's terminal is the real one: an unknown command is a problem, the new one is not.

@@ -118,7 +118,12 @@ test("[#362] create, forced password change, disable: the new user's session end
     await expect(user.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await user.getByLabel("Email").fill(email);
     await user.getByLabel("Password").fill(chosen);
+    // The server's answer is the proof: a sign-in that succeeded would be a 2xx here.
+    const refused = user.waitForResponse(
+      (r) => r.request().method() === "POST" && new URL(r.url()).pathname.includes("/sign-in"),
+    );
     await user.getByRole("button", { name: "Sign in" }).click();
+    expect((await refused).ok()).toBe(false);
     await expect(user.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await expect(user.getByRole("heading", { name: "Query Module", exact: true })).toBeHidden();
     await expectNoSeriousAxeViolations(user);
