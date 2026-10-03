@@ -23,3 +23,7 @@ auditConfig:
     # apps/mobile > expo > @expo/cli (dev tooling; API and web do not use it). This one ID
     # only; remove with #492 once node-forge > 1.4.0 ships or Expo drops it.
     - GHSA-86w9-cpqp-85rv
+    # GHSA-vfj7-8cjw-p6xm: braces <=3.0.3, no patched version (10-02-26). Only path is
+    # apps/mobile > react-native > metro > micromatch (build tooling; API and web do not use
+    # it). This one ID only; remove with #492 once braces > 3.0.3 ships.
+    - GHSA-vfj7-8cjw-p6xm
