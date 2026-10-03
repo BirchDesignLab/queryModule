@@ -78,7 +78,7 @@ export function LeaveGuard({
 
 /**
  * A modal choice between staying and leaving. Focus goes to Stay (the safe choice) and is trapped
- * between the two buttons; Escape stays; on close focus returns to what had it (the link that was
+ * between the dialog's focusable parts; Escape stays; on close focus returns to what had it (the link that was
  * used). Native <dialog> where the engine has it, with the same behaviour by hand where it does not.
  */
 export function LeaveDialog({
@@ -93,6 +93,7 @@ export function LeaveDialog({
   children,
   leavePrimary = false,
   busy = false,
+  busyReason,
 }: {
   open: boolean;
   title: string;
@@ -109,6 +110,8 @@ export function LeaveDialog({
   leavePrimary?: boolean;
   /** An action is under way: both buttons stay focusable but do nothing (spec 6.2). */
   busy?: boolean;
+  /** Why the buttons do nothing while `busy`; read by both buttons and shown in the dialog. */
+  busyReason?: string | undefined;
 }) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -117,6 +120,10 @@ export function LeaveDialog({
   const opener = useRef<Element | null>(null);
   const openRef = useRef(open);
   openRef.current = open;
+  // Read by the key and cancel handlers: once the action is under way it cannot be called off, so
+  // Escape must not look like a cancel while the request still completes.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog === null) return;
@@ -137,11 +144,13 @@ export function LeaveDialog({
   const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
     if (e.key === "Escape") {
       e.preventDefault();
-      onStay();
+      if (!busyRef.current) onStay();
     } else if (e.key === "Tab") {
-      // Two buttons: wrap between them, whatever the engine's own trap does.
-      const first = stayRef.current;
-      const last = leaveRef.current;
+      // Wrap between the first and last focusable (the buttons, and a scrollable list of changes
+      // when there is one), whatever the engine's own trap does.
+      const stops = dialogRef.current?.querySelectorAll<HTMLElement>('button, [tabindex="0"]');
+      const first = stops?.[0];
+      const last = stops?.[stops.length - 1];
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last?.focus();
@@ -160,23 +169,29 @@ export function LeaveDialog({
       onKeyDown={onKeyDown}
       onCancel={(e) => {
         e.preventDefault();
-        onStay();
+        if (!busyRef.current) onStay();
       }}
       // Closed by the browser on its own (a second close request the page cannot cancel): still a
       // Stay, so the sign-out that is waiting on the answer is never left hanging.
       onClose={() => {
-        if (openRef.current) onStay();
+        if (openRef.current && !busyRef.current) onStay();
       }}
     >
       <h2 id={`${id}-title`}>{title}</h2>
       <p id={`${id}-body`}>{body}</p>
       {children}
+      {busy && busyReason !== undefined && (
+        <p id={`${id}-busy`} className="qm-builder__reason">
+          {busyReason}
+        </p>
+      )}
       <div className="qm-leave-dialog__actions">
         <button
           ref={stayRef}
           type="button"
           className={leavePrimary ? "qm-button qm-button--secondary" : "qm-button"}
           aria-disabled={busy ? "true" : undefined}
+          aria-describedby={busy && busyReason !== undefined ? `${id}-busy` : undefined}
           onClick={busy ? undefined : onStay}
         >
           {stayLabel}
@@ -186,6 +201,7 @@ export function LeaveDialog({
           type="button"
           className={leavePrimary ? "qm-button" : "qm-button qm-button--secondary"}
           aria-disabled={busy ? "true" : undefined}
+          aria-describedby={busy && busyReason !== undefined ? `${id}-busy` : undefined}
           onClick={busy ? undefined : onLeave}
         >
           {leaveLabel}

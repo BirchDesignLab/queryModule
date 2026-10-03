@@ -1,5 +1,10 @@
 import type { ApiClient } from "@querymodule/client";
-import { type Diagnostic, FEATURES, SiteConfigSchema } from "@querymodule/core/config";
+import {
+  type Diagnostic,
+  FEATURES,
+  SiteConfigSchema,
+  toClientSiteConfig,
+} from "@querymodule/core/config";
 import {
   AdminConfigResponseSchema,
   type ConfigDocument,
@@ -47,7 +52,10 @@ const VIEW_KEYS = [
   "sources",
 ] as const;
 
-/** toClientSiteConfig, tolerant: a draft siteConfig may be invalid, and the builder must still open it. */
+/**
+ * Only for a siteConfig that does not validate: toClientSiteConfig needs a parsed config, and a
+ * draft may be invalid while the builder must still open it, so this is its tolerant copy.
+ */
 function project(source: JsonObject): JsonObject {
   const features = objectOf(source.features);
   const delegation = objectOf(source.delegation);
@@ -76,7 +84,12 @@ function project(source: JsonObject): JsonObject {
 /** The view of a siteConfig: schema defaults filled in when it validates, as the client sees it. */
 function viewOf(siteConfig: JsonObject): JsonObject {
   const parsed = SiteConfigSchema.safeParse(siteConfig);
-  return structuredClone(project(parsed.success ? (parsed.data as JsonObject) : siteConfig));
+  if (parsed.success) {
+    // The same function that builds what dispatchers get, so the two cannot drift apart.
+    const { configHash: _hash, ...view } = toClientSiteConfig(parsed.data, "0".repeat(64));
+    return structuredClone(view as JsonObject);
+  }
+  return structuredClone(project(siteConfig));
 }
 
 /** The server document as the builder's draft: the client-shaped siteConfig and the label overlay. */

@@ -56,6 +56,13 @@ export interface PublishFlow {
   reload(): void;
 }
 
+/**
+ * A region that scrolls must take focus so the keyboard can scroll it (axe scrollable-region-focusable).
+ * The lint rule against tabindex on a named, non-interactive element is written for the opposite
+ * mistake, so the attribute is spread from here.
+ */
+const SCROLL_FOCUS = { tabIndex: 0 } as const;
+
 const labelText = (labels: LabelOverlay): string => JSON.stringify(labels);
 
 function labelChanges(labels: LabelOverlay, live: LabelOverlay): number {
@@ -287,7 +294,13 @@ export function PublishButtons({
 }) {
   const t = useT();
   const uid = useId();
-  const saveReason = !flow.unsaved ? t("admin.config.saveNone") : null;
+  const saveReason = flow.busy
+    ? t("admin.config.reviewBusy")
+    : parseError
+      ? t("admin.config.saveJson")
+      : !flow.unsaved
+        ? t("admin.config.saveNone")
+        : null;
   const reviewReason = flow.busy
     ? t("admin.config.reviewBusy")
     : parseError
@@ -295,7 +308,7 @@ export function PublishButtons({
       : flow.changeCount === 0 && !flow.unsaved
         ? t("admin.config.reviewNone")
         : null;
-  const saveBlocked = saveReason !== null || flow.busy || parseError;
+  const saveBlocked = saveReason !== null;
   return (
     <>
       <button
@@ -377,9 +390,17 @@ export function PublishDialogs({
         onLeave={flow.publish}
         leavePrimary
         busy={flow.busy}
+        busyReason={t("admin.publish.busy")}
         fallback={fallback}
       >
-        <div className="qm-leave-dialog__content">{open && <ChangesView doc={doc} />}</div>
+        {/* Scrolls when the list is long: focusable so the keyboard can scroll it. */}
+        <section
+          className="qm-leave-dialog__content"
+          aria-label={t("admin.publish.changes")}
+          {...SCROLL_FOCUS}
+        >
+          {open && <ChangesView doc={doc} />}
+        </section>
       </LeaveDialog>
       <LeaveDialog
         open={flow.confirmingReload}

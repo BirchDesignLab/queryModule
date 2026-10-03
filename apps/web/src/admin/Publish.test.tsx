@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
@@ -34,8 +34,8 @@ const site = (over: Record<string, unknown>) => ({ ...RAW_SITE, ...over });
 type Handlers = {
   get?: () => Response;
   put?: () => Response;
-  validate?: () => Response;
-  publish?: () => Response;
+  validate?: () => Response | Promise<Response>;
+  publish?: () => Response | Promise<Response>;
 };
 
 async function openBuilder(handlers: Handlers = {}) {
@@ -59,11 +59,11 @@ async function openBuilder(handlers: Handlers = {}) {
     }),
     http.post(`${API}/api/v1/admin/config/validate`, async ({ request }) => {
       calls.validates.push(await request.json());
-      return handlers.validate?.() ?? HttpResponse.json({ errors: [], warnings: [] });
+      return (await handlers.validate?.()) ?? HttpResponse.json({ errors: [], warnings: [] });
     }),
     http.post(`${API}/api/v1/admin/config/publish`, async ({ request }) => {
       calls.publishes.push(await request.json());
-      return handlers.publish?.() ?? HttpResponse.json(versionRow(2, "published"));
+      return (await handlers.publish?.()) ?? HttpResponse.json(versionRow(2, "published"));
     }),
   );
   const t = renderRoot({ path: "/admin/config" });
@@ -360,5 +360,112 @@ describe("review and publish", () => {
     await t.user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(calls.publishes).toHaveLength(0);
+  });
+});
+
+/** A response the test releases by hand, to look at the page while a request is in flight. */
+function gate() {
+  let release: () => void = () => {};
+  const open = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { open, release };
+}
+
+describe("while an action is in flight (round 1: C1, C2, C3)", () => {
+  it("C1: Escape and the dialog's cancel event do nothing while the publish is under way", async () => {
+    const g = gate();
+    const t = await openBuilder({
+      publish: async () => {
+        await g.open;
+        return HttpResponse.json(versionRow(2, "published"));
+      },
+    });
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
+    await waitFor(() => expect(calls.publishes).toHaveLength(1));
+    await t.user.keyboard("{Escape}");
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(screen.getByRole("dialog", { name: "Review and publish" })).toBeInTheDocument();
+    expect(configDraftStore(t.services).getState().doc).not.toBeNull();
+    g.release();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("C2: Save draft says why it is disabled while a check is under way", async () => {
+    const g = gate();
+    const t = await openBuilder({
+      validate: async () => {
+        await g.open;
+        return HttpResponse.json({ errors: [], warnings: [] });
+      },
+    });
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    const save = await waitFor(() => {
+      const b = button("Save draft");
+      expect(b).toHaveAttribute("aria-disabled", "true");
+      return b;
+    });
+    expect(save).toHaveAccessibleDescription(/Working/);
+    g.release();
+    await screen.findByRole("dialog", { name: "Review and publish" });
+  });
+
+  it("C2: Save draft says why it is disabled while the Raw JSON does not parse", async () => {
+    const t = await openBuilder();
+    await setDelimiter(t, ",");
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    await t.user.click(screen.getByRole("textbox", { name: "Draft JSON" }));
+    await t.user.keyboard("{Control>}{End}{/Control}xx");
+    const save = button("Save draft");
+    await waitFor(() => expect(save).toHaveAttribute("aria-disabled", "true"));
+    expect(save).toHaveAccessibleDescription(/Raw JSON/);
+    await t.user.click(save);
+    expect(calls.puts).toHaveLength(0);
+  });
+
+  it("C2: the dialog's buttons say why they do nothing while the publish is under way", async () => {
+    const g = gate();
+    const t = await openBuilder({
+      publish: async () => {
+        await g.open;
+        return HttpResponse.json(versionRow(2, "published"));
+      },
+    });
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
+    await waitFor(() => expect(calls.publishes).toHaveLength(1));
+    for (const name of ["Cancel", "Publish version 2"]) {
+      const b = within(dialog).getByRole("button", { name });
+      expect(b).toHaveAttribute("aria-disabled", "true");
+      expect(b).toHaveAccessibleDescription(/Publishing/);
+    }
+    g.release();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("C3: the list of changes can be focused and is inside the dialog's Tab order", async () => {
+    const t = await openBuilder();
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const list = within(dialog).getByRole("region", { name: "Changes to publish" });
+    expect(list).toHaveAttribute("tabindex", "0");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const publish = within(dialog).getByRole("button", { name: "Publish version 2" });
+    expect(cancel).toHaveFocus();
+    await t.user.tab({ shift: true });
+    expect(list).toHaveFocus();
+    await t.user.tab({ shift: true });
+    expect(publish).toHaveFocus();
+    await t.user.tab();
+    expect(list).toHaveFocus();
+    await t.user.tab();
+    expect(cancel).toHaveFocus();
   });
 });
