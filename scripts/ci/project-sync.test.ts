@@ -37,6 +37,7 @@ interface FakeItem {
   prs?: Array<{ state: string; isDraft: boolean; repo: string | null }>;
   createdAt?: string;
   closedAt?: string | null;
+  body?: string;
   start?: string;
   finish?: string;
 }
@@ -86,6 +87,8 @@ async function runBoard(
                   stateReason: i.stateReason ?? null,
                   createdAt: i.createdAt ?? "2026-09-25T00:00:00Z",
                   closedAt: i.closedAt ?? (i.state === "CLOSED" ? "2026-09-26T00:00:00Z" : null),
+                  // Only when the job asks for it, so a query without body fails the #488 parity.
+                  ...(/\bbody\b/.test(q) ? { body: i.body ?? "" } : {}),
                   repository: { nameWithOwner: REPO },
                   parent: i.parentNumber ? { number: i.parentNumber, title: "" } : null,
                   subIssuesSummary: i.sub ?? { total: 0, completed: 0 },
@@ -847,6 +850,7 @@ function referenceDates(items: FakeItem[]) {
               closed_at: i.closedAt ?? (closed ? "2026-09-26T00:00:00Z" : null),
               state: closed ? "closed" : "open",
               state_reason: i.stateReason?.toLowerCase() ?? null,
+              body: i.body ?? "",
             }),
             closed,
           };
@@ -926,6 +930,23 @@ describe("project-sync board job: parity with board-model.mjs (PR #83 review M2)
         task(2, 56, "2026-09-27T00:00:00Z", { at: "2026-09-29T00:00:00Z" }),
         task(3, 56, "2026-09-28T00:00:00Z"),
         { ...task(4, 39, "2026-10-01T00:00:00Z"), level: "Follow-up" },
+      ],
+    ],
+    [
+      "board-dates markers on leaves filed after the fact (#488), rolled up to the wave",
+      [
+        parent(55, "Wave", undefined, true),
+        {
+          ...task(1, 55, "2026-10-01T00:00:00Z", { at: "2026-10-01T00:00:00Z" }),
+          body: "x\n<!-- board-dates start=2026-09-30 finish=2026-09-30 -->",
+        },
+        {
+          ...task(2, 55, "2026-10-01T00:00:00Z", {
+            at: "2026-10-01T00:00:00Z",
+            reason: "NOT_PLANNED",
+          }),
+          body: "<!-- board-dates start=2026-09-29 finish=2026-09-29 -->",
+        },
       ],
     ],
     [
