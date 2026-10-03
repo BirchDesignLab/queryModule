@@ -337,6 +337,16 @@ describe("spec 5.8 fail closed: an invalid stored document refuses startup namin
     });
   }
 
+  it("refuses a published version whose stored config_hash differs from its document (C4)", async () => {
+    const env = await storeWith(JSON.stringify(await valid()));
+    const err = await buildDeps({ env, secrets: TEST_SECRETS, logSink: () => {} }).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ConfigLoadError);
+    expect(String((err as Error).message)).toMatch(/site default version 2/);
+    expect(String((err as Error).message)).toContain("config.hashMismatch");
+  });
+
   it("refuses a store with rows for the site but no published version, seeding nothing", async () => {
     const file = siteCopy();
     const env = testEnv({ SITE_CONFIG: file });
@@ -395,6 +405,26 @@ describe("SEC-010 ADR-0011 item 1: published history is never rewritten (migrati
       );
     await expect(exec(db, "DELETE FROM site_config_version")).rejects.toThrow(/never deleted/);
     expect((await rows(db)).map((r) => [r.version, r.status])).toEqual([[1, "published"]]);
+  });
+  it("a published or superseded row's authorship and lineage never change (C1)", async () => {
+    const db = await seeded();
+    const sets = [
+      "created_by = 'x'",
+      "created_at = 1",
+      "published_by = 'x'",
+      "published_at = 1",
+      "base_version = 9",
+      "rollback_of = 9",
+    ];
+    for (const set of sets)
+      await expect(exec(db, `UPDATE site_config_version SET ${set}`)).rejects.toThrow(
+        /never rewritten/,
+      );
+    await exec(db, "UPDATE site_config_version SET status = 'superseded'");
+    for (const set of sets)
+      await expect(exec(db, `UPDATE site_config_version SET ${set}`)).rejects.toThrow(
+        /never rewritten/,
+      );
   });
   it("INSERT OR REPLACE cannot replace a published row, nor add a second published row", async () => {
     const db = await seeded();
@@ -464,7 +494,17 @@ describe("SEC-010 ADR-0011 item 1: published history is never rewritten (migrati
         db,
         "INSERT INTO site_config_version (id, site_id, version, status, document, created_by, created_at) VALUES ('d', 'default', 1, 'draft', '{}', 'u', 1)",
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/never replaced/);
+    // The unique index holds on its own, not only through the no_replace trigger.
+    await exec(db, "DROP TRIGGER site_config_version_no_replace");
+    await expect(
+      exec(
+        db,
+        "INSERT INTO site_config_version (id, site_id, version, status, document, created_by, created_at) VALUES ('d', 'default', 1, 'draft', '{}', 'u', 1)",
+      ),
+    ).rejects.toThrow(
+      /UNIQUE constraint failed: site_config_version\.site_id, site_config_version\.version/,
+    );
   });
   it("startup refuses when a site_config_version trigger is missing or altered", async () => {
     const db = await seeded();

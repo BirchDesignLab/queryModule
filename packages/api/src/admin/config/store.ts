@@ -119,6 +119,10 @@ export async function loadLiveConfig(db: Db, bootstrap: ConfigBootstrap): Promis
   });
   if (config.siteConfig.site.id !== siteId)
     throw new ConfigLoadError(label, "/siteConfig/site/id", "config.siteMismatch");
+  // The stored hash must be the one this document hashes to: a mismatch means the row was
+  // altered outside the app (the triggers refuse it from inside), so refuse to boot (fail closed).
+  if (published.configHash !== config.configHash)
+    throw new ConfigLoadError(label, "", "config.hashMismatch");
   const fileIgnored =
     !seeded &&
     (await bootstrapDocument(file, bootstrap).then(

@@ -262,7 +262,9 @@ describe("spec 5.8 ADR-0011 item 2 a failed activation leaves the old snapshot l
     const before = await rows(t);
     const loaded = (await t.auditRows("configLoaded")).length;
     const bad = { ...stubEvent(t, draft.id, STUB_HASH), actor: SYSTEM_ACTOR };
-    await expect(activate(t.deps, draft.version, bad)).rejects.toThrow();
+    await expect(activate(t.deps, draft.version, bad)).rejects.toThrow(
+      /written by an admin or implementer/,
+    );
     await expectUnchanged(t, before, old);
     expect(await t.auditRows("configLoaded")).toHaveLength(loaded);
   });
