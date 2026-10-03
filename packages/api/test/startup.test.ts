@@ -294,7 +294,9 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
         configHash: first.config.configHash,
         configSchemaVersion: CONFIG_SCHEMA_VERSION,
         coreVersion: CORE_VERSION,
-        extendsChain: ["default"],
+        // ADR-0011: the live config comes from the store, whose document is the resolved site
+        // (extends already merged), so a boot from the store extends nothing (Task 25).
+        extendsChain: [],
       },
     });
     const second = await bootstrap(env, { logSink: () => {} });

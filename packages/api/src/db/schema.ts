@@ -245,3 +245,38 @@ export const requestKey = sqliteTable(
     check("request_key_scope_check", sql`${t.scope} IN ('values', 'payload')`),
   ],
 );
+
+// site_config_version: ADR-0011 item 1. Version 1 is seeded from the SITE_CONFIG file; afterwards
+// the store is the live source. document is a ConfigDocument as JSON text, parsed by the loader
+// (never by the driver) so a parse error cannot echo stored content. Triggers in
+// 0007_site_config_version.sql: a non-draft row's document and config_hash never change, it never
+// returns to draft, its identity never changes, it is never deleted or replaced, and a draft is
+// never published over a live version (published history is never rewritten).
+export const siteConfigVersion = sqliteTable(
+  "site_config_version",
+  {
+    id: text().primaryKey(),
+    siteId: text().notNull(),
+    version: integer().notNull(),
+    status: text({ enum: ["draft", "published", "superseded"] }).notNull(),
+    document: text().notNull(),
+    // set once the version validates at publish; a draft has none
+    configHash: text(),
+    baseVersion: integer(),
+    createdBy: text().notNull(),
+    createdAt: integer().notNull(),
+    publishedBy: text(),
+    publishedAt: integer(),
+    rollbackOf: integer(),
+  },
+  (t) => [
+    uniqueIndex("site_config_version_site_version_uq").on(t.siteId, t.version),
+    uniqueIndex("site_config_version_one_published_uq")
+      .on(t.siteId)
+      .where(sql`status = 'published'`),
+    check(
+      "site_config_version_status_check",
+      sql`${t.status} IN ('draft', 'published', 'superseded')`,
+    ),
+  ],
+);

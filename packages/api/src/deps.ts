@@ -1,13 +1,19 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { loadLiveConfig } from "./admin/config/store";
 import { createAuditService } from "./audit/service";
 import { type Auth, createAuth } from "./auth/auth";
 import { type AppIdentityService, createIdentityService } from "./auth/identity";
 import { createRateLimiter, type RateLimiter } from "./auth/rate-limit";
 import { type Clock, type MonotonicClock, systemClock, systemMonotonic } from "./clock";
-import { type LoadedConfig, loadSiteConfig } from "./config/load";
+import type { LoadedConfig } from "./config/load";
 import { type Db, openDatabase } from "./db/client";
-import { checkAuditTriggers, checkQueryTriggers, runMigrations } from "./db/migrate";
+import {
+  checkAuditTriggers,
+  checkConfigVersionTriggers,
+  checkQueryTriggers,
+  runMigrations,
+} from "./db/migrate";
 import type { DeployEnv } from "./env";
 import { type AppEventBus, createEventBus } from "./events/bus";
 import { checkKeyCanaries } from "./keys/canary";
@@ -45,8 +51,11 @@ export async function buildDeps(o: {
     await runMigrations(db, o.env.migrationsDir);
     await checkAuditTriggers(db);
     await checkQueryTriggers(db);
+    await checkConfigVersionTriggers(db);
     await checkKeyCanaries(db, o.secrets, clock);
-    const config = await loadSiteConfig(o.env.siteConfigFile, {
+    // ADR-0011: the store is the live source; an empty store seeds version 1 from the file.
+    const config = await loadLiveConfig(db, {
+      siteConfigFile: o.env.siteConfigFile,
       allowMockSources: o.env.allowMockSources,
       now: clock.now(),
     });
@@ -62,6 +71,14 @@ export async function buildDeps(o: {
         ...(s.seedPasswordSecret ? [s.seedPasswordSecret] : []),
       ],
     });
+    const site = config.siteConfig.site.id;
+    if (config.seeded) logger.info("config store seeded", { site, version: config.version });
+    if (config.fileIgnored)
+      logger.warn("site config file ignored", {
+        file: o.env.siteConfigFile,
+        site,
+        version: config.version,
+      });
     for (const w of config.warnings) logger.warn("config warning", { key: w.key, path: w.path });
     const limits = config.siteConfig.auth.session;
     const auth = createAuth({
