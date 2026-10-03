@@ -77,5 +77,7 @@ export async function activate(d: AppDeps, version: number, event?: AuditEvent):
     });
     if (event) await d.audit.record(tx, event);
   });
+  // Before the swap, so no reader of the new snapshot logs a new field key unredacted (C1).
+  d.logger.addRedactKeys(config.fieldKeys);
   d.config.swap(config);
 }

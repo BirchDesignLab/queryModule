@@ -183,19 +183,28 @@ describe("FR-064 spec 6.7 submits across an activation", () => {
     const gate = new Promise<void>((r) => {
       release = r;
     });
-    // prepare reads the snapshot; the next transaction after that read is T1.
+    // Once the session has resolved (its limits read the holder too), prepare's read is the
+    // next current(); the next transaction after that read is T1.
     const holder = t.deps.config;
     const read = holder.current.bind(holder);
-    const current = vi.spyOn(holder, "current").mockImplementationOnce(() => {
-      vi.spyOn(db, "transaction").mockImplementationOnce(async (fn, config) => {
-        reached();
-        await gate;
-        return original(fn, config);
+    const current = vi.spyOn(holder, "current");
+    const identity = t.deps.identity;
+    const resolve = identity.resolve.bind(identity);
+    const resolved = vi.spyOn(identity, "resolve").mockImplementationOnce(async (req) => {
+      const p = await resolve(req);
+      current.mockImplementationOnce(() => {
+        vi.spyOn(db, "transaction").mockImplementationOnce(async (fn, config) => {
+          reached();
+          await gate;
+          return original(fn, config);
+        });
+        return read();
       });
-      return read();
+      return p;
     });
     const pending = submit(old);
     await atT1;
+    resolved.mockRestore();
     current.mockRestore();
     vi.mocked(db.transaction).mockRestore();
     await activate(t.deps, draft.version);
@@ -344,5 +353,57 @@ describe("spec 5.8 ADR-0011 item 2 a failed activation leaves the old snapshot l
     expect(t.deps.config.current().configHash).toBe(hash);
     const after = await rows(t);
     expect(after.map((r) => r.status)).toEqual(["published", "draft"]);
+  });
+});
+
+/** The live stored document with `edit` applied to its siteConfig, as draft version 2. */
+async function insertEdited(
+  t: TestApp,
+  edit: (sc: Record<string, unknown>) => Record<string, unknown>,
+): Promise<{ id: string; version: number }> {
+  const [live] = await rows(t);
+  const doc = ConfigDocumentSchema.parse(JSON.parse(String(live?.document)));
+  const siteConfig = edit(doc.siteConfig as unknown as Record<string, unknown>);
+  return insertDraft(t, JSON.stringify({ ...doc, siteConfig }));
+}
+
+describe("spec 5.9 spec 5.6 readers that outlive the boot snapshot (critic C1)", () => {
+  it("a field key added by a published version is redacted at once, in children made before", async () => {
+    const { t } = await setup();
+    const early = t.deps.logger.child({ req: "early" });
+    const draft = await insertEdited(t, (sc) => ({
+      ...sc,
+      queryTypes: (sc.queryTypes as { code: string; fields: unknown[] }[]).map((q) =>
+        q.code === "WNT"
+          ? {
+              ...q,
+              fields: [
+                ...q.fields,
+                { key: "probeKey", labelKey: "field.first", dataType: "string" },
+              ],
+            }
+          : q,
+      ),
+    }));
+    t.deps.logger.info("before", { probeKey: "ZZ-PRE-0001" });
+    expect(t.logLines.join("\n")).toContain("ZZ-PRE-0001");
+    await activate(t.deps, draft.version);
+    t.deps.logger.info("root", { probeKey: "ZZ-PROBE-0001" });
+    early.info("child", { probeKey: "ZZ-PROBE-0002" });
+    t.deps.logger.child({ req: "late" }).info("late", { probekey: "ZZ-PROBE-0003" });
+    expect(t.logLines.join("\n")).not.toMatch(/ZZ-PROBE-/);
+  });
+
+  it("session limits from a published version apply to the next request", async () => {
+    const { t } = await setup();
+    const draft = await insertEdited(t, (sc) => ({
+      ...sc,
+      auth: { ...(sc.auth as object), session: { absoluteMinutes: 720, idleMinutes: 5 } },
+    }));
+    await activate(t.deps, draft.version);
+    const cookie = await t.cookieFor(EMAIL, PASSWORD);
+    t.clock.advance(10 * 60_000);
+    const r = await t.request("/api/v1/config", { headers: { cookie } });
+    expect(r.status).toBe(401);
   });
 });

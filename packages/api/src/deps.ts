@@ -17,7 +17,7 @@ import {
 import type { DeployEnv } from "./env";
 import { type AppEventBus, createEventBus } from "./events/bus";
 import { checkKeyCanaries } from "./keys/canary";
-import { createLogger, type Logger } from "./log/logger";
+import { createLogger, type RootLogger } from "./log/logger";
 import type { AuditService } from "./seams";
 import type { Secrets } from "./secrets";
 
@@ -47,7 +47,8 @@ export interface AppDeps {
   identity: AppIdentityService;
   audit: AuditService;
   limiter: RateLimiter;
-  logger: Logger;
+  /** Root logger: activate extends its redaction keys with each published version's fields. */
+  logger: RootLogger;
   config: ConfigHolder;
   clock: Clock;
   /** Durations for audit details (spec 4.7). */
@@ -99,12 +100,13 @@ export async function buildDeps(o: {
         version: config.version,
       });
     for (const w of config.warnings) logger.warn("config warning", { key: w.key, path: w.path });
-    const limits = config.siteConfig.auth.session;
+    const holder = createConfigHolder(config);
+    // Better Auth's own expiry is fixed at boot; the app limits below are read at use.
     const auth = createAuth({
       db,
       env: o.env,
       secret: s.betterAuthSecret,
-      session: limits,
+      session: config.siteConfig.auth.session,
       log: logger,
     });
     return {
@@ -115,8 +117,14 @@ export async function buildDeps(o: {
       monotonic: systemMonotonic,
       dataKey: s.dataKey,
       logger,
-      config: createConfigHolder(config),
-      identity: createIdentityService({ db, auth, limits, clock, log: logger }),
+      config: holder,
+      identity: createIdentityService({
+        db,
+        auth,
+        limits: () => holder.current().siteConfig.auth.session,
+        clock,
+        log: logger,
+      }),
       audit: createAuditService(clock),
       limiter: createRateLimiter(db, clock),
       eventBus: createEventBus({ log: logger }),
