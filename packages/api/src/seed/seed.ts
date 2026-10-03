@@ -19,9 +19,9 @@ export class SeedRefusedError extends Error {
  * row already exists (in order, with its derived password) so the caller can recover: a rerun
  * throws SeedRefusedError once any user exists (spec 8.5's run-once contract is never relaxed),
  * so the operator needs this list to know who was made and to finish role grants by hand via
- * `scripts/ops/grant-role.ts`, and to set a missing persona preference (see docs/demo.md's Recovery
- * section). The message never repeats a
- * password (spec 5.9); only the CLI's own stdout may do that.
+ * `scripts/ops/grant-role.ts`. No tool sets a missing persona preference: the account works with
+ * the device layout until the demo database is reset and seeded again (docs/demo.md, Recovery).
+ * The message never repeats a password (spec 5.9); only the CLI's own stdout may do that.
  */
 export class SeedPartialFailureError extends Error {
   readonly created: { email: string; role: Role; password: string }[];

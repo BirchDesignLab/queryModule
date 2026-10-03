@@ -21,6 +21,7 @@
 // Usage (repo root): node scripts/board/cloud-catchup-2026-10-01.mjs [--apply]
 // Then: node scripts/board/sync-followups.mjs --add scripts/board/cloud-catchup-2026-10-01.followups.json
 //       node scripts/ops/gh-setup-project.mjs (dry run), --apply, gh workflow run project-sync.yml
+// Step 6 (#488) runs once project-sync reads the board-dates marker (merged on main first).
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
@@ -713,6 +714,22 @@ for (const fix of LABEL_FIXES) {
         milestone: milestones.get(fix.milestone),
       }),
     );
+}
+
+// ---------------------------------------------------------------- 6. board-dates markers (#488)
+
+// Step 1's issues (#447..#475) were filed 10-01 for work done 09-30; project-sync reads this
+// body marker (board-model.mjs boardDatesMarker) so their Start and Finish show 09-30, and #42's
+// roll-up follows on the next project-sync run.
+const DATES_MARK = `<!-- board-dates start=${DONE_DATE} finish=${DONE_DATE} -->`;
+for (let n = 447; n <= 475; n++) {
+  const issue = byNumber.get(n);
+  if (!issue || (issue.body ?? "").includes("board-dates")) continue;
+  write(`add board-dates marker to #${n}`, () =>
+    rest(`repos/${REPO}/issues/${n}`, "PATCH", {
+      body: `${(issue.body ?? "").trimEnd()}\n\n${DATES_MARK}\n`,
+    }),
+  );
 }
 
 // Data entries for sync-followups --add: labels of the adopted issues come from GitHub there.

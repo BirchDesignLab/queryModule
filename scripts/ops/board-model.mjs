@@ -112,16 +112,35 @@ export function clampToFloor(date, floor = FLOOR) {
  * completed (not_planned/duplicate, or still open, leaves Finish empty).
  * Both are clamped to `FLOOR`.
  *
- * @param {{created_at: string, closed_at?: string|null, state: "open"|"closed", state_reason?: string|null}} issue
+ * @param {{created_at: string, closed_at?: string|null, state: "open"|"closed", state_reason?: string|null, body?: string|null}} issue
  * @param {string} [floor]
  * @returns {{start: string, finish: string|null}}
  */
 export function leafDates(issue, floor = FLOOR) {
-  const start = clampToFloor(issue.created_at, floor);
+  const marker = boardDatesMarker(issue.body);
+  const start = clampToFloor(marker.start ?? issue.created_at, floor);
   const completed =
     issue.state === "closed" && (issue.state_reason === "completed" || issue.state_reason == null);
-  const finish = completed && issue.closed_at ? clampToFloor(issue.closed_at, floor) : null;
+  const closedAt = marker.finish ?? issue.closed_at;
+  const finish = completed && closedAt ? clampToFloor(closedAt, floor) : null;
   return { start, finish };
+}
+
+/**
+ * #488: an issue filed after the fact carries its real dates in a body marker,
+ * `<!-- board-dates start=YYYY-MM-DD finish=YYYY-MM-DD -->` (either attribute
+ * alone is fine). A malformed marker is ignored. Finish still applies only to
+ * an issue closed as completed (leafDates).
+ *
+ * @param {string|null|undefined} body
+ * @returns {{start?: string, finish?: string}}
+ */
+export function boardDatesMarker(body) {
+  const m = /<!--\s*board-dates((?:\s+(?:start|finish)=\d{4}-\d{2}-\d{2})+)\s*-->/.exec(body ?? "");
+  if (!m) return {};
+  return Object.fromEntries(
+    [...m[1].matchAll(/(start|finish)=(\d{4}-\d{2}-\d{2})/g)].map((a) => [a[1], a[2]]),
+  );
 }
 
 /**

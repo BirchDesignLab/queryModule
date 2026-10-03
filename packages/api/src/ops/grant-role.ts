@@ -10,7 +10,7 @@ export { ROLES } from "@querymodule/core/contracts";
 
 export class GrantRoleUsageError extends Error {
   constructor() {
-    super("usage: grant-role <email> <user|trainingOfficer|admin> [--revoke]");
+    super(`usage: grant-role <email> <${ROLES.join("|")}> [--revoke]`);
     this.name = "GrantRoleUsageError";
   }
 }

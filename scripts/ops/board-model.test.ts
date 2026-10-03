@@ -158,6 +158,63 @@ describe("leafDates: Task/Follow-up Start and Finish (#80 req. 4)", () => {
   });
 });
 
+describe("leafDates: board-dates body marker overrides an after-the-fact issue's dates (#488)", () => {
+  const marker = "Filed after the fact.\n<!-- board-dates start=2026-09-30 finish=2026-09-30 -->";
+  it("overrides Start and, for an issue closed as completed, Finish", () => {
+    expect(
+      leafDates({
+        created_at: "2026-10-01T00:00:00Z",
+        closed_at: "2026-10-01T00:00:00Z",
+        state: "closed",
+        state_reason: "completed",
+        body: marker,
+      }),
+    ).toEqual({ start: "2026-09-30", finish: "2026-09-30" });
+  });
+
+  it("keeps Finish empty while the issue is open or closed as not planned", () => {
+    expect(leafDates({ created_at: "2026-10-01T00:00:00Z", state: "open", body: marker })).toEqual({
+      start: "2026-09-30",
+      finish: null,
+    });
+    expect(
+      leafDates({
+        created_at: "2026-10-01T00:00:00Z",
+        closed_at: "2026-10-01T00:00:00Z",
+        state: "closed",
+        state_reason: "not_planned",
+        body: marker,
+      }),
+    ).toEqual({ start: "2026-09-30", finish: null });
+  });
+
+  it("takes either attribute alone, clamps to the floor, and ignores a malformed marker", () => {
+    const issue = (body: string) =>
+      leafDates({
+        created_at: "2026-10-01T00:00:00Z",
+        closed_at: "2026-10-02T00:00:00Z",
+        state: "closed",
+        state_reason: "completed",
+        body,
+      });
+    expect(issue("<!-- board-dates finish=2026-09-30 -->")).toEqual({
+      start: "2026-10-01",
+      finish: "2026-09-30",
+    });
+    expect(issue("<!-- board-dates start=2026-09-01 -->")).toEqual({
+      start: "2026-09-25",
+      finish: "2026-10-02",
+    });
+    for (const bad of [
+      "<!-- board-dates start=09-30-2026 -->",
+      "board-dates start=2026-09-30",
+      "<!-- board-dates -->",
+    ]) {
+      expect(issue(bad)).toEqual({ start: "2026-10-01", finish: "2026-10-02" });
+    }
+  });
+});
+
 describe("rollUp: parent dates from children, bottom up (#80 req. 5)", () => {
   it("gives no dates when no child has one", () => {
     expect(rollUp([{ start: null, finish: null, closed: false }])).toEqual({

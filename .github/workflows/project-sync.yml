@@ -78,7 +78,7 @@ jobs:
                 `query($p:ID!,$a:String){node(id:$p){... on ProjectV2{items(first:100,after:$a){
                   pageInfo{hasNextPage endCursor}
                   nodes{id content{... on Issue{number title state stateReason
-                    createdAt closedAt
+                    createdAt closedAt body
                     repository{nameWithOwner} parent{number title}
                     subIssuesSummary{total completed}
                     closedByPullRequestsReferences(first:20,includeClosedPrs:false){nodes{state isDraft
@@ -279,11 +279,20 @@ jobs:
               const d = date.slice(0, 10);
               return d < FLOOR ? FLOOR : d;
             };
+            // #488: <!-- board-dates start=YYYY-MM-DD finish=YYYY-MM-DD --> in an
+            // issue body overrides its leaf dates (board-model.mjs boardDatesMarker).
+            function boardDatesMarker(body) {
+              const m = /<!--\s*board-dates((?:\s+(?:start|finish)=\d{4}-\d{2}-\d{2})+)\s*-->/.exec(body ?? "");
+              if (!m) return {};
+              return Object.fromEntries([...m[1].matchAll(/(start|finish)=(\d{4}-\d{2}-\d{2})/g)].map((a) => [a[1], a[2]]));
+            }
             function leafDates(item) {
-              const start = clampToFloor(item.createdAt);
+              const marker = boardDatesMarker(item.body);
+              const start = clampToFloor(marker.start ?? item.createdAt);
               const completed =
                 item.state === "CLOSED" && (item.stateReason === "COMPLETED" || item.stateReason == null);
-              const finish = completed && item.closedAt ? clampToFloor(item.closedAt) : null;
+              const closedAt = marker.finish ?? item.closedAt;
+              const finish = completed && closedAt ? clampToFloor(closedAt) : null;
               return { start, finish };
             }
             function rollUp(children) {

@@ -7,12 +7,14 @@ import {
   checkMockCoverage,
   type Diagnostic,
   extendsOf,
+  pointer,
   type RawFile,
   resolveSiteShape,
   type SiteConfig,
   toClientSiteConfig,
   validateResolved,
 } from "@querymodule/core/config";
+import { type ConfigDocument, ConfigDocumentSchema } from "@querymodule/core/contracts";
 import {
   contrastFailures,
   contrastRatio,
@@ -166,36 +168,42 @@ function firstError(file: string, errors: Diagnostic[]): ConfigLoadError {
   return new ConfigLoadError(file, d?.path ?? "", d?.key ?? "config.schema");
 }
 
-export async function loadSiteConfig(
-  siteConfigFile: string,
+/** Where the spec 5.8 chain reads its inputs: the site files, or a stored ConfigDocument. */
+interface ChainSource {
+  /** Names the source in a ConfigLoadError: the site file path, or the stored site and version. */
+  label: string;
+  configDir: string;
+  site: RawFile;
+  /** The base site an `extends` names; a stored document is already resolved and has none. */
+  readBase?: (id: string) => Promise<RawFile>;
+  readLocale: (locale: string, index: number) => Promise<RawFile>;
+  readMock: (siteId: string) => Promise<RawFile>;
+}
+
+/**
+ * Spec 5.8 steps 1 to 6 on one source: migrate, merge any base, strict parse, locale bundles,
+ * validateSiteConfig, contrast and colour checks, mock coverage, then the config hash. Throws
+ * ConfigLoadError with keys and pointers only (spec 5.9).
+ */
+async function runChain(
+  src: ChainSource,
   o: { allowMockSources: boolean; now: number },
 ): Promise<LoadedConfig> {
-  const file = resolve(siteConfigFile);
-  const configDir = resolve(dirname(file), "..");
-  const site = await readRaw(file, file, "");
-  const ext = extendsOf(site.ok ? site.value : undefined);
-  if (!ext.ok) throw firstError(file, ext.errors);
+  const { label } = src;
+  const ext = extendsOf(src.site.ok ? src.site.value : undefined);
+  if (!ext.ok) throw firstError(label, ext.errors);
   const base =
-    ext.id === null
-      ? undefined
-      : {
-          id: ext.id,
-          file: await readRaw(join(configDir, "sites", `${ext.id}.json`), file, "/extends"),
-        };
-  const shape = resolveSiteShape(site, base);
-  if (!shape.ok) throw firstError(file, shape.errors);
+    ext.id === null || !src.readBase ? undefined : { id: ext.id, file: await src.readBase(ext.id) };
+  const shape = resolveSiteShape(src.site, base);
+  if (!shape.ok) throw firstError(label, shape.errors);
   const siteConfig = shape.config;
 
   const rawLocales: Record<string, RawFile> = {};
   for (const [i, locale] of siteConfig.locales.entries())
-    rawLocales[locale] = await readRaw(
-      join(configDir, "locales", `${locale}.json`),
-      file,
-      `/locales/${i}`,
-    );
+    rawLocales[locale] = await src.readLocale(locale, i);
 
   const pre = preResolvedChecks(siteConfig, rawLocales);
-  if (pre.length > 0) throw firstError(file, pre);
+  if (pre.length > 0) throw firstError(label, pre);
 
   let result: ReturnType<typeof validateResolved>;
   try {
@@ -207,25 +215,27 @@ export async function loadSiteConfig(
     });
   } catch {
     // Never surface a raw error: its message can echo a config value (spec 5.9).
-    throw new ConfigLoadError(file, "", "config.schema");
+    throw new ConfigLoadError(label, "", "config.schema");
   }
   const { errors, warnings } = result;
-  if (errors.length > 0) throw firstError(file, errors);
+  if (errors.length > 0) throw firstError(label, errors);
   const colour = colourTokenChecks(siteConfig);
-  if (colour.length > 0) throw firstError(file, colour);
+  if (colour.length > 0) throw firstError(label, colour);
 
   const mockIndex = siteConfig.sources.findIndex((s) => s.kind === "mock");
   if (mockIndex >= 0) {
     if (!o.allowMockSources)
       throw new ConfigLoadError(
-        file,
+        label,
         `/sources/${mockIndex}/kind`,
         "mock sources need ALLOW_MOCK_SOURCES=true",
       );
-    const mockPath = join(configDir, "mock", `${siteConfig.site.id}.json`);
-    const mockRaw = await readRaw(mockPath, file, "/mock");
-    const mockErrors = checkMockCoverage(siteConfig, mockRaw, mockPath);
-    if (mockErrors.length > 0) throw firstError(file, mockErrors);
+    const mockErrors = checkMockCoverage(
+      siteConfig,
+      await src.readMock(siteConfig.site.id),
+      `${siteConfig.site.id}.json`,
+    );
+    if (mockErrors.length > 0) throw firstError(label, mockErrors);
   }
 
   const locales: Record<string, Record<string, unknown>> = {};
@@ -237,10 +247,103 @@ export async function loadSiteConfig(
     siteConfig,
     configHash,
     clientConfig: toClientSiteConfig(siteConfig, configHash),
-    configDir,
+    configDir: src.configDir,
     fieldKeys,
     locales,
     extendsChain: shape.extendsChain,
     warnings,
   };
+}
+
+/** The config root a site file sits in: its locales, mock and sibling sites. */
+export const configDirOf = (file: string) => resolve(dirname(file), "..");
+
+export async function loadSiteConfig(
+  siteConfigFile: string,
+  o: { allowMockSources: boolean; now: number },
+): Promise<LoadedConfig> {
+  const file = resolve(siteConfigFile);
+  const configDir = configDirOf(file);
+  return runChain(
+    {
+      label: file,
+      configDir,
+      site: await readRaw(file, file, ""),
+      readBase: (id) => readRaw(join(configDir, "sites", `${id}.json`), file, "/extends"),
+      readLocale: (locale, i) =>
+        readRaw(join(configDir, "locales", `${locale}.json`), file, `/locales/${i}`),
+      readMock: (siteId) => readRaw(join(configDir, "mock", `${siteId}.json`), file, "/mock"),
+    },
+    o,
+  );
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * ADR-0011 item 1: the SITE_CONFIG file as a version 1 document. The file runs the full chain
+ * first (an invalid file seeds nothing). The document holds the resolved site (extends merged),
+ * an empty locale overlay and, only where mock sources are allowed, the site's mock file.
+ */
+export async function bootstrapDocument(
+  siteConfigFile: string,
+  o: { allowMockSources: boolean; now: number },
+): Promise<{ config: LoadedConfig; document: ConfigDocument }> {
+  const config = await loadSiteConfig(siteConfigFile, o);
+  const file = resolve(siteConfigFile);
+  const siteConfig = JSON.parse(JSON.stringify(config.siteConfig)) as Record<string, unknown>;
+  const document: ConfigDocument = { siteConfig, locales: {} };
+  if (o.allowMockSources) {
+    const mock = await readRaw(
+      join(config.configDir, "mock", `${config.siteConfig.site.id}.json`),
+      file,
+      "/mock",
+    );
+    if (mock.ok && isPlainObject(mock.value)) document.mock = mock.value;
+  }
+  return { config, document };
+}
+
+/**
+ * ADR-0011 item 2: a stored document through the full spec 5.8 chain, never trusted unvalidated.
+ * The strict ConfigDocument parse comes first; the label overlay applies over the bundled locale
+ * files in configDir; the mock is the document's own. label names the site and version.
+ */
+export async function loadConfigDocument(
+  document: unknown,
+  o: { label: string; configDir: string; allowMockSources: boolean; now: number },
+): Promise<LoadedConfig> {
+  const parsed = ConfigDocumentSchema.safeParse(document);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new ConfigLoadError(
+      o.label,
+      pointer(...(issue?.path ?? []).map((s) => String(s))),
+      "config.documentSchema",
+    );
+  }
+  const doc = parsed.data;
+  return runChain(
+    {
+      label: o.label,
+      configDir: o.configDir,
+      site: { ok: true, value: doc.siteConfig },
+      readLocale: async (locale, i) => {
+        const bundle = await readRaw(
+          join(o.configDir, "locales", `${locale}.json`),
+          o.label,
+          `/locales/${i}`,
+        );
+        const overlay = Object.hasOwn(doc.locales, locale) ? doc.locales[locale] : undefined;
+        if (overlay === undefined || !bundle.ok) return bundle;
+        if (bundle.value === undefined) return { ok: true, value: overlay };
+        return isPlainObject(bundle.value)
+          ? { ok: true, value: { ...bundle.value, ...overlay } }
+          : bundle;
+      },
+      readMock: async () => ({ ok: true, value: doc.mock }),
+    },
+    o,
+  );
 }

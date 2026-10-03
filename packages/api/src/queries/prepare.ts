@@ -6,6 +6,7 @@ import {
 } from "@querymodule/core/contracts";
 import { isPlanError, type Plan, planRequest } from "@querymodule/core/planner";
 import type { Context } from "hono";
+import type { LoadedConfig } from "../config/load";
 import type { AppDeps } from "../deps";
 import { apiError } from "../http/errors";
 import type { AppEnv } from "../http/types";
@@ -20,6 +21,8 @@ export interface DispatchPair {
   adapterKind: string;
 }
 export interface PreparedSubmit {
+  /** The one config snapshot this submit was planned against; T1 records its hash (ADR-0011 item 3). */
+  config: LoadedConfig;
   request: SubmitQueryRequest;
   plan: Plan;
   pairs: DispatchPair[];
@@ -42,14 +45,15 @@ export function prepareSubmit(
   // Controller ruling #284: a repeated source id is a malformed body, not something to dedupe.
   if (new Set(request.sourceIds).size !== request.sourceIds.length)
     return invalid(c, [{ key: "validation.invalidBody", params: { field: "sourceIds" } }]);
-  if (request.configHash !== d.config.configHash) {
+  const config = d.config.current();
+  if (request.configHash !== config.configHash) {
     return {
       ok: false,
-      response: apiError(c, "configHashMismatch", { currentConfigHash: d.config.configHash }),
+      response: apiError(c, "configHashMismatch", { currentConfigHash: config.configHash }),
     };
   }
   const plan = planRequest(
-    d.config.siteConfig,
+    config.siteConfig,
     request.queryType,
     request.values,
     request.sourceIds,
@@ -61,7 +65,12 @@ export function prepareSubmit(
   if (request.mode !== plan.mode) return invalid(c, [{ key: "validation.modeMismatch" }]);
   return {
     ok: true,
-    value: { request, plan, pairs: snapshotCredentials(plan, d.config.siteConfig, principal) },
+    value: {
+      config,
+      request,
+      plan,
+      pairs: snapshotCredentials(plan, config.siteConfig, principal),
+    },
   };
 }
 

@@ -48,7 +48,7 @@ function body(deps: AppDeps, over: Record<string, unknown> = {}) {
     values: { plate: PLATE, year: "26" },
     sourceIds: ["stateSource", "nationalSource"],
     mode: "normal",
-    configHash: deps.config.configHash,
+    configHash: deps.config.current().configHash,
     ...over,
   };
 }
@@ -123,7 +123,7 @@ describe("prepareSubmit (spec 5.2 steps 2 and 3, FR-040, FR-041, FR-042, FR-064)
     const r = await rejectedAny(await send(body(deps, { configHash: "0".repeat(64) })));
     expect(r.status).toBe(409);
     expect(r.code).toBe("configHashMismatch");
-    expect(r.params).toEqual({ currentConfigHash: deps.config.configHash });
+    expect(r.params).toEqual({ currentConfigHash: deps.config.current().configHash });
   });
 
   it("an unknown field is 400 validation.unknownField, value not echoed", async () => {
@@ -220,7 +220,7 @@ describe("snapshotCredentials (spec 5.2 step 3, SEC-011)", () => {
 
   it("a source that requires credentials still resolves no owner in M1", async () => {
     const { deps } = await createTestApp();
-    const config: SiteConfig = structuredClone(deps.config.siteConfig);
+    const config: SiteConfig = structuredClone(deps.config.current().siteConfig);
     for (const s of config.sources) s.requiresCredentials = true;
     expect(snapshotCredentials(plan, config, PRINCIPAL)).toEqual([
       {
@@ -235,7 +235,7 @@ describe("snapshotCredentials (spec 5.2 step 3, SEC-011)", () => {
 
   it("a planned source missing from the resolved config throws", async () => {
     const { deps } = await createTestApp();
-    const config: SiteConfig = structuredClone(deps.config.siteConfig);
+    const config: SiteConfig = structuredClone(deps.config.current().siteConfig);
     config.sources = config.sources.filter((s) => s.id !== "stateSource");
     expect(() => snapshotCredentials(plan, config, PRINCIPAL)).toThrow(
       "snapshot: planned source not in config",

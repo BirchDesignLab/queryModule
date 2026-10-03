@@ -26,17 +26,16 @@ export function auditEmail(email: string): string | null {
 
 /**
  * Session limits (spec 5.6, SEC-005): live while now - created_at < absolute, now - updated_at <
- * idle, and the user is not disabled. updated_at is the last user-initiated activity.
+ * idle, and the user is not disabled. updated_at is the last user-initiated activity. `limits` is
+ * read at each check, so a published config version applies to the next request (ADR-0011).
  */
 export function createIdentityService(o: {
   db: Db;
   auth: Auth;
-  limits: { absoluteMinutes: number; idleMinutes: number };
+  limits: () => { absoluteMinutes: number; idleMinutes: number };
   clock: Clock;
   log: Logger;
 }): AppIdentityService {
-  const abs = o.limits.absoluteMinutes * 60_000;
-  const idle = o.limits.idleMinutes * 60_000;
   async function load(sessionId: string) {
     const rows = await o.db
       .select({
@@ -55,10 +54,14 @@ export function createIdentityService(o: {
     return rows[0] ?? null;
   }
   type Row = NonNullable<Awaited<ReturnType<typeof load>>>;
-  const live = (r: Row, now: number) =>
-    r.disabledAt === null &&
-    now - r.createdAt.getTime() < abs &&
-    now - r.updatedAt.getTime() < idle;
+  const live = (r: Row, now: number) => {
+    const { absoluteMinutes, idleMinutes } = o.limits();
+    return (
+      r.disabledAt === null &&
+      now - r.createdAt.getTime() < absoluteMinutes * 60_000 &&
+      now - r.updatedAt.getTime() < idleMinutes * 60_000
+    );
+  };
 
   return {
     async resolve(req) {

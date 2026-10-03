@@ -291,10 +291,12 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
       credential_user_id: null,
       details: {
         siteId: "example-ok",
-        configHash: first.config.configHash,
+        configHash: first.config.current().configHash,
         configSchemaVersion: CONFIG_SCHEMA_VERSION,
         coreVersion: CORE_VERSION,
-        extendsChain: ["default"],
+        // ADR-0011: the live config comes from the store, whose document is the resolved site
+        // (extends already merged), so a boot from the store extends nothing (Task 25).
+        extendsChain: [],
       },
     });
     const second = await bootstrap(env, { logSink: () => {} });
@@ -309,7 +311,7 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
     const deps = await loadDeps(env, { logSink: () => {} });
     const rows = await configLoadedRows(deps);
     deps.db.$client.close();
-    expect(deps.config.siteConfig.site.id).toBe("example-ok");
+    expect(deps.config.current().siteConfig.site.id).toBe("example-ok");
     expect(rows).toEqual([]);
   });
 

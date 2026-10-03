@@ -53,9 +53,9 @@ async function setup(o: { site?: (c: SiteConfig) => void } = {}): Promise<Setup>
   const clock = fixedClock();
   const t = await createTestApp({ clock });
   if (o.site) {
-    const siteConfig = structuredClone(t.deps.config.siteConfig);
+    const siteConfig = structuredClone(t.deps.config.current().siteConfig);
     o.site(siteConfig);
-    t.deps.config = { ...t.deps.config, siteConfig };
+    t.deps.config.swap({ ...t.deps.config.current(), siteConfig });
   }
   const userId = await t.createUser(EMAIL, PASSWORD);
   const cookie = await t.cookieFor(EMAIL, PASSWORD);
@@ -638,6 +638,7 @@ describe("acknowledge envelope and the race detector (SEC-011, spec 5.2 step 1)"
       authenticatedAt: 1_790_000_000_000,
     };
     const prepared: PreparedSubmit = {
+      config: t.deps.config.current(),
       request: {
         queryType: "VEH",
         values: { plate: PLATE },
