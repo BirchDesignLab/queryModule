@@ -4,6 +4,7 @@ import {
   checkMockCoverage,
   type Diagnostic,
   extendsOf,
+  migrateConfig,
   type RawFile,
   resolveSiteShape,
   validateResolved,
@@ -42,21 +43,24 @@ export interface FileReport {
   resolved?: unknown;
 }
 
-class Unreadable extends Error {
-  constructor(readonly at: string) {
-    super("config.unreadableFile");
-  }
-}
+/** A read through the io: a RawFile, or the file exists but cannot be read (not invalid JSON). */
+type Read = RawFile | { unreadable: true };
 
-/** Reads through the io; a file that exists but cannot be read aborts as config.unreadableFile at `at`. */
-function read(io: ConfigIo, path: string, at: string): RawFile {
+function read(io: ConfigIo, path: string): Read {
   try {
     return { ok: true, value: io.readJson(path) };
   } catch (e) {
-    if (e instanceof ConfigUnreadableError) throw new Unreadable(at);
+    if (e instanceof ConfigUnreadableError) return { unreadable: true };
     return { ok: false };
   }
 }
+const isUnreadable = (r: Read): r is { unreadable: true } => "unreadable" in r;
+const unreadableAt = (path: string, params: Diagnostic["params"] = {}): Diagnostic => ({
+  level: "error",
+  path,
+  key: "config.unreadableFile",
+  params,
+});
 
 /**
  * The files config:validate checks: the explicit ones, else the default listing.
@@ -79,35 +83,49 @@ export function checkConfigFile(
 ): FileReport {
   try {
     return check(file, io, options);
-  } catch (e) {
+  } catch {
     // Any other throw is config.schema at the root: never a stack or a message, which can echo a
     // config value (spec 5.9, #220), and the report for later files goes on (wave review G-I1).
-    const errors: Diagnostic[] =
-      e instanceof Unreadable
-        ? [{ level: "error", path: e.at, key: "config.unreadableFile", params: {} }]
-        : [{ level: "error", path: "", key: "config.schema", params: {} }];
-    return { file, errors, warnings: [] };
+    return {
+      file,
+      errors: [{ level: "error", path: "", key: "config.schema", params: {} }],
+      warnings: [],
+    };
   }
 }
 
 function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
   const configDir = resolve(dirname(file), "..");
-  const site = read(io, file, "");
-  const ext = extendsOf(site.ok ? (site.value as { extends?: unknown } | undefined) : undefined);
-  // extendsOf tolerates a non-object site; resolveSiteShape reports the real fault.
-  if (!ext.ok) return { file, errors: ext.errors, warnings: [] };
-  const base =
-    ext.id === null
-      ? undefined
-      : { id: ext.id, file: read(io, resolve(configDir, "sites", `${ext.id}.json`), "/extends") };
+  const site = read(io, file);
+  if (isUnreadable(site)) return { file, errors: [unreadableAt("")], warnings: [] };
+
+  // The base is read only after the site migrates and names it, so a migration fault is never
+  // masked by an unreadable base (#303). resolveSiteShape migrates again; migration is pure.
+  let base: { id: string; file: RawFile } | undefined;
+  if (site.ok && site.value !== undefined) {
+    const migrated = migrateConfig(site.value);
+    if (!migrated.ok) return { file, errors: [migrated.error], warnings: [] };
+    const ext = extendsOf(migrated.config);
+    if (!ext.ok) return { file, errors: ext.errors, warnings: [] };
+    if (ext.id !== null) {
+      const baseFile = read(io, resolve(configDir, "sites", `${ext.id}.json`));
+      if (isUnreadable(baseFile)) return { file, errors: [unreadableAt("/extends")], warnings: [] };
+      base = { id: ext.id, file: baseFile };
+    }
+  }
   const shape = resolveSiteShape(site, base);
   if (!shape.ok) return { file, errors: shape.errors, warnings: [], resolved: shape.merged };
   const config = shape.config;
 
+  // Every unreadable locale bundle is reported (not just the first); the rest cannot be checked.
   const locales: Record<string, RawFile> = {};
+  const unreadableLocales: Diagnostic[] = [];
   config.locales.forEach((code, i) => {
-    locales[code] = read(io, resolve(configDir, "locales", `${code}.json`), `/locales/${i}`);
+    const bundle = read(io, resolve(configDir, "locales", `${code}.json`));
+    if (isUnreadable(bundle)) unreadableLocales.push(unreadableAt(`/locales/${i}`));
+    else locales[code] = bundle;
   });
+  if (unreadableLocales.length > 0) return { file, errors: unreadableLocales, warnings: [] };
   // The loader's own pre- and post-checks, so "ok" here means the server starts (G-I1, G-I2).
   const pre = preResolvedChecks(config, locales);
   const result =
@@ -128,7 +146,11 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
     // The mock file's repo-relative posix path rides in every mock diagnostic's params: the
     // "mock" pointer is into the mock document, so a reader needs its path (review C5).
     const mockFile = toPosixRel(relative(REPO_ROOT, mockPath));
-    mockErrors = checkMockCoverage(config, read(io, mockPath, "/mock"), mockFile);
+    const mock = read(io, mockPath);
+    // An unreadable mock file does not hide the errors already found.
+    mockErrors = isUnreadable(mock)
+      ? [unreadableAt("/mock", { file: mockFile })]
+      : checkMockCoverage(config, mock, mockFile);
   }
   return {
     file,

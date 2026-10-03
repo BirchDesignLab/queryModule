@@ -13,11 +13,7 @@ export { readJsonFile, toPosixRel } from "./cli-io";
 /** Writes the migrated config; a failed write prints `<rel>: cannot write file` (never the raw error, which carries the absolute path) and returns false (#220 M1). */
 export function writeConfigFile(path: string, rel: string, config: unknown): boolean {
   try {
-    writeFileSync(
-      path,
-      `${JSON.stringify(config, null, 2)}
-`,
-    );
+    writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
     return true;
   } catch {
     console.error(`${rel}: cannot write file`);

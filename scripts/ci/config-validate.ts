@@ -41,8 +41,7 @@ export function parseValidateArgs(args: string[]): ParsedValidateArgs {
     if (!optionsDone && a.startsWith("--"))
       return {
         ok: false,
-        message: `unknown option ${a}
-${VALIDATE_USAGE}`,
+        message: `unknown option ${a}\n${VALIDATE_USAGE}`,
       };
     files.push(a);
   }
@@ -102,7 +101,7 @@ function main(): void {
 
   let failed = false;
   for (const file of targets) {
-    const report = checkConfigFile(file, io, { now: Date.now() });
+    const report = checkConfigFile(file, io);
     const rel = toPosixRel(relative(root, file));
     for (const d of report.errors)
       console.error(`ERROR ${rel} ${d.path || "/"} ${d.key} ${JSON.stringify(d.params)}`);

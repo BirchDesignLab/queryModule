@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -41,7 +41,11 @@ describe("config:migrate write guard (#220 M1)", () => {
   it("a successful write returns true", () => {
     const dir = mkdtempSync(join(tmpdir(), "qm-migrate-"));
     try {
-      expect(writeConfigFile(join(dir, "ok.json"), "ok.json", { a: 1 })).toBe(true);
+      const file = join(dir, "ok.json");
+      expect(writeConfigFile(file, "ok.json", { a: 1 })).toBe(true);
+      expect(readFileSync(file, "utf8")).toBe(
+        JSON.stringify({ a: 1 }, null, 2) + String.fromCharCode(10),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -53,5 +57,21 @@ describe("config:migrate CLI (#220 G-M-b)", () => {
     const r = spawnSync(process.execPath, [tsxCli, cli], { encoding: "utf8", cwd: root });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("usage: pnpm config:migrate <file>");
+  });
+
+  it("a config the migrations cannot take exits 1 with the diagnostic (#303 Task 9)", {
+    timeout: 20000,
+  }, () => {
+    const dir = mkdtempSync(join(tmpdir(), "qm-migrate-"));
+    try {
+      const file = join(dir, "future.json");
+      writeFileSync(file, JSON.stringify({ schemaVersion: 999 }));
+      const r = spawnSync(process.execPath, [tsxCli, cli, file], { encoding: "utf8", cwd: root });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('config.schemaVersionTooNew {"found":999,"supported":1}');
+      expect(readFileSync(file, "utf8")).toBe('{"schemaVersion":999}');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

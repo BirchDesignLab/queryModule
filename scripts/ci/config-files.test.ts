@@ -41,24 +41,35 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
       const r = checkConfigFile(cfg(rel), fsIo, { tokenNames: TOKEN_NAMES });
       expect(r.errors).toEqual([]);
       // VEH plateType (and plateColor, example-ok's own rule, #347); PRO and PROP make and
-      // caliber, PROP description (per-type rules, #346).
+      // caliber, PROP description (per-type rules, #346). Each pointer is found by rule content
+      // in the resolved config, not by a fixed rules/<n> index (#303).
       const okOnly = rel === "sites/example-ok.json";
-      expect(r.warnings).toEqual(
-        [
-          ["/queryTypes/0/rules/1/field", "plateType", "VEH"],
-          ...(okOnly ? [["/queryTypes/0/rules/3/field", "plateColor", "VEH"]] : []),
-          ["/queryTypes/2/rules/1/field", "make", "PRO"],
-          ["/queryTypes/2/rules/1/field", "make", "PROP"],
-          ["/queryTypes/2/rules/3/field", "caliber", "PRO"],
-          ["/queryTypes/2/rules/3/field", "caliber", "PROP"],
-          ["/queryTypes/2/rules/6/field", "description", "PROP"],
-        ].map(([path, field, command]) => ({
+      const resolved = r.resolved as {
+        queryTypes: { code: string; rules: { field: string; effect: string }[] }[];
+      };
+      const required = (queryType: string, field: string, command: string) => {
+        const qi = resolved.queryTypes.findIndex((q) => q.code === queryType);
+        const ri = resolved.queryTypes[qi]?.rules.findIndex(
+          (x) => x.field === field && x.effect === "require",
+        );
+        if (qi < 0 || ri === undefined || ri < 0)
+          throw new Error(`no require rule for ${queryType} ${field}`);
+        return {
           level: "warning",
-          path,
+          path: `/queryTypes/${qi}/rules/${ri}/field`,
           key: "config.conditionallyRequiredWithoutPosition",
           params: { field, command },
-        })),
-      );
+        };
+      };
+      expect(r.warnings).toEqual([
+        required("VEH", "plateType", "VEH"),
+        ...(okOnly ? [required("VEH", "plateColor", "VEH")] : []),
+        required("PRO", "make", "PRO"),
+        required("PRO", "make", "PROP"),
+        required("PRO", "caliber", "PRO"),
+        required("PRO", "caliber", "PROP"),
+        required("PRO", "description", "PROP"),
+      ]);
     });
   }
 
@@ -313,6 +324,92 @@ describe("config:validate contrast and unreadable files (Task 9)", () => {
     expect(checkConfigFile(broken, io).errors).toEqual([
       { level: "error", path: "/locales/0", key: "config.unreadableFile", params: {} },
     ]);
+  });
+});
+
+describe("config:validate unreadable files and read order (#303 Task 9)", () => {
+  const broken = cfg("sites/broken.json");
+  const withBase = (extra: Record<string, unknown>) => ({
+    schemaVersion: 1,
+    extends: "default",
+    ...extra,
+  });
+
+  it("an unreadable base is config.unreadableFile at /extends", () => {
+    const base = cfg("sites/default.json");
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return withBase({});
+        if (p === base) throw new ConfigUnreadableError();
+        return fsIo.readJson(p);
+      },
+    };
+    expect(checkConfigFile(broken, io).errors).toEqual([
+      { level: "error", path: "/extends", key: "config.unreadableFile", params: {} },
+    ]);
+  });
+
+  it("a site migration failure is reported even when the base is unreadable (base is read after migrate)", () => {
+    const base = cfg("sites/default.json");
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return { schemaVersion: 999, extends: "default" };
+        if (p === base) throw new ConfigUnreadableError();
+        return fsIo.readJson(p);
+      },
+    };
+    expect(checkConfigFile(broken, io).errors).toEqual([
+      {
+        level: "error",
+        path: "/schemaVersion",
+        key: "config.schemaVersionTooNew",
+        params: { found: 999, supported: 1 },
+      },
+    ]);
+  });
+
+  it("an unreadable mock file carries its path and does not hide the other errors", () => {
+    const site = defaultSite();
+    site.keywordSeverityStyles.info.color = "color.severity.info.bg";
+    site.keywordSeverityStyles.info.background = "color.severity.info.bg";
+    const mockFile = cfg("mock/default.json");
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return site;
+        if (p === mockFile) throw new ConfigUnreadableError();
+        return fsIo.readJson(p);
+      },
+    };
+    const r = checkConfigFile(broken, io);
+    expect(r.errors).toContainEqual({
+      level: "error",
+      path: "/mock",
+      key: "config.unreadableFile",
+      params: { file: "packages/config/mock/default.json" },
+    });
+    expect(r.errors).toContainEqual(
+      expect.objectContaining({
+        path: "/keywordSeverityStyles/info",
+        key: "config.severityContrast",
+      }),
+    );
+  });
+
+  it("a locale bundle with invalid JSON is one config.invalidJson through checkConfigFile, never also missingLocale (#220 r1-b)", () => {
+    const site = defaultSite();
+    const localeFile = cfg(`locales/${(site.locales as string[])[0]}.json`);
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return site;
+        if (p === localeFile) throw new SyntaxError("bad locale json");
+        return fsIo.readJson(p);
+      },
+    };
+    const r = checkConfigFile(broken, io);
+    expect(r.errors.filter((d) => d.path === "/locales/0")).toEqual([
+      expect.objectContaining({ level: "error", path: "/locales/0", key: "config.invalidJson" }),
+    ]);
+    expect(r.errors.some((d) => d.key === "config.missingLocale")).toBe(false);
   });
 });
 
