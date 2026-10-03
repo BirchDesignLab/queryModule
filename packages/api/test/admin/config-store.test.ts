@@ -159,8 +159,10 @@ describe("BR-001 ADR-0011 the store is the live source after the first boot", ()
     site.defaults.state = "ZZ";
     writeFileSync(file, JSON.stringify(site));
     const second = await depsLog(env);
-    expect(second.deps.config.configHash).toBe(first.deps.config.configHash);
-    expect(second.deps.config.siteConfig.defaults).toEqual(first.deps.config.siteConfig.defaults);
+    expect(second.deps.config.current().configHash).toBe(first.deps.config.current().configHash);
+    expect(second.deps.config.current().siteConfig.defaults).toEqual(
+      first.deps.config.current().siteConfig.defaults,
+    );
     const warned = second.lines.filter((l) => l.msg === "site config file ignored");
     expect(warned).toEqual([
       expect.objectContaining({
@@ -181,7 +183,7 @@ describe("BR-001 ADR-0011 the store is the live source after the first boot", ()
     site.queryTypes = "not a list";
     writeFileSync(file, JSON.stringify(site));
     const again = await depsLog(env);
-    expect(again.deps.config.siteConfig.site.id).toBe("default");
+    expect(again.deps.config.current().siteConfig.site.id).toBe("default");
     expect(again.lines.filter((l) => l.msg === "site config file ignored")).toHaveLength(1);
   });
 

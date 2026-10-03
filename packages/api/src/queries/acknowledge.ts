@@ -23,6 +23,8 @@ export async function acknowledge(
   a: { idempotencyKey: string; receivedAt: number; receivedMono: number },
 ): Promise<SubmitQueryResponse> {
   const { request, plan, pairs } = p;
+  // The hash of the snapshot prepare planned against, even if a publish swapped it since.
+  const { configHash } = p.config;
   return withTransaction(d.db, async (tx) => {
     const acknowledgedAt = d.clock.now();
     const correlationId = uuidv7(acknowledgedAt);
@@ -50,7 +52,7 @@ export async function acknowledge(
           selectedSourceIds: selectedOf(part, request.sourceIds),
           droppedSourceIds: part.droppedSourceIds,
           skippedReason: part.skipReasons ?? null,
-          configHash: d.config.configHash,
+          configHash,
           idempotencyKey: part.partId === 0 ? a.idempotencyKey : null,
           submittedAt: a.receivedAt,
         });
@@ -91,7 +93,7 @@ export async function acknowledge(
             dispatchedSourceIds: part.sourceIds,
             droppedSourceIds: part.droppedSourceIds,
             plateOnly: part.mode === "plateOnly",
-            configHash: d.config.configHash,
+            configHash,
             ...(part.fieldMapApplied ? { fieldMapApplied: part.fieldMapApplied } : {}),
           },
         });

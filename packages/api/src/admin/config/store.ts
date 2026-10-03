@@ -63,7 +63,7 @@ async function versionRows(db: Db, siteId: string) {
 }
 
 /** The stored JSON text as a value; a parse error is fixed text, never the stored content. */
-function parseStored(text: string, label: string): unknown {
+export function parseStored(text: string, label: string): unknown {
   try {
     return JSON.parse(text);
   } catch {

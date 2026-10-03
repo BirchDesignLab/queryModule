@@ -33,9 +33,10 @@ export async function loadDeps(
   const deps = await buildDeps({ env, secrets, ...o });
   // Checker ruling 09-28-26 (T19 spec:CV1): SEC-005 MFA is not enforced anywhere until M3 P1
   // (#216), so a site that requires it must not start. #216 removes this guard.
-  if (deps.config.siteConfig.auth.mfaRequired !== false) {
+  const config = deps.config.current();
+  if (config.siteConfig.auth.mfaRequired !== false) {
     const reason = "site config auth.mfaRequired is set, but MFA is not enforced until #216";
-    deps.logger.error("startup refused", { reason, site: deps.config.siteConfig.site.id });
+    deps.logger.error("startup refused", { reason, site: config.siteConfig.site.id });
     deps.db.$client.close();
     throw new StartupRefusedError(reason);
   }
@@ -52,7 +53,7 @@ export async function bootstrap(
 ): Promise<AppDeps> {
   const deps = await loadDeps(processEnv, o);
   try {
-    const c = deps.config;
+    const c = deps.config.current();
     await withTransaction(deps.db, (tx) =>
       deps.audit.record(tx, {
         type: "configLoaded",
@@ -71,7 +72,7 @@ export async function bootstrap(
     // Fixed reason, like the MFA guard: the error itself is not logged, so no value can leak.
     deps.logger.error("startup refused", {
       reason: "configLoaded audit write failed",
-      site: deps.config.siteConfig.site.id,
+      site: deps.config.current().siteConfig.site.id,
     });
     deps.db.$client.close();
     throw e;
@@ -104,10 +105,11 @@ export async function startServer(
   }
   const ws = attachWebSocket(server, deps);
   const port = (server.address() as AddressInfo).port;
+  const live = deps.config.current();
   deps.logger.info("listening", {
     port,
-    site: deps.config.siteConfig.site.id,
-    configHash: deps.config.configHash,
+    site: live.siteConfig.site.id,
+    configHash: live.configHash,
   });
   return {
     port,

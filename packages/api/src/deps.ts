@@ -21,6 +21,25 @@ import { createLogger, type Logger } from "./log/logger";
 import type { AuditService } from "./seams";
 import type { Secrets } from "./secrets";
 
+/**
+ * The live config snapshot (ADR-0011 item 3). Readers call current() at use and keep that one
+ * snapshot for the rest of their work; swap replaces it atomically for the next reader.
+ */
+export interface ConfigHolder {
+  current(): LoadedConfig;
+  swap(next: LoadedConfig): void;
+}
+
+export function createConfigHolder(initial: LoadedConfig): ConfigHolder {
+  let live = initial;
+  return {
+    current: () => live,
+    swap(next) {
+      live = next;
+    },
+  };
+}
+
 export interface AppDeps {
   env: DeployEnv;
   db: Db;
@@ -29,7 +48,7 @@ export interface AppDeps {
   audit: AuditService;
   limiter: RateLimiter;
   logger: Logger;
-  config: LoadedConfig;
+  config: ConfigHolder;
   clock: Clock;
   /** Durations for audit details (spec 4.7). */
   monotonic: MonotonicClock;
@@ -96,7 +115,7 @@ export async function buildDeps(o: {
       monotonic: systemMonotonic,
       dataKey: s.dataKey,
       logger,
-      config,
+      config: createConfigHolder(config),
       identity: createIdentityService({ db, auth, limits, clock, log: logger }),
       audit: createAuditService(clock),
       limiter: createRateLimiter(db, clock),
