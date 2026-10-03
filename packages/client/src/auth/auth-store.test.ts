@@ -19,4 +19,9 @@ describe("D-A26 forced password change flag (SEC-005)", () => {
     store.getState().setSignedIn(USER);
     expect(store.getState().passwordChangeRequired).toBe(false);
   });
+  it("a session user who must change the password is flagged at sign-in, before any API call (#505 T34 M1)", () => {
+    const store = createAuthStore();
+    store.getState().setSignedIn({ ...USER, mustChangePassword: true });
+    expect(store.getState().passwordChangeRequired).toBe(true);
+  });
 });

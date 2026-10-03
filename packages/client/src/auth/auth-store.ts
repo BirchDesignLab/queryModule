@@ -25,8 +25,15 @@ export function createAuthStore(): AuthStore {
     signOutFailed: false,
     passwordChangeRequired: false,
     setPasswordChangeRequired: (passwordChangeRequired) => set({ passwordChangeRequired }),
+    // D-A26: the session itself says whether the password must change, so the shell never renders
+    // before the first 403 passwordChangeRequired (#505 T34 M1); that 403 still sets it too.
     setSignedIn: (user) =>
-      set({ status: "signedIn", user, signOutFailed: false, passwordChangeRequired: false }),
+      set({
+        status: "signedIn",
+        user,
+        signOutFailed: false,
+        passwordChangeRequired: user.mustChangePassword === true,
+      }),
     setSignedOut: () => set({ status: "signedOut", user: null, passwordChangeRequired: false }),
     setSignOutFailed: (signOutFailed) => set({ signOutFailed }),
   }));

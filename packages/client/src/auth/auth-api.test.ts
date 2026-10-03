@@ -120,6 +120,15 @@ describe("BR-002 standalone login through Better Auth (spec 5.6)", () => {
     });
     expect(parseSessionUser("nope")).toBeNull();
   });
+  it("parseSessionUser carries Better Auth's mustChangePassword only when true (D-A26)", () => {
+    const user = { id: "u", email: "x@querymodule.test", role: "user" };
+    expect(parseSessionUser({ user: { ...user, mustChangePassword: true } })).toEqual({
+      ...user,
+      mustChangePassword: true,
+    });
+    expect(parseSessionUser({ user: { ...user, mustChangePassword: false } })).toEqual(user);
+    expect(parseSessionUser({ user: { ...user, mustChangePassword: "yes" } })).toEqual(user);
+  });
 });
 
 describe("D-A26 change-password through Better Auth (SEC-005)", () => {

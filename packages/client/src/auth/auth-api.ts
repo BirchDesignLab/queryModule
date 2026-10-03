@@ -4,6 +4,8 @@ export interface SessionUser {
   id: string;
   email: string;
   role: string | null;
+  /** D-A26: present (true) only while an admin-created user keeps the temporary password. */
+  mustChangePassword?: true;
 }
 
 export type AuthErrorCode = "unauthenticated" | "rateLimited" | "unavailable" | "forbidden";
@@ -43,9 +45,15 @@ export function parseSessionUser(value: unknown): SessionUser | null {
   if (typeof value !== "object" || value === null) return null;
   const user = (value as { user?: unknown }).user;
   if (typeof user !== "object" || user === null) return null;
-  const { id, email, role } = user as { id?: unknown; email?: unknown; role?: unknown };
+  const { id, email, role, mustChangePassword } = user as {
+    id?: unknown;
+    email?: unknown;
+    role?: unknown;
+    mustChangePassword?: unknown;
+  };
   if (typeof id !== "string" || typeof email !== "string") return null;
-  return { id, email, role: typeof role === "string" ? role : null };
+  const parsed: SessionUser = { id, email, role: typeof role === "string" ? role : null };
+  return mustChangePassword === true ? { ...parsed, mustChangePassword: true } : parsed;
 }
 
 function failure(code: AuthErrorCode, retryAfterSeconds: number | null = null): SignInResult {
