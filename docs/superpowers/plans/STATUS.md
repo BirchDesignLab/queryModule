@@ -39,7 +39,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 |---|---|---|---|---|
 | Linux laptop | Host lane (host steps only) | M1 P3 | idle (15b83d2 promoted, smoke green) | 09-30-26 |
 | Windows 11 | B (`C:\git\queryModule`) | M1 P3 | paused | 10-01-26 14:38 |
-| Windows 11 | A (`C:\git\queryModule-a4`; `-a` retired for P3) | M1 P3 | paused (next: AC1) | 10-01-26 14:38 |
+| Windows 11 | A (`C:\git\queryModule-a4`; M1 finish, single session, no A/B lanes or manager) | M1 P3 | paused (next: AC2) | 10-03-26 06:54 |
 | Windows 11 | Checker (`C:\git\queryModule-checker-p3`) | M1 P3 | running | 10-01-26 14:38 |
 | Cloud (claude.ai/code) | UI lanes, ordinary tier only | M1 P3 | paused until AC2 | 09-30-26 |
 
@@ -51,13 +51,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: #349 Versioned config store and startup from it (BR-001, SEC-010, ADR-0011)
-- Branch / PR: none (AC1 not started)
-- Last green: `pnpm verify` at d2450cd on main
-- Next step: "Step 25.1: Failing tests: empty store boots from the file and holds version 1"
+- Issue: #351 Admin config API (Task 27), then #352 (Task 28), #353 (Task 29): wave AC2
+- Branch / PR: none (AC2 not started); AC1 #498, AM1 #500, chore #501 merged
+- Last green: `pnpm verify` at 48f17eb (#500) on Windows
+- Next step: rule the Task 28 forced-password-change mechanism, then AC2 briefs and one sdd-wave (Tasks 27 critical, 28 gate, 29 critical behaviour)
 - Blocked by: none
-- Local-only state: none
-- Notes: AC1 is Tasks 25 and 26 (critical) and carries the gate rider #488 (#338 and `login-stats` proposed); AC2 then unblocks A-D3, the users UI (#359) and the core-loop e2e (#362).
+- Local-only state: `.superpowers/sdd/track-a-p3/handover.md` (start brief), `progress.md` ledger
+- Notes: M1 finishes as one session (developer 10-02-26). AC2 carries #497 C-m1 (migration 0008), the #351 comment (MFA refusal, configPublished, supersede first) and signInCount, lastSignInAt, distinctIps on the admin user list. Then AC3, #377, M1 exit (ADR-0012, Task 17).
 
 ### Track B
 
