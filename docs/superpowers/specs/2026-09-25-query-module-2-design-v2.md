@@ -638,7 +638,7 @@ Auth events (Better Auth hooks, the session service and the sweeper, 5.2, 5.6):
 | Type | Required `details` |
 |---|---|
 | `loginSucceeded` | `method` (`password`\|`totp`\|`hostJwt`), `sessionId`, `clientIp` |
-| `loginFailed` | `targetUserId` (nullable), `reason` (`badPassword`\|`unknownAccount`\|`mfaFailed`\|`lockedOut`\|`hostJwtInvalid`\|`accountDisabled`), `clientIp`, `lockoutUntil?` (set when this failure starts a lockout). `accountDisabled` (AC2 review C-I1, 10-03-26): a sign-in to a disabled account, refused before the password is checked; it counts toward the lockout like a bad password |
+| `loginFailed` | `targetUserId` (nullable), `reason` (`badPassword`\|`unknownAccount`\|`mfaFailed`\|`lockedOut`\|`hostJwtInvalid`\|`accountDisabled`), `clientIp`, `lockoutUntil?` (set when this failure starts a lockout). `accountDisabled` (AC2 review C-I1, 10-03-26): a sign-in to a disabled account, refused whatever the password (Better Auth checks it as for any account and any session it creates is discarded, rr:N-I1); it counts toward the lockout like a bad password |
 | `logout` | `sessionId` |
 | `sessionRevoked` | `sessionId`, `reason` (`userDisabled`\|`admin`\|`expired`); `expired` is written by the sweeper for idle or absolute expiry (5.2) |
 | `mfaEnrolled` | `method: "totp"` |
