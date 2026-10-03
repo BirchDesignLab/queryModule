@@ -17,3 +17,9 @@ overrides:
   # GHSA-67mh-4wv8-2f99: drizzle-kit pins the deprecated @esbuild-kit/* loaders,
   # which pin esbuild@0.18.20. Force the patched esbuild used elsewhere in the repo.
   "@esbuild-kit/core-utils>esbuild": "^0.28.2"
+auditConfig:
+  ignoreGhsas:
+    # GHSA-86w9-cpqp-85rv: node-forge <=1.4.0, no patched version (10-02-26). Only path is
+    # apps/mobile > expo > @expo/cli (dev tooling; API and web do not use it). This one ID
+    # only; remove with #492 once node-forge > 1.4.0 ships or Expo drops it.
+    - GHSA-86w9-cpqp-85rv
