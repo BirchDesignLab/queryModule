@@ -8,8 +8,8 @@
     "delegation": false,
     "resultHide": false,
     "adminAudit": false,
-    "adminConfig": false,
-    "adminUsers": false
+    "adminConfig": true,
+    "adminUsers": true
   },
   "personas": [
     { "key": "dispatch", "labelKey": "persona.dispatch", "layout": "dispatch" },

@@ -10,7 +10,7 @@ import { API, adminConfigApp, type Caller, errorOf } from "../helpers/admin-conf
  * on POST /api/v1/queries. ADR-0011 item 6, BR-001.
  */
 
-const DEFAULT_SITE = resolve(import.meta.dirname, "../../../config/sites/default.json");
+const FLAGS_OFF_SITE = resolve(import.meta.dirname, "../../../config/test/flags-off.json");
 
 /** One request per config route that passes access; `ok` is its status for an allowed caller. */
 const CASES = [
@@ -63,7 +63,7 @@ describe("ADR-0011 item 6 admin config route access", () => {
   });
 
   it("every caller gets 404 notFound while adminConfig is off", async () => {
-    const a = await adminConfigApp({ siteConfig: DEFAULT_SITE });
+    const a = await adminConfigApp({ siteConfig: FLAGS_OFF_SITE });
     for (const c of CASES) {
       for (const who of ["anonymous", "user", "implementer", "admin"] as const) {
         const r = await a.call(who, c.method, c.path, "body" in c ? {} : undefined);
