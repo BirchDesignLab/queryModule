@@ -27,7 +27,7 @@ const site = SiteConfigSchema.parse(
 const configOf = (n: number): ClientSiteConfig => toClientSiteConfig(site, hash(n));
 
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }));
