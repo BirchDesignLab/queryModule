@@ -21,7 +21,7 @@ const CONFIG = toClientSiteConfig(
 );
 
 const server = setupServer();
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -126,5 +126,12 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
     expect(q.queryKey).toEqual(["config"]);
     expect(q.staleTime).toBe(Number.POSITIVE_INFINITY);
     await expect(q.queryFn()).resolves.toEqual(CONFIG);
+  });
+});
+
+describe("msw 3: unhandled requests still fail the suite (onUnhandledFrame)", () => {
+  it("an unhandled request is refused by msw's error strategy, not sent to the network", async () => {
+    const e = await fetch(`${BASE}/__unhandled__`).catch((x: unknown) => x);
+    expect(String((e as Error).cause)).toContain('"error" strategy');
   });
 });

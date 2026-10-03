@@ -1,6 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAuthApi, parseSessionUser } from "./auth-api.js";
 
 const BASE = "http://api.test";
@@ -28,7 +28,7 @@ const server = setupServer(
   http.post(`${BASE}/api/v1/auth/sign-out`, () => HttpResponse.json({ success: true })),
 );
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => {
   server.resetHandlers();
   seen.length = 0;
@@ -38,9 +38,14 @@ afterAll(() => server.close());
 describe("BR-002 standalone login through Better Auth (spec 5.6)", () => {
   const api = createAuthApi({ baseUrl: BASE });
   it("signs in and returns the session user", async () => {
+    // msw 3 hands handlers a rebuilt Request without cache or credentials, so read them where sent.
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     expect(await api.signInEmail(USER.email, PASSWORD)).toEqual({ ok: true, user: USER });
-    expect(seen[0]?.cache).toBe("no-store");
-    expect(seen[0]?.credentials).toBe("include");
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({
+      cache: "no-store",
+      credentials: "include",
+    });
+    fetchSpy.mockRestore();
   });
   it("maps a bad password to a generic unauthenticated result", async () => {
     expect(await api.signInEmail(USER.email, "wrong")).toEqual({

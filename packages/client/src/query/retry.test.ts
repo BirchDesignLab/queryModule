@@ -166,7 +166,7 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
 describe("retryRequest with the real submit controller: the Idempotency-Key rule (spec 6.7)", () => {
   const BASE = "http://api.test";
   const server = setupServer();
-  beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+  beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
   afterEach(() => {
     server.resetHandlers();
     vi.useRealTimers();
