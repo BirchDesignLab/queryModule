@@ -97,7 +97,7 @@ export type UserPreference = z.infer<typeof UserPreferenceSchema>;
 
 const error = (description: string): RouteResponse => ({ description, schema: ApiErrorSchema });
 
-/** Admin console routes (ADR-0011): planned until Tasks 27 and 28 mount them. */
+/** Admin console routes (ADR-0011): config routes live (Task 27); user routes planned (Task 28). */
 const adminErrors = {
   401: error("No session"),
   403: error("Role not allowed, or missing X-Requested-With on a write (forbidden)"),
@@ -202,7 +202,7 @@ const ROUTE_DEFS = [
       202: { description: "Acknowledged", schema: SubmitQueryResponseSchema },
       400: error("Malformed body or failed validation or plan (validationFailed, errors[])"),
       401: error("No session"),
-      403: error("Query type or source not allowed for the caller (forbidden)"),
+      403: error("Role, query type or source not allowed for the caller (forbidden)"),
       409: error("Stale config hash (configHashMismatch, currentConfigHash)"),
       413: error("Body over the size cap (payloadTooLarge)"),
       429: error("Rate limited (rateLimited, Retry-After)"),
@@ -217,7 +217,7 @@ const ROUTE_DEFS = [
     summary: "The live config version and the shared draft, with documents",
     access: "configEditor",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminConfig",
     requiresRequestedWith: false,
     responses: {
@@ -232,7 +232,7 @@ const ROUTE_DEFS = [
     summary: "Save the shared draft; the base must be the live version",
     access: "configEditor",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminConfig",
     requiresRequestedWith: true,
     request: { body: PutDraftBodySchema },
@@ -251,7 +251,7 @@ const ROUTE_DEFS = [
     summary: "Validate a document by the spec 5.8 chain; diagnostics by JSON pointer",
     access: "configEditor",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminConfig",
     requiresRequestedWith: true,
     request: { body: ValidateConfigBodySchema },
@@ -269,14 +269,14 @@ const ROUTE_DEFS = [
     summary: "Publish the draft and activate it; refused on any validation error",
     access: "configEditor",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminConfig",
     requiresRequestedWith: true,
     request: { body: PublishConfigBodySchema },
     responses: {
       200: { description: "Published version", schema: ConfigVersionSchema },
       400: error(
-        "Malformed body, or the draft fails validation; call validate for diagnostics (validationFailed)",
+        "Malformed body, or the draft fails validation (validationFailed, errors[] keys and paths; validate gives every diagnostic)",
       ),
       404: error("No such draft (notFound)"),
       409: error("The draft base is not the live version (draftConflict)"),
@@ -290,7 +290,7 @@ const ROUTE_DEFS = [
     summary: "Version history, newest first; never rewritten",
     access: "configEditor",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminConfig",
     requiresRequestedWith: false,
     responses: {
@@ -305,14 +305,17 @@ const ROUTE_DEFS = [
     summary: "Publish an older version as a new version",
     access: "configEditor",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminConfig",
     requiresRequestedWith: true,
     request: { params: VersionParamsSchema },
     responses: {
       200: { description: "New published version", schema: ConfigVersionSchema },
-      400: error("Malformed version (validationFailed)"),
-      404: error("No such version (notFound)"),
+      400: error(
+        "Malformed version, or its document fails validation now (validationFailed, errors[])",
+      ),
+      404: error("No such published or superseded version (notFound)"),
+      409: error("The live version changed during the rollback (draftConflict)"),
       ...adminErrors,
     },
   },
@@ -323,7 +326,7 @@ const ROUTE_DEFS = [
     summary: "One version document as JSON (git round trip)",
     access: "configEditor",
     since: "m1",
-    status: "planned",
+    status: "live",
     feature: "adminConfig",
     requiresRequestedWith: false,
     request: { params: VersionParamsSchema },

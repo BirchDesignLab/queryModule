@@ -249,7 +249,7 @@
             }
           },
           "403": {
-            "description": "Query type or source not allowed for the caller (forbidden)",
+            "description": "Role, query type or source not allowed for the caller (forbidden)",
             "content": {
               "application/json": {
                 "schema": {
@@ -525,7 +525,7 @@
             }
           },
           "400": {
-            "description": "Malformed body, or the draft fails validation; call validate for diagnostics (validationFailed)",
+            "description": "Malformed body, or the draft fails validation (validationFailed, errors[] keys and paths; validate gives every diagnostic)",
             "content": {
               "application/json": {
                 "schema": {
@@ -645,7 +645,7 @@
             }
           },
           "400": {
-            "description": "Malformed version (validationFailed)",
+            "description": "Malformed version, or its document fails validation now (validationFailed, errors[])",
             "content": {
               "application/json": {
                 "schema": {
@@ -675,7 +675,17 @@
             }
           },
           "404": {
-            "description": "No such version (notFound)",
+            "description": "No such published or superseded version (notFound)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The live version changed during the rollback (draftConflict)",
             "content": {
               "application/json": {
                 "schema": {

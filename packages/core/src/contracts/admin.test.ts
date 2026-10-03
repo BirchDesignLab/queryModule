@@ -148,7 +148,8 @@ describe("ADR-0011 admin routes (SEC-014)", () => {
       const config = r.path.startsWith("/api/v1/admin/config");
       expect(r.access, r.id).toBe(config ? "configEditor" : "admin");
       expect(r.feature, r.id).toBe(config ? "adminConfig" : "adminUsers");
-      expect(r.status, r.id).toBe("planned");
+      // Task 27 mounts the config routes; the user routes stay planned until Task 28.
+      expect(r.status, r.id).toBe(config ? "live" : "planned");
       expect(r.since, r.id).toBe("m1");
       expect(r.responses[401], r.id).toBeDefined();
       expect(r.responses[403], r.id).toBeDefined();

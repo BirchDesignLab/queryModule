@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { ADMIN_CONFIG_LARGE_BODY_PATHS, mountAdminConfigRoutes } from "./admin/config/routes";
 import { mountAuthRoutes } from "./auth/routes";
 import type { AppDeps } from "./deps";
 import { apiError } from "./http/errors";
@@ -46,12 +47,19 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
       ],
     }),
   );
-  app.use("/api/v1/*", bodyCap(), requireRequestedWith());
+  // The admin config draft and validate routes apply their own larger cap (ADR-0011 item 2).
+  const apiCap = bodyCap();
+  app.use(
+    "/api/v1/*",
+    (c, next) => (ADMIN_CONFIG_LARGE_BODY_PATHS.has(c.req.path) ? next() : apiCap(c, next)),
+    requireRequestedWith(),
+  );
   mountAuthRoutes(app, d);
   mountPublicRoutes(app, d);
   mountConfigRoute(app, d);
   mountQueriesRoute(app, d);
   mountPreferencesRoute(app, d);
+  mountAdminConfigRoutes(app, d);
   mountWeb(app, d);
   app.notFound((c) => apiError(c, "notFound"));
   app.onError((err, c) => {

@@ -72,8 +72,9 @@ export const ValidateConfigResponseSchema = z.strictObject({
 });
 
 /**
- * A publish refused on validation answers 400 validationFailed without diagnostics: the builder
- * validates first and shows the diagnostics at their controls (Task 33).
+ * A publish refused on validation answers 400 validationFailed with errors[] (each a message key
+ * and its path, never a value); the builder validates first and shows the full diagnostics at
+ * their controls (Task 33).
  */
 export const PublishConfigBodySchema = z.strictObject({ draftVersion: z.int().min(1) });
 
