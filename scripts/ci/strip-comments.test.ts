@@ -49,6 +49,24 @@ describe("stripComments (item 7)", () => {
     expect(stripComments("x = [/[/]//]; // real\n")).toBe("x = [/[/]//]; \n");
   });
 
+  it("reads a slash after postfix ++ or -- as division, not a regex (#220 G-M1)", () => {
+    const tagged = 'it("[A1] x", () => {})';
+    expect(stripComments(`x = i++ / 2; // ${tagged}\n`)).toBe("x = i++ / 2; \n");
+    expect(stripComments(`x = i-- / 2; // ${tagged}\n`)).toBe("x = i-- / 2; \n");
+  });
+
+  it("reads a slash after a keyword as a regex start (#220 G-M2)", () => {
+    for (const kw of ["return", "typeof", "case", "in", "of", "void", "delete", "throw"]) {
+      const source = `${kw} /a\\//; it("[A1] x", () => {})\n`;
+      expect(stripComments(source)).toContain('it("[A1] x"');
+    }
+    // An identifier that merely ends in a keyword is still an operand: division.
+    expect(stripComments("x = noreturn / 2; // real\n")).toBe("x = noreturn / 2; \n");
+    // G-m5: a property named like a keyword is an operand, so the slash divides.
+    expect(stripComments("x = obj.in / 2; // real\n")).toBe("x = obj.in / 2; \n");
+    expect(stripComments("x = o.delete / 2; // real\n")).toBe("x = o.delete / 2; \n");
+  });
+
   it("keeps the issue's exact case, an escaped slash inside a regex literal (#220 r1-a)", () => {
     const source = 'const u = /a\\//; it("[A1] x", () => {})\nconst v = "b";\n';
     const out = stripComments(source);

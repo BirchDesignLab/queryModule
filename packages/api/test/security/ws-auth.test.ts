@@ -234,13 +234,13 @@ describe("WebSocket upgrade and heartbeat (spec 5.3, 10.3)", () => {
     const gate = new Promise<void>((r) => {
       release = r;
     });
-    const original = t.deps.identity.resolve.bind(t.deps.identity);
+    const original = t.deps.identity.resolveGated.bind(t.deps.identity);
     let first = true;
     const slowDeps = {
       ...t.deps,
       identity: {
         ...t.deps.identity,
-        resolve: async (req: Request) => {
+        resolveGated: async (req: Request) => {
           if (first) {
             first = false;
             await gate;
@@ -300,7 +300,7 @@ describe("WebSocket upgrade rate limit (D-A9, spec 5.3; #225, #315)", () => {
 
   it("limits upgrades per IP: once the bucket is full the next gets 429 with Retry-After", async () => {
     const { t, s, cookie } = await setup();
-    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    const resolve = vi.spyOn(t.deps.identity, "resolveGated");
     // Fill the bucket straight through the limiter (no 60 sockets), then one real upgrade.
     for (let i = 0; i < WS_UPGRADE_LIMIT.limit; i++)
       await t.deps.limiter.hit(
@@ -360,17 +360,17 @@ describe("WebSocket upgrade rate limit (D-A9, spec 5.3; #225, #315)", () => {
       await expect(status(s.wsUrl, { origin: FOREIGN })).resolves.toMatchObject({ status: 429 });
     });
   });
-  it("a foreign Origin never reaches identity.resolve", async () => {
+  it("a foreign Origin never reaches identity.resolveGated", async () => {
     const { t, s, cookie } = await setup();
-    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    const resolve = vi.spyOn(t.deps.identity, "resolveGated");
     await expect(open(s.wsUrl, { origin: "https://evil.example.test", cookie })).rejects.toThrow(
       "HTTP 403",
     );
     expect(resolve).not.toHaveBeenCalled();
   });
-  it("a missing Origin with only a cookie never reaches identity.resolve", async () => {
+  it("a missing Origin with only a cookie never reaches identity.resolveGated", async () => {
     const { t, s, cookie } = await setup();
-    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    const resolve = vi.spyOn(t.deps.identity, "resolveGated");
     await expect(open(s.wsUrl, { cookie })).rejects.toThrow("HTTP 403");
     expect(resolve).not.toHaveBeenCalled();
   });
@@ -382,7 +382,7 @@ describe("WebSocket upgrade rate limit (D-A9, spec 5.3; #225, #315)", () => {
       body: JSON.stringify({ email: EMAIL, password: PW }),
     });
     const token = r.headers.get("set-auth-token") ?? "";
-    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    const resolve = vi.spyOn(t.deps.identity, "resolveGated");
     const ws = await open(s.wsUrl, { authorization: `Bearer ${token}` });
     ws.send(JSON.stringify(hello));
     expect(await nextMsg(ws)).toMatchObject({ type: "welcome" });

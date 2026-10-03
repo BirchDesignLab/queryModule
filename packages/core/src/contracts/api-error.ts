@@ -14,6 +14,8 @@ export const API_ERROR_CODES = [
   "draftConflict",
   /** ADR-0011 item 8: the change would leave the site with no enabled admin. */
   "lastAdmin",
+  /** Task 28 (D-A26): an admin-created user must change the temporary password first. */
+  "passwordChangeRequired",
   "payloadTooLarge",
   "rateLimited",
   "internal",
@@ -34,6 +36,7 @@ export const API_ERROR_HTTP_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   delegationCredentialsMissing: 409,
   draftConflict: 409,
   lastAdmin: 409,
+  passwordChangeRequired: 403,
   payloadTooLarge: 413,
   rateLimited: 429,
   internal: 500,

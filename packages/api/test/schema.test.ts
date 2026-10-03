@@ -112,6 +112,20 @@ describe("user_preference columns (spec 5.5)", () => {
   });
 });
 
+describe("user.must_change_password (Task 28, D-A26, migration 0008)", () => {
+  it("is a not-null boolean that defaults to false, so existing users are not forced", async () => {
+    const db = await migrated();
+    const col = (await db.$client.execute("PRAGMA table_info(user)")).rows.find(
+      (r) => r.name === "must_change_password",
+    );
+    expect(col && { notnull: Number(col.notnull), dflt: String(col.dflt_value) }).toEqual({
+      notnull: 1,
+      dflt: "false",
+    });
+    expect(user.mustChangePassword.default).toBe(false);
+  });
+});
+
 describe("query tables (spec 5.5, SEC-013)", () => {
   const shared = sharedMigrated();
   const columns = async (table: string) =>

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { BOUNDED_ID_PATTERN, SYSTEM_ACTOR } from "@querymodule/core/contracts";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import {
   bootstrapDocument,
   ConfigLoadError,
@@ -109,6 +109,19 @@ export async function loadLiveConfig(db: Db, bootstrap: ConfigBootstrap): Promis
     published = row;
     seeded = true;
   }
+  // C-m4: a rollback's own row is a draft only between its insert and activate()'s commit, both
+  // in one request; one left at boot is from an interrupted rollback, never history. Remove it.
+  await withTransaction(db, async (tx) => {
+    await tx
+      .delete(siteConfigVersion)
+      .where(
+        and(
+          eq(siteConfigVersion.siteId, siteId),
+          eq(siteConfigVersion.status, "draft"),
+          isNotNull(siteConfigVersion.rollbackOf),
+        ),
+      );
+  });
   const label = `store site ${siteId} version ${published.version}`;
   const document = parseStored(published.document, label);
   const config = await loadConfigDocument(document, {

@@ -173,8 +173,11 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     const bearer = /^Bearer \S+$/.test(req.headers.authorization ?? "");
     const originOk = origin === undefined ? bearer : allowed.has(origin);
     if (!originOk) return reject(socket, 403);
-    const principal = await d.identity.resolve(toRequest(req, d.env.publicOrigin));
-    if (!principal) return reject(socket, 401);
+    const resolved = await d.identity.resolveGated(toRequest(req, d.env.publicOrigin));
+    if (!resolved) return reject(socket, 401);
+    // D-A26: a temporary password must be changed before any non-auth route, sockets included.
+    if (resolved.mustChangePassword) return reject(socket, 403);
+    const principal = resolved.principal;
     // wss.handleUpgrade attaches its own socket "error" listener once it takes over; remove
     // ours immediately beforehand (it only removes its own listener, so leaving ours attached
     // through the handshake would be harmless too, but this keeps ownership unambiguous).

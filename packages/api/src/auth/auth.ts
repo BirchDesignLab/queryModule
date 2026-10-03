@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, isAPIError } from "better-auth/api";
 import { bearer } from "better-auth/plugins";
 import type { Db } from "../db/client";
 import { authSchema } from "../db/schema";
@@ -39,6 +39,28 @@ const stripWebBearerToken = {
           if (remaining.length > 0)
             headers.set("access-control-expose-headers", remaining.join(", "));
           else headers.delete("access-control-expose-headers");
+        }),
+      },
+    ],
+  },
+};
+
+/**
+ * D-A26: a successful change-password ends the forced password change. The flag is cleared only
+ * after Better Auth has stored the new hash (a failed change, which returns an APIError, keeps
+ * it); the session is the one that authenticated the change.
+ */
+const clearMustChangePassword = {
+  id: "clear-must-change-password",
+  hooks: {
+    after: [
+      {
+        matcher: (ctx: { path?: string }) => ctx.path === "/change-password",
+        handler: createAuthMiddleware(async (ctx) => {
+          if (isAPIError(ctx.context.returned)) return;
+          const userId = ctx.context.session?.user.id;
+          if (userId === undefined) return;
+          await ctx.context.internalAdapter.updateUser(userId, { mustChangePassword: false });
         }),
       },
     ],
@@ -204,6 +226,8 @@ export function createAuth(o: {
       additionalFields: {
         role: { type: "string", defaultValue: "user", input: false },
         identitySource: { type: "string", defaultValue: "local", input: false },
+        // D-A26: set for an admin-created user; cleared by change-password (see above).
+        mustChangePassword: { type: "boolean", defaultValue: false, input: false },
       },
     },
     // Better Auth's own rate limiter off; ours is Task 16.
@@ -215,7 +239,7 @@ export function createAuth(o: {
     // 5.3). requireSignature: true rejects a raw, unsigned session token presented as a bearer
     // token (SEC-005); stripWebBearerToken must come after bearer() in this array so its
     // `hooks.after` runs after bearer's and can remove what bearer just set (see above).
-    plugins: [bearer({ requireSignature: true }), stripWebBearerToken],
+    plugins: [bearer({ requireSignature: true }), stripWebBearerToken, clearMustChangePassword],
     advanced: {
       useSecureCookies: false,
       cookies: {

@@ -24,11 +24,19 @@ export const LoginSucceededDetailsSchema = z.strictObject({
 
 /**
  * SEC-005, SEC-010: a refused sign-in. targetUserId is null for an unknown account; lockoutUntil
- * is set on the failure that starts a lockout (spec 5.6).
+ * is set on the failure that starts a lockout (spec 5.6). accountDisabled: a sign-in to a disabled
+ * account, refused before the password is checked (D-A26, C-I1), so it states no password fact.
  */
 export const LoginFailedDetailsSchema = z.strictObject({
   targetUserId: BoundedIdSchema.nullable(),
-  reason: z.enum(["badPassword", "unknownAccount", "mfaFailed", "lockedOut", "hostJwtInvalid"]),
+  reason: z.enum([
+    "badPassword",
+    "unknownAccount",
+    "mfaFailed",
+    "lockedOut",
+    "hostJwtInvalid",
+    "accountDisabled",
+  ]),
   clientIp: ClientIpSchema,
   lockoutUntil: EpochMsSchema.optional(),
 });

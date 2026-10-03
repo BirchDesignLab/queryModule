@@ -189,8 +189,8 @@ describe("FR-064 spec 6.7 submits across an activation", () => {
     const read = holder.current.bind(holder);
     const current = vi.spyOn(holder, "current");
     const identity = t.deps.identity;
-    const resolve = identity.resolve.bind(identity);
-    const resolved = vi.spyOn(identity, "resolve").mockImplementationOnce(async (req) => {
+    const resolve = identity.resolveGated.bind(identity);
+    const resolved = vi.spyOn(identity, "resolveGated").mockImplementationOnce(async (req) => {
       const p = await resolve(req);
       current.mockImplementationOnce(() => {
         vi.spyOn(db, "transaction").mockImplementationOnce(async (fn, config) => {

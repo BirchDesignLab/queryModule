@@ -11,17 +11,19 @@ import { clearSessionCookie } from "./auth";
 import { auditEmail, BACKGROUND_HEADER } from "./identity";
 import { AUTH_LIMITS, clientIp } from "./rate-limit";
 
-type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut";
+type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut" | "accountDisabled";
 
 // The only Better Auth paths this app forwards to (critic:C3): every other Better Auth path
 // (revoke-session, revoke-sessions, revoke-other-sessions, change-password, sign-up, ...) would
 // end or change a session with no sessionRevoked/logout audit row and no eventBus.endSession,
 // breaking spec 5.6/4.7/SEC-010. Add a path here only once it has its own audit and
-// eventBus.endSession wiring, like sign-in/email and sign-out below.
+// eventBus.endSession wiring, like sign-in/email and sign-out below. change-password (D-A26)
+// ends no session: changePassword() refuses revokeOtherSessions, the one option that would.
 const ALLOWED_AUTH_PATHS = new Set([
   "/api/v1/auth/sign-in/email",
   "/api/v1/auth/sign-out",
   "/api/v1/auth/get-session",
+  "/api/v1/auth/change-password",
 ]);
 
 export function mountAuthRoutes(app: Hono<AppEnv>, d: AppDeps): void {
@@ -38,6 +40,7 @@ export function mountAuthRoutes(app: Hono<AppEnv>, d: AppDeps): void {
       if (!gate.allowed) return rateLimited(c, gate.retryAfterSeconds);
       if (c.req.path === "/api/v1/auth/sign-in/email") return signIn(c, d, ip);
       if (c.req.path === "/api/v1/auth/sign-out") return signOut(c, d);
+      if (c.req.path === "/api/v1/auth/change-password") return changePassword(c, d);
     }
     return d.auth.handler(c.req.raw);
   });
@@ -65,6 +68,33 @@ async function auditFailure(
   );
 }
 
+/** Better Auth's error code on a non-2xx sign-in response, or undefined. */
+async function signInErrorCode(res: Response): Promise<unknown> {
+  return (
+    (await res
+      .clone()
+      .json()
+      .catch(() => null)) as { code?: unknown } | null
+  )?.code;
+}
+
+/** A 401 that means wrong email or password, not an internal failure inside Better Auth. */
+async function isBadCredentials(res: Response): Promise<boolean> {
+  return (await signInErrorCode(res)) === "INVALID_EMAIL_OR_PASSWORD";
+}
+
+async function internalSignInFailure(
+  c: Context<AppEnv>,
+  d: AppDeps,
+  res: Response,
+): Promise<Response> {
+  const code = await signInErrorCode(res);
+  d.logger.error("sign-in failed inside Better Auth", {
+    code: typeof code === "string" ? code : "unknown",
+  });
+  return apiError(c, "internal");
+}
+
 async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Response> {
   // critic:C1 / critic:CV1: Better Auth's sign-in/email also accepts
   // application/x-www-form-urlencoded (better-call parses both), which would give email "" here
@@ -75,7 +105,7 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
   const body = (await c.req.raw
     .clone()
     .json()
-    .catch(() => null)) as { email?: unknown } | null;
+    .catch(() => null)) as { email?: unknown; password?: unknown } | null;
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) return apiError(c, "validationFailed");
   const key = `login:acct:${email}`;
@@ -86,6 +116,22 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     return rateLimited(c, (locked - d.clock.now()) / 1000);
   }
   const res = await d.auth.handler(c.req.raw);
+  // A disabled account never gets a session (D-A26). It runs through Better Auth's own handler
+  // like any account (rr:N-I1): the same body validation (a malformed body is the same 400, with
+  // no lockout count) and the same credential check (no timing difference, G-I2). A session that
+  // a right password created is deleted before answering, and its cookie never leaves; every
+  // credential outcome answers Better Auth's bad-credentials 401, counts toward the account
+  // lockout (the same 429 after N failures) and audits accountDisabled (C-I1).
+  if (target?.disabledAt != null && (res.ok || res.status === 401)) {
+    // A disabled user holds no session (disable deleted them), so drop every one by user id.
+    if (res.ok) await d.db.delete(session).where(eq(session.userId, target.id));
+    else if (!(await isBadCredentials(res))) {
+      return internalSignInFailure(c, d, res);
+    }
+    const { lockedUntil } = await d.limiter.recordFailure(key, AUTH_LIMITS.accountFailures);
+    await auditFailure(d, target.id, "accountDisabled", ip, lockedUntil);
+    return c.json({ code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" }, 401);
+  }
   if (res.ok) {
     const token = ((await res.clone().json()) as { token?: string }).token ?? "";
     const s = (
@@ -107,18 +153,7 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     // #212 G-M2: only bad credentials count toward the lockout and audit as badPassword or
     // unknownAccount. Any other 401 (for example FAILED_TO_CREATE_SESSION after a correct
     // password) is an internal failure: no lockout increment and no loginFailed row.
-    const code = (
-      (await res
-        .clone()
-        .json()
-        .catch(() => null)) as { code?: unknown } | null
-    )?.code;
-    if (code !== "INVALID_EMAIL_OR_PASSWORD") {
-      d.logger.error("sign-in failed inside Better Auth", {
-        code: typeof code === "string" ? code : "unknown",
-      });
-      return apiError(c, "internal");
-    }
+    if (!(await isBadCredentials(res))) return internalSignInFailure(c, d, res);
     const { lockedUntil } = await d.limiter.recordFailure(key, AUTH_LIMITS.accountFailures);
     await auditFailure(
       d,
@@ -129,6 +164,32 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     );
   }
   return res;
+}
+
+/**
+ * D-A26: Better Auth's change-password with revokeOtherSessions would delete the user's other
+ * sessions with no sessionRevoked row and no eventBus.endSession (SEC-010), so that option is
+ * refused. The session must be live by the app's own limits, idle clock included (G-m2: Better
+ * Auth checks only the absolute limit). A new password equal to the current one is refused
+ * (G-I4): it would clear the forced-change flag while the admin-issued password stays valid.
+ * Every other body goes to Better Auth, which verifies the current password and clears
+ * must_change_password through the hook in auth.ts.
+ */
+async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
+  if (!(await d.identity.resolveGated(c.req.raw))) return apiError(c, "unauthenticated");
+  const body = (await c.req.raw
+    .clone()
+    .json()
+    .catch(() => null)) as {
+    revokeOtherSessions?: unknown;
+    currentPassword?: unknown;
+    newPassword?: unknown;
+  } | null;
+  if (body === null || typeof body !== "object" || body.revokeOtherSessions !== undefined)
+    return apiError(c, "validationFailed");
+  if (typeof body.newPassword === "string" && body.newPassword === body.currentPassword)
+    return apiError(c, "validationFailed");
+  return d.auth.handler(c.req.raw);
 }
 
 type SignOutOutcome = "deleted" | "alreadyGone" | "rowSurvived";

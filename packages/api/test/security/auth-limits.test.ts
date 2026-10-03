@@ -42,6 +42,74 @@ describe("SEC-005 auth limits and lockout", () => {
       reason: "lockedOut",
     });
   });
+  it("G-I2/C-I1: a disabled account locks like an active one, hashes, and audits accountDisabled", async () => {
+    const t = await createTestApp();
+    const id = await t.createUser(EMAIL, PW);
+    await t.deps.db.$client.execute({
+      sql: "UPDATE user SET disabled_at = 1 WHERE id = ?",
+      args: [id],
+    });
+    const ctx = await t.deps.auth.$context;
+    const verify = vi.spyOn(ctx.password, "verify");
+    // Even the right password: a disabled account never gets a session (D-A26).
+    for (let i = 0; i < 10; i++) {
+      const r = await t.signIn(EMAIL, i % 2 === 0 ? PW : "wrong-password-000");
+      expect(r.status).toBe(401);
+      expect(r.headers.getSetCookie()).toEqual([]);
+      expect(((await r.json()) as { code?: string }).code).toBe("INVALID_EMAIL_OR_PASSWORD");
+    }
+    // Better Auth's own credential check runs, as for an active account (no timing oracle, rr:N-I1).
+    expect(verify).toHaveBeenCalledTimes(10);
+    const sessions = await t.deps.db.$client.execute({
+      sql: "SELECT count(*) AS n FROM session WHERE user_id = ?",
+      args: [id],
+    });
+    expect(Number(sessions.rows[0]?.n)).toBe(0);
+    const failed = await t.auditRows("loginFailed");
+    expect(failed).toHaveLength(10);
+    for (const f of failed)
+      expect(f.details).toMatchObject({ targetUserId: id, reason: "accountDisabled" });
+    expect(typeof failed[9]?.details.lockoutUntil).toBe("number");
+    expect(failed[8]?.details).not.toHaveProperty("lockoutUntil");
+    const locked = await t.signIn(EMAIL, PW);
+    expect(locked.status).toBe(429);
+    expect(ApiErrorSchema.parse(await locked.json()).error.code).toBe("rateLimited");
+    expect((await t.auditRows("loginFailed")).at(-1)?.details).toMatchObject({
+      reason: "lockedOut",
+    });
+  });
+  it("rr:N-I1: a malformed sign-in body answers the same for a disabled and an active account", async () => {
+    const t = await createTestApp();
+    const active = "active@example.test";
+    await t.createUser(active, PW);
+    const id = await t.createUser(EMAIL, PW);
+    await t.deps.db.$client.execute({
+      sql: "UPDATE user SET disabled_at = 1 WHERE id = ?",
+      args: [id],
+    });
+    const post = (body: unknown) =>
+      t.request("/api/v1/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const bodies = (email: string): unknown[] => [
+      { email },
+      { email, password: 12345 },
+      { email, password: "x".repeat(1000) },
+      { email: ` ${email}`, password: PW },
+    ];
+    const statuses = async (email: string) => {
+      const out: number[] = [];
+      for (const b of bodies(email)) out.push((await post(b)).status);
+      return out;
+    };
+    expect(await statuses(EMAIL)).toEqual(await statuses(active));
+    // None of these counts toward the disabled account's lockout or writes a loginFailed row.
+    expect(
+      (await t.auditRows("loginFailed")).filter((f) => f.details.targetUserId === id),
+    ).toHaveLength(0);
+  });
   it("unknown accounts lock the same way (no enumeration)", async () => {
     const t = await createTestApp();
     for (let i = 0; i < 10; i++) await t.signIn("nobody@example.test", "wrong-password-000");
@@ -154,7 +222,7 @@ describe("SEC-005 auth limits and lockout", () => {
     expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("validationFailed");
     expect(await t.auditRows("loginFailed")).toHaveLength(0);
   });
-  it("critic:C3 returns 404 for Better Auth session-revocation and password-change paths", async () => {
+  it("critic:C3 returns 404 for Better Auth session-revocation paths (change-password is allowed since D-A26)", async () => {
     const t = await createTestApp();
     await t.createUser(EMAIL, PW);
     const cookie = await t.cookieFor(EMAIL, PW);
@@ -162,7 +230,6 @@ describe("SEC-005 auth limits and lockout", () => {
       "/api/v1/auth/revoke-session",
       "/api/v1/auth/revoke-sessions",
       "/api/v1/auth/revoke-other-sessions",
-      "/api/v1/auth/change-password",
     ]) {
       const r = await t.request(path, {
         method: "POST",

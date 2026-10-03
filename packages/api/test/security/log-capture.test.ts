@@ -1,11 +1,18 @@
 // packages/api/test/security/log-capture.test.ts
+import {
+  AdminUserListSchema,
+  AdminUserSessionListSchema,
+  CreateUserResponseSchema,
+} from "@querymodule/core/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
-import { toBetterAuthLogger } from "../../src/auth/auth";
+import { sessionCookieName, toBetterAuthLogger } from "../../src/auth/auth";
 import type { RequestDeks } from "../../src/keys/request-keys";
 import { createLogger } from "../../src/log/logger";
+import { grantRole } from "../../src/ops/grant-role";
+import { ALL_ON, API, adminConfigApp, withSiteConfig } from "../helpers/admin-config";
 import { TEST_SECRETS } from "../helpers/fixture";
-import { createTestApp, startTestServer } from "../helpers/test-app";
+import { createTestApp, startTestServer, type TestApp } from "../helpers/test-app";
 
 // A pass-through spy on createRequestKeys: T1 zeroes the DEKs when it finishes, so the bytes
 // are copied here as they are made, for the submit case below to look for in every sink.
@@ -171,6 +178,117 @@ describe("SEC-006 log capture: POST /api/v1/queries (M1 P2 submit case)", () => 
       ),
     ];
     for (const f of forbidden) expect(all.includes(f), `leaked: ${f.slice(0, 6)}...`).toBe(false);
+  });
+});
+
+/** Every audit row's details as one string, to show a value reached no audit sink either. */
+async function auditText(t: TestApp): Promise<string> {
+  const r = await t.deps.db.$client.execute("SELECT type, details FROM audit_event ORDER BY id");
+  return JSON.stringify(r.rows);
+}
+
+describe("SEC-010 SEC-014 log capture: admin routes (Task 29, spec 5.9)", () => {
+  it("config publish: the changed pointer is audited, the document value reaches no sink", async () => {
+    const mark = "ZZLOGCANARYAGENCY";
+    const a = await adminConfigApp();
+    const doc = withSiteConfig(await a.exportVersion(1), (s) => {
+      s.defaults = { ...(s.defaults as Record<string, string>), agency: mark };
+    });
+    const put = await a.call("implementer", "PUT", `${API}/draft`, {
+      baseVersion: 1,
+      document: doc,
+    });
+    expect(put.status).toBe(200);
+    expect((await a.call("implementer", "POST", `${API}/validate`, { document: doc })).status).toBe(
+      200,
+    );
+    expect(
+      (await a.call("implementer", "POST", `${API}/publish`, { draftVersion: 2 })).status,
+    ).toBe(200);
+    expect(a.t.deps.config.current().siteConfig.defaults.agency).toBe(mark);
+
+    const published = await a.t.auditRows("configPublished");
+    expect(published).toHaveLength(1);
+    expect(published[0]?.details.changedPointers).toEqual(["/siteConfig/defaults/agency"]);
+    const sinks = [...a.t.logLines, ...stray].join("\n");
+    expect(a.t.logLines.length).toBeGreaterThan(0);
+    expect(sinks.includes(mark), "document value in a log line").toBe(false);
+    expect((await auditText(a.t)).includes(mark), "document value in an audit row").toBe(false);
+  });
+
+  it("user create: the temporary password is in the create response only, in no sink", async () => {
+    const a = await adminConfigApp();
+    const r = await a.call("admin", "POST", "/api/v1/admin/users", {
+      email: "fresh@example.test",
+      name: "Fresh",
+      role: "user",
+    });
+    expect(r.status).toBe(201);
+    const { user, temporaryPassword } = CreateUserResponseSchema.parse(await r.json());
+    expect(temporaryPassword.length).toBeGreaterThanOrEqual(16);
+    // The temporary password flows through sign-in, a refused data route and change-password.
+    await a.t.signIn("fresh@example.test", `${temporaryPassword}x`);
+    const cookie = await a.t.cookieFor("fresh@example.test", temporaryPassword);
+    expect((await a.t.request("/api/v1/config", { headers: { cookie } })).status).toBe(403);
+    const changed = await a.t.request("/api/v1/auth/change-password", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json", "x-requested-with": "querymodule" },
+      body: JSON.stringify({ currentPassword: temporaryPassword, newPassword: PW }),
+    });
+    expect(changed.status).toBe(200);
+    const list = await (await a.call("admin", "GET", "/api/v1/admin/users")).text();
+    const sessions = await (
+      await a.call("admin", "GET", `/api/v1/admin/users/${user.id}/sessions`)
+    ).text();
+
+    const sinks = [...a.t.logLines, ...stray].join("\n");
+    expect(a.t.logLines.length).toBeGreaterThan(0);
+    expect(sinks.includes(temporaryPassword), "temporary password in a log line").toBe(false);
+    expect((await auditText(a.t)).includes(temporaryPassword), "in an audit row").toBe(false);
+    expect(`${list}${sessions}`.includes(temporaryPassword), "in a later response").toBe(false);
+  });
+
+  it("sign-in stats: the client IP is counted, never shown in a response or a log line", async () => {
+    // Production trusts CF-Connecting-IP (cloudflared ingress), so the audit records this value.
+    const ip = "203.0.113.77";
+    const t = await createTestApp({ env: { NODE_ENV: "production", SITE_CONFIG: ALL_ON } });
+    const adminId = await t.createUser("admin@example.test", PW);
+    await grantRole(t.deps, { email: "admin@example.test", role: "admin", change: "granted" });
+    const userId = await t.createUser("dispatcher@example.test", PW);
+    await t.signIn("dispatcher@example.test", WRONG, { "cf-connecting-ip": ip });
+    expect((await t.signIn("dispatcher@example.test", PW, { "cf-connecting-ip": ip })).status).toBe(
+      200,
+    );
+    const signed = await t.signIn("admin@example.test", PW, { "cf-connecting-ip": ip });
+    const cookie = signed.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0] ?? "")
+      .find((c) => c.startsWith(`${sessionCookieName(t.env)}=`));
+    expect(cookie).toBeDefined();
+    const get = (path: string) =>
+      t.request(path, {
+        headers: {
+          cookie: cookie ?? "",
+          "x-requested-with": "querymodule",
+          "cf-connecting-ip": ip,
+        },
+      });
+    const listRes = await get("/api/v1/admin/users");
+    expect(listRes.status).toBe(200);
+    const listText = await listRes.text();
+    const users = AdminUserListSchema.parse(JSON.parse(listText)).users;
+    expect(users.find((u) => u.id === userId)).toMatchObject({ signInCount: 1, distinctIps: 1 });
+    const sessionsRes = await get(`/api/v1/admin/users/${adminId}/sessions`);
+    expect(sessionsRes.status).toBe(200);
+    const sessionsText = await sessionsRes.text();
+    expect(AdminUserSessionListSchema.parse(JSON.parse(sessionsText)).sessions).toHaveLength(1);
+    // The IP is in the audit (the stats source), so its absence below is meaningful.
+    expect((await t.auditRows("loginSucceeded"))[0]?.details.clientIp).toBe(ip);
+
+    const sinks = [...t.logLines, ...stray].join("\n");
+    expect(t.logLines.length).toBeGreaterThan(0);
+    expect(sinks.includes(ip), "IP value in a log line").toBe(false);
+    expect(`${listText}${sessionsText}`.includes(ip), "IP value in a response").toBe(false);
   });
 });
 

@@ -315,7 +315,7 @@ export interface components {
         ApiError: {
             error: {
                 /** @enum {string} */
-                code: "validationFailed" | "unauthenticated" | "stepUpRequired" | "mfaEnrollmentRequired" | "forbidden" | "notFound" | "configHashMismatch" | "delegationCredentialsMissing" | "draftConflict" | "lastAdmin" | "payloadTooLarge" | "rateLimited" | "internal" | "unavailable";
+                code: "validationFailed" | "unauthenticated" | "stepUpRequired" | "mfaEnrollmentRequired" | "forbidden" | "notFound" | "configHashMismatch" | "delegationCredentialsMissing" | "draftConflict" | "lastAdmin" | "passwordChangeRequired" | "payloadTooLarge" | "rateLimited" | "internal" | "unavailable";
                 params?: {
                     [key: string]: string | number;
                 };
@@ -913,6 +913,9 @@ export interface components {
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
+                signInCount: number;
+                lastSignInAt: number | null;
+                distinctIps: number;
             }[];
         };
         createAdminUser201: {
@@ -926,6 +929,9 @@ export interface components {
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
+                signInCount: number;
+                lastSignInAt: number | null;
+                distinctIps: number;
             };
             temporaryPassword: string;
         };
@@ -947,6 +953,9 @@ export interface components {
                 disabled: boolean;
                 mustChangePassword: boolean;
                 createdAt: number;
+                signInCount: number;
+                lastSignInAt: number | null;
+                distinctIps: number;
             };
             sessionsRevoked: number;
         };
@@ -960,6 +969,9 @@ export interface components {
             disabled: boolean;
             mustChangePassword: boolean;
             createdAt: number;
+            signInCount: number;
+            lastSignInAt: number | null;
+            distinctIps: number;
         };
         setAdminUserRoleBody: {
             /** @enum {string} */
@@ -1205,7 +1217,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description Query type or source not allowed for the caller (forbidden) */
+            /** @description Role, query type or source not allowed for the caller (forbidden) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1450,7 +1462,7 @@ export interface operations {
                     "application/json": components["schemas"]["publishAdminConfig200"];
                 };
             };
-            /** @description Malformed body, or the draft fails validation; call validate for diagnostics (validationFailed) */
+            /** @description Malformed body, or the draft fails validation (validationFailed, errors[] keys and paths; validate gives every diagnostic) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1555,7 +1567,7 @@ export interface operations {
                     "application/json": components["schemas"]["rollbackAdminConfig200"];
                 };
             };
-            /** @description Malformed version (validationFailed) */
+            /** @description Malformed version, or its document fails validation now (validationFailed, errors[]) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1582,8 +1594,17 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description No such version (notFound) */
+            /** @description No such published or superseded version (notFound) */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description The live version changed during the rollback (draftConflict) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

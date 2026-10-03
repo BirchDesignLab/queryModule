@@ -34,6 +34,13 @@ describe("SEC-010 auth audit details", () => {
     ).toBe(false);
     expect(s.safeParse({ targetUserId: "u", reason: "typo", clientIp: "x" }).success).toBe(false);
   });
+  it("loginFailed states a disabled-account attempt as accountDisabled (C-I1, spec 4.7)", () => {
+    const s = AUDIT_DETAILS_SCHEMAS.loginFailed;
+    expect(
+      s.safeParse({ targetUserId: "u", reason: "accountDisabled", clientIp: "x", lockoutUntil: 1 })
+        .success,
+    ).toBe(true);
+  });
   it("logout requires sessionId", () => {
     expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({ sessionId: SID }).success).toBe(true);
     expect(AUDIT_DETAILS_SCHEMAS.logout.safeParse({}).success).toBe(false);

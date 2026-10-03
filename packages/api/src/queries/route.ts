@@ -1,6 +1,7 @@
 import { type SubmitQueryResponse, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
 import type { Hono } from "hono";
 import type { AppDeps } from "../deps";
+import { apiError } from "../http/errors";
 import { requireSession } from "../http/session";
 import type { AppEnv } from "../http/types";
 import { acknowledge } from "./acknowledge";
@@ -28,10 +29,12 @@ export function lostIdempotencyRace(e: unknown): boolean {
 /**
  * POST /api/v1/queries (spec 5.2 steps 1 to 4), mounted after the body cap and the
  * X-Requested-With check. Nothing from the body is logged; any other throw reaches
- * app.onError as 500 internal, a T1 failure only as a SubmitTransactionError.
+ * app.onError as 500 internal, a T1 failure only as a SubmitTransactionError. The implementer
+ * role is config only (ADR-0011 item 6, checker ruling 09-29-26): 403 before anything is read.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
   app.post("/api/v1/queries", requireSession(d.identity), async (c) => {
+    if (c.get("principal").role === "implementer") return apiError(c, "forbidden");
     const a = await admitSubmit(c, d);
     if (a.kind === "reject") return a.response;
     if (a.kind === "replay") return c.json(a.body, 202);

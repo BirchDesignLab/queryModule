@@ -119,7 +119,8 @@ export class ConfigLoadError extends Error {
   constructor(
     readonly file: string,
     readonly path: string,
-    reason: string,
+    /** A message key (config.*) or fixed text; never config content (spec 5.9). */
+    readonly reason: string,
   ) {
     super(`config ${file} at ${path || "/"}: ${reason}`);
     this.name = "ConfigLoadError";
@@ -162,11 +163,20 @@ async function readRaw(file: string, siteFile: string, path: string): Promise<Ra
   }
 }
 
+/** A mock source where ALLOW_MOCK_SOURCES is not true (spec 5.4 Kind). */
+const MOCK_NOT_ALLOWED = "config.mockSourcesNotAllowed";
+
 function firstError(file: string, errors: Diagnostic[]): ConfigLoadError {
   const d = errors[0];
   // Keys and pointers only: params can carry config-derived text (spec 5.9).
-  return new ConfigLoadError(file, d?.path ?? "", d?.key ?? "config.schema");
+  const reason = d?.key === MOCK_NOT_ALLOWED ? "mock sources need ALLOW_MOCK_SOURCES=true" : d?.key;
+  return new ConfigLoadError(file, d?.path ?? "", reason ?? "config.schema");
 }
+
+/** The chain's outcome: the loaded config, or every diagnostic of the first failing step. */
+export type ChainResult =
+  | { ok: true; config: LoadedConfig }
+  | { ok: false; errors: Diagnostic[]; warnings: Diagnostic[] };
 
 /** Where the spec 5.8 chain reads its inputs: the site files, or a stored ConfigDocument. */
 interface ChainSource {
@@ -182,20 +192,25 @@ interface ChainSource {
 
 /**
  * Spec 5.8 steps 1 to 6 on one source: migrate, merge any base, strict parse, locale bundles,
- * validateSiteConfig, contrast and colour checks, mock coverage, then the config hash. Throws
- * ConfigLoadError with keys and pointers only (spec 5.9).
+ * validateSiteConfig, contrast and colour checks, mock coverage, then the config hash. Stops at
+ * the first step with errors and answers all of that step's diagnostics (keys, pointers and
+ * params; the caller decides what leaves the process). An unreadable file still throws.
  */
-async function runChain(
+async function checkChain(
   src: ChainSource,
   o: { allowMockSources: boolean; now: number },
-): Promise<LoadedConfig> {
-  const { label } = src;
+): Promise<ChainResult> {
+  const fail = (errors: Diagnostic[], warnings: Diagnostic[] = []): ChainResult => ({
+    ok: false,
+    errors,
+    warnings,
+  });
   const ext = extendsOf(src.site.ok ? src.site.value : undefined);
-  if (!ext.ok) throw firstError(label, ext.errors);
+  if (!ext.ok) return fail(ext.errors);
   const base =
     ext.id === null || !src.readBase ? undefined : { id: ext.id, file: await src.readBase(ext.id) };
   const shape = resolveSiteShape(src.site, base);
-  if (!shape.ok) throw firstError(label, shape.errors);
+  if (!shape.ok) return fail(shape.errors);
   const siteConfig = shape.config;
 
   const rawLocales: Record<string, RawFile> = {};
@@ -203,7 +218,7 @@ async function runChain(
     rawLocales[locale] = await src.readLocale(locale, i);
 
   const pre = preResolvedChecks(siteConfig, rawLocales);
-  if (pre.length > 0) throw firstError(label, pre);
+  if (pre.length > 0) return fail(pre);
 
   let result: ReturnType<typeof validateResolved>;
   try {
@@ -215,27 +230,26 @@ async function runChain(
     });
   } catch {
     // Never surface a raw error: its message can echo a config value (spec 5.9).
-    throw new ConfigLoadError(label, "", "config.schema");
+    return fail([{ level: "error", path: "", key: "config.schema", params: {} }]);
   }
   const { errors, warnings } = result;
-  if (errors.length > 0) throw firstError(label, errors);
+  if (errors.length > 0) return fail(errors, warnings);
   const colour = colourTokenChecks(siteConfig);
-  if (colour.length > 0) throw firstError(label, colour);
+  if (colour.length > 0) return fail(colour, warnings);
 
   const mockIndex = siteConfig.sources.findIndex((s) => s.kind === "mock");
   if (mockIndex >= 0) {
     if (!o.allowMockSources)
-      throw new ConfigLoadError(
-        label,
-        `/sources/${mockIndex}/kind`,
-        "mock sources need ALLOW_MOCK_SOURCES=true",
+      return fail(
+        [{ level: "error", path: `/sources/${mockIndex}/kind`, key: MOCK_NOT_ALLOWED, params: {} }],
+        warnings,
       );
     const mockErrors = checkMockCoverage(
       siteConfig,
       await src.readMock(siteConfig.site.id),
       `${siteConfig.site.id}.json`,
     );
-    if (mockErrors.length > 0) throw firstError(label, mockErrors);
+    if (mockErrors.length > 0) return fail(mockErrors, warnings);
   }
 
   const locales: Record<string, Record<string, unknown>> = {};
@@ -244,15 +258,28 @@ async function runChain(
   const configHash = createHash("sha256").update(canonicalJson(siteConfig)).digest("hex");
   const fieldKeys = [...new Set(siteConfig.queryTypes.flatMap((q) => q.fields.map((f) => f.key)))];
   return {
-    siteConfig,
-    configHash,
-    clientConfig: toClientSiteConfig(siteConfig, configHash),
-    configDir: src.configDir,
-    fieldKeys,
-    locales,
-    extendsChain: shape.extendsChain,
-    warnings,
+    ok: true,
+    config: {
+      siteConfig,
+      configHash,
+      clientConfig: toClientSiteConfig(siteConfig, configHash),
+      configDir: src.configDir,
+      fieldKeys,
+      locales,
+      extendsChain: shape.extendsChain,
+      warnings,
+    },
   };
+}
+
+/** The chain as a loader: throws ConfigLoadError with keys and pointers only (spec 5.9). */
+async function runChain(
+  src: ChainSource,
+  o: { allowMockSources: boolean; now: number },
+): Promise<LoadedConfig> {
+  const r = await checkChain(src, o);
+  if (!r.ok) throw firstError(src.label, r.errors);
+  return r.config;
 }
 
 /** The config root a site file sits in: its locales, mock and sibling sites. */
@@ -305,26 +332,38 @@ export async function bootstrapDocument(
   return { config, document };
 }
 
+interface DocumentOptions {
+  label: string;
+  configDir: string;
+  allowMockSources: boolean;
+  now: number;
+}
+
 /**
- * ADR-0011 item 2: a stored document through the full spec 5.8 chain, never trusted unvalidated.
- * The strict ConfigDocument parse comes first; the label overlay applies over the bundled locale
- * files in configDir; the mock is the document's own. label names the site and version.
+ * ADR-0011 items 2 and 5: a config document through the full spec 5.8 chain, answering the
+ * diagnostics instead of throwing. The strict ConfigDocument parse comes first (its pointers
+ * are into the document); the chain's pointers are into siteConfig, as validateSiteConfig's in
+ * the browser, and into /mock for the mock. The label overlay applies over the bundled locale
+ * files in configDir; the mock is the document's own.
  */
-export async function loadConfigDocument(
+export async function checkConfigDocument(
   document: unknown,
-  o: { label: string; configDir: string; allowMockSources: boolean; now: number },
-): Promise<LoadedConfig> {
+  o: DocumentOptions,
+): Promise<ChainResult> {
   const parsed = ConfigDocumentSchema.safeParse(document);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new ConfigLoadError(
-      o.label,
-      pointer(...(issue?.path ?? []).map((s) => String(s))),
-      "config.documentSchema",
-    );
-  }
+  if (!parsed.success)
+    return {
+      ok: false,
+      errors: parsed.error.issues.map((issue) => ({
+        level: "error",
+        path: pointer(...issue.path.map((s) => String(s))),
+        key: "config.documentSchema",
+        params: {},
+      })),
+      warnings: [],
+    };
   const doc = parsed.data;
-  return runChain(
+  return checkChain(
     {
       label: o.label,
       configDir: o.configDir,
@@ -346,4 +385,18 @@ export async function loadConfigDocument(
     },
     o,
   );
+}
+
+/**
+ * ADR-0011 item 2: a stored document through the full spec 5.8 chain, never trusted unvalidated.
+ * Throws ConfigLoadError at the first error (keys and pointers only); label names the site and
+ * version.
+ */
+export async function loadConfigDocument(
+  document: unknown,
+  o: DocumentOptions,
+): Promise<LoadedConfig> {
+  const r = await checkConfigDocument(document, o);
+  if (!r.ok) throw firstError(o.label, r.errors);
+  return r.config;
 }
