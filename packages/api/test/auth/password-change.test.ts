@@ -6,7 +6,7 @@ import { startTestServer } from "../helpers/test-app";
 
 /*
  * Task 28 (D-A26, developer ruling 10-03-26): an admin-created user must change the temporary
- * password before any non-auth route (SEC-005). While user.must_change_password is true every
+ * password before any non-auth route. While user.must_change_password is true every
  * /api/v1 data route and the WebSocket upgrade answer 403 passwordChangeRequired; Better Auth's
  * own sign-in, sign-out, get-session and change-password stay open.
  */

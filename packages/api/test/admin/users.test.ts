@@ -13,9 +13,9 @@ import { startTestServer } from "../helpers/test-app";
 
 /*
  * Task 28 (ADR-0011 item 8, D-A26): user administration. Admin only behind the adminUsers
- * feature; every change writes exactly its audit row in the same transaction (SEC-010); disable
- * revokes sessions and closes their sockets (SEC-005); no password, hash, token or IP value is
- * returned or logged (spec 5.9, SEC-014).
+ * feature; every change writes exactly its audit row in the same transaction; disable
+ * revokes sessions and closes their sockets; no password, hash, token or IP value is
+ * returned or logged (spec 5.9).
  */
 
 const API = "/api/v1/admin/users";
@@ -190,7 +190,7 @@ describe("create user", () => {
     expect((await errorOf(r)).code).toBe("validationFailed");
   });
 
-  it("rolls the user back when the audit row cannot be written (SEC-010)", async () => {
+  it("rolls the user back when the audit row cannot be written", async () => {
     const { a } = await setup();
     await a.t.deps.db.$client.execute(
       "CREATE TRIGGER test_no_audit BEFORE INSERT ON audit_event WHEN NEW.type = 'userCreated' BEGIN SELECT RAISE(ABORT, 'test'); END",

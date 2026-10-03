@@ -33,7 +33,7 @@ async function bodyOf<T extends z.ZodType>(c: Context<AppEnv>, schema: T) {
 /**
  * The admin user routes (ADR-0011 item 8; contracts in core admin.ts and routes.ts): admin only,
  * behind the adminUsers feature. Responses carry no password, hash, token or IP value, and the
- * one-time password appears only in the create response (SEC-014).
+ * one-time password appears only in the create response (ADR-0011 item 8, D-A26; spec 5.9).
  */
 export function mountAdminUserRoutes(app: Hono<AppEnv>, d: AppDeps): void {
   const guard = adminGuard(d, "adminUsers", ["admin"]);

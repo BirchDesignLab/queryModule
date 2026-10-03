@@ -15,7 +15,7 @@ import { loginStatsByUser, type UserSignInStats } from "../../ops/login-stats";
 import { actorOf, type Principal } from "../../seams";
 
 /*
- * User administration (ADR-0011 item 8, D-A26, SEC-005, SEC-010, SEC-014). Each change runs in
+ * User administration (ADR-0011 item 8, D-A26). Each change runs in
  * one transaction with its audit row (AuditService through the same tx); the sessions a change
  * ends are closed through the EventBus only after it commits. Nothing here logs: no password,
  * hash, token, address or IP value reaches a log line or a response (spec 5.9).
