@@ -3,20 +3,27 @@ import { ConfigLoadError } from "../../src/config/load";
 import { API, adminConfigApp, errorOf, withSiteConfig } from "../helpers/admin-config";
 
 /*
- * ADR-0011 items 3 and 5, SEC-010: activate() can still refuse after publish or rollback has
+ * ADR-0011 items 3, 5 and 7: activate() can still refuse after publish or rollback has
  * validated (a save, publish or rollback committed in between). The refusal maps to an API
  * answer, leaves the old snapshot live and writes no audit row; a rollback removes the version
  * row it inserted (still a draft, never history).
  */
 
-const refuse = vi.hoisted(() => ({ next: undefined as Error | undefined }));
+const refuse = vi.hoisted(() => ({
+  next: undefined as Error | undefined,
+  before: undefined as (() => Promise<void>) | undefined,
+}));
 vi.mock("../../src/admin/config/activate", async (importOriginal) => {
   const m = await importOriginal<typeof import("../../src/admin/config/activate")>();
   return {
-    activate: (...args: Parameters<typeof m.activate>) => {
+    activate: async (...args: Parameters<typeof m.activate>) => {
       const e = refuse.next;
+      const before = refuse.before;
       refuse.next = undefined;
-      return e ? Promise.reject(e) : m.activate(...args);
+      refuse.before = undefined;
+      if (e) throw e;
+      if (before) await before();
+      return m.activate(...args);
     },
   };
 });
@@ -34,7 +41,7 @@ async function withDraft() {
   return a;
 }
 
-describe("SEC-010 ADR-0011 activate refusals after validation", () => {
+describe("ADR-0011 items 3 and 5 activate refusals after validation", () => {
   it("publish: a live version that moved is 409 draftConflict; nothing changes", async () => {
     const a = await withDraft();
     const hash = a.t.deps.config.current().configHash;
@@ -45,6 +52,27 @@ describe("SEC-010 ADR-0011 activate refusals after validation", () => {
     expect(a.t.deps.config.current().configHash).toBe(hash);
     expect(await a.t.auditRows("configPublished")).toEqual([]);
     expect((await a.versionRows()).map((v) => v.status)).toEqual(["published", "draft"]);
+  });
+
+  it("publish: a draft saved in place after validation is 409; the edit stays a draft", async () => {
+    const a = await withDraft();
+    const hash = a.t.deps.config.current().configHash;
+    const edited = withSiteConfig(await a.exportVersion(1), (s) => {
+      s.defaults = { state: "OK", agency: "OTHERPD" };
+    });
+    refuse.before = async () => {
+      const r = await a.call("admin", "PUT", `${API}/draft`, { baseVersion: 1, document: edited });
+      expect(r.status).toBe(200);
+    };
+    const r = await a.call("admin", "POST", `${API}/publish`, { draftVersion: 2 });
+    expect(r.status).toBe(409);
+    expect((await errorOf(r)).code).toBe("draftConflict");
+    expect(a.t.deps.config.current().configHash).toBe(hash);
+    expect(await a.t.auditRows("configPublished")).toEqual([]);
+    expect((await a.versionRows()).map((v) => [v.version, v.status])).toEqual([
+      [1, "published"],
+      [2, "draft"],
+    ]);
   });
 
   it.each([

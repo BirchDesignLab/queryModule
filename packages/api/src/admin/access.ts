@@ -9,7 +9,7 @@ import type { AppEnv } from "../http/types";
 export const CONFIG_EDITOR_ROLES: readonly Role[] = ["admin", "implementer"];
 
 /**
- * The admin console guard (ADR-0011 item 6, SEC-014), in this order: the feature off answers
+ * The admin console guard (ADR-0011 item 6), in this order: the feature off answers
  * 404 notFound to every caller (the route does not exist for the site); no live session 401
  * unauthenticated (as requireSession); a role outside `roles` 403 forbidden. The feature is
  * read from the live snapshot per request, so a publish that turns it off applies at once.

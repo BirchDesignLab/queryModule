@@ -10,8 +10,7 @@ import { API, adminConfigApp, errorOf, withSiteConfig } from "../helpers/admin-c
 /*
  * ADR-0011 items 1, 2, 4 and 5: one shared draft per site with an optimistic lock on the base
  * version; validate runs the spec 5.8 chain and answers diagnostics at JSON pointers; export
- * returns a version's document, and importing it as a draft round-trips unchanged. BR-001,
- * BR-004, SEC-014.
+ * returns a version's document, and importing it as a draft round-trips unchanged. BR-001.
  */
 
 type Json = Record<string, unknown>;
@@ -169,7 +168,7 @@ describe("BR-001 ADR-0011 validate", () => {
   });
 });
 
-describe("BR-004 ADR-0011 versions and export", () => {
+describe("ADR-0011 items 3 and 5 versions and export", () => {
   it("export round-trips through draft save unchanged", async () => {
     const a = await adminConfigApp();
     const r = await a.call("implementer", "GET", `${API}/versions/1/export`);

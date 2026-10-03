@@ -70,7 +70,7 @@ function outermost(pointers: Iterable<string>): string[] {
 }
 
 /**
- * ADR-0011 item 7 (SEC-010): the JSON pointers at which `after` differs from `before`, never the
+ * ADR-0011 item 7: the JSON pointers at which `after` differs from `before`, never the
  * values. Key and index segments, RFC 6901 escaped; a leaf under a key outside the audit pointer
  * grammar (an arbitrary map key) is recorded as its deepest parent whose segments all fit, as is
  * a pointer over 256 characters; over MAX_CHANGED_POINTERS, the deepest pointers collapse to
@@ -178,10 +178,11 @@ async function activateRow(
   live: VersionRow,
 ): Promise<PublishResult> {
   try {
-    await activate(d, row.version, event, live.version);
+    await activate(d, row.version, event, { live: live.version, document: row.document });
   } catch (e) {
     if (!(e instanceof ConfigLoadError)) throw e;
-    // The draft or the live version moved between the caller's read and activate's commit.
+    // The draft (saved in place, published or removed) or the live version moved between the
+    // caller's read and activate's commit.
     if (STALE.has(e.reason)) return { ok: false, code: "draftConflict" };
     const key = MESSAGE_KEY_PATTERN.test(e.reason) ? e.reason : "config.schema";
     return refusal([{ key, path: e.path }]);
@@ -193,7 +194,7 @@ async function activateRow(
 
 /**
  * POST /admin/config/publish (ADR-0011 items 3 and 5): the shared draft, on the live base, fully
- * validated, activated through activate() with configPublished (BR-001, SEC-010).
+ * validated, activated through activate() with configPublished (BR-001; ADR-0011 item 7).
  */
 export async function publishDraft(
   d: AppDeps,
@@ -211,7 +212,7 @@ export async function publishDraft(
 }
 
 /**
- * POST /admin/config/versions/{version}/rollback (ADR-0011 item 5, BR-004): version k's document
+ * POST /admin/config/versions/{version}/rollback (ADR-0011 items 3 and 5): version k's document
  * as a new version n+1 with rollback_of k, activated through activate(); k is never rewritten
  * and the shared draft is left as it is. A refused activation removes the new row (still a
  * draft, so it was never history).

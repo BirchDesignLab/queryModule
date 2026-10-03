@@ -7,7 +7,7 @@ import { API, adminConfigApp, type Caller, errorOf } from "../helpers/admin-conf
  * ADR-0011 item 6, checker ruling 09-29-26: the admin config routes are configEditor (admin or
  * implementer) behind the adminConfig feature. user and trainingOfficer get 403 forbidden,
  * anonymous 401, and every caller 404 while the feature is off. implementer is config only: 403
- * on POST /api/v1/queries. SEC-014, BR-001.
+ * on POST /api/v1/queries. ADR-0011 item 6, BR-001.
  */
 
 const DEFAULT_SITE = resolve(import.meta.dirname, "../../../config/sites/default.json");
@@ -29,7 +29,7 @@ const CASES = [
   { id: "exportAdminConfigVersion", method: "GET", path: `${API}/versions/1/export`, ok: 200 },
 ] as const;
 
-describe("SEC-014 ADR-0011 admin config route access", () => {
+describe("ADR-0011 item 6 admin config route access", () => {
   it("covers every admin config route in the contract, each marked live", () => {
     const config = ROUTES.filter((r) => r.path.startsWith(API));
     expect(config.map((r) => r.id).sort()).toEqual(CASES.map((c) => c.id).sort());
@@ -86,7 +86,7 @@ describe("SEC-014 ADR-0011 admin config route access", () => {
   });
 });
 
-describe("SEC-014 implementer is config only (checker ruling 09-29-26)", () => {
+describe("ADR-0011 item 6 implementer is config only (checker ruling 09-29-26)", () => {
   it("implementer reads the app shell config and preferences but gets 403 on POST /api/v1/queries", async () => {
     const a = await adminConfigApp();
     expect((await a.call("implementer", "GET", "/api/v1/config")).status).toBe(200);

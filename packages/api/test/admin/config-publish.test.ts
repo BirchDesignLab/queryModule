@@ -12,7 +12,7 @@ import { API, adminConfigApp, errorOf, withSiteConfig } from "../helpers/admin-c
  * ADR-0011 items 3, 5 and 7: publish validates the draft, refuses any error, and activates it
  * through activate() as the next version, writing configPublished (JSON pointers only, never
  * values) and configLoaded in the same transaction. Rollback republishes an older document as
- * a new version with rollbackOf; history is never rewritten. BR-001, BR-004, SEC-010.
+ * a new version with rollbackOf; history is never rewritten. BR-001.
  */
 
 /** A value no config holds, so its absence from the audit row is meaningful. */
@@ -32,7 +32,7 @@ async function publishedDraft() {
   return { a, v1, edited };
 }
 
-describe("BR-001 SEC-010 ADR-0011 publish", () => {
+describe("BR-001 ADR-0011 items 3 and 5 publish", () => {
   it("publishes the draft as version n+1 with configPublished (pointers, no values) and configLoaded", async () => {
     const { a } = await publishedDraft();
     const before = a.t.deps.config.current().configHash;
@@ -157,7 +157,7 @@ describe("BR-001 SEC-010 ADR-0011 publish", () => {
   });
 });
 
-describe("BR-004 SEC-010 ADR-0011 rollback", () => {
+describe("ADR-0011 items 3 and 5 rollback", () => {
   it("rollback to version 1 publishes version n+2 with rollbackOf 1 and never rewrites version 1", async () => {
     const { a, v1 } = await publishedDraft();
     const original = (await a.versionRows())[0];
@@ -217,17 +217,31 @@ describe("BR-004 SEC-010 ADR-0011 rollback", () => {
   });
 });
 
-describe("SEC-010 activate checks the live version inside its transaction", () => {
+describe("ADR-0011 items 3 and 5 activate checks the live version and the draft inside its transaction", () => {
   it("a live version other than the expected one refuses the publish and changes nothing", async () => {
     const { a } = await publishedDraft();
     const hash = a.t.deps.config.current().configHash;
-    await expect(activate(a.t.deps, 2, undefined, 7)).rejects.toThrow(/config\.liveChanged/);
+    const document = (await a.versionRows())[1]?.document ?? "";
+    await expect(activate(a.t.deps, 2, undefined, { live: 7, document })).rejects.toThrow(
+      /config\.liveChanged/,
+    );
     expect(a.t.deps.config.current().configHash).toBe(hash);
     expect((await a.versionRows()).map((v) => v.status)).toEqual(["published", "draft"]);
   });
+
+  it("a draft other than the validated document refuses the publish and changes nothing (critic:C1)", async () => {
+    const { a, v1 } = await publishedDraft();
+    const hash = a.t.deps.config.current().configHash;
+    const loaded = (await a.t.auditRows("configLoaded")).length;
+    const stale = { live: 1, document: JSON.stringify(v1) };
+    await expect(activate(a.t.deps, 2, undefined, stale)).rejects.toThrow(/config\.versionChanged/);
+    expect(a.t.deps.config.current().configHash).toBe(hash);
+    expect((await a.versionRows()).map((v) => v.status)).toEqual(["published", "draft"]);
+    expect(await a.t.auditRows("configLoaded")).toHaveLength(loaded);
+  });
 });
 
-describe("SEC-010 changedPointers (ADR-0011 item 7 writer rule)", () => {
+describe("ADR-0011 item 7 changedPointers (writer rule)", () => {
   it("names changed, added and removed leaves by pointer, never by value", () => {
     expect(
       changedPointers(

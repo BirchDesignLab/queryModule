@@ -19,15 +19,17 @@ import { parseStored } from "./store";
  * `event` (Task 27 passes configPublished). The in-process snapshot swaps only after commit, so
  * any failure (validation, audit, database) leaves the old snapshot live and the statuses
  * unchanged. Errors name the site and version only, never document content (spec 5.9).
- * `expectLive` (Task 27 publish and rollback): the transaction refuses with config.liveChanged
- * unless that version is still the published one, so the caller's base check and its event's
- * previousConfigHash cannot go stale between the caller's read and the commit.
+ * `expected` (Task 27 publish and rollback): the transaction refuses with config.liveChanged
+ * unless `expected.live` is still the published version, and with config.versionChanged unless
+ * the draft still holds `expected.document`, the document the caller validated and built its
+ * event from. So the event's previousConfigHash, configHash and changedPointers cannot go stale
+ * between the caller's read and the commit (an in-place draft save in between, critic:C1).
  */
 export async function activate(
   d: AppDeps,
   version: number,
   event?: AuditEvent,
-  expectLive?: number,
+  expected?: { live: number; document: string },
 ): Promise<void> {
   const siteId = d.config.current().siteConfig.site.id;
   const label = `store site ${siteId} version ${version}`;
@@ -37,6 +39,8 @@ export async function activate(
     .where(and(eq(siteConfigVersion.siteId, siteId), eq(siteConfigVersion.version, version)));
   if (!row) throw new ConfigLoadError(label, "", "config.versionNotFound");
   if (row.status !== "draft") throw new ConfigLoadError(label, "", "config.versionNotDraft");
+  if (expected !== undefined && row.document !== expected.document)
+    throw new ConfigLoadError(label, "", "config.versionChanged");
   const config = await loadConfigDocument(parseStored(row.document, label), {
     label,
     configDir: configDirOf(resolve(d.env.siteConfigFile)),
@@ -54,7 +58,7 @@ export async function activate(
       .set({ status: "superseded" })
       .where(and(eq(siteConfigVersion.siteId, siteId), eq(siteConfigVersion.status, "published")))
       .returning({ version: siteConfigVersion.version });
-    if (expectLive !== undefined && superseded[0]?.version !== expectLive)
+    if (expected !== undefined && superseded[0]?.version !== expected.live)
       throw new ConfigLoadError(label, "", "config.liveChanged");
     // Only the draft exactly as validated: an edit since the read publishes nothing.
     const published = await tx
