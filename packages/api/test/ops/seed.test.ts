@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { loadSiteConfig } from "../../src/config/load";
 import { user, userPreference } from "../../src/db/schema";
 import { derivePassword } from "../../src/seed/password";
 import { SeedPartialFailureError, SeedRefusedError, seedUsers } from "../../src/seed/seed";
@@ -68,13 +69,20 @@ describe("SEC-005 seed", () => {
       { email: "officer@example.test", personaOverride: "mobileUnit" },
     ]);
   });
-  it("#363 M1: every seeded persona is a persona key of the shipped default site", () => {
-    const site = JSON.parse(
-      readFileSync(resolve(import.meta.dirname, "../../../config/sites/default.json"), "utf8"),
-    ) as { personas: { key: string }[] };
-    const keys = site.personas.map((p) => p.key);
-    for (const u of DEMO_USERS)
-      if (u.persona !== undefined) expect(keys, u.email).toContain(u.persona);
+  it("#363 M1, #339 m3: every seeded persona is a persona key of every shipped site", async () => {
+    const sites = resolve(import.meta.dirname, "../../../config/sites");
+    const files = readdirSync(sites).filter((f) => f.endsWith(".json"));
+    expect(files.length).toBeGreaterThan(1);
+    for (const f of files) {
+      // Resolved (extends merged), so a site that inherits its personas is checked too.
+      const { siteConfig } = await loadSiteConfig(resolve(sites, f), {
+        allowMockSources: true,
+        now: Date.now(),
+      });
+      const keys = siteConfig.personas.map((p) => p.key);
+      for (const u of DEMO_USERS)
+        if (u.persona !== undefined) expect(keys, `${f} ${u.email}`).toContain(u.persona);
+    }
   });
   it("#363 M2: a failed preference write reports the users already created, no password", async () => {
     const t = await createTestApp();
