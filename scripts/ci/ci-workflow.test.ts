@@ -329,9 +329,10 @@ function step12Violations(run: string): string[] {
       );
       if (!isMask && !isExport) bad.push(l);
     } else if (
-      // The variable by name, and every spelling that dumps the environment (#315).
-      /\$\{?E2E_USER_PASSWORD(?![A-Za-z_])/.test(l) ||
-      /(^|[|;&(]\s*)(env|printenv|export(\s+-\S+)?|declare(\s+-\S+)?|typeset(\s+-\S+)?|set)\s*($|[|;&>)])/.test(
+      // Any mention of the password variable except the export line, and every spelling that
+      // dumps the environment, as a command word after a separator, keyword or wrapper (#315).
+      /E2E_USER_PASSWORD/.test(l) ||
+      /(^|[;|&({]\s*|\b(then|do|else|sudo|command|exec)\s+)(\S*\/)?(env|printenv|export(\s+-\S+)?|declare(\s+-\S+)?|typeset(\s+-\S+)?|set)\s*($|[|;&>)}])/.test(
         l,
       ) ||
       /\bprintenv\b/.test(l)
@@ -389,6 +390,16 @@ describe("ci.yml step 12: the M0 Playwright suite against the boot-smoke contain
     ["bare export", "export"],
     ["declare -x", "declare -x"],
     ["set with no arguments", "set"],
+    ["declare -p of the variable", "declare -p E2E_USER_PASSWORD"],
+    ["typeset -p of the variable", "typeset -p E2E_USER_PASSWORD"],
+    ["export -p of the variable", "export -p E2E_USER_PASSWORD"],
+    ["the variable bare, unquoted", "echo E2E_USER_PASSWORD"],
+    ["env inside if/then", "if true; then env; fi"],
+    ["env inside braces", "{ env; }"],
+    ["sudo env", "sudo env"],
+    ["env by absolute path", "/usr/bin/env"],
+    ["env after exec", "exec env"],
+    ["env after command", "command env"],
     [
       "an export that smuggles $pw into the email",
       'export E2E_USER_EMAIL=$pw E2E_USER_PASSWORD="$pw"',
