@@ -47,6 +47,19 @@ describe("FR-056 the merged draft is evaluated, not the command alone (#297 item
     ]);
   });
 
+  it("a draft-only invalid value is an error with no position (#377 C-M1)", () => {
+    const c = check("VEH.ABC123.OK", { VEH: { plateType: "NOT-A-PLATE-TYPE" } });
+    expect(c.formState?.valid).toBe(false);
+    // Exact: the draft value has no position, so the error carries none (spec 4.4).
+    expect(c.errors).toEqual([
+      {
+        key: "validation.notInPicklist",
+        params: { field: "plateType", labelKey: "field.plateType" },
+      },
+    ]);
+    expect(c.merged).toMatchObject({ plate: "ABC123", state: "OK", plateType: "NOT-A-PLATE-TYPE" });
+  });
+
   it("a position the command omits overwrites the draft with null (spec 4.4)", () => {
     const c = check("VEH.ABC123", { VEH: { plate: "ZZ-0001", state: "OK", year: "26" } });
     expect(c.merged).toEqual({ plate: "ABC123", state: null, year: null, vin: null });
