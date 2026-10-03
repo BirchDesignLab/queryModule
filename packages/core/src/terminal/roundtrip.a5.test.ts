@@ -47,7 +47,12 @@ const sites: [string, TerminalConfig][] = [
   ["presets", presetSite],
 ];
 const cases = sites.flatMap(([name, config]) =>
-  config.commands.map((command) => ({ name: `${name} ${command.code}`, config, command })),
+  config.commands.map((command) => ({
+    name: `${name} ${command.code}`,
+    site: name,
+    config,
+    command,
+  })),
 );
 
 /**
@@ -68,11 +73,15 @@ function fieldDef(config: TerminalConfig, queryType: string, key: string): Field
 }
 
 /**
- * Typed-only commands (#346): a second command on a query type that the toggle never produces,
- * because selectCommand keeps the first preset-free command in config order (PER, PRO). They are
- * typed in the terminal only; every other shipped command is the toggle's pick for its type.
+ * Typed-only commands (#346), per site: a second command on a query type that the toggle never
+ * produces, because selectCommand keeps the first preset-free command in config order. Each maps
+ * to the command the toggle does pick (#377 C-C-M1, C-C-M2); every other command is its own pick.
  */
-const TYPED_ONLY: ReadonlySet<string> = new Set(["NAM", "PROP"]);
+const TYPED_ONLY: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  default: { NAM: "PER", PROP: "PRO" },
+  "example-ok": { NAM: "PER", PROP: "PRO" },
+  presets: {},
+};
 
 /** Terminal to draft for one command: formatCommand with its own code, tokenize, mergeDraft. */
 function tripWith(config: TerminalConfig, c: DraftCase, code: string) {
@@ -130,7 +139,7 @@ describe("round-trip harness", () => {
 
 describe.each(cases)(
   "[A5] terminal round trip, $name (FR-056, spec 4.4)",
-  ({ config, command }) => {
+  ({ site, config, command }) => {
     const qt = command.queryType;
     const arb = draftFor(config, command, now);
 
@@ -138,8 +147,7 @@ describe.each(cases)(
       fc.assert(
         fc.property(arb, (c) => {
           const { selected, formatted, tokens, merged } = trip(config, c);
-          if (TYPED_ONLY.has(command.code)) expect(selected.code).not.toBe(command.code);
-          else expect(selected.code).toBe(command.code);
+          expect(selected.code).toBe(TYPED_ONLY[site]?.[command.code] ?? command.code);
           expect(formatted.errors).toEqual([]);
           expect(tokens.errors).toEqual([]);
           expect(canonDraft(config, qt, merged)).toEqual(canonDraft(config, qt, c.draft));
