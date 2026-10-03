@@ -327,6 +327,29 @@ describe("config:validate contrast and unreadable files (Task 9)", () => {
   });
 });
 
+describe("config:validate every unreadable locale is reported (#303 Task 9, S1)", () => {
+  it("two unreadable locale bundles give one error each at their own index", () => {
+    const site = { ...defaultSite(), locales: ["en", "es"] };
+    const broken = cfg("sites/broken.json");
+    const io: ConfigIo = {
+      readJson: (p) => {
+        if (p === broken) return site;
+        if (p === cfg("locales/en.json") || p === cfg("locales/es.json")) {
+          throw new ConfigUnreadableError();
+        }
+        return fsIo.readJson(p);
+      },
+    };
+    const errs = checkConfigFile(broken, io).errors.filter(
+      (d) => d.key === "config.unreadableFile",
+    );
+    expect(errs).toEqual([
+      { level: "error", path: "/locales/0", key: "config.unreadableFile", params: {} },
+      { level: "error", path: "/locales/1", key: "config.unreadableFile", params: {} },
+    ]);
+  });
+});
+
 describe("config:validate unreadable files and read order (#303 Task 9)", () => {
   const broken = cfg("sites/broken.json");
   const withBase = (extra: Record<string, unknown>) => ({
