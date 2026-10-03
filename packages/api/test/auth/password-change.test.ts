@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { CreateUserResponseSchema } from "@querymodule/core/contracts";
 import { describe, expect, it } from "vitest";
 import WebSocket from "ws";
@@ -12,6 +13,7 @@ import { startTestServer } from "../helpers/test-app";
  */
 
 const NEW_PW = "a-brand-new-password-9";
+const FLAGS_OFF = resolve(import.meta.dirname, "../../../config/test/flags-off.json");
 const ORIGIN = "http://localhost:3000";
 const H = { "x-requested-with": "querymodule", "content-type": "application/json" };
 
@@ -136,6 +138,53 @@ describe("forced password change (D-A26)", () => {
       body: JSON.stringify({ currentPassword: temporaryPassword, newPassword: NEW_PW }),
     });
     expect(anon.status).toBe(401);
+  });
+
+  it("G-I4: re-setting the temporary password is refused (400) and the flag stays set", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    const r = await changePassword(a, cookie, {
+      currentPassword: temporaryPassword,
+      newPassword: temporaryPassword,
+    });
+    expect(r.status).toBe(400);
+    expect((await errorOf(r)).code).toBe("validationFailed");
+    const row = await a.t.deps.db.$client.execute({
+      sql: "SELECT must_change_password AS m FROM user WHERE id = ?",
+      args: [user.id],
+    });
+    expect(Number(row.rows[0]?.m)).toBe(1);
+    expect((await a.t.request("/api/v1/config", { headers: { cookie } })).status).toBe(403);
+  });
+
+  it("G-m2: an idle-expired session cannot change the password (401) and the flag stays set", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    a.t.clock.advance(31 * 60_000);
+    const r = await changePassword(a, cookie, {
+      currentPassword: temporaryPassword,
+      newPassword: NEW_PW,
+    });
+    expect(r.status).toBe(401);
+    expect((await errorOf(r)).code).toBe("unauthenticated");
+    const row = await a.t.deps.db.$client.execute({
+      sql: "SELECT must_change_password AS m FROM user WHERE id = ?",
+      args: [user.id],
+    });
+    expect(Number(row.rows[0]?.m)).toBe(1);
+  });
+
+  it("G-m1/C-m3: a flagged user gets 404 from a feature-off admin route, like every caller", async () => {
+    const a = await adminConfigApp({ siteConfig: FLAGS_OFF });
+    const id = await a.t.createUser("flagged@example.test", "correct-horse-battery-1");
+    await a.t.deps.db.$client.execute({
+      sql: "UPDATE user SET must_change_password = 1 WHERE id = ?",
+      args: [id],
+    });
+    const cookie = await a.t.cookieFor("flagged@example.test", "correct-horse-battery-1");
+    for (const path of ["/api/v1/admin/users", "/api/v1/admin/config"]) {
+      const r = await a.t.request(path, { headers: { cookie } });
+      expect(r.status, path).toBe(404);
+      expect((await errorOf(r)).code).toBe("notFound");
+    }
   });
 
   it("an ordinary user (flag false) is not gated", async () => {

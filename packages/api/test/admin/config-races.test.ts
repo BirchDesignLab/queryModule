@@ -12,6 +12,7 @@ import { API, adminConfigApp, errorOf, withSiteConfig } from "../helpers/admin-c
 const refuse = vi.hoisted(() => ({
   next: undefined as Error | undefined,
   before: undefined as (() => Promise<void>) | undefined,
+  after: undefined as (() => void) | undefined,
 }));
 vi.mock("../../src/admin/config/activate", async (importOriginal) => {
   const m = await importOriginal<typeof import("../../src/admin/config/activate")>();
@@ -19,11 +20,15 @@ vi.mock("../../src/admin/config/activate", async (importOriginal) => {
     activate: async (...args: Parameters<typeof m.activate>) => {
       const e = refuse.next;
       const before = refuse.before;
+      const after = refuse.after;
       refuse.next = undefined;
       refuse.before = undefined;
+      refuse.after = undefined;
       if (e) throw e;
       if (before) await before();
-      return m.activate(...args);
+      const r = await m.activate(...args);
+      if (after) after();
+      return r;
     },
   };
 });
@@ -81,7 +86,8 @@ describe("ADR-0011 items 3 and 5 activate refusals after validation", () => {
       "config.mfaNotEnforced",
       "/siteConfig/auth/mfaRequired",
       400,
-      { key: "config.mfaNotEnforced", params: { path: "/siteConfig/auth/mfaRequired" } },
+      // C-m2: siteConfig-relative, as validate and the prepare refusal answer it.
+      { key: "config.mfaNotEnforced", params: { path: "/auth/mfaRequired" } },
     ],
     [
       "mock sources need ALLOW_MOCK_SOURCES=true",
@@ -102,6 +108,49 @@ describe("ADR-0011 items 3 and 5 activate refusals after validation", () => {
     ]);
     expect(await a.t.auditRows("configPublished")).toEqual([]);
   });
+
+  it.each([
+    [
+      "publish",
+      (a: Awaited<ReturnType<typeof withDraft>>) =>
+        a.call("admin", "POST", `${API}/publish`, { draftVersion: 2 }),
+    ],
+    [
+      "rollback",
+      (a: Awaited<ReturnType<typeof withDraft>>) =>
+        a.call("admin", "POST", `${API}/versions/1/rollback`),
+    ],
+  ] as const)(
+    "C-m1: %s that committed answers 200 even if a read after commit fails",
+    async (_n, send) => {
+      const a = await withDraft();
+      const db = a.t.deps.db;
+      const select = db.select;
+      let failed = false;
+      refuse.after = () => {
+        db.select = ((...args: Parameters<typeof select>) => {
+          if (!failed) {
+            failed = true;
+            throw new Error("read failed");
+          }
+          return select.apply(db, args);
+        }) as typeof select;
+      };
+      let r: Response;
+      try {
+        r = await send(a);
+      } finally {
+        db.select = select;
+      }
+      expect(r.status).toBe(200);
+      const body = (await r.json()) as { status: string; configHash: string; version: number };
+      expect(body.status).toBe("published");
+      expect(body.configHash).toBe(a.t.deps.config.current().configHash);
+      const row = (await a.versionRows()).find((v) => v.version === body.version);
+      expect(row).toMatchObject({ status: "published", configHash: body.configHash });
+      expect(await a.t.auditRows("configPublished")).toHaveLength(1);
+    },
+  );
 
   it("rollback: any other failure is 500 internal and removes its new row", async () => {
     const a = await withDraft();

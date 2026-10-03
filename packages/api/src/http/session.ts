@@ -23,10 +23,16 @@ export const requireSession =
  * The same 403 passwordChangeRequired for a path whose own guard resolves the session itself
  * (the admin console, ADR-0011): a request with no live session passes through, so that guard
  * still answers 404, 401 or 403 in its own order. Mounted ahead of the admin routes in app.ts.
+ * `applies` false (the route's feature is off, G-m1) passes through without resolving, so the
+ * guard's 404 reaches every caller, a flagged one included (ADR-0011 item 6).
  */
 export const requirePasswordChanged =
-  (identity: AppIdentityService): MiddlewareHandler<AppEnv> =>
+  (
+    identity: AppIdentityService,
+    applies: (path: string) => boolean = () => true,
+  ): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
+    if (!applies(c.req.path)) return next();
     const r = await identity.resolveGated(c.req.raw);
     if (r?.mustChangePassword) return apiError(c, "passwordChangeRequired");
     await next();

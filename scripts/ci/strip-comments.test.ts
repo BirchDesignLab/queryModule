@@ -62,6 +62,9 @@ describe("stripComments (item 7)", () => {
     }
     // An identifier that merely ends in a keyword is still an operand: division.
     expect(stripComments("x = noreturn / 2; // real\n")).toBe("x = noreturn / 2; \n");
+    // G-m5: a property named like a keyword is an operand, so the slash divides.
+    expect(stripComments("x = obj.in / 2; // real\n")).toBe("x = obj.in / 2; \n");
+    expect(stripComments("x = o.delete / 2; // real\n")).toBe("x = o.delete / 2; \n");
   });
 
   it("keeps the issue's exact case, an escaped slash inside a regex literal (#220 r1-a)", () => {

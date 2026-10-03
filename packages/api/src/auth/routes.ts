@@ -11,7 +11,7 @@ import { clearSessionCookie } from "./auth";
 import { auditEmail, BACKGROUND_HEADER } from "./identity";
 import { AUTH_LIMITS, clientIp } from "./rate-limit";
 
-type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut";
+type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut" | "accountDisabled";
 
 // The only Better Auth paths this app forwards to (critic:C3): every other Better Auth path
 // (revoke-session, revoke-sessions, revoke-other-sessions, change-password, sign-up, ...) would
@@ -78,7 +78,7 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
   const body = (await c.req.raw
     .clone()
     .json()
-    .catch(() => null)) as { email?: unknown } | null;
+    .catch(() => null)) as { email?: unknown; password?: unknown } | null;
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) return apiError(c, "validationFailed");
   const key = `login:acct:${email}`;
@@ -88,11 +88,17 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     await auditFailure(d, target?.id ?? null, "lockedOut", ip, null);
     return rateLimited(c, (locked - d.clock.now()) / 1000);
   }
-  // A disabled account never gets a session (D-A26). The answer is Better Auth's own bad-
-  // credentials 401, so it does not tell a caller which accounts are disabled; it is audited as
-  // badPassword (the closest loginFailed reason) and does not count toward the lockout.
+  // A disabled account never gets a session (D-A26). To look like any bad-credentials sign-in
+  // (G-I2) it answers Better Auth's own 401, spends one password hash as Better Auth does for a
+  // wrong or unknown account (no timing difference), and counts toward the account lockout (the
+  // same 429 after N failures). The audit row states the fact: accountDisabled (C-I1), since the
+  // password is never checked.
   if (target?.disabledAt != null) {
-    await auditFailure(d, target.id, "badPassword", ip, null);
+    await (await d.auth.$context).password.hash(
+      typeof body?.password === "string" ? body.password : "",
+    );
+    const { lockedUntil } = await d.limiter.recordFailure(key, AUTH_LIMITS.accountFailures);
+    await auditFailure(d, target.id, "accountDisabled", ip, lockedUntil);
     return c.json({ code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" }, 401);
   }
   const res = await d.auth.handler(c.req.raw);
@@ -144,15 +150,25 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
 /**
  * D-A26: Better Auth's change-password with revokeOtherSessions would delete the user's other
  * sessions with no sessionRevoked row and no eventBus.endSession (SEC-010), so that option is
- * refused. Every other body goes to Better Auth, which verifies the current password and
- * clears must_change_password through the hook in auth.ts.
+ * refused. The session must be live by the app's own limits, idle clock included (G-m2: Better
+ * Auth checks only the absolute limit). A new password equal to the current one is refused
+ * (G-I4): it would clear the forced-change flag while the admin-issued password stays valid.
+ * Every other body goes to Better Auth, which verifies the current password and clears
+ * must_change_password through the hook in auth.ts.
  */
 async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
+  if (!(await d.identity.resolveGated(c.req.raw))) return apiError(c, "unauthenticated");
   const body = (await c.req.raw
     .clone()
     .json()
-    .catch(() => null)) as { revokeOtherSessions?: unknown } | null;
+    .catch(() => null)) as {
+    revokeOtherSessions?: unknown;
+    currentPassword?: unknown;
+    newPassword?: unknown;
+  } | null;
   if (body === null || typeof body !== "object" || body.revokeOtherSessions !== undefined)
+    return apiError(c, "validationFailed");
+  if (typeof body.newPassword === "string" && body.newPassword === body.currentPassword)
     return apiError(c, "validationFailed");
   return d.auth.handler(c.req.raw);
 }

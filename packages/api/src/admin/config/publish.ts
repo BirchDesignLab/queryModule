@@ -170,25 +170,42 @@ const STALE: ReadonlySet<string> = new Set([
   "config.liveChanged",
 ]);
 
-/** activate() refusals as API outcomes; a refusal leaves the old snapshot live. */
+/** activate()'s own refusals, whose pointers it states document-relative (as the store does). */
+const SITE_CONFIG_REFUSALS: ReadonlySet<string> = new Set([
+  "config.siteMismatch",
+  "config.mfaNotEnforced",
+]);
+
+/**
+ * activate() refusals as API outcomes; a refusal leaves the old snapshot live. The answer is
+ * built from the row activate() published (C-m1): no read after the commit, so a change that
+ * committed never answers 500.
+ */
 async function activateRow(
   d: AppDeps,
   row: VersionRow,
   event: AuditEvent,
   live: VersionRow,
 ): Promise<PublishResult> {
+  let published: VersionRow;
   try {
-    await activate(d, row.version, event, { live: live.version, document: row.document });
+    published = await activate(d, row.version, event, {
+      live: live.version,
+      document: row.document,
+    });
   } catch (e) {
     if (!(e instanceof ConfigLoadError)) throw e;
     // The draft (saved in place, published or removed) or the live version moved between the
     // caller's read and activate's commit.
     if (STALE.has(e.reason)) return { ok: false, code: "draftConflict" };
     const key = MESSAGE_KEY_PATTERN.test(e.reason) ? e.reason : "config.schema";
-    return refusal([{ key, path: e.path }]);
+    // C-m2: siteConfig-relative, as validate and the prepare refusal answer the same check.
+    const path =
+      SITE_CONFIG_REFUSALS.has(e.reason) && e.path.startsWith("/siteConfig/")
+        ? e.path.slice("/siteConfig".length)
+        : e.path;
+    return refusal([{ key, path }]);
   }
-  const published = await versionRow(d.db, row.siteId, row.version);
-  if (!published) throw new Error(`store site ${row.siteId} version ${row.version} missing`);
   return { ok: true, version: toConfigVersion(published) };
 }
 

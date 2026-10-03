@@ -1,3 +1,4 @@
+import type { FeatureKey } from "@querymodule/core/config";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { ADMIN_CONFIG_LARGE_BODY_PATHS, mountAdminConfigRoutes } from "./admin/config/routes";
@@ -19,6 +20,13 @@ import { mountQueriesRoute } from "./queries/route";
 import { mountConfigRoute } from "./routes/config";
 import { mountPreferencesRoute } from "./routes/preferences";
 import { mountPublicRoutes } from "./routes/public";
+
+/** The feature each admin route prefix sits behind (admin/config/routes.ts, admin/users/routes.ts). */
+const ADMIN_FEATURES: readonly (readonly [string, FeatureKey])[] = [
+  ["/api/v1/admin/config", "adminConfig"],
+  ["/api/v1/admin/users", "adminUsers"],
+  ["/api/v1/admin/sessions", "adminUsers"],
+];
 
 export function createApp(d: AppDeps): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -61,8 +69,13 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   mountConfigRoute(app, d);
   mountQueriesRoute(app, d);
   mountPreferencesRoute(app, d);
-  // D-A26: no admin route for a user who still holds a temporary password.
-  app.use("/api/v1/admin/*", requirePasswordChanged(d.identity));
+  // D-A26: no admin route for a user who still holds a temporary password. Only where the
+  // route's feature is on (G-m1): a feature-off route answers 404 to every caller (adminGuard).
+  const adminFeatureOn = (path: string) => {
+    const hit = ADMIN_FEATURES.find(([p]) => path === p || path.startsWith(`${p}/`));
+    return hit === undefined || d.config.current().siteConfig.features[hit[1]] === true;
+  };
+  app.use("/api/v1/admin/*", requirePasswordChanged(d.identity, adminFeatureOn));
   mountAdminConfigRoutes(app, d);
   mountAdminUserRoutes(app, d);
   mountWeb(app, d);

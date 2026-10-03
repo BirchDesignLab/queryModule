@@ -24,13 +24,15 @@ import { parseStored } from "./store";
  * the draft still holds `expected.document`, the document the caller validated and built its
  * event from. So the event's previousConfigHash, configHash and changedPointers cannot go stale
  * between the caller's read and the commit (an in-place draft save in between, critic:C1).
+ * Returns the row as published (the UPDATE's RETURNING), so a caller needs no read after the
+ * commit that could fail a change that already happened (C-m1).
  */
 export async function activate(
   d: AppDeps,
   version: number,
   event?: AuditEvent,
   expected?: { live: number; document: string },
-): Promise<void> {
+): Promise<typeof siteConfigVersion.$inferSelect> {
   const siteId = d.config.current().siteConfig.site.id;
   const label = `store site ${siteId} version ${version}`;
   const [row] = await d.db
@@ -52,7 +54,7 @@ export async function activate(
   // Same refusal as the startup MFA guard (startup.ts, T19 spec:CV1); removed with it in #216.
   if (config.siteConfig.auth.mfaRequired !== false)
     throw new ConfigLoadError(label, "/siteConfig/auth/mfaRequired", "config.mfaNotEnforced");
-  await withTransaction(d.db, async (tx) => {
+  const activated = await withTransaction(d.db, async (tx) => {
     const superseded = await tx
       .update(siteConfigVersion)
       .set({ status: "superseded" })
@@ -76,8 +78,10 @@ export async function activate(
           eq(siteConfigVersion.document, row.document),
         ),
       )
-      .returning({ id: siteConfigVersion.id });
-    if (published.length !== 1) throw new ConfigLoadError(label, "", "config.versionChanged");
+      .returning();
+    const [done] = published;
+    if (published.length !== 1 || !done)
+      throw new ConfigLoadError(label, "", "config.versionChanged");
     await d.audit.record(tx, {
       type: "configLoaded",
       actor: SYSTEM_ACTOR,
@@ -91,8 +95,10 @@ export async function activate(
       },
     });
     if (event) await d.audit.record(tx, event);
+    return done;
   });
   // Before the swap, so no reader of the new snapshot logs a new field key unredacted (C1).
   d.logger.addRedactKeys(config.fieldKeys);
   d.config.swap(config);
+  return activated;
 }

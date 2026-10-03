@@ -9,8 +9,9 @@ function regexAllowedAfter(out: string): boolean {
   if ((ch === "+" || ch === "-") && out[k - 1] === ch) return false;
   if ("(,=:[!&|?{};+-*%>~^".includes(ch)) return true;
   // A keyword that takes an expression starts one: `return /a\//` (#220 G-M2). A longer
-  // identifier that merely ends in one (`noreturn / 2`) is an operand.
-  const word = /(?:^|[^\w$])(return|typeof|case|in|of|void|delete|throw)$/.exec(
+  // identifier that merely ends in one (`noreturn / 2`), or a property named like one
+  // (`obj.in / 2`, G-m5), is an operand.
+  const word = /(?:^|[^\w$.])(return|typeof|case|in|of|void|delete|throw)$/.exec(
     out.slice(0, k + 1),
   );
   return word !== null;

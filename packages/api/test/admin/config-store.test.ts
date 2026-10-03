@@ -119,6 +119,30 @@ describe("BR-001 ADR-0011 an empty store seeds version 1 from the site file", ()
     );
   });
 
+  it("C-m4: a boot sweeps a rollback draft left by an interrupted rollback; a shared draft stays", async () => {
+    const file = siteCopy();
+    const env = testEnv({ SITE_CONFIG: file });
+    const db = await migratedDb(env);
+    await loadLiveConfig(db, boot(file));
+    const [live] = await rows(db);
+    await insertRow(db, { version: 2, status: "draft", document: String(live?.document) });
+    const orphan = await insertRow(db, {
+      version: 3,
+      status: "draft",
+      document: String(live?.document),
+    });
+    await db.$client.execute({
+      sql: "UPDATE site_config_version SET rollback_of = 1 WHERE id = ?",
+      args: [orphan],
+    });
+    const again = await loadLiveConfig(db, boot(file));
+    expect(again.version).toBe(1);
+    expect((await rows(db)).map((r) => [Number(r.version), r.status, r.rollback_of])).toEqual([
+      [1, "published", null],
+      [2, "draft", null],
+    ]);
+  });
+
   it("stores the resolved config of a site that extends another, without extends", async () => {
     const file = join(siteCopy(), "../example-ok.json");
     const env = testEnv({ SITE_CONFIG: file });

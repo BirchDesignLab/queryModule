@@ -5,10 +5,10 @@ import type {
   CreateUserBodySchema,
   Role,
 } from "@querymodule/core/contracts";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull } from "drizzle-orm";
 import type { z } from "zod";
 import { account, session, user } from "../../db/schema";
-import { withTransaction } from "../../db/tx";
+import { type Tx, withTransaction } from "../../db/tx";
 import type { AppDeps } from "../../deps";
 import { uuidv7 } from "../../ids";
 import { loginStatsByUser, type UserSignInStats } from "../../ops/login-stats";
@@ -26,6 +26,45 @@ type AdminUserSessionRow = z.infer<typeof AdminUserSessionSchema>;
 export type CreateUserBody = z.infer<typeof CreateUserBodySchema>;
 
 const NO_SIGN_INS: UserSignInStats = { signIns: 0, distinctIps: 0, lastSignIn: null };
+
+/** Thrown inside a transaction to roll it back and answer 409 lastAdmin. */
+class LastAdminError extends Error {
+  constructor() {
+    super("lastAdmin");
+    this.name = "LastAdminError";
+  }
+}
+
+/**
+ * G-I1 (contract 409 "no enabled admin left"): run inside the IMMEDIATE transaction, so it is
+ * race free. Before the change the actor must still be an enabled admin (a concurrent request
+ * may have disabled or demoted them); after it at least one enabled admin must remain.
+ */
+async function actorStillAdmin(tx: Tx, actor: Principal): Promise<void> {
+  const [me] = await tx
+    .select({ role: user.role, disabledAt: user.disabledAt })
+    .from(user)
+    .where(eq(user.id, actor.userId));
+  if (me?.role !== "admin" || me.disabledAt !== null) throw new LastAdminError();
+}
+
+async function enabledAdminLeft(tx: Tx): Promise<void> {
+  const [r] = await tx
+    .select({ n: count() })
+    .from(user)
+    .where(and(eq(user.role, "admin"), isNull(user.disabledAt)));
+  if ((r?.n ?? 0) === 0) throw new LastAdminError();
+}
+
+/** Runs fn in withTransaction; a LastAdminError rolls it back and becomes the lastAdmin code. */
+async function guarded<T>(d: AppDeps, fn: (tx: Tx) => Promise<T>): Promise<T | "lastAdmin"> {
+  try {
+    return await withTransaction(d.db, fn);
+  } catch (e) {
+    if (e instanceof LastAdminError) return "lastAdmin";
+    throw e;
+  }
+}
 
 export function toAdminUser(row: UserRow, stats: UserSignInStats = NO_SIGN_INS): AdminUser {
   return {
@@ -46,8 +85,15 @@ async function statsOf(d: AppDeps, id: string): Promise<UserSignInStats | undefi
   return (await loginStatsByUser(d.db, id)).get(id);
 }
 
+/**
+ * Every user, by email, capped at LIST_USERS_LIMIT rows (G-m4): the contract has no paging and
+ * M1 is demo scale (a handful of seeded accounts). A site past the cap needs paging added to the
+ * listAdminUsers contract first; until then the first LIST_USERS_LIMIT addresses are listed.
+ */
+const LIST_USERS_LIMIT = 1000;
+
 export async function listUsers(d: AppDeps): Promise<AdminUser[]> {
-  const rows = await d.db.select().from(user).orderBy(user.email).limit(1000);
+  const rows = await d.db.select().from(user).orderBy(user.email).limit(LIST_USERS_LIMIT);
   const stats = await loginStatsByUser(d.db);
   return rows.map((r) => toAdminUser(r, stats.get(r.id)));
 }
@@ -121,8 +167,9 @@ export type DisableResult =
  * One transaction: set disabledAt, delete the user's sessions, write userDisabled with the
  * counts (M1 has no delegations or state credentials, so those are 0; the credential purge
  * lands in credentials/** with M3 P1). The sockets of the ended sessions close after commit.
- * An admin cannot disable themselves, which also keeps an enabled admin: the caller. Disabling
- * an already disabled user is a no-op with no audit row.
+ * An admin cannot disable themselves; inside the transaction the actor must still be an enabled
+ * admin and one enabled admin must remain, else 409 lastAdmin with nothing written (G-I1).
+ * Disabling an already disabled user is a no-op with no audit row.
  */
 export async function disableUser(
   d: AppDeps,
@@ -130,7 +177,8 @@ export async function disableUser(
   id: string,
 ): Promise<DisableResult> {
   if (id === actor.userId) return { ok: false, code: "lastAdmin" };
-  const done = await withTransaction(d.db, async (tx) => {
+  const done = await guarded(d, async (tx) => {
+    await actorStillAdmin(tx, actor);
     const target = (await tx.select().from(user).where(eq(user.id, id)))[0];
     if (!target) return null;
     if (target.disabledAt !== null) return { target, sessionIds: [] as string[] };
@@ -143,6 +191,7 @@ export async function disableUser(
       .set({ disabledAt: now, updatedAt: new Date(now) })
       .where(eq(user.id, id));
     await tx.delete(session).where(eq(session.userId, id));
+    await enabledAdminLeft(tx);
     await d.audit.record(tx, {
       type: "userDisabled",
       actor: actorOf(actor),
@@ -156,6 +205,7 @@ export async function disableUser(
     });
     return { target: { ...target, disabledAt: now }, sessionIds };
   });
+  if (done === "lastAdmin") return { ok: false, code: "lastAdmin" };
   if (!done) return { ok: false, code: "notFound" };
   for (const sid of done.sessionIds) d.eventBus.endSession(sid);
   return {
@@ -172,7 +222,9 @@ export type RoleResult =
 /**
  * Sets the role and writes roleChanged via adminConsole, in one transaction. A move to user is
  * recorded as the revoke of the role held (as grant-role does); anything else as a grant of the
- * new role. An admin cannot change their own role. The same role is a no-op with no audit row.
+ * new role. An admin cannot change their own role; inside the transaction the actor must still be
+ * an enabled admin and one enabled admin must remain, else 409 lastAdmin (G-I1). The same role is
+ * a no-op with no audit row.
  */
 export async function setUserRole(
   d: AppDeps,
@@ -181,7 +233,8 @@ export async function setUserRole(
   role: Role,
 ): Promise<RoleResult> {
   if (id === actor.userId) return { ok: false, code: "lastAdmin" };
-  const changed = await withTransaction(d.db, async (tx) => {
+  const changed = await guarded(d, async (tx) => {
+    await actorStillAdmin(tx, actor);
     const target = (await tx.select().from(user).where(eq(user.id, id)))[0];
     if (!target) return null;
     if (target.role === role) return target;
@@ -189,6 +242,7 @@ export async function setUserRole(
       .update(user)
       .set({ role, updatedAt: new Date(d.clock.now()) })
       .where(eq(user.id, id));
+    await enabledAdminLeft(tx);
     await d.audit.record(tx, {
       type: "roleChanged",
       actor: actorOf(actor),
@@ -202,6 +256,7 @@ export async function setUserRole(
     });
     return { ...target, role };
   });
+  if (changed === "lastAdmin") return { ok: false, code: "lastAdmin" };
   if (!changed) return { ok: false, code: "notFound" };
   return { ok: true, user: toAdminUser(changed, await statsOf(d, id)) };
 }

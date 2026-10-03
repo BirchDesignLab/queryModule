@@ -42,6 +42,36 @@ describe("SEC-005 auth limits and lockout", () => {
       reason: "lockedOut",
     });
   });
+  it("G-I2/C-I1: a disabled account locks like an active one, hashes, and audits accountDisabled", async () => {
+    const t = await createTestApp();
+    const id = await t.createUser(EMAIL, PW);
+    await t.deps.db.$client.execute({
+      sql: "UPDATE user SET disabled_at = 1 WHERE id = ?",
+      args: [id],
+    });
+    const ctx = await t.deps.auth.$context;
+    const hash = vi.spyOn(ctx.password, "hash");
+    // Even the right password: a disabled account never gets a session (D-A26).
+    for (let i = 0; i < 10; i++) {
+      const r = await t.signIn(EMAIL, i % 2 === 0 ? PW : "wrong-password-000");
+      expect(r.status).toBe(401);
+      expect(((await r.json()) as { code?: string }).code).toBe("INVALID_EMAIL_OR_PASSWORD");
+    }
+    // The same password hashing cost as Better Auth's bad-credentials path (no timing oracle).
+    expect(hash).toHaveBeenCalledTimes(10);
+    const failed = await t.auditRows("loginFailed");
+    expect(failed).toHaveLength(10);
+    for (const f of failed)
+      expect(f.details).toMatchObject({ targetUserId: id, reason: "accountDisabled" });
+    expect(typeof failed[9]?.details.lockoutUntil).toBe("number");
+    expect(failed[8]?.details).not.toHaveProperty("lockoutUntil");
+    const locked = await t.signIn(EMAIL, PW);
+    expect(locked.status).toBe(429);
+    expect(ApiErrorSchema.parse(await locked.json()).error.code).toBe("rateLimited");
+    expect((await t.auditRows("loginFailed")).at(-1)?.details).toMatchObject({
+      reason: "lockedOut",
+    });
+  });
   it("unknown accounts lock the same way (no enumeration)", async () => {
     const t = await createTestApp();
     for (let i = 0; i < 10; i++) await t.signIn("nobody@example.test", "wrong-password-000");

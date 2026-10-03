@@ -8,6 +8,8 @@ import {
 } from "@querymodule/core/contracts";
 import { describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
+import { disableUser, setUserRole } from "../../src/admin/users/users";
+import { grantRole } from "../../src/ops/grant-role";
 import { adminConfigApp, type Caller, errorOf } from "../helpers/admin-config";
 import { startTestServer } from "../helpers/test-app";
 
@@ -427,5 +429,71 @@ describe("sessions", () => {
     const { a } = await setup();
     const r = await a.call("admin", "DELETE", "/api/v1/admin/sessions/not-a-uuid");
     expect(r.status).toBe(400);
+  });
+});
+
+describe("last-admin guard under concurrency (G-I1, contract 409 'no enabled admin left')", () => {
+  /** Two fresh admins, each with a live session, and their resolved principals. */
+  async function twoAdmins() {
+    const { a } = await setup();
+    const out = [];
+    for (const email of ["admin-a@example.test", "admin-b@example.test"]) {
+      const id = await a.t.createUser(email, PW);
+      await grantRole(a.t.deps, { email, role: "admin", change: "granted" });
+      const cookie = await a.t.cookieFor(email, PW);
+      const p = await a.t.deps.identity.resolve(
+        new Request("http://localhost/x", { headers: { cookie } }),
+      );
+      if (!p) throw new Error("no principal");
+      out.push({ id, p });
+    }
+    const [x, y] = out;
+    if (!x || !y) throw new Error("no admins");
+    return { a, x, y };
+  }
+  async function enabledAdmins(a: App): Promise<number> {
+    const r = await a.t.deps.db.$client.execute(
+      "SELECT count(*) AS n FROM user WHERE role = 'admin' AND disabled_at IS NULL",
+    );
+    return Number(r.rows[0]?.n);
+  }
+
+  it("two admins disabling each other at once: one succeeds, the other 409 lastAdmin", async () => {
+    const { a, x, y } = await twoAdmins();
+    const before = await enabledAdmins(a);
+    const rs = await Promise.all([
+      disableUser(a.t.deps, x.p, y.id),
+      disableUser(a.t.deps, y.p, x.id),
+    ]);
+    expect(rs.filter((r) => r.ok)).toHaveLength(1);
+    expect(rs.filter((r) => !r.ok && r.code === "lastAdmin")).toHaveLength(1);
+    expect(await enabledAdmins(a)).toBe(before - 1);
+    expect(await a.t.auditRows("userDisabled")).toHaveLength(1);
+  });
+
+  it("two admins demoting each other at once: one succeeds, the other 409 lastAdmin", async () => {
+    const { a, x, y } = await twoAdmins();
+    const before = await enabledAdmins(a);
+    const rs = await Promise.all([
+      setUserRole(a.t.deps, x.p, y.id, "user"),
+      setUserRole(a.t.deps, y.p, x.id, "implementer"),
+    ]);
+    expect(rs.filter((r) => r.ok)).toHaveLength(1);
+    expect(rs.filter((r) => !r.ok && r.code === "lastAdmin")).toHaveLength(1);
+    expect(await enabledAdmins(a)).toBe(before - 1);
+    expect(await consoleRoleRows(a)).toHaveLength(1);
+  });
+
+  it("an admin disabled a moment earlier cannot demote or disable (stale principal)", async () => {
+    const { a, x, y } = await twoAdmins();
+    const u = await plainUser(a, "bystander@example.test");
+    expect((await disableUser(a.t.deps, x.p, y.id)).ok).toBe(true);
+    expect(await disableUser(a.t.deps, y.p, u.id)).toEqual({ ok: false, code: "lastAdmin" });
+    expect(await setUserRole(a.t.deps, y.p, u.id, "implementer")).toEqual({
+      ok: false,
+      code: "lastAdmin",
+    });
+    expect(await a.t.auditRows("userDisabled")).toHaveLength(1);
+    expect(await consoleRoleRows(a)).toHaveLength(0);
   });
 });
