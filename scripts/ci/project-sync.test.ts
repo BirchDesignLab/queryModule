@@ -950,6 +950,20 @@ describe("project-sync board job: parity with board-model.mjs (PR #83 review M2)
       ],
     ],
     [
+      "board-dates markers with an impossible date or a finish before the start (#497)",
+      [
+        parent(55, "Wave", undefined, true),
+        {
+          ...task(1, 55, "2026-10-01T00:00:00Z", { at: "2026-10-02T00:00:00Z" }),
+          body: "<!-- board-dates start=2026-13-45 finish=2026-09-30 -->",
+        },
+        {
+          ...task(2, 55, "2026-10-01T00:00:00Z", { at: "2026-10-02T00:00:00Z" }),
+          body: "<!-- board-dates start=2026-09-30 finish=2026-09-29 -->",
+        },
+      ],
+    ],
+    [
       "a parent with no children (no dates) beside a pre-floor leaf (clamped)",
       [parent(55, "Wave"), task(1, 60, "2026-09-01T00:00:00Z", { at: "2026-09-10T00:00:00Z" })],
     ],
