@@ -75,16 +75,22 @@ have no code yet):
   `packages/core/src/contracts/audit.ts`, `audit-auth.ts`, `primitives.ts`,
   `identity.ts`; query
   dispatch `packages/api/src/queries/**` (submit and access policy, #318),
+  `packages/core/src/planner/**`,
   `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
-  `packages/core/contracts/ws-events.schema.json`; the
+  `packages/core/contracts/ws-events.schema.json`; terminal command parser
+  `packages/core/src/terminal/**`; the live site config store
+  `packages/api/src/admin/config/**` and the shared admin files
+  `packages/api/src/admin/*.ts` (ADR-0011: swaps live config, writes audit); the
   sensitive-review gate itself `.github/sensitive-paths`,
   `scripts/ci/sensitive-review.ts`, `scripts/ci/check-sensitive-review.ts`;
-  reserved: the audit-migration guard `scripts/ci/check-audit-migrations.ts`;
+  the critical CI checks `scripts/ci/check-audit-migrations.ts`,
+  `scripts/ci/check-schema-writes.ts` and the `main` guard they start through,
+  `scripts/ci/is-main-module.mjs` (#311 C-m1);
   reserved: TokenStore implementations `**/*token-store*` and the case- and
   separator-insensitive `**/*[Tt][Oo][Kk][Ee][Nn]*[Ss][Tt][Oo][Rr][Ee]*`, file
   and directory forms (SEC-006, #85, #96); reserved: credentials, dispatch,
-  adapters, planner, delegation, terminal parser, write-back and results
-  directories named in `.github/sensitive-paths`.
+  adapters, delegation, write-back and results directories named in
+  `.github/sensitive-paths`.
 - Gate (Opus 5.5 `medium` artifact, #92): the verify gate and merge path
   `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
   `.gitignore`, `**/vitest.config.ts`, `**/vite.config.ts`,
@@ -94,7 +100,11 @@ have no code yet):
   `packages/api/src/http/session.ts`, `packages/api/src/ws/**`,
   `packages/api/src/seed/**`, `packages/api/src/ops/**`,
   `packages/api/src/deps.ts`, `packages/api/src/events/**` (event bus: session end closes
-  sockets, #212).
+  sockets, #212); HTTP security guards `packages/api/src/http/security.ts`
+  (CSRF and Origin), `packages/api/src/http/web.ts` and `packages/api/src/app.ts`
+  (#338, #343); the admin console floor `packages/api/src/admin/**` (user
+  administration is auth; anything new under `admin/` is at least gate,
+  ADR-0011).
 - Deps (automated checks only, no artifact): `pnpm-lock.yaml`, and a
   version-only change of an existing package (`package.json`) or action (the
   ref of an existing workflow `uses:` line). `.github/dependabot.yml` is gate.
