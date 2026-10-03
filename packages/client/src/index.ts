@@ -14,6 +14,8 @@ export type {
   AuthApi,
   AuthApiOptions,
   AuthErrorCode,
+  ChangePasswordCode,
+  ChangePasswordResult,
   SessionUser,
   SignInResult,
 } from "./auth/auth-api.js";

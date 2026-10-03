@@ -86,6 +86,79 @@ describe("config draft (Task 31 part 1, BR-001, FR-060)", () => {
   });
 });
 
+describe("the store and the server draft (Task 33 part 2a)", () => {
+  const server = (over: Record<string, unknown> = {}) => ({
+    document: { siteConfig: {}, locales: {} },
+    siteId: "default",
+    baseVersion: 3,
+    draftVersion: null,
+    liveDoc: { a: 1 },
+    liveLabels: {},
+    savedDoc: { a: 1 },
+    savedLabels: {},
+    ...over,
+  });
+
+  it("start takes the labels and the server base the draft was loaded with", () => {
+    const store = createConfigDraftStore();
+    store.getState().start({ a: 1 }, { labels: { en: { k: "v" } }, server: server() });
+    expect(store.getState().labels).toEqual({ en: { k: "v" } });
+    expect(store.getState().server?.baseVersion).toBe(3);
+  });
+
+  it("load replaces the draft and its server base and clears undo and redo", () => {
+    const store = createConfigDraftStore();
+    store.getState().start({ a: 1 }, { server: server() });
+    store.getState().setPath(["a"], 2);
+    expect(store.getState().undoCount).toBe(1);
+    store.getState().load({ a: 9 }, { en: { k: "v" } }, server({ baseVersion: 4 }));
+    expect(store.getState().doc).toEqual({ a: 9 });
+    expect(store.getState().labels).toEqual({ en: { k: "v" } });
+    expect(store.getState().server?.baseVersion).toBe(4);
+    expect(store.getState().undoCount).toBe(0);
+    expect(store.getState().redoCount).toBe(0);
+  });
+
+  it("markSaved records the saved draft without touching the edits or the undo steps", () => {
+    const store = createConfigDraftStore();
+    store.getState().start({ a: 1 }, { server: server() });
+    store.getState().setPath(["a"], 2);
+    const document = { siteConfig: { a: 2 }, locales: {} };
+    store.getState().markSaved(4, document, { doc: { a: 2 }, labels: {} });
+    const saved = store.getState().server;
+    expect(saved?.draftVersion).toBe(4);
+    expect(saved?.document).toBe(document);
+    expect(saved?.savedDoc).toEqual({ a: 2 });
+    expect(store.getState().undoCount).toBe(1);
+  });
+
+  it("setLive replaces the live view only: the edits, the base version and the undo steps stay", () => {
+    const store = createConfigDraftStore();
+    store.getState().start({ a: 1 }, { server: server() });
+    store.getState().setPath(["a"], 2);
+    store.getState().setLive({ a: 7 }, { en: { k: "v" } });
+    const state = store.getState();
+    expect(state.server?.liveDoc).toEqual({ a: 7 });
+    expect(state.server?.liveLabels).toEqual({ en: { k: "v" } });
+    expect(state.server?.baseVersion).toBe(3);
+    expect(state.doc).toEqual({ a: 2 });
+    expect(state.undoCount).toBe(1);
+  });
+
+  it("setLive before the server base is loaded does nothing", () => {
+    const store = createConfigDraftStore();
+    store.getState().setLive({ a: 7 }, {});
+    expect(store.getState().server).toBeNull();
+  });
+
+  it("reset clears the server base too (spec 6.7)", () => {
+    const store = createConfigDraftStore();
+    store.getState().start({ a: 1 }, { server: server() });
+    store.getState().reset();
+    expect(store.getState().server).toBeNull();
+  });
+});
+
 describe("pointerLines (Task 33)", () => {
   it("maps JSON pointers to 1-based lines of the shown text", () => {
     const text = JSON.stringify({ a: { b: 1, "c/d": [10, { e: 2 }] }, f: "x" }, null, 2);

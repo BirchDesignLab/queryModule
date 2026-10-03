@@ -86,3 +86,40 @@ describe("SEC-006 typed client respects no-store and resets on 401 (spec 6.7)", 
     expect(onUnauthenticated).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("D-A26 passwordChangeRequired (SEC-005)", () => {
+  const make = (fetch: (r: Request) => Promise<Response>, onPasswordChangeRequired = vi.fn()) => ({
+    onPasswordChangeRequired,
+    api: createApiClient({
+      baseUrl: "http://api.test",
+      platform: platform("cookie"),
+      onUnauthenticated: () => undefined,
+      onPasswordChangeRequired,
+      fetch,
+    }),
+  });
+  it("calls onPasswordChangeRequired on a 403 with that code and leaves the body readable", async () => {
+    const t = make(async () =>
+      Response.json(
+        { error: { code: "passwordChangeRequired", requestId: "r1" } },
+        { status: 403 },
+      ),
+    );
+    const { error } = await t.api.GET("/api/v1/meta");
+    expect(t.onPasswordChangeRequired).toHaveBeenCalledTimes(1);
+    expect(error).toMatchObject({ error: { code: "passwordChangeRequired" } });
+  });
+  it("ignores any other 403, a non-JSON 403 and a 200", async () => {
+    const forbidden = make(async () =>
+      Response.json({ error: { code: "forbidden", requestId: "r1" } }, { status: 403 }),
+    );
+    await forbidden.api.GET("/api/v1/meta");
+    const plain = make(async () => new Response("no", { status: 403 }));
+    await plain.api.GET("/api/v1/meta");
+    const ok = make(async () => Response.json(META));
+    await ok.api.GET("/api/v1/meta");
+    expect(forbidden.onPasswordChangeRequired).not.toHaveBeenCalled();
+    expect(plain.onPasswordChangeRequired).not.toHaveBeenCalled();
+    expect(ok.onPasswordChangeRequired).not.toHaveBeenCalled();
+  });
+});

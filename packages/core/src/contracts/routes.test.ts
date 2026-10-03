@@ -24,6 +24,14 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     }
   });
 
+  it("every session route declares 403 passwordChangeRequired (D-A26, #505 T28 Q3)", () => {
+    for (const r of ROUTES) {
+      if (r.access === "public") continue;
+      const forbidden = (r.responses as Record<number, { description: string } | undefined>)[403];
+      expect(forbidden?.description, r.id).toMatch(/passwordChangeRequired/);
+    }
+  });
+
   it("path parameters match the params schema", () => {
     for (const r of ROUTES) {
       const inPath = [...r.path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();

@@ -100,7 +100,7 @@ describe("ADR-0011 admin config contracts (BR-001, FR-060)", () => {
   });
 });
 
-describe("ADR-0011 admin user contracts (SEC-005, SEC-014)", () => {
+describe("ADR-0011 item 8 admin user contracts (D-A26)", () => {
   it("a user row carries no password, hash or token", () => {
     expect(AdminUserSchema.safeParse(adminUser).success).toBe(true);
     for (const leak of ["password", "passwordHash", "token"])
@@ -151,7 +151,7 @@ describe("ADR-0011 admin user contracts (SEC-005, SEC-014)", () => {
   });
 });
 
-describe("ADR-0011 admin routes (SEC-014)", () => {
+describe("ADR-0011 admin routes (items 5, 6, 8)", () => {
   const admin = ROUTES.filter((r) => r.path.startsWith("/api/v1/admin/"));
 
   it("config routes are configEditor behind adminConfig; user and session routes admin behind adminUsers", () => {

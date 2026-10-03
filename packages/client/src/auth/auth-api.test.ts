@@ -120,4 +120,55 @@ describe("BR-002 standalone login through Better Auth (spec 5.6)", () => {
     });
     expect(parseSessionUser("nope")).toBeNull();
   });
+  it("parseSessionUser carries Better Auth's mustChangePassword only when true (D-A26)", () => {
+    const user = { id: "u", email: "x@querymodule.test", role: "user" };
+    expect(parseSessionUser({ user: { ...user, mustChangePassword: true } })).toEqual({
+      ...user,
+      mustChangePassword: true,
+    });
+    expect(parseSessionUser({ user: { ...user, mustChangePassword: false } })).toEqual(user);
+    expect(parseSessionUser({ user: { ...user, mustChangePassword: "yes" } })).toEqual(user);
+  });
+});
+
+describe("D-A26 change-password through Better Auth (SEC-005)", () => {
+  const api = createAuthApi({ baseUrl: BASE });
+  const answer = (status: number, body: Record<string, unknown>) =>
+    server.use(
+      http.post(`${BASE}/api/v1/auth/change-password`, () => HttpResponse.json(body, { status })),
+    );
+  it("sends both passwords with the app's X-Requested-With header and no revokeOtherSessions", async () => {
+    const seenBodies: unknown[] = [];
+    const headers: (string | null)[] = [];
+    server.use(
+      http.post(`${BASE}/api/v1/auth/change-password`, async ({ request }) => {
+        headers.push(request.headers.get("x-requested-with"));
+        seenBodies.push(await request.json());
+        return HttpResponse.json({ status: true });
+      }),
+    );
+    expect(await api.changePassword("old-pass-1234", "new-pass-5678")).toEqual({ ok: true });
+    expect(headers).toEqual(["querymodule"]);
+    expect(seenBodies).toEqual([
+      { currentPassword: "old-pass-1234", newPassword: "new-pass-5678" },
+    ]);
+  });
+  it("maps the server's refusals to a code, never echoing a message", async () => {
+    answer(400, { error: { code: "validationFailed", requestId: "r1" } });
+    expect(await api.changePassword("a", "a")).toEqual({ ok: false, code: "samePassword" });
+    answer(400, { code: "INVALID_PASSWORD", message: "Invalid password" });
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "incorrect" });
+    answer(400, { code: "PASSWORD_TOO_SHORT", message: "Password too short" });
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "tooShort" });
+    answer(400, { code: "PASSWORD_TOO_LONG", message: "Password too long" });
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "tooShort" });
+    answer(429, {});
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "rateLimited" });
+    answer(401, { error: { code: "unauthenticated", requestId: "r1" } });
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "unauthenticated" });
+    answer(503, {});
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "unavailable" });
+    server.use(http.post(`${BASE}/api/v1/auth/change-password`, () => HttpResponse.error()));
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "unavailable" });
+  });
 });

@@ -26,7 +26,7 @@ function copy(): string {
  * step 6), so it changes with packages/config/sites/default.json and with any core schema
  * default; update it deliberately in the change that does that.
  */
-const DEFAULT_CONFIG_HASH = "bdbc274ddd743acf1ef2af660e62eac33e540713707bbc18506ec7f4cb0dba06";
+const DEFAULT_CONFIG_HASH = "18f91a62da4d0a2878f7b6066573dbd7b6811541b928e9338ae6f1adf51778d6";
 
 /*
  * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
@@ -34,7 +34,7 @@ const DEFAULT_CONFIG_HASH = "bdbc274ddd743acf1ef2af660e62eac33e540713707bbc18506
  * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
  * default; update it deliberately in the change that does that.
  */
-const EXAMPLE_OK_CONFIG_HASH = "4ce8f2e46b18a6c20857b17793dd445e999152ab4070fc89aa700ccea5aa2aee";
+const EXAMPLE_OK_CONFIG_HASH = "3d0be51696e8915c9d07ac961b72189582c1cf0ea731ea535ecb627c80d7ecee";
 
 /**
  * example-ok's resolved warnings: fields a rule can require with no position in a command. VEH

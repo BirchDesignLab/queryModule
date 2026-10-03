@@ -88,15 +88,20 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
     expect(area).not.toHaveFocus();
   });
 
-  it("publish and history stay in the tab order, described by their reason", async () => {
+  it("the disabled controls stay in the tab order, described by their reason", async () => {
     const t = await openBuilder();
-    const publish = screen.getByRole("button", { name: "Publish" });
+    const save = screen.getByRole("button", { name: "Save draft" });
+    const review = screen.getByRole("button", { name: "Review and publish" });
     const history = screen.getByRole("button", { name: "History" });
     history.focus();
     await t.user.tab();
-    expect(publish).toHaveFocus();
-    expect(publish).toHaveAccessibleDescription(
-      "Publish and history arrive with the config store.",
+    expect(save).toHaveFocus();
+    await t.user.tab();
+    expect(review).toHaveFocus();
+    expect(save).toHaveAccessibleDescription("No new edits to save.");
+    expect(review).toHaveAccessibleDescription(
+      "Nothing to publish: the draft matches the live version.",
     );
+    expect(history).not.toHaveAttribute("aria-disabled");
   });
 });

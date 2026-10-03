@@ -51,6 +51,11 @@ export { expect };
 
 /** Fails on serious or critical axe violations (spec 9.3 step 12, 10.6). */
 export async function expectNoSeriousAxeViolations(page: Page): Promise<void> {
+  // Scan the settled page: a button's background-color transition (focus returning after a
+  // dialog) read mid-way gives a false color-contrast failure (#507, 1 in 4 runs of admin-users).
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running"),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();

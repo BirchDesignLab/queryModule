@@ -1,6 +1,6 @@
 import { diffConfig } from "@querymodule/core/config";
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { useContext, useId, useMemo } from "react";
+import { type ReactNode, useContext, useId, useMemo } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
@@ -15,11 +15,11 @@ import {
 } from "./changes.js";
 import { ChecksContext, type ShippedBundles } from "./checks.js";
 import { useLabelText } from "./controls.js";
-import { docFromClient, type JsonObject } from "./draft.js";
+import type { JsonObject } from "./draft.js";
 import { useItemName } from "./FormTab.js";
 import { languageName } from "./LabelOverlay.js";
 import { useConditionWords } from "./RulesEditor.js";
-import { useLiveConfig } from "./use-cached-config.js";
+import { useLiveDoc } from "./use-cached-config.js";
 
 /** What a locale ships for a label key: "" when nothing, null while the bundles are not loaded. */
 function shippedText(shipped: ShippedBundles | null, locale: string, key: string): string | null {
@@ -43,12 +43,15 @@ export function ChangesView({
   onOpen,
 }: {
   doc: JsonObject;
-  /** Opens an item in the Form view and puts focus in it (a user action, so focus may move). */
-  onOpen(pointer: string): void;
+  /**
+   * Opens an item in the Form view and puts focus in it (a user action, so focus may move). Without
+   * it the list is for reading only, as in the publish dialog.
+   */
+  onOpen?: (pointer: string) => void;
 }) {
   const t = useT();
   const translator = useTranslator();
-  const { config, check } = useLiveConfig();
+  const { doc: live, check } = useLiveDoc();
   const { labels } = useDraft();
   const { issues, status, shipped } = useContext(ChecksContext);
   const labelText = useLabelText();
@@ -59,7 +62,6 @@ export function ChangesView({
     [translator.locale],
   );
   const deps = useMemo<ChangeDeps>(() => ({ t, labelText, itemName }), [t, labelText, itemName]);
-  const live = useMemo(() => (config === undefined ? null : docFromClient(config)), [config]);
   const groups = useMemo<ChangeGroup[]>(() => {
     if (live === null) return [];
     const list = buildChangeGroups(diffConfig(live, doc), live, doc, deps);
@@ -99,7 +101,9 @@ export function ChangesView({
       <h3 className="qm-editor__title" id={headingId}>
         {t("admin.diff.title")}
       </h3>
-      <p className="qm-diff__note">{t("admin.diff.note")}</p>
+      <p className="qm-diff__note">
+        {t(onOpen === undefined ? "admin.diff.noteStatic" : "admin.diff.note")}
+      </p>
       {check === "checking" && <p className="qm-diff__note">{t("admin.diff.checking")}</p>}
       {check === "failed" && <p className="qm-diff__note">{t("admin.diff.failed")}</p>}
       {live === null ? (
@@ -118,17 +122,13 @@ export function ChangesView({
           <ul className="qm-diff__list">
             {missing.map((row) => (
               <li key={row.labelKey}>
-                <button
-                  type="button"
-                  className="qm-button qm-button--ghost qm-diff__entry"
-                  onClick={() => onOpen(row.target)}
-                >
+                <Row onOpen={onOpen === undefined ? undefined : () => onOpen(row.target)}>
                   <span className="qm-diff__what">{row.owner}</span>
                   <span className="qm-diff__values">
                     {t("admin.diff.missing.in", { languages: row.languages.join(", ") })}
                   </span>
                   <VisuallyHidden>{row.labelKey}</VisuallyHidden>
-                </button>
+                </Row>
               </li>
             ))}
           </ul>
@@ -138,7 +138,7 @@ export function ChangesView({
   );
 }
 
-function GroupView({ group, onOpen }: { group: ChangeGroup; onOpen(pointer: string): void }) {
+function GroupView({ group, onOpen }: { group: ChangeGroup; onOpen?: (pointer: string) => void }) {
   return (
     <section className="qm-diff__group">
       <h4 className="qm-diff__title">
@@ -166,14 +166,27 @@ function GroupView({ group, onOpen }: { group: ChangeGroup; onOpen(pointer: stri
   );
 }
 
-function EntryButton({ entry, onOpen }: { entry: ChangeEntry; onOpen(pointer: string): void }) {
+/** An entry row: a button that opens its item, or plain text where the list is for reading. */
+function Row({ onOpen, children }: { onOpen: (() => void) | undefined; children: ReactNode }) {
+  if (onOpen === undefined)
+    return <div className="qm-diff__entry qm-diff__entry--static">{children}</div>;
+  return (
+    <button type="button" className="qm-button qm-button--ghost qm-diff__entry" onClick={onOpen}>
+      {children}
+    </button>
+  );
+}
+
+function EntryButton({
+  entry,
+  onOpen,
+}: {
+  entry: ChangeEntry;
+  onOpen?: (pointer: string) => void;
+}) {
   const t = useT();
   return (
-    <button
-      type="button"
-      className="qm-button qm-button--ghost qm-diff__entry"
-      onClick={() => onOpen(entry.target)}
-    >
+    <Row onOpen={onOpen === undefined ? undefined : () => onOpen(entry.target)}>
       <span className="qm-badge qm-diff__kind">{t(`admin.diff.kind.${entry.kind}`)}</span>
       <span className="qm-diff__what">{entry.what}</span>
       <span className="qm-diff__values">
@@ -191,7 +204,7 @@ function EntryButton({ entry, onOpen }: { entry: ChangeEntry; onOpen(pointer: st
         )}
       </span>
       <VisuallyHidden>{entry.keyText}</VisuallyHidden>
-    </button>
+    </Row>
   );
 }
 

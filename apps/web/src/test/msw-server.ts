@@ -28,6 +28,64 @@ export const CLIENT_CONFIG = toClientSiteConfig(
   META.configHash,
 );
 
+/** The raw default site file: what an empty config store seeds as version 1 (ADR-0011 item 1). */
+export const RAW_SITE: Record<string, unknown> = JSON.parse(readFileSync(defaultSitePath, "utf8"));
+
+const FIXTURE_ID = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+/** One site_config_version row as the admin API answers it (metadata only, no document). */
+export function versionRow(
+  version: number,
+  status: "draft" | "published" | "superseded",
+  over: Record<string, unknown> = {},
+) {
+  return {
+    id: FIXTURE_ID,
+    version,
+    status,
+    configHash: status === "draft" ? null : "a".repeat(64),
+    baseVersion: status === "draft" ? version - 1 : null,
+    createdBy: "user-0001",
+    createdAt: Date.UTC(2026, 8, 29, 17, 0, 0),
+    publishedBy: status === "draft" ? null : "user-0001",
+    publishedAt: status === "draft" ? null : Date.UTC(2026, 8, 29, 17, 0, 0),
+    rollbackOf: null,
+    ...over,
+  };
+}
+
+/** GET /api/v1/admin/config: live version 1 with the default site, and an optional draft. */
+export function adminConfigBody(
+  options: {
+    liveVersion?: number;
+    /** The live siteConfig; the default site file when omitted. */
+    siteConfig?: Record<string, unknown>;
+    draft?: {
+      version: number;
+      siteConfig: Record<string, unknown>;
+      locales?: Record<string, Record<string, string>>;
+    } | null;
+  } = {},
+) {
+  const liveVersion = options.liveVersion ?? 1;
+  return {
+    siteId: "default",
+    live: {
+      ...versionRow(liveVersion, "published"),
+      document: { siteConfig: options.siteConfig ?? RAW_SITE, locales: {} },
+    },
+    draft:
+      options.draft === undefined || options.draft === null
+        ? null
+        : {
+            ...versionRow(options.draft.version, "draft", { baseVersion: liveVersion }),
+            document: {
+              siteConfig: options.draft.siteConfig,
+              locales: options.draft.locales ?? {},
+            },
+          },
+  };
+}
+
 /** The contract shape of GET/PUT /api/v1/me/preferences (openapi.json getMePreferences200). */
 export const PREFERENCES = {
   layout: { orientation: "horizontal", terminal: "toggle" },
@@ -64,6 +122,7 @@ export function resetMswState(): void {
 export const server = setupServer(
   http.get(`${API}/api/v1/meta`, () => HttpResponse.json(META)),
   http.get(`${API}/api/v1/config`, () => HttpResponse.json(CLIENT_CONFIG)),
+  http.get(`${API}/api/v1/admin/config`, () => HttpResponse.json(adminConfigBody())),
   http.get(`${API}/api/v1/locales/en`, () => HttpResponse.json(EN_BUNDLE)),
   http.get(`${API}/api/v1/auth/get-session`, () =>
     HttpResponse.json(signedIn ? { session: { id: "s1" }, user: TEST_USER } : null),

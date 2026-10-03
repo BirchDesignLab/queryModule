@@ -675,6 +675,17 @@ main[tabindex="-1"]:focus {
   margin-inline-start: auto;
 }
 
+/* Save, conflict and publish results sit above the panes: an alert for what needs action, a plain
+   line for what was done. */
+.qm-builder__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  margin: 0 0 var(--qm-space-2);
+  font-size: var(--qm-type-size-sm);
+}
+
 /* The panes' column: what the row leaves, never more, so the panes inside can scroll. */
 .qm-builder__body {
   grid-column: 1 / -1;
@@ -1458,6 +1469,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin: 0 0 var(--qm-space-5);
 }
 
+/* The publish dialog's list of changes scrolls inside the dialog, never the page behind it. */
+.qm-leave-dialog__content {
+  max-block-size: 50vh;
+  margin-block-end: var(--qm-space-5);
+  overflow-y: auto;
+}
+
 .qm-leave-dialog__actions {
   display: flex;
   flex-wrap: wrap;
@@ -1503,7 +1521,8 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   list-style: none;
 }
 
-.qm-diff__entry.qm-button {
+.qm-diff__entry.qm-button,
+.qm-diff__entry--static {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -1547,4 +1566,125 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-diff__value {
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-sm);
+}
+
+/* Version history (Task 33 part 2b): a panel between the notices and the panes. */
+.qm-history {
+  box-sizing: border-box;
+  margin: 0 0 var(--qm-space-2);
+  padding: var(--qm-space-2) var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-history__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qm-space-2);
+}
+
+.qm-history__head > h3 {
+  margin: 0;
+}
+
+.qm-history__scroll {
+  max-block-size: calc(var(--qm-space-12) * 5);
+  overflow-y: auto;
+}
+
+.qm-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-history__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1) var(--qm-space-3);
+  padding-block: var(--qm-space-1);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-history__version {
+  font-weight: 600;
+}
+
+.qm-history__when,
+.qm-history__of {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-history__actions {
+  display: flex;
+  gap: var(--qm-space-2);
+  margin-inline-start: auto;
+}
+
+/* Users and roles (Task 34): one table in a scroll region, so a narrow window scrolls the table
+   and not the page. Status is a badge with words, never colour alone. */
+.qm-users__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: var(--qm-space-3);
+}
+
+.qm-users__scroll {
+  overflow-x: auto;
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-users__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-users__table th,
+.qm-users__table td {
+  padding: var(--qm-space-2) var(--qm-space-3);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.qm-users__table thead th {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qm-users__table tbody th {
+  font-weight: 600;
+}
+
+.qm-users__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+}
+
+/* The one-time password: set in the data face and selectable, so it can be copied by hand. */
+.qm-users__password {
+  margin: 0 0 var(--qm-space-4);
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-sunken);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  font-family: var(--qm-type-family-data);
+  overflow-wrap: anywhere;
+  user-select: all;
 }

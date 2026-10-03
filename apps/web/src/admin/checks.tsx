@@ -77,6 +77,25 @@ export function useDraftChecks(
   }, [bundleState, settledDoc, settledLabels]);
 }
 
+/**
+ * The checks with issues the server found added (Review and publish runs the spec 5.8 chain on the
+ * server): shown at their controls like the browser's own, without repeating one both found.
+ */
+export function withServerIssues(
+  checks: DraftChecks,
+  extra: readonly DraftIssue[] | null,
+): DraftChecks {
+  if (extra === null || extra.length === 0 || checks.doc === null) return checks;
+  const id = (i: DraftIssue) => JSON.stringify([i.level, i.pointer, i.key, i.params]);
+  const have = new Set(checks.issues.map(id));
+  const added = extra.filter((i) => !have.has(id(i)));
+  if (added.length === 0) return checks;
+  const issues = [...checks.issues, ...added];
+  const byPointer = new Map<string, DraftIssue[]>();
+  for (const i of issues) byPointer.set(i.pointer, [...(byPointer.get(i.pointer) ?? []), i]);
+  return { ...checks, issues, byPointer, groups: groupByControl(checks.doc, issues) };
+}
+
 export const isError = (issues: readonly DraftIssue[] | undefined): boolean =>
   issues?.some((i) => i.level === "error") ?? false;
 

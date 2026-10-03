@@ -455,14 +455,16 @@ test.describe("D0 must-fixes from the design review (1440x900)", () => {
     });
   });
 
-  test("an unavailable admin button (Publish, History) has the disabled look, not the primary fill", async ({
+  test("an unavailable admin button (Save draft, Review and publish) has the disabled look, not the primary fill", async ({
     page,
   }) => {
     await asUser(page, "admin@example.test", "night", async () => {
       await page.goto("/admin/config");
       await expect(page.getByRole("heading", { name: "Site configuration" })).toBeVisible();
-      for (const name of ["Publish", "History"]) {
+      // A fresh draft matches the live version: nothing to save or publish yet.
+      for (const name of ["Save draft", "Review and publish"]) {
         const button = page.getByRole("button", { name });
+        await expect(button, name).toHaveAttribute("aria-disabled", "true");
         await expect(button, name).toHaveCSS("border-top-style", "dashed");
         await expect(button, name).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
         await expect(button, name).toHaveCSS("color", rgb("night", "color.text.muted"));
@@ -789,7 +791,7 @@ test.describe("B1 sign out with unsaved changes (1440x900)", () => {
         // By keyboard, so the dialog's first focus is a keyboard focus and shows its ring.
         await signOut.focus();
         await page.keyboard.press("Enter");
-        const dialog = page.getByRole("dialog", { name: "Sign out and lose your changes?" });
+        const dialog = page.getByRole("dialog", { name: "Sign out with unsaved edits?" });
         await expect(dialog).toBeVisible();
         const stay = dialog.getByRole("button", { name: "Stay signed in" });
         const leave = dialog.getByRole("button", { name: "Sign out", exact: true });
@@ -981,26 +983,33 @@ test.describe("Admin parity (item 5)", () => {
           expect(Math.round(b.preview?.w ?? 0), "preview width").toBeLessThanOrEqual(450);
           expect(b.tree?.w ?? 0, "tree width").toBeGreaterThanOrEqual(230);
           expect(b.editor?.w ?? 0, "editor width").toBeGreaterThanOrEqual(360);
-          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(90);
+          // Two rows: the status line and the view tabs, then Undo, Redo, History, Save draft and Review
+          // and publish (Tasks 33 and 34 added the last four to the old one-row bar).
+          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(130);
           // A section's label column sits beside its controls, not above them.
           expect(
             (b.label?.x ?? 0) + (b.label?.w ?? 0),
             "label column beside controls",
           ).toBeLessThanOrEqual(b.body1?.x ?? 0);
-          // The reasons for the disabled buttons share one row, under the buttons.
+          // The reasons for the disabled buttons sit in one or two rows inside the toolbar.
           const reasons = await page.evaluate(() => {
             const tops = [...document.querySelectorAll(".qm-builder__reason")].map(
               (el) => el.getBoundingClientRect().top,
             );
-            const publish = [...document.querySelectorAll(".qm-builder__toolbar button")]
-              .at(-1)
-              ?.getBoundingClientRect().bottom;
-            return { tops, publish: publish ?? 0 };
+            return { tops };
           });
           expect(reasons.tops.length, "reasons").toBeGreaterThan(0);
-          expect(Math.max(...reasons.tops) - Math.min(...reasons.tops), "one row").toBeLessThan(4);
-          expect(Math.min(...reasons.tops), "under the buttons").toBeGreaterThanOrEqual(
-            reasons.publish,
+          // Three reasons now (history, save, review): at 1366 they wrap to two rows, no more.
+          expect(Math.max(...reasons.tops) - Math.min(...reasons.tops), "two rows").toBeLessThan(
+            40,
+          );
+          // They flow in the toolbar's last row after the buttons (shell.css order 3), so a reason
+          // can start beside the last button on a wrapped bar: only "inside the toolbar" holds.
+          expect(Math.min(...reasons.tops), "inside the toolbar").toBeGreaterThanOrEqual(
+            b.toolbar?.y ?? 0,
+          );
+          expect(Math.max(...reasons.tops), "inside the toolbar").toBeLessThan(
+            b.toolbar?.bottom ?? 0,
           );
           // With unpublished changes the status line is longer and the toolbar may wrap more: the
           // panes still end inside the window and the page still does not scroll.
@@ -1056,7 +1065,7 @@ test.describe("Admin parity (item 5)", () => {
   }
 
   for (const mode of MODES) {
-    test(`${mode}: the users placeholder and /status sit on the sunken page; the rail runs the column`, async ({
+    test(`${mode}: the users page and /status sit on the sunken page; the rail runs the column`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1366, height: 768 });
@@ -1069,7 +1078,9 @@ test.describe("Admin parity (item 5)", () => {
         expect(users.rail?.bottom ?? 0, "rail reaches the window bottom").toBeGreaterThanOrEqual(
           768,
         );
-        expect(users.overflowY, "page scroll").toBeLessThanOrEqual(0);
+        // The users table is real content now (the seeded users, then sessions): the page may
+        // scroll down, never sideways.
+        expect(users.overflowX, "page overflow").toBeLessThanOrEqual(0);
         await page.goto("/status");
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
         await capture(page, `parity-status-${mode}`);
@@ -1633,19 +1644,18 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
     });
   }
 
-  // A short page: the stacked rail keeps its own height and the page does not scroll; beside the
-  // section the rail runs the whole window.
+  // A short window: the stacked rail keeps its own height; beside the section the rail runs the
+  // whole window. The users table is real content, so the page itself may scroll down.
   for (const [width, height] of [
     [683, 600],
     [800, 600],
   ] as const) {
-    test(`${width}x${height} users: the stacked rail is natural height and the page does not scroll`, async ({
+    test(`${width}x${height} users: the stacked rail is natural height and the section fills the window`, async ({
       page,
     }) => {
       await asUser(page, "admin@example.test", "day", async () => {
         await open(page, { width, height }, "/admin/users");
         const g = await parts(page);
-        expect(g.overflowY, "page scroll").toBeLessThanOrEqual(0);
         expect((g.rail?.h ?? 0) / height, "rail share of the window").toBeLessThan(0.3);
         expect(
           g.main?.bottom ?? 0,
@@ -1659,7 +1669,6 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
     await asUser(page, "admin@example.test", "day", async () => {
       await open(page, { width: 1024, height: 600 }, "/admin/users");
       const g = await parts(page);
-      expect(g.overflowY, "page scroll").toBeLessThanOrEqual(0);
       expect(g.rail?.bottom ?? 0, "rail bottom").toBeGreaterThanOrEqual(600 - 1);
     });
   });

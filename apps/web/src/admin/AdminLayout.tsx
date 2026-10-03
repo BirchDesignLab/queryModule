@@ -7,6 +7,7 @@ import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { ConfigBuilder } from "./ConfigBuilder.js";
 import { canManageUsers, canOpenAdmin } from "./roles.js";
+import { UsersView } from "./Users.js";
 
 /**
  * The admin console (ADR-0011 item 5, Task 30), lazy-loaded. Other roles get what an unknown path
@@ -108,9 +109,9 @@ export function AdminUsersPage() {
   const role = useStore(authStore, (s) => s.user?.role);
   if (!canManageUsers(role)) return <Navigate to="/admin/config" replace />;
   return (
-    <section>
+    <section className="qm-users-page">
       <SectionHeading>{t("admin.users.title")}</SectionHeading>
-      <p>{t("admin.users.pending")}</p>
+      <UsersView />
     </section>
   );
 }

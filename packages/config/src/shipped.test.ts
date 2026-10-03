@@ -90,7 +90,11 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
       ["stateSource", "state", "mock"],
       ["nationalSource", "national", "mock"],
     ]);
-    expect(Object.values(c.features).every((v) => v === false)).toBe(true);
+    // The admin console is on in the shipped site (ADR-0011: off only until its tests pass; ADR-0012
+    // puts the admin persona in the M1 demo). Every other flag stays off.
+    const on = ["adminConfig", "adminUsers"];
+    for (const [flag, value] of Object.entries(c.features))
+      expect(value, flag).toBe(on.includes(flag));
   });
 
   it("FR-008 FR-031 example-ok: OK default, / delimiter, BOAT removed, tagSticker added", () => {
