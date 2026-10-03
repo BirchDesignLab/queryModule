@@ -344,6 +344,11 @@ export function usePublishFlow(): PublishFlow {
     cancelRollback: () => setRollingBack(null),
     rollback: () => void rollback(),
     retryLoad: () => {
+      // Edits made since the failed reload are not replaced without the same confirm as a conflict.
+      if (stale === "replace" && unsaved) {
+        setConfirmReload(true);
+        return;
+      }
       void (stale === "replace" ? load(false) : refreshLive()).then((ok) => {
         if (ok) setStale(null);
       });
@@ -354,6 +359,7 @@ export function usePublishFlow(): PublishFlow {
         if (ok) {
           setConflict(false);
           setNotice(null);
+          setStale(null);
         } else setNotice({ kind: "error", text: t("admin.config.loadError") });
       });
     },

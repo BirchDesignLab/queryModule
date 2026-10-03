@@ -561,4 +561,31 @@ describe("part 2a minors (M1, M2, M3, M6)", () => {
     );
     expect(screen.queryByText(/the latest version could not be loaded/)).not.toBeInTheDocument();
   });
+  it("Q1: Load again with edits made since asks before replacing them", async () => {
+    let failGets = false;
+    const t = await openBuilder({
+      get: () =>
+        failGets
+          ? HttpResponse.json({ error: { code: "internal", requestId: "r1" } }, { status: 500 })
+          : HttpResponse.json(adminConfigBody()),
+    });
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    await within(dialog).findByText(/Terminal settings/);
+    await waitFor(() =>
+      expect(within(dialog).queryByText("Checking the live version.")).toBeNull(),
+    );
+    failGets = true;
+    await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
+    await screen.findByText(/the latest version could not be loaded/);
+    await setDelimiter(t, ";");
+    failGets = false;
+    await t.user.click(screen.getByRole("button", { name: "Load again" }));
+    const confirm = await screen.findByRole("dialog");
+    expect(confirm).toHaveTextContent(/discard|keep/i);
+    await t.user.click(within(confirm).getByRole("button", { name: /keep/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await findSetting("terminal.delimiter")).toHaveValue(";");
+  });
 });
