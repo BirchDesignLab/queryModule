@@ -94,6 +94,7 @@ export function LeaveDialog({
   leavePrimary = false,
   busy = false,
   busyReason,
+  hideLeave = false,
 }: {
   open: boolean;
   title: string;
@@ -112,6 +113,8 @@ export function LeaveDialog({
   busy?: boolean;
   /** Why the buttons do nothing while `busy`; read by both buttons and shown in the dialog. */
   busyReason?: string | undefined;
+  /** Only the first button: there is nothing to confirm (the publish dialog with no changes). */
+  hideLeave?: boolean;
 }) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -196,16 +199,18 @@ export function LeaveDialog({
         >
           {stayLabel}
         </button>
-        <button
-          ref={leaveRef}
-          type="button"
-          className={leavePrimary ? "qm-button" : "qm-button qm-button--secondary"}
-          aria-disabled={busy ? "true" : undefined}
-          aria-describedby={busy && busyReason !== undefined ? `${id}-busy` : undefined}
-          onClick={busy ? undefined : onLeave}
-        >
-          {leaveLabel}
-        </button>
+        {!hideLeave && (
+          <button
+            ref={leaveRef}
+            type="button"
+            className={leavePrimary ? "qm-button" : "qm-button qm-button--secondary"}
+            aria-disabled={busy ? "true" : undefined}
+            aria-describedby={busy && busyReason !== undefined ? `${id}-busy` : undefined}
+            onClick={busy ? undefined : onLeave}
+          >
+            {leaveLabel}
+          </button>
+        )}
       </div>
     </dialog>
   );

@@ -44,23 +44,18 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
     expect(draftDoc(t)?.terminal).toEqual({ delimiter: "," });
   });
 
-  it("labels server-only sections; history is aria-disabled and focusable with its reason; publish needs changes", async () => {
+  it("labels server-only sections; publish needs changes (aria-disabled, focusable); history is enabled", async () => {
     const t = await openBuilder();
     expect(
       screen.getByText(/server settings: available after the config store lands/i),
     ).toBeInTheDocument();
     const publish = screen.getByRole("button", { name: "Review and publish" });
     const history = screen.getByRole("button", { name: "History" });
-    for (const b of [publish, history]) {
-      expect(b).not.toBeDisabled();
-      expect(b).toHaveAttribute("aria-disabled", "true");
-    }
-    expect(history).toHaveAccessibleDescription(/version history arrives/i);
-    const reason = document.getElementById(history.getAttribute("aria-describedby") ?? "");
-    expect(reason).not.toHaveAttribute("tabindex");
+    expect(publish).not.toBeDisabled();
+    expect(publish).toHaveAttribute("aria-disabled", "true");
+    expect(history).not.toHaveAttribute("aria-disabled");
     const before = JSON.stringify(draftDoc(t));
     await t.user.click(publish);
-    await t.user.click(history);
     expect(JSON.stringify(draftDoc(t))).toBe(before);
   });
 

@@ -156,6 +156,8 @@ export const HISTORY_LIMIT = 100;
 export interface ServerBase {
   /** The document the draft was loaded from or last saved as: what unchanged sections keep. */
   document: ConfigDocument;
+  /** The site's id: the export file's name. */
+  siteId: string;
   /** The live version the draft is based on (the optimistic lock of PUT /admin/config/draft). */
   baseVersion: number;
   /** The saved draft's version; null while the server has none. */
@@ -199,6 +201,11 @@ export interface ConfigDraftState {
    * than the edits now): it is the new merge base and the new saved copy.
    */
   markSaved(draftVersion: number, document: ConfigDocument, saved: EditState): void;
+  /**
+   * The live version moved on the server (a check, a roll back): its view replaces the one the
+   * diff compares with. The edits, the draft's base version and the undo steps stay.
+   */
+  setLive(liveDoc: JsonObject, liveLabels: LabelOverlay): void;
   /** `coalesce`: a text entry, whose consecutive edits of one control are one undo step. */
   setPath(path: readonly PathSegment[], value: unknown, options?: SetPathOptions): void;
   setDoc(doc: JsonObject): void;
@@ -279,6 +286,10 @@ export function createConfigDraftStore(): ConfigDraftStore {
           savedLabels: saved.labels,
         },
       });
+    },
+    setLive(liveDoc, liveLabels) {
+      if (state.server === null) return;
+      publish({ server: { ...state.server, liveDoc, liveLabels } });
     },
     setPath(path, value, options) {
       if (state.doc === null || Object.is(valueAt(state.doc, path), value)) return;

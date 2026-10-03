@@ -206,11 +206,11 @@ describe("review and publish", () => {
     );
   });
 
-  it("History stays aria-disabled with its reason until part 2b", async () => {
+  it("History is a working button now (part 2b): no reason text, not aria-disabled", async () => {
     await openBuilder();
     const history = button("History");
-    expect(history).toHaveAttribute("aria-disabled", "true");
-    expect(history).toHaveAccessibleDescription(/version history arrives/i);
+    expect(history).not.toHaveAttribute("aria-disabled");
+    expect(history).not.toHaveAccessibleDescription(/version history arrives/i);
   });
 
   it("server validation errors show at their controls with the count announced, and nothing is published", async () => {
@@ -467,5 +467,98 @@ describe("while an action is in flight (round 1: C1, C2, C3)", () => {
     expect(list).toHaveFocus();
     await t.user.tab();
     expect(cancel).toHaveFocus();
+  });
+});
+
+describe("part 2a minors (M1, M2, M3, M6)", () => {
+  it("M1: the publish dialog's list is static, so it does not say to select an entry", async () => {
+    const t = await openBuilder();
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    await within(dialog).findByText(/Terminal settings/);
+    expect(within(dialog).queryByText(/Select an entry to open it/)).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Compared with the version dispatchers see now/),
+    ).toBeInTheDocument();
+    await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    // The Changes tab keeps its entries openable, and the note.
+    await t.user.click(screen.getByRole("tab", { name: "Changes" }));
+    expect(await screen.findByText(/Select an entry to open it/)).toBeInTheDocument();
+  });
+
+  it("M2: the live check feeds one source, so the chip, the Changes view and the dialog agree", async () => {
+    let liveDelimiter = ".";
+    const t = await openBuilder({
+      get: () =>
+        HttpResponse.json(
+          adminConfigBody({ siteConfig: site({ terminal: { delimiter: liveDelimiter } }) }),
+        ),
+    });
+    await setDelimiter(t, ",");
+    expect(status()).toHaveTextContent("1 unpublished change.");
+    // Someone else publishes the same value while this draft is open; the Changes view checks.
+    liveDelimiter = ",";
+    await t.user.click(screen.getByRole("tab", { name: "Changes" }));
+    expect(await screen.findByTestId("diff-empty")).toBeInTheDocument();
+    await waitFor(() => expect(status()).toHaveTextContent("No unpublished changes."));
+  });
+
+  it("M6: with no differences against live, Review does not offer Publish and the dialog says so", async () => {
+    const t = await openBuilder();
+    await setDelimiter(t, ",");
+    await t.user.click(button("Save draft"));
+    await waitFor(() => expect(status()).not.toHaveTextContent("Not saved yet"));
+    // Back to the live value: unsaved against the saved draft, but nothing differs from live.
+    const input = await findSetting("terminal.delimiter");
+    await t.user.clear(input);
+    await t.user.type(input, ".");
+    expect(status()).toHaveTextContent("No unpublished changes. Not saved yet.");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    expect(dialog).toHaveTextContent(
+      "There is nothing to publish: the draft matches the live version.",
+    );
+    expect(
+      within(dialog).queryByRole("button", { name: /^Publish version/ }),
+    ).not.toBeInTheDocument();
+    expect(calls.publishes).toHaveLength(0);
+    await t.user.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(button("Review and publish")).toHaveFocus();
+  });
+
+  it("M3: a failed reload after a publish says so, and Load again retries it", async () => {
+    let failGets = false;
+    let liveNow = adminConfigBody();
+    const t = await openBuilder({
+      get: () =>
+        failGets
+          ? HttpResponse.json({ error: { code: "internal", requestId: "r1" } }, { status: 500 })
+          : HttpResponse.json(liveNow),
+    });
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    await within(dialog).findByText(/Terminal settings/);
+    await waitFor(() =>
+      expect(within(dialog).queryByText("Checking the live version.")).toBeNull(),
+    );
+    failGets = true;
+    await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
+    const alert = await screen.findByText(/the latest version could not be loaded/);
+    expect(alert.closest("[role=alert]")).not.toBeNull();
+    // The old base stays until the load works, and says so.
+    expect(status()).toHaveTextContent("Draft, based on version 1.");
+    failGets = false;
+    liveNow = adminConfigBody({
+      liveVersion: 2,
+      siteConfig: site({ terminal: { delimiter: "," } }),
+    });
+    await t.user.click(screen.getByRole("button", { name: "Load again" }));
+    await waitFor(() =>
+      expect(status()).toHaveTextContent("Draft, based on version 2. No unpublished changes."),
+    );
+    expect(screen.queryByText(/the latest version could not be loaded/)).not.toBeInTheDocument();
   });
 });

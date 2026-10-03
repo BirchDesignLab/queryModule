@@ -4,8 +4,10 @@ import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import {
   documentFrom,
+  editorOf,
   fetchAdminConfig,
   publishDraft,
+  rollbackTo,
   saveDraft,
   startOf,
   validateOnServer,
@@ -47,6 +49,12 @@ export interface PublishFlow {
   reviewing: number | null;
   /** The confirm before the latest version replaces the edits is open. */
   confirmingReload: boolean;
+  /** The version whose roll back confirm is open; null while it is closed. */
+  rollingBack: number | null;
+  /** Counts up whenever the version list changed (a roll back, a publish), so the history reloads. */
+  historyStamp: number;
+  /** A reload after a publish or roll back failed: the builder still shows the older base. */
+  staleBase: boolean;
   save(): void;
   review(): void;
   publish(): void;
@@ -54,6 +62,10 @@ export interface PublishFlow {
   askReload(): void;
   cancelReload(): void;
   reload(): void;
+  askRollback(version: number): void;
+  cancelRollback(): void;
+  rollback(): void;
+  retryLoad(): void;
 }
 
 /**
@@ -89,6 +101,10 @@ export function usePublishFlow(): PublishFlow {
   const [found, setFound] = useState<ServerIssues | null>(null);
   const [issueSeq, setIssueSeq] = useState(0);
   const [reviewing, setReviewing] = useState<number | null>(null);
+  const [rollingBack, setRollingBack] = useState<number | null>(null);
+  const [historyStamp, setHistoryStamp] = useState(0);
+  // Which reload failed after a publish ("replace": the draft) or a roll back ("live": the diff).
+  const [stale, setStale] = useState<"replace" | "live" | null>(null);
 
   const unsaved = useMemo(() => {
     if (server === null || doc === null) return false;
@@ -205,6 +221,18 @@ export function usePublishFlow(): PublishFlow {
     [api, store],
   );
 
+  /** Re-reads the live version for the diff only: the draft and its base stay (after a roll back). */
+  const refreshLive = useCallback(async (): Promise<boolean> => {
+    try {
+      const config = await fetchAdminConfig(api);
+      const live = editorOf(config.live.document);
+      store.getState().setLive(live.doc, live.labels);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [api, store]);
+
   const publish = useCallback(
     () =>
       exclusive(async () => {
@@ -238,9 +266,45 @@ export function usePublishFlow(): PublishFlow {
         setNotice({ kind: "info", text });
         // Dispatchers' view: the cached client config is refetched now, not at the next poll.
         void queryClient.invalidateQueries({ queryKey: ["config"], refetchType: "all" });
-        await load(false);
+        setHistoryStamp((n) => n + 1);
+        setStale((await load(false)) ? null : "replace");
       }),
     [announcer, api, exclusive, load, queryClient, reviewing, store, t],
+  );
+
+  const rollback = useCallback(
+    () =>
+      exclusive(async () => {
+        const from = rollingBack;
+        if (from === null) return;
+        const result = await rollbackTo(api, from);
+        setRollingBack(null);
+        if (!result.ok) {
+          setNotice({
+            kind: "error",
+            text: t(
+              result.reason === "conflict"
+                ? "admin.rollback.conflict"
+                : result.reason === "invalid"
+                  ? "admin.rollback.invalid"
+                  : "admin.rollback.failed",
+              { version: from },
+            ),
+          });
+          // The live version moved under it: the list on screen is out of date.
+          if (result.reason === "conflict") setHistoryStamp((n) => n + 1);
+          return;
+        }
+        const text = t("admin.rollback.done", { version: result.version.version, from });
+        announcer.announce(text);
+        setNotice({ kind: "info", text });
+        void queryClient.invalidateQueries({ queryKey: ["config"], refetchType: "all" });
+        setHistoryStamp((n) => n + 1);
+        // The draft is left as it is, so its base is now stale: the next save or publish takes the
+        // 409 path. Only the live view the changes are counted against is refreshed.
+        setStale((await refreshLive()) ? null : "live");
+      }),
+    [announcer, api, exclusive, queryClient, refreshLive, rollingBack, t],
   );
 
   const [confirmReload, setConfirmReload] = useState(false);
@@ -249,6 +313,8 @@ export function usePublishFlow(): PublishFlow {
     if (doc === null) {
       setReviewing(null);
       setConfirmReload(false);
+      setRollingBack(null);
+      setStale(null);
     }
   }, [doc]);
 
@@ -265,12 +331,23 @@ export function usePublishFlow(): PublishFlow {
     issueSeq,
     reviewing,
     confirmingReload: confirmReload,
+    rollingBack,
+    historyStamp,
+    staleBase: stale !== null,
     save: () => void save(),
     review: () => void review(),
     publish: () => void publish(),
     cancelReview: () => setReviewing(null),
     askReload: () => setConfirmReload(true),
     cancelReload: () => setConfirmReload(false),
+    askRollback: (version) => setRollingBack(version),
+    cancelRollback: () => setRollingBack(null),
+    rollback: () => void rollback(),
+    retryLoad: () => {
+      void (stale === "replace" ? load(false) : refreshLive()).then((ok) => {
+        if (ok) setStale(null);
+      });
+    },
     reload: () => {
       setConfirmReload(false);
       void load(true).then((ok) => {
@@ -356,6 +433,14 @@ export function PublishNotices({ flow }: { flow: PublishFlow }) {
           </button>
         </div>
       )}
+      {flow.staleBase && (
+        <div className="qm-builder__notice" role="alert">
+          <span>{t("admin.config.reloadFailed")}</span>
+          <button type="button" className="qm-button" onClick={flow.retryLoad}>
+            {t("admin.config.reloadRetry")}
+          </button>
+        </div>
+      )}
       {flow.notice?.kind === "error" && (
         <p className="qm-builder__notice" role="alert">
           {flow.notice.text}
@@ -378,14 +463,21 @@ export function PublishDialogs({
 }) {
   const t = useT();
   const open = flow.reviewing !== null;
+  // Nothing differs from the live version (the edits went back to it): there is nothing to confirm.
+  const nothing = flow.changeCount === 0;
   return (
     <>
       <LeaveDialog
         open={open}
         title={t("admin.publish.title")}
-        body={t("admin.publish.body", { version: flow.reviewing ?? 0 })}
-        stayLabel={t("admin.publish.cancel")}
+        body={
+          nothing
+            ? t("admin.publish.nothing")
+            : t("admin.publish.body", { version: flow.reviewing ?? 0 })
+        }
+        stayLabel={nothing ? t("admin.publish.close") : t("admin.publish.cancel")}
         leaveLabel={t("admin.publish.confirm", { version: flow.reviewing ?? 0 })}
+        hideLeave={nothing}
         onStay={flow.cancelReview}
         onLeave={flow.publish}
         leavePrimary
@@ -394,14 +486,29 @@ export function PublishDialogs({
         fallback={fallback}
       >
         {/* Scrolls when the list is long: focusable so the keyboard can scroll it. */}
-        <section
-          className="qm-leave-dialog__content"
-          aria-label={t("admin.publish.changes")}
-          {...SCROLL_FOCUS}
-        >
-          {open && <ChangesView doc={doc} />}
-        </section>
+        {!nothing && (
+          <section
+            className="qm-leave-dialog__content"
+            aria-label={t("admin.publish.changes")}
+            {...SCROLL_FOCUS}
+          >
+            {open && <ChangesView doc={doc} />}
+          </section>
+        )}
       </LeaveDialog>
+      <LeaveDialog
+        open={flow.rollingBack !== null}
+        title={t("admin.rollback.title", { version: flow.rollingBack ?? 0 })}
+        body={t("admin.rollback.body", { version: flow.rollingBack ?? 0 })}
+        stayLabel={t("admin.rollback.cancel")}
+        leaveLabel={t("admin.rollback.confirm", { version: flow.rollingBack ?? 0 })}
+        onStay={flow.cancelRollback}
+        onLeave={flow.rollback}
+        leavePrimary
+        busy={flow.busy}
+        busyReason={t("admin.rollback.busy")}
+        fallback={fallback}
+      />
       <LeaveDialog
         open={flow.confirmingReload}
         title={t("admin.conflict.title")}

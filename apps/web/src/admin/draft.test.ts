@@ -89,6 +89,7 @@ describe("config draft (Task 31 part 1, BR-001, FR-060)", () => {
 describe("the store and the server draft (Task 33 part 2a)", () => {
   const server = (over: Record<string, unknown> = {}) => ({
     document: { siteConfig: {}, locales: {} },
+    siteId: "default",
     baseVersion: 3,
     draftVersion: null,
     liveDoc: { a: 1 },
@@ -129,6 +130,25 @@ describe("the store and the server draft (Task 33 part 2a)", () => {
     expect(saved?.document).toBe(document);
     expect(saved?.savedDoc).toEqual({ a: 2 });
     expect(store.getState().undoCount).toBe(1);
+  });
+
+  it("setLive replaces the live view only: the edits, the base version and the undo steps stay", () => {
+    const store = createConfigDraftStore();
+    store.getState().start({ a: 1 }, { server: server() });
+    store.getState().setPath(["a"], 2);
+    store.getState().setLive({ a: 7 }, { en: { k: "v" } });
+    const state = store.getState();
+    expect(state.server?.liveDoc).toEqual({ a: 7 });
+    expect(state.server?.liveLabels).toEqual({ en: { k: "v" } });
+    expect(state.server?.baseVersion).toBe(3);
+    expect(state.doc).toEqual({ a: 2 });
+    expect(state.undoCount).toBe(1);
+  });
+
+  it("setLive before the server base is loaded does nothing", () => {
+    const store = createConfigDraftStore();
+    store.getState().setLive({ a: 7 }, {});
+    expect(store.getState().server).toBeNull();
   });
 
   it("reset clears the server base too (spec 6.7)", () => {

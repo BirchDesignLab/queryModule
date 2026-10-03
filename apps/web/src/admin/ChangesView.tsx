@@ -101,7 +101,9 @@ export function ChangesView({
       <h3 className="qm-editor__title" id={headingId}>
         {t("admin.diff.title")}
       </h3>
-      <p className="qm-diff__note">{t("admin.diff.note")}</p>
+      <p className="qm-diff__note">
+        {t(onOpen === undefined ? "admin.diff.noteStatic" : "admin.diff.note")}
+      </p>
       {check === "checking" && <p className="qm-diff__note">{t("admin.diff.checking")}</p>}
       {check === "failed" && <p className="qm-diff__note">{t("admin.diff.failed")}</p>}
       {live === null ? (

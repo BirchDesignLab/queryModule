@@ -1567,3 +1567,64 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-sm);
 }
+
+/* Version history (Task 33 part 2b): a panel between the notices and the panes. */
+.qm-history {
+  box-sizing: border-box;
+  margin: 0 0 var(--qm-space-2);
+  padding: var(--qm-space-2) var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-history__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qm-space-2);
+}
+
+.qm-history__head > h3 {
+  margin: 0;
+}
+
+.qm-history__scroll {
+  max-block-size: calc(var(--qm-space-12) * 5);
+  overflow-y: auto;
+}
+
+.qm-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-history__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1) var(--qm-space-3);
+  padding-block: var(--qm-space-1);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-history__version {
+  font-weight: 600;
+}
+
+.qm-history__when,
+.qm-history__of {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-history__actions {
+  display: flex;
+  gap: var(--qm-space-2);
+  margin-inline-start: auto;
+}

@@ -8,7 +8,9 @@ import {
 import {
   AdminConfigResponseSchema,
   type ConfigDocument,
+  ConfigDocumentSchema,
   type ConfigVersion,
+  ConfigVersionListSchema,
   ConfigVersionSchema,
   ValidateConfigResponseSchema,
   type ValidationError,
@@ -115,6 +117,7 @@ export function startOf(
     ...own,
     server: {
       document: useDraft ? draft.document : config.live.document,
+      siteId: config.siteId,
       baseVersion: useDraft ? (draft.baseVersion ?? config.live.version) : config.live.version,
       draftVersion: useDraft ? draft.version : null,
       liveDoc: live.doc,
@@ -275,5 +278,51 @@ export async function publishDraft(api: ApiClient, draftVersion: number): Promis
     return parsed.success ? { ok: true, version: parsed.data } : { ok: false, reason: "error" };
   } catch {
     return { ok: false, reason: "error" };
+  }
+}
+
+/** GET /api/v1/admin/config/versions: the history, newest first; null when it cannot be loaded. */
+export async function fetchVersions(api: ApiClient): Promise<ConfigVersion[] | null> {
+  try {
+    const { data } = await api.GET("/api/v1/admin/config/versions");
+    const parsed = ConfigVersionListSchema.safeParse(data);
+    return parsed.success ? [...parsed.data.versions].sort((a, b) => b.version - a.version) : null;
+  } catch {
+    return null;
+  }
+}
+
+export type RollbackResult =
+  | { ok: true; version: ConfigVersion }
+  | { ok: false; reason: "conflict" | "invalid" | "error" };
+
+/** POST /api/v1/admin/config/versions/{version}/rollback: an older version published as a new one. */
+export async function rollbackTo(api: ApiClient, version: number): Promise<RollbackResult> {
+  try {
+    const { data, response } = await api.POST("/api/v1/admin/config/versions/{version}/rollback", {
+      params: { path: { version } },
+    });
+    if (response.status === 409) return { ok: false, reason: "conflict" };
+    if (response.status === 400) return { ok: false, reason: "invalid" };
+    const parsed = ConfigVersionSchema.safeParse(data);
+    return parsed.success ? { ok: true, version: parsed.data } : { ok: false, reason: "error" };
+  } catch {
+    return { ok: false, reason: "error" };
+  }
+}
+
+/** GET /api/v1/admin/config/versions/{version}/export: one version's document, or null. */
+export async function exportVersion(
+  api: ApiClient,
+  version: number,
+): Promise<ConfigDocument | null> {
+  try {
+    const { data } = await api.GET("/api/v1/admin/config/versions/{version}/export", {
+      params: { path: { version } },
+    });
+    const parsed = ConfigDocumentSchema.safeParse(data);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
   }
 }

@@ -102,6 +102,6 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
     expect(review).toHaveAccessibleDescription(
       "Nothing to publish: the draft matches the live version.",
     );
-    expect(history).toHaveAccessibleDescription(/version history arrives/i);
+    expect(history).not.toHaveAttribute("aria-disabled");
   });
 });

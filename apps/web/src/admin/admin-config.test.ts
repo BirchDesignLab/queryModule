@@ -144,3 +144,9 @@ function withDraftBody() {
     draft: { version: 4, siteConfig: RAW_SITE },
   }) as never;
 }
+
+describe("startOf carries the site id (export file names)", () => {
+  it("takes it from the admin config response", () => {
+    expect(startOf(adminConfigBody()).server.siteId).toBe("default");
+  });
+});

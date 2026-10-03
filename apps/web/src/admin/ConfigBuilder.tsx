@@ -18,6 +18,7 @@ import { ChecksContext, useDraftChecks, withServerIssues } from "./checks.js";
 import { revealAndFocus } from "./controls.js";
 import type { JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
+import { HistoryDrawer } from "./HistoryDrawer.js";
 import { hasPointer, parentPointer } from "./issues.js";
 import { LeaveGuard } from "./LeaveGuard.js";
 import { BuilderPreview } from "./Preview.js";
@@ -318,7 +319,13 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
     const next = existingPointer(doc, p);
     if (next !== p) setSelection((s) => ({ pointer: next, seq: s.seq }));
   }, [doc, selection.pointer]);
-  const reasonId = `${uid}-history-disabled`;
+  const historyRef = useRef<HTMLButtonElement>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // Esc and Close return focus to the button that opened the history.
+  const closeHistory = useCallback(() => {
+    setHistoryOpen(false);
+    historyRef.current?.focus();
+  }, []);
   const errorCount = checks.issues.filter((i) => i.level === "error").length;
   const warningCount = checks.issues.length - errorCount;
   // The issue button and the preview's "Go to the error" share this path: select the issue's item,
@@ -487,12 +494,12 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           >
             {t("admin.config.redo")}
           </button>
-          {/* Spec 6.2: aria-disabled keeps each focusable, and its visible reason describes it. */}
           <button
+            ref={historyRef}
             type="button"
             className="qm-button qm-button--secondary"
-            aria-disabled="true"
-            aria-describedby={reasonId}
+            aria-expanded={historyOpen}
+            onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
           >
             {t("admin.config.history")}
           </button>
@@ -502,12 +509,16 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
               {historyReason}
             </p>
           )}
-          <p className="qm-builder__reason" id={reasonId}>
-            {t("admin.config.historyDisabled")}
-          </p>
         </div>
         <div className="qm-builder__body">
           <PublishNotices flow={flow} />
+          {historyOpen && (
+            <HistoryDrawer
+              stamp={flow.historyStamp}
+              onClose={closeHistory}
+              onRollback={flow.askRollback}
+            />
+          )}
           {/* The issue button shows the counts; this stays as the polite announcement (Task 33). */}
           <div data-testid="draft-summary" aria-live="polite" style={visuallyHiddenStyle}>
             {raw.parseError !== null ? (
@@ -559,7 +570,9 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
         flow={flow}
         doc={doc}
         fallback={() =>
-          scopeRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null
+          historyRef.current ??
+          scopeRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ??
+          null
         }
       />
       <LeaveGuard
