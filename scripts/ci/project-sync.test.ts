@@ -950,6 +950,16 @@ describe("project-sync board job: parity with board-model.mjs (PR #83 review M2)
       ],
     ],
     [
+      "a board-dates start after closed_at keeps Finish at Start (#497 G-M2 r1 N1)",
+      [
+        parent(55, "Wave", undefined, true),
+        {
+          ...task(1, 55, "2026-10-01T00:00:00Z", { at: "2026-10-02T00:00:00Z" }),
+          body: "<!-- board-dates start=2026-10-05 -->",
+        },
+      ],
+    ],
+    [
       "board-dates markers with an impossible date or a finish before the start (#497)",
       [
         parent(55, "Wave", undefined, true),

@@ -152,7 +152,7 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     if (!accepting) return reject(socket, 503);
     // No token in a query string, ever (spec 4.7, 12.2).
     if (url.search !== "") return reject(socket, 400);
-    // Cheapest checks first, and no session lookup until both pass (SEC-014, NFR-003): the
+    // Cheapest checks first, and no session lookup until both pass (spec 5.3): the
     // per-IP limiter (one rate_limit write), then Origin, then identity.resolve.
     // Production sits behind Cloudflare, which always sets CF-Connecting-IP. A production upgrade
     // without a usable one is misrouted traffic: trustedClientIp yields "unknown" and all such

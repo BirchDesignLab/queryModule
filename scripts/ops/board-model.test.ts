@@ -241,6 +241,18 @@ describe("leafDates: board-dates body marker overrides an after-the-fact issue's
     expect(boardDatesMarker("<!-- board-dates start=2026-13-45 finish=2026-00-10 -->")).toEqual({});
   });
 
+  it("never puts Finish before Start when the marker start is after closed_at (#497 G-M2 r1 N1)", () => {
+    expect(
+      leafDates({
+        created_at: "2026-10-01T00:00:00Z",
+        closed_at: "2026-10-02T00:00:00Z",
+        state: "closed",
+        state_reason: "completed",
+        body: "<!-- board-dates start=2026-10-05 -->",
+      }),
+    ).toEqual({ start: "2026-10-05", finish: "2026-10-05" });
+  });
+
   it("ignores a finish before the start (#497 G-M2)", () => {
     expect(boardDatesMarker("<!-- board-dates start=2026-09-30 finish=2026-09-29 -->")).toEqual({
       start: "2026-09-30",

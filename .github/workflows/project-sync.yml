@@ -305,7 +305,9 @@ jobs:
               const markerFinish =
                 marker.finish && clampToFloor(marker.finish) >= start ? marker.finish : undefined;
               const closedAt = markerFinish ?? item.closedAt;
-              const finish = completed && closedAt ? clampToFloor(closedAt) : null;
+              const closed = completed && closedAt ? clampToFloor(closedAt) : null;
+              // A marker start after closed_at would put Finish before Start: Finish never precedes Start.
+              const finish = closed !== null && closed < start ? start : closed;
               return { start, finish };
             }
             function rollUp(children) {

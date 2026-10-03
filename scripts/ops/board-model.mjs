@@ -126,7 +126,9 @@ export function leafDates(issue, floor = FLOOR) {
   const markerFinish =
     marker.finish && clampToFloor(marker.finish, floor) >= start ? marker.finish : undefined;
   const closedAt = markerFinish ?? issue.closed_at;
-  const finish = completed && closedAt ? clampToFloor(closedAt, floor) : null;
+  const closed = completed && closedAt ? clampToFloor(closedAt, floor) : null;
+  // A marker start after closed_at would put Finish before Start: Finish never precedes Start.
+  const finish = closed !== null && closed < start ? start : closed;
   return { start, finish };
 }
 

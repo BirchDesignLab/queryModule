@@ -49,6 +49,13 @@ describe("stripComments (item 7)", () => {
     expect(stripComments("x = [/[/]//]; // real\n")).toBe("x = [/[/]//]; \n");
   });
 
+  it("keeps the issue's exact case, an escaped slash inside a regex literal (#220 r1-a)", () => {
+    const source = 'const u = /a\\//; it("[A1] x", () => {})\nconst v = "b";\n';
+    const out = stripComments(source);
+    expect(out).toContain('it("[A1] x"');
+    expect(out).toContain('const v = "b";');
+  });
+
   it("strips a comment after a JSX closing tag or a line-leading division (round 1 C1)", () => {
     const tagged = 'it("[A1] x", () => {})';
     expect(
