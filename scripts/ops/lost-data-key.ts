@@ -9,7 +9,7 @@
 
 import { createAuditService } from "../../packages/api/src/audit/service";
 import { systemClock } from "../../packages/api/src/clock";
-import { checkAuditTriggers } from "../../packages/api/src/db/migrate";
+import { checkAuditTriggers, checkQueryTriggers } from "../../packages/api/src/db/migrate";
 import { openForOps } from "../../packages/api/src/ops/audit-stats";
 import { recoverLostKey } from "../../packages/api/src/ops/lost-key";
 
@@ -21,7 +21,9 @@ if (!process.argv.includes("--confirm-offline-copy-lost")) {
 }
 const { db, secrets } = await openForOps(process.env);
 try {
+  // As server startup does: refuse on an altered trigger before shredding anything (#311 G-m1).
   await checkAuditTriggers(db);
+  await checkQueryTriggers(db);
   const r = await recoverLostKey(
     db,
     systemClock,

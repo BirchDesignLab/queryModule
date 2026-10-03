@@ -1,3 +1,34 @@
+/** True when a `/` after `out` starts a regex literal, not a division: the previous
+ * non-space character is an operator, an opening bracket or nothing at all. */
+function regexAllowedAfter(out: string): boolean {
+  let k = out.length - 1;
+  while (k >= 0 && (out[k] === " " || out[k] === "\t")) k -= 1;
+  if (k < 0) return true;
+  return "(,=:[!&|?{};+-*%>~^".includes(out[k] ?? "");
+}
+
+/** Index just past the regex literal starting at `start` (slash), or -1 when the line has none. */
+function regexLiteralEnd(source: string, start: number): number {
+  let j = start + 1;
+  let inClass = false;
+  while (j < source.length && source[j] !== "\n") {
+    const ch = source[j];
+    if (ch === "\\") {
+      j += 2;
+      continue;
+    }
+    if (ch === "[") inClass = true;
+    else if (ch === "]") inClass = false;
+    else if (ch === "/" && !inClass) {
+      j += 1;
+      while (/[a-z]/i.test(source[j] ?? "")) j += 1;
+      return j;
+    }
+    j += 1;
+  }
+  return -1;
+}
+
 /**
  * Strips `//` line comments and `/* ... *\/` block comments from `source`,
  * without touching comment-like text inside a string or template literal.
@@ -58,6 +89,16 @@ export function stripComments(source: string): string {
       out += source.slice(i, j);
       i = j;
       continue;
+    }
+    if (c === "/" && source[i + 1] !== "/" && source[i + 1] !== "*" && regexAllowedAfter(out)) {
+      // A regex literal (#220 r1-a): a `//` inside it (`/a\//`) is not a line comment.
+      // Bounded to the current line; with no closing `/` the `/` is just a division sign.
+      const end = regexLiteralEnd(source, i);
+      if (end > 0) {
+        out += source.slice(i, end);
+        i = end;
+        continue;
+      }
     }
     if (c === "/" && source[i + 1] === "/") {
       let j = i;

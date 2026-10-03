@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  boardDatesMarker,
   bodyUpdate,
   clampToFloor,
   closedStatus,
@@ -197,9 +198,9 @@ describe("leafDates: board-dates body marker overrides an after-the-fact issue's
         state_reason: "completed",
         body,
       });
-    expect(issue("<!-- board-dates finish=2026-09-30 -->")).toEqual({
+    expect(issue("<!-- board-dates finish=2026-10-01 -->")).toEqual({
       start: "2026-10-01",
-      finish: "2026-09-30",
+      finish: "2026-10-01",
     });
     expect(issue("<!-- board-dates start=2026-09-01 -->")).toEqual({
       start: "2026-09-25",
@@ -212,6 +213,54 @@ describe("leafDates: board-dates body marker overrides an after-the-fact issue's
     ]) {
       expect(issue(bad)).toEqual({ start: "2026-10-01", finish: "2026-10-02" });
     }
+  });
+
+  it("drops a date that is not a real calendar date (#497 G-M2), keeping the other attribute", () => {
+    const issue = (body: string) =>
+      leafDates({
+        created_at: "2026-10-01T00:00:00Z",
+        closed_at: "2026-10-02T00:00:00Z",
+        state: "closed",
+        state_reason: "completed",
+        body,
+      });
+    expect(issue("<!-- board-dates start=2026-13-45 -->")).toEqual({
+      start: "2026-10-01",
+      finish: "2026-10-02",
+    });
+    // The marker finish precedes the effective start (created_at), so it is ignored
+    // and the closed date applies (#497 round 1 S1).
+    expect(issue("<!-- board-dates start=2026-02-30 finish=2026-09-30 -->")).toEqual({
+      start: "2026-10-01",
+      finish: "2026-10-02",
+    });
+    expect(issue("<!-- board-dates finish=2026-09-30 -->")).toEqual({
+      start: "2026-10-01",
+      finish: "2026-10-02",
+    });
+    expect(boardDatesMarker("<!-- board-dates start=2026-13-45 finish=2026-00-10 -->")).toEqual({});
+  });
+
+  it("never puts Finish before Start when the marker start is after closed_at (#497 G-M2 r1 N1)", () => {
+    expect(
+      leafDates({
+        created_at: "2026-10-01T00:00:00Z",
+        closed_at: "2026-10-02T00:00:00Z",
+        state: "closed",
+        state_reason: "completed",
+        body: "<!-- board-dates start=2026-10-05 -->",
+      }),
+    ).toEqual({ start: "2026-10-05", finish: "2026-10-05" });
+  });
+
+  it("ignores a finish before the start (#497 G-M2)", () => {
+    expect(boardDatesMarker("<!-- board-dates start=2026-09-30 finish=2026-09-29 -->")).toEqual({
+      start: "2026-09-30",
+    });
+    expect(boardDatesMarker("<!-- board-dates start=2026-09-30 finish=2026-09-30 -->")).toEqual({
+      start: "2026-09-30",
+      finish: "2026-09-30",
+    });
   });
 });
 

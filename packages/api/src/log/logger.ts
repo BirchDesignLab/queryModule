@@ -132,11 +132,7 @@ export function createLogger(
   for (const k of o.redactKeys ?? []) keys.add(k.toLowerCase());
   const secrets = (o.secretValues ?? []).filter((s) => s.length >= MIN_SECRET_VALUE_LENGTH);
   return build({
-    sink:
-      o.sink ??
-      ((l: string) =>
-        process.stdout.write(`${l}
-`)),
+    sink: o.sink ?? ((l: string) => process.stdout.write(`${l}\n`)),
     keys,
     secrets,
     // A secret with a quote, backslash or control character appears escaped in the line.

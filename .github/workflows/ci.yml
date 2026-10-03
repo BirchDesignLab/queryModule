@@ -170,10 +170,10 @@ jobs:
           # The checkout is refs/pull/N/merge, whose merge base with the base tip is the tip;
           # the PR head sha gives the real merge base and the PR's own openapi.json (#171).
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        # Diffs the merge base, not the base tip (#171), so a route main added after the
-        # branch was cut is not a removal; a component renamed with a byte-identical body
-        # (#69, #95) is mapped back first. Fails closed: skip only on the script exit code 3
-        # (merge base lists no openapi.json), exit 0 must leave the file; any git failure fails the step (fetch-depth 0 above). Image pinned
+        # Diffs the merge base, not the base tip (#171): a route main added after the branch was
+        # cut is not a removal, and a component renamed with an identical body (#69, #95) is
+        # mapped back first (scripts/ci/openapi-rename-map.ts). Fail closed: only exit code 3
+        # (no openapi.json at the merge base) skips; exit 0 must leave both files. Image pinned
         # by digest (v1.32.1).
         run: |
           set -euo pipefail

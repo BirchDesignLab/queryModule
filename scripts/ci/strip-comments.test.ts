@@ -40,14 +40,32 @@ describe("stripComments (item 7)", () => {
     expect(out).toContain('const s = "a";');
   });
 
-  it("a false line-comment match inside a regex literal is bounded to its own line", () => {
-    // `/a\//` is not a string, so it is not quote-scanned; `\/` followed by
-    // `/` is still read as a `//` line-comment start (a known, pre-existing
-    // limitation of a scanner with no regex-literal awareness), but the
-    // mis-scan must stop at the next newline rather than eating the rest of
-    // the file.
-    const source = 'const u = /a\\//; it("[A1] x")\nconst v = "b";\n';
+  it("does not read // inside a regex literal as a line comment (#220 r1-a)", () => {
+    const source = 'const u = /a//; it("[A1] x", () => {})\nconst v = "b";\n';
     const out = stripComments(source);
+    expect(out).toContain('it("[A1] x"');
     expect(out).toContain('const v = "b";');
+    expect(stripComments("x = a / b; // real\n")).toBe("x = a / b; \n");
+    expect(stripComments("x = [/[/]//]; // real\n")).toBe("x = [/[/]//]; \n");
+  });
+
+  it("keeps the issue's exact case, an escaped slash inside a regex literal (#220 r1-a)", () => {
+    const source = 'const u = /a\\//; it("[A1] x", () => {})\nconst v = "b";\n';
+    const out = stripComments(source);
+    expect(out).toContain('it("[A1] x"');
+    expect(out).toContain('const v = "b";');
+  });
+
+  it("strips a comment after a JSX closing tag or a line-leading division (round 1 C1)", () => {
+    const tagged = 'it("[A1] x", () => {})';
+    expect(
+      stripComments(`render(<p>hi</p>); // ${tagged}
+`),
+    ).not.toContain(tagged);
+    expect(
+      stripComments(`const a = b
+/ c; // ${tagged}
+`),
+    ).not.toContain(tagged);
   });
 });

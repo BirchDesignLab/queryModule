@@ -2,6 +2,7 @@ import net from "node:net";
 import { type WsEvent, WsServerMessageSchema } from "@querymodule/core/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
+import { WS_UPGRADE_LIMIT } from "../../src/ws/server";
 import { createTestApp, startTestServer, type TestApp } from "../helpers/test-app";
 
 const MIN = 60_000;
@@ -35,7 +36,7 @@ const nextMsg = (ws: WebSocket) =>
 const hello = { v: 1, type: "hello", lastSeq: null };
 const ping = (nonce: string) => ({ v: 1, type: "ping", nonce });
 
-describe("SEC-014 WebSocket upgrade and heartbeat", () => {
+describe("WebSocket upgrade and heartbeat (spec 5.3, 10.3)", () => {
   it("accepts a live session with the deployed Origin; hello and ping answer", async () => {
     const { s, cookie } = await setup();
     const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
@@ -273,17 +274,11 @@ describe("SEC-014 WebSocket upgrade and heartbeat", () => {
   });
 });
 
-describe("SEC-014 upgrade costs no DB lookup before Origin and limit (#225)", () => {
-  it("limits upgrades per IP: the 61st in a minute gets 429 with Retry-After", async () => {
-    const { t, s, cookie } = await setup();
-    const resolve = vi.spyOn(t.deps.identity, "resolve");
-    // Cheap rejected upgrades (foreign Origin) still count against the per-IP limit.
-    for (let i = 0; i < 60; i++)
-      await expect(open(s.wsUrl, { origin: "https://evil.example.test", cookie })).rejects.toThrow(
-        "HTTP 403",
-      );
-    const res = await new Promise<{ status: number; retryAfter: string | undefined }>((ok, rej) => {
-      const ws = new WebSocket(s.wsUrl, { headers: { origin: ORIGIN, cookie } });
+describe("WebSocket upgrade rate limit (D-A9, spec 5.3; #225, #315)", () => {
+  const FOREIGN = "https://evil.example.test";
+  const status = (url: string, headers: Record<string, string>) =>
+    new Promise<{ status: number; retryAfter: string | undefined }>((ok, rej) => {
+      const ws = new WebSocket(url, { headers });
       ws.once("open", () => rej(new Error("upgraded")));
       ws.once("unexpected-response", (_q, r) =>
         ok({
@@ -293,10 +288,78 @@ describe("SEC-014 upgrade costs no DB lookup before Origin and limit (#225)", ()
       );
       ws.once("error", rej);
     });
+  const hitKeys = (t: TestApp) => {
+    const keys: string[] = [];
+    const real = t.deps.limiter.hit.bind(t.deps.limiter);
+    vi.spyOn(t.deps.limiter, "hit").mockImplementation((key, limit, windowMs) => {
+      keys.push(key);
+      return real(key, limit, windowMs);
+    });
+    return keys;
+  };
+
+  it("limits upgrades per IP: once the bucket is full the next gets 429 with Retry-After", async () => {
+    const { t, s, cookie } = await setup();
+    const resolve = vi.spyOn(t.deps.identity, "resolve");
+    // Fill the bucket straight through the limiter (no 60 sockets), then one real upgrade.
+    for (let i = 0; i < WS_UPGRADE_LIMIT.limit; i++)
+      await t.deps.limiter.hit(
+        "ws:ip:127.0.0.1",
+        WS_UPGRADE_LIMIT.limit,
+        WS_UPGRADE_LIMIT.windowMs,
+      );
+    const res = await status(s.wsUrl, { origin: ORIGIN, cookie });
     expect(res.status).toBe(429);
     expect(Number(res.retryAfter)).toBeGreaterThan(0);
     expect(resolve).not.toHaveBeenCalled();
-  }, 30_000);
+  });
+  it("counts cheap rejected upgrades (foreign Origin) against the limit", async () => {
+    const { t, s, cookie } = await setup();
+    const keys = hitKeys(t);
+    await expect(open(s.wsUrl, { origin: FOREIGN, cookie })).rejects.toThrow("HTTP 403");
+    expect(keys).toEqual(["ws:ip:127.0.0.1"]);
+  });
+  it("keys the bucket on the socket address outside production and ignores CF-Connecting-IP", async () => {
+    const { t, s, cookie } = await setup();
+    const keys = hitKeys(t);
+    await expect(
+      open(s.wsUrl, { origin: FOREIGN, cookie, "cf-connecting-ip": "203.0.113.7" }),
+    ).rejects.toThrow("HTTP 403");
+    expect(keys).toEqual(["ws:ip:127.0.0.1"]);
+  });
+  describe("in production (behind Cloudflare)", () => {
+    const prod = async () => {
+      const t = await createTestApp({ env: { NODE_ENV: "production" } });
+      const s = await startTestServer(t);
+      closers.push(s.close);
+      return { t, s, keys: hitKeys(t) };
+    };
+    it("keys the bucket on CF-Connecting-IP, one bucket per client", async () => {
+      const { s, keys } = await prod();
+      for (const ip of ["203.0.113.7", "203.0.113.8", "203.0.113.7"])
+        await expect(open(s.wsUrl, { origin: FOREIGN, "cf-connecting-ip": ip })).rejects.toThrow(
+          "HTTP 403",
+        );
+      expect(keys).toEqual(["ws:ip:203.0.113.7", "ws:ip:203.0.113.8", "ws:ip:203.0.113.7"]);
+    });
+    it("shares the ws:ip:unknown bucket when the header is absent or invalid (decided, #315)", async () => {
+      // Production sits behind Cloudflare, which always sets the header: a request without a
+      // usable one is misrouted traffic and is throttled together, failing closed.
+      const { t, s, keys } = await prod();
+      await expect(open(s.wsUrl, { origin: FOREIGN })).rejects.toThrow("HTTP 403");
+      await expect(
+        open(s.wsUrl, { origin: FOREIGN, "cf-connecting-ip": "not an ip" }),
+      ).rejects.toThrow("HTTP 403");
+      expect(keys).toEqual(["ws:ip:unknown", "ws:ip:unknown"]);
+      for (let i = 0; i < WS_UPGRADE_LIMIT.limit; i++)
+        await t.deps.limiter.hit(
+          "ws:ip:unknown",
+          WS_UPGRADE_LIMIT.limit,
+          WS_UPGRADE_LIMIT.windowMs,
+        );
+      await expect(status(s.wsUrl, { origin: FOREIGN })).resolves.toMatchObject({ status: 429 });
+    });
+  });
   it("a foreign Origin never reaches identity.resolve", async () => {
     const { t, s, cookie } = await setup();
     const resolve = vi.spyOn(t.deps.identity, "resolve");

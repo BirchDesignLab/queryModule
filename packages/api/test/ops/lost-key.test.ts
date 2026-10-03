@@ -173,6 +173,35 @@ describe("SEC-006 lost DATA_KEY shreds request_key (spec 8.7)", () => {
       await recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), t.deps.audit),
     ).toEqual({ keysDeleted: 0, requestCount: 0 });
   });
+  it("writes no audit row and still rewrites the canary when request_key is missing", async () => {
+    const t = await createTestApp();
+    await t.deps.db.$client.execute("DROP TABLE request_key");
+    const before = await count(t, "audit_event");
+    const newData = Buffer.alloc(32, 8);
+    await recoverLostKey(t.deps.db, t.clock, "data", newData, t.deps.audit);
+    expect(await count(t, "audit_event")).toBe(before);
+    expect(await checkKeyCanaries(t.deps.db, { ...keys, dataKey: newData }, t.clock)).toEqual({
+      credential: "verified",
+      data: "verified",
+    });
+  });
+  it("refuses, deleting nothing, when a row has a scope the audit would not count", async () => {
+    // Migration 0003's scope CHECK makes this impossible today; recreate the table without it
+    // to prove the runbook would fail closed rather than shred rows it never audits.
+    const t = await withRequestKeys();
+    const c = t.deps.db.$client;
+    await c.execute("DROP TABLE request_key");
+    await c.execute(
+      "CREATE TABLE request_key (correlation_id text NOT NULL, scope text NOT NULL, wrapped_dek blob NOT NULL, iv blob NOT NULL, auth_tag blob NOT NULL, key_version integer NOT NULL, created_at integer NOT NULL, PRIMARY KEY (correlation_id, scope))",
+    );
+    await c.execute("INSERT INTO request_key VALUES ('req-a', 'other', x'01', x'02', x'03', 1, 1)");
+    const before = await count(t, "audit_event");
+    await expect(
+      recoverLostKey(t.deps.db, t.clock, "data", Buffer.alloc(32, 8), t.deps.audit),
+    ).rejects.toThrow(/scope/);
+    expect(await count(t, "request_key")).toBe(1);
+    expect(await count(t, "audit_event")).toBe(before);
+  });
   it("credential still refuses when state_credential exists", async () => {
     const t = await withRequestKeys();
     await t.deps.db.$client.execute("CREATE TABLE state_credential (user_id TEXT)");

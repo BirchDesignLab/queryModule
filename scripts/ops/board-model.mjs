@@ -121,15 +121,22 @@ export function leafDates(issue, floor = FLOOR) {
   const start = clampToFloor(marker.start ?? issue.created_at, floor);
   const completed =
     issue.state === "closed" && (issue.state_reason === "completed" || issue.state_reason == null);
-  const closedAt = marker.finish ?? issue.closed_at;
-  const finish = completed && closedAt ? clampToFloor(closedAt, floor) : null;
+  // A marker finish before the effective start (created_at when the marker start is
+  // absent or dropped) is ignored, as boardDatesMarker does between its own attributes.
+  const markerFinish =
+    marker.finish && clampToFloor(marker.finish, floor) >= start ? marker.finish : undefined;
+  const closedAt = markerFinish ?? issue.closed_at;
+  const closed = completed && closedAt ? clampToFloor(closedAt, floor) : null;
+  // A marker start after closed_at would put Finish before Start: Finish never precedes Start.
+  const finish = closed !== null && closed < start ? start : closed;
   return { start, finish };
 }
 
 /**
  * #488: an issue filed after the fact carries its real dates in a body marker,
  * `<!-- board-dates start=YYYY-MM-DD finish=YYYY-MM-DD -->` (either attribute
- * alone is fine). A malformed marker is ignored. Finish still applies only to
+ * alone is fine). A malformed marker, an impossible calendar date or a finish
+ * before the start is ignored. Finish still applies only to
  * an issue closed as completed (leafDates).
  *
  * @param {string|null|undefined} body
@@ -138,9 +145,18 @@ export function leafDates(issue, floor = FLOOR) {
 export function boardDatesMarker(body) {
   const m = /<!--\s*board-dates((?:\s+(?:start|finish)=\d{4}-\d{2}-\d{2})+)\s*-->/.exec(body ?? "");
   if (!m) return {};
-  return Object.fromEntries(
-    [...m[1].matchAll(/(start|finish)=(\d{4}-\d{2}-\d{2})/g)].map((a) => [a[1], a[2]]),
-  );
+  /** @type {{start?: string, finish?: string}} */
+  const out = {};
+  for (const a of m[1].matchAll(/(start|finish)=(\d{4}-\d{2}-\d{2})/g)) {
+    // A date that is not a real calendar date (2026-13-45) is dropped (#497 G-M2).
+    const real = new Date(`${a[2]}T00:00:00Z`);
+    if (Number.isNaN(real.getTime()) || real.toISOString().slice(0, 10) !== a[2]) continue;
+    if (a[1] === "start") out.start = a[2];
+    else out.finish = a[2];
+  }
+  // A finish before the start is ignored (#497 G-M2).
+  if (out.start && out.finish && out.finish < out.start) delete out.finish;
+  return out;
 }
 
 /**

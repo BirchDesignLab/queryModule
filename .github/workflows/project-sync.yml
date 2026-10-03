@@ -284,15 +284,30 @@ jobs:
             function boardDatesMarker(body) {
               const m = /<!--\s*board-dates((?:\s+(?:start|finish)=\d{4}-\d{2}-\d{2})+)\s*-->/.exec(body ?? "");
               if (!m) return {};
-              return Object.fromEntries([...m[1].matchAll(/(start|finish)=(\d{4}-\d{2}-\d{2})/g)].map((a) => [a[1], a[2]]));
+              const out = {};
+              for (const a of m[1].matchAll(/(start|finish)=(\d{4}-\d{2}-\d{2})/g)) {
+                // Not a real calendar date (2026-13-45): dropped (#497 G-M2).
+                const real = new Date(`${a[2]}T00:00:00Z`);
+                if (Number.isNaN(real.getTime()) || real.toISOString().slice(0, 10) !== a[2]) continue;
+                if (a[1] === "start") out.start = a[2];
+                else out.finish = a[2];
+              }
+              // A finish before the start is ignored (#497 G-M2).
+              if (out.start && out.finish && out.finish < out.start) delete out.finish;
+              return out;
             }
             function leafDates(item) {
               const marker = boardDatesMarker(item.body);
               const start = clampToFloor(marker.start ?? item.createdAt);
               const completed =
                 item.state === "CLOSED" && (item.stateReason === "COMPLETED" || item.stateReason == null);
-              const closedAt = marker.finish ?? item.closedAt;
-              const finish = completed && closedAt ? clampToFloor(closedAt) : null;
+              // A marker finish before the effective start is ignored (#497 round 1 S1).
+              const markerFinish =
+                marker.finish && clampToFloor(marker.finish) >= start ? marker.finish : undefined;
+              const closedAt = markerFinish ?? item.closedAt;
+              const closed = completed && closedAt ? clampToFloor(closedAt) : null;
+              // A marker start after closed_at would put Finish before Start: Finish never precedes Start.
+              const finish = closed !== null && closed < start ? start : closed;
               return { start, finish };
             }
             function rollUp(children) {

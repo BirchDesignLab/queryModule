@@ -5,7 +5,11 @@
  * so registering a name for it (#95) reads as a removed component. `renameToBase` maps a head
  * component onto a base component only when their canonical JSON is identical (sorted keys,
  * `$ref`s rewritten through the renames found so far, iterated to a fixed point) and the match
- * is unique on both sides. Anything else is left alone, so a real change still reaches oasdiff.
+ * is unique on both sides. A schema that refers to itself (a recursive tree) is compared with
+ * its own name standing in for each candidate base name in turn. Discriminator `mapping`
+ * values are rewritten like `$ref`s. Mutually recursive schemas (A refers to B, B to A) are
+ * never mapped: neither body can match first. Anything else is left alone, so a real change
+ * still reaches oasdiff.
  *
  * CLI: pnpm tsx scripts/ci/openapi-rename-map.ts <base> <head> <out>
  */
@@ -19,14 +23,34 @@ export type OpenApiDoc = {
 
 const PREFIX = "#/components/schemas/";
 
+type SchemaMap = Record<string, unknown>;
+
+/** `#/components/schemas/<name>` through the renames; any other string is returned as is. */
+function rewriteRef(ref: string, map: ReadonlyMap<string, string>): string {
+  if (!ref.startsWith(PREFIX)) return ref;
+  const name = ref.slice(PREFIX.length);
+  return PREFIX + (map.get(name) ?? name);
+}
+
+function rewriteDiscriminator(d: Record<string, unknown>, map: ReadonlyMap<string, string>) {
+  const { mapping, ...rest } = d;
+  const out = rewrite(rest, map) as Record<string, unknown>;
+  if (mapping !== null && typeof mapping === "object")
+    out.mapping = Object.fromEntries(
+      Object.entries(mapping).map(([m, t]) => [m, typeof t === "string" ? rewriteRef(t, map) : t]),
+    );
+  return out;
+}
+
 function rewrite(value: unknown, map: ReadonlyMap<string, string>): unknown {
   if (Array.isArray(value)) return value.map((v) => rewrite(v, map));
   if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      if (k === "$ref" && typeof v === "string" && v.startsWith(PREFIX)) {
-        out[k] = PREFIX + (map.get(v.slice(PREFIX.length)) ?? v.slice(PREFIX.length));
-      } else out[k] = rewrite(v, map);
+      if (k === "$ref" && typeof v === "string") out[k] = rewriteRef(v, map);
+      else if (k === "discriminator" && v !== null && typeof v === "object")
+        out[k] = rewriteDiscriminator(v as Record<string, unknown>, map);
+      else out[k] = rewrite(v, map);
     }
     return out;
   }
@@ -60,6 +84,20 @@ export function renameToBase(
     baseBodies.set(key, [...(baseBodies.get(key) ?? []), name]);
   }
 
+  /** The one base component `name` equals under the renames so far, or undefined. */
+  const matchFor = (name: string, schema: unknown, map: ReadonlyMap<string, string>) => {
+    const hit = baseBodies.get(canonical(rewrite(schema, map)));
+    if (hit !== undefined) return hit.length === 1 ? hit[0] : undefined;
+    if (!JSON.stringify(schema).includes(`"${PREFIX}${name}"`)) return undefined;
+    // Recursive: its own $refs name `name`, the base body's name the base component, so try
+    // each unmatched base name as the stand-in and keep a unique match.
+    const found = [...baseBodies.values()].flat().filter((candidate) => {
+      const body = rewrite(schema, new Map(map).set(name, candidate));
+      return canonical(body) === canonical(baseSchemas[candidate]);
+    });
+    return found.length === 1 ? found[0] : undefined;
+  };
+
   const map = new Map<string, string>();
   const claimed = new Set<string>();
   const renames: [string, string][] = [];
@@ -68,9 +106,9 @@ export function renameToBase(
     const claims = new Map<string, string[]>();
     for (const [name, schema] of Object.entries(headSchemas)) {
       if (name in baseSchemas || map.has(name)) continue;
-      const hit = baseBodies.get(canonical(rewrite(schema, map)));
-      if (hit?.length !== 1 || hit[0] === undefined || claimed.has(hit[0])) continue;
-      claims.set(hit[0], [...(claims.get(hit[0]) ?? []), name]);
+      const target = matchFor(name, schema, map);
+      if (target === undefined || claimed.has(target)) continue;
+      claims.set(target, [...(claims.get(target) ?? []), name]);
     }
     for (const [target, names] of claims) {
       const [only] = names;
@@ -84,13 +122,10 @@ export function renameToBase(
   if (map.size === 0) return { doc: head, renames: [] };
 
   const doc = rewrite(head, map) as OpenApiDoc;
-  const schemas: Record<string, unknown> = {};
-  for (const [name, schema] of Object.entries(
-    (doc.components as { schemas: Record<string, unknown> }).schemas,
-  )) {
-    schemas[map.get(name) ?? name] = schema;
-  }
-  (doc.components as { schemas: Record<string, unknown> }).schemas = schemas;
+  const components = doc.components as { schemas: SchemaMap };
+  components.schemas = Object.fromEntries(
+    Object.entries(components.schemas).map(([name, schema]) => [map.get(name) ?? name, schema]),
+  );
   return { doc, renames };
 }
 

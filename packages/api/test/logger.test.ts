@@ -1,5 +1,5 @@
 // packages/api/test/logger.test.ts
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createLogger } from "../src/log/logger";
 
 function capture(o: { redactKeys?: string[]; secretValues?: string[] } = {}) {
@@ -220,5 +220,19 @@ describe("spec 5.9 redaction walk is bounded (#183)", () => {
     expect(parsed.cyc.self).toBe("[circular]");
     expect(parsed.cyc.shared).toEqual({ x: 1 });
     expect(parsed.cyc.again).toEqual({ x: 1 });
+  });
+});
+
+describe("default sink (#497 G-M1)", () => {
+  it("writes each record to stdout as one JSON line ending in a single newline", () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation((() => true) as never);
+    try {
+      createLogger().info("hello");
+      const out = String(write.mock.calls[0]?.[0]);
+      expect(out.endsWith("}\n")).toBe(true);
+      expect(out.split("\n")).toHaveLength(2);
+    } finally {
+      write.mockRestore();
+    }
   });
 });

@@ -28,25 +28,33 @@ function resolve(rel: string) {
 // Spec 4.1 "Command config checks": a field a rule can require, with no position in a command, warns.
 // VEH plateType is the original case. PRO make, caliber and description (per-type rules, Task 22)
 // have no position in PRO or PROP: they are set by name (make=...) or in the form.
-const required = (path: string, field: string, command: string) => ({
-  level: "warning",
-  path,
-  key: "config.conditionallyRequiredWithoutPosition",
-  params: { field, command },
-});
-const KNOWN_WARNINGS = [
-  required("/queryTypes/0/rules/1/field", "plateType", "VEH"),
-  required("/queryTypes/2/rules/1/field", "make", "PRO"),
-  required("/queryTypes/2/rules/1/field", "make", "PROP"),
-  required("/queryTypes/2/rules/3/field", "caliber", "PRO"),
-  required("/queryTypes/2/rules/3/field", "caliber", "PROP"),
-  required("/queryTypes/2/rules/6/field", "description", "PROP"),
-];
+// Each warning's rules/<n> pointer is found by rule content (the `require` rule on that field in
+// that query type), so adding or reordering an earlier rule does not break this list (#303).
+type SiteShape = ReturnType<typeof resolve>;
+const required = (config: SiteShape, queryType: string, field: string, command: string) => {
+  const qi = config.queryTypes.findIndex((q) => q.code === queryType);
+  const ri = config.queryTypes[qi]?.rules.findIndex(
+    (r) => r.field === field && r.effect === "require",
+  );
+  if (qi < 0 || ri === undefined || ri < 0)
+    throw new Error(`no require rule for ${queryType} ${field}`);
+  return {
+    level: "warning",
+    path: `/queryTypes/${qi}/rules/${ri}/field`,
+    key: "config.conditionallyRequiredWithoutPosition",
+    params: { field, command },
+  };
+};
 /** example-ok also requires its custom plateColor off the default state (site-only rule, #347). */
-const knownWarnings = (rel: string) =>
-  rel === "sites/example-ok.json"
-    ? KNOWN_WARNINGS.toSpliced(1, 0, required("/queryTypes/0/rules/3/field", "plateColor", "VEH"))
-    : KNOWN_WARNINGS;
+const knownWarnings = (rel: string, config: SiteShape) => [
+  required(config, "VEH", "plateType", "VEH"),
+  ...(rel === "sites/example-ok.json" ? [required(config, "VEH", "plateColor", "VEH")] : []),
+  required(config, "PRO", "make", "PRO"),
+  required(config, "PRO", "make", "PROP"),
+  required(config, "PRO", "caliber", "PRO"),
+  required(config, "PRO", "caliber", "PROP"),
+  required(config, "PRO", "description", "PROP"),
+];
 
 describe("BR-001 shipped sites validate (spec 7)", () => {
   for (const rel of [
@@ -56,19 +64,19 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
     "test/flags-off.json",
   ]) {
     it(`${rel} has no errors and only the known required-without-position warnings`, () => {
-      expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES)).toEqual({
+      const config = resolve(rel);
+      expect(validateSiteConfig(config, BUNDLED_LOCALES)).toEqual({
         errors: [],
-        warnings: knownWarnings(rel),
+        warnings: knownWarnings(rel, config),
       });
     });
 
     it(`${rel} has no errors and only the known required-without-position warnings with adapterKinds: ["mock"] (ruling W3-1)`, () => {
-      expect(validateSiteConfig(resolve(rel), BUNDLED_LOCALES, { adapterKinds: ["mock"] })).toEqual(
-        {
-          errors: [],
-          warnings: knownWarnings(rel),
-        },
-      );
+      const config = resolve(rel);
+      expect(validateSiteConfig(config, BUNDLED_LOCALES, { adapterKinds: ["mock"] })).toEqual({
+        errors: [],
+        warnings: knownWarnings(rel, config),
+      });
     });
   }
 
