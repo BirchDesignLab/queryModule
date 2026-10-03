@@ -57,6 +57,15 @@ export async function recoverLostKey(
         sql`SELECT scope, count(*) AS keys, count(DISTINCT correlation_id) AS requests
             FROM request_key GROUP BY scope`,
       );
+      // The DELETE below removes every row but the audit counts only SCOPES. Migration 0003's
+      // scope CHECK makes any other scope impossible today; assert it so a future scope fails
+      // closed (the throw rolls the transaction back) instead of being shredded unaudited.
+      if (perScope.some((r) => !(SCOPES as readonly string[]).includes(r.scope)))
+        throw new Error(
+          "request_key holds a scope this runbook does not audit (spec 8.7, SEC-021)",
+        );
+      // A request normally has a row in each scope, so the per-scope request counts above
+      // double count it: the headline requestCount is the distinct total across scopes.
       const total = await tx.all<{ requests: number }>(
         sql`SELECT count(DISTINCT correlation_id) AS requests FROM request_key`,
       );

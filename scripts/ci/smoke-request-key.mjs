@@ -23,6 +23,9 @@ const client = createClient({
 });
 const CIDS = ["01890a5d-ac96-774b-bcce-b302099a8057", "01890a5d-ac96-774b-bcce-b302099a8058"];
 const SCOPES = ["values", "payload"];
+// The system actor as SYSTEM_ACTOR in packages/core/src/contracts/audit.ts writes it. This helper
+// runs standalone in the image and cannot import it; smoke-request-key.test.ts keeps the copy in step.
+const SYSTEM_ACTOR = { id: "system", role: "system", identitySource: "system" };
 try {
   if (mode === "seed") {
     for (const cid of CIDS) {
@@ -46,9 +49,9 @@ try {
     for (const r of rows) {
       const d = JSON.parse(String(r.details));
       const ok =
-        r.actor_user_id === "system" &&
-        r.actor_role === "system" &&
-        r.identity_source === "system" &&
+        r.actor_user_id === SYSTEM_ACTOR.id &&
+        r.actor_role === SYSTEM_ACTOR.role &&
+        r.identity_source === SYSTEM_ACTOR.identitySource &&
         d.reason === "keyLost" &&
         d.olderThan === null &&
         d.requestCount === 2 &&
