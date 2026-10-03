@@ -68,6 +68,33 @@ async function auditFailure(
   );
 }
 
+/** Better Auth's error code on a non-2xx sign-in response, or undefined. */
+async function signInErrorCode(res: Response): Promise<unknown> {
+  return (
+    (await res
+      .clone()
+      .json()
+      .catch(() => null)) as { code?: unknown } | null
+  )?.code;
+}
+
+/** A 401 that means wrong email or password, not an internal failure inside Better Auth. */
+async function isBadCredentials(res: Response): Promise<boolean> {
+  return (await signInErrorCode(res)) === "INVALID_EMAIL_OR_PASSWORD";
+}
+
+async function internalSignInFailure(
+  c: Context<AppEnv>,
+  d: AppDeps,
+  res: Response,
+): Promise<Response> {
+  const code = await signInErrorCode(res);
+  d.logger.error("sign-in failed inside Better Auth", {
+    code: typeof code === "string" ? code : "unknown",
+  });
+  return apiError(c, "internal");
+}
+
 async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Response> {
   // critic:C1 / critic:CV1: Better Auth's sign-in/email also accepts
   // application/x-www-form-urlencoded (better-call parses both), which would give email "" here
@@ -88,20 +115,23 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     await auditFailure(d, target?.id ?? null, "lockedOut", ip, null);
     return rateLimited(c, (locked - d.clock.now()) / 1000);
   }
-  // A disabled account never gets a session (D-A26). To look like any bad-credentials sign-in
-  // (G-I2) it answers Better Auth's own 401, spends one password hash as Better Auth does for a
-  // wrong or unknown account (no timing difference), and counts toward the account lockout (the
-  // same 429 after N failures). The audit row states the fact: accountDisabled (C-I1), since the
-  // password is never checked.
-  if (target?.disabledAt != null) {
-    await (await d.auth.$context).password.hash(
-      typeof body?.password === "string" ? body.password : "",
-    );
+  const res = await d.auth.handler(c.req.raw);
+  // A disabled account never gets a session (D-A26). It runs through Better Auth's own handler
+  // like any account (rr:N-I1): the same body validation (a malformed body is the same 400, with
+  // no lockout count) and the same credential check (no timing difference, G-I2). A session that
+  // a right password created is deleted before answering, and its cookie never leaves; every
+  // credential outcome answers Better Auth's bad-credentials 401, counts toward the account
+  // lockout (the same 429 after N failures) and audits accountDisabled (C-I1).
+  if (target?.disabledAt != null && (res.ok || res.status === 401)) {
+    // A disabled user holds no session (disable deleted them), so drop every one by user id.
+    if (res.ok) await d.db.delete(session).where(eq(session.userId, target.id));
+    else if (!(await isBadCredentials(res))) {
+      return internalSignInFailure(c, d, res);
+    }
     const { lockedUntil } = await d.limiter.recordFailure(key, AUTH_LIMITS.accountFailures);
     await auditFailure(d, target.id, "accountDisabled", ip, lockedUntil);
     return c.json({ code: "INVALID_EMAIL_OR_PASSWORD", message: "Invalid email or password" }, 401);
   }
-  const res = await d.auth.handler(c.req.raw);
   if (res.ok) {
     const token = ((await res.clone().json()) as { token?: string }).token ?? "";
     const s = (
@@ -123,18 +153,7 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
     // #212 G-M2: only bad credentials count toward the lockout and audit as badPassword or
     // unknownAccount. Any other 401 (for example FAILED_TO_CREATE_SESSION after a correct
     // password) is an internal failure: no lockout increment and no loginFailed row.
-    const code = (
-      (await res
-        .clone()
-        .json()
-        .catch(() => null)) as { code?: unknown } | null
-    )?.code;
-    if (code !== "INVALID_EMAIL_OR_PASSWORD") {
-      d.logger.error("sign-in failed inside Better Auth", {
-        code: typeof code === "string" ? code : "unknown",
-      });
-      return apiError(c, "internal");
-    }
+    if (!(await isBadCredentials(res))) return internalSignInFailure(c, d, res);
     const { lockedUntil } = await d.limiter.recordFailure(key, AUTH_LIMITS.accountFailures);
     await auditFailure(
       d,
