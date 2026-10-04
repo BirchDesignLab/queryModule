@@ -18,6 +18,12 @@ export interface SubmitRequest {
   sourceIds: readonly string[];
   mode: FormMode;
   configHash: string;
+  /**
+   * The request's own Idempotency-Key (SUBMIT-1): the caller keeps one per request row and sends
+   * it again on a Retry, so a request the server may already hold is never run twice. Absent, the
+   * controller's own rule applies (a new key; the kept one after a network failure).
+   */
+  idempotencyKey?: string;
 }
 
 export type SubmitOutcome =
@@ -34,6 +40,11 @@ export interface SubmitState {
   status: "idle" | "submitting" | "noConnection";
   /** Ignored (returns the in-flight promise) while submitting. */
   submit(req: SubmitRequest): Promise<SubmitOutcome>;
+  /**
+   * The Idempotency-Key this request would go under: the kept one after a network failure of an
+   * identical body, else a fresh one. A request row keeps it for its Retry (SUBMIT-1).
+   */
+  keyFor(req: SubmitRequest): string;
   reset(): void;
   /** Unsubscribes from the platform signal and stops polling (the web app keeps it for the page's life). */
   dispose(): void;
@@ -105,8 +116,9 @@ function bodyFingerprint(body: SubmitQueryBody): string {
 }
 
 /**
- * Submits a query with an Idempotency-Key (spec 6.7). A new key per attempt; after a network
- * failure the next submit of an identical body reuses it; any HTTP response discards it.
+ * Submits a query with an Idempotency-Key (spec 6.7). A request that carries its own key (a row
+ * and its Retry) always sends that one. Otherwise a new key per attempt; after a network failure
+ * the next submit of an identical body reuses it; any HTTP response discards it.
  * Never logs bodies, values or responses.
  */
 export function createSubmitController(options: SubmitControllerOptions): SubmitController {
@@ -127,6 +139,11 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
   let unsubscribeOnline: () => void = () => undefined;
   let disposed = false;
   let goOffline: () => void = () => undefined;
+
+  const keyFor = (req: SubmitRequest): string => {
+    const fingerprint = bodyFingerprint(buildSubmitBody(req));
+    return keptKey?.fingerprint === fingerprint ? keptKey.key : newKey();
+  };
 
   const store = createStore<SubmitState>((set, get) => {
     const stopPolling = (): void => {
@@ -185,7 +202,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
     const run = async (req: SubmitRequest, gen: number): Promise<SubmitOutcome> => {
       const body = buildSubmitBody(req);
       const fingerprint = bodyFingerprint(body);
-      const key = keptKey?.fingerprint === fingerprint ? keptKey.key : newKey();
+      const key = req.idempotencyKey ?? keyFor(req);
       keptKey = { key, fingerprint };
       let result: Awaited<ReturnType<ApiClient["POST"]>>;
       try {
@@ -209,7 +226,9 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
         const errors = validationErrorsOf(error);
         outcome = errors === undefined ? { kind: "failed" } : { kind: "invalid", errors };
       } else if (status === 409) {
-        void options.queryClient.invalidateQueries({ queryKey: ["config"] });
+        // refetchType "all": a requests-list Retry can 409 with no panel observing ["config"], and
+        // "active" would then leave it stale until the 15 s poll (spec 6.7, CFG-6).
+        void options.queryClient.invalidateQueries({ queryKey: ["config"], refetchType: "all" });
         outcome = { kind: "configChanged" };
       } else if (status === 429) {
         const seconds = Number(response.headers.get("Retry-After"));
@@ -234,6 +253,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
 
     return {
       status: "idle",
+      keyFor,
       submit(req) {
         if (inFlight !== null) return inFlight;
         const gen = generation;

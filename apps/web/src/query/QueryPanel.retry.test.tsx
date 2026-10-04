@@ -77,14 +77,20 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     expect(fresh).toHaveTextContent("VEH.ZZ-0001");
     expect(submitRecorder.calls).toHaveLength(2);
     expect(submitRecorder.calls[1]?.body).toEqual(submitRecorder.calls[0]?.body);
-    expect(submitRecorder.calls[1]?.key).not.toBe(submitRecorder.calls[0]?.key);
-    // The result goes through the shared region only, once; focus never moved.
+    // SUBMIT-1: a retry is the same request, so the server sees one Idempotency-Key (FR-064).
+    expect(submitRecorder.calls[0]?.key).toEqual(expect.any(String));
+    expect(submitRecorder.calls[1]?.key).toBe(submitRecorder.calls[0]?.key);
+    // The result goes through the shared region only, once.
     await waitFor(() =>
       expect(announce.mock.calls.filter(([text]) => /query sent/.test(String(text)))).toHaveLength(
         1,
       ),
     );
-    expect(retry).toHaveFocus();
+    // M1 exit C1: the acknowledged retry supersedes the failed row, so its Retry leaves the page
+    // and focus goes to the list heading (spec 6.4), not to the document body.
+    expect(retry).not.toBeInTheDocument();
+    expect(within(failed as HTMLElement).queryByRole("button", { name: /^Retry/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Requests this shift" })).toHaveFocus();
     expect(region.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
   });
 

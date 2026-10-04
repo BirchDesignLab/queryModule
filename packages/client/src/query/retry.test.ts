@@ -38,6 +38,7 @@ function fakeSubmit(status: SubmitState["status"], outcome: SubmitOutcome = ACK)
   const store: SubmitController = createStore<SubmitState>(() => ({
     status,
     submit,
+    keyFor: () => "key-fresh",
     reset: () => undefined,
     dispose: () => undefined,
   }));
@@ -46,9 +47,12 @@ function fakeSubmit(status: SubmitState["status"], outcome: SubmitOutcome = ACK)
 
 function failedRow(kind: "noResponse" | "invalid" = "noResponse") {
   const requests = createRequestsStore();
-  const id = requests
-    .getState()
-    .begin({ queryType: "VEH", summary: "VEH.ZZ-0001.TX", submitted: SUBMITTED });
+  const id = requests.getState().begin({
+    queryType: "VEH",
+    summary: "VEH.ZZ-0001.TX",
+    submitted: SUBMITTED,
+    idempotencyKey: "key-orig",
+  });
   requests.getState().settle(id, kind === "invalid" ? { kind, errors: [] } : { kind });
   return { requests, id };
 }
@@ -98,7 +102,12 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
     const { requests, id } = failedRow();
     const { store, submit } = fakeSubmit("idle");
     const result = await retryRequest({ requests, submit: store }, id, "h-now");
-    expect(submit).toHaveBeenCalledWith({ ...SUBMITTED, configHash: "h-now" });
+    // SUBMIT-1: the retry is the same request, so it goes under the failed row's own key.
+    expect(submit).toHaveBeenCalledWith({
+      ...SUBMITTED,
+      idempotencyKey: "key-orig",
+      configHash: "h-now",
+    });
     expect(result).toEqual({ kind: "sent", outcome: ACK, rowId: expect.any(String) });
     const items = requests.getState().items;
     expect(items).toHaveLength(2);
@@ -106,6 +115,7 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
       status: "acknowledged",
       summary: "VEH.ZZ-0001.TX",
       submitted: SUBMITTED,
+      idempotencyKey: "key-orig",
     });
     expect(items[1]).toMatchObject({ id, status: "failed", failure: "noResponse" });
   });
@@ -117,6 +127,7 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
     const store: SubmitController = createStore<SubmitState>(() => ({
       status: "idle",
       submit,
+      keyFor: () => "key-fresh",
       reset: () => undefined,
       dispose: () => undefined,
     }));
@@ -134,6 +145,51 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
     const rows = requests.getState().items;
     expect(rows.map((r) => r.status)).toEqual(["failed", "failed"]);
     expect(rows.every(isRetryable)).toBe(true);
+  });
+
+  it("an acknowledged retry supersedes the failed row: it is no longer retryable (M1 exit C1)", async () => {
+    const { requests, id } = failedRow();
+    const { store, submit } = fakeSubmit("idle");
+    await retryRequest({ requests, submit: store }, id, "h");
+    const original = requests.getState().items.find((r) => r.id === id);
+    expect(original).toMatchObject({ status: "failed", superseded: true });
+    expect(original !== undefined && isRetryable(original)).toBe(false);
+    // A second Retry on it sends nothing and adds no row.
+    expect(await retryRequest({ requests, submit: store }, id, "h")).toEqual({
+      kind: "unavailable",
+    });
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(requests.getState().items).toHaveLength(2);
+  });
+
+  it("a failed retry does not supersede the failed row", async () => {
+    const { requests, id } = failedRow();
+    const { store } = fakeSubmit("idle", { kind: "noResponse" });
+    await retryRequest({ requests, submit: store }, id, "h");
+    expect(requests.getState().items.find((r) => r.id === id)?.superseded).toBeUndefined();
+  });
+
+  it("never lists a second row for a correlation ID already listed (a replayed ack)", async () => {
+    const { requests, id } = failedRow();
+    // The first retry fails, so two failed rows hold the same key; both are retried and the
+    // server replays one ack for that key.
+    await retryRequest(
+      { requests, submit: fakeSubmit("idle", { kind: "noResponse" }).store },
+      id,
+      "h",
+    );
+    const second = requests.getState().items[0]?.id ?? "";
+    const { store } = fakeSubmit("idle");
+    const a = await retryRequest({ requests, submit: store }, second, "h");
+    const b = await retryRequest({ requests, submit: store }, id, "h");
+    const items = requests.getState().items;
+    expect(items.filter((r) => r.status === "acknowledged")).toHaveLength(1);
+    expect(items).toHaveLength(3);
+    expect(items.filter((r) => r.status === "failed").every((r) => r.superseded === true)).toBe(
+      true,
+    );
+    // The second result points at the row already listed.
+    expect(a.kind === "sent" && b.kind === "sent" && a.rowId === b.rowId).toBe(true);
   });
 
   it("is gated while submitting or offline: nothing is sent and no row is added", async () => {
@@ -198,6 +254,33 @@ describe("retryRequest with the real submit controller: the Idempotency-Key rule
     return keys;
   }
 
+  /** A row begun the way the panel does: its key comes from the controller and is kept with it. */
+  const beginRow = (
+    requests: ReturnType<typeof createRequestsStore>,
+    submit: SubmitController,
+    summary = "s",
+    submitted: typeof SUBMITTED = SUBMITTED,
+  ) => {
+    const idempotencyKey = submit.getState().keyFor({ ...submitted, configHash: "h" });
+    const id = requests
+      .getState()
+      .begin({ queryType: submitted.queryType, summary, submitted, idempotencyKey });
+    return { id, idempotencyKey, submitted };
+  };
+  const sendRow = async (
+    requests: ReturnType<typeof createRequestsStore>,
+    submit: SubmitController,
+    row: { id: string; idempotencyKey: string; submitted: typeof SUBMITTED },
+  ) =>
+    requests
+      .getState()
+      .settle(
+        row.id,
+        await submit
+          .getState()
+          .submit({ ...row.submitted, idempotencyKey: row.idempotencyKey, configHash: "h" }),
+      );
+
   it("a request that got no answer is retried under the same key (the server may have it), as a new row", async () => {
     let up = false;
     server.use(
@@ -210,35 +293,83 @@ describe("retryRequest with the real submit controller: the Idempotency-Key rule
     );
     const submit = realSubmit();
     const requests = createRequestsStore();
-    const id = requests.getState().begin({ queryType: "VEH", summary: "s", submitted: SUBMITTED });
-    requests
-      .getState()
-      .settle(id, await submit.getState().submit({ ...SUBMITTED, configHash: "h" }));
+    const row = beginRow(requests, submit);
+    await sendRow(requests, submit, row);
     expect(requests.getState().items[0]).toMatchObject({ status: "failed", failure: "noResponse" });
     expect(submit.getState().status).toBe("noConnection");
     // Down: the retry is gated and sends nothing.
-    expect(await retryRequest({ requests, submit }, id, "h")).toEqual({
+    expect(await retryRequest({ requests, submit }, row.id, "h")).toEqual({
       kind: "gated",
       status: "noConnection",
     });
     up = true;
     await vi.advanceTimersByTimeAsync(2000);
     expect(submit.getState().status).toBe("idle");
-    const result = await retryRequest({ requests, submit }, id, "h");
+    const result = await retryRequest({ requests, submit }, row.id, "h");
     expect(result.kind).toBe("sent");
     expect(keys).toEqual(["key-1", "key-1"]);
     expect(requests.getState().items.map((r) => r.status)).toEqual(["acknowledged", "failed"]);
   });
 
-  it("a request the server answered (503) is retried under a new key", async () => {
-    const keys = keysSeen(() => new HttpResponse(null, { status: 503 }));
+  it.each([
+    ["503", () => new HttpResponse(null, { status: 503 })],
+    ["502 from a gateway", () => new HttpResponse(null, { status: 502 })],
+    [
+      "429",
+      () => HttpResponse.json({ error: { code: "rateLimited", requestId: "r" } }, { status: 429 }),
+    ],
+  ])(
+    "SUBMIT-1 a request answered %s is retried under the same key, so it cannot run twice",
+    async (_name, answer) => {
+      const keys = keysSeen(answer);
+      const submit = realSubmit();
+      const requests = createRequestsStore();
+      const row = beginRow(requests, submit);
+      await sendRow(requests, submit, row);
+      await retryRequest({ requests, submit }, row.id, "h");
+      expect(keys).toEqual(["key-1", "key-1"]);
+    },
+  );
+
+  it("SUBMIT-1 another request sent between does not take the failed row's key", async () => {
+    let drop = true;
+    server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.json({ ok: true })));
+    const keys = keysSeen(() =>
+      drop ? HttpResponse.error() : HttpResponse.json(ACK_BODY, { status: 202 }),
+    );
     const submit = realSubmit();
     const requests = createRequestsStore();
-    const id = requests.getState().begin({ queryType: "VEH", summary: "s", submitted: SUBMITTED });
-    requests
-      .getState()
-      .settle(id, await submit.getState().submit({ ...SUBMITTED, configHash: "h" }));
-    await retryRequest({ requests, submit }, id, "h");
-    expect(keys).toEqual(["key-1", "key-2"]);
+    const a = beginRow(requests, submit, "a");
+    await sendRow(requests, submit, a); // A drops: key-1
+    await vi.advanceTimersByTimeAsync(2000);
+    drop = false;
+    const b = beginRow(requests, submit, "b", { ...SUBMITTED, queryType: "PER" });
+    await sendRow(requests, submit, b); // B is a different request: key-2
+    await retryRequest({ requests, submit }, a.id, "h");
+    expect(keys).toEqual(["key-1", "key-2", "key-1"]);
+  });
+
+  it("SUBMIT-1 the server sees one request: a retry of a stored-but-unanswered request replays it", async () => {
+    const stored = new Map<string, number>();
+    let firstAnswered = false;
+    server.use(
+      http.post(`${BASE}/api/v1/queries`, ({ request }) => {
+        const key = request.headers.get("idempotency-key") ?? "";
+        const replay = stored.has(key);
+        if (!replay) stored.set(key, stored.size + 1);
+        // The first answer is lost to a gateway after the server stored the request.
+        if (!firstAnswered) {
+          firstAnswered = true;
+          return new HttpResponse(null, { status: 502 });
+        }
+        return HttpResponse.json(ACK_BODY, { status: 202 });
+      }),
+    );
+    const submit = realSubmit();
+    const requests = createRequestsStore();
+    const row = beginRow(requests, submit);
+    await sendRow(requests, submit, row);
+    await retryRequest({ requests, submit }, row.id, "h");
+    expect(stored.size).toBe(1);
   });
 });

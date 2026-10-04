@@ -6,13 +6,13 @@ import { I18nProvider } from "../app/i18n-context.js";
 import { ServicesProvider } from "../app/services-context.js";
 import { selectBuilderItem } from "../test/builder-tree.js";
 import { EN_BUNDLE } from "../test/en-bundle.js";
-import { API, server, submitRecorder, TEST_USER } from "../test/msw-server.js";
+import { API, CLIENT_CONFIG, server, submitRecorder, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { testServices } from "../test/render-routes.js";
 import { configDraftStore } from "./ConfigBuilder.js";
 import type { JsonObject } from "./draft.js";
-import { BuilderPreview } from "./Preview.js";
+import { BuilderPreview, previewConfig } from "./Preview.js";
 
 beforeAll(preloadAdminRoutes);
 
@@ -435,5 +435,34 @@ describe("preview type follows the tree (selectType, #427)", () => {
     await waitFor(() => expect(pressed(t.preview, "Vehicle")).toBeInTheDocument());
     // No remount: what was typed under Vehicle is still there.
     expect(within(t.preview).getByLabelText("Plate")).toHaveValue("ZZ-1234");
+  });
+});
+
+describe("previewConfig builds the draft the way production does (CFG-8, ADR-0011 item 4, spec 4.1)", () => {
+  // The builder edits the client-shaped view of the site (the live config without its hash).
+  const draft = (): JsonObject => {
+    const { configHash: _hash, ...view } = structuredClone(CLIENT_CONFIG);
+    return view as unknown as JsonObject;
+  };
+
+  it("a valid draft that omits a defaulted feature flag still previews", () => {
+    const doc = draft();
+    const { adminUsers: _omitted, ...features } = doc.features as Record<string, boolean>;
+    doc.features = features;
+    expect(previewConfig(doc)?.features.adminUsers).toBe(false);
+  });
+
+  it("a valid draft that omits a source timeoutMs gets the schema default", () => {
+    const doc = draft();
+    doc.sources = (doc.sources as JsonObject[]).map(({ timeoutMs: _omitted, ...source }) => source);
+    const config = previewConfig(doc);
+    expect(config).not.toBeNull();
+    expect(config?.sources.every((s) => s.timeoutMs > 0)).toBe(true);
+  });
+
+  it("a draft that does not validate still pauses the preview", () => {
+    const doc = draft();
+    doc.queryTypes = "nope";
+    expect(previewConfig(doc)).toBeNull();
   });
 });

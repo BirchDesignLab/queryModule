@@ -633,14 +633,14 @@ Query events:
 
 `credentialOwnerUserId` and `delegationId` are copied from the step-3 snapshot on the pending row (5.2), not resolved again.
 
-Auth events (Better Auth hooks, the session service and the sweeper, 5.2, 5.6):
+Auth events (Better Auth hooks, the session service, the sweeper and the admin console, 5.2, 5.6, ADR-0011 item 8):
 
 | Type | Required `details` |
 |---|---|
 | `loginSucceeded` | `method` (`password`\|`totp`\|`hostJwt`), `sessionId`, `clientIp` |
 | `loginFailed` | `targetUserId` (nullable), `reason` (`badPassword`\|`unknownAccount`\|`mfaFailed`\|`lockedOut`\|`hostJwtInvalid`\|`accountDisabled`), `clientIp`, `lockoutUntil?` (set when this failure starts a lockout). `accountDisabled` (AC2 review C-I1, 10-03-26): a sign-in to a disabled account, refused whatever the password (Better Auth checks it as for any account and any session it creates is discarded, rr:N-I1); it counts toward the lockout like a bad password |
 | `logout` | `sessionId` |
-| `sessionRevoked` | `sessionId`, `reason` (`userDisabled`\|`admin`\|`expired`); `expired` is written by the sweeper for idle or absolute expiry (5.2) |
+| `sessionRevoked` | `sessionId`, `reason` (`userDisabled`\|`admin`\|`expired`); `expired` is written by the sweeper (system actor) for idle or absolute expiry (5.2); `admin` is written by an admin who revokes one session in the admin console (ADR-0011 item 8) |
 | `mfaEnrolled` | `method: "totp"` |
 | `mfaDisabled` | `method: "totp"`, `byUserId` |
 
@@ -668,7 +668,9 @@ Admin and ops events:
 
 | Type | Required `details` |
 |---|---|
-| `roleChanged` | `targetUserId`, `role`, `change` (`granted`\|`revoked`), `via: "grant-role"` |
+| `roleChanged` | `targetUserId`, `role`, `change` (`granted`\|`revoked`), `via` (`grant-role`\|`adminConsole`); `grant-role` rows are written by the system actor, `adminConsole` rows by the admin who changed the role (5.6, ADR-0011 item 8) |
+| `configPublished` | `siteId`, `versionId`, `version`, `configHash`, `previousConfigHash`, `changedPointers` (JSON pointers only, never values), `rollbackOf?`; one row per publish or rollback, written by the admin or implementer who acted (ADR-0011 item 7) |
+| `userCreated` | `targetUserId`, `role`; written by the admin who created the user; the one-time password is never audited (ADR-0011 item 8) |
 | `auditViewed` | `filters` (`userId?`, `correlationId?`, `type?`, `from`, `to`), `cursor?`, `rowCount` |
 | `auditExported` | `filters`, `rowCount`, `format: "ndjson"` |
 | `configLoaded` | `siteId`, `configHash`, `configSchemaVersion`, `coreVersion`, `extendsChain` (site ids) |
@@ -926,17 +928,15 @@ Two identity modes behind `IdentityService.resolve(req) -> Principal` (5.5). Eve
 
 Lockouts are audited: the `loginFailed` row whose failure starts a lockout carries `lockoutUntil` (4.7).
 
-**Auth audit.** Better Auth hooks write `loginSucceeded`, `loginFailed`, `logout`, `mfaEnrolled` and `mfaDisabled`; the session service and the sweeper write `sessionRevoked` (4.7).
+**Auth audit.** Better Auth hooks write `loginSucceeded`, `loginFailed`, `logout`, `mfaEnrolled` and `mfaDisabled`; `sessionRevoked` (4.7) is written by the admin console session-revoke route (reason `admin`, the acting admin; ADR-0011 item 8) and by the sweeper on expiry (reason `expired`, system actor; 5.2). Sessions a user disable deletes are counted in its `userDisabled` row (`sessionsRevoked`), not given one `sessionRevoked` row each.
 
 **MFA.** TOTP through the Better Auth two-factor plugin (M3, SEC-005). `SiteConfig.auth.mfaRequired: boolean | { roles: Role[] }`, default `false`. When it applies to a user who has not enrolled, middleware returns 403 `mfaEnrollmentRequired` (4.7) on every route except auth, enrollment, `meta`, `config` and `locales`, and the client routes to enrollment. In embedded mode the host owns MFA and `mfaRequired` is not evaluated.
 
-**Roles.** `user`, `trainingOfficer`, `admin`, stored on the user row in standalone mode and checked by route middleware. Roles change only through `scripts/ops/grant-role.ts`, which writes `roleChanged`. There is no role-editing route. Delegator roles are per purpose (5.7).
-
-Overridden by ADR-0011 (implementer role; roles also change in the admin console).
+**Roles.** `user`, `trainingOfficer`, `implementer`, `admin` (ADR-0011 item 6), stored on the user row in standalone mode and checked by route middleware. Roles change in two places, each writing `roleChanged` (4.7): `scripts/ops/grant-role.ts` (system actor, `via: "grant-role"`; it also bootstraps the first admin) and the admin console role route (the acting admin, `via: "adminConsole"`; ADR-0011 item 8). Delegator roles are per purpose (5.7).
 
 **Step-up.** Routes marked step-up (credential PUT and DELETE, delegation approval) require: a TOTP code in the request when the user has TOTP enrolled, otherwise a password re-entry at `POST /api/v1/me/step-up` within the last 5 minutes, recorded as `stepUpAt` on the session. A missing step-up is 403 `stepUpRequired` (4.7). Step-up failures count against the account limiter. In embedded mode step-up requires a host token with `iat` at most 5 minutes old, obtained with `identityRequest { reason: "stepUp" }` (6.9).
 
-**User disable.** One transaction: revoke every delegation where the user is trainee or officer (reason `userDisabled`), delete the user's `state_credential` rows, revoke all sessions, set the user disabled, write `userDisabled` (plus `delegationRevoked` and `credentialsDeleted` per affected row). Sockets close after commit. Run by `scripts/ops/disable-user.ts`; there is no admin UI. `audit_event` has no foreign key to `user` and carries an actor snapshot (5.5), so audit survives. A user row may be hard-deleted by ops script any time after disable (5.5, 11).
+**User disable.** One transaction: revoke every delegation where the user is trainee or officer (reason `userDisabled`), delete the user's `state_credential` rows, revoke all sessions, set the user disabled, write `userDisabled` (plus `delegationRevoked` and `credentialsDeleted` per affected row). Sockets close after commit (`EventBus.onSessionEnded`). Run by an admin from the admin console (`POST /api/v1/admin/users/:id/disable`, ADR-0011 item 8), as the acting admin; an admin cannot disable themselves, and the last enabled admin cannot be disabled. Until delegations and stored credentials land, `delegationsRevoked` and `credentialsDeleted` are 0. The ops script `scripts/ops/disable-user.ts` is not built yet. `audit_event` has no foreign key to `user` and carries an actor snapshot (5.5), so audit survives. A user row may be hard-deleted by ops script any time after disable (5.5, 11).
 
 **Demo users** and their password derivation: 8.5.
 
@@ -1376,7 +1376,7 @@ Rollback is a promote of an older sha. `release` then points at the older digest
 
 ### 8.5 Seed and demo accounts
 
-`docker compose run --rm app node scripts/ops/seed.js` runs once against an empty database. It creates the users in `packages/api/src/seed/users.ts` (usernames and roles) plus a non-admin `smoke` user. Each password is derived as HMAC-SHA256 of the email under `SEED_PASSWORD_SECRET` (8.2). It is printed once to that command's stdout, never to the service log, and is never committed. `docs/demo.md` lists usernames only. Roles beyond the seed go through `scripts/ops/grant-role.ts` (5.6). CI generates a random `SEED_PASSWORD_SECRET` per run and derives passwords the same way.
+`docker compose run --rm app node scripts/ops/seed.js` runs once against an empty database. It creates the users in `packages/api/src/seed/users.ts` (usernames and roles) plus a non-admin `smoke` user. Each password is derived as HMAC-SHA256 of the email under `SEED_PASSWORD_SECRET` (8.2). It is printed once to that command's stdout, never to the service log, and is never committed. `docs/demo.md` lists usernames only. Roles beyond the seed go through `scripts/ops/grant-role.ts` or an admin in the admin console (5.6). CI generates a random `SEED_PASSWORD_SECRET` per run and derives passwords the same way.
 
 ### 8.6 Backups and restore
 

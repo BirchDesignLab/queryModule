@@ -11,13 +11,19 @@ const here = import.meta.dirname;
 const secret = "smoke-test-secret-not-real";
 const email = "smoke@example.test";
 
-// Stub API: health, meta, sign-in (records the body) and config. No WebSocket, so step 5 fails.
+// Stub API: health, meta, sign-in (records the body), config and submit (records the body). No WebSocket, so step 5 fails.
 let server: Server;
 let base: string;
 let signInBody: string | undefined;
+let submitBody: string | undefined;
+let submitStatus = 202;
+const stubHash = "a".repeat(64);
+const stubCorrelationId = "01900000-0000-7000-8000-000000000001";
 let dir: string;
 beforeEach(async () => {
   signInBody = undefined;
+  submitBody = undefined;
+  submitStatus = 202;
   dir = mkdtempSync(join(tmpdir(), "qm-smoke-"));
   writeFileSync(join(dir, "SEED_PASSWORD_SECRET"), `${secret}\n`);
   server = createServer((req, res) => {
@@ -37,7 +43,20 @@ beforeEach(async () => {
         return json({}, { "set-cookie": "qm_session=abc123; Path=/; HttpOnly" });
       }
       if (req.url === "/api/v1/config" && req.headers.cookie === "qm_session=abc123")
-        return json({ configHash: "x" });
+        return json({ configHash: stubHash });
+      if (req.url === "/api/v1/queries" && req.method === "POST") {
+        const ok =
+          req.headers.cookie === "qm_session=abc123" &&
+          req.headers.origin === base &&
+          req.headers["x-requested-with"] === "querymodule" &&
+          /^[A-Za-z0-9_-]{16,128}$/.test(String(req.headers["idempotency-key"]));
+        if (!ok) return res.writeHead(403).end();
+        submitBody = body;
+        res.writeHead(submitStatus, { "content-type": "application/json" });
+        return res.end(
+          JSON.stringify({ correlationId: stubCorrelationId, acknowledgedAt: 1, parts: [] }),
+        );
+      }
       res.writeHead(404).end();
     });
   });
@@ -125,6 +144,11 @@ describe("smoke.sh keeps secrets off argv (G-I2, #167)", { timeout: 30_000 }, ()
     expect(argv).not.toContain(derivedPassword());
     expect(argv).not.toContain(secret);
     expect(argv).not.toContain("abc123");
+    // The submit body (plate, configHash) goes on stdin, not argv.
+    expect(argv).toMatch(/^curl .*\/api\/v1\/queries/m);
+    const curlLines = argv.split("\n").filter((l) => l.startsWith("curl "));
+    expect(curlLines.join("\n")).not.toContain("ZZ-");
+    expect(argv).not.toContain(stubHash);
   });
 });
 
@@ -193,6 +217,29 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     expect(r.out).not.toContain(pw);
     expect(r.out).not.toContain(secret);
     expect(r.out).not.toContain("abc123");
+  });
+
+  it("step 3 submits a VEH query with step 2's configHash and expects 202", async () => {
+    const r = await smoke(base);
+    expect(r.out).toContain(`3 ok: submit 202 ${stubCorrelationId}`);
+    const sent = JSON.parse(submitBody ?? "{}");
+    expect(sent.configHash).toBe(stubHash);
+    expect(sent.queryType).toBe("VEH");
+    expect(sent.values.plate).toMatch(/^ZZ-\d{4}$/);
+    expect(Object.keys(sent).sort()).toEqual(
+      ["configHash", "mode", "queryType", "sourceIds", "values"].sort(),
+    );
+  });
+
+  it("step 3 fails on any status but 202, before step 5, naming the status", async () => {
+    submitStatus = 200;
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/2 ok/);
+    expect(r.out).toMatch(/step 3.*200/);
+    expect(r.out).not.toMatch(/3 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+    expect(r.out).not.toContain(stubCorrelationId);
   });
 
   it("accepts a base URL with a trailing slash (G-M5)", async () => {

@@ -62,6 +62,8 @@ export function adminConfigBody(
     liveVersion?: number;
     /** The live siteConfig; the default site file when omitted. */
     siteConfig?: Record<string, unknown>;
+    /** The live label overlay by locale; none when omitted. */
+    liveLocales?: Record<string, Record<string, string>>;
     draft?: {
       version: number;
       siteConfig: Record<string, unknown>;
@@ -74,7 +76,10 @@ export function adminConfigBody(
     siteId: "default",
     live: {
       ...versionRow(liveVersion, "published"),
-      document: { siteConfig: options.siteConfig ?? RAW_SITE, locales: {} },
+      document: {
+        siteConfig: options.siteConfig ?? RAW_SITE,
+        locales: options.liveLocales ?? {},
+      },
     },
     draft:
       options.draft === undefined || options.draft === null

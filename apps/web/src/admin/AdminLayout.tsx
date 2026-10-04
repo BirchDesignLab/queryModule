@@ -2,11 +2,12 @@ import { useStore } from "@querymodule/client";
 import { visuallyHiddenStyle } from "@querymodule/web-ui";
 import { useEffect, useId, useRef } from "react";
 import { Link, Navigate, NavLink, useOutlet } from "react-router";
+import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { ConfigBuilder } from "./ConfigBuilder.js";
-import { canManageUsers, canOpenAdmin } from "./roles.js";
+import { adminConfigOff, adminUsersOff, canManageUsers, canOpenAdmin } from "./roles.js";
 import { UsersView } from "./Users.js";
 
 /**
@@ -17,7 +18,9 @@ export function AdminLayout() {
   const { authStore } = useServices();
   const t = useT();
   const role = useStore(authStore, (s) => s.user?.role);
-  const allowed = canOpenAdmin(role);
+  const features = useCachedConfig()?.features;
+  // AC-2: role and the published flag. Only a loaded config with the flag off closes the console.
+  const allowed = canOpenAdmin(role) && !adminConfigOff(features);
   // Every console route opens a section (/admin redirects to Config) and the section focuses its
   // own heading (SectionHeading); the console title never takes focus, so the two cannot race (#388).
   const outlet = useOutlet();
@@ -27,7 +30,7 @@ export function AdminLayout() {
   return (
     <main className="qm-admin" {...MAIN_LANDMARK}>
       <h1 style={visuallyHiddenStyle}>{t("admin.title")}</h1>
-      <AdminRail users={canManageUsers(role)} />
+      <AdminRail users={canManageUsers(role) && !adminUsersOff(features)} />
       <div className="qm-admin__main">{outlet}</div>
     </main>
   );
@@ -107,7 +110,9 @@ export function AdminUsersPage() {
   const { authStore } = useServices();
   const t = useT();
   const role = useStore(authStore, (s) => s.user?.role);
-  if (!canManageUsers(role)) return <Navigate to="/admin/config" replace />;
+  const features = useCachedConfig()?.features;
+  if (!canManageUsers(role) || adminUsersOff(features))
+    return <Navigate to="/admin/config" replace />;
   return (
     <section className="qm-users-page">
       <SectionHeading>{t("admin.users.title")}</SectionHeading>

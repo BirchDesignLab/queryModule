@@ -4,6 +4,17 @@
 set -euo pipefail
 : "${QM_AGE_RECIPIENT_FILE:=/opt/querymodule/backup/age-recipient.txt}"
 : "${QM_RCLONE_REMOTE:=r2:querymodule-backups}"
+# Preflight (#487): Ubuntu's packaged rclone 1.60 gets a 501 NotImplemented from R2 on its first
+# PUT and passes only on retry; refuse anything older than 1.65 (install from rclone.org).
+rclone_version=$(rclone version | awk 'NR==1 {print $2}')
+if [[ ! "$rclone_version" =~ ^v([0-9]+)\.([0-9]+) ]]; then
+  echo "backup: cannot read the rclone version ($rclone_version)" >&2
+  exit 1
+fi
+if (( BASH_REMATCH[1] < 1 || (BASH_REMATCH[1] == 1 && BASH_REMATCH[2] < 65) )); then
+  echo "backup: rclone $rclone_version is older than 1.65; install a current rclone from rclone.org (docs/deploy.md)" >&2
+  exit 1
+fi
 cd "$(dirname "$0")/../../deploy"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 work=$(mktemp -d)

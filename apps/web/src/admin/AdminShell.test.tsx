@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
-import { API, server, TEST_USER } from "../test/msw-server.js";
+import { API, CLIENT_CONFIG, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 
 /** Opens the app at `path` with a live session for TEST_USER in the given role (Task 30). */
@@ -145,5 +145,42 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     await t.user.click(screen.getByRole("link", { name: "Users and roles" }));
     const users = await screen.findByRole("heading", { name: "Users and roles", level: 2 });
     await waitFor(() => expect(users).toHaveFocus());
+  });
+});
+
+// AC-2 (M1 phase review): the console follows the published feature flags as well as the role.
+describe("the console follows features.adminConfig and features.adminUsers (spec 5.8, ADR-0011 item 6)", () => {
+  const serveFlags = (flags: Partial<typeof CLIENT_CONFIG.features>) =>
+    server.use(
+      http.get(`${API}/api/v1/config`, () =>
+        HttpResponse.json({ ...CLIENT_CONFIG, features: { ...CLIENT_CONFIG.features, ...flags } }),
+      ),
+    );
+
+  it("adminConfig off: an admin on the query panel has no Admin link in the header", async () => {
+    serveFlags({ adminConfig: false });
+    await openAs("admin", "/");
+    await screen.findByRole("heading", { name: /^Query Module$/ });
+    await waitFor(() =>
+      expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument(),
+    );
+    expect(adminLink()).toBeNull();
+  });
+
+  it("adminConfig off: an admin typing /admin/config lands on the query panel", async () => {
+    serveFlags({ adminConfig: false });
+    await openAs("admin", "/admin/config");
+    expect(await screen.findByRole("heading", { name: /^Query Module$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Site configuration", level: 2 })).toBeNull();
+  });
+
+  it("adminUsers off: the rail has no Users link and /admin/users goes to Config", async () => {
+    serveFlags({ adminUsers: false });
+    await openAs("admin", "/admin/users");
+    expect(
+      await screen.findByRole("heading", { name: "Site configuration", level: 2 }),
+    ).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(nav).queryByRole("link", { name: "Users and roles" })).toBeNull();
   });
 });

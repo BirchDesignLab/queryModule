@@ -91,10 +91,14 @@ ops_checks() {
   # --- a fresh migrated db, from booting main.js once on the ops volume ---
   boot_once "$ops_vol" "$sec" "$ops_name"
 
-  # --- check-triggers: 0 on the fresh, unaltered db ---
+  # --- check-triggers: 0 on the fresh, unaltered db, over the three trigger sets startup checks ---
   code=0
-  ops_run "$ops_vol" "$sec" node scripts/ops/check-triggers.js || code=$?
+  ct_out=$(ops_run "$ops_vol" "$sec" node scripts/ops/check-triggers.js) || code=$?
+  echo "$ct_out"
   assert_exit "check-triggers (fresh db)" 0 "$code"
+  grep -q "site_config_version triggers present" <<<"$ct_out" ||
+    { echo "ops check failed: check-triggers did not check the site_config_version triggers (AUD-4)"; exit 1; }
+  echo "ops check ok: check-triggers covers the site_config_version triggers"
 
   # --- audit-stats: 0 with and without --up-to, 2 on a bad --up-to ---
   code=0

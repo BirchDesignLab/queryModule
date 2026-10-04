@@ -10,7 +10,7 @@ import type {
   FormState,
   RulesConfig,
 } from "./types.js";
-import { computeVisibility, detectMode } from "./visibility.js";
+import { computeVisibility, modeOf } from "./visibility.js";
 
 function unknownQueryType(code: string): FormState {
   return {
@@ -45,7 +45,7 @@ export function evaluateForm(
   // Steps 2 to 6.
   const { userValues, errorsByField } = computeUserValues(qt, input, options.now);
   const effective = computeEffectiveValues(qt, userValues);
-  const visibility = computeVisibility(qt, effective, detectMode(qt, input));
+  const visibility = computeVisibility(qt, effective, modeOf(qt, input, effective));
   const sectionLabels = new Map(qt.sections.map((s) => [s.key, s.labelKey]));
 
   // Step 7: prune and check.

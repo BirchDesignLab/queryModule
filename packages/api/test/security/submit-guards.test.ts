@@ -99,7 +99,8 @@ describe("POST /api/v1/queries guards (spec 10.3, SEC-006, SEC-014)", () => {
 
   it("a hidden field's value (VEH plateType while State is TX) is absent from the stored values", async () => {
     const { t, post, body } = await setup();
-    const r = await post(body({ values: { plate: PLATE, plateType: "PC" }, mode: "normal" }));
+    // SUBMIT-2: a hidden value never decides the mode, so this plate-only query is plate-only.
+    const r = await post(body({ values: { plate: PLATE, plateType: "PC" }, mode: "plateOnly" }));
     expect(r.status).toBe(202);
     const { correlationId } = SubmitQueryResponseSchema.parse(await r.json());
     const [keyRow] = await t.deps.db

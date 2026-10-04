@@ -117,7 +117,9 @@ describe("runCheckTriggers", () => {
       { write: (s: string) => err.push(s) },
     );
     expect(code).toBe(0);
-    expect(out.join("")).toContain("audit_event and query table triggers present");
+    expect(out.join("")).toContain(
+      "audit_event, query table and site_config_version triggers present",
+    );
     expect(err).toEqual([]);
   });
 
@@ -151,6 +153,22 @@ describe("runCheckTriggers", () => {
     );
     expect(code).toBe(1);
     expect(err.join("")).toContain("source_result_no_delete");
+  });
+
+  it("returns 1 and names a dropped site_config_version trigger, as startup does (AUD-4)", async () => {
+    const { processEnv, deployEnv } = await setupOpsEnv();
+    const db = await openDatabase({ file: deployEnv.dbFile, encryptionKey: TEST_DB_KEY });
+    await db.$client.execute({ sql: "DROP TRIGGER site_config_version_no_delete", args: [] });
+    db.$client.close();
+
+    const err: string[] = [];
+    const code = await runCheckTriggers(
+      processEnv,
+      { write: () => {} },
+      { write: (s: string) => err.push(s) },
+    );
+    expect(code).toBe(1);
+    expect(err.join("")).toContain("site_config_version_no_delete");
   });
 });
 

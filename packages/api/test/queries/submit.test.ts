@@ -370,7 +370,7 @@ describe("POST /api/v1/queries transaction T1 (spec 5.2 step 4, FR-040, FR-041, 
     const { t, post, body } = await setup();
     const { body: ack } = await accepted(
       await post(
-        body({ queryType: "veh", values: { plate: PLATE, plateType: "PC" }, mode: "normal" }),
+        body({ queryType: "veh", values: { plate: PLATE, plateType: "PC" }, mode: "plateOnly" }),
       ),
     );
     expect(ack.parts[0]?.queryType).toBe("VEH");

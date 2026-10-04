@@ -1,4 +1,5 @@
 import { fetchLocaleBundle, LocaleUnavailableError } from "@querymodule/client";
+import shippedEnglish from "@querymodule/config/locales/en.json";
 import { createContext, useEffect, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -23,6 +24,12 @@ export interface DraftChecks {
   labels: ReturnType<typeof useDraft>["labels"];
   /** The shipped strings the checks ran against: English, and each other draft locale's (empty when it ships none). Null until loaded. */
   shipped: ShippedBundles | null;
+  /**
+   * The strings the app is served now: the shipped files with the live overlay on top. The Changes
+   * view reads its "Was" text here, so a changed live label shows its live text (M1 exit Q1); the
+   * checks read `shipped`. Null until loaded.
+   */
+  served: ShippedBundles | null;
 }
 
 export interface ShippedBundles {
@@ -38,9 +45,18 @@ const NO_CHECKS: DraftChecks = {
   doc: null,
   labels: {},
   shipped: null,
+  served: null,
 };
 export const ChecksContext = createContext<DraftChecks>(NO_CHECKS);
 const CHECK_DEBOUNCE_MS = 150;
+const NO_LABELS: ReturnType<typeof useDraft>["labels"] = {};
+
+/**
+ * An own property only: a locale or key named like an object member ("constructor") is not
+ * there. Shared with the Changes view.
+ */
+export const own = <T,>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
+  Object.hasOwn(record, key) ? record[key] : undefined;
 
 function useDebounced<T>(value: T, ms: number): T {
   const [shown, setShown] = useState(value);
@@ -51,10 +67,35 @@ function useDebounced<T>(value: T, ms: number): T {
   return shown;
 }
 
+const SHIPPED_ENGLISH_KEYS: ReadonlySet<string> = new Set(
+  Object.keys(flattenBundle(shippedEnglish as Parameters<typeof flattenBundle>[0])),
+);
+
+/**
+ * What the server's label check reads: the shipped files, then the draft's own overlay (spec 5.8).
+ * The bundle the app is served already has the live overlay on top, so the live overlay's own
+ * keys are taken off again: a draft that drops one the shipped files lack must fail here as it
+ * fails at Review (CFG-5). An overlay entry that only overrides a shipped key stays, because the
+ * shipped text is still there. English is told apart by the bundled en.json; another locale has no
+ * shipped key list here, so its live overlay keys all come off.
+ */
+export function shippedStrings(
+  served: Readonly<Record<string, string>>,
+  liveOverlay: Readonly<Record<string, string>> | undefined,
+  shippedKeys?: ReadonlySet<string>,
+): Record<string, string> {
+  const out = { ...served };
+  for (const key of Object.keys(liveOverlay ?? {}))
+    if (shippedKeys?.has(key) !== true) delete out[key];
+  return out;
+}
+
 /** validateSiteConfig on every draft change, debounced, with diagnostics grouped by control. */
 export function useDraftChecks(
   doc: JsonObject,
   labels: ReturnType<typeof useDraft>["labels"],
+  /** The live version's label overlay by locale: already part of what the app is served. */
+  liveLabels: ReturnType<typeof useDraft>["labels"] = NO_LABELS,
 ): DraftChecks {
   const settledDoc = useDebounced(doc, CHECK_DEBOUNCE_MS);
   const locales = Array.isArray(settledDoc.locales)
@@ -66,15 +107,21 @@ export function useDraftChecks(
     const settled = { doc: settledDoc, labels: settledLabels };
     if (bundleState.status !== "ready")
       return { ...NO_CHECKS, ...settled, status: bundleState.status };
-    const issues = draftIssues(
-      validateDraft(settledDoc, settledLabels, bundleState.bundle, bundleState.perLocale),
+    const en = shippedStrings(bundleState.bundle, own(liveLabels, "en"), SHIPPED_ENGLISH_KEYS);
+    const perLocale = Object.fromEntries(
+      Object.entries(bundleState.perLocale).map(([locale, served]) => [
+        locale,
+        shippedStrings(served, own(liveLabels, locale)),
+      ]),
     );
+    const issues = draftIssues(validateDraft(settledDoc, settledLabels, en, perLocale));
     const byPointer = new Map<string, DraftIssue[]>();
     for (const i of issues) byPointer.set(i.pointer, [...(byPointer.get(i.pointer) ?? []), i]);
     const groups = groupByControl(settledDoc, issues);
-    const shipped = { en: bundleState.bundle, perLocale: bundleState.perLocale };
-    return { status: "ready", issues, groups, byPointer, shipped, ...settled };
-  }, [bundleState, settledDoc, settledLabels]);
+    const shipped = { en, perLocale };
+    const served = { en: bundleState.bundle, perLocale: bundleState.perLocale };
+    return { status: "ready", issues, groups, byPointer, shipped, served, ...settled };
+  }, [bundleState, settledDoc, settledLabels, liveLabels]);
 }
 
 /**

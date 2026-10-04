@@ -1,20 +1,25 @@
 import { createDraftStore, createTranslator, type Translator } from "@querymodule/client";
-import { type ClientSiteConfig, ClientSiteConfigSchema } from "@querymodule/core/config";
+import { type ClientSiteConfig, toClientSiteConfig } from "@querymodule/core/config";
 import { VisuallyHidden } from "@querymodule/web-ui";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCachedConfigState } from "../app/cached-config.js";
 import { I18nProvider, useT, useTranslator } from "../app/i18n-context.js";
 import { QueryPanelView } from "../query/QueryPanelView.js";
-import type { JsonObject } from "./draft.js";
+import { buildSiteConfig, type JsonObject } from "./draft.js";
 import { topItem } from "./selection.js";
 
 /** A fixed hash: the preview never submits, so no server compares it (ADR-0011 item 4). */
 const PREVIEW_HASH = "0".repeat(64);
 
-/** The builder's draft as the client view the dispatcher panel reads, or null if it does not fit. */
+/**
+ * The builder's draft as the client view the dispatcher panel reads, or null if it does not fit.
+ * Built as production builds it, through SiteConfigSchema (which fills the defaulted keys, such as
+ * an omitted feature flag or a source's timeoutMs) and then toClientSiteConfig, so a valid draft
+ * never pauses the preview for a key production would have defaulted (CFG-8).
+ */
 export function previewConfig(doc: JsonObject): ClientSiteConfig | null {
-  const parsed = ClientSiteConfigSchema.safeParse({ ...doc, configHash: PREVIEW_HASH });
-  return parsed.success ? parsed.data : null;
+  const built = buildSiteConfig(doc);
+  return built.ok ? toClientSiteConfig(built.config, PREVIEW_HASH) : null;
 }
 
 /** The app's strings with the draft's label overlay for the same locale on top. */

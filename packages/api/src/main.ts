@@ -1,5 +1,6 @@
 import { writeSync } from "node:fs";
-import { type RunningServer, startServer } from "./startup";
+import { errorFields } from "./log/error-fields";
+import { type RunningServer, startServer, startupErrorFields } from "./startup";
 
 /** Upper bound on the drain after a fatal error; the exit code is already 1 by then. */
 const FATAL_DRAIN_MS = 10_000;
@@ -13,9 +14,6 @@ function writeFatal(msg: string, fields: Record<string, unknown>): void {
   writeSync(2, `${JSON.stringify({ level: "fatal", time: Date.now(), msg, ...fields })}\n`);
 }
 
-const errorName = (err: unknown): string =>
-  err instanceof Error && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(err.name) ? err.name : "unknown";
-
 let server: RunningServer | undefined;
 let failing = false;
 
@@ -28,7 +26,7 @@ function fail(event: "uncaughtException" | "unhandledRejection", err: unknown): 
   if (failing) process.exit(1);
   failing = true;
   process.exitCode = 1;
-  writeFatal("uncaught error, exiting", { event, error: { name: errorName(err) } });
+  writeFatal("uncaught error, exiting", { event, error: { name: errorFields(err).name } });
   setTimeout(() => process.exit(1), FATAL_DRAIN_MS).unref();
   const s = server;
   if (!s) process.exit(1);
@@ -52,12 +50,9 @@ try {
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
 } catch (err) {
-  // Error name and message only (spec 5.9): startup errors never carry key material, and a
-  // stack is never printed.
-  const e =
-    err instanceof Error
-      ? { name: err.name, message: err.message }
-      : { name: "unknown", message: "" };
+  // LS-2 (spec 5.9): the name, plus the message only of a fixed-text startup error (a query
+  // error's message quotes its params); a stack is never printed.
+  const e = startupErrorFields(err);
   process.stderr.write(
     `${JSON.stringify({ level: "fatal", time: Date.now(), msg: "startup refused", error: e })}\n`,
   );

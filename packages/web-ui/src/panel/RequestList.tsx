@@ -82,16 +82,18 @@ export function RequestList({
   const headingId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   // The Retry button that had focus when it was pressed. Where a retry replaces its own row (the
-  // officer's "last request" shows one row), the button leaves the page with focus on it; then, and
-  // only then, focus goes to this heading (spec 6.4). Where the row stays, nothing moves.
+  // officer's "last request" shows one row), or its acknowledgment retires the button (the failed
+  // row is superseded, M1 exit C1), the button leaves the page with focus on it; then, and only
+  // then, focus goes to this heading (spec 6.4). Where the button stays, nothing moves.
   const retryFocus = useRef<Element | null>(null);
   // Every commit: a no-op until a Retry was pressed while it had focus.
   useLayoutEffect(() => {
     const pressed = retryFocus.current;
     if (pressed === null) return;
     if (pressed.isConnected) {
-      // Still there (the list variant): the next commit judges it again only if it is pressed again.
-      retryFocus.current = null;
+      // Still there: watched while it keeps focus (the answer may yet retire it); once the user
+      // moves focus away, it is no longer this list's to move.
+      if (document.activeElement !== pressed) retryFocus.current = null;
       return;
     }
     retryFocus.current = null;

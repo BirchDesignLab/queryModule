@@ -42,8 +42,10 @@ export class UnknownUserError extends Error {
 }
 
 /**
- * Roles change only here; there is no role-editing route (spec 5.6). One transaction updates
- * user.role and writes roleChanged (system actor); an audit failure rolls the role back. A
+ * The ops path for a role change (spec 5.6), and the bootstrap of the first admin; an admin also
+ * changes roles in the admin console (admin/users/users.ts setUserRole, roleChanged via
+ * adminConsole, ADR-0011 item 8). One transaction updates user.role and writes roleChanged via
+ * grant-role (system actor); an audit failure rolls the role back. A
  * revoke sets the role back to "user". IdentityService reads role from the user row, so the
  * new role applies on the user's next request.
  */

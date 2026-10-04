@@ -46,6 +46,8 @@ export function mountAdminUserRoutes(app: Hono<AppEnv>, d: AppDeps): void {
     const body = await bodyOf(c, CreateUserBodySchema);
     if (!body.success) return apiError(c, "validationFailed");
     const r = await createUser(d, c.get("principal"), body.data);
+    // AUD-3: forbidden, as the guard answers a non-admin, when the actor lost the role meanwhile.
+    if (!r.ok && r.code === "forbidden") return apiError(c, "forbidden");
     if (!r.ok)
       return apiError(c, "validationFailed", undefined, [{ key: "validation.emailTaken" }]);
     return c.json(
@@ -84,8 +86,8 @@ export function mountAdminUserRoutes(app: Hono<AppEnv>, d: AppDeps): void {
   app.delete("/api/v1/admin/sessions/:sessionId", guard, async (c) => {
     const p = SessionParamsSchema.safeParse({ sessionId: c.req.param("sessionId") });
     if (!p.success) return apiError(c, "validationFailed");
-    if (!(await revokeSession(d, c.get("principal"), p.data.sessionId)))
-      return apiError(c, "notFound");
+    const r = await revokeSession(d, c.get("principal"), p.data.sessionId);
+    if (!r.ok) return apiError(c, r.code);
     return c.body(null, 204);
   });
 }

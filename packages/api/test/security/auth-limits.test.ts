@@ -334,4 +334,54 @@ describe("SEC-005 session limits over HTTP", () => {
     expect(rows.rows).toHaveLength(1);
     expect(rows.rows[0]?.actor_email).toBeNull();
   });
+  it("AUD-2: a loginSucceeded audit failure answers 500 with no cookie, deletes the session and keeps the lockout count", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    expect((await t.signIn(EMAIL, "wrong-password-000")).status).toBe(401);
+    const record = t.deps.audit.record.bind(t.deps.audit);
+    vi.spyOn(t.deps.audit, "record").mockImplementation(async (tx, e) => {
+      if (e.type === "loginSucceeded") throw new Error("audit store unavailable");
+      return record(tx, e);
+    });
+    const r = await t.signIn(EMAIL, PW);
+    expect(r.status).toBe(500);
+    expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("internal");
+    expect(r.headers.getSetCookie()).toEqual([]);
+    expect(await t.deps.db.select().from(session)).toHaveLength(0);
+    expect(await t.auditRows("loginSucceeded")).toHaveLength(0);
+    // The limiter is reset only after the audit commits: the earlier failure still counts.
+    const acct = await t.deps.db.$client.execute({
+      sql: "SELECT count FROM rate_limit WHERE key = ?",
+      args: [`login:acct:${EMAIL}`],
+    });
+    expect(Number(acct.rows[0]?.count)).toBe(1);
+    expect(t.logLines.join("\n")).not.toContain("audit store unavailable");
+  });
+  it("AUD-2: when the unaudited session's delete also fails, the answer is still 500 with no cookie", async () => {
+    const t = await createTestApp();
+    await t.createUser(EMAIL, PW);
+    const record = t.deps.audit.record.bind(t.deps.audit);
+    vi.spyOn(t.deps.audit, "record").mockImplementation(async (tx, e) => {
+      if (e.type === "loginSucceeded") throw new Error("audit store unavailable");
+      return record(tx, e);
+    });
+    vi.spyOn(t.deps.db, "delete").mockImplementationOnce(() => {
+      throw new TypeError("delete unavailable");
+    });
+    const r = await t.signIn(EMAIL, PW);
+    expect(r.status).toBe(500);
+    expect(r.headers.getSetCookie()).toEqual([]);
+    const lines = t.logLines.map(
+      (l) => JSON.parse(l) as { msg: string; errorName?: string; deleteErrorName?: string },
+    );
+    // M1 exit Q2: one line, after the delete, with the actual outcome; never "session deleted".
+    expect(lines.map((l) => l.msg)).not.toContain("sign-in audit failed; session deleted");
+    expect(
+      lines.find((l) => l.msg === "sign-in audit failed; session delete failed"),
+    ).toMatchObject({
+      errorName: "Error",
+      deleteErrorName: "TypeError",
+    });
+    expect(t.logLines.join("\n")).not.toContain("unavailable");
+  });
 });

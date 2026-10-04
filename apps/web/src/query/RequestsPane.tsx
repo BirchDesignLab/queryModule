@@ -98,8 +98,9 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
               t(result.status === "submitting" ? "form.submitting" : "form.noConnection"),
             );
           }
-          // A 409 makes the controller refetch the config, and the panel announces that change
-          // itself: a second sentence here would cut it off in the shared region.
+          // A 409 makes the controller refetch the config (every cached copy, observed or not), and
+          // the panel announces that change itself: a second sentence here would cut it off in the
+          // shared region.
           else if (
             result.kind === "sent" &&
             result.outcome.kind !== "configChanged" &&

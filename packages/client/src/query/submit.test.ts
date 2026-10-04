@@ -107,7 +107,33 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     const { controller, queryClient } = setup();
     const spy = vi.spyOn(queryClient, "invalidateQueries");
     expect(await controller.getState().submit(REQ)).toEqual({ kind: "configChanged" });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ["config"] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["config"], refetchType: "all" });
+  });
+
+  it("CFG-6 a 409 refetches a cached config nothing observes (a requests-list Retry), not just on the 15 s poll", async () => {
+    serveQueries(() => HttpResponse.json(err("configHashMismatch"), { status: 409 }));
+    const { controller, queryClient } = setup();
+    const load = vi.fn(async () => ({ configHash: "h1" }));
+    // No observer: the default refetchType "active" would leave this query alone (spec 6.7).
+    await queryClient.fetchQuery({ queryKey: ["config"], queryFn: load, staleTime: Infinity });
+    expect(load).toHaveBeenCalledTimes(1);
+    await controller.getState().submit(REQ);
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  });
+
+  it("SUBMIT-1 sends the key the request carries; keyFor gives a fresh one, or the kept one for an identical body after a network failure", async () => {
+    const seen = serveQueries(() => HttpResponse.json(ACK, { status: 202 }));
+    const { controller } = setup();
+    expect(controller.getState().keyFor(REQ)).toBe("key-1");
+    expect(controller.getState().keyFor(REQ)).toBe("key-2");
+    await controller.getState().submit({ ...REQ, idempotencyKey: "row-key" });
+    expect(seen[0]?.headers.get("idempotency-key")).toBe("row-key");
+    server.use(http.post(`${BASE}/api/v1/queries`, () => HttpResponse.error()));
+    server.use(http.get(`${BASE}/api/v1/health`, () => HttpResponse.json({ ok: true })));
+    const first = controller.getState().keyFor(REQ);
+    await controller.getState().submit({ ...REQ, idempotencyKey: first });
+    expect(controller.getState().keyFor(REQ)).toBe(first);
+    expect(controller.getState().keyFor({ ...REQ, queryType: "PER" })).not.toBe(first);
   });
 
   it("400 passes errors[] through", async () => {

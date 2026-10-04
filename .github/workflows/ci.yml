@@ -269,11 +269,14 @@ jobs:
         # cache-poisoning: that action's own step is what the audit treats as
         # a runtime-artifact publish site when a job also sets up node/pnpm;
         # this build only loads a local, untagged-for-push image). The step
-        # above makes the gha cache flags below real, not a silent no-op.
+        # above makes the gha cache flags below real, not a silent no-op. The
+        # revision label (runner env, not an expression) lets the deploy host
+        # name the commit a :release image runs (M1 exit, 10-04-26).
         run: |
           docker buildx build --load \
             --file deploy/Dockerfile \
             --tag querymodule:ci \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             .

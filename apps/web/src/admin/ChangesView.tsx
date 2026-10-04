@@ -13,7 +13,7 @@ import {
   missingLabels,
   ownerName,
 } from "./changes.js";
-import { ChecksContext, type ShippedBundles } from "./checks.js";
+import { ChecksContext, own, type ShippedBundles } from "./checks.js";
 import { useLabelText } from "./controls.js";
 import type { JsonObject } from "./draft.js";
 import { useItemName } from "./FormTab.js";
@@ -21,17 +21,18 @@ import { languageName } from "./LabelOverlay.js";
 import { useConditionWords } from "./RulesEditor.js";
 import { useLiveDoc } from "./use-cached-config.js";
 
-/** What a locale ships for a label key: "" when nothing, null while the bundles are not loaded. */
-function shippedText(shipped: ShippedBundles | null, locale: string, key: string): string | null {
-  if (shipped === null) return null;
-  // Own properties only: a key named like an object member ("constructor") is not shipped text.
-  const bundle = locale === "en" ? shipped.en : own(shipped.perLocale, locale);
+/**
+ * What a locale is served now for a label key (the shipped text, or the live overlay's): "" when
+ * nothing, null while the bundles are not loaded.
+ */
+function servedText(served: ShippedBundles | null, locale: string, key: string): string | null {
+  if (served === null) return null;
+  // Own properties only: a key named like an object member ("constructor") is not served text.
+  const bundle = locale === "en" ? served.en : own(served.perLocale, locale);
   if (bundle === undefined) return null;
   const text = own(bundle, key);
   return typeof text === "string" ? text : "";
 }
-const own = <T,>(o: Readonly<Record<string, T>>, key: string): T | undefined =>
-  Object.hasOwn(o, key) ? o[key] : undefined;
 
 /**
  * Changes (item 4): what the draft changes against the live config, grouped by query type, list,
@@ -53,7 +54,7 @@ export function ChangesView({
   const translator = useTranslator();
   const { doc: live, check } = useLiveDoc();
   const { labels } = useDraft();
-  const { issues, status, shipped } = useContext(ChecksContext);
+  const { issues, status, served } = useContext(ChecksContext);
   const labelText = useLabelText();
   const itemName = useItemName();
   const headingId = useId();
@@ -71,15 +72,16 @@ export function ChangesView({
           locale,
           key,
           text,
-          // The shipped text of that language: "" when it has none, unknown until the bundles load.
-          shipped: shippedText(shipped, locale, key),
+          // The live text of that language (shipped, or the live overlay's; M1 exit Q1): "" when
+          // it has none, unknown until the bundles load.
+          shipped: servedText(served, locale, key),
         })),
       ),
       language,
       t,
     );
     return overlay === null ? list : [...list, overlay];
-  }, [live, doc, deps, labels, shipped, language, t]);
+  }, [live, doc, deps, labels, served, language, t]);
   const missing = useMemo(
     () =>
       missingLabels(

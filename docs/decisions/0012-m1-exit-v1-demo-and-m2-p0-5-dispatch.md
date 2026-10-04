@@ -27,7 +27,7 @@ Option 1.
 - Core loop e2e: an admin publishes builder changes (a field, a rule that makes a field required, a default, picklist values, a subtype value, a terminal command, a quick-access button), each seen first in the builder preview and then in an open dispatcher form without a reload; a stale submit gets 409 and refetches; rollback restores the previous form (Track A P3 Task 35).
 - Persona screens for dispatcher (`dispatch`), officer (`mobileUnit`, a spec 6.3 subset verified at 1024x768) and admin (the `/admin` console), with a persona e2e (Track B P3 Task 21).
 - Stories A1 to A5 green and tagged; A4 "runs" is asserted to the 202 acknowledgment (its "clean no-record" result moves to M2 P0.5); keyboard-only A1 and A4; axe in every scenario.
-- Security: the route x caller matrix for config, queries, meta and the admin routes; unknown keys and hidden values rejected; `configHash` 409; log capture for config publish and user creation.
+- Security: the route x caller matrix for config, queries, meta and the admin routes; unknown keys rejected; hidden values accepted and pruned, neither persisted nor dispatched (spec 10.3; wording corrected 10-04-26 by the M1 phase review, SUBMIT-3); `configHash` 409; log capture for config publish and user creation.
 - Smoke steps 1, 2, 3 (submit, 202) and 5 against the live URL; restore test; `docs/releases/m1.md`; product docs; promote `m1`.
 
 **New phase M2 P0.5 dispatch** (between M2 P0 contracts and M2 P1 feed), Track A with a Track B cell:

@@ -483,7 +483,14 @@ built (the `adminAudit` feature, M2).
    as" Dispatcher or Officer. Submit is off in the preview. If the draft is invalid the preview
    pauses and shows the last valid version.
 3. **Check.** Diagnostics show at their controls and as a count ("Draft checks: N errors, M
-   warnings"). They come from the same validation chain as `config:validate`.
+   warnings"). The browser runs the same rules as `config:validate`, with the label keys checked
+   against the shipped strings plus the draft's own overlay, as the server does. That label check
+   is exact for English only: the browser holds the shipped English file, but for another locale
+   it cannot tell a shipped string from a live overlay entry, so it treats every live overlay key
+   as unshipped and may show an error the server would not (reverting an override of a shipped
+   label, for one). It is not the whole chain: "Review and publish" runs the full server chain and
+   may show more or fewer issues (a locale whose shipped file only the server holds, for one). The
+   server's Review is authoritative, and publish is decided there.
 4. **Publish.** "Review and publish" shows the changes against the live version; confirming
    publishes the draft as the next version and makes it live in one step. Publish is refused while
    any validation error remains. A publish writes the audit row `configPublished` (JSON pointers of

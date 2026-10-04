@@ -99,24 +99,31 @@ export async function disableUser(
 
 /**
  * Ends every session of a user but the caller's own (revoking that one would sign the admin out
- * from a row action): lists them, then deletes each by row id. The count of sessions ended, or null
- * when the list or any delete failed.
+ * from a row action). The list answers at most 100 sessions (the contract's cap), so it lists,
+ * deletes and lists again until none but the caller's remain. A session listed again after its
+ * delete answered means the revoke did not hold: that is a failure, not a success. The count of
+ * sessions ended, or null when a list or delete failed or any session survived (AC-1).
  */
 export async function revokeUserSessions(api: ApiClient, id: string): Promise<number | null> {
   try {
-    const { data } = await api.GET("/api/v1/admin/users/{id}/sessions", {
-      params: { path: { id } },
-    });
-    const parsed = AdminUserSessionListSchema.safeParse(data);
-    if (!parsed.success) return null;
-    const others = parsed.data.sessions.filter((s) => !s.current);
-    for (const s of others) {
-      const { response } = await api.DELETE("/api/v1/admin/sessions/{sessionId}", {
-        params: { path: { sessionId: s.id } },
+    const attempted = new Set<string>();
+    for (;;) {
+      const { data } = await api.GET("/api/v1/admin/users/{id}/sessions", {
+        params: { path: { id } },
       });
-      if (!response.ok && response.status !== 404) return null;
+      const parsed = AdminUserSessionListSchema.safeParse(data);
+      if (!parsed.success) return null;
+      const others = parsed.data.sessions.filter((s) => !s.current);
+      if (others.length === 0) return attempted.size;
+      if (others.some((s) => attempted.has(s.id))) return null;
+      for (const s of others) {
+        attempted.add(s.id);
+        const { response } = await api.DELETE("/api/v1/admin/sessions/{sessionId}", {
+          params: { path: { sessionId: s.id } },
+        });
+        if (!response.ok && response.status !== 404) return null;
+      }
     }
-    return others.length;
   } catch {
     return null;
   }

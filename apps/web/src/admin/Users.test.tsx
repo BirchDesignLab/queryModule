@@ -147,11 +147,12 @@ async function openUsers(initial: UserRow[] = [SELF, ROSE, NEWBIE, GONE], handle
         current: true,
       };
       return HttpResponse.json({
+        // A revoked session is gone from the next list, as on the server.
         sessions: [
           { id: SESSION_A, createdAt: T0, expiresAt: T0 + 1000, userAgent: null, current: false },
           { id: SESSION_B, createdAt: T0, expiresAt: T0 + 1000, userAgent: null, current: false },
           ...(params.id === TEST_USER.id ? [mine] : []),
-        ],
+        ].filter((s) => !calls.revoked.includes(s.id)),
       });
     }),
     http.delete(`${API}/api/v1/admin/sessions/:sessionId`, ({ params }) => {
@@ -355,7 +356,8 @@ describe("sign out everywhere", () => {
     const t = await openUsers();
     await t.user.click(signOutButton("Rose Dispatch"));
     await waitFor(() => expect(calls.revoked).toEqual([SESSION_A, SESSION_B]));
-    expect(calls.sessionLists).toEqual(["user-0002"]);
+    // One pass that ends both, then the list again to see none are left (AC-1).
+    expect(calls.sessionLists).toEqual(["user-0002", "user-0002"]);
     expect(await screen.findByText("Rose Dispatch is signed out of 2 sessions.")).toBeVisible();
     expect(signOutButton("Rose Dispatch")).toHaveFocus();
   });
@@ -365,6 +367,64 @@ describe("sign out everywhere", () => {
     await t.user.click(signOutButton("Test Admin"));
     await waitFor(() => expect(calls.revoked).toEqual([SESSION_A, SESSION_B]));
     expect(calls.revoked).not.toContain(SESSION_SELF);
+  });
+
+  const sessionId = (n: number) =>
+    `0198a1b2-c3d4-7e5f-8a9b-${(0xa000 + n).toString(16).padStart(12, "0")}`;
+
+  it("AC-1 ends every session of a user with more than 100, not just the first page", async () => {
+    const t = await openUsers();
+    const live = new Set(Array.from({ length: 250 }, (_, i) => sessionId(i)));
+    const ended: string[] = [];
+    server.use(
+      // The server answers at most 100 sessions per list (admin.ts max(100)).
+      http.get(`${API}/api/v1/admin/users/:id/sessions`, () =>
+        HttpResponse.json({
+          sessions: [...live].slice(0, 100).map((id) => ({
+            id,
+            createdAt: T0,
+            expiresAt: T0 + 1000,
+            userAgent: null,
+            current: false,
+          })),
+        }),
+      ),
+      http.delete(`${API}/api/v1/admin/sessions/:sessionId`, ({ params }) => {
+        ended.push(String(params.sessionId));
+        live.delete(String(params.sessionId));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    await t.user.click(signOutButton("Rose Dispatch"));
+    expect(await screen.findByText("Rose Dispatch is signed out of 250 sessions.")).toBeVisible();
+    expect(ended).toHaveLength(250);
+    expect(live.size).toBe(0);
+  });
+
+  it("AC-1 does not claim success when sessions are still live after the passes", async () => {
+    const t = await openUsers();
+    server.use(
+      http.get(`${API}/api/v1/admin/users/:id/sessions`, () =>
+        HttpResponse.json({
+          sessions: Array.from({ length: 100 }, (_, i) => ({
+            id: sessionId(i),
+            createdAt: T0,
+            expiresAt: T0 + 1000,
+            userAgent: null,
+            current: false,
+          })),
+        }),
+      ),
+      // 204 but the session stays: a revoke the server does not honour must end the loop, not spin.
+      http.delete(
+        `${API}/api/v1/admin/sessions/:sessionId`,
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    );
+    await t.user.click(signOutButton("Rose Dispatch"));
+    expect(
+      await screen.findByText("Rose Dispatch could not be signed out of every session. Try again."),
+    ).toHaveAttribute("role", "alert");
   });
 
   it("a failed revoke says so", async () => {

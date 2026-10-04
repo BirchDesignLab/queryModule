@@ -24,12 +24,26 @@ const tempDir = (prefix: string): string => {
   return dir;
 };
 
+/**
+ * A port the child can bind, probed on the child's own host (0.0.0.0) and picked outside the
+ * OS ephemeral ranges (Windows 49152+, Linux 32768+). The child takes seconds to boot, and under
+ * the full parallel suite a listen(0) port can be handed to another socket in that window, and
+ * the child then refuses startup on EADDRINUSE before "listening" (M1 phase review gate-0:1).
+ */
 async function freePort(): Promise<number> {
-  const srv = createServer();
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
-  const { port } = srv.address() as { port: number };
-  await new Promise<void>((r) => srv.close(() => r()));
-  return port;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const port = 20_000 + Math.floor(Math.random() * 12_000);
+    const srv = createServer();
+    const bound = await new Promise<boolean>((r) => {
+      srv.once("error", () => r(false));
+      srv.listen(port, "0.0.0.0", () => r(true));
+    });
+    if (bound) {
+      await new Promise<void>((r) => srv.close(() => r()));
+      return port;
+    }
+  }
+  throw new Error("no free port in 20000-31999");
 }
 
 const apiDir = resolve(import.meta.dirname, "..");
@@ -90,7 +104,7 @@ describe("#224 main.ts fails closed on an error outside the request path (spec 8
   ] as const) {
     it(`exits non-zero with exactly one fatal line and no secret or stack on ${event}`, async () => {
       const { code, stdout, stderr } = await runFatal(kind);
-      expect(stdout).toContain('"msg":"listening"');
+      expect(stdout, `child stderr: ${stderr}`).toContain('"msg":"listening"');
       expect(code).toBe(1);
       const fatal = stderr.split("\n").filter((l) => l.includes('"level":"fatal"'));
       expect(fatal).toHaveLength(1);
@@ -107,7 +121,7 @@ describe("#224 main.ts fails closed on an error outside the request path (spec 8
 
   it("a second fatal event during the drain exits 1 at once without a second line (#231 C-m2)", async () => {
     const { code, stdout, stderr } = await runFatal("double");
-    expect(stdout).toContain('"msg":"listening"');
+    expect(stdout, `child stderr: ${stderr}`).toContain('"msg":"listening"');
     expect(code).toBe(1);
     expect(fatalLines(stderr)).toHaveLength(1);
     expect(`${stdout}${stderr}`).not.toContain(AUTH_SECRET);
@@ -116,9 +130,72 @@ describe("#224 main.ts fails closed on an error outside the request path (spec 8
 
   it("SIGTERM during a fatal drain still exits 1, never the clean 0 (#231 C-m2)", async () => {
     const { code, stdout, stderr } = await runFatal("sigterm");
-    expect(stdout).toContain('"msg":"listening"');
+    expect(stdout, `child stderr: ${stderr}`).toContain('"msg":"listening"');
     expect(code).toBe(1);
     expect(fatalLines(stderr)).toHaveLength(1);
     expect(`${stdout}${stderr}`).not.toContain(AUTH_SECRET);
+  }, 60_000);
+});
+
+/**
+ * M1 exit residual (LS-2 side effect): the "startup refused" line keeps the fixed text of a
+ * DeployEnvError and a Node system error code, so an operator still sees why startup failed.
+ */
+async function runStartup(env: Record<string, string>) {
+  const secrets = tempDir("qm-start-sec-");
+  for (const [n, v] of Object.entries({
+    DB_ENCRYPTION_KEY: k(1),
+    CREDENTIAL_KEY: k(2),
+    DATA_KEY: k(3),
+    BETTER_AUTH_SECRET: AUTH_SECRET,
+  }))
+    writeFileSync(join(secrets, n), v);
+  const child = spawn(process.execPath, ["--import", "tsx", "src/main.ts"], {
+    cwd: apiDir,
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      PUBLIC_ORIGIN: "http://localhost:3000",
+      DATA_DIR: tempDir("qm-start-data-"),
+      SECRETS_DIR: secrets,
+      ALLOW_MOCK_SOURCES: "true",
+      ...env,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (b: Buffer) => {
+    stderr += b.toString();
+  });
+  child.stdout.resume();
+  const code = await new Promise<number | null>((r) => child.on("exit", (c) => r(c)));
+  const lines = stderr.split("\n").filter((l) => l.includes('"msg":"startup refused"'));
+  return { code, stderr, lines };
+}
+
+describe("main.ts startup refused line keeps fixed causes (spec 5.9, 8.1)", () => {
+  it("a bad PORT prints the fixed DeployEnvError text", async () => {
+    const { code, stderr, lines } = await runStartup({ PORT: "abc" });
+    expect(code).toBe(1);
+    expect(lines, stderr).toHaveLength(1);
+    expect(JSON.parse(lines[0] ?? "{}").error).toEqual({
+      name: "DeployEnvError",
+      message: "PORT must be an integer from 1 to 65535",
+    });
+  }, 60_000);
+
+  it("a port in use prints code EADDRINUSE and no address", async () => {
+    const port = await freePort();
+    const taken = createServer();
+    await new Promise<void>((r) => taken.listen(port, "0.0.0.0", () => r()));
+    try {
+      const { code, stderr, lines } = await runStartup({ PORT: String(port) });
+      expect(code).toBe(1);
+      expect(lines, stderr).toHaveLength(1);
+      expect(JSON.parse(lines[0] ?? "{}").error).toEqual({ name: "Error", code: "EADDRINUSE" });
+      expect(stderr).not.toContain("0.0.0.0");
+    } finally {
+      await new Promise<void>((r) => taken.close(() => r()));
+    }
   }, 60_000);
 });

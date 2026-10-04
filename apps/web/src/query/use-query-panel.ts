@@ -466,19 +466,27 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const sentDraftSources = drafts.getState().drafts[request.queryType]?.sources ?? null;
     const submitted = {
       queryType: request.queryType,
-      values: valuesToSend(config, request.queryType, request.values, request.state, Date.now()),
+      values: valuesToSend(request.values, request.state),
       sourceIds: request.sourceIds,
       mode: request.state.mode,
     };
-    const rowId =
-      submit.getState().status === "submitting"
-        ? null
-        : requests.getState().begin({
-            queryType: request.queryType,
-            summary: formToTerminal(config, request.queryType, request.values, Date.now()).text,
-            submitted,
-          });
-    const outcome = await submit.getState().submit({ ...submitted, configHash: config.configHash });
+    // The row keeps the request's Idempotency-Key, so its Retry sends the same one (SUBMIT-1). A
+    // send that joins one in flight has no row and no key of its own.
+    const joining = submit.getState().status === "submitting";
+    const idempotencyKey = joining
+      ? undefined
+      : submit.getState().keyFor({ ...submitted, configHash: config.configHash });
+    const rowId = joining
+      ? null
+      : requests.getState().begin({
+          queryType: request.queryType,
+          summary: formToTerminal(config, request.queryType, request.values, Date.now()).text,
+          submitted,
+          idempotencyKey,
+        });
+    const outcome = await submit
+      .getState()
+      .submit({ ...submitted, configHash: config.configHash, idempotencyKey });
     // The list outlives the panel, so the row settles even if the panel has unmounted.
     if (rowId !== null) requests.getState().settle(rowId, outcome);
     if (mounted.current) handleOutcome(outcome, { ...request, draftSources: sentDraftSources });

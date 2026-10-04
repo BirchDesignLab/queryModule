@@ -27,7 +27,10 @@ export type CreateUserBody = z.infer<typeof CreateUserBodySchema>;
 
 const NO_SIGN_INS: UserSignInStats = { signIns: 0, distinctIps: 0, lastSignIn: null };
 
-/** Thrown inside a transaction to roll it back and answer 409 lastAdmin. */
+/**
+ * Thrown inside a transaction to roll it back: 409 lastAdmin on disable and role change, 403
+ * forbidden on create and revoke, whose contracts have no 409 (AUD-3).
+ */
 class LastAdminError extends Error {
   constructor() {
     super("lastAdmin");
@@ -105,12 +108,14 @@ function temporaryPassword(): string {
 
 export type CreateResult =
   | { ok: true; user: AdminUser; temporaryPassword: string }
-  | { ok: false; code: "emailTaken" };
+  | { ok: false; code: "emailTaken" | "forbidden" };
 
 /**
  * Creates the user and its credential account with a server-generated one-time password, set
  * to be changed at first sign-in (D-A26), and writes userCreated, in one transaction. The
- * password is hashed with Better Auth's own hasher and returned to the caller once.
+ * password is hashed with Better Auth's own hasher and returned to the caller once. Inside the
+ * transaction the actor must still be an enabled admin (AUD-3, as disable and role change), else
+ * forbidden with nothing written: the route's own role check has gone stale.
  */
 export async function createUser(
   d: AppDeps,
@@ -122,7 +127,8 @@ export async function createUser(
   const hash = await (await d.auth.$context).password.hash(password);
   const now = new Date(d.clock.now());
   const id = uuidv7();
-  const row = await withTransaction(d.db, async (tx): Promise<UserRow | null> => {
+  const row = await guarded(d, async (tx): Promise<UserRow | null> => {
+    await actorStillAdmin(tx, actor);
     const taken = await tx.select({ id: user.id }).from(user).where(eq(user.email, email));
     if (taken.length > 0) return null;
     const [created] = await tx
@@ -156,6 +162,7 @@ export async function createUser(
     });
     return created ?? null;
   });
+  if (row === "lastAdmin") return { ok: false, code: "forbidden" };
   if (!row) return { ok: false, code: "emailTaken" };
   return { ok: true, user: toAdminUser(row), temporaryPassword: password };
 }
@@ -294,13 +301,19 @@ export async function listUserSessions(
   }));
 }
 
-/** Deletes one session and writes sessionRevoked reason admin in one transaction, then ends it. */
+export type RevokeResult = { ok: true } | { ok: false; code: "notFound" | "forbidden" };
+
+/**
+ * Deletes one session and writes sessionRevoked reason admin in one transaction, then ends it.
+ * Inside the transaction the actor must still be an enabled admin (AUD-3), else forbidden.
+ */
 export async function revokeSession(
   d: AppDeps,
   actor: Principal,
   sessionId: string,
-): Promise<boolean> {
-  const gone = await withTransaction(d.db, async (tx) => {
+): Promise<RevokeResult> {
+  const gone = await guarded(d, async (tx) => {
+    await actorStillAdmin(tx, actor);
     const deleted = await tx
       .delete(session)
       .where(eq(session.id, sessionId))
@@ -315,6 +328,8 @@ export async function revokeSession(
     });
     return true;
   });
-  if (gone) d.eventBus.endSession(sessionId);
-  return gone;
+  if (gone === "lastAdmin") return { ok: false, code: "forbidden" };
+  if (!gone) return { ok: false, code: "notFound" };
+  d.eventBus.endSession(sessionId);
+  return { ok: true };
 }
