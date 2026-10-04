@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL as NodeURL } from "node:url";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 
 type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
 
@@ -174,14 +174,18 @@ export function hexToRgb(hex: string): string {
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
 }
 
-/** Button and option text of each query type in the shipped English bundle and the e2e sites. */
-const TYPE_LABELS: Readonly<Record<string, string>> = {
-  VEH: "Vehicle",
-  PER: "Person",
-  PRO: "Property",
-  WNT: "Wanted check",
-  CHK: "Checkbox check",
-};
+const readJson = (relative: string): Record<string, string> =>
+  JSON.parse(readFileSync(fileURLToPath(new NodeURL(relative, import.meta.url)), "utf8"));
+
+/** The shipped English bundle, and the e2e-only site's overlay of it (e2e/sites/boolean-form.en.json). */
+const SHIPPED_EN = readJson("../../../packages/config/locales/en.json");
+const E2E_SITE_EN = readJson("./sites/boolean-form.en.json");
+
+/** Button and option text of a query type: its `queryType.<code>` key in the bundle the page loads. */
+function typeLabel(code: string): string | undefined {
+  const key = `queryType.${code}`;
+  return E2E_SITE_EN[key] ?? SHIPPED_EN[key];
+}
 
 /**
  * Picks a query type by keyboard (ADR-0010): Enter on its quick-access button, else the "Other
@@ -189,7 +193,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
  * reach no handler.
  */
 export async function chooseQueryType(page: Page, code: string): Promise<void> {
-  const label = TYPE_LABELS[code];
+  const label = typeLabel(code);
   if (label === undefined) throw new Error(`No label known for query type ${code}`);
   const nav = page.getByRole("group", { name: "Quick access" });
   await expect(nav).toBeVisible();
@@ -204,4 +208,15 @@ export async function chooseQueryType(page: Page, code: string): Promise<void> {
   await select.focus();
   await page.keyboard.type(label);
   await expect(select).toHaveValue(code);
+}
+
+/**
+ * Fetches the live response behind a mocked route and fails loudly on a non-2xx, so a 401 from the
+ * live server never hides behind a mock that fulfils 200 (#319). Fulfil with `{ response, json }`.
+ */
+export async function liveResponse(route: Route): Promise<APIResponse> {
+  const response = await route.fetch();
+  if (!response.ok())
+    throw new Error(`live ${route.request().url()} answered ${response.status()}`);
+  return response;
 }

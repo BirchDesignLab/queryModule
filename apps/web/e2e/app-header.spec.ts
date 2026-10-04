@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { chooseTheme, openAccountMenu, seededUser, signIn } from "./helpers.js";
+import { chooseTheme, liveResponse, openAccountMenu, seededUser, signIn } from "./helpers.js";
 
 // B1 app shell and header (docs/design/2026-09-29-visual-system.md, app shell): a 52 px bar with
 // the Main nav and an account disclosure that holds the theme choice and sign out.
@@ -68,7 +68,7 @@ test.describe("B1 theme focus survives a persona flip", () => {
   }) => {
     let flipped = false;
     await page.route("**/api/v1/config", async (route) => {
-      const response = await route.fetch();
+      const response = await liveResponse(route);
       const body = (await response.json()) as {
         configHash: string;
         personas: { layout: string }[];
@@ -96,7 +96,16 @@ test.describe("B1 theme focus survives a persona flip", () => {
     await expect(
       banner.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Night" }),
     ).toBeFocused();
-    await expect(page.getByTestId("announcer-polite")).not.toContainText(/theme|night/i);
+    // Positive: the one announcement is the config update (nothing about the theme), the theme did
+    // not change, and the focused mode is still not the pressed one (focus moved, the choice did not).
+    await expect(page.getByTestId("announcer-polite")).toHaveText(
+      /^The form was updated by your administrator\.\s*$/,
+    );
+    await expect(page.getByTestId("announcer-assertive")).toHaveText("");
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "night");
+    await expect(
+      banner.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Night" }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 });
 
@@ -108,7 +117,7 @@ const ROW = { dispatch: 52, compact: 64 } as const;
 /** A longer site name than the seeded "Default site", so a squashed label shows up as truncation. */
 async function useLongSiteName(page: Page): Promise<void> {
   await page.route("**/api/v1/config", async (route) => {
-    const response = await route.fetch();
+    const response = await liveResponse(route);
     const body = (await response.json()) as { site: { labelKey: string } };
     body.site.labelKey = "site.exampleOk";
     await route.fulfill({ response, json: body });

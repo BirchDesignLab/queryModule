@@ -10,7 +10,7 @@ import {
   toClientSiteConfig,
 } from "@querymodule/core/config";
 import { ShortcutProvider } from "@querymodule/web-ui";
-import { screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderRoutes } from "../test/render-routes.js";
 import { QueryPanelView } from "./QueryPanelView.js";
@@ -24,25 +24,30 @@ import { QueryPanelView } from "./QueryPanelView.js";
 const sites = join(dirname(fileURLToPath(import.meta.url)), "../../../../packages/config/sites");
 const read = (name: string): unknown => JSON.parse(readFileSync(join(sites, name), "utf8"));
 
-function resolveExampleOk() {
+function resolveSite(overlayName: string | null) {
   const base = migrateConfig(read("default.json"));
-  const overlay = migrateConfig(read("example-ok.json"));
-  if (!base.ok || !overlay.ok) throw new Error("config does not migrate");
+  if (!base.ok) throw new Error("config does not migrate");
+  if (overlayName === null) {
+    return toClientSiteConfig(SiteConfigSchema.parse(base.config), "0".repeat(64));
+  }
+  const overlay = migrateConfig(read(overlayName));
+  if (!overlay.ok) throw new Error("config does not migrate");
   const merged = mergeSiteOverlay(base.config, overlay.config);
   expect(merged.errors).toEqual([]);
   return toClientSiteConfig(SiteConfigSchema.parse(merged.config), "0".repeat(64));
 }
 
-const EXAMPLE_OK = resolveExampleOk();
+const DEFAULT_SITE = resolveSite(null);
+const EXAMPLE_OK = resolveSite("example-ok.json");
 
-function renderExampleOk() {
+function renderSite(config: ReturnType<typeof resolveSite>) {
   return renderRoutes([
     {
       path: "/",
       element: (
-        <ShortcutProvider bindings={resolveShortcuts(EXAMPLE_OK.shortcuts)}>
+        <ShortcutProvider bindings={resolveShortcuts(config.shortcuts)}>
           <QueryPanelView
-            config={EXAMPLE_OK}
+            config={config}
             drafts={createDraftStore()}
             mode="preview"
             idPrefix="ok"
@@ -51,6 +56,17 @@ function renderExampleOk() {
       ),
     },
   ]);
+}
+
+const renderExampleOk = () => renderSite(EXAMPLE_OK);
+
+/** The labels of the Property type radios after opening the Property query. */
+async function propertyTypeLabels(view: ReturnType<typeof renderSite>) {
+  await view.user.click(await screen.findByRole("button", { name: "Property" }));
+  const type = await screen.findByRole("group", { name: /Property type/ });
+  return within(type)
+    .getAllByRole("radio")
+    .map((r) => r.closest("label")?.textContent);
 }
 
 describe("example-ok site through the shared renderer (BR-001)", () => {
@@ -70,12 +86,12 @@ describe("example-ok site through the shared renderer (BR-001)", () => {
   });
 
   it("PRO: the property type list has no Boat, site-narrowed with $remove (FR-031)", async () => {
-    const { user } = renderExampleOk();
-    await user.click(await screen.findByRole("button", { name: "Property" }));
-    const type = await screen.findByRole("group", { name: /Property type/ });
-    const labels = within(type)
-      .getAllByRole("radio")
-      .map((r) => r.closest("label")?.textContent);
+    // Positive control: the same renderer on the unnarrowed default site does list Boat, so the
+    // absence below can only come from the overlay's $remove.
+    const control = await propertyTypeLabels(renderSite(DEFAULT_SITE));
+    expect(control).toContain("Boat");
+    cleanup();
+    const labels = await propertyTypeLabels(renderExampleOk());
     expect(labels).toContain("Firearm");
     expect(labels).toContain("Article");
     expect(labels).not.toContain("Boat");
@@ -86,7 +102,7 @@ describe("example-ok site through the shared renderer (BR-001)", () => {
     await user.click(await screen.findByRole("button", { name: "Person" }));
     await user.click(screen.getByRole("button", { name: "Terminal mode" }));
     const command = await screen.findByRole("textbox", { name: "Command" });
-    expect(screen.getByText(/VEH\/plate\/state/)).toBeInTheDocument();
+    expect(screen.getByText(/VEH\/Plate\/State/)).toBeInTheDocument();
 
     await user.clear(command);
     await user.type(command, "NAM/TESTERSON/SAMPLE/W/M/01011901");

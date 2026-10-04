@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
 import { chooseQueryType, seededUser, signIn } from "./helpers.js";
 
@@ -239,10 +239,10 @@ test("[#362] a new type-role value in the subtype bar changes the required field
   await editDraft(page, (doc) => {
     const type = doc.picklists.find((p) => p.id === "propertyType");
     for (const v of type?.values ?? []) if (v.code === "BOAT") v.enabled = false;
-    // The Boat button now stands for the new WATERCRAFT code (the shipped "Boat" label).
+    // The new WATERCRAFT code has its own label, so the bar visibly changes (#507 item 21).
     type?.values.push({
       code: "WATERCRAFT",
-      labelKey: "picklist.propertyType.BOAT",
+      labelKey: "picklist.propertyType.WATERCRAFT",
       enabled: true,
     });
     doc.queryTypes
@@ -255,7 +255,7 @@ test("[#362] a new type-role value in the subtype bar changes the required field
   });
   await selectInTree(page, /^Property/);
   const inPreview = preview(page);
-  await inPreview.getByRole("radio", { name: "Boat" }).focus();
+  await inPreview.getByRole("radio", { name: "Watercraft" }).focus();
   await page.keyboard.press("Space");
   await expect(inPreview.getByLabel("Serial number")).toHaveAttribute("aria-required", "true");
   await publish(page);
@@ -263,12 +263,11 @@ test("[#362] a new type-role value in the subtype bar changes the required field
   await chooseQueryType(dispatcher, "PRO");
   const bar = dispatcher.getByRole("group", { name: /^Property type/ });
   const serial = dispatcher.getByLabel("Serial number");
-  // The old Boat button (code BOAT) is there until the new config arrives; the rule is what tells
-  // them apart: only the new WATERCRAFT code makes the serial number required.
-  await expect(async () => {
-    await bar.getByRole("radio", { name: "Boat" }).check();
-    await expect(serial).toHaveAttribute("aria-required", "true", { timeout: 1_000 });
-  }).toPass({ timeout: BOUND });
+  // The new Watercraft button replaces Boat once the new config arrives; only the WATERCRAFT code
+  // makes the serial number required.
+  await expect(bar.getByRole("radio", { name: "Boat" })).toHaveCount(0, { timeout: BOUND });
+  await bar.getByRole("radio", { name: "Watercraft" }).check();
+  await expect(serial).toHaveAttribute("aria-required", "true");
   await bar.getByRole("radio", { name: "Article" }).check();
   await expect(serial).not.toHaveAttribute("aria-required", "true");
   await expectNoSeriousAxeViolations(dispatcher);
@@ -323,18 +322,23 @@ test("[#362] a new terminal command parses in the dispatcher's terminal", async 
 
   // The same command is unknown until the new config arrives, then it runs as a vehicle query.
   const posts: { queryType: string; values: Record<string, string> }[] = [];
-  dispatcher.on("request", (r) => {
+  const onRequest = (r: Request) => {
     if (r.url().endsWith("/api/v1/queries") && r.method() === "POST")
       posts.push(r.postDataJSON() as (typeof posts)[number]);
-  });
+  };
+  dispatcher.on("request", onRequest);
   await chooseQueryType(dispatcher, "VEH");
   await dispatcher.getByRole("button", { name: "Terminal mode" }).click();
   const input = dispatcher.getByRole("textbox", { name: "Command" });
-  await expect(async () => {
-    await input.fill("PLT.ZZ0036.OK.26");
-    await input.press("Enter");
-    expect(posts.length).toBeGreaterThan(0);
-  }).toPass({ timeout: BOUND });
+  try {
+    await expect(async () => {
+      await input.fill("PLT.ZZ0036.OK.26");
+      await input.press("Enter");
+      expect(posts.length).toBeGreaterThan(0);
+    }).toPass({ timeout: BOUND });
+  } finally {
+    dispatcher.off("request", onRequest);
+  }
   expect(posts.at(-1)?.queryType).toBe("VEH");
   expect(posts.at(-1)?.values).toMatchObject({ plate: "ZZ0036", year: "26" });
   await expectNoSeriousAxeViolations(dispatcher);

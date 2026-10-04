@@ -8,7 +8,7 @@ import { renderRoot } from "../test/render-root.js";
 beforeAll(preloadAdminRoutes);
 afterEach(() => vi.restoreAllMocks());
 
-// Task 34 (#359, SEC-005, UX-004): People > Users and roles. One table, row actions that carry the
+// Task 34 (#359, D-A26, ADR-0011 item 8): People > Users and roles. One table, row actions that carry the
 // user's name, a create dialog that shows the temporary password once, and the guards' messages.
 
 const T0 = Date.UTC(2026, 9, 1, 15, 30, 0);
@@ -176,7 +176,7 @@ const rowOf = (name: string): HTMLElement => {
 const roleSelect = (name: string) =>
   within(rowOf(name)).getByRole("combobox", { name: `Role for ${name}` });
 
-describe("users table (Task 34, SEC-005, UX-004)", () => {
+describe("users table (Task 34, D-A26, ADR-0011 item 8)", () => {
   it("lists every user: name, email, role, status, last sign-in, sign-ins and a count of addresses", async () => {
     await openUsers();
     const table = screen.getByRole("table", { name: "Users" });
@@ -242,6 +242,33 @@ describe("role change", () => {
     );
     await waitFor(() => expect(roleSelect("Rose Dispatch")).toHaveValue("trainingOfficer"));
     expect(await screen.findByText("Rose Dispatch is now Training officer.")).toBeInTheDocument();
+  });
+
+  it("the select reads as unavailable while that row's change is under way (#507 item 14)", async () => {
+    const t = await openUsers();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let puts = 0;
+    server.use(
+      http.put(`${API}/api/v1/admin/users/:id/role`, async () => {
+        puts++;
+        await gate;
+        return HttpResponse.json({ ...ROSE, role: "implementer" });
+      }),
+    );
+    expect(roleSelect("Rose Dispatch")).not.toHaveAttribute("aria-disabled");
+    await t.user.selectOptions(roleSelect("Rose Dispatch"), "implementer");
+    await waitFor(() =>
+      expect(roleSelect("Rose Dispatch")).toHaveAttribute("aria-disabled", "true"),
+    );
+    expect(roleSelect("Test Admin")).not.toHaveAttribute("aria-disabled");
+    // A second pick while busy is ignored: no second PUT, and the select keeps the held value.
+    await t.user.selectOptions(roleSelect("Rose Dispatch"), "trainingOfficer");
+    expect(puts).toBe(1);
+    release();
+    await waitFor(() => expect(roleSelect("Rose Dispatch")).not.toHaveAttribute("aria-disabled"));
   });
 
   it("409 lastAdmin shows the reason as a message and the select reverts", async () => {
@@ -490,9 +517,13 @@ describe("create user (the temporary password is shown once)", () => {
     expect(reveal).toHaveTextContent(/shown once/);
     expect(within(reveal).getByText(TEMPORARY)).toBeInTheDocument();
     expect(within(reveal).getByRole("button", { name: "Copy password" })).toHaveFocus();
+    const statusBefore = within(reveal).getByRole("status");
+    expect(statusBefore).toBeEmptyDOMElement();
     await t.user.click(within(reveal).getByRole("button", { name: "Copy password" }));
     expect(writeText).toHaveBeenCalledWith(TEMPORARY);
     expect(await screen.findByText("Password copied.")).toBeInTheDocument();
+    // #507 item 15: the same live region, present (empty) before Copy, so the text is announced.
+    expect(screen.getByText("Password copied.")).toBe(statusBefore);
     await t.user.click(within(reveal).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.body.innerHTML).not.toContain(TEMPORARY);

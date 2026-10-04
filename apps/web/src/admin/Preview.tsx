@@ -2,11 +2,11 @@ import { createDraftStore, createTranslator, type Translator } from "@querymodul
 import { type ClientSiteConfig, ClientSiteConfigSchema } from "@querymodule/core/config";
 import { VisuallyHidden } from "@querymodule/web-ui";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCachedConfigState } from "../app/cached-config.js";
 import { I18nProvider, useT, useTranslator } from "../app/i18n-context.js";
 import { QueryPanelView } from "../query/QueryPanelView.js";
 import type { JsonObject } from "./draft.js";
 import { topItem } from "./selection.js";
-import { useCachedClientConfig, useCachedConfigFailed } from "./use-cached-config.js";
 
 /** A fixed hash: the preview never submits, so no server compares it (ADR-0011 item 4). */
 const PREVIEW_HASH = "0".repeat(64);
@@ -98,8 +98,7 @@ export function BuilderPreview({
   useEffect(() => {
     if (candidate !== null) setLastGood(candidate);
   }, [candidate]);
-  const live = useCachedClientConfig();
-  const liveFailed = useCachedConfigFailed();
+  const { config: live, unavailable: liveFailed } = useCachedConfigState();
   const config = candidate ?? lastGood ?? live ?? null;
   const paused = candidate === null;
   // Loading: there is no valid config to show yet and the live one is still on its way.

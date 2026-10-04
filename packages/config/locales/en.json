@@ -23,6 +23,7 @@
   "picklist.race.W": "White",
   "picklist.propertyType.FIREARM": "Firearm",
   "picklist.propertyType.BOAT": "Boat",
+  "picklist.propertyType.WATERCRAFT": "Watercraft",
   "picklist.propertyType.ARTICLE": "Article",
   "source.stateSource": "State system",
   "source.nationalSource": "National system",
@@ -78,7 +79,6 @@
   "terminal.valueForHiddenField": "{label} is hidden for these values; clear it or change the other fields.",
   "terminal.delimiterInValue": "{label} cannot be written in a command position. Use the form, or a named value like field=value.",
   "terminal.label": "Command",
-  "terminal.description": "Type a command such as VEH{delimiter}plate{delimiter}state, then press Enter.",
   "terminal.errorsLabel": "Command problems",
   "terminal.fieldsNotShown.one": "{count} field not shown",
   "terminal.fieldsNotShown.other": "{count} fields not shown",
@@ -743,5 +743,7 @@
   "admin.config.quickAccess.add": "Add quick access",
   "admin.config.raw.checksLoading": "Checking the draft…",
   "admin.config.command.new": "Command (new)",
-  "admin.config.command.removeStale": "Remove fields not in {type}"
+  "admin.config.command.removeStale": "Remove fields not in {type}",
+  "terminal.descriptionExample": "Type a command such as {example}, then press Enter.",
+  "terminal.descriptionPlain": "Type a command, then press Enter."
 }

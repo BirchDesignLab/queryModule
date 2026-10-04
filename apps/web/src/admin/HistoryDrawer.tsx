@@ -4,6 +4,7 @@ import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { exportVersion, fetchVersions } from "./admin-config.js";
 import { configDraftStore } from "./builder-store.js";
+import { SCROLL_FOCUS } from "./scroll-focus.js";
 
 /**
  * Version history (Task 33 part 2b, #358, BR-001, UX-004): a named region opened from the toolbar's
@@ -13,8 +14,6 @@ import { configDraftStore } from "./builder-store.js";
  * change note, so neither is shown in M1.
  */
 
-/** A region that scrolls takes focus so the keyboard can scroll it (axe scrollable-region-focusable). */
-const SCROLL_FOCUS = { tabIndex: 0 } as const;
 /** The heading takes focus when the region opens; it is not in the tab order. */
 const PROGRAMMATIC_FOCUS = { tabIndex: -1 } as const;
 
@@ -29,6 +28,9 @@ const STATUS_TEXT = {
   draft: "admin.history.status.draft",
 } as const;
 
+/** How long the Blob URL outlives the click. */
+export const REVOKE_DELAY_MS = 1000;
+
 /** Hands the document to the browser as `<siteId>-v<n>.json`; the Blob URL is revoked after the click. */
 function download(text: string, name: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
@@ -39,14 +41,18 @@ function download(text: string, name: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Some engines drop the download if the URL goes at once: revoke it a moment later.
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
 }
 
 export function HistoryDrawer({
+  id,
   stamp,
   onClose,
   onRollback,
 }: {
+  /** The region's id, named by the History button's aria-controls. */
+  id: string;
   /** Changes whenever the list on the server did (a roll back, a publish): the list reloads. */
   stamp: number;
   onClose(): void;
@@ -101,22 +107,32 @@ export function HistoryDrawer({
     [locale],
   );
 
+  // One export per version at a time: a second click on a version whose export is in flight
+  // downloads nothing twice. An export of another version is its own request and goes ahead, so
+  // no click is dropped without a trace.
+  const exporting = useRef(new Set<number>());
   const doExport = useCallback(
     async (version: number) => {
-      setExportError(null);
-      const doc = await exportVersion(api, version);
-      const siteId = store.getState().server?.siteId;
-      if (doc === null || siteId === undefined) {
-        setExportError(version);
-        return;
+      if (exporting.current.has(version)) return;
+      exporting.current.add(version);
+      try {
+        setExportError(null);
+        const doc = await exportVersion(api, version);
+        const siteId = store.getState().server?.siteId;
+        if (doc === null || siteId === undefined) {
+          setExportError(version);
+          return;
+        }
+        download(JSON.stringify(doc, null, 2), `${siteId}-v${version}.json`);
+      } finally {
+        exporting.current.delete(version);
       }
-      download(JSON.stringify(doc, null, 2), `${siteId}-v${version}.json`);
     },
     [api, store],
   );
 
   return (
-    <section ref={regionRef} className="qm-history" aria-labelledby={headingId}>
+    <section ref={regionRef} id={id} className="qm-history" aria-labelledby={headingId}>
       <div className="qm-history__head">
         <h3 ref={headingRef} className="qm-editor__title" id={headingId} {...PROGRAMMATIC_FOCUS}>
           {t("admin.history.title")}

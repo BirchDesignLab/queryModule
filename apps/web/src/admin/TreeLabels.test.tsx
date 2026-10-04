@@ -27,6 +27,23 @@ async function openBuilder() {
 }
 type Opened = Awaited<ReturnType<typeof openBuilder>>;
 
+/**
+ * Resolves once the tree has stopped rendering (the counters unchanged across a short wait), so a
+ * baseline taken after it is not still moving under parallel load (#507 item 23, #441).
+ */
+const settled = () => {
+  let last = "";
+  return waitFor(
+    () => {
+      const now = JSON.stringify(treeRenderStats);
+      const same = now === last;
+      last = now;
+      expect(same).toBe(true);
+    },
+    { interval: 50, timeout: 5_000 },
+  );
+};
+
 const nav = () => screen.getByRole("navigation", { name: "Configuration items" });
 const store = (t: Opened) => configDraftStore(t.services);
 /** The label key of Vehicle's first field, as the draft holds it. */
@@ -74,7 +91,13 @@ describe("tree rows and draft label edits", () => {
         .getState()
         .setDoc({ ...doc, queryTypes: [...list, ...more] }),
     );
-    await waitFor(() => expect(store(t).getState().doc?.queryTypes).toHaveLength(list.length + 40));
+    await waitFor(
+      () => expect(store(t).getState().doc?.queryTypes).toHaveLength(list.length + 40),
+      {
+        timeout: 5_000,
+      },
+    );
+    await settled();
     const key = plateKey(t);
     const before = { ...treeRenderStats };
     for (const text of ["L", "Li", "Lic", "Lice"])
@@ -89,6 +112,7 @@ describe("tree rows and draft label edits", () => {
   it("counts nothing in a production build (import.meta.env.DEV is false)", async () => {
     vi.stubEnv("DEV", false);
     const t = await openBuilder();
+    await settled();
     const before = { ...treeRenderStats };
     act(() => store(t).getState().setLabel("en", plateKey(t), "Licence"));
     await waitFor(() => expect(store(t).getState().labels.en?.[plateKey(t)]).toBe("Licence"));

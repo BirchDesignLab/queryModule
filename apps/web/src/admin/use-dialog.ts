@@ -52,6 +52,8 @@ export function useDialog({
   const opener = useRef<Element | null>(null);
   const openRef = useRef(open);
   openRef.current = open;
+  const lastOpen = useRef(open);
+  lastOpen.current = open;
   const keepRef = useRef(keepOpen);
   keepRef.current = keepOpen;
   const dismissRef = useRef(onDismiss);
@@ -75,6 +77,9 @@ export function useDialog({
   }, [open]);
   useEffect(() => {
     const dialog = dialogRef.current;
+    // StrictMode's simulated unmount runs the cleanup below, then this again with no render in
+    // between: put back what the last render said, or a native close is ignored until the next.
+    openRef.current = lastOpen.current;
     return () => {
       // Unmounted while open (the parent closes by not rendering it).
       openRef.current = false;

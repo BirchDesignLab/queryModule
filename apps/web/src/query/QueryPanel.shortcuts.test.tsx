@@ -134,6 +134,23 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
     expect(screen.getByRole("button", { name: "Vehicle" })).toHaveFocus();
   });
 
+  it("G then Q with the current type outside quick access focuses the Other query types select (goPanel fallback)", async () => {
+    server.use(
+      http.get(`${API}/api/v1/config`, () =>
+        HttpResponse.json({ ...CLIENT_CONFIG, quickAccess: ["VEH", "PER"] }),
+      ),
+    );
+    const { user } = await openPanel();
+    await user.selectOptions(screen.getByLabelText("Other query types"), "WNT");
+    expect(screen.getByLabelText("Other query types")).toHaveValue("WNT");
+    // No quick-access button is pressed now, so the fallback is the select that holds the type.
+    expect(document.querySelector(".qm-quick-access [aria-pressed='true']")).toBeNull();
+    (document.activeElement as HTMLElement).blur();
+    expect(document.body).toHaveFocus();
+    await user.keyboard("gq");
+    expect(screen.getByLabelText("Other query types")).toHaveFocus();
+  });
+
   it("Shift+/ opens the sheet listing submit with Ctrl+Enter; Escape closes it and focus returns", async () => {
     const { user } = await openPanel();
     vehicle().focus();
@@ -167,7 +184,7 @@ describe("FR-006 FR-007 shortcuts on the query panel (spec 6.4)", () => {
   });
 });
 
-describe("FR-006 FR-050 terminal shortcuts (spec 6.4)", () => {
+describe("FR-053 FR-056 terminal shortcuts (spec 6.4)", () => {
   it("/ outside inputs switches to terminal mode and focuses the command line; / inside it types a slash", async () => {
     const { user } = await openPanel();
     (document.activeElement as HTMLElement).blur();
@@ -207,9 +224,29 @@ describe("FR-006 FR-050 terminal shortcuts (spec 6.4)", () => {
     await user.type(screen.getByLabelText("Command"), ".ABC123{Control>}{Enter}{/Control}");
     await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
   });
+
+  it("Ctrl+Enter in terminal mode is the submit shortcut, not the form's implicit submit", async () => {
+    // A synthetic keydown has no default action in jsdom: no keypress follows and the form never
+    // submits implicitly. Only the shortcut handler (requestSubmit) can send the query, and it
+    // claims the key (preventDefault) so the browser's own Enter handling does not run as well.
+    const { user, services } = await openPanel();
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    const command = screen.getByLabelText("Command");
+    await user.type(command, ".ABC123");
+    expect(fireEvent.keyDown(command, { code: "Enter", key: "Enter" })).toBe(true);
+    // A send registers its row synchronously (requests.begin runs before the first await), and
+    // fireEvent flushes React before it returns: nothing in the store means nothing was sent, with
+    // no wait for a send that would have been late.
+    expect(services.requests.getState().items).toHaveLength(0);
+    expect(services.submit.getState().status).toBe("idle");
+    expect(polite()).not.toHaveTextContent(/query sent/);
+    expect(fireEvent.keyDown(command, { code: "Enter", key: "Enter", ctrlKey: true })).toBe(false);
+    expect(services.requests.getState().items).toHaveLength(1);
+    await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
+  });
 });
 
-describe("FR-054 site terminal settings (example-ok: Ctrl+Slash, / delimiter)", () => {
+describe("FR-051 FR-052 site terminal settings (example-ok: Ctrl+Slash, / delimiter)", () => {
   it("Ctrl+Slash focuses the command line and the site delimiter writes and reads the command", async () => {
     server.use(
       http.get(`${API}/api/v1/config`, () =>
@@ -227,7 +264,7 @@ describe("FR-054 site terminal settings (example-ok: Ctrl+Slash, / delimiter)", 
     const command = await screen.findByLabelText("Command");
     await waitFor(() => expect(command).toHaveFocus());
     expect(command).toHaveValue("VEH/ZZ-0001");
-    expect(screen.getByText(/such as VEH\/plate\/state/)).toBeInTheDocument();
+    expect(screen.getByText(/such as VEH\/Plate\/State/)).toBeInTheDocument();
   });
 });
 

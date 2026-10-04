@@ -1,4 +1,5 @@
 import {
+  type DraftState,
   type DraftValue,
   fromCoreDraft,
   terminalErrorText,
@@ -16,6 +17,11 @@ import { formToTerminal } from "./form-to-terminal.js";
 import { type ReadyQueryPanel, resolveCheckedSources } from "./use-query-panel.js";
 
 type Values = Readonly<Record<string, DraftValue>>;
+
+/** Each query type's draft values, as the draft store holds them (the one projection of its map). */
+function valuesByType(drafts: DraftState["drafts"]): Record<string, Values> {
+  return Object.fromEntries(Object.entries(drafts).map(([code, d]) => [code, d.values]));
+}
 
 /**
  * Spec 4.4 Toggle, terminal to form: merges what the command read into the draft of its own type
@@ -61,7 +67,9 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
   const { config, drafts } = panel;
   const mode = useStore(drafts, (s) => s.mode);
   const text = useStore(drafts, (s) => s.terminalText);
-  const [errors, setErrors] = useState<string[]>([]);
+  // Kept as keys and params, never as text: the wording follows the translator and the site's
+  // delimiter at render (#382 T8).
+  const [problems, setProblems] = useState<readonly ValidationError[]>([]);
   const [unshown, setUnshown] = useState(0);
   const [focusTick, setFocusTick] = useState(0);
   const wantFocus = useRef(false);
@@ -86,7 +94,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       const derived = formToTerminal(config, queryType, values, now);
       drafts.getState().setTerminalText(derived.text);
       setUnshown(derived.unshown);
-      setErrors([]);
+      setProblems([]);
     },
     [config, drafts, panel.queryType, panel.evaluatedAt],
   );
@@ -98,20 +106,15 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
 
   /** Merges the current text into the draft of its own type (spec 4.4: nothing typed is lost). */
   const mergeText = (): { queryType: string } | null => {
-    const byType = Object.fromEntries(
-      Object.entries(drafts.getState().drafts).map(([code, d]) => [code, d.values]),
-    );
-    const merged = terminalToForm(config, text, byType);
+    const merged = terminalToForm(config, text, valuesByType(drafts.getState().drafts));
     if (merged !== null) drafts.getState().replaceValues(merged.queryType, merged.values);
     return merged;
   };
 
   /** Lists errors under the input, announces the count and keeps focus there (FR-055). */
-  const showProblems = (problems: readonly ValidationError[]): void => {
-    setErrors(
-      problems.map((e) => terminalErrorText(e, { t, delimiter: config.terminal.delimiter })),
-    );
-    announcer.announce(t("terminal.problems", { count: problems.length }));
+  const showProblems = (found: readonly ValidationError[]): void => {
+    setProblems(found);
+    announcer.announce(t("terminal.problems", { count: found.length }));
     // Enter keeps focus and text; a click on Submit brings focus back to the input.
     inputRef.current?.focus();
   };
@@ -121,6 +124,10 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     setFocusTick((n) => n + 1);
   };
 
+  const errors = problems.map((e) =>
+    terminalErrorText(e, { t, delimiter: config.terminal.delimiter }),
+  );
+
   return {
     mode,
     text,
@@ -129,7 +136,20 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     unshown: unshown === 0 ? null : t("terminal.fieldsNotShown", { count: unshown }),
     setText(next) {
       drafts.getState().setTerminalText(next);
-      setErrors([]);
+      setProblems([]);
+      // The count belongs to the draft of the query type the command names, so it follows the
+      // type as it is typed (#382 W3); a command that names none has nothing to count.
+      const typed = tokenize(config, next).queryType;
+      setUnshown(
+        typed === undefined
+          ? 0
+          : formToTerminal(
+              config,
+              typed,
+              drafts.getState().drafts[typed]?.values ?? {},
+              typed === panel.queryType ? panel.evaluatedAt : Date.now(),
+            ).unshown,
+      );
     },
     toggle(options) {
       if (mode === "form") {
@@ -137,7 +157,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       } else {
         const merged = mergeText();
         if (merged !== null) panel.selectQueryType(merged.queryType);
-        setErrors([]);
+        setProblems([]);
         drafts.getState().setMode("form");
       }
       if (options?.focus === true) requestFocus();
@@ -161,7 +181,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       if (panel.submitGated()) return;
       const state = drafts.getState();
       const coreDrafts = Object.fromEntries(
-        Object.entries(state.drafts).map(([code, d]) => [code, toCoreDraft(d.values)]),
+        Object.entries(valuesByType(state.drafts)).map(([code, v]) => [code, toCoreDraft(v)]),
       );
       const checked = checkTerminalSubmit(config, text, coreDrafts, { now: Date.now() });
       const { queryType, merged, formState } = checked;
@@ -176,7 +196,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
         showProblems(checked.errors.length > 0 ? checked.errors : (formState?.errors ?? []));
         return;
       }
-      setErrors([]);
+      setProblems([]);
       const values = fromCoreDraft(merged);
       state.replaceValues(queryType, values);
       panel.selectQueryType(queryType);

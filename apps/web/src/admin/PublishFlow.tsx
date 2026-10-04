@@ -1,5 +1,5 @@
 import { diffConfig } from "@querymodule/core/config";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import {
@@ -13,10 +13,8 @@ import {
   validateOnServer,
 } from "./admin-config.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
-import { ChangesView } from "./ChangesView.js";
 import type { JsonObject, LabelOverlay } from "./draft.js";
 import type { DraftIssue } from "./issues.js";
-import { LeaveDialog } from "./LeaveGuard.js";
 
 /**
  * Save, review and publish on the server draft (Task 33 part 2a, #358, BR-001, UX-004). The draft
@@ -68,13 +66,6 @@ export interface PublishFlow {
   retryLoad(): void;
 }
 
-/**
- * A region that scrolls must take focus so the keyboard can scroll it (axe scrollable-region-focusable).
- * The lint rule against tabindex on a named, non-interactive element is written for the opposite
- * mistake, so the attribute is spread from here.
- */
-const SCROLL_FOCUS = { tabIndex: 0 } as const;
-
 const labelText = (labels: LabelOverlay): string => JSON.stringify(labels);
 
 function labelChanges(labels: LabelOverlay, live: LabelOverlay): number {
@@ -105,6 +96,8 @@ export function usePublishFlow(): PublishFlow {
   const [historyStamp, setHistoryStamp] = useState(0);
   // Which reload failed after a publish ("replace": the draft) or a roll back ("live": the diff).
   const [stale, setStale] = useState<"replace" | "live" | null>(null);
+  // A "Load again" reload in flight: a second click while it runs asks the server nothing.
+  const retrying = useRef(false);
 
   const unsaved = useMemo(() => {
     if (server === null || doc === null) return false;
@@ -146,6 +139,8 @@ export function usePublishFlow(): PublishFlow {
       return { ok: false };
     }
     store.getState().markSaved(result.version.version, document, sent);
+    // A saved draft is a version of its own: an open history shows it.
+    setHistoryStamp((n) => n + 1);
     return { ok: true, version: result.version.version, document };
   }, [api, store, t]);
 
@@ -349,7 +344,10 @@ export function usePublishFlow(): PublishFlow {
         setConfirmReload(true);
         return;
       }
+      if (retrying.current) return;
+      retrying.current = true;
       void (stale === "replace" ? load(false) : refreshLive()).then((ok) => {
+        retrying.current = false;
         if (ok) setStale(null);
       });
     },
@@ -364,167 +362,4 @@ export function usePublishFlow(): PublishFlow {
       });
     },
   };
-}
-
-/** The toolbar's Save draft and Review and publish, each with its visible reason when disabled. */
-export function PublishButtons({
-  flow,
-  parseError,
-}: {
-  flow: PublishFlow;
-  /** The Raw JSON text does not parse. */
-  parseError: boolean;
-}) {
-  const t = useT();
-  const uid = useId();
-  const saveReason = flow.busy
-    ? t("admin.config.reviewBusy")
-    : parseError
-      ? t("admin.config.saveJson")
-      : !flow.unsaved
-        ? t("admin.config.saveNone")
-        : null;
-  const reviewReason = flow.busy
-    ? t("admin.config.reviewBusy")
-    : parseError
-      ? t("admin.config.reviewJson")
-      : flow.changeCount === 0 && !flow.unsaved
-        ? t("admin.config.reviewNone")
-        : null;
-  const saveBlocked = saveReason !== null;
-  return (
-    <>
-      <button
-        type="button"
-        className="qm-button qm-button--secondary"
-        aria-disabled={saveBlocked ? "true" : undefined}
-        aria-describedby={saveReason !== null ? `${uid}-save` : undefined}
-        onClick={saveBlocked ? undefined : flow.save}
-      >
-        {t("admin.config.save")}
-      </button>
-      <button
-        type="button"
-        className="qm-button"
-        aria-disabled={reviewReason !== null ? "true" : undefined}
-        aria-describedby={reviewReason !== null ? `${uid}-review` : undefined}
-        onClick={reviewReason !== null ? undefined : flow.review}
-      >
-        {t("admin.config.review")}
-      </button>
-      {saveReason !== null && (
-        <p className="qm-builder__reason" id={`${uid}-save`}>
-          {saveReason}
-        </p>
-      )}
-      {reviewReason !== null && (
-        <p className="qm-builder__reason" id={`${uid}-review`}>
-          {reviewReason}
-        </p>
-      )}
-    </>
-  );
-}
-
-/** What was done or went wrong, and the way out of a conflict. Errors are an alert; the rest is plain. */
-export function PublishNotices({ flow }: { flow: PublishFlow }) {
-  const t = useT();
-  return (
-    <>
-      {flow.conflict && (
-        <div className="qm-builder__notice" role="alert">
-          <span>{t("admin.conflict.message")}</span>
-          <button type="button" className="qm-button" onClick={flow.askReload}>
-            {t("admin.conflict.load")}
-          </button>
-        </div>
-      )}
-      {flow.staleBase && (
-        <div className="qm-builder__notice" role="alert">
-          <span>{t("admin.config.reloadFailed")}</span>
-          <button type="button" className="qm-button" onClick={flow.retryLoad}>
-            {t("admin.config.reloadRetry")}
-          </button>
-        </div>
-      )}
-      {flow.notice?.kind === "error" && (
-        <p className="qm-builder__notice" role="alert">
-          {flow.notice.text}
-        </p>
-      )}
-      {flow.notice?.kind === "info" && <p className="qm-builder__notice">{flow.notice.text}</p>}
-    </>
-  );
-}
-
-/** The review dialog (changes and Publish) and the confirm before the latest version replaces the edits. */
-export function PublishDialogs({
-  flow,
-  doc,
-  fallback,
-}: {
-  flow: PublishFlow;
-  doc: JsonObject;
-  fallback?: () => HTMLElement | null;
-}) {
-  const t = useT();
-  const open = flow.reviewing !== null;
-  // Nothing differs from the live version (the edits went back to it): there is nothing to confirm.
-  const nothing = flow.changeCount === 0;
-  return (
-    <>
-      <LeaveDialog
-        open={open}
-        title={t("admin.publish.title")}
-        body={
-          nothing
-            ? t("admin.publish.nothing")
-            : t("admin.publish.body", { version: flow.reviewing ?? 0 })
-        }
-        stayLabel={nothing ? t("admin.publish.close") : t("admin.publish.cancel")}
-        leaveLabel={t("admin.publish.confirm", { version: flow.reviewing ?? 0 })}
-        hideLeave={nothing}
-        onStay={flow.cancelReview}
-        onLeave={flow.publish}
-        leavePrimary
-        busy={flow.busy}
-        busyReason={t("admin.publish.busy")}
-        fallback={fallback}
-      >
-        {/* Scrolls when the list is long: focusable so the keyboard can scroll it. */}
-        {!nothing && (
-          <section
-            className="qm-leave-dialog__content"
-            aria-label={t("admin.publish.changes")}
-            {...SCROLL_FOCUS}
-          >
-            {open && <ChangesView doc={doc} />}
-          </section>
-        )}
-      </LeaveDialog>
-      <LeaveDialog
-        open={flow.rollingBack !== null}
-        title={t("admin.rollback.title", { version: flow.rollingBack ?? 0 })}
-        body={t("admin.rollback.body", { version: flow.rollingBack ?? 0 })}
-        stayLabel={t("admin.rollback.cancel")}
-        leaveLabel={t("admin.rollback.confirm", { version: flow.rollingBack ?? 0 })}
-        onStay={flow.cancelRollback}
-        onLeave={flow.rollback}
-        leavePrimary
-        busy={flow.busy}
-        busyReason={t("admin.rollback.busy")}
-        fallback={fallback}
-      />
-      <LeaveDialog
-        open={flow.confirmingReload}
-        title={t("admin.conflict.title")}
-        body={t("admin.conflict.body")}
-        stayLabel={t("admin.conflict.keep")}
-        leaveLabel={t("admin.conflict.discard")}
-        onStay={flow.cancelReload}
-        onLeave={flow.reload}
-        fallback={fallback}
-      />
-    </>
-  );
 }

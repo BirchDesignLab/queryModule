@@ -81,8 +81,14 @@ async function readChangeFailure(response: Response): Promise<ChangePasswordResu
   if (code === "INVALID_PASSWORD") return { ok: false, code: "incorrect" };
   if (code === "PASSWORD_TOO_SHORT" || code === "PASSWORD_TOO_LONG")
     return { ok: false, code: "tooShort" };
-  // The app's own 400 validationFailed: the new password is the current one (G-I4).
-  return { ok: false, code: "samePassword" };
+  // The app's own 400 validationFailed: the new password is the current one (G-I4). Any other
+  // 400 is unrecognised and must not claim to be that.
+  const appCode =
+    typeof body === "object" && body !== null
+      ? (body as { error?: { code?: unknown } }).error?.code
+      : null;
+  if (appCode === "validationFailed") return { ok: false, code: "samePassword" };
+  return { ok: false, code: "unavailable" };
 }
 
 /** Better Auth handlers at /api/v1/auth/* (spec 5.1, 5.6). Not in OpenAPI, so plain fetch. */

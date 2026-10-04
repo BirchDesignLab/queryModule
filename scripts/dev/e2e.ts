@@ -2,7 +2,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { resolve } from "node:path";
-import { e2eTarget, probeHealth, runSeed, waitForReady } from "./e2e-lib.ts";
+import { e2eTarget, probeHealth, runSeed, smokeCredentials, waitForReady } from "./e2e-lib.ts";
 import { ensureDevSecrets } from "./secrets.ts";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -10,6 +10,7 @@ const secrets = resolve(root, ".dev/secrets");
 ensureDevSecrets(secrets);
 const shell = process.platform === "win32";
 const target = e2eTarget(process.env);
+const smoke = smokeCredentials(process.env, resolve(secrets, "SEED_PASSWORD_SECRET"));
 for (const f of ["@querymodule/web", "@querymodule/api"]) {
   const b = spawnSync("pnpm", ["--filter", f, "build"], { cwd: root, stdio: "inherit", shell });
   if (b.status !== 0) process.exit(b.status ?? 1);
@@ -71,6 +72,7 @@ const pw = spawnSync(
     shell,
     env: {
       ...process.env,
+      ...smoke,
       QM_BASE_URL: target.origin,
       E2E_BASE_URL: target.origin,
       SEED_PASSWORD_SECRET_FILE: resolve(secrets, "SEED_PASSWORD_SECRET"),

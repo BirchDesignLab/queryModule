@@ -42,12 +42,12 @@ describe("BR-007 route contracts (spec 5.1)", () => {
 
   it("ships the M0/M1 skeleton; submitQuery is live (D-A3, #285); admin config routes live (Task 27), user routes live (Task 28)", () => {
     expect(ROUTES.map((r) => [r.id, r.method, r.path, r.access, r.since, r.status])).toEqual([
-      ["getHealth", "get", "/api/v1/health", "public", "m0", "planned"],
-      ["getMeta", "get", "/api/v1/meta", "public", "m0", "planned"],
-      ["getLocale", "get", "/api/v1/locales/{locale}", "public", "m0", "planned"],
-      ["getConfig", "get", "/api/v1/config", "session", "m1", "planned"],
-      ["getMePreferences", "get", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
-      ["putMePreferences", "put", "/api/v1/me/preferences", "sessionOwn", "m1", "planned"],
+      ["getHealth", "get", "/api/v1/health", "public", "m0", "live"],
+      ["getMeta", "get", "/api/v1/meta", "public", "m0", "live"],
+      ["getLocale", "get", "/api/v1/locales/{locale}", "public", "m0", "live"],
+      ["getConfig", "get", "/api/v1/config", "session", "m1", "live"],
+      ["getMePreferences", "get", "/api/v1/me/preferences", "sessionOwn", "m1", "live"],
+      ["putMePreferences", "put", "/api/v1/me/preferences", "sessionOwn", "m1", "live"],
       ["submitQuery", "post", "/api/v1/queries", "session", "m1", "live"],
       ["getAdminConfig", "get", "/api/v1/admin/config", "configEditor", "m1", "live"],
       ["putAdminConfigDraft", "put", "/api/v1/admin/config/draft", "configEditor", "m1", "live"],
@@ -128,9 +128,9 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     }
     const health = findRoute("getHealth") as { status: string };
     expect(() => {
-      health.status = "live";
+      health.status = "planned";
     }).toThrow(TypeError);
-    expect(findRoute("getHealth").status).toBe("planned");
+    expect(findRoute("getHealth").status).toBe("live");
   });
 
   it("meta body per spec 5.1", () => {

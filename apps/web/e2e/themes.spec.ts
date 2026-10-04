@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { hexToRgb, signIn } from "./helpers.js";
+import { hexToRgb, liveResponse, signIn } from "./helpers.js";
 
 const MODES = ["day", "night", "redShift"] as const;
 
@@ -61,8 +61,7 @@ test.describe("OS light scheme with no preference", () => {
 const noPreference = async (page: Page) => {
   await page.route("**/api/v1/me/preferences", async (route) => {
     if (route.request().method() !== "GET") return route.fallback();
-    const response = await route.fetch();
-    if (!response.ok()) throw new Error(`live preferences answered ${response.status()}`);
+    const response = await liveResponse(route);
     return route.fulfill({ json: { ...(await response.json()), themeMode: null } });
   });
 };

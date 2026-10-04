@@ -1,34 +1,8 @@
-import type { ClientSiteConfig } from "@querymodule/core/config";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { useServices } from "../app/services-context.js";
 import { editorOf, fetchAdminConfig } from "./admin-config.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import type { JsonObject } from "./draft.js";
-
-/** The cached GET /api/v1/config (key ["config"]); the header prefetches it, so no new call. */
-export function useCachedClientConfig(): ClientSiteConfig | undefined {
-  const { queryClient } = useServices();
-  const subscribe = useCallback(
-    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
-    [queryClient],
-  );
-  return useSyncExternalStore(subscribe, () =>
-    queryClient.getQueryData<ClientSiteConfig>(["config"]),
-  );
-}
-
-/** The cached config's fetch failed and left no data: the preview stops waiting for it. */
-export function useCachedConfigFailed(): boolean {
-  const { queryClient } = useServices();
-  const subscribe = useCallback(
-    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
-    [queryClient],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () => queryClient.getQueryState(["config"])?.status === "error",
-  );
-}
 
 export type LiveCheck = "checking" | "done" | "failed";
 

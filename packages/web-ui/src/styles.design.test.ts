@@ -114,6 +114,12 @@ describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)"
     expect(decls(".qm-chip input:focus-visible")).toMatch(/outline:\s*none/);
   });
 
+  it("a select with aria-disabled reads as unavailable, like a button (#507 item 14)", () => {
+    const disabled = decls('.qm-select[aria-disabled="true"]');
+    expect(disabled).toMatch(/dashed/);
+    expect(disabled).toMatch(/cursor:\s*not-allowed/);
+  });
+
   it("buttons: primary uses the accent fill and label pair; aria-disabled stays focusable and dashed", () => {
     const primary = decls(".qm-button");
     expect(primary).toMatch(/background:\s*var\(--qm-color-accent-fill\)/);

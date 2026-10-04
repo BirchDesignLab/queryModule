@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
-import { API, server, TEST_USER } from "../test/msw-server.js";
+import { API, server, TEST_USER, versionRow } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
@@ -144,6 +144,10 @@ describe("undo and redo (B1)", () => {
     const t = await openBuilder();
     await editDelimiter(t);
     const summary = screen.getByTestId("draft-summary");
+    // The counts come from debounced draft checks, and while the typed edit is still unchecked they
+    // describe an earlier draft (the cleared field has errors). A valid ";" delimiter settles on 0
+    // errors: wait for that, not for any counts, before taking the baseline.
+    await waitFor(() => expect(summary.textContent).toMatch(/: 0 errors, \d+ warnings?/));
     const summaryBefore = summary.textContent;
     undoButton().focus();
     await t.user.click(undoButton());
@@ -151,9 +155,112 @@ describe("undo and redo (B1)", () => {
     expect(undoButton()).toHaveFocus();
     await t.user.click(redoButton());
     expect(polite(t)).toBe("Redone. Redo steps left: 0.");
-    // The builder's own polite summary carries no undo text.
-    expect(summary.textContent).toBe(summaryBefore);
+    // The builder's own polite summary carries no undo text. The redo restores the same draft, but
+    // its checks run again: wait for them to settle on the counts the draft had before.
+    await waitFor(() => expect(summary.textContent).toBe(summaryBefore));
     expect(summary.textContent).not.toMatch(/undo|redo/i);
+  });
+
+  it("an undo speaks one announcement: the summary region updates silently (#485)", async () => {
+    const t = await openBuilder();
+    const spy = vi.spyOn(t.services.announcer, "announce");
+    // "/" collides with a single-key shortcut, so the draft gains an error the undo then removes.
+    await editDelimiter(t, "/");
+    const summary = screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary.textContent).toMatch(/[1-9]\d* error/));
+    const withError = summary.textContent;
+    expect(summary).toHaveAttribute("aria-live", "polite");
+    spy.mockClear();
+    await t.user.click(undoButton());
+    // The counts change under the undo, but the region is not live while they do.
+    await waitFor(() => expect(summary.textContent).not.toBe(withError));
+    expect(summary).toHaveAttribute("aria-live", "off");
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(polite(t)).toBe("Undone. Undo steps left: 0.");
+    // The next edit makes it a polite region again.
+    await editDelimiter(t, "/");
+    expect(summary).toHaveAttribute("aria-live", "polite");
+  });
+
+  describe("while a server verdict shows (#485, WM2 R1-N1)", () => {
+    /** Edits the delimiter, then Review and publish: the server finds an error for this draft. */
+    async function reviewWithVerdict() {
+      let verdicts = 0;
+      server.use(
+        http.put(`${API}/api/v1/admin/config/draft`, () =>
+          HttpResponse.json(versionRow(2, "draft")),
+        ),
+        http.post(`${API}/api/v1/admin/config/validate`, () => {
+          verdicts++;
+          return HttpResponse.json({
+            errors: [
+              {
+                level: "error",
+                path: "/terminal/delimiter",
+                key: "config.schema",
+                params: { code: `server-says-no-${verdicts}` },
+              },
+            ],
+            warnings: [],
+          });
+        }),
+      );
+      const t = await openBuilder();
+      const spy = vi.spyOn(t.services.announcer, "announce");
+      await editDelimiter(t, ";");
+      await t.user.click(screen.getByRole("button", { name: "Review and publish" }));
+      await waitFor(() => expect(verdicts).toBe(1));
+      const summary = screen.getByTestId("draft-summary");
+      await waitFor(() => expect(summary.textContent).toMatch(/[1-9]\d* error/));
+      return { t, spy, summary, verdicts: () => verdicts };
+    }
+    const review = () => screen.getByRole("button", { name: "Review and publish" });
+
+    it("an undo speaks once and the summary stays off", async () => {
+      const { t, spy, summary } = await reviewWithVerdict();
+      spy.mockClear();
+      await t.user.click(undoButton());
+      await waitFor(() => expect(summary).toHaveAttribute("aria-live", "off"));
+      // Give a late derived-state change the chance to flip it before asserting it did not.
+      await act(async () => {});
+      expect(summary).toHaveAttribute("aria-live", "off");
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(polite(t)).toBe("Undone. Undo steps left: 0.");
+    });
+
+    it("a redo back to the reviewed draft speaks once and the summary stays off", async () => {
+      const { t, spy, summary } = await reviewWithVerdict();
+      await t.user.click(undoButton());
+      spy.mockClear();
+      await t.user.click(redoButton());
+      await act(async () => {});
+      expect(summary).toHaveAttribute("aria-live", "off");
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(polite(t)).toBe("Redone. Redo steps left: 0.");
+    });
+
+    it("a new server verdict after the undo is polite again", async () => {
+      const { t, summary, verdicts } = await reviewWithVerdict();
+      await t.user.click(undoButton());
+      await waitFor(() => expect(summary).toHaveAttribute("aria-live", "off"));
+      await t.user.click(redoButton());
+      await t.user.click(review());
+      await waitFor(() => expect(verdicts()).toBe(2));
+      await waitFor(() => expect(summary).toHaveAttribute("aria-live", "polite"));
+    });
+  });
+
+  it("a Raw edit that does not parse after an undo is announced: the summary is polite (#485)", async () => {
+    const t = await openBuilder();
+    await editDelimiter(t);
+    await t.user.click(undoButton());
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const summary = screen.getByTestId("draft-summary");
+    fireEvent.change(screen.getByRole("textbox", { name: "Draft JSON" }), {
+      target: { value: "{" },
+    });
+    await waitFor(() => expect(summary.textContent).toMatch(/does not parse/i));
+    expect(summary).toHaveAttribute("aria-live", "polite");
   });
 
   it("undoing a setting edit and then a label edit, in the order they were made", async () => {

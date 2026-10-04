@@ -323,7 +323,12 @@ describe("review and publish", () => {
             error: {
               code: "validationFailed",
               requestId: "r1",
-              errors: [{ key: "config.schema", params: { path: "/terminal/delimiter" } }],
+              errors: [
+                {
+                  key: "config.schema",
+                  params: { path: "/terminal/delimiter", code: "server-says-no" },
+                },
+              ],
             },
           },
           { status: 400 },
@@ -335,6 +340,8 @@ describe("review and publish", () => {
     await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByTestId("draft-summary")).toHaveTextContent("Draft checks: 1 errors");
+    // The message belongs to the delimiter control.
+    expect(await findSetting("terminal.delimiter")).toHaveAccessibleDescription(/server-says-no/);
   });
 
   it("Review and publish is aria-disabled with a reason while the Raw JSON does not parse", async () => {

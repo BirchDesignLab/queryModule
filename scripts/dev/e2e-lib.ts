@@ -3,7 +3,8 @@
 // be satisfied by a server the launcher did not spawn.
 
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createHmac } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 
 export type Fetcher = (url: string) => Promise<{ ok: boolean }>;
 export type Sleeper = (ms: number) => Promise<void>;
@@ -143,4 +144,41 @@ export function e2eTarget(env: Readonly<Record<string, string | undefined>>): E2
     throw new Error(`E2E_PORT must be an integer from 1 to 65535, got "${port}"`);
   const origin = `http://localhost:${port}`;
   return { port, origin, healthUrl: `${origin}/api/v1/health` };
+}
+
+export const SMOKE_EMAIL = "smoke@example.test";
+
+/**
+ * The seeded smoke login for local runs (#410), derived as ci.yml does: base64url(HMAC-SHA256(
+ * trimmed seed secret, email)). A complete pair the caller set wins; exactly one of the two is an
+ * error, not a silent replacement. Errors name the variable, never the secret, the derived
+ * password or a value the caller set.
+ */
+export function smokeCredentials(
+  env: Readonly<Record<string, string | undefined>>,
+  secretFile: string,
+  readFileFn: (path: string, encoding: "utf8") => string = readFileSync,
+): { E2E_USER_EMAIL: string; E2E_USER_PASSWORD: string } {
+  const email = env.E2E_USER_EMAIL;
+  const password = env.E2E_USER_PASSWORD;
+  const hasEmail = email !== undefined && email !== "";
+  const hasPassword = password !== undefined && password !== "";
+  if (hasEmail && hasPassword) return { E2E_USER_EMAIL: email, E2E_USER_PASSWORD: password };
+  // Half a pair would be replaced silently by the derived login: a different user than the caller
+  // asked for. Say which one is missing (the name only, never a value).
+  if (hasEmail !== hasPassword) {
+    throw new Error(
+      `${hasEmail ? "E2E_USER_PASSWORD" : "E2E_USER_EMAIL"} is not set: set both E2E_USER_EMAIL and E2E_USER_PASSWORD, or neither to use the seeded smoke login`,
+    );
+  }
+  let secret: string;
+  try {
+    secret = readFileFn(secretFile, "utf8").trim();
+  } catch {
+    throw new Error("SEED_PASSWORD_SECRET unreadable: run pnpm dev once or set E2E_USER_PASSWORD");
+  }
+  return {
+    E2E_USER_EMAIL: SMOKE_EMAIL,
+    E2E_USER_PASSWORD: createHmac("sha256", secret).update(SMOKE_EMAIL).digest("base64url"),
+  };
 }

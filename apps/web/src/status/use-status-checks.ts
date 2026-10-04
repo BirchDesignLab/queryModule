@@ -5,7 +5,7 @@ import {
   type SocketLike,
 } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 
@@ -30,21 +30,6 @@ const INITIAL: StatusChecks = {
   config: null,
   configAt: null,
 };
-
-/** The cached config query failed and left no data: the page stops saying "Loading". */
-export function useConfigUnavailable(): boolean {
-  const { queryClient } = useServices();
-  const subscribe = useCallback(
-    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
-    [queryClient],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () =>
-      queryClient.getQueryState(["config"])?.status === "error" &&
-      queryClient.getQueryData(["config"]) === undefined,
-  );
-}
 
 /**
  * The status page's checks: the heartbeat probe (socket hello, ping, pong) and one GET

@@ -72,10 +72,6 @@ Access levels:
 | GET | `/api/v1/admin/users/{id}/sessions` | admin | no | live | 200, 400, 401, 403, 404 |
 | DELETE | `/api/v1/admin/sessions/{sessionId}` | admin | yes | live | 204, 400, 401, 403, 404 |
 
-The contract file still marks the first six rows (`health` to `PUT /me/preferences`) with the
-status `planned`; their handlers are merged and tested (`packages/api/test/routes.test.ts`,
-`preferences.test.ts`), so this page lists them as live.
-
 What each route does:
 
 | Route | Summary |

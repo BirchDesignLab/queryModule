@@ -42,7 +42,6 @@ describe("NFR-001 every emitted message key has an en string", () => {
 describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", () => {
   const single = [
     "terminal.label",
-    "terminal.description",
     "terminal.errorsLabel",
     "terminal.delimiterInValue",
     "mode.label",
@@ -104,18 +103,54 @@ describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", (
   });
 });
 
+describe("#382 W4 terminal.description is gone (the hint is built from the config)", () => {
+  it("is not in en.json and the example and plain keys that replace it are", () => {
+    expect("terminal.description" in en).toBe(false);
+    expect(
+      ["terminal.descriptionExample", "terminal.descriptionPlain"].filter((k) => !(k in en)),
+    ).toEqual([]);
+  });
+});
+
+/** Relative "/" paths of every file under root, never entering a node_modules directory. */
+function filesUnder(root: URL, prefix = ""): string[] {
+  return readdirSync(new URL(prefix, root), { withFileTypes: true }).flatMap((d) => {
+    if (d.isDirectory())
+      return d.name === "node_modules" ? [] : filesUnder(root, `${prefix}${d.name}/`);
+    return [`${prefix}${d.name}`];
+  });
+}
+
 describe("FR-006 form.readyToSubmit is gone (M1 P3 sends queries)", () => {
   it("is not in en.json", () => {
     expect("form.readyToSubmit" in en).toBe(false);
   });
-  it("is in no web source file", () => {
-    const root = new URL("../../../../apps/web/src/", import.meta.url);
-    const files = readdirSync(root, { recursive: true, encoding: "utf8" }).filter(
-      (f) => /\.tsx?$/.test(f) && !f.endsWith("locale-keys.test.ts"),
-    );
-    const hits = files.filter((f) =>
-      readFileSync(new URL(f.replaceAll("\\", "/"), root), "utf8").includes("readyToSubmit"),
-    );
+  it("is in no source, e2e spec, locale or site file of the apps and packages", () => {
+    // Every tree that can name a locale key: the web app and its e2e specs, the mobile app (its
+    // sources sit at the app root, so node_modules is skipped), each package's sources, and the
+    // shipped locale and site JSON (C6, #382: the old grep covered apps/web/src only).
+    const repo = new URL("../../../../", import.meta.url);
+    const roots = [
+      "apps/web/src",
+      "apps/web/e2e",
+      "apps/mobile",
+      ...readdirSync(new URL("packages/", repo), { withFileTypes: true }).flatMap((d) =>
+        d.isDirectory() ? [`packages/${d.name}/src`, `packages/${d.name}/locales`] : [],
+      ),
+      "packages/config/sites",
+    ].filter((r) => existsSync(new URL(`${r}/`, repo)));
+    const self = new URL("locale-keys.test.ts", import.meta.url).href;
+    const hits = roots.flatMap((r) => {
+      const root = new URL(`${r}/`, repo);
+      return filesUnder(root)
+        .filter((f) => /\.(tsx?|json)$/.test(f))
+        .map((f) => new URL(f, root))
+        .filter((u) => u.href !== self && readFileSync(u, "utf8").includes("readyToSubmit"))
+        .map((u) => u.href.slice(repo.href.length));
+    });
+    expect(roots).toContain("apps/web/src");
+    expect(roots).toContain("apps/mobile");
+    expect(roots).toContain("packages/core/src");
     expect(hits).toEqual([]);
   });
 });
