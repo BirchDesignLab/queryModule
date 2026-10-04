@@ -144,8 +144,10 @@ describe("undo and redo (B1)", () => {
     const t = await openBuilder();
     await editDelimiter(t);
     const summary = screen.getByTestId("draft-summary");
-    // The counts come from async draft checks: wait for them to settle before taking the baseline.
-    await waitFor(() => expect(summary.textContent).toMatch(/\d+ errors?, \d+ warnings?/));
+    // The counts come from debounced draft checks, and while the typed edit is still unchecked they
+    // describe an earlier draft (the cleared field has errors). A valid ";" delimiter settles on 0
+    // errors: wait for that, not for any counts, before taking the baseline.
+    await waitFor(() => expect(summary.textContent).toMatch(/: 0 errors, \d+ warnings?/));
     const summaryBefore = summary.textContent;
     undoButton().focus();
     await t.user.click(undoButton());
