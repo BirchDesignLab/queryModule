@@ -8,7 +8,7 @@ import { renderRoot } from "../test/render-root.js";
 beforeAll(preloadAdminRoutes);
 afterEach(() => vi.restoreAllMocks());
 
-// Task 34 (#359, SEC-005, UX-004): People > Users and roles. One table, row actions that carry the
+// Task 34 (#359, D-A26, ADR-0011 item 8): People > Users and roles. One table, row actions that carry the
 // user's name, a create dialog that shows the temporary password once, and the guards' messages.
 
 const T0 = Date.UTC(2026, 9, 1, 15, 30, 0);
@@ -176,7 +176,7 @@ const rowOf = (name: string): HTMLElement => {
 const roleSelect = (name: string) =>
   within(rowOf(name)).getByRole("combobox", { name: `Role for ${name}` });
 
-describe("users table (Task 34, SEC-005, UX-004)", () => {
+describe("users table (Task 34, D-A26, ADR-0011 item 8)", () => {
   it("lists every user: name, email, role, status, last sign-in, sign-ins and a count of addresses", async () => {
     await openUsers();
     const table = screen.getByRole("table", { name: "Users" });

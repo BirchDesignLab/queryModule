@@ -23,6 +23,7 @@
   "picklist.race.W": "White",
   "picklist.propertyType.FIREARM": "Firearm",
   "picklist.propertyType.BOAT": "Boat",
+  "picklist.propertyType.WATERCRAFT": "Watercraft",
   "picklist.propertyType.ARTICLE": "Article",
   "source.stateSource": "State system",
   "source.nationalSource": "National system",
