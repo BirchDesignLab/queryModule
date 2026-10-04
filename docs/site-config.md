@@ -1,8 +1,7 @@
 # Site configuration reference
 
 How a site changes what the Query Module does, without a code change or a rebuild (BR-001, BR-005,
-NFR-001). This page covers M1 and was checked against the code on `main` at M1 finish 2
-(10-03-26). Where a thing does not exist yet, the page says which phase brings it and does not
+NFR-001). This page covers M1 and was checked against the code on `main` on 10-03-26. Where a thing does not exist yet, the page says which phase brings it and does not
 describe it.
 
 Mock data only. The prototype uses a mock data source with canned responses and never connects to

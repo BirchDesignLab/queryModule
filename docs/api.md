@@ -28,8 +28,8 @@ use placeholder values.
 - **No cache.** Every `/api/*` response carries `Cache-Control: no-store`.
 - **Errors.** Every non-2xx answer that carries a body uses the `ApiError` shape (below).
 - **Feature gates.** The admin routes sit behind site features (`adminConfig`, `adminUsers`). With
-  the feature off the route answers `404 notFound` to every caller. The shipped default site turns
-  both on.
+  the feature off the route answers `404 notFound` to every caller, although the route table below
+  (from `openapi.json`) does not list that 404 per route. The shipped default site turns both on.
 - **Forced password change.** A user created by an admin holds a temporary password. Until they
   change it, every session route answers `403 passwordChangeRequired`, and the WebSocket upgrade is
   refused with HTTP 403. Only the auth routes work (D-A26).
