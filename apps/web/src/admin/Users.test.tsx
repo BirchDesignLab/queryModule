@@ -244,6 +244,28 @@ describe("role change", () => {
     expect(await screen.findByText("Rose Dispatch is now Training officer.")).toBeInTheDocument();
   });
 
+  it("the select reads as unavailable while that row's change is under way (#507 item 14)", async () => {
+    const t = await openUsers();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    server.use(
+      http.put(`${API}/api/v1/admin/users/:id/role`, async () => {
+        await gate;
+        return HttpResponse.json({ ...ROSE, role: "implementer" });
+      }),
+    );
+    expect(roleSelect("Rose Dispatch")).not.toHaveAttribute("aria-disabled");
+    await t.user.selectOptions(roleSelect("Rose Dispatch"), "implementer");
+    await waitFor(() =>
+      expect(roleSelect("Rose Dispatch")).toHaveAttribute("aria-disabled", "true"),
+    );
+    expect(roleSelect("Test Admin")).not.toHaveAttribute("aria-disabled");
+    release();
+    await waitFor(() => expect(roleSelect("Rose Dispatch")).not.toHaveAttribute("aria-disabled"));
+  });
+
   it("409 lastAdmin shows the reason as a message and the select reverts", async () => {
     const t = await openUsers(undefined, { role: () => apiError("lastAdmin", 409) });
     await t.user.selectOptions(roleSelect("Test Admin"), "user");
@@ -490,9 +512,13 @@ describe("create user (the temporary password is shown once)", () => {
     expect(reveal).toHaveTextContent(/shown once/);
     expect(within(reveal).getByText(TEMPORARY)).toBeInTheDocument();
     expect(within(reveal).getByRole("button", { name: "Copy password" })).toHaveFocus();
+    const statusBefore = within(reveal).getByRole("status");
+    expect(statusBefore).toBeEmptyDOMElement();
     await t.user.click(within(reveal).getByRole("button", { name: "Copy password" }));
     expect(writeText).toHaveBeenCalledWith(TEMPORARY);
     expect(await screen.findByText("Password copied.")).toBeInTheDocument();
+    // #507 item 15: the same live region, present (empty) before Copy, so the text is announced.
+    expect(screen.getByText("Password copied.")).toBe(statusBefore);
     await t.user.click(within(reveal).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.body.innerHTML).not.toContain(TEMPORARY);
