@@ -115,7 +115,7 @@ const ROUTE_DEFS = [
     summary: "Liveness for the Docker healthcheck; no data",
     access: "public",
     since: "m0",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: false,
     responses: { 200: { description: "Alive", schema: HealthResponseSchema } },
   },
@@ -126,7 +126,7 @@ const ROUTE_DEFS = [
     summary: "Versions and config hash; the client refuses to run below minClientVersion",
     access: "public",
     since: "m0",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: false,
     responses: { 200: { description: "Versions", schema: MetaResponseSchema } },
   },
@@ -137,7 +137,7 @@ const ROUTE_DEFS = [
     summary: "Locale bundle, UI strings only",
     access: "public",
     since: "m0",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: false,
     request: { params: LocaleParamsSchema },
     responses: {
@@ -153,7 +153,7 @@ const ROUTE_DEFS = [
     summary: "ClientSiteConfig allowlist; never Source.server or mock data",
     access: "session",
     since: "m1",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: false,
     responses: {
       200: { description: "Client config", schema: ClientSiteConfigSchema },
@@ -168,7 +168,7 @@ const ROUTE_DEFS = [
     summary: "The caller's own preference row; nulls when unset",
     access: "sessionOwn",
     since: "m1",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: false,
     responses: {
       200: { description: "Preferences", schema: UserPreferenceSchema },
@@ -183,7 +183,7 @@ const ROUTE_DEFS = [
     summary: "Replace the caller's own preference row",
     access: "sessionOwn",
     since: "m1",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: true,
     request: { body: UserPreferenceSchema },
     responses: {

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { FEATURES, SiteConfigSchema } from "@querymodule/core/config";
 import {
   API_ERROR_CODES,
+  ROUTES,
   WsClientMessageSchema,
   WsServerMessageSchema,
 } from "@querymodule/core/contracts";
@@ -26,6 +27,37 @@ describe("BR-005 docs/api.md", () => {
         .map((m) => `${m.toUpperCase()} ${path}`),
     );
     expect(missing).toEqual([]);
+  });
+
+  // #507 item 27 (Q3): one table row per route, matched on its exact cells, so a changed response
+  // code or status fails here instead of passing on a substring elsewhere on the line.
+  it("lists each route once, with exactly the response codes and status of the contract", () => {
+    const row = (method: string, path: string): string[] | null => {
+      const found = api
+        .split("\n")
+        .filter((l) => l.startsWith(`| ${method.toUpperCase()} | \`${path}\` |`));
+      return found.length === 1 ? (found[0] as string).split("|").map((c) => c.trim()) : null;
+    };
+    const drift = Object.entries(openapi.paths).flatMap(([path, methods]) =>
+      Object.entries(methods).flatMap(([method, op]) => {
+        const cells = row(method, path);
+        if (cells === null) return [`${method.toUpperCase()} ${path}: not exactly one row`];
+        const codes = Object.keys((op as { responses: Record<string, unknown> }).responses).sort();
+        const documented = (cells[6] ?? "").split(",").map((c) => c.trim());
+        const status = ROUTES.find((r) => r.method === method && r.path === path)?.status;
+        return [
+          ...(documented.join(",") === codes.join(",")
+            ? []
+            : [
+                `${method.toUpperCase()} ${path}: codes ${documented.join(",")} != ${codes.join(",")}`,
+              ]),
+          ...(cells[5] === status
+            ? []
+            : [`${method.toUpperCase()} ${path}: status ${cells[5]} != ${status}`]),
+        ];
+      }),
+    );
+    expect(drift).toEqual([]);
   });
 
   it("names every ApiError code", () => {
