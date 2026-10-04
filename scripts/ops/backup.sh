@@ -6,7 +6,7 @@ set -euo pipefail
 : "${QM_RCLONE_REMOTE:=r2:querymodule-backups}"
 # Preflight (#487): Ubuntu's packaged rclone 1.60 gets a 501 NotImplemented from R2 on its first
 # PUT and passes only on retry; refuse anything older than 1.65 (install from rclone.org).
-rclone_version=$(rclone version | head -n 1 | awk '{print $2}')
+rclone_version=$(rclone version | awk 'NR==1 {print $2}')
 if [[ ! "$rclone_version" =~ ^v([0-9]+)\.([0-9]+) ]]; then
   echo "backup: cannot read the rclone version ($rclone_version)" >&2
   exit 1

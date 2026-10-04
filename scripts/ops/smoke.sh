@@ -44,7 +44,9 @@ const h=JSON.parse(require("node:fs").readFileSync(0,"utf8")).configHash;
 process.stdout.write(JSON.stringify({queryType:"VEH",values:{plate:"ZZ-0001"},
   sourceIds:["stateSource","nationalSource"],mode:"plateOnly",configHash:h}))')
 resp=$(mktemp); trap 'rm -f "$jar" "$resp"' EXIT
-code=$(printf '%s' "$body" | curl -sS -o "$resp" -w '%{http_code}' -b "$jar"   -H 'content-type: application/json' -H "origin: $base" -H 'x-requested-with: querymodule'   -H "idempotency-key: $idem" --data-binary @- "$base/api/v1/queries")
+code=$(printf '%s' "$body" | curl -sS -o "$resp" -w '%{http_code}' -b "$jar" \
+  -H 'content-type: application/json' -H "origin: $base" -H 'x-requested-with: querymodule' \
+  -H "idempotency-key: $idem" --data-binary @- "$base/api/v1/queries")
 [ "$code" = 202 ] || { echo "step 3 failed: submit answered HTTP $code"; exit 1; }
 cid=$(node -e 'const c=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).correlationId;if(typeof c!=="string"||!c)process.exit(1);process.stdout.write(c)' "$resp") ||
   { echo "step 3 failed: submit 202 without a correlationId"; exit 1; }

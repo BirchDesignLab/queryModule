@@ -96,10 +96,10 @@ async function internalSignInFailure(
 }
 
 /**
- * AUD-2: drops a session whose loginSucceeded row failed to commit. A failed delete is logged by
- * name and still answers 500: the cookie was never sent, and the row expires on its own limits.
+ * AUD-2: drops a session whose loginSucceeded row failed to commit, and returns the delete
+ * error's name, or null. A failed delete still answers 500: the cookie was never sent, and the
+ * row expires on its own limits.
  */
-/** Deletes a session whose loginSucceeded row failed; returns the delete error's name, or null. */
 async function deleteUnauditedSession(d: AppDeps, sessionId: string): Promise<string | null> {
   try {
     await d.db.delete(session).where(eq(session.id, sessionId));
