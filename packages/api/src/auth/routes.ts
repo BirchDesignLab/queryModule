@@ -123,12 +123,12 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
   // credential outcome answers Better Auth's bad-credentials 401, counts toward the account
   // lockout (the same 429 after N failures) and audits accountDisabled (C-I1).
   if (target?.disabledAt != null && (res.ok || res.status === 401)) {
-    // Disable deleted the user's sessions, so any row here is the one this sign-in just made;
-    // drop every one by user id. A failed delete still answers the same 401 (#505 G-m2) and can
-    // leave that row behind: identity refuses a disabled user's session, so it is never live. A
-    // future enable-user path must delete the user's sessions before clearing disabled_at, or
-    // such an orphan row would come back to life (#513 G-M1). Only the error name is logged
-    // (spec 5.9).
+    // Disable deleted the user's sessions, so any row here is one a sign-in made after disable
+    // (this one, or an orphan an earlier failed delete left); drop every one by user id. A failed
+    // delete still answers the same 401 (#505 G-m2) and can leave the row behind: identity
+    // refuses a disabled user's session, so it is never live. A future enable-user path must
+    // delete the user's sessions in the same transaction that clears disabledAt, or such an
+    // orphan row would come back to life (#513 G-M1). Only the error name is logged (spec 5.9).
     if (res.ok) {
       try {
         await d.db.delete(session).where(eq(session.userId, target.id));
