@@ -155,8 +155,10 @@ export function saveDraft(
 /**
  * POST /admin/config/validate and the publish and rollback refusal (ADR-0011 items 2, 3 and 5):
  * the spec 5.8 chain on the document (the same validateSiteConfig the browser runs, with the
- * server-only adapter kind and mock coverage checks), then the checks activate() applies: the
- * document names the live site, and auth.mfaRequired stays false until MFA is enforced (#216).
+ * server-only adapter kind and mock coverage checks), then the checks activate() applies (the
+ * document names the live site; auth.mfaRequired stays false until MFA is enforced, #216), and
+ * one only this chain applies: features.adminConfig stays true, so a publish cannot lock the
+ * config API (#505 T27 Q6).
  */
 export async function validateDocument(d: AppDeps, document: unknown): Promise<ChainResult> {
   const siteId = siteIdOf(d);
