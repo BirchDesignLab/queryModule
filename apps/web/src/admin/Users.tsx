@@ -10,6 +10,7 @@ import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { LeaveDialog } from "./LeaveGuard.js";
 import { Modal } from "./Modal.js";
+import { SCROLL_FOCUS } from "./scroll-focus.js";
 import {
   createUser,
   disableUser,
@@ -24,9 +25,6 @@ import {
  * never an address, spec 5.9) and row actions that carry the user's name. The list lives in this
  * component's state only: no cache, nothing persisted (spec 6.7).
  */
-
-/** A region that scrolls takes focus so the keyboard can scroll it (axe scrollable-region-focusable). */
-const SCROLL_FOCUS = { tabIndex: 0 } as const;
 
 type Notice = { kind: "info" | "error"; text: string };
 

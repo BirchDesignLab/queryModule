@@ -6,7 +6,8 @@ import { I18nProvider } from "../app/i18n-context.js";
 import { ServicesProvider } from "../app/services-context.js";
 import { EN_BUNDLE } from "../test/en-bundle.js";
 import { testServices } from "../test/render-routes.js";
-import { PublishDialogs, type PublishFlow } from "./PublishFlow.js";
+import { PublishDialogs } from "./PublishControls.js";
+import type { PublishFlow } from "./PublishFlow.js";
 
 // Task 33 part 2b (#507 items 5 and 6): what the publish dialogs do with the flow they are given,
 // without the whole builder. UX-004.

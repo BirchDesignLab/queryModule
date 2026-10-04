@@ -4,6 +4,7 @@ import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { exportVersion, fetchVersions } from "./admin-config.js";
 import { configDraftStore } from "./builder-store.js";
+import { SCROLL_FOCUS } from "./scroll-focus.js";
 
 /**
  * Version history (Task 33 part 2b, #358, BR-001, UX-004): a named region opened from the toolbar's
@@ -13,8 +14,6 @@ import { configDraftStore } from "./builder-store.js";
  * change note, so neither is shown in M1.
  */
 
-/** A region that scrolls takes focus so the keyboard can scroll it (axe scrollable-region-focusable). */
-const SCROLL_FOCUS = { tabIndex: 0 } as const;
 /** The heading takes focus when the region opens; it is not in the tab order. */
 const PROGRAMMATIC_FOCUS = { tabIndex: -1 } as const;
 
