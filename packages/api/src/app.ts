@@ -14,6 +14,9 @@ import {
 } from "./http/security";
 import type { AppEnv } from "./http/types";
 import { mountWeb } from "./http/web";
+import { errorFields } from "./log/error-fields";
+import { ReplayIntegrityError } from "./queries/admission";
+import { SubmitTransactionError } from "./queries/errors";
 import { mountQueriesRoute } from "./queries/route";
 import { mountConfigRoute } from "./routes/config";
 import { mountPreferencesRoute } from "./routes/preferences";
@@ -65,8 +68,14 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   mountAdminUserRoutes(app, d);
   mountWeb(app, d);
   app.notFound((c) => apiError(c, "notFound"));
+  // LS-1 (spec 5.9): a query error's message carries its params, so an unhandled error logs its
+  // name and driver code only; the submit errors keep their fixed-text message.
   app.onError((err, c) => {
-    d.logger.error("unhandled", { err, method: c.req.method, path: c.req.path });
+    d.logger.error("unhandled", {
+      err: errorFields(err, [SubmitTransactionError, ReplayIntegrityError]),
+      method: c.req.method,
+      path: c.req.path,
+    });
     return apiError(c, "internal");
   });
   return app;

@@ -95,6 +95,21 @@ async function internalSignInFailure(
   return apiError(c, "internal");
 }
 
+/**
+ * AUD-2: drops a session whose loginSucceeded row failed to commit. A failed delete is logged by
+ * name and still answers 500: the cookie was never sent, and the row expires on its own limits.
+ */
+async function deleteUnauditedSession(d: AppDeps, sessionId: string): Promise<void> {
+  try {
+    await d.db.delete(session).where(eq(session.id, sessionId));
+  } catch (e) {
+    d.logger.error("unaudited session delete failed", {
+      sessionId,
+      errorName: e instanceof Error ? e.name : typeof e,
+    });
+  }
+}
+
 async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Response> {
   // critic:C1 / critic:CV1: Better Auth's sign-in/email also accepts
   // application/x-www-form-urlencoded (better-call parses both), which would give email "" here
@@ -150,15 +165,27 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
       await d.db.select({ id: session.id }).from(session).where(eq(session.token, token))
     )[0];
     if (!s || !target) throw new Error("sign-in succeeded without a session row");
+    try {
+      await withTransaction(d.db, (tx) =>
+        d.audit.record(tx, {
+          type: "loginSucceeded",
+          actor: { id: target.id, email: auditEmail(target.email), role: target.role },
+          identitySource: "local",
+          details: { method: "password", sessionId: s.id, clientIp: ip },
+        }),
+      );
+    } catch (e) {
+      // AUD-2 (SEC-010): no session lives without its loginSucceeded row. Better Auth already
+      // inserted it, so it is deleted and its cookie never leaves; the lockout count stays.
+      // Fixed text and the error's name only: a query error's message carries its params.
+      d.logger.error("sign-in audit failed; session deleted", {
+        sessionId: s.id,
+        errorName: e instanceof Error ? e.name : typeof e,
+      });
+      await deleteUnauditedSession(d, s.id);
+      return apiError(c, "internal");
+    }
     await d.limiter.reset(key);
-    await withTransaction(d.db, (tx) =>
-      d.audit.record(tx, {
-        type: "loginSucceeded",
-        actor: { id: target.id, email: auditEmail(target.email), role: target.role },
-        identitySource: "local",
-        details: { method: "password", sessionId: s.id, clientIp: ip },
-      }),
-    );
     return res;
   }
   if (res.status === 401) {

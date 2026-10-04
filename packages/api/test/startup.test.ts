@@ -5,10 +5,19 @@ import { join, resolve } from "node:path";
 import { CONFIG_SCHEMA_VERSION, CORE_VERSION } from "@querymodule/core/contracts";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type * as auditService from "../src/audit/service";
+import { ConfigLoadError } from "../src/config/load";
 import type * as dbClient from "../src/db/client";
 import { readPragmas } from "../src/db/client";
 import { KeyCanaryError } from "../src/keys/canary";
-import { bootstrap, loadDeps, type RunningServer, startServer } from "../src/startup";
+import { SecretConfigError } from "../src/secrets";
+import {
+  bootstrap,
+  loadDeps,
+  type RunningServer,
+  StartupRefusedError,
+  startServer,
+  startupErrorFields,
+} from "../src/startup";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
 // Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert of a
@@ -339,9 +348,11 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
     const lines: string[] = [];
     failAudit.on = true;
     opened.length = 0;
-    await expect(startServer(env, { logSink: (l) => lines.push(l) })).rejects.toThrow(
-      /audit store unavailable/,
-    );
+    // LS-2: the rethrown error is fixed text; the audit error's own message never leaves.
+    const refusal = await startServer(env, { logSink: (l) => lines.push(l) }).catch((e) => e);
+    expect(refusal).toBeInstanceOf(StartupRefusedError);
+    expect(refusal.message).toBe("startup refused: configLoaded audit write failed");
+    expect(refusal.cause).toBeUndefined();
     // Like the MFA guard: one fixed "startup refused" line naming the step, with no values.
     const refused = lines.map((l) => JSON.parse(l)).filter((l) => l.msg === "startup refused");
     expect(refused).toEqual([
@@ -360,5 +371,33 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
     const rows = await configLoadedRows(next);
     next.db.$client.close();
     expect(rows.length).toBe(1);
+  });
+});
+
+describe("SEC-006 spec 5.9 the startup stderr line (M1 phase review LS-2)", () => {
+  const FAKE_SECRET = "ZZFAKESECRETVALUE0123456789";
+
+  it("keeps the message of a fixed-text startup error", () => {
+    for (const e of [
+      new StartupRefusedError("configLoaded audit write failed"),
+      new ConfigLoadError("site.json", "/auth", "config.invalid"),
+      new KeyCanaryError("data"),
+      new SecretConfigError("DATA_KEY", "file is empty"),
+    ])
+      expect(startupErrorFields(e)).toEqual({ name: e.name, message: e.message });
+  });
+
+  it("writes only the name, and a driver code, of any other error", () => {
+    const query = new Error(`Failed query: insert into "user"\nparams: ${FAKE_SECRET}`, {
+      cause: Object.assign(new Error(`constraint ${FAKE_SECRET}`), { code: "SQLITE_CONSTRAINT" }),
+    });
+    expect(startupErrorFields(query)).toEqual({ name: "Error", code: "SQLITE_CONSTRAINT" });
+    const named = new TypeError(`bad ${FAKE_SECRET}`);
+    expect(startupErrorFields(named)).toEqual({ name: "TypeError" });
+    expect(startupErrorFields(FAKE_SECRET)).toEqual({ name: "unknown" });
+    // A forged name never carries a value either.
+    const forged = new Error("x");
+    forged.name = `Error ${FAKE_SECRET}`;
+    expect(JSON.stringify(startupErrorFields(forged))).not.toContain(FAKE_SECRET);
   });
 });

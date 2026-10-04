@@ -5,10 +5,15 @@ import { serve } from "@hono/node-server";
 import { CONFIG_SCHEMA_VERSION, CORE_VERSION, SYSTEM_ACTOR } from "@querymodule/core/contracts";
 import { createApp } from "./app";
 import type { Clock } from "./clock";
+import { ConfigLoadError } from "./config/load";
+import { DatabaseLockTimeoutError, DatabaseOpenError } from "./db/client";
+import { TriggerMissingError } from "./db/migrate";
 import { withTransaction } from "./db/tx";
 import { type AppDeps, buildDeps } from "./deps";
 import { readDeployEnv } from "./env";
-import { loadSecrets } from "./secrets";
+import { KeyCanaryError } from "./keys/canary";
+import { type ErrorFields, errorFields } from "./log/error-fields";
+import { loadSecrets, SecretConfigError } from "./secrets";
 import { attachWebSocket } from "./ws/server";
 
 export class StartupRefusedError extends Error {
@@ -16,6 +21,27 @@ export class StartupRefusedError extends Error {
     super(`startup refused: ${reason}`);
     this.name = "StartupRefusedError";
   }
+}
+
+/** The startup errors whose message is fixed text: key names, file paths, trigger names. */
+const FIXED_TEXT_STARTUP_ERRORS = [
+  StartupRefusedError,
+  ConfigLoadError,
+  SecretConfigError,
+  KeyCanaryError,
+  TriggerMissingError,
+  DatabaseOpenError,
+  DatabaseLockTimeoutError,
+];
+
+/**
+ * LS-2 (spec 5.9, 8.1): the error fields main.ts writes to stderr when startup is refused. A
+ * failed seed insert or migration throws a query error whose message quotes its params, so the
+ * message is written only for the fixed-text startup errors; any other error gives its name and
+ * driver code only.
+ */
+export function startupErrorFields(err: unknown): ErrorFields {
+  return errorFields(err, FIXED_TEXT_STARTUP_ERRORS);
 }
 
 /**
@@ -68,14 +94,16 @@ export async function bootstrap(
         },
       }),
     );
-  } catch (e) {
-    // Fixed reason, like the MFA guard: the error itself is not logged, so no value can leak.
+  } catch {
+    // Fixed reason, like the MFA guard: the error itself is neither logged nor rethrown (LS-2),
+    // so no query value can reach the log or main.ts's stderr line.
+    const reason = "configLoaded audit write failed";
     deps.logger.error("startup refused", {
-      reason: "configLoaded audit write failed",
+      reason,
       site: deps.config.current().siteConfig.site.id,
     });
     deps.db.$client.close();
-    throw e;
+    throw new StartupRefusedError(reason);
   }
   return deps;
 }

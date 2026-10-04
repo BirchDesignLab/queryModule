@@ -423,3 +423,57 @@ describe("toBetterAuthLogger (A3 T14 CV2)", () => {
     expect(all).not.toContain("Failed query");
   });
 });
+
+describe("SEC-006 log capture: a failed query on an unsanitized route (M1 phase review LS-1)", () => {
+  /** A BEFORE INSERT trigger that aborts every insert into `table`, so drizzle throws its own error. */
+  async function failInserts(t: TestApp, table: "user" | "account"): Promise<void> {
+    await t.deps.db.$client.execute(
+      `CREATE TRIGGER ls1_fail_${table} BEFORE INSERT ON "${table}" BEGIN SELECT RAISE(ABORT, 'forced'); END`,
+    );
+  }
+
+  it("POST /admin/users: a failed insert logs no email, name, password hash or query text", async () => {
+    const a = await adminConfigApp();
+    await a.userId("admin"); // signs the admin in before any insert is made to fail
+    const ctx = await a.t.deps.auth.$context;
+    const hashSpy = vi.spyOn(ctx.password, "hash");
+    const email = "ls1-canary@example.test";
+    const name = "ZZLOGCANARYNAME";
+    await failInserts(a.t, "account");
+    const r1 = await a.call("admin", "POST", "/api/v1/admin/users", { email, name, role: "user" });
+    expect(r1.status).toBe(500);
+    await a.t.deps.db.$client.execute("DROP TRIGGER ls1_fail_account");
+    await failInserts(a.t, "user");
+    const r2 = await a.call("admin", "POST", "/api/v1/admin/users", { email, name, role: "user" });
+    expect(r2.status).toBe(500);
+    const hashes = await Promise.all(hashSpy.mock.results.map((m) => m.value as Promise<string>));
+    expect(hashes).toHaveLength(2);
+
+    const sinks = [...a.t.logLines, ...stray].join("\n");
+    const unhandled = a.t.logLines.map((l) => JSON.parse(l)).filter((l) => l.msg === "unhandled");
+    expect(unhandled).toHaveLength(2);
+    // The error's name and a SQLite code walked from its cause are kept: enough to triage.
+    // drizzle's DrizzleQueryError keeps the name "Error"; the code comes from its libsql cause.
+    for (const u of unhandled)
+      expect(u.err).toEqual({ name: "Error", code: expect.stringMatching(/^SQLITE_CONSTRAINT/) });
+    for (const f of [email, name, ...hashes, "Failed query", "params:"])
+      expect(sinks.includes(f), `leaked: ${f.slice(0, 12)}...`).toBe(false);
+  });
+
+  it("a query error carrying a session token in its message reaches no sink", async () => {
+    const t = await createTestApp();
+    const tokenLike = "ZZSESSIONTOKENCANARY0123456789abcdef";
+    t.app.get("/api/v1/__dbfail", () => {
+      const e = new Error(
+        `Failed query: select from "session" where token = ?\nparams: ${tokenLike}`,
+      );
+      e.name = "DrizzleQueryError";
+      throw e;
+    });
+    expect((await t.request("/api/v1/__dbfail")).status).toBe(500);
+    const sinks = [...t.logLines, ...stray].join("\n");
+    expect(sinks).toContain("DrizzleQueryError");
+    expect(sinks.includes(tokenLike), "token in a log line").toBe(false);
+    expect(sinks.includes("Failed query"), "query text in a log line").toBe(false);
+  });
+});

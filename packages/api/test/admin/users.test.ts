@@ -496,6 +496,65 @@ describe("last-admin guard under concurrency (G-I1, contract 409 'no enabled adm
     expect(await a.t.auditRows("userDisabled")).toHaveLength(1);
     expect(await consoleRoleRows(a)).toHaveLength(0);
   });
+
+  for (const how of ["demoted", "disabled"] as const) {
+    it(`AUD-3: an admin ${how} a moment earlier cannot create a user or revoke a session (stale principal)`, async () => {
+      const { a, x, y } = await twoAdmins();
+      const u = await plainUser(a, "bystander-aud3@example.test");
+      const sid = await sessionIdOf(a, u.id);
+      if (how === "demoted") expect((await setUserRole(a.t.deps, x.p, y.id, "user")).ok).toBe(true);
+      else expect((await disableUser(a.t.deps, x.p, y.id)).ok).toBe(true);
+      const email = "made-by-stale@example.test";
+      expect(await createUser(a.t.deps, y.p, { email, name: "Stale", role: "admin" })).toEqual({
+        ok: false,
+        code: "forbidden",
+      });
+      expect(await revokeSession(a.t.deps, y.p, sid)).toEqual({ ok: false, code: "forbidden" });
+      expect(await a.t.auditRows("userCreated")).toHaveLength(0);
+      expect(
+        (await a.t.auditRows("sessionRevoked")).filter((r) => r.details.reason === "admin"),
+      ).toHaveLength(0);
+      expect(await sessionIdOf(a, u.id)).toBe(sid);
+      const made = await a.t.deps.db.$client.execute({
+        sql: "SELECT count(*) AS n FROM user WHERE email = ?",
+        args: [email],
+      });
+      expect(Number(made.rows[0]?.n)).toBe(0);
+    });
+  }
+
+  it("AUD-3: the routes answer a stale principal 403 forbidden and write nothing", async () => {
+    const { a, y } = await twoAdmins();
+    const u = await plainUser(a, "bystander-route@example.test");
+    const sid = await sessionIdOf(a, u.id);
+    const cookie = await a.t.cookieFor("admin-b@example.test", PW);
+    // The guard read y as an admin; y is demoted before the change's transaction runs.
+    const resolve = a.t.deps.identity.resolveGated.bind(a.t.deps.identity);
+    vi.spyOn(a.t.deps.identity, "resolveGated").mockImplementation(async (req) => {
+      const r = await resolve(req);
+      await a.t.deps.db.$client.execute({
+        sql: "UPDATE user SET role = 'user' WHERE id = ?",
+        args: [y.id],
+      });
+      return r;
+    });
+    const headers = { cookie, "x-requested-with": "querymodule" };
+    const created = await a.t.request(API, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ email: "route-stale@example.test", name: "Stale", role: "user" }),
+    });
+    expect(created.status).toBe(403);
+    expect((await errorOf(created)).code).toBe("forbidden");
+    const revoked = await a.t.request(`/api/v1/admin/sessions/${sid}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(revoked.status).toBe(403);
+    expect((await errorOf(revoked)).code).toBe("forbidden");
+    expect(await a.t.auditRows("userCreated")).toHaveLength(0);
+    expect(await sessionIdOf(a, u.id)).toBe(sid);
+  });
 });
 
 describe("host principals (spec 5.6, SEC-010: host rows carry the host subject)", () => {
@@ -519,7 +578,7 @@ describe("host principals (spec 5.6, SEC-010: host rows carry the host subject)"
     if (!created.ok) throw new Error("create failed");
     const u = await plainUser(a, "bystander-host@example.test");
     expect((await setUserRole(a.t.deps, host, u.id, "trainingOfficer")).ok).toBe(true);
-    expect(await revokeSession(a.t.deps, host, await sessionIdOf(a, u.id))).toBe(true);
+    expect(await revokeSession(a.t.deps, host, await sessionIdOf(a, u.id))).toEqual({ ok: true });
     expect((await disableUser(a.t.deps, host, u.id)).ok).toBe(true);
 
     const rows = (

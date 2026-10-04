@@ -1,5 +1,5 @@
 import { writeSync } from "node:fs";
-import { type RunningServer, startServer } from "./startup";
+import { type RunningServer, startServer, startupErrorFields } from "./startup";
 
 /** Upper bound on the drain after a fatal error; the exit code is already 1 by then. */
 const FATAL_DRAIN_MS = 10_000;
@@ -52,12 +52,9 @@ try {
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
 } catch (err) {
-  // Error name and message only (spec 5.9): startup errors never carry key material, and a
-  // stack is never printed.
-  const e =
-    err instanceof Error
-      ? { name: err.name, message: err.message }
-      : { name: "unknown", message: "" };
+  // LS-2 (spec 5.9): the name, plus the message only of a fixed-text startup error (a query
+  // error's message quotes its params); a stack is never printed.
+  const e = startupErrorFields(err);
   process.stderr.write(
     `${JSON.stringify({ level: "fatal", time: Date.now(), msg: "startup refused", error: e })}\n`,
   );

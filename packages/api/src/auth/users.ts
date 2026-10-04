@@ -1,6 +1,8 @@
 import type { Auth } from "./auth";
 
-// Public sign-up is disabled; demo users are created here by seed.ts (spec 8.5). Role changes go through grantRole.
+// Public sign-up is disabled; demo users are created here by seed.ts (spec 8.5). An admin creates
+// users in the admin console instead (admin/users/users.ts createUser, ADR-0011 item 8). Roles
+// change through grantRole or the console's setUserRole (spec 5.6).
 export async function createLocalUser(
   auth: Auth,
   o: { email: string; name: string; password: string },
