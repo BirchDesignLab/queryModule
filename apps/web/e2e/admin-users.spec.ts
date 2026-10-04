@@ -65,12 +65,16 @@ test("[#362] create, forced password change, disable: the new user's session end
     const change = user.getByRole("heading", { name: "Choose a new password" });
     await expect(change).toBeVisible();
     // Straight to /status: still only the change screen, and no WebSocket ever opens.
+    const sessionAsked = user.waitForResponse((r) =>
+      new URL(r.url()).pathname.endsWith("/get-session"),
+    );
     await user.goto("/status");
+    // The app has asked who is signed in and drawn the change screen in place of /status: the
+    // point where a socket the app meant to open would already be up.
+    await sessionAsked;
     await expect(change).toBeVisible();
     await expect(user.getByRole("link", { name: "Status" })).toHaveCount(0);
     await expect(user.getByRole("banner")).toHaveCount(0);
-    // Settled: the page and its requests are done, so a socket the app meant to open would be up.
-    await user.waitForLoadState("networkidle");
     expect(sockets).toHaveLength(0);
     await expectNoSeriousAxeViolations(user);
 
@@ -79,9 +83,12 @@ test("[#362] create, forced password change, disable: the new user's session end
     await user.getByLabel(/^New password/).fill(temporary);
     await user.getByLabel(/^Confirm new password/).fill(temporary);
     await user.getByRole("button", { name: "Change password" }).click();
-    await expect(
-      user.getByText("Choose a password different from the temporary one").first(),
-    ).toBeVisible();
+    // The refusal belongs to the New password field: it is flagged and described by the message.
+    const newPassword = user.getByLabel(/^New password/);
+    await expect(newPassword).toHaveAttribute("aria-invalid", "true");
+    await expect(newPassword).toHaveAccessibleDescription(
+      /Choose a password different from the temporary one/,
+    );
     await expectNoSeriousAxeViolations(user);
     const chosen = `${temporary.slice(0, 20)}-new-A1`;
     await user.getByLabel(/^New password/).fill(chosen);
@@ -101,7 +108,7 @@ test("[#362] create, forced password change, disable: the new user's session end
     await expect.poll(() => sockets.length).toBeGreaterThan(0);
     await expectNoSeriousAxeViolations(user);
 
-    // The admin disables the user: confirm dialog, then the session ends (socket closed).
+    // The admin disables the user: confirm dialog, then the session ends.
     await page.reload();
     const row = page.getByRole("row", { name: NAME_FRAGMENT });
     await expect(row).toBeVisible();
@@ -113,9 +120,9 @@ test("[#362] create, forced password change, disable: the new user's session end
     // The one open session ended (the page text and the live region both carry the message).
     await expect(page.getByText(`${NAME} is disabled. 1 session ended.`).first()).toBeVisible();
     await expect(row).toContainText("Disabled");
-    await expect
-      .poll(() => sockets.length > 0 && sockets.every((ws) => ws.isClosed()), { timeout: 15_000 })
-      .toBe(true);
+    // No poll on the sockets here: the status page's heartbeat socket closes itself after its
+    // pong, so "every socket closed" holds whether or not the server ended the session. The
+    // session-ended text above and the refused sign-in below are the proof.
     await expectNoSeriousAxeViolations(page);
 
     // The disabled user's session is gone: the app asks for a sign-in again, and one is refused.

@@ -9,7 +9,7 @@ import { SCROLL_FOCUS } from "./scroll-focus.js";
 import { disableUser, fetchUsers, revokeUserSessions, setUserRole } from "./users-api.js";
 
 /**
- * People > Users and roles (Task 34, #359, SEC-005, UX-004, ADR-0011 item 8): one table with the
+ * People > Users and roles (Task 34, #359, D-A26, ADR-0011 item 8): one table with the
  * role as an inline select, a status badge, the sign-in figures (a count of distinct addresses,
  * never an address, spec 5.9) and row actions that carry the user's name. The list lives in this
  * component's state only: no cache, nothing persisted (spec 6.7).

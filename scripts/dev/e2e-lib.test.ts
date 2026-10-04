@@ -196,6 +196,33 @@ describe("smokeCredentials (#410: local e2e derives the smoke login as ci.yml do
     expect(readFileFn).not.toHaveBeenCalled();
   });
 
+  it("Q1: with only one of the two set, fails naming the missing variable and derives nothing", () => {
+    const readFileFn = vi.fn(() => "s3cret-value");
+    expect(() => smokeCredentials({ E2E_USER_EMAIL: "a@b.test" }, "/x", readFileFn)).toThrow(
+      /E2E_USER_PASSWORD/,
+    );
+    expect(() => smokeCredentials({ E2E_USER_PASSWORD: "pw-value" }, "/x", readFileFn)).toThrow(
+      /E2E_USER_EMAIL/,
+    );
+    // An empty value is unset, so a half-empty pair is the same mistake.
+    expect(() =>
+      smokeCredentials({ E2E_USER_EMAIL: "a@b.test", E2E_USER_PASSWORD: "" }, "/x", readFileFn),
+    ).toThrow(/E2E_USER_PASSWORD/);
+    expect(readFileFn).not.toHaveBeenCalled();
+  });
+
+  it("Q1: the message carries no value", () => {
+    let message: string | undefined;
+    try {
+      smokeCredentials({ E2E_USER_PASSWORD: "pw-value-leak" }, "/x", () => "s3cret-value");
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(/E2E_USER_EMAIL/);
+    expect(message).not.toContain("pw-value-leak");
+    expect(message).not.toContain("s3cret-value");
+  });
+
   it("fails naming the file, never the secret, when it is unreadable", () => {
     const readFileFn = () => {
       throw new Error("ENOENT leak-me");

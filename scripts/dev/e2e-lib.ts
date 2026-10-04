@@ -150,8 +150,9 @@ export const SMOKE_EMAIL = "smoke@example.test";
 
 /**
  * The seeded smoke login for local runs (#410), derived as ci.yml does: base64url(HMAC-SHA256(
- * trimmed seed secret, email)). Values the caller already set win. Errors name the variable, never
- * the secret or the derived password.
+ * trimmed seed secret, email)). A complete pair the caller set wins; exactly one of the two is an
+ * error, not a silent replacement. Errors name the variable, never the secret, the derived
+ * password or a value the caller set.
  */
 export function smokeCredentials(
   env: Readonly<Record<string, string | undefined>>,
@@ -160,8 +161,16 @@ export function smokeCredentials(
 ): { E2E_USER_EMAIL: string; E2E_USER_PASSWORD: string } {
   const email = env.E2E_USER_EMAIL;
   const password = env.E2E_USER_PASSWORD;
-  if (email !== undefined && email !== "" && password !== undefined && password !== "")
-    return { E2E_USER_EMAIL: email, E2E_USER_PASSWORD: password };
+  const hasEmail = email !== undefined && email !== "";
+  const hasPassword = password !== undefined && password !== "";
+  if (hasEmail && hasPassword) return { E2E_USER_EMAIL: email, E2E_USER_PASSWORD: password };
+  // Half a pair would be replaced silently by the derived login: a different user than the caller
+  // asked for. Say which one is missing (the name only, never a value).
+  if (hasEmail !== hasPassword) {
+    throw new Error(
+      `${hasEmail ? "E2E_USER_PASSWORD" : "E2E_USER_EMAIL"} is not set: set both E2E_USER_EMAIL and E2E_USER_PASSWORD, or neither to use the seeded smoke login`,
+    );
+  }
   let secret: string;
   try {
     secret = readFileFn(secretFile, "utf8").trim();

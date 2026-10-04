@@ -6,7 +6,7 @@ import { seededUser, signIn } from "./helpers.js";
 // #410, WM1 carry forward: the live site document's quick access is the shipped default's. Specs
 // that publish (admin-config) restore the shipped config; one that did not would leave the
 // dispatcher's buttons and select out of step with default.json, and show up here first.
-test("the live config's quick access is the shipped default's", async ({ page }) => {
+test("[#410] the live config's quick access is the shipped default's", async ({ page }) => {
   await signIn(page, seededUser("admin@example.test"));
   const response = await page.request.get("/api/v1/admin/config");
   expect(response.ok(), `admin config answered ${response.status()}`).toBe(true);
