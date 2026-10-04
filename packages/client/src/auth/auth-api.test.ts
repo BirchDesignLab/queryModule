@@ -162,6 +162,11 @@ describe("D-A26 change-password through Better Auth (SEC-005)", () => {
     expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "tooShort" });
     answer(400, { code: "PASSWORD_TOO_LONG", message: "Password too long" });
     expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "tooShort" });
+    // #507 item 13: a 400 nobody recognises is not "same password" (it showed the wrong message).
+    answer(400, { code: "SOMETHING_NEW", message: "x" });
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "unavailable" });
+    answer(400, { error: { code: "forbidden", requestId: "r1" } });
+    expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "unavailable" });
     answer(429, {});
     expect(await api.changePassword("a", "b")).toEqual({ ok: false, code: "rateLimited" });
     answer(401, { error: { code: "unauthenticated", requestId: "r1" } });
