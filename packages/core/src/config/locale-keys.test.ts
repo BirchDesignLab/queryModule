@@ -112,6 +112,15 @@ describe("#382 W4 terminal.description is gone (the hint is built from the confi
   });
 });
 
+/** Relative "/" paths of every file under root, never entering a node_modules directory. */
+function filesUnder(root: URL, prefix = ""): string[] {
+  return readdirSync(new URL(prefix, root), { withFileTypes: true }).flatMap((d) => {
+    if (d.isDirectory())
+      return d.name === "node_modules" ? [] : filesUnder(root, `${prefix}${d.name}/`);
+    return [`${prefix}${d.name}`];
+  });
+}
+
 describe("FR-006 form.readyToSubmit is gone (M1 P3 sends queries)", () => {
   it("is not in en.json", () => {
     expect("form.readyToSubmit" in en).toBe(false);
@@ -133,9 +142,9 @@ describe("FR-006 form.readyToSubmit is gone (M1 P3 sends queries)", () => {
     const self = new URL("locale-keys.test.ts", import.meta.url).href;
     const hits = roots.flatMap((r) => {
       const root = new URL(`${r}/`, repo);
-      return readdirSync(root, { recursive: true, encoding: "utf8" })
-        .filter((f) => /\.(tsx?|json)$/.test(f) && !/(^|[/])node_modules[/]/.test(f))
-        .map((f) => new URL(f.replaceAll("\\", "/"), root))
+      return filesUnder(root)
+        .filter((f) => /\.(tsx?|json)$/.test(f))
+        .map((f) => new URL(f, root))
         .filter((u) => u.href !== self && readFileSync(u, "utf8").includes("readyToSubmit"))
         .map((u) => u.href.slice(repo.href.length));
     });
