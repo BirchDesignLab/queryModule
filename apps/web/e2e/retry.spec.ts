@@ -52,7 +52,8 @@ test.describe("dispatcher retry (1366x768)", () => {
     await expect(region.getByRole("listitem").last()).toContainText("Failed");
     expect(sent).toHaveLength(2);
     expect(sent[1]?.body).toBe(sent[0]?.body);
-    expect(sent[1]?.key).not.toBe(sent[0]?.key);
+    // SUBMIT-1: a retry is the same request, so it carries the same Idempotency-Key.
+    expect(sent[1]?.key).toBe(sent[0]?.key);
     // Focus never moved off the button; the result went through the shared region only.
     await expect(retry).toBeFocused();
     await expect(page.getByTestId("announcer-polite")).toContainText(/Vehicle query sent at/);
@@ -82,7 +83,8 @@ test.describe("officer retry (1024x768)", () => {
     await expect(region.getByRole("listitem")).toHaveCount(1);
     await expect(region.getByRole("listitem")).toContainText("Acknowledged");
     expect(sent).toHaveLength(2);
-    expect(sent[1]?.key).not.toBe(sent[0]?.key);
+    // SUBMIT-1: a retry is the same request, so it carries the same Idempotency-Key.
+    expect(sent[1]?.key).toBe(sent[0]?.key);
     await expect(region.getByRole("heading", { name: "Last request" })).toBeFocused();
     await expect(page.getByTestId("announcer-polite")).toContainText(/Vehicle query sent at/);
   });

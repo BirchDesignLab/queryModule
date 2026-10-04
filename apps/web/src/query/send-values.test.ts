@@ -7,8 +7,7 @@ import { valuesToSend } from "./send-values.js";
 const NOW = Date.UTC(2026, 8, 29);
 const stateOf = (values: Record<string, string>) =>
   evaluateForm(CLIENT_CONFIG, "VEH", values, { now: NOW });
-const send = (values: Record<string, string>) =>
-  valuesToSend(CLIENT_CONFIG, "VEH", values, stateOf(values), NOW);
+const send = (values: Record<string, string>) => valuesToSend(values, stateOf(values));
 
 describe("valuesToSend (#382 A5, FR-012, spec 4.3 step 6)", () => {
   it("drops a value a rule hides when the mode is unchanged", () => {
@@ -17,14 +16,22 @@ describe("valuesToSend (#382 A5, FR-012, spec 4.3 step 6)", () => {
     expect(send(values)).toEqual({ plate: "ZZ-0001", state: "TX" });
   });
 
-  it("sends the draft as it is when dropping would turn normal into plate-only", () => {
-    // State left empty (the site default applies) with a kept Plate type: the form is normal, but
-    // the pruned body would be plate-only and the server would answer modeMismatch.
+  it("SUBMIT-2 a stale hidden Plate type stays out of a plate-only query, and the national source with it", () => {
+    // State left empty (the site default applies) with a Plate type kept from an earlier out-of-state
+    // query: hidden values never decide the mode, so this is plate-only, and the body drops it.
     const values = { plate: "ZZ-0001", state: "", plateType: "PC" };
     const state = stateOf(values);
-    expect(state.mode).toBe("normal");
+    expect(state.mode).toBe("plateOnly");
     expect(state.hiddenWithValue).toEqual(["plateType"]);
-    expect(send(values)).toBe(values);
+    const sent = send(values);
+    expect(sent).toEqual({ plate: "ZZ-0001", state: "" });
+    // What the server evaluates from the body it receives: the same mode, so the planner narrows to
+    // the plate-only sources (spec 4.6 step 3) and the national source is not asked.
+    const server = stateOf(sent as Record<string, string>);
+    expect(server.mode).toBe("plateOnly");
+    expect(server.sources.filter((x) => x.plateOnly).map((x) => x.sourceId)).toEqual([
+      "stateSource",
+    ]);
   });
 
   it("returns the same object when nothing is hidden", () => {

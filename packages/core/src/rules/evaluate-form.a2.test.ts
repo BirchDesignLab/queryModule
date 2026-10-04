@@ -42,3 +42,33 @@ describe("UX-004 required fields are distinguishable", () => {
     expect(field({ plate: "ZZ-0001", state: "OK" }, "year")?.required).toBe(false);
   });
 });
+
+describe("SUBMIT-2 hidden values never decide the mode (spec 4.3 step 6, spec 10.3)", () => {
+  const modeOf = (input: FormInput) => evaluateForm(vehicleConfig(), "VEH", input, opts);
+
+  it("a stale Plate Type the rules hide leaves a plate-only query plate-only", () => {
+    // State is empty (the site default applies), so a rule hides Plate Type: its kept value is a
+    // leftover of an out-of-state query, not something the user entered for this one.
+    const stale = modeOf({ plate: "ZZ-0001", state: "", plateType: "PC" });
+    expect(stale.mode).toBe("plateOnly");
+    expect(stale.values).not.toHaveProperty("plateType");
+    expect(stale.hiddenWithValue).toEqual(["plateType"]);
+    // The same answer as the form without the leftover: form and terminal cannot disagree.
+    const fresh = modeOf({ plate: "ZZ-0001" });
+    expect(stale.mode).toBe(fresh.mode);
+    expect(stale.values).toEqual(fresh.values);
+    expect(stale.sources).toEqual(fresh.sources);
+  });
+
+  it("an invalid hidden value does not make the query normal either", () => {
+    expect(modeOf({ plate: "ZZ-0001", plateType: "not-a-code" }).mode).toBe("plateOnly");
+  });
+
+  it("a Plate Type the rules show still counts: State changed, so it is normal", () => {
+    expect(modeOf({ plate: "ZZ-0001", state: "OK", plateType: "PC" }).mode).toBe("normal");
+  });
+
+  it("a visible field with an entry still makes the query normal", () => {
+    expect(modeOf({ plate: "ZZ-0001", year: "2020", plateType: "PC" }).mode).toBe("normal");
+  });
+});

@@ -7,7 +7,8 @@ export type RequestFailure = Exclude<SubmitOutcome["kind"], "acknowledged">;
 /**
  * What a request sent, kept with its row so a failed one can be sent again: the query type, the
  * field values (the subtype is one of them), the sources and the mode. Memory only, cleared with
- * the row (a reset, the 100-row cap). The config hash is not kept: a retry goes under the current one.
+ * the row (a reset, the 100-row cap). The config hash is not kept: a retry goes under the current one
+ * (the server replays by Idempotency-Key alone, so the new hash does not make it a new request).
  */
 export type SubmittedQuery = Omit<SubmitRequest, "configHash">;
 
@@ -19,6 +20,11 @@ interface RequestBase {
   summary: string;
   /** Absent for a row begun without values; such a row cannot be retried. */
   submitted?: SubmittedQuery;
+  /**
+   * The Idempotency-Key the request went under (SUBMIT-1): a Retry sends it again, so the server
+   * answers the original acknowledgment if it already holds the request. Memory only, like the row.
+   */
+  idempotencyKey?: string;
 }
 
 export type RequestEntry = RequestBase &
@@ -38,7 +44,12 @@ export interface RequestsState {
   /** This session's requests, newest first. */
   items: readonly RequestEntry[];
   /** Adds a Sending row and returns its key. */
-  begin(request: { queryType: string; summary: string; submitted?: SubmittedQuery }): string;
+  begin(request: {
+    queryType: string;
+    summary: string;
+    submitted?: SubmittedQuery;
+    idempotencyKey?: string;
+  }): string;
   /** Turns the row into Acknowledged or Failed; a row a reset already cleared is ignored. */
   settle(id: string, outcome: SubmitOutcome): void;
   reset(): void;
@@ -59,7 +70,7 @@ export function createRequestsStore(): RequestsStore {
   let counter = 0;
   return createStore<RequestsState>((set) => ({
     items: [],
-    begin({ queryType, summary, submitted }) {
+    begin({ queryType, summary, submitted, idempotencyKey }) {
       counter += 1;
       const id = `r${counter}`;
       // A copy: the caller's objects (the draft's values) may change after the request left.
@@ -75,10 +86,17 @@ export function createRequestsStore(): RequestsStore {
               },
             };
       set((s) => ({
-        items: [{ id, queryType, summary, ...kept, status: "sending" as const }, ...s.items].slice(
-          0,
-          MAX_ROWS,
-        ),
+        items: [
+          {
+            id,
+            queryType,
+            summary,
+            ...kept,
+            ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+            status: "sending" as const,
+          },
+          ...s.items,
+        ].slice(0, MAX_ROWS),
       }));
       return id;
     },
@@ -91,6 +109,7 @@ export function createRequestsStore(): RequestsStore {
             queryType: item.queryType,
             summary: item.summary,
             ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
+            ...(item.idempotencyKey === undefined ? {} : { idempotencyKey: item.idempotencyKey }),
           };
           return outcome.kind === "acknowledged"
             ? {

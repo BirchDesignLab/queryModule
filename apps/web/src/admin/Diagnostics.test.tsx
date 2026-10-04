@@ -2,7 +2,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { selectBuilderItem } from "../test/builder-tree.js";
-import { API, server, TEST_USER } from "../test/msw-server.js";
+import { EN_BUNDLE } from "../test/en-bundle.js";
+import { API, adminConfigBody, RAW_SITE, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 
@@ -103,5 +104,43 @@ describe("config builder diagnostics (Task 33 client half, BR-001, UX-004, NFR-0
       "Nothing to publish: the draft matches the live version.",
     );
     expect(history).not.toHaveAttribute("aria-disabled");
+  });
+});
+
+describe("label checks use the shipped strings, like the server (CFG-5, ADR-0011 item 5, spec 5.8)", () => {
+  /**
+   * The live site names a label only the live overlay supplies, so the served bundle (shipped plus
+   * live overlay) has it. A draft that drops the overlay entry must fail the browser check as it
+   * fails the server's at Review: the server reads the shipped files plus the draft's own overlay.
+   */
+  async function openWith(liveKey: string, overlayText: Record<string, string>, draftOverlay = {}) {
+    const siteConfig = { ...RAW_SITE, site: { id: "default", labelKey: liveKey } };
+    server.use(
+      http.get(`${API}/api/v1/locales/en`, () =>
+        HttpResponse.json({ ...EN_BUNDLE, ...overlayText }),
+      ),
+      http.get(`${API}/api/v1/admin/config`, () =>
+        HttpResponse.json(
+          adminConfigBody({
+            siteConfig,
+            liveLocales: { en: overlayText },
+            draft: { version: 2, siteConfig, locales: { en: draftOverlay } },
+          }),
+        ),
+      ),
+    );
+    await openBuilder();
+    await waitFor(() => expect(summary()).toHaveTextContent(/Draft checks: \d+ errors/));
+  }
+
+  it("removing a label only the live overlay supplies is an error in the browser too", async () => {
+    await openWith("custom.liveOnly", { "custom.liveOnly": "Live only" });
+    await waitFor(() => expect(errorCount()).toBe(1));
+  });
+
+  it("removing an overlay override of a shipped label is fine: the shipped text stays", async () => {
+    await openWith("site.default", { "site.default": "Overridden" });
+    await waitFor(() => expect(summary()).toHaveTextContent(/Draft checks: \d+ errors/));
+    expect(errorCount()).toBe(0);
   });
 });

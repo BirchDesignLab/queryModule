@@ -42,7 +42,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
   const uid = useId();
   const { labels, undoCount, redoCount, server } = useDraft();
   const { announcer } = useServices();
-  const localChecks = useDraftChecks(doc, labels);
+  const localChecks = useDraftChecks(doc, labels, server?.liveLabels);
   const flow = usePublishFlow();
   // Issues the server found when the draft was last checked join the browser's own, until an edit.
   const checks = useMemo(

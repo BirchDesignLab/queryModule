@@ -77,7 +77,9 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     expect(fresh).toHaveTextContent("VEH.ZZ-0001");
     expect(submitRecorder.calls).toHaveLength(2);
     expect(submitRecorder.calls[1]?.body).toEqual(submitRecorder.calls[0]?.body);
-    expect(submitRecorder.calls[1]?.key).not.toBe(submitRecorder.calls[0]?.key);
+    // SUBMIT-1: a retry is the same request, so the server sees one Idempotency-Key (FR-064).
+    expect(submitRecorder.calls[0]?.key).toEqual(expect.any(String));
+    expect(submitRecorder.calls[1]?.key).toBe(submitRecorder.calls[0]?.key);
     // The result goes through the shared region only, once; focus never moved.
     await waitFor(() =>
       expect(announce.mock.calls.filter(([text]) => /query sent/.test(String(text)))).toHaveLength(

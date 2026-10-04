@@ -43,7 +43,11 @@ export async function fetchClientConfig(
   return parsed.data;
 }
 
-/** Config changes only on a server restart; a 409 configHashMismatch invalidates ["config"]. */
+/**
+ * The live config changes when an admin publishes (ADR-0011) or on a server restart. Open panels
+ * refetch every 15 s and on window focus; a 409 configHashMismatch invalidates ["config"] with
+ * refetchType "all", so it refetches at once even when no panel observes it (spec 6.7).
+ */
 export function clientConfigQuery(api: ApiClient): {
   queryKey: readonly ["config"];
   queryFn: () => Promise<ClientSiteConfig>;

@@ -22,10 +22,11 @@ export type RetryResult =
 
 /**
  * Sends a failed row's stored values again as a new attempt and adds a new row, under the current
- * config hash. The failed row stays. The submit controller keeps the Idempotency-Key rule (spec
- * 6.7): a request that got no answer is retried under its own key, so a server that did receive it
- * answers with the original acknowledgment rather than running the query twice; any answered
- * failure got a new key already. Memory only; nothing is announced or focused here (the caller
+ * config hash. The failed row stays. A retry is the same request (FR-064, spec 5.2 step 1, 6.7), so
+ * it goes under the failed row's own Idempotency-Key whatever the failure was: a request that got no
+ * answer, a gateway error or a 429 may still have been stored, and the server answers a known key
+ * with the original acknowledgment rather than running the query twice. The new row keeps the same
+ * key. A row without one (none was kept) gets a fresh key. Memory only; nothing is announced or focused here (the caller
  * speaks through the shared announcer).
  */
 export async function retryRequest(
@@ -38,10 +39,17 @@ export async function retryRequest(
     return { kind: "unavailable" };
   const status = deps.submit.getState().status;
   if (status !== "idle") return { kind: "gated", status };
-  const newRow = deps.requests
+  const idempotencyKey =
+    entry.idempotencyKey ?? deps.submit.getState().keyFor({ ...entry.submitted, configHash });
+  const newRow = deps.requests.getState().begin({
+    queryType: entry.queryType,
+    summary: entry.summary,
+    submitted: entry.submitted,
+    idempotencyKey,
+  });
+  const outcome = await deps.submit
     .getState()
-    .begin({ queryType: entry.queryType, summary: entry.summary, submitted: entry.submitted });
-  const outcome = await deps.submit.getState().submit({ ...entry.submitted, configHash });
+    .submit({ ...entry.submitted, idempotencyKey, configHash });
   // The list outlives the panel, so the row settles even if the panel has unmounted.
   deps.requests.getState().settle(newRow, outcome);
   return { kind: "sent", outcome, rowId: newRow };
