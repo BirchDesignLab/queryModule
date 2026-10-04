@@ -198,6 +198,15 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(up?.run).toContain("querymodule:ci");
   });
 
+  it("the image carries its commit as org.opencontainers.image.revision, from the runner env, not an expression (M1 exit)", () => {
+    const steps = jobs.image.steps as WorkflowStep[];
+    const build = steps.find(
+      (s) => typeof s.run === "string" && s.run.includes("docker buildx build"),
+    );
+    expect(build?.run).toContain('--label "org.opencontainers.image.revision=$GITHUB_SHA"');
+    expect(build?.run).not.toContain("${{");
+  });
+
   it("main runs never cancel each other; PR branches still do (developer 09-28-26, #231)", () => {
     // Deviation from spec 9.3: every main sha must finish ci (and build its image) so it can be
     // promoted; a newer push to main queues behind the running one instead of cancelling it.
