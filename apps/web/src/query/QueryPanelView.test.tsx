@@ -1,11 +1,15 @@
-import { createDraftStore } from "@querymodule/client";
+import { createDraftStore, createTranslator, type Translator } from "@querymodule/client";
 import { type ClientSiteConfig, resolveShortcuts } from "@querymodule/core/config";
 import { ShortcutProvider } from "@querymodule/web-ui";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CLIENT_CONFIG, submitRecorder } from "../test/msw-server.js";
-import { renderRoutes } from "../test/render-routes.js";
+import type { JsonObject } from "../admin/draft.js";
+import { previewConfig } from "../admin/Preview.js";
+import { I18nProvider } from "../app/i18n-context.js";
+import { EN_BUNDLE } from "../test/en-bundle.js";
+import { CLIENT_CONFIG, RAW_SITE, submitRecorder } from "../test/msw-server.js";
+import { renderRoutes, testServices } from "../test/render-routes.js";
 import { QueryPanelView } from "./QueryPanelView.js";
 
 const VEH = CLIENT_CONFIG.queryTypes.find((q) => q.code === "VEH");
@@ -27,12 +31,15 @@ function renderView(
       path: "/",
       element: (
         <ShortcutProvider bindings={resolveShortcuts((props.config ?? CUSTOM).shortcuts)}>
-          <QueryPanelView
-            config={props.config ?? CUSTOM}
-            drafts={drafts}
-            mode={props.mode ?? "preview"}
-            idPrefix={props.idPrefix ?? "pv"}
-          />
+          {/* The page's <main> carries the panel context the panel-scoped shortcuts resolve against. */}
+          <div data-shortcut-context="panel">
+            <QueryPanelView
+              config={props.config ?? CUSTOM}
+              drafts={drafts}
+              mode={props.mode ?? "preview"}
+              idPrefix={props.idPrefix ?? "pv"}
+            />
+          </div>
         </ShortcutProvider>
       ),
     },
@@ -66,12 +73,53 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
     expect(submitRecorder.calls).toEqual([]);
   });
 
-  it("preview: terminal Enter sends no request", async () => {
+  it("preview: terminal Enter and Ctrl+Enter send no request, and the submit says Preview", async () => {
     const { user } = renderView({ config: CLIENT_CONFIG });
     await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
-    await user.type(await screen.findByLabelText("Command"), "VEH ZZ-1234{Enter}");
-    expect(screen.queryByText("Preview")).toBeInTheDocument();
+    const command = await screen.findByLabelText("Command");
+    // The command is valid (see the live control below), so only the preview mode stops it.
+    await user.type(command, ".ABC123{Enter}");
+    await user.type(command, "{Control>}{Enter}{/Control}");
+    const run = screen.getByRole("button", { name: "Run query" });
+    expect(run).toHaveAttribute("aria-disabled", "true");
+    expect(run).toHaveAccessibleDescription("Preview");
     expect(submitRecorder.calls).toEqual([]);
+  });
+
+  it("live control: the same terminal command sends a request, so the preview's silence is sensitive", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG, mode: "live" });
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    await user.type(await screen.findByLabelText("Command"), ".ABC123{Enter}");
+    await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+  });
+
+  it("live control: Ctrl+Enter in the terminal sends a request too", async () => {
+    const { user } = renderView({ config: CLIENT_CONFIG, mode: "live" });
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    await user.type(await screen.findByLabelText("Command"), ".ABC123{Control>}{Enter}{/Control}");
+    await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+  });
+
+  it("#382 W4 the terminal hint shows an example built from the site's first command", async () => {
+    const per = CLIENT_CONFIG.commands.find((c) => c.code === "NAM");
+    if (per === undefined) throw new Error("fixture: NAM missing");
+    const { user } = renderView({
+      config: {
+        ...CLIENT_CONFIG,
+        terminal: { ...CLIENT_CONFIG.terminal, delimiter: "/" },
+        commands: [{ ...per, positions: ["last", "first", "dob"] }],
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    expect(
+      screen.getByText("Type a command such as NAM/last name/first name, then press Enter."),
+    ).toBeInTheDocument();
+  });
+
+  it("#382 W4 a site with no commands gets a hint without an example", async () => {
+    const { user } = renderView({ config: { ...CLIENT_CONFIG, commands: [] } });
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    expect(screen.getByText("Type a command, then press Enter.")).toBeInTheDocument();
   });
 
   const TWO: ClientSiteConfig = {
@@ -135,6 +183,29 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
     expect(dupes).toEqual([]);
     expect(screen.getAllByLabelText("Plate")).toHaveLength(2);
   });
+
+  it("two views in terminal mode share no element id either", async () => {
+    const drafts = createDraftStore();
+    const other = createDraftStore();
+    const { user } = renderRoutes([
+      {
+        path: "/",
+        element: (
+          <>
+            <QueryPanelView config={CUSTOM} drafts={drafts} mode="preview" idPrefix="a" />
+            <QueryPanelView config={CUSTOM} drafts={other} mode="preview" idPrefix="b" />
+          </>
+        ),
+      },
+    ]);
+    for (const button of await screen.findAllByRole("button", { name: "Terminal mode" })) {
+      await user.click(button);
+    }
+    expect(await screen.findAllByLabelText("Command")).toHaveLength(2);
+    const ids = [...document.querySelectorAll("[id]")].map((e) => e.id);
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+    expect(dupes).toEqual([]);
+  });
 });
 
 describe("ADR-0011 the preview shows what dispatchers see (checker ruling M1, M2)", () => {
@@ -166,6 +237,62 @@ describe("ADR-0011 the preview shows what dispatchers see (checker ruling M1, M2
     await user.click(screen.getByRole("button", { name: "Run query" }));
     expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true");
     expect(submitRecorder.calls).toEqual([]);
+  });
+
+  it("preview never subscribes to the live submit store; live does (ADR-0011: its state is the live panel's)", async () => {
+    for (const mode of ["preview", "live"] as const) {
+      const services = testServices();
+      const subscribe = vi.spyOn(services.submit, "subscribe");
+      renderRoutes(
+        [
+          {
+            path: "/",
+            element: (
+              <QueryPanelView
+                config={CLIENT_CONFIG}
+                drafts={createDraftStore()}
+                mode={mode}
+                idPrefix={mode}
+              />
+            ),
+          },
+        ],
+        { services },
+      );
+      await screen.findByLabelText("Plate");
+      expect(subscribe).toHaveBeenCalledTimes(mode === "live" ? 1 : 0);
+      cleanup();
+    }
+  });
+
+  it("#382 T8 terminal problems are kept as keys and translated at render: a new translator re-words them", async () => {
+    let swapTranslator: (next: Translator) => void = () => undefined;
+    function Host() {
+      const [translator, setTranslator] = useState(() => createTranslator("en", EN_BUNDLE));
+      const [drafts] = useState(() => createDraftStore());
+      swapTranslator = setTranslator;
+      return (
+        <I18nProvider translator={translator}>
+          <QueryPanelView config={CLIENT_CONFIG} drafts={drafts} mode="preview" idPrefix="tr" />
+        </I18nProvider>
+      );
+    }
+    const { user } = renderRoutes([{ path: "/", element: <Host /> }]);
+    await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
+    const command = await screen.findByLabelText("Command");
+    await user.clear(command);
+    await user.type(command, "XYZ.123{Enter}");
+    expect(screen.getByText("Unrecognized command XYZ.")).toBeInTheDocument();
+    act(() =>
+      swapTranslator(
+        createTranslator("en", {
+          ...EN_BUNDLE,
+          "terminal.unknownCommand": "Not a command: {code}",
+        }),
+      ),
+    );
+    expect(screen.getByText("Not a command: XYZ")).toBeInTheDocument();
+    expect(screen.queryByText("Unrecognized command XYZ.")).not.toBeInTheDocument();
   });
 
   it("M1 preview: terminal Enter lists command problems like live and sends nothing", async () => {
@@ -200,6 +327,40 @@ describe("ADR-0011 the preview shows what dispatchers see (checker ruling M1, M2
     const drafts = createDraftStore();
     return { ...renderRoutes([{ path: "/", element: <Swappable drafts={drafts} /> }]), drafts };
   };
+
+  it("#382 A32 the same site shows the same type controls as the live config and through the builder's draft path, first render or swap", async () => {
+    // Track A Task 32 observed the live config showing a select where the draft config showed the
+    // quick-access buttons. The view reads quickAccess from the config alone, so for the same site
+    // both arrive at the same controls whichever comes first.
+    const draftPath = previewConfig(RAW_SITE as JsonObject);
+    if (draftPath === null) throw new Error("fixture: the raw default site does not fit");
+    const controls = () => ({
+      buttons: within(screen.getByRole("group", { name: "Quick access" }))
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+      select: screen.queryByLabelText(/query types?$/i) !== null,
+    });
+    for (const [first, second] of [
+      [CLIENT_CONFIG, draftPath],
+      [draftPath, CLIENT_CONFIG],
+    ] as const) {
+      let swapTo: (next: ClientSiteConfig) => void = () => undefined;
+      function Host() {
+        const [config, setConfig] = useState(first);
+        const [drafts] = useState(() => createDraftStore());
+        swapTo = setConfig;
+        return <QueryPanelView config={config} drafts={drafts} mode="preview" idPrefix="sw" />;
+      }
+      renderRoutes([{ path: "/", element: <Host /> }]);
+      await screen.findByRole("group", { name: "Quick access" });
+      const before = controls();
+      expect(before.buttons).toHaveLength(CLIENT_CONFIG.quickAccess.length);
+      expect(before.select).toBe(false);
+      act(() => swapTo(second));
+      expect(controls()).toEqual(before);
+      cleanup();
+    }
+  });
 
   it("M2 preview: when the selected type is removed it falls back to the first quick-access type", async () => {
     const { user, drafts } = renderSwappable();

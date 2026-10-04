@@ -872,6 +872,112 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(polite()).toHaveTextContent("1 field needs attention");
   });
 
+  describe("#382 A4 a server 400 describes the request that was sent", () => {
+    const REQUIRED_LAST = {
+      error: {
+        code: "validationFailed",
+        errors: [{ key: "validation.required", params: { field: "last" } }],
+      },
+    };
+
+    it("a source change after the 400 drops its errors, as an edit to a value does", async () => {
+      server.use(
+        http.post(`${API}/api/v1/queries`, () => HttpResponse.json(REQUIRED_LAST, { status: 400 })),
+      );
+      const { user } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true"),
+      );
+      const group = screen.getByRole("group", { name: "Sources" });
+      await user.click(within(group).getByRole("checkbox", { name: "State system" }));
+      expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
+    });
+
+    it("a 400 that arrives after the user edited a value shows nothing: it is about the old values", async () => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.post(`${API}/api/v1/queries`, async ({ request }) => {
+          submitRecorder.calls.push({ key: null, body: await request.json() });
+          await gate;
+          return HttpResponse.json(REQUIRED_LAST, { status: 400 });
+        }),
+      );
+      const { user, services } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+      await user.type(screen.getByLabelText(/First name/), "SAMPLE");
+      release();
+      await waitFor(() =>
+        expect(services.requests.getState().items[0]).toMatchObject({
+          status: "failed",
+          failure: "invalid",
+        }),
+      );
+      expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
+      expect(polite()).not.toHaveTextContent("needs attention");
+    });
+
+    it("a 400 that arrives after the user switched source shows nothing either", async () => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.post(`${API}/api/v1/queries`, async ({ request }) => {
+          submitRecorder.calls.push({ key: null, body: await request.json() });
+          await gate;
+          return HttpResponse.json(REQUIRED_LAST, { status: 400 });
+        }),
+      );
+      const { user, services } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+      const group = screen.getByRole("group", { name: "Sources" });
+      await user.click(within(group).getByRole("checkbox", { name: "State system" }));
+      release();
+      await waitFor(() =>
+        expect(services.requests.getState().items[0]).toMatchObject({
+          status: "failed",
+          failure: "invalid",
+        }),
+      );
+      expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
+    });
+
+    it("control: a 400 for the values still on screen is shown", async () => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.post(`${API}/api/v1/queries`, async ({ request }) => {
+          submitRecorder.calls.push({ key: null, body: await request.json() });
+          await gate;
+          return HttpResponse.json(REQUIRED_LAST, { status: 400 });
+        }),
+      );
+      const { user } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+      release();
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true"),
+      );
+    });
+  });
+
   it("FR-064 a network error shows the no-connection reason and the retry reuses the Idempotency-Key", async () => {
     // Worst case of the full-jitter backoff: the first health poll fires at once.
     const random = vi.spyOn(Math, "random").mockReturnValue(0);
@@ -1093,7 +1199,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
   });
 });
 
-describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
+describe("FR-052 FR-056 terminal mode (spec 4.4, 6.2)", () => {
   /** The button that switches mode: the unpressed one of the Form mode / Terminal mode pair. */
   const toggle = () =>
     screen.getByRole("button", { name: /^(Form|Terminal) mode$/, pressed: false });
@@ -1117,6 +1223,27 @@ describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
     expect(terminalButton()).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0002");
     expect(screen.getByLabelText(/Plate type/)).toHaveValue("PC");
+  });
+
+  it("#382 W3 the not-shown count follows the query type the command names as it is typed", async () => {
+    const { user } = await openPanel();
+    await user.selectOptions(screen.getByLabelText("State"), "OK");
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001");
+    await user.selectOptions(screen.getByLabelText(/Plate type/), "PC");
+    await user.click(toggle());
+    expect(screen.getByText("1 field not shown")).toBeInTheDocument();
+    // The typed command now names Person, whose draft has nothing the command cannot carry.
+    await user.clear(terminal());
+    await user.type(terminal(), "PER.TESTERSON");
+    expect(screen.queryByText(/not shown/)).not.toBeInTheDocument();
+    // And back to Vehicle: its draft still has the plate type the command cannot carry.
+    await user.clear(terminal());
+    await user.type(terminal(), "VEH.ZZ-0001.OK");
+    expect(screen.getByText("1 field not shown")).toBeInTheDocument();
+    // A command that names no query type carries nothing to count.
+    await user.clear(terminal());
+    await user.type(terminal(), "XYZ.1");
+    expect(screen.queryByText(/not shown/)).not.toBeInTheDocument();
   });
 
   it("selecting a type in terminal mode re-derives the text from that type's draft", async () => {
@@ -1155,7 +1282,7 @@ describe("FR-050 FR-051 FR-052 terminal mode (spec 4.4, 6.2)", () => {
   });
 });
 
-describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
+describe("FR-053 FR-054 FR-055 terminal submit (spec 4.4, 6.2)", () => {
   const toggle = () =>
     screen.getByRole("button", { name: /^(Form|Terminal) mode$/, pressed: false });
   const terminal = () => screen.getByLabelText("Command");
@@ -1252,13 +1379,27 @@ describe("FR-053 FR-054 FR-055 FR-056 terminal submit (spec 4.4, 6.2)", () => {
   });
 
   it("signing out resets the mode to form and clears the terminal text", async () => {
-    const { user, services } = await openPanel();
+    const { user, services, router } = await openPanel();
     await user.click(toggle());
     await user.type(terminal(), ".ABC123");
     await user.click(screen.getByRole("button", { name: TEST_USER.email }));
     await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
     await waitFor(() => expect(services.drafts.getState().mode).toBe("form"));
     expect(services.drafts.getState().terminalText).toBe("");
+    // What the next sign-in renders, not only the store: the form mode with an empty draft.
+    services.authStore.getState().setSignedIn(TEST_USER);
+    await act(() => router.navigate("/"));
+    expect(await screen.findByLabelText("Plate")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Form mode" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Terminal mode" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.queryByLabelText("Command")).not.toBeInTheDocument();
   });
 });
 
@@ -1275,6 +1416,24 @@ describe("UX-002 BR-002 officer mobile-unit layout (spec 6.1, 6.3 v1 subset)", (
     await openPanel();
     expect(panelRoot()).not.toHaveClass("qm-layout--mobile-unit");
     expect(screen.getByRole("banner")).not.toHaveClass("qm-app-header--compact");
+  });
+
+  it("with no override on a coarse-pointer device the heuristic gives the mobile-unit layout (spec 6.1)", async () => {
+    // usePersona's only web input is (any-pointer: coarse); a stored override would win over it.
+    const original = window.matchMedia;
+    window.matchMedia = (query: string) =>
+      ({
+        matches: query === "(any-pointer: coarse)",
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList;
+    onTestFinished(() => {
+      window.matchMedia = original;
+    });
+    await openPanel();
+    await waitFor(() => expect(panelRoot()).toHaveClass("qm-layout--mobile-unit"));
+    expect(screen.getByRole("banner")).toHaveClass("qm-app-header--compact");
   });
 
   it("a persona key the site does not configure falls back to the dispatch layout", async () => {

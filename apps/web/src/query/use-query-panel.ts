@@ -23,6 +23,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
@@ -99,6 +100,14 @@ const CONFIG_CHANGED_SETTLE_MS = 1000;
 const NO_VALUES: Readonly<Record<string, DraftValue>> = {};
 const NO_KEYS: ReadonlySet<string> = new Set();
 
+function sameValues(
+  a: Readonly<Record<string, DraftValue>>,
+  b: Readonly<Record<string, DraftValue>>,
+): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
+
 function initialQueryType(config: ClientSiteConfig): string | null {
   const codes = config.queryTypes.map((q) => q.code);
   const first = config.quickAccess[0];
@@ -127,13 +136,7 @@ export function useLiveConfig(): LiveConfigModel {
   const [load, setLoad] = useState<ConfigLoad>({ status: "loading" });
   const mounted = useRef(false);
   // The background refresh writes a newer config into the query cache (ADR-0011 item 3); follow it.
-  const subscribe = useCallback(
-    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
-    [queryClient],
-  );
-  const cached = useSyncExternalStore(subscribe, () =>
-    queryClient.getQueryData<ClientSiteConfig>(["config"]),
-  );
+  const cached = useCachedConfig();
 
   // retry: false, the panel has its own Retry button; a second silent attempt would hide the failure.
   const fetchConfig = useCallback(
@@ -259,9 +262,15 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     queryType === null ? null : (s.drafts[queryType]?.sources ?? null),
   );
 
-  // Preview never reads the submit controller: its state belongs to the live panel.
-  const liveStatus = useStore(submit, (s) => s.status);
-  const submitStatus = preview ? "idle" : liveStatus;
+  // Preview neither reads nor subscribes to the submit controller: its state belongs to the live
+  // panel, so preview is always idle and nothing re-renders it when a live submit changes.
+  const subscribeSubmit = useCallback(
+    (onChange: () => void) => (preview ? () => undefined : submit.subscribe(onChange)),
+    [preview, submit],
+  );
+  const submitStatus = useSyncExternalStore(subscribeSubmit, () =>
+    preview ? "idle" : submit.getState().status,
+  );
 
   // Spec 6.6: connection changes are announced politely; a screen reader user has no other signal
   // that the submit is held until the server answers again.
@@ -288,9 +297,16 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     });
   }, [values]);
 
-  // Server validation errors describe the values that were sent; any edit or type change drops them.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: values and queryType are the triggers
-  useEffect(() => setServerErrors([]), [values, queryType]);
+  // Server validation errors describe the request that was sent (values and sources); any edit, a
+  // source change or a type change drops them.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: values, draftSources and queryType are the triggers
+  useEffect(() => setServerErrors([]), [values, draftSources, queryType]);
+  // What is on screen now, for an answer that arrives after the request left (see sameAsSent).
+  const onScreen = useRef<{
+    queryType: string;
+    values: Readonly<Record<string, DraftValue>>;
+    sourceIds: readonly string[];
+  } | null>(null);
 
   // One clock read per evaluation: the command echo formats with the same now (evaluatedAt), so a
   // date or year the rules resolve against today reads the same in the form and the echo.
@@ -357,6 +373,23 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   if (queryType === null || formState === null || evaluated === null) return null;
 
   const checkedSources = resolveCheckedSources(formState, draftSources);
+  onScreen.current = { queryType, values: values ?? NO_VALUES, sourceIds: checkedSources };
+
+  /**
+   * A 400 describes the values and sources that were sent. If the user changed either while the
+   * request was in flight (the effect above only drops errors that already exist), its errors
+   * would mark fields the user has since edited, so they are not shown.
+   */
+  const sameAsSent = (request: CheckedRequest): boolean => {
+    const now = onScreen.current;
+    return (
+      now !== null &&
+      now.queryType === request.queryType &&
+      sameValues(now.values, request.values) &&
+      now.sourceIds.length === request.sourceIds.length &&
+      now.sourceIds.every((id, index) => id === request.sourceIds[index])
+    );
+  };
 
   const announceBlocked = (state: FormState): void => {
     const count = blockedErrorCount(state);
@@ -379,6 +412,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         announcer.announce(outcomeAnnouncement(outcome, t, typeLabel));
         return;
       case "invalid":
+        if (!sameAsSent(request)) return;
         setServerErrors(outcome.errors as ValidationError[]);
         if (request.onInvalid !== undefined) {
           request.onInvalid(outcome.errors as ValidationError[]);

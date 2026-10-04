@@ -5,7 +5,7 @@ import { ModeSeg } from "./ModeSeg.js";
 
 const props = { legend: "Entry mode", formLabel: "Form mode", terminalLabel: "Terminal mode" };
 
-describe("FR-050 entry mode segmented control (form or terminal)", () => {
+describe("FR-056 entry mode segmented control (form or terminal)", () => {
   it("is a labelled group of two aria-pressed buttons, exactly one pressed", () => {
     const { rerender } = render(<ModeSeg {...props} terminal={false} onSelect={() => {}} />);
     const group = screen.getByRole("group", { name: "Entry mode" });

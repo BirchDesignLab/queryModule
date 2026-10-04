@@ -108,14 +108,29 @@ describe("FR-006 form.readyToSubmit is gone (M1 P3 sends queries)", () => {
   it("is not in en.json", () => {
     expect("form.readyToSubmit" in en).toBe(false);
   });
-  it("is in no web source file", () => {
-    const root = new URL("../../../../apps/web/src/", import.meta.url);
-    const files = readdirSync(root, { recursive: true, encoding: "utf8" }).filter(
-      (f) => /\.tsx?$/.test(f) && !f.endsWith("locale-keys.test.ts"),
-    );
-    const hits = files.filter((f) =>
-      readFileSync(new URL(f.replaceAll("\\", "/"), root), "utf8").includes("readyToSubmit"),
-    );
+  it("is in no source, e2e spec, locale or site file of the apps and packages", () => {
+    // Every tree that can name a locale key: the web app and its e2e specs, each package's sources,
+    // and the shipped locale and site JSON (C6, #382: the old grep covered apps/web/src only).
+    const repo = new URL("../../../../", import.meta.url);
+    const roots = [
+      "apps/web/src",
+      "apps/web/e2e",
+      ...readdirSync(new URL("packages/", repo), { withFileTypes: true }).flatMap((d) =>
+        d.isDirectory() ? [`packages/${d.name}/src`, `packages/${d.name}/locales`] : [],
+      ),
+      "packages/config/sites",
+    ].filter((r) => existsSync(new URL(`${r}/`, repo)));
+    const self = new URL("locale-keys.test.ts", import.meta.url).href;
+    const hits = roots.flatMap((r) => {
+      const root = new URL(`${r}/`, repo);
+      return readdirSync(root, { recursive: true, encoding: "utf8" })
+        .filter((f) => /\.(tsx?|json)$/.test(f))
+        .map((f) => new URL(f.replaceAll("\\", "/"), root))
+        .filter((u) => u.href !== self && readFileSync(u, "utf8").includes("readyToSubmit"))
+        .map((u) => u.href.slice(repo.href.length));
+    });
+    expect(roots).toContain("apps/web/src");
+    expect(roots).toContain("packages/core/src");
     expect(hits).toEqual([]);
   });
 });

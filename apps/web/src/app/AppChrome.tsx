@@ -5,44 +5,27 @@ import {
   type ThemeModePreference,
   useStore,
 } from "@querymodule/client";
-import {
-  type ClientSiteConfig,
-  type PERSONA_LAYOUTS,
-  resolveShortcuts,
-} from "@querymodule/core/config";
+import { type PERSONA_LAYOUTS, resolveShortcuts } from "@querymodule/core/config";
 import type { ThemeSelection } from "@querymodule/tokens";
 import { ShortcutProvider, ThemeModeSeg, usePersona, useThemeMode } from "@querymodule/web-ui";
 import {
   createContext,
   type RefObject,
-  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useSyncExternalStore,
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
 import { AccountMenu } from "./AccountMenu.js";
+import { useCachedConfig } from "./cached-config.js";
 import { useT } from "./i18n-context.js";
 import { MAIN_LANDMARK } from "./main-landmark.js";
 import { useServices } from "./services-context.js";
 import { ShortcutSheetProvider, useShortcutSheet } from "./shortcut-sheet-context.js";
 import { useSignOut } from "./use-sign-out.js";
-
-/** The cached GET /api/v1/config (key ["config"], filled by the query panel), or undefined before sign-in and after reset. */
-export function useCachedConfig(): ClientSiteConfig | undefined {
-  const { queryClient } = useServices();
-  const subscribe = useCallback(
-    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
-    [queryClient],
-  );
-  return useSyncExternalStore(subscribe, () =>
-    queryClient.getQueryData<ClientSiteConfig>(["config"]),
-  );
-}
 
 /**
  * SiteConfig.theme from the cached config, or null before sign-in and after reset, when the OS
@@ -57,13 +40,21 @@ function useSiteThemeSelection(): ThemeSelection | null {
 type PersonaLayout = (typeof PERSONA_LAYOUTS)[number];
 
 /**
+ * The signed-in persona (spec 6.1): the stored override, else the device heuristic. The one place
+ * the web app resolves it, so the `data-persona` attribute and the layout cannot disagree.
+ */
+export function useResolvedPersona(): string {
+  const { preferences } = useServices();
+  const personaOverride = useStore(preferences, (s) => s.personaOverride);
+  return usePersona(null, personaOverride).persona;
+}
+
+/**
  * The signed-in persona's layout from SiteConfig.personas (spec 6.1: the persona selects the layout
  * and nothing else), "dispatch" until the config loads (BR-002).
  */
 export function usePersonaLayout(): PersonaLayout {
-  const { preferences } = useServices();
-  const personaOverride = useStore(preferences, (s) => s.personaOverride);
-  const { persona } = usePersona(null, personaOverride);
+  const persona = useResolvedPersona();
   const config = useCachedConfig();
   return config?.personas.find((p) => p.key === persona)?.layout ?? "dispatch";
 }
@@ -72,10 +63,9 @@ export function usePersonaLayout(): PersonaLayout {
 export function AppChrome() {
   const { preferences } = useServices();
   const themeMode = useStore(preferences, (s) => s.themeMode);
-  const personaOverride = useStore(preferences, (s) => s.personaOverride);
   const selection = useSiteThemeSelection();
   useThemeMode({ preference: themeMode, selection });
-  const { persona } = usePersona(null, personaOverride);
+  const persona = useResolvedPersona();
   useLayoutEffect(() => {
     document.documentElement.dataset.persona = persona;
   }, [persona]);

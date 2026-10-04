@@ -5,7 +5,7 @@ import { terminalToForm } from "./use-terminal.js";
 
 const NOW = Date.UTC(2026, 8, 29);
 
-describe("FR-051 form to terminal (spec 4.4 Toggle)", () => {
+describe("FR-056 form to terminal (spec 4.4 Toggle)", () => {
   it("[A5] writes the command from user values and counts the fields it cannot show", () => {
     const r = formToTerminal(
       CLIENT_CONFIG,
@@ -21,7 +21,7 @@ describe("FR-051 form to terminal (spec 4.4 Toggle)", () => {
   });
 });
 
-describe("FR-052 terminal to form (spec 4.4 Toggle, #297 item 1)", () => {
+describe("FR-056 terminal to form (spec 4.4 Toggle, #297 item 1)", () => {
   it("[A5] merges the command into the draft of its type and keeps other values", () => {
     const r = terminalToForm(CLIENT_CONFIG, "VEH.ZZ-0002.OK..", {
       VEH: { plate: "ZZ-0001", state: "OK", plateType: "PC" },

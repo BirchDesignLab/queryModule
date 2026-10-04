@@ -26,6 +26,7 @@ import { useShortcutSheet } from "../app/shortcut-sheet-context.js";
 import { isDataField } from "./data-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
+import { terminalExample } from "./terminal-example.js";
 import { useActionBarClearance } from "./use-action-bar-clearance.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
 import { useTerminal } from "./use-terminal.js";
@@ -124,6 +125,7 @@ function ReadyPanel({
     container.addEventListener("focusin", onFocusIn);
     return () => container.removeEventListener("focusin", onFocusIn);
   }, [formContainerRef, dismissRevealed]);
+  const example = useMemo(() => terminalExample(config, t), [config, t]);
   const echo = useMemo(
     () => formToTerminal(config, queryType, panel.values, panel.evaluatedAt).text,
     [config, queryType, panel.values, panel.evaluatedAt],
@@ -246,7 +248,11 @@ function ReadyPanel({
           <TerminalInput
             id={`${idPrefix}-terminal`}
             label={t("terminal.label")}
-            description={t("terminal.description", { delimiter: config.terminal.delimiter })}
+            description={
+              example === null
+                ? t("terminal.descriptionPlain")
+                : t("terminal.descriptionExample", { example })
+            }
             value={terminal.text}
             onChange={terminal.setText}
             onSubmit={terminal.submitTerminal}

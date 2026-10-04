@@ -3,11 +3,12 @@ import { ROLES } from "@querymodule/core/contracts";
 import { formatAckTime } from "@querymodule/web-ui";
 import { type ReactNode, useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { useCachedConfig, usePersonaLayout } from "../app/AppChrome.js";
+import { usePersonaLayout } from "../app/AppChrome.js";
+import { useCachedConfigState } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
-import { useConfigUnavailable, useStatusChecks } from "./use-status-checks.js";
+import { useStatusChecks } from "./use-status-checks.js";
 
 export { heartbeatUrl } from "./use-status-checks.js";
 
@@ -56,8 +57,7 @@ export function StatusPage() {
   const t = useT();
   const user = useStore(authStore, (s) => s.user);
   const layout = usePersonaLayout();
-  const config = useCachedConfig();
-  const unavailable = useConfigUnavailable();
+  const { config, unavailable } = useCachedConfigState();
   const { checks, run } = useStatusChecks();
   const headingRef = useRef<HTMLHeadingElement>(null);
   // Focus lands on the heading once, on navigation; a check never moves it.
