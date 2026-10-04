@@ -24,6 +24,12 @@ export interface DraftChecks {
   labels: ReturnType<typeof useDraft>["labels"];
   /** The shipped strings the checks ran against: English, and each other draft locale's (empty when it ships none). Null until loaded. */
   shipped: ShippedBundles | null;
+  /**
+   * The strings the app is served now: the shipped files with the live overlay on top. The Changes
+   * view reads its "Was" text here, so a changed live label shows its live text (M1 exit Q1); the
+   * checks read `shipped`. Null until loaded.
+   */
+  served: ShippedBundles | null;
 }
 
 export interface ShippedBundles {
@@ -39,13 +45,17 @@ const NO_CHECKS: DraftChecks = {
   doc: null,
   labels: {},
   shipped: null,
+  served: null,
 };
 export const ChecksContext = createContext<DraftChecks>(NO_CHECKS);
 const CHECK_DEBOUNCE_MS = 150;
 const NO_LABELS: ReturnType<typeof useDraft>["labels"] = {};
 
-/** An own property only: a locale named like an object member ("constructor") has no overlay. */
-const own = <T,>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
+/**
+ * An own property only: a locale or key named like an object member ("constructor") is not
+ * there. Shared with the Changes view.
+ */
+export const own = <T,>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
   Object.hasOwn(record, key) ? record[key] : undefined;
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -109,7 +119,8 @@ export function useDraftChecks(
     for (const i of issues) byPointer.set(i.pointer, [...(byPointer.get(i.pointer) ?? []), i]);
     const groups = groupByControl(settledDoc, issues);
     const shipped = { en, perLocale };
-    return { status: "ready", issues, groups, byPointer, shipped, ...settled };
+    const served = { en: bundleState.bundle, perLocale: bundleState.perLocale };
+    return { status: "ready", issues, groups, byPointer, shipped, served, ...settled };
   }, [bundleState, settledDoc, settledLabels, liveLabels]);
 }
 

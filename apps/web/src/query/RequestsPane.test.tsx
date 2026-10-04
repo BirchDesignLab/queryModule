@@ -67,3 +67,38 @@ describe("RequestsPane: a late retry outcome", () => {
     );
   });
 });
+
+describe("RequestsPane: an acknowledged retry (M1 exit C1, SUBMIT-1 follow-on)", () => {
+  it("leaves the failed row without Retry, so the same ack is never listed twice", async () => {
+    const services = testServices();
+    services.authStore.getState().setSignedIn(TEST_USER);
+    const id = services.requests.getState().begin({
+      queryType: "VEH",
+      summary: "VEH.ZZ-0001",
+      submitted: { queryType: "VEH", values: { plate: "ZZ-0001" }, sourceIds: [], mode: "normal" },
+      idempotencyKey: "key-orig",
+    });
+    services.requests.getState().settle(id, { kind: "unavailable" });
+    let posts = 0;
+    server.use(
+      http.post(`${API}/api/v1/queries`, () => {
+        posts += 1;
+        return HttpResponse.json(ACK_202, { status: 202 });
+      }),
+    );
+    const { user } = renderRoutes(
+      [{ path: "/", element: <RequestsPane config={CLIENT_CONFIG} variant="list" /> }],
+      { services },
+    );
+    await user.click(await screen.findByRole("button", { name: /^Retry/ }));
+    await waitFor(() =>
+      expect(services.requests.getState().items.map((r) => r.status)).toEqual([
+        "acknowledged",
+        "failed",
+      ]),
+    );
+    expect(screen.queryByRole("button", { name: /^Retry/ })).not.toBeInTheDocument();
+    expect(services.requests.getState().items).toHaveLength(2);
+    expect(posts).toBe(1);
+  });
+});

@@ -4,6 +4,8 @@ import type { SubmitController, SubmitOutcome } from "./submit.js";
 /** A failed row whose values were kept, and whose failure the same values could get past. */
 export function isRetryable(entry: RequestEntry): boolean {
   if (entry.status !== "failed" || entry.submitted === undefined) return false;
+  // Its retry was acknowledged: the request is listed as acknowledged already (M1 exit C1).
+  if (entry.superseded === true) return false;
   // The server refused these values or this user, or the form itself changed under the request
   // ("check the form and submit again"): sending the same values again cannot help.
   return (
@@ -26,7 +28,8 @@ export type RetryResult =
  * it goes under the failed row's own Idempotency-Key whatever the failure was: a request that got no
  * answer, a gateway error or a 429 may still have been stored, and the server answers a known key
  * with the original acknowledgment rather than running the query twice. The new row keeps the same
- * key. A row without one (none was kept) gets a fresh key. Memory only; nothing is announced or focused here (the caller
+ * key. Once the retry is acknowledged the failed row is superseded and cannot be retried again, and
+ * an ack whose correlation ID is already listed adds no second row (M1 exit C1). A row without one (none was kept) gets a fresh key. Memory only; nothing is announced or focused here (the caller
  * speaks through the shared announcer).
  */
 export async function retryRequest(
@@ -50,7 +53,9 @@ export async function retryRequest(
   const outcome = await deps.submit
     .getState()
     .submit({ ...entry.submitted, idempotencyKey, configHash });
-  // The list outlives the panel, so the row settles even if the panel has unmounted.
-  deps.requests.getState().settle(newRow, outcome);
-  return { kind: "sent", outcome, rowId: newRow };
+  // The list outlives the panel, so the row settles even if the panel has unmounted. A replayed
+  // ack already listed keeps its one row, and the result points at it.
+  const shownBy = deps.requests.getState().settle(newRow, outcome, { once: true }) ?? newRow;
+  if (outcome.kind === "acknowledged") deps.requests.getState().supersede(rowId);
+  return { kind: "sent", outcome, rowId: shownBy };
 }

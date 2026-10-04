@@ -157,7 +157,7 @@ describe("the console follows features.adminConfig and features.adminUsers (spec
       ),
     );
 
-  it("adminConfig off: no Admin link, and /admin/config gets the query panel", async () => {
+  it("adminConfig off: an admin on the query panel has no Admin link in the header", async () => {
     serveFlags({ adminConfig: false });
     await openAs("admin", "/");
     await screen.findByRole("heading", { name: /^Query Module$/ });

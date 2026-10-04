@@ -25,6 +25,11 @@ interface RequestBase {
    * answers the original acknowledgment if it already holds the request. Memory only, like the row.
    */
   idempotencyKey?: string;
+  /**
+   * Set on a failed row once a retry of it was acknowledged (M1 exit C1): the request it stands
+   * for is now listed as acknowledged, so it cannot be retried again.
+   */
+  superseded?: true;
 }
 
 export type RequestEntry = RequestBase &
@@ -50,8 +55,15 @@ export interface RequestsState {
     submitted?: SubmittedQuery;
     idempotencyKey?: string;
   }): string;
-  /** Turns the row into Acknowledged or Failed; a row a reset already cleared is ignored. */
-  settle(id: string, outcome: SubmitOutcome): void;
+  /**
+   * Turns the row into Acknowledged or Failed; a row a reset already cleared is ignored. With
+   * `once` (a retry), an acknowledgment whose correlation ID another row already shows (a replayed
+   * ack, FR-064) removes this row instead, so the request is listed once. Returns the id of the row
+   * that now shows the outcome, or undefined when the row is gone.
+   */
+  settle(id: string, outcome: SubmitOutcome, options?: { once?: boolean }): string | undefined;
+  /** Marks a failed row superseded (its retry was acknowledged); any other row is left as is. */
+  supersede(id: string): void;
   reset(): void;
 }
 
@@ -100,27 +112,54 @@ export function createRequestsStore(): RequestsStore {
       }));
       return id;
     },
-    settle(id, outcome) {
+    settle(id, outcome, options) {
+      let shownBy: string | undefined;
+      set((s) => {
+        if (!s.items.some((item) => item.id === id)) return s;
+        shownBy = id;
+        if (options?.once === true && outcome.kind === "acknowledged") {
+          const listed = s.items.find(
+            (item) =>
+              item.id !== id &&
+              item.status === "acknowledged" &&
+              item.correlationId === outcome.response.correlationId,
+          );
+          if (listed !== undefined) {
+            shownBy = listed.id;
+            return { items: s.items.filter((item) => item.id !== id) };
+          }
+        }
+        return {
+          items: s.items.map((item): RequestEntry => {
+            if (item.id !== id) return item;
+            const base = {
+              id: item.id,
+              queryType: item.queryType,
+              summary: item.summary,
+              ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
+              ...(item.idempotencyKey === undefined ? {} : { idempotencyKey: item.idempotencyKey }),
+              ...(item.superseded === undefined ? {} : { superseded: item.superseded }),
+            };
+            return outcome.kind === "acknowledged"
+              ? {
+                  ...base,
+                  status: "acknowledged",
+                  correlationId: outcome.response.correlationId,
+                  acknowledgedAt: outcome.response.acknowledgedAt,
+                  parts: outcome.response.parts,
+                }
+              : { ...base, status: "failed", failure: outcome.kind };
+          }),
+        };
+      });
+      return shownBy;
+    },
+    supersede(id) {
       set((s) => ({
-        items: s.items.map((item): RequestEntry => {
-          if (item.id !== id) return item;
-          const base = {
-            id: item.id,
-            queryType: item.queryType,
-            summary: item.summary,
-            ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
-            ...(item.idempotencyKey === undefined ? {} : { idempotencyKey: item.idempotencyKey }),
-          };
-          return outcome.kind === "acknowledged"
-            ? {
-                ...base,
-                status: "acknowledged",
-                correlationId: outcome.response.correlationId,
-                acknowledgedAt: outcome.response.acknowledgedAt,
-                parts: outcome.response.parts,
-              }
-            : { ...base, status: "failed", failure: outcome.kind };
-        }),
+        items: s.items.map(
+          (item): RequestEntry =>
+            item.id === id && item.status === "failed" ? { ...item, superseded: true } : item,
+        ),
       }));
     },
     reset() {

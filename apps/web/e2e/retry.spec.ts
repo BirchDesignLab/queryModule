@@ -28,7 +28,7 @@ async function failFirstQuery(page: Page): Promise<Sent[]> {
 test.describe("dispatcher retry (1366x768)", () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 
-  test("Retry sends the kept values as a new request; the failed row stays; focus stays; one announcement", async ({
+  test("Retry sends the kept values as a new request; the failed row stays, superseded; focus to the heading; one announcement", async ({
     page,
   }) => {
     await signIn(page, seededUser("dispatcher@example.test"));
@@ -54,8 +54,10 @@ test.describe("dispatcher retry (1366x768)", () => {
     expect(sent[1]?.body).toBe(sent[0]?.body);
     // SUBMIT-1: a retry is the same request, so it carries the same Idempotency-Key.
     expect(sent[1]?.key).toBe(sent[0]?.key);
-    // Focus never moved off the button; the result went through the shared region only.
-    await expect(retry).toBeFocused();
+    // M1 exit C1: the acknowledged retry supersedes the failed row, so its Retry leaves the page
+    // and focus goes to the list heading (spec 6.4); the result went through the shared region only.
+    await expect(retry).toHaveCount(0);
+    await expect(region.getByRole("heading", { name: "Requests this shift" })).toBeFocused();
     await expect(page.getByTestId("announcer-polite")).toContainText(/Vehicle query sent at/);
     expect(await region.locator("[aria-live], [role=status], [role=alert]").count()).toBe(0);
   });

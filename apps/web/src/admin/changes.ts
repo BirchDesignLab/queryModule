@@ -419,12 +419,12 @@ export function buildChangeGroups(
   return [...groups.values()];
 }
 
-/** One locale's draft label texts against the shipped text (known only in the language shown). */
+/** One locale's draft label texts against the text the app is served now (M1 exit Q1). */
 export interface LabelChange {
   locale: string;
   key: string;
   text: string;
-  /** The shipped text this replaces: "" when there is none, null when it is not known here. */
+  /** The served text it replaces (shipped or live overlay): "" when none, null when unknown. */
   shipped: string | null;
 }
 

@@ -147,6 +147,51 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
     expect(rows.every(isRetryable)).toBe(true);
   });
 
+  it("an acknowledged retry supersedes the failed row: it is no longer retryable (M1 exit C1)", async () => {
+    const { requests, id } = failedRow();
+    const { store, submit } = fakeSubmit("idle");
+    await retryRequest({ requests, submit: store }, id, "h");
+    const original = requests.getState().items.find((r) => r.id === id);
+    expect(original).toMatchObject({ status: "failed", superseded: true });
+    expect(original !== undefined && isRetryable(original)).toBe(false);
+    // A second Retry on it sends nothing and adds no row.
+    expect(await retryRequest({ requests, submit: store }, id, "h")).toEqual({
+      kind: "unavailable",
+    });
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(requests.getState().items).toHaveLength(2);
+  });
+
+  it("a failed retry does not supersede the failed row", async () => {
+    const { requests, id } = failedRow();
+    const { store } = fakeSubmit("idle", { kind: "noResponse" });
+    await retryRequest({ requests, submit: store }, id, "h");
+    expect(requests.getState().items.find((r) => r.id === id)?.superseded).toBeUndefined();
+  });
+
+  it("never lists a second row for a correlation ID already listed (a replayed ack)", async () => {
+    const { requests, id } = failedRow();
+    // The first retry fails, so two failed rows hold the same key; both are retried and the
+    // server replays one ack for that key.
+    await retryRequest(
+      { requests, submit: fakeSubmit("idle", { kind: "noResponse" }).store },
+      id,
+      "h",
+    );
+    const second = requests.getState().items[0]?.id ?? "";
+    const { store } = fakeSubmit("idle");
+    const a = await retryRequest({ requests, submit: store }, second, "h");
+    const b = await retryRequest({ requests, submit: store }, id, "h");
+    const items = requests.getState().items;
+    expect(items.filter((r) => r.status === "acknowledged")).toHaveLength(1);
+    expect(items).toHaveLength(3);
+    expect(items.filter((r) => r.status === "failed").every((r) => r.superseded === true)).toBe(
+      true,
+    );
+    // The second result points at the row already listed.
+    expect(a.kind === "sent" && b.kind === "sent" && a.rowId === b.rowId).toBe(true);
+  });
+
   it("is gated while submitting or offline: nothing is sent and no row is added", async () => {
     for (const status of ["submitting", "noConnection"] as const) {
       const { requests, id } = failedRow();
