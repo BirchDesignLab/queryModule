@@ -512,7 +512,7 @@
       "size": "M",
       "priority": "High",
       "reqIds": "SEC-010, SEC-011",
-      "body": "Minors from the M0 P0 whole-phase review (gate Step 8, Opus 5.5 high over the 8 P0 critical-tier files; artifact `docs/reviews/docs-status-a-20260927.md`). None blocks the freeze. Contract changes go through master plan 8 (contract change procedure); all are critical tier.\n\n**Land early in P1, before the first audit writer (M1 P2 T1), while no audit rows exist:**\n- [x] (#103) C-M1 `packages/core/src/contracts/audit.ts:204,130,148`: envelope `credentialUserId` is unconstrained against `details.credentialOwnerUserId` on `sourceDispatched` and `sourceResponded`; one append-only row can name two credential owners, and owner searches on `audit_event(credential_user_id, at)` can miss delegated queries (SEC-011). Require equality in `AuditEventSchema.superRefine`, with tests.\n- [x] (#103) C-M3 `audit.ts:140-146`: `sourceResponded.status` is a hand-written literal list; derive it with `SourceStatusSchema.exclude([\"pending\", \"interrupted\"])` (same JSON) and test that every other terminal status is accepted, so a new SourceStatus value cannot crash the dispatcher's audit write.\n- [x] (#103) C-M5 `primitives.ts:21-22,44-45`: `BOUNDED_ID_MAX_LENGTH` and `HOST_SUBJECT_MAX_LENGTH` are repeated as literals in the regexes; build the patterns from the constants or test the boundary.\n- [x] (#103) C-M7 `.github/sensitive-paths`: `packages/core/src/contracts/version.ts` (WS protocol version) and `packages/core/contracts/ws-events.schema.json` are ordinary tier; list them under [critical] (query dispatch).\n\n**Before M4:**\n- [ ] C-M2 `audit.ts:263-270`: a row with `identitySource: \"host\"` and no `hostSubject` passes; spec 5.6 requires the host subject on host rows (SEC-010). Require it, with a test.\n- [ ] C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8.\n\n**With the Track A P1 audit writer (from the feat/core-98 review, M1):**\n- [x] (#292) C-M8 `audit.ts`: envelope `credentialUserId` stays unconstrained on `submitted`, `acknowledged`, `interrupted` and `partSkipped`; owner searches on `audit_event(credential_user_id, at)` could over- or under-match. Decide whether `interrupted` copies the `source_result` owner and whether the other query types must omit `credentialUserId`; add the refinement with parse and reject tests (master plan 8).\n- [ ] C-m1 (review of #292) `audit.test.ts`: the `retentionPurged` reject cases cover `correlationId` but not `partId` or `credentialUserId` (enforced today only by the shared system envelope). Add both cases the next time the file is touched.\n\n**Track A (no contract change):**\n- [ ] C-M6 `audit.ts:192`: `AuditActor.email` uses `z.email()`; the identity layer may accept addresses that fail it, and an audit write failure fails every submit. IdentityService normalises with `AuditActorSchema.shape.email` and stores null on failure, with a test.\n\nDeclined by the reviewer for the developer: whether `packages/api/src/auth/**` should be critical tier (CLAUDE.md does not list authentication as a sensitive area).\n\n**Source:** M0 P0 gate whole-phase review, 09-27-26.\n\n\n\n\n"
+      "body": "Minors from the M0 P0 whole-phase review (gate Step 8, Opus 5.5 high over the 8 P0 critical-tier files; artifact `docs/reviews/docs-status-a-20260927.md`). None blocks the freeze. Contract changes go through master plan 8 (contract change procedure); all are critical tier.\n\n**Land early in P1, before the first audit writer (M1 P2 T1), while no audit rows exist:**\n- [x] (#103) C-M1 `packages/core/src/contracts/audit.ts:204,130,148`: envelope `credentialUserId` is unconstrained against `details.credentialOwnerUserId` on `sourceDispatched` and `sourceResponded`; one append-only row can name two credential owners, and owner searches on `audit_event(credential_user_id, at)` can miss delegated queries (SEC-011). Require equality in `AuditEventSchema.superRefine`, with tests.\n- [x] (#103) C-M3 `audit.ts:140-146`: `sourceResponded.status` is a hand-written literal list; derive it with `SourceStatusSchema.exclude([\"pending\", \"interrupted\"])` (same JSON) and test that every other terminal status is accepted, so a new SourceStatus value cannot crash the dispatcher's audit write.\n- [x] (#103) C-M5 `primitives.ts:21-22,44-45`: `BOUNDED_ID_MAX_LENGTH` and `HOST_SUBJECT_MAX_LENGTH` are repeated as literals in the regexes; build the patterns from the constants or test the boundary.\n- [x] (#103) C-M7 `.github/sensitive-paths`: `packages/core/src/contracts/version.ts` (WS protocol version) and `packages/core/contracts/ws-events.schema.json` are ordinary tier; list them under [critical] (query dispatch).\n\n**Before M4:**\n- [ ] C-M2 `audit.ts:263-270`: a row with `identitySource: \"host\"` and no `hostSubject` passes; spec 5.6 requires the host subject on host rows (SEC-010). Require it, with a test.\n- [x] C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8. (moved to #511)\n\n**With the Track A P1 audit writer (from the feat/core-98 review, M1):**\n- [x] (#292) C-M8 `audit.ts`: envelope `credentialUserId` stays unconstrained on `submitted`, `acknowledged`, `interrupted` and `partSkipped`; owner searches on `audit_event(credential_user_id, at)` could over- or under-match. Decide whether `interrupted` copies the `source_result` owner and whether the other query types must omit `credentialUserId`; add the refinement with parse and reject tests (master plan 8).\n- [ ] C-m1 (review of #292) `audit.test.ts`: the `retentionPurged` reject cases cover `correlationId` but not `partId` or `credentialUserId` (enforced today only by the shared system envelope). Add both cases the next time the file is touched.\n\n**Track A (no contract change):**\n- [ ] C-M6 `audit.ts:192`: `AuditActor.email` uses `z.email()`; the identity layer may accept addresses that fail it, and an audit write failure fails every submit. IdentityService normalises with `AuditActorSchema.shape.email` and stores null on failure, with a test.\n\nDeclined by the reviewer for the developer: whether `packages/api/src/auth/**` should be critical tier (CLAUDE.md does not list authentication as a sensitive area).\n\n**Source:** M0 P0 gate whole-phase review, 09-27-26.\n\n\n\n\n"
     },
     {
       "number": 171,
@@ -1027,7 +1027,7 @@
       "size": "M",
       "priority": "Medium",
       "reqIds": "SEC-006",
-      "body": "Deferred minors from wave A3 (#277, #278, #279, #189, #280), artifact `docs/reviews/feat-a-p2-wave-3.md` (reviewed d3a0d9b). Tier: mostly critical (`keys/**`, `db/**`, `drizzle/**`); split by tier when picked up.\n\n**Task 11, `packages/api/src/keys/request-keys.ts` (critical)**\n- [ ] DEK length not asserted on unwrap.\n- [ ] AAD built from unvalidated ids/partId (`|` collision possible; a bad partId fails late).\n- [ ] `REQUEST_KEY_VERSION` independent of DATA_KEY/canary version (rotation cannot tell rows apart).\n- [ ] NaN/Infinity become null through JSON.\n- [ ] DEK and plaintext buffers not zeroed.\n- [ ] Sorted-key test asserts length only.\n\n**Task 12, `packages/api/src/ops/lost-key.ts` (gate)**\n- [x] DELETE removes every `request_key` row but the audit counts only values/payload scopes (0003's scope CHECK makes others impossible today; assert it). (done in #500)\n- [x] Separate distinct-request count query unexplained. (done in #500)\n- [x] No-table test asserts the return value only. (done in #500)\n\n**Task 13, query tables (critical)**\n- [ ] `query_request.origin` has no DB CHECK (status now has one).\n- [ ] `QueryTriggerMissingError` duplicates `AuditTriggerMissingError`.\n- [x] `smoke-request-key.mjs` hardcodes system actor strings (gate). (done in #500)\n- [ ] `schema.test` helpers migrate a fresh DB per call; one storage test lacks try/finally close.\n- [ ] Spec 10.3 test asserts only that `KeyCanaryError` names data.\n\n**Task 14, `packages/api/src/db/client.ts` (critical)**\n- [ ] Pragma name split-joined to dodge `check-schema-writes` (use an allowlist entry instead).\n- [ ] `guarded(...)` boilerplate x7.\n- [ ] Per-case fresh encrypted DB in tests; out-of-band tamper client relies on concurrent open.\n\n**Review**\n- [x] G-m1: `lost-data-key` runbook checks audit triggers only, not `checkQueryTriggers` (it never writes query tables; confirm or add). (done in #500 (checkQueryTriggers added))\n- [x] C-m1: critical CI checks (`check-audit-migrations.ts`, `check-schema-writes.ts`) now start `main` through gate-tier `scripts/ci/is-main-module.mjs`; a fail-open there silently skips a critical check. Checker ruling: list `scripts/ci/is-main-module.mjs` under `[critical]` in `.github/sensitive-paths` (critical PR, fast path). (already done: `.github/sensitive-paths` lists is-main-module.mjs as critical (checked 10-03-26))\n\n**Source:** A3 push request, checker 09-29-26. No-change park case logged on #300.\n"
+      "body": "Deferred minors from wave A3 (#277, #278, #279, #189, #280), artifact `docs/reviews/feat-a-p2-wave-3.md` (reviewed d3a0d9b). Tier: mostly critical (`keys/**`, `db/**`, `drizzle/**`); split by tier when picked up.\n\n**Task 11, `packages/api/src/keys/request-keys.ts` (critical)**\n- [ ] DEK length not asserted on unwrap.\n- [ ] AAD built from unvalidated ids/partId (`|` collision possible; a bad partId fails late).\n- [x] `REQUEST_KEY_VERSION` independent of DATA_KEY/canary version (rotation cannot tell rows apart). (moved to #511)\n- [ ] NaN/Infinity become null through JSON.\n- [ ] DEK and plaintext buffers not zeroed.\n- [ ] Sorted-key test asserts length only.\n\n**Task 12, `packages/api/src/ops/lost-key.ts` (gate)**\n- [x] DELETE removes every `request_key` row but the audit counts only values/payload scopes (0003's scope CHECK makes others impossible today; assert it). (done in #500)\n- [x] Separate distinct-request count query unexplained. (done in #500)\n- [x] No-table test asserts the return value only. (done in #500)\n\n**Task 13, query tables (critical)**\n- [ ] `query_request.origin` has no DB CHECK (status now has one).\n- [ ] `QueryTriggerMissingError` duplicates `AuditTriggerMissingError`.\n- [x] `smoke-request-key.mjs` hardcodes system actor strings (gate). (done in #500)\n- [ ] `schema.test` helpers migrate a fresh DB per call; one storage test lacks try/finally close.\n- [ ] Spec 10.3 test asserts only that `KeyCanaryError` names data.\n\n**Task 14, `packages/api/src/db/client.ts` (critical)**\n- [ ] Pragma name split-joined to dodge `check-schema-writes` (use an allowlist entry instead).\n- [ ] `guarded(...)` boilerplate x7.\n- [ ] Per-case fresh encrypted DB in tests; out-of-band tamper client relies on concurrent open.\n\n**Review**\n- [x] G-m1: `lost-data-key` runbook checks audit triggers only, not `checkQueryTriggers` (it never writes query tables; confirm or add). (done in #500 (checkQueryTriggers added))\n- [x] C-m1: critical CI checks (`check-audit-migrations.ts`, `check-schema-writes.ts`) now start `main` through gate-tier `scripts/ci/is-main-module.mjs`; a fail-open there silently skips a critical check. Checker ruling: list `scripts/ci/is-main-module.mjs` under `[critical]` in `.github/sensitive-paths` (critical PR, fast path). (already done: `.github/sensitive-paths` lists is-main-module.mjs as critical (checked 10-03-26))\n\n**Source:** A3 push request, checker 09-29-26. No-change park case logged on #300.\n"
     },
     {
       "number": 313,
@@ -1208,7 +1208,7 @@
       "priority": "Medium",
       "reqIds": "none",
       "title": "Lean sdd-task: Opus critic as the single reviewer, minors never start a fix round",
-      "body": "Developer decision 09-29-26 (checker analysis of M0 to M1 P3 run data): reshape `sdd-task` so the per-task Opus critic carries review and the low-yield Sonnet review, ruler and fix loops shrink. Build after the Thu 10-01-26 usage reset.\n\nEvidence: W4 critic found 9 of 12 real fixes, spec reviewer 0; nested waves cost 40 to 70 agents and 3 to 6M tokens; every important finding in M1 P3 so far came from an Opus critic or a sensitive-tier review; per-task loops produced 40 to 50 minors per wave and every cap hit (TDD-order churn, a fixer hiding runtime deps).\n\nChanges (`.claude/workflows/sdd-task.js`, `sdd-wave.js` pass-through, `CLAUDE.md` tier and role tables, ADR-0007 amendment; all ordinary tier):\n- [x] 1. The Opus 5.5 medium critic is the single per-task reviewer (spec, quality and critic lenses in one prompt, citing FR/UX/SEC IDs); the Sonnet combined reviewer is removed for ordinary and gate.\n- [x] 2. Minor findings never start a fix round: they go straight to `deferredMinors`; only important or critical findings start a fixer.\n- [x] 3. The ruler runs only on implementer concerns or contested findings, not on every review.\n- [x] 4. The re-reviewer checks only the fixed findings, not the whole diff (already so). The progress-checker fold was not done by developer ruling 10-01-26: cheapest role, still needed on mechanical rounds (ADR-0007 amendment 10-01-26).\n- [x] 5. `maxRounds` default 1 for ordinary, 2 for gate and critical.\n- [x] 6. Critical tier (option a): drop the separate spec reviewer; the Opus critic cites requirement IDs; the critical `wave-review` (Opus 5.5 high) stays.\n- [x] Unchanged: implementer, TDD-order check, verifyHead, gate verify, ledger, resume, per-PR tier reviews, caps never raised.\n- [ ] Tests: stub smoke test for the new flow; one real ordinary task as pilot with weekly usage logged before and after; compare with the W-series figures. (harness scenarios done in #491, 150/150; the real-task pilot runs on the next ordinary task)\n\nTarget: clean ordinary task about 4 agents (from about 10); one fix round about 6 (from about 16).\n",
+      "body": "Developer decision 09-29-26 (checker analysis of M0 to M1 P3 run data): reshape `sdd-task` so the per-task Opus critic carries review and the low-yield Sonnet review, ruler and fix loops shrink. Build after the Thu 10-01-26 usage reset.\n\nEvidence: W4 critic found 9 of 12 real fixes, spec reviewer 0; nested waves cost 40 to 70 agents and 3 to 6M tokens; every important finding in M1 P3 so far came from an Opus critic or a sensitive-tier review; per-task loops produced 40 to 50 minors per wave and every cap hit (TDD-order churn, a fixer hiding runtime deps).\n\nChanges (`.claude/workflows/sdd-task.js`, `sdd-wave.js` pass-through, `CLAUDE.md` tier and role tables, ADR-0007 amendment; all ordinary tier):\n- [x] 1. The Opus 5.5 medium critic is the single per-task reviewer (spec, quality and critic lenses in one prompt, citing FR/UX/SEC IDs); the Sonnet combined reviewer is removed for ordinary and gate.\n- [x] 2. Minor findings never start a fix round: they go straight to `deferredMinors`; only important or critical findings start a fixer.\n- [x] 3. The ruler runs only on implementer concerns or contested findings, not on every review.\n- [x] 4. The re-reviewer checks only the fixed findings, not the whole diff (already so). The progress-checker fold was not done by developer ruling 10-01-26: cheapest role, still needed on mechanical rounds (ADR-0007 amendment 10-01-26).\n- [x] 5. `maxRounds` default 1 for ordinary, 2 for gate and critical.\n- [x] 6. Critical tier (option a): drop the separate spec reviewer; the Opus critic cites requirement IDs; the critical `wave-review` (Opus 5.5 high) stays.\n- [x] Unchanged: implementer, TDD-order check, verifyHead, gate verify, ledger, resume, per-PR tier reviews, caps never raised.\n- [x] Tests: stub smoke test for the new flow; one real ordinary task as pilot with weekly usage logged before and after; compare with the W-series figures. (harness scenarios done in #491, 150/150; the real-task pilot runs on the next ordinary task)\n\nTarget: clean ordinary task about 4 agents (from about 10); one fix round about 6 (from about 16).\n\n",
       "labels": ["platform", "p3", "follow-up"]
     },
     {
@@ -1252,8 +1252,8 @@
     },
     {
       "number": 476,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["core", "web", "p3", "follow-up"],
       "track": "Core",
@@ -1265,8 +1265,8 @@
     },
     {
       "number": 477,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["web", "p3", "follow-up", "enhancement"],
       "track": "Web (B)",
@@ -1278,8 +1278,8 @@
     },
     {
       "number": 478,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["web", "p3", "follow-up"],
       "track": "Web (B)",
@@ -1291,8 +1291,8 @@
     },
     {
       "number": 479,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["web", "p3", "follow-up", "accessibility"],
       "track": "Web (B)",
@@ -1317,8 +1317,8 @@
     },
     {
       "number": 481,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["web", "p3", "follow-up", "enhancement"],
       "track": "Web (B)",
@@ -1330,8 +1330,8 @@
     },
     {
       "number": 482,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["web", "p3", "follow-up", "accessibility"],
       "track": "Web (B)",
@@ -1352,12 +1352,12 @@
       "priority": "Low",
       "reqIds": "none",
       "title": "Hardening test minors: repair B e2e, a second clearance, theme-focus guards",
-      "body": "- [ ] Focus repair B (`AccountMenu` moves focus when the Keyboard shortcuts item disappears) has no e2e; no route loses its sheet while the item has focus today (#432).\n- [ ] If anything else becomes sticky, the action-bar clearance needs a second source (#432).\n- [ ] The two theme-focus \"no announcement\" assertions are negative guards only (#438)."
+      "body": "- [ ] Focus repair B (`AccountMenu` moves focus when the Keyboard shortcuts item disappears) has no e2e; no route loses its sheet while the item has focus today (#432).\n- [x] If anything else becomes sticky, the action-bar clearance needs a second source (#432). (moved to #511)\n- [ ] The two theme-focus \"no announcement\" assertions are negative guards only (#438)."
     },
     {
       "number": 484,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["web", "p3", "follow-up"],
       "track": "Web (B)",
@@ -1382,8 +1382,8 @@
     },
     {
       "number": 486,
-      "milestone": "M1 Forms and terminal",
-      "parent": 42,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
       "phase": "P3",
       "labels": ["web", "p3", "follow-up", "decision"],
       "track": "Web (B)",
@@ -1496,6 +1496,45 @@
       "labels": ["platform", "p2", "follow-up"],
       "title": "smoke-request-key test ties the system identitySource to core",
       "body": "Moved from #220 (AM1 gate wave-review minor G-M3, docs/reviews/feat-a-p3-am1.md, 10-03-26) so #220 can close with AC2, which fixes G-M1 and G-M2.\n\n`scripts/ci/smoke-request-key.test.ts:22` compares `identitySource` to the literal `\"system\"`. Core's `SYSTEM_ACTOR` (`packages/core/src/contracts/audit.ts:288`) has no `identitySource`, so there is no core field to tie the test to yet.\n\nTier: gate (`scripts/ci/**`); the core change, if any, is critical (`contracts/audit.ts`).\n\n- [ ] When the audit contract (or `SYSTEM_ACTOR`) exposes the system identity source, the test compares against that field instead of the literal.\n"
+    },
+    {
+      "number": 505,
+      "milestone": "M1 Forms and terminal",
+      "parent": 42,
+      "phase": "P3",
+      "track": "Platform (A)",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "SEC-005, SEC-010",
+      "labels": ["platform", "p3", "follow-up", "sensitive"],
+      "title": "AC2 review minors and carry-overs (AC3, critical next, M2)",
+      "body": "From the AC2 sdd-wave (Tasks 27-29, run wf_c4561d6a-6b4) and its wave-review (wf_3748b1e0-25e, branch feat/a-p3-ac2), 10-03-26. Controller ruling: minors are tracked here, never a re-review. Each box names its tier and the PR it rides.\n\n**Ride AC3 (ordinary)**\n- [x] T28 Q3: declare 403 `passwordChangeRequired` on every session route in `packages/core/src/contracts/routes.ts` (getConfig, me/preferences, submitQuery, admin routes); regenerate openapi.json. Task 34 UI handles the code.\n- [ ] T28 M6: the WS upgrade refusal for a flagged user is a bare 403, indistinguishable from an Origin refusal; the client learns from the HTTP 403 code first (note in the Task 34/35 UI; change the socket refusal only if the UI needs it).\n- [x] T29 Q1: `packages/api/test/security/route-matrix.test.ts` submitQuery \"allowed\" accepts any 400; assert the error code.\n- [x] T29 Q2: route-matrix setup gives a confusing row failure when the target has no session; fail setup instead.\n- [x] T27/T28 spec S1 carry: retag AC1 tests that still cite SEC-010/BR-004 for config-store behaviour (`config-store.test.ts`, `config-activate.test.ts`) and the T28 comments citing SEC-005/SEC-010/SEC-014 (`auth/routes.ts`, `http/session.ts`, `ops/login-stats.ts`, core `admin.test.ts`) with the ADR-0011 item; correct the plan's Task 27 and 28 ID lists. Comment-only edits in gate/critical files may ride the next sensitive PR instead.\n\n**Ride the next critical PR (#377 or M1 exit)**\n- [ ] rr:N-m1 (critical, `admin/access.ts`): the feature is read twice (app.ts requirePasswordChanged skip, then adminGuard); move the mustChangePassword check into adminGuard after its feature check and drop the app.ts middleware.\n- [ ] T27 Q6 (critical, `admin/config/**`): a publish that sets `features.adminConfig` false locks the config API (404) until the store is changed outside the app. Refuse it as validationFailed, or warn in validate.\n- [ ] T27 Q2 (critical, `queries/route.ts`): the implementer exclusion on POST /queries is a denylist; make it an allowlist of query-capable roles.\n\n**M2 (audit, P2)**\n- [x] G-m3 (critical, `contracts/audit.ts`): demoting an admin audits only \"granted implementer\"; add `fromRole` to roleChanged. (moved to #511)\n- [x] A password change writes no audit row (spec 4.7 has no event); decide with the M2 audit catalogue. (moved to #511)\n- [x] revokeSession's `sessionRevoked` row carries no target user id; decide with the M2 audit catalogue. (moved to #511)\n- [x] Change-password has no per-account lockout on wrong currentPassword guesses (IP limiter only); decide with SEC-005 hardening (gate). (moved to #511)\n- [x] G-m4 (gate): listUsers caps at 1000 rows (documented); add paging when the user list can exceed it. (moved to #511)\n\n**M2 P0.5**\n- [x] T27 IC1 carry: the fixture-policy task runs `checkFixturePolicy` on `document.mock` in admin config validate, publish and rollback (`admin/config/**`), findings as validationFailed diagnostics with pointers, tested. (moved to #511)\n\n**When real adapters land**\n- [x] T27 critic CV1 carry: re-check changedPointers for map keys that can hold query values once any non-mock free-form map enters ConfigDocument (ADR-0011 item 7). (moved to #511)\n\n\n**From the fresh gate review (wf_462d4b95-6a2, rr:N-I1 fix)**\n- [x] G-m1 (ordinary, ride AC3): `packages/api/test/security/auth-limits.test.ts:45` title says \"hashes\"; the body asserts `password.verify`. Rename to \"verifies\".\n- [ ] G-m2 (gate, ride the next gate PR): `auth/routes.ts:127` if the disabled-account session delete throws, the request answers 500 (fails closed: identity refuses disabled users' sessions, no cookie leaves). Optionally catch, log the error name, still answer the bad-credentials 401.\n\n- [ ] (critical, ride the next critical PR) `packages/core/src/contracts/audit-auth.ts` LoginFailedDetailsSchema comment says accountDisabled is \"refused before the password is checked\"; since rr:N-I1 Better Auth checks it and discards any session. Match the spec 4.7 wording.\n\n"
+    },
+    {
+      "number": 507,
+      "milestone": "M1 Forms and terminal",
+      "parent": 42,
+      "phase": "P3",
+      "track": "Web (B)",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "labels": ["web", "p3", "follow-up"],
+      "title": "AC3 review minors and design gaps (admin UI, e2e)",
+      "body": "From the AC3 sdd runs (Task 33 parts 2a/2b, Tasks 34, 35; runs wf_f6fae7d4-2ac, wf_e3ae0bad-6ff, wf_5b8b2034-a6f), 10-03-26. Ordinary tier unless noted. Controller ruling: minors are tracked here, never a re-review. Ride the next ordinary PR (M1 exit polish) unless noted.\n\n**Design gaps against the target (contract decisions, M2)**\n- [x] Publish change note and \"who\" in the history drawer: the contract has no note field and carries user ids only (controller ruling 10-03-26: omitted in M1). Decide with the M2 audit viewer (contract change, `admin.ts` ordinary, audit link critical). (moved to #511)\n\n**Builder, publish and history (Task 33)**\n- [ ] 2a Q4: the test \"shows the errors at their controls\" asserts only the summary count; assert a control's message.\n- [ ] 2a Q5: `as never` casts in `admin-config.test.ts` fixtures turn off type checking.\n- [ ] 2b Q2: `PublishFlow.tsx` reload() does not clear `stale`; after a successful \"Discard and load\" the \"could not be loaded\" alert stays.\n- [ ] 2b Q3/Q4: History.test.tsx 409/400 test asserts only 409; the roll back half of M3 (failed refreshLive, retry) is untested.\n- [ ] 2b C1: `nothing` is read live from changeCount while the dialog is open; a live check can unmount the focused Publish button.\n- [ ] 2b C2: the History button is the focus fallback for every publish dialog, not only roll back.\n- [ ] 2b C3: Blob URL revoked synchronously after click(); defer the revoke (setTimeout) if any engine drops the download.\n- [ ] 2b C4: the history list does not reload after Save draft or Review while open.\n- [ ] 2b C5: the History button has aria-expanded but no aria-controls.\n- [ ] 2b Q5: Export and retryLoad have no in-flight guard (double click downloads twice).\n- [ ] 2b Q6/Q8: History.test.tsx URL stub never restored; fixture versions do not increase per site.\n- [ ] 2b Q7: SCROLL_FOCUS duplicated in HistoryDrawer.tsx and PublishFlow.tsx; PublishFlow.tsx (524 lines) and ConfigBuilder.tsx (586) want splitting.\n\n**Users and forced change (Task 34)**\n- [ ] M2: any unrecognised 400 from change-password maps to `samePassword`, showing the wrong message.\n- [ ] M3: the role select stays enabled while the row is busy; a change is silently ignored.\n- [ ] M4: the Copy result `role=status` is inserted with its text already present; may not be announced.\n- [ ] M5: `Users.tsx` (497 lines) holds two components; split.\n- [ ] M6: `ChangePasswordPage.tsx` hard-codes MIN_LENGTH 12 (server config copy); read it from config or the server error.\n- [ ] Observation: \"Sign out everywhere\" skips the admin's own current session; decide whether the row action should end it too.\n- [ ] R1-N1: `use-dialog.ts` unmount cleanup under StrictMode ignores a native close until the next render (dev only).\n\n**e2e (Task 35)**\n- [x] C/M1: `visual.spec.ts` admin look checks were loosened for the Task 33/34 toolbar wrapping to two rows at 1366 (toolbar height bound 90 -> 130, reasons \"inside the toolbar\", overflowY checks removed). Developer to look at the 1366 builder toolbar; tighten the checks once the layout is settled. (moved to #511)\n- [ ] M3: the dispatcher `request` listener in `admin-config.spec.ts` is never removed.\n- [ ] M4: the WATERCRAFT subtype reuses the BOAT label, so the subtype bar looks unchanged; use a distinct label key.\n- [ ] M5: `admin-users.spec.ts` fixed `waitForTimeout(1500)`, `#id` locators, and `sockets toHaveLength(1)` (breaks on a legitimate reconnect).\n- [ ] Load flakes: `Polish.test.tsx` (#388) and `TreeLabels.test.tsx` render-count (#441) failed once under parallel agent load (Task 34 gate); harden them.\n- [ ] Local e2e needs `E2E_USER_EMAIL`/`E2E_USER_PASSWORD` derived by hand from `.dev/secrets/SEED_PASSWORD_SECRET` (as ci.yml); let `scripts/dev/e2e.ts` derive them.\n- [ ] Requirement tags: `admin-users.spec.ts:541` and `Users.test.tsx:182` cite SEC-005/UX-004 for behaviour they do not state; cite D-A26 / ADR-0011 item 8.\n\n\n**From Task 16 docs (#345, run wf_40225f6a-ba2)**\n- [ ] `ROUTES` in `packages/core/src/contracts/routes.ts` (ordinary) still marks getHealth, getMeta, getLocale, getConfig, getMePreferences and putMePreferences `status: \"planned\"` though they are mounted and tested; set them live (check the oasdiff effect) and drop the note in `docs/api.md`.\n- [ ] Q3: `packages/api/test/docs-reference.test.ts` matches routes by loose substring and does not cover response codes; tighten it so response-code drift fails.\n"
+    },
+    {
+      "number": 511,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "phase": "P2",
+      "track": "Platform (A)",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "SEC-010",
+      "labels": ["platform", "p2", "follow-up", "sensitive", "decision"],
+      "title": "M1 carry-overs: WS receipt policy, key versioning, audit catalogue, admin UI",
+      "body": "Boxes carried out of issues that stay in M1, in the M1 triage (10-03-26, developer-approved). Each is a design decision or M2-only work; its source box is ticked \"moved to #N\" so the source issue can close at the M1 exit.\n\n**Contracts and keys (critical)**\n- [ ] (from #98) C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8.\n- [ ] (from #311) `REQUEST_KEY_VERSION` independent of DATA_KEY/canary version (rotation cannot tell rows apart).\n\n**Audit catalogue and auth (M2 P2)**\n- [ ] (from #505) G-m3 (critical, `contracts/audit.ts`): demoting an admin audits only \"granted implementer\"; add `fromRole` to roleChanged.\n- [ ] (from #505) A password change writes no audit row (spec 4.7 has no event); decide with the M2 audit catalogue.\n- [ ] (from #505) revokeSession's `sessionRevoked` row carries no target user id; decide with the M2 audit catalogue.\n- [ ] (from #505) Change-password has no per-account lockout on wrong currentPassword guesses (IP limiter only); decide with SEC-005 hardening (gate).\n- [ ] (from #505) G-m4 (gate): listUsers caps at 1000 rows (documented); add paging when the user list can exceed it.\n\n**M2 P0.5 and real adapters**\n- [ ] (from #505) T27 IC1 carry: the fixture-policy task runs `checkFixturePolicy` on `document.mock` in admin config validate, publish and rollback (`admin/config/**`), findings as validationFailed diagnostics with pointers, tested.\n- [ ] (from #505) T27 critic CV1 carry: re-check changedPointers for map keys that can hold query values once any non-mock free-form map enters ConfigDocument (ADR-0011 item 7).\n\n**Admin UI and demo prep**\n- [ ] (from #507) Publish change note and \"who\" in the history drawer: the contract has no note field and carries user ids only (controller ruling 10-03-26: omitted in M1). Decide with the M2 audit viewer (contract change, `admin.ts` ordinary, audit link critical).\n- [ ] (from #507) C/M1: `visual.spec.ts` admin look checks were loosened for the Task 33/34 toolbar wrapping to two rows at 1366 (toolbar height bound 90 -> 130, reasons \"inside the toolbar\", overflowY checks removed). Developer to look at the 1366 builder toolbar; tighten the checks once the layout is settled.\n\n**Watch**\n- [ ] (from #483) If anything else becomes sticky, the action-bar clearance needs a second source (#432).\n\n**Source:** `scripts/board/m1-triage-2026-10-03.mjs`, session \"M1 finish 3\"."
     }
   ]
 }
