@@ -210,6 +210,14 @@ h1 {
   cursor: not-allowed;
 }
 
+/* A select held while its change is under way reads as unavailable but stays focusable (#507 item 14). */
+.qm-select[aria-disabled="true"] {
+  border: var(--qm-border-width) dashed var(--qm-color-border);
+  background: transparent;
+  color: var(--qm-color-text-muted);
+  cursor: not-allowed;
+}
+
 /* Tabs: the selected tab keeps the accent fill, an unselected one is outlined (#395 critic 6). */
 .qm-button[role="tab"][aria-selected="false"] {
   background: var(--qm-color-surface-base);

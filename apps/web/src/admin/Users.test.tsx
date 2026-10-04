@@ -250,8 +250,10 @@ describe("role change", () => {
     const gate = new Promise<void>((r) => {
       release = r;
     });
+    let puts = 0;
     server.use(
       http.put(`${API}/api/v1/admin/users/:id/role`, async () => {
+        puts++;
         await gate;
         return HttpResponse.json({ ...ROSE, role: "implementer" });
       }),
@@ -262,6 +264,9 @@ describe("role change", () => {
       expect(roleSelect("Rose Dispatch")).toHaveAttribute("aria-disabled", "true"),
     );
     expect(roleSelect("Test Admin")).not.toHaveAttribute("aria-disabled");
+    // A second pick while busy is ignored: no second PUT, and the select keeps the held value.
+    await t.user.selectOptions(roleSelect("Rose Dispatch"), "trainingOfficer");
+    expect(puts).toBe(1);
     release();
     await waitFor(() => expect(roleSelect("Rose Dispatch")).not.toHaveAttribute("aria-disabled"));
   });
