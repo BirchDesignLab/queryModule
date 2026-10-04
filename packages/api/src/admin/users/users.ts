@@ -150,6 +150,7 @@ export async function createUser(
     await d.audit.record(tx, {
       type: "userCreated",
       actor: actorOf(actor),
+      ...(actor.hostSubject ? { hostSubject: actor.hostSubject } : {}),
       identitySource: actor.identitySource,
       details: { targetUserId: id, role: body.role },
     });
@@ -195,6 +196,7 @@ export async function disableUser(
     await d.audit.record(tx, {
       type: "userDisabled",
       actor: actorOf(actor),
+      ...(actor.hostSubject ? { hostSubject: actor.hostSubject } : {}),
       identitySource: actor.identitySource,
       details: {
         targetUserId: id,
@@ -246,6 +248,7 @@ export async function setUserRole(
     await d.audit.record(tx, {
       type: "roleChanged",
       actor: actorOf(actor),
+      ...(actor.hostSubject ? { hostSubject: actor.hostSubject } : {}),
       identitySource: actor.identitySource,
       details: {
         targetUserId: id,
@@ -304,6 +307,7 @@ export async function revokeSession(
     await d.audit.record(tx, {
       type: "sessionRevoked",
       actor: actorOf(actor),
+      ...(actor.hostSubject ? { hostSubject: actor.hostSubject } : {}),
       identitySource: actor.identitySource,
       details: { sessionId, reason: "admin" },
     });
