@@ -1,6 +1,7 @@
+import { createHmac } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
-import { e2eTarget, probeHealth, runSeed, waitForReady } from "./e2e-lib.ts";
+import { e2eTarget, probeHealth, runSeed, smokeCredentials, waitForReady } from "./e2e-lib.ts";
 
 describe("runSeed (review C1: seed failure must not be swallowed)", () => {
   it("fails without running seed when the built seed script is missing", () => {
@@ -172,5 +173,34 @@ describe("e2eTarget (E2E_PORT: a second lane runs e2e beside port 3000)", () => 
     for (const bad of ["0", "65536", "abc", "31.5", "-1", " 3100"]) {
       expect(() => e2eTarget({ E2E_PORT: bad })).toThrow(/E2E_PORT/);
     }
+  });
+});
+
+describe("smokeCredentials (#410: local e2e derives the smoke login as ci.yml does)", () => {
+  const expected = (secret: string) =>
+    createHmac("sha256", secret).update("smoke@example.test").digest("base64url");
+
+  it("derives the password from the trimmed secret when env has none", () => {
+    const readFileFn = () => `  s3cret-value${"\r\n"}`;
+    expect(smokeCredentials({}, "/x/SEED", readFileFn)).toEqual({
+      E2E_USER_EMAIL: "smoke@example.test",
+      E2E_USER_PASSWORD: expected("s3cret-value"),
+    });
+  });
+
+  it("keeps values the caller already set", () => {
+    const readFileFn = vi.fn();
+    expect(
+      smokeCredentials({ E2E_USER_EMAIL: "a@b.test", E2E_USER_PASSWORD: "pw" }, "/x", readFileFn),
+    ).toEqual({ E2E_USER_EMAIL: "a@b.test", E2E_USER_PASSWORD: "pw" });
+    expect(readFileFn).not.toHaveBeenCalled();
+  });
+
+  it("fails naming the file, never the secret, when it is unreadable", () => {
+    const readFileFn = () => {
+      throw new Error("ENOENT leak-me");
+    };
+    expect(() => smokeCredentials({}, "/x/SEED", readFileFn)).toThrow(/SEED_PASSWORD_SECRET/);
+    expect(() => smokeCredentials({}, "/x/SEED", readFileFn)).not.toThrow(/leak-me/);
   });
 });
