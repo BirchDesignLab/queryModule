@@ -177,6 +177,19 @@ describe("undo and redo (B1)", () => {
     expect(summary).toHaveAttribute("aria-live", "polite");
   });
 
+  it("a Raw edit that does not parse after an undo is announced: the summary is polite (#485)", async () => {
+    const t = await openBuilder();
+    await editDelimiter(t);
+    await t.user.click(undoButton());
+    await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    const summary = screen.getByTestId("draft-summary");
+    fireEvent.change(screen.getByRole("textbox", { name: "Draft JSON" }), {
+      target: { value: "{" },
+    });
+    await waitFor(() => expect(summary.textContent).toMatch(/does not parse/i));
+    expect(summary).toHaveAttribute("aria-live", "polite");
+  });
+
   it("undoing a setting edit and then a label edit, in the order they were made", async () => {
     const t = await openBuilder();
     act(() => store(t).setLabel("en", "site.x", "X"));
