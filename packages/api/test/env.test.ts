@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readDeployEnv } from "../src/env";
+import { DeployEnvError, readDeployEnv } from "../src/env";
 
 const defaults = { configDir: "/app/config", migrationsDir: "/app/drizzle", webDist: "/app/web" };
 const ORIGIN = "https://q.example.test";
@@ -61,5 +61,24 @@ describe("readDeployEnv", () => {
   });
   it("WEB_DIST empty disables web serving", () => {
     expect(readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, WEB_DIST: "" }, defaults).webDist).toBeNull();
+  });
+  it("throws a DeployEnvError with fixed text and no value in it (spec 5.9, M1 exit LS-2)", () => {
+    const CANARY = "ZZENVCANARY0123";
+    const cases: NodeJS.ProcessEnv[] = [
+      { PUBLIC_ORIGIN: ORIGIN, PORT: CANARY },
+      { PUBLIC_ORIGIN: CANARY },
+      { PUBLIC_ORIGIN: ORIGIN, IDENTITY_MODES: CANARY },
+    ];
+    for (const env of cases) {
+      let caught: unknown;
+      try {
+        readDeployEnv(env, defaults);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(DeployEnvError);
+      expect((caught as Error).name).toBe("DeployEnvError");
+      expect((caught as Error).message).not.toContain(CANARY);
+    }
   });
 });

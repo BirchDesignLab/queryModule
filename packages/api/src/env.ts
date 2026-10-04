@@ -22,6 +22,17 @@ export interface DeployEnv {
 
 export const DEV_ORIGINS: readonly string[] = ["http://localhost:5173", "http://localhost:3000"];
 
+/**
+ * A malformed deploy env (spec 8.1). The message is fixed text naming the variable, never its
+ * value, so startup's stderr line may print it (spec 5.9).
+ */
+export class DeployEnvError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DeployEnvError";
+  }
+}
+
 const list = (v: string | undefined): string[] =>
   (v ?? "")
     .split(",")
@@ -32,7 +43,8 @@ const list = (v: string | undefined): string[] =>
 function readPort(v: string | undefined): number {
   const raw = v ?? "3000";
   const port = /^\d+$/.test(raw) ? Number.parseInt(raw, 10) : Number.NaN;
-  if (!(port >= 1 && port <= 65535)) throw new Error("PORT must be an integer from 1 to 65535");
+  if (!(port >= 1 && port <= 65535))
+    throw new DeployEnvError("PORT must be an integer from 1 to 65535");
   return port;
 }
 
@@ -43,12 +55,12 @@ export function readDeployEnv(env: NodeJS.ProcessEnv, defaults?: BundledPaths): 
     env.NODE_ENV === "development" || env.NODE_ENV === "test" ? env.NODE_ENV : "production";
   const publicOrigin = env.PUBLIC_ORIGIN?.trim();
   if (!publicOrigin || !/^https?:\/\/[^/]+$/.test(publicOrigin)) {
-    throw new Error("PUBLIC_ORIGIN must be an origin like https://host");
+    throw new DeployEnvError("PUBLIC_ORIGIN must be an origin like https://host");
   }
   const modes = list(env.IDENTITY_MODES ?? "standalone");
   for (const m of modes) {
     if (m !== "standalone" && m !== "embedded") {
-      throw new Error(`IDENTITY_MODES has unknown mode ${m}`);
+      throw new DeployEnvError("IDENTITY_MODES may list only standalone and embedded");
     }
   }
   const dataDir = env.DATA_DIR ?? "/data";

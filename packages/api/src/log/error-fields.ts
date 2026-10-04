@@ -12,13 +12,15 @@ export interface ErrorFields {
 const SAFE_NAME = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 /** Driver result codes are fixed tokens such as SQLITE_CONSTRAINT_TRIGGER, never data. */
 const DRIVER_CODE = /^SQLITE_[A-Z_]{1,64}$/;
+/** Node system error codes (EADDRINUSE, EACCES) are fixed tokens too; the message is not. */
+const SYSTEM_CODE = /^E[A-Z]{1,31}$/;
 const MAX_CAUSES = 5;
 
 /**
  * What an error may put in a log line or on stderr (spec 5.9; M1 phase review LS-1, LS-2). A
  * query error's message quotes the statement's params (an email, a password hash, a session
- * token, a config document), so only the error's name is kept, plus the first driver code found
- * on it or its causes. The message is kept only for an instance of one of `fixedText`, the
+ * token, a config document), so only the error's name is kept, plus the first driver or Node
+ * system code found on it or its causes. The message is kept only for an instance of one of `fixedText`, the
  * classes whose message the app builds from fixed text.
  */
 export function errorFields(err: unknown, fixedText: readonly FixedTextError[] = []): ErrorFields {
@@ -28,7 +30,8 @@ export function errorFields(err: unknown, fixedText: readonly FixedTextError[] =
   let e: unknown = err;
   for (let i = 0; i < MAX_CAUSES && e !== null && typeof e === "object"; i++) {
     const code: unknown = (e as { code?: unknown }).code;
-    if (typeof code === "string" && DRIVER_CODE.test(code)) return { name, code };
+    if (typeof code === "string" && (DRIVER_CODE.test(code) || SYSTEM_CODE.test(code)))
+      return { name, code };
     e = (e as { cause?: unknown }).cause;
   }
   return { name };

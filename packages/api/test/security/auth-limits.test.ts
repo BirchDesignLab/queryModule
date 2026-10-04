@@ -366,13 +366,22 @@ describe("SEC-005 session limits over HTTP", () => {
       return record(tx, e);
     });
     vi.spyOn(t.deps.db, "delete").mockImplementationOnce(() => {
-      throw new Error("delete unavailable");
+      throw new TypeError("delete unavailable");
     });
     const r = await t.signIn(EMAIL, PW);
     expect(r.status).toBe(500);
     expect(r.headers.getSetCookie()).toEqual([]);
-    const lines = t.logLines.map((l) => JSON.parse(l) as { msg: string; errorName?: string });
-    expect(lines.find((l) => l.msg === "unaudited session delete failed")?.errorName).toBe("Error");
+    const lines = t.logLines.map(
+      (l) => JSON.parse(l) as { msg: string; errorName?: string; deleteErrorName?: string },
+    );
+    // M1 exit Q2: one line, after the delete, with the actual outcome; never "session deleted".
+    expect(lines.map((l) => l.msg)).not.toContain("sign-in audit failed; session deleted");
+    expect(
+      lines.find((l) => l.msg === "sign-in audit failed; session delete failed"),
+    ).toMatchObject({
+      errorName: "Error",
+      deleteErrorName: "TypeError",
+    });
     expect(t.logLines.join("\n")).not.toContain("unavailable");
   });
 });

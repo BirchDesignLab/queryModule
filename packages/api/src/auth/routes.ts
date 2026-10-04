@@ -99,14 +99,13 @@ async function internalSignInFailure(
  * AUD-2: drops a session whose loginSucceeded row failed to commit. A failed delete is logged by
  * name and still answers 500: the cookie was never sent, and the row expires on its own limits.
  */
-async function deleteUnauditedSession(d: AppDeps, sessionId: string): Promise<void> {
+/** Deletes a session whose loginSucceeded row failed; returns the delete error's name, or null. */
+async function deleteUnauditedSession(d: AppDeps, sessionId: string): Promise<string | null> {
   try {
     await d.db.delete(session).where(eq(session.id, sessionId));
+    return null;
   } catch (e) {
-    d.logger.error("unaudited session delete failed", {
-      sessionId,
-      errorName: e instanceof Error ? e.name : typeof e,
-    });
+    return e instanceof Error ? e.name : typeof e;
   }
 }
 
@@ -178,11 +177,17 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
       // AUD-2 (SEC-010): no session lives without its loginSucceeded row. Better Auth already
       // inserted it, so it is deleted and its cookie never leaves; the lockout count stays.
       // Fixed text and the error's name only: a query error's message carries its params.
-      d.logger.error("sign-in audit failed; session deleted", {
-        sessionId: s.id,
-        errorName: e instanceof Error ? e.name : typeof e,
-      });
-      await deleteUnauditedSession(d, s.id);
+      // M1 exit Q2: logged after the delete, with its actual outcome.
+      const errorName = e instanceof Error ? e.name : typeof e;
+      const deleteErrorName = await deleteUnauditedSession(d, s.id);
+      if (deleteErrorName === null)
+        d.logger.error("sign-in audit failed; session deleted", { sessionId: s.id, errorName });
+      else
+        d.logger.error("sign-in audit failed; session delete failed", {
+          sessionId: s.id,
+          errorName,
+          deleteErrorName,
+        });
       return apiError(c, "internal");
     }
     await d.limiter.reset(key);

@@ -460,6 +460,34 @@ describe("SEC-006 log capture: a failed query on an unsanitized route (M1 phase 
       expect(sinks.includes(f), `leaked: ${f.slice(0, 12)}...`).toBe(false);
   });
 
+  it("PUT /admin/config/draft: a failed insert logs no config document value or query text", async () => {
+    const mark = "ZZDRAFTCANARYAGENCY";
+    const a = await adminConfigApp();
+    await a.userId("implementer"); // signs in before any insert is made to fail
+    const doc = withSiteConfig(await a.exportVersion(1), (s) => {
+      s.defaults = { ...(s.defaults as Record<string, string>), agency: mark };
+    });
+    await a.t.deps.db.$client.execute(
+      "CREATE TRIGGER ls1_fail_draft BEFORE INSERT ON site_config_version BEGIN SELECT RAISE(ABORT, 'forced'); END",
+    );
+    const r = await a.call("implementer", "PUT", `${API}/draft`, { baseVersion: 1, document: doc });
+    expect(r.status).toBe(500);
+    const body = await r.text();
+
+    const sinks = [...a.t.logLines, ...stray].join("\n");
+    const unhandled = a.t.logLines.map((l) => JSON.parse(l)).filter((l) => l.msg === "unhandled");
+    expect(unhandled).toHaveLength(1);
+    expect(unhandled[0]?.err).toEqual({
+      name: "Error",
+      code: expect.stringMatching(/^SQLITE_CONSTRAINT/),
+    });
+    for (const f of [mark, "Failed query", "params:"]) {
+      expect(sinks.includes(f), `leaked to a log: ${f}`).toBe(false);
+      expect(body.includes(f), `leaked to the response: ${f}`).toBe(false);
+    }
+    expect((await auditText(a.t)).includes(mark), "document value in an audit row").toBe(false);
+  });
+
   it("a query error carrying a session token in its message reaches no sink", async () => {
     const t = await createTestApp();
     const tokenLike = "ZZSESSIONTOKENCANARY0123456789abcdef";

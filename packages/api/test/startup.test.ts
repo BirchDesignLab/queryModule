@@ -8,6 +8,7 @@ import type * as auditService from "../src/audit/service";
 import { ConfigLoadError } from "../src/config/load";
 import type * as dbClient from "../src/db/client";
 import { readPragmas } from "../src/db/client";
+import { readDeployEnv } from "../src/env";
 import { KeyCanaryError } from "../src/keys/canary";
 import { SecretConfigError } from "../src/secrets";
 import {
@@ -399,5 +400,40 @@ describe("SEC-006 spec 5.9 the startup stderr line (M1 phase review LS-2)", () =
     const forged = new Error("x");
     forged.name = `Error ${FAKE_SECRET}`;
     expect(JSON.stringify(startupErrorFields(forged))).not.toContain(FAKE_SECRET);
+  });
+
+  it("keeps the fixed text of a DeployEnvError (M1 exit residual, LS-2 side effect)", () => {
+    let caught: unknown;
+    try {
+      readDeployEnv({ PUBLIC_ORIGIN: "http://localhost:3000", PORT: "abc" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(startupErrorFields(caught)).toEqual({
+      name: "DeployEnvError",
+      message: "PORT must be an integer from 1 to 65535",
+    });
+  });
+
+  it("keeps a Node system error code, never its message (EADDRINUSE carries the address)", () => {
+    const e = Object.assign(
+      new Error(`listen EADDRINUSE: address already in use 10.0.0.1:${FAKE_SECRET}`),
+      {
+        code: "EADDRINUSE",
+        syscall: "listen",
+      },
+    );
+    expect(startupErrorFields(e)).toEqual({ name: "Error", code: "EADDRINUSE" });
+    // A code that is not a fixed token is dropped.
+    const odd = Object.assign(new Error("x"), { code: `E${FAKE_SECRET}x` });
+    expect(startupErrorFields(odd)).toEqual({ name: "Error" });
+  });
+
+  it("prints neither the message nor a canary in it for an unknown plain Error", () => {
+    const e = new Error(`unexpected ${FAKE_SECRET}`);
+    const out = JSON.stringify(startupErrorFields(e));
+    expect(startupErrorFields(e)).toEqual({ name: "Error" });
+    expect(out).not.toContain(FAKE_SECRET);
+    expect(out).not.toContain("unexpected");
   });
 });

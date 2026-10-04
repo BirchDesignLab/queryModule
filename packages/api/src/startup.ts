@@ -10,7 +10,7 @@ import { DatabaseLockTimeoutError, DatabaseOpenError } from "./db/client";
 import { TriggerMissingError } from "./db/migrate";
 import { withTransaction } from "./db/tx";
 import { type AppDeps, buildDeps } from "./deps";
-import { readDeployEnv } from "./env";
+import { DeployEnvError, readDeployEnv } from "./env";
 import { KeyCanaryError } from "./keys/canary";
 import { type ErrorFields, errorFields } from "./log/error-fields";
 import { loadSecrets, SecretConfigError } from "./secrets";
@@ -26,6 +26,7 @@ export class StartupRefusedError extends Error {
 /** The startup errors whose message is fixed text: key names, file paths, trigger names. */
 const FIXED_TEXT_STARTUP_ERRORS = [
   StartupRefusedError,
+  DeployEnvError,
   ConfigLoadError,
   SecretConfigError,
   KeyCanaryError,
@@ -38,7 +39,7 @@ const FIXED_TEXT_STARTUP_ERRORS = [
  * LS-2 (spec 5.9, 8.1): the error fields main.ts writes to stderr when startup is refused. A
  * failed seed insert or migration throws a query error whose message quotes its params, so the
  * message is written only for the fixed-text startup errors; any other error gives its name and
- * driver code only.
+ * its driver or Node system code only (EADDRINUSE, not the message, which quotes the address).
  */
 export function startupErrorFields(err: unknown): ErrorFields {
   return errorFields(err, FIXED_TEXT_STARTUP_ERRORS);

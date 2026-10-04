@@ -136,3 +136,66 @@ describe("#224 main.ts fails closed on an error outside the request path (spec 8
     expect(`${stdout}${stderr}`).not.toContain(AUTH_SECRET);
   }, 60_000);
 });
+
+/**
+ * M1 exit residual (LS-2 side effect): the "startup refused" line keeps the fixed text of a
+ * DeployEnvError and a Node system error code, so an operator still sees why startup failed.
+ */
+async function runStartup(env: Record<string, string>) {
+  const secrets = tempDir("qm-start-sec-");
+  for (const [n, v] of Object.entries({
+    DB_ENCRYPTION_KEY: k(1),
+    CREDENTIAL_KEY: k(2),
+    DATA_KEY: k(3),
+    BETTER_AUTH_SECRET: AUTH_SECRET,
+  }))
+    writeFileSync(join(secrets, n), v);
+  const child = spawn(process.execPath, ["--import", "tsx", "src/main.ts"], {
+    cwd: apiDir,
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      PUBLIC_ORIGIN: "http://localhost:3000",
+      DATA_DIR: tempDir("qm-start-data-"),
+      SECRETS_DIR: secrets,
+      ALLOW_MOCK_SOURCES: "true",
+      ...env,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (b: Buffer) => {
+    stderr += b.toString();
+  });
+  child.stdout.resume();
+  const code = await new Promise<number | null>((r) => child.on("exit", (c) => r(c)));
+  const lines = stderr.split("\n").filter((l) => l.includes('"msg":"startup refused"'));
+  return { code, stderr, lines };
+}
+
+describe("main.ts startup refused line keeps fixed causes (spec 5.9, 8.1)", () => {
+  it("a bad PORT prints the fixed DeployEnvError text", async () => {
+    const { code, stderr, lines } = await runStartup({ PORT: "abc" });
+    expect(code).toBe(1);
+    expect(lines, stderr).toHaveLength(1);
+    expect(JSON.parse(lines[0] ?? "{}").error).toEqual({
+      name: "DeployEnvError",
+      message: "PORT must be an integer from 1 to 65535",
+    });
+  }, 60_000);
+
+  it("a port in use prints code EADDRINUSE and no address", async () => {
+    const port = await freePort();
+    const taken = createServer();
+    await new Promise<void>((r) => taken.listen(port, "0.0.0.0", () => r()));
+    try {
+      const { code, stderr, lines } = await runStartup({ PORT: String(port) });
+      expect(code).toBe(1);
+      expect(lines, stderr).toHaveLength(1);
+      expect(JSON.parse(lines[0] ?? "{}").error).toEqual({ name: "Error", code: "EADDRINUSE" });
+      expect(stderr).not.toContain("0.0.0.0");
+    } finally {
+      await new Promise<void>((r) => taken.close(() => r()));
+    }
+  }, 60_000);
+});

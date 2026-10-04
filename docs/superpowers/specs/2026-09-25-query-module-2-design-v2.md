@@ -928,7 +928,7 @@ Two identity modes behind `IdentityService.resolve(req) -> Principal` (5.5). Eve
 
 Lockouts are audited: the `loginFailed` row whose failure starts a lockout carries `lockoutUntil` (4.7).
 
-**Auth audit.** Better Auth hooks write `loginSucceeded`, `loginFailed`, `logout`, `mfaEnrolled` and `mfaDisabled`; the session service and the sweeper write `sessionRevoked` (4.7).
+**Auth audit.** Better Auth hooks write `loginSucceeded`, `loginFailed`, `logout`, `mfaEnrolled` and `mfaDisabled`; `sessionRevoked` (4.7) is written by the admin console session-revoke route (reason `admin`, the acting admin; ADR-0011 item 8) and by the sweeper on expiry (reason `expired`, system actor; 5.2). Sessions a user disable deletes are counted in its `userDisabled` row (`sessionsRevoked`), not given one `sessionRevoked` row each.
 
 **MFA.** TOTP through the Better Auth two-factor plugin (M3, SEC-005). `SiteConfig.auth.mfaRequired: boolean | { roles: Role[] }`, default `false`. When it applies to a user who has not enrolled, middleware returns 403 `mfaEnrollmentRequired` (4.7) on every route except auth, enrollment, `meta`, `config` and `locales`, and the client routes to enrollment. In embedded mode the host owns MFA and `mfaRequired` is not evaluated.
 
@@ -936,7 +936,7 @@ Lockouts are audited: the `loginFailed` row whose failure starts a lockout carri
 
 **Step-up.** Routes marked step-up (credential PUT and DELETE, delegation approval) require: a TOTP code in the request when the user has TOTP enrolled, otherwise a password re-entry at `POST /api/v1/me/step-up` within the last 5 minutes, recorded as `stepUpAt` on the session. A missing step-up is 403 `stepUpRequired` (4.7). Step-up failures count against the account limiter. In embedded mode step-up requires a host token with `iat` at most 5 minutes old, obtained with `identityRequest { reason: "stepUp" }` (6.9).
 
-**User disable.** One transaction: revoke every delegation where the user is trainee or officer (reason `userDisabled`), delete the user's `state_credential` rows, revoke all sessions, set the user disabled, write `userDisabled` (plus `delegationRevoked` and `credentialsDeleted` per affected row). Sockets close after commit. Run by `scripts/ops/disable-user.ts`; there is no admin UI. `audit_event` has no foreign key to `user` and carries an actor snapshot (5.5), so audit survives. A user row may be hard-deleted by ops script any time after disable (5.5, 11).
+**User disable.** One transaction: revoke every delegation where the user is trainee or officer (reason `userDisabled`), delete the user's `state_credential` rows, revoke all sessions, set the user disabled, write `userDisabled` (plus `delegationRevoked` and `credentialsDeleted` per affected row). Sockets close after commit (`EventBus.onSessionEnded`). Run by an admin from the admin console (`POST /api/v1/admin/users/:id/disable`, ADR-0011 item 8), as the acting admin; an admin cannot disable themselves, and the last enabled admin cannot be disabled. Until delegations and stored credentials land, `delegationsRevoked` and `credentialsDeleted` are 0. The ops script `scripts/ops/disable-user.ts` is not built yet. `audit_event` has no foreign key to `user` and carries an actor snapshot (5.5), so audit survives. A user row may be hard-deleted by ops script any time after disable (5.5, 11).
 
 **Demo users** and their password derivation: 8.5.
 
