@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { CreateUserResponseSchema } from "@querymodule/core/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { adminConfigApp, errorOf } from "../helpers/admin-config";
 import { startTestServer } from "../helpers/test-app";
@@ -184,6 +184,21 @@ describe("forced password change (D-A26)", () => {
       const r = await a.t.request(path, { headers: { cookie } });
       expect(r.status, path).toBe(404);
       expect((await errorOf(r)).code).toBe("notFound");
+    }
+  });
+
+  it("#505 N-m1: adminGuard gates the forced change and resolves the session once per admin request", async () => {
+    const { a, cookie } = await createdUser();
+    const gated = vi.spyOn(a.t.deps.identity, "resolveGated");
+    const plain = vi.spyOn(a.t.deps.identity, "resolve");
+    for (const path of ["/api/v1/admin/config", "/api/v1/admin/users"]) {
+      gated.mockClear();
+      plain.mockClear();
+      expect((await a.call("admin", "GET", path)).status, path).toBe(200);
+      expect(gated.mock.calls.length + plain.mock.calls.length, path).toBe(1);
+      const r = await a.t.request(path, { headers: { cookie } });
+      expect(r.status, path).toBe(403);
+      expect((await errorOf(r)).code).toBe("passwordChangeRequired");
     }
   });
 

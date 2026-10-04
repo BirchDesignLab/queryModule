@@ -145,7 +145,7 @@ describe("BR-001 ADR-0011 validate", () => {
     ]);
   });
 
-  it("server-only checks: an unknown adapter kind, a missing mock response and mfaRequired", async () => {
+  it("server-only checks: an unknown adapter kind, a missing mock response, mfaRequired and adminConfig off", async () => {
     const a = await adminConfigApp();
     const doc = await a.exportVersion(1);
     const kind = withSiteConfig(doc, (s) => {
@@ -155,10 +155,15 @@ describe("BR-001 ADR-0011 validate", () => {
     const mfa = withSiteConfig(doc, (s) => {
       s.auth = { ...(s.auth as Json), mfaRequired: true };
     });
+    const adminOff = withSiteConfig(doc, (s) => {
+      s.features = { ...(s.features as Json), adminConfig: false };
+    });
     const cases = [
       [kind, "/sources/0/kind", "config.unknownAdapterKind"],
       [noMock, "/sources/0/id", "config.missingMock"],
       [mfa, "/auth/mfaRequired", "config.mfaNotEnforced"],
+      // #505 T27 Q6: publishing it would lock the config API (404) until the store is edited.
+      [adminOff, "/features/adminConfig", "config.adminConfigOff"],
     ] as const;
     for (const [document, path, key] of cases) {
       const r = await a.call("admin", "POST", `${API}/validate`, { document });

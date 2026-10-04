@@ -6,6 +6,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { activate } from "../../src/admin/config/activate";
 import { changedPointers } from "../../src/admin/config/publish";
+import { uuidv7 } from "../../src/ids";
 import { API, adminConfigApp, errorOf, withSiteConfig } from "../helpers/admin-config";
 
 /*
@@ -154,6 +155,61 @@ describe("BR-001 ADR-0011 items 3 and 5 publish", () => {
     expect(await a.t.auditRows("configPublished")).toEqual([]);
     expect(await a.t.auditRows("configLoaded")).toHaveLength(loaded);
     expect((await a.versionRows()).map((v) => v.status)).toEqual(["published", "draft"]);
+  });
+});
+
+describe("#505 T27 Q6 a publish or rollback cannot turn adminConfig off", () => {
+  const OFF = { key: "config.adminConfigOff", params: { path: "/features/adminConfig" } };
+  const adminOff = (doc: Parameters<typeof withSiteConfig>[0]) =>
+    withSiteConfig(doc, (s) => {
+      s.features = { ...(s.features as Record<string, unknown>), adminConfig: false };
+    });
+
+  it("publish of an adminConfig-off draft is 400 validationFailed: no audit row, old snapshot live", async () => {
+    const a = await adminConfigApp();
+    const doc = adminOff(await a.exportVersion(1));
+    await a.call("admin", "PUT", `${API}/draft`, { baseVersion: 1, document: doc });
+    const hash = a.t.deps.config.current().configHash;
+    const r = await a.call("admin", "POST", `${API}/publish`, { draftVersion: 2 });
+    expect(r.status).toBe(400);
+    const e = await errorOf(r);
+    expect(e.code).toBe("validationFailed");
+    expect(e.errors).toContainEqual(OFF);
+    expect(a.t.deps.config.current().configHash).toBe(hash);
+    expect(a.t.deps.config.current().siteConfig.features.adminConfig).toBe(true);
+    expect(await a.t.auditRows("configPublished")).toEqual([]);
+    expect((await a.versionRows()).map((v) => v.status)).toEqual(["published", "draft"]);
+  });
+
+  it("rollback to an adminConfig-off version is 400 validationFailed and leaves no new row", async () => {
+    const a = await adminConfigApp();
+    const v1 = await a.exportVersion(1);
+    await a.call("admin", "PUT", `${API}/draft`, { baseVersion: 1, document: adminOff(v1) });
+    // An adminConfig-off version 2 and an on version 3, published outside the API (activate()
+    // directly, as an operator would): the only way the store can hold one.
+    const off = (await a.versionRows())[1]?.document ?? "";
+    await activate(a.t.deps, 2, undefined, { live: 1, document: off });
+    expect(a.t.deps.config.current().siteConfig.features.adminConfig).toBe(false);
+    await a.t.deps.db.$client.execute({
+      sql: `INSERT INTO site_config_version (id, site_id, version, status, document, base_version, created_by, created_at)
+            SELECT ?, site_id, 3, 'draft', document, 2, created_by, created_at FROM site_config_version WHERE version = 1`,
+      args: [uuidv7()],
+    });
+    const on = (await a.versionRows())[2]?.document ?? "";
+    await activate(a.t.deps, 3, undefined, { live: 2, document: on });
+    const hash = a.t.deps.config.current().configHash;
+    const r = await a.call("admin", "POST", `${API}/versions/2/rollback`);
+    expect(r.status).toBe(400);
+    const e = await errorOf(r);
+    expect(e.code).toBe("validationFailed");
+    expect(e.errors).toContainEqual(OFF);
+    expect(a.t.deps.config.current().configHash).toBe(hash);
+    expect(await a.t.auditRows("configPublished")).toEqual([]);
+    expect((await a.versionRows()).map((v) => [v.version, v.status])).toEqual([
+      [1, "superseded"],
+      [2, "superseded"],
+      [3, "published"],
+    ]);
   });
 });
 

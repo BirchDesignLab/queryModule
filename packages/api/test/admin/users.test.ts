@@ -8,7 +8,7 @@ import {
 } from "@querymodule/core/contracts";
 import { describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
-import { disableUser, setUserRole } from "../../src/admin/users/users";
+import { createUser, disableUser, revokeSession, setUserRole } from "../../src/admin/users/users";
 import { grantRole } from "../../src/ops/grant-role";
 import { adminConfigApp, type Caller, errorOf } from "../helpers/admin-config";
 import { startTestServer } from "../helpers/test-app";
@@ -495,5 +495,43 @@ describe("last-admin guard under concurrency (G-I1, contract 409 'no enabled adm
     });
     expect(await a.t.auditRows("userDisabled")).toHaveLength(1);
     expect(await consoleRoleRows(a)).toHaveLength(0);
+  });
+});
+
+describe("host principals (spec 5.6, SEC-010: host rows carry the host subject)", () => {
+  it("every user administration audit row of a host admin records its hostSubject", async () => {
+    const { a } = await setup();
+    const email = "host-admin@example.test";
+    await a.t.createUser(email, PW);
+    await grantRole(a.t.deps, { email, role: "admin", change: "granted" });
+    const cookie = await a.t.cookieFor(email, PW);
+    const local = await a.t.deps.identity.resolve(
+      new Request("http://localhost/x", { headers: { cookie } }),
+    );
+    if (!local) throw new Error("no principal");
+    const host = { ...local, identitySource: "host" as const, hostSubject: "host-subject-0002" };
+
+    const created = await createUser(a.t.deps, host, {
+      email: "made-by-host@example.test",
+      name: "Sample Testerson",
+      role: "user",
+    });
+    if (!created.ok) throw new Error("create failed");
+    const u = await plainUser(a, "bystander-host@example.test");
+    expect((await setUserRole(a.t.deps, host, u.id, "trainingOfficer")).ok).toBe(true);
+    expect(await revokeSession(a.t.deps, host, await sessionIdOf(a, u.id))).toBe(true);
+    expect((await disableUser(a.t.deps, host, u.id)).ok).toBe(true);
+
+    const rows = (
+      await a.t.deps.db.$client.execute(
+        "SELECT type, identity_source, host_subject FROM audit_event WHERE type IN ('userCreated', 'roleChanged', 'sessionRevoked', 'userDisabled') AND identity_source = 'host' ORDER BY id",
+      )
+    ).rows.map((r) => [r.type, r.host_subject]);
+    expect(rows).toEqual([
+      ["userCreated", "host-subject-0002"],
+      ["roleChanged", "host-subject-0002"],
+      ["sessionRevoked", "host-subject-0002"],
+      ["userDisabled", "host-subject-0002"],
+    ]);
   });
 });

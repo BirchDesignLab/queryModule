@@ -123,9 +123,18 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
   // credential outcome answers Better Auth's bad-credentials 401, counts toward the account
   // lockout (the same 429 after N failures) and audits accountDisabled (C-I1).
   if (target?.disabledAt != null && (res.ok || res.status === 401)) {
-    // A disabled user holds no session (disable deleted them), so drop every one by user id.
-    if (res.ok) await d.db.delete(session).where(eq(session.userId, target.id));
-    else if (!(await isBadCredentials(res))) {
+    // A disabled user holds no session (disable deleted them), so drop every one by user id. A
+    // failed delete still answers the same 401 (#505 G-m2): identity refuses a disabled user's
+    // session, so a row left behind is never live. Only the error name is logged (spec 5.9).
+    if (res.ok) {
+      try {
+        await d.db.delete(session).where(eq(session.userId, target.id));
+      } catch (e) {
+        d.logger.error("disabled sign-in session delete failed", {
+          errorName: e instanceof Error ? e.name : typeof e,
+        });
+      }
+    } else if (!(await isBadCredentials(res))) {
       return internalSignInFailure(c, d, res);
     }
     const { lockedUntil } = await d.limiter.recordFailure(key, AUTH_LIMITS.accountFailures);

@@ -14,9 +14,9 @@ export interface AppIdentityService extends IdentityService {
   isSessionLive(sessionId: string): Promise<boolean>;
   /**
    * resolve() plus the user's must_change_password flag (D-A26), read in the same query. Principal
-   * is a critical-tier contract, so the flag travels beside it. requireSession, the admin-prefix
-   * middleware requirePasswordChanged (app.ts, ahead of adminGuard, which does not check it) and
-   * the WebSocket upgrade refuse a principal whose flag is set (passwordChangeRequired).
+   * is a critical-tier contract, so the flag travels beside it. requireSession, adminGuard
+   * (admin/access.ts, after its feature check) and the WebSocket upgrade refuse a principal whose
+   * flag is set (passwordChangeRequired).
    */
   resolveGated(req: Request): Promise<{ principal: Principal; mustChangePassword: boolean } | null>;
 }
