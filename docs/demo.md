@@ -14,6 +14,25 @@ The live demo at https://querymodule.birchdesignlab.com uses these accounts. Pas
 
 All data behind these accounts is mock data (spec 5.4 fixture policy). No real person, vehicle or property record exists in this system.
 
+## Demo runbook
+
+[docs/demo/m1-v1.md](demo/m1-v1.md) is the M1 v1 click path, one section per persona: dispatcher,
+officer, admin (builder, publish, history and roll back, users and roles, the forced password
+change), implementer and the Status page, with what each step shows and what M1 does not do yet.
+The config behind it is in [docs/site-config.md](site-config.md) and the routes are in
+[docs/api.md](api.md).
+
+## Submit and terminal, as far as M1 goes
+
+1. Sign in as `dispatcher@example.test`.
+2. Pick Vehicle, type a plate (`ZZ-0001`) and press Enter. The form sends `POST /api/v1/queries`.
+3. The row in "Requests this shift" reads "Acknowledged" with the send time and a short reference.
+   That is the end of a submit in M1 (the HTTP 202 and its correlation id); no source answers
+   until dispatch lands (M2 P0.5, ADR-0012).
+4. Choose "Terminal mode", type `VEH.ZZ-0001` and press Enter: the same query, typed. `XYZ.1` shows
+   "Unrecognized command XYZ." and sends nothing.
+5. Use the table below for more queries, each of which runs from the form and from the terminal.
+
 ## Example queries
 
 Each example from the requirements ("Use Case Examples" and the Person, Vehicle, Property and Terminal scenarios) runs from the form and from the terminal. In M1 a submit ends at the acknowledgment (202); source answers arrive once dispatch lands (M2 P0.5). The default site uses `.` as the terminal delimiter; example-ok uses `/`.
