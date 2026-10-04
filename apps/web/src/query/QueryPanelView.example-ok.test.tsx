@@ -102,7 +102,7 @@ describe("example-ok site through the shared renderer (BR-001)", () => {
     await user.click(await screen.findByRole("button", { name: "Person" }));
     await user.click(screen.getByRole("button", { name: "Terminal mode" }));
     const command = await screen.findByRole("textbox", { name: "Command" });
-    expect(screen.getByText(/VEH\/plate\/state/)).toBeInTheDocument();
+    expect(screen.getByText(/VEH\/Plate\/State/)).toBeInTheDocument();
 
     await user.clear(command);
     await user.type(command, "NAM/TESTERSON/SAMPLE/W/M/01011901");

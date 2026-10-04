@@ -108,6 +108,14 @@ function sameValues(
   return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 }
 
+function sameSources(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** A checked request with the user's source choice as it stood when the request left. */
+type SentRequest = CheckedRequest & { draftSources: readonly string[] | null };
+
 function initialQueryType(config: ClientSiteConfig): string | null {
   const codes = config.queryTypes.map((q) => q.code);
   const first = config.quickAccess[0];
@@ -301,12 +309,17 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   // source change or a type change drops them.
   // biome-ignore lint/correctness/useExhaustiveDependencies: values, draftSources and queryType are the triggers
   useEffect(() => setServerErrors([]), [values, draftSources, queryType]);
-  // What is on screen now, for an answer that arrives after the request left (see sameAsSent).
+  // What the user has on screen now, for an answer that arrives after the request left (see
+  // sameAsSent). Sources are the user's own choice (the draft's), not the resolved checked list: a
+  // background config refresh can change which sources are eligible without the user doing anything.
   const onScreen = useRef<{
-    queryType: string;
+    queryType: string | null;
     values: Readonly<Record<string, DraftValue>>;
-    sourceIds: readonly string[];
+    draftSources: readonly string[] | null;
   } | null>(null);
+  useEffect(() => {
+    onScreen.current = { queryType, values: values ?? NO_VALUES, draftSources };
+  }, [queryType, values, draftSources]);
 
   // One clock read per evaluation: the command echo formats with the same now (evaluatedAt), so a
   // date or year the rules resolve against today reads the same in the form and the echo.
@@ -373,21 +386,21 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   if (queryType === null || formState === null || evaluated === null) return null;
 
   const checkedSources = resolveCheckedSources(formState, draftSources);
-  onScreen.current = { queryType, values: values ?? NO_VALUES, sourceIds: checkedSources };
 
   /**
    * A 400 describes the values and sources that were sent. If the user changed either while the
    * request was in flight (the effect above only drops errors that already exist), its errors
-   * would mark fields the user has since edited, so they are not shown.
+   * would mark fields the user has since edited, so they are not shown. Only the user's own
+   * source choice counts: a config refresh that changes which sources are eligible does not make
+   * the server's answer stale.
    */
-  const sameAsSent = (request: CheckedRequest): boolean => {
+  const sameAsSent = (request: SentRequest): boolean => {
     const now = onScreen.current;
     return (
       now !== null &&
       now.queryType === request.queryType &&
       sameValues(now.values, request.values) &&
-      now.sourceIds.length === request.sourceIds.length &&
-      now.sourceIds.every((id, index) => id === request.sourceIds[index])
+      sameSources(now.draftSources, request.draftSources)
     );
   };
 
@@ -405,7 +418,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     return labelKey === undefined ? code : t(labelKey);
   };
 
-  const handleOutcome = (outcome: SubmitOutcome, request: CheckedRequest): void => {
+  const handleOutcome = (outcome: SubmitOutcome, request: SentRequest): void => {
     const { state } = request;
     switch (outcome.kind) {
       case "acknowledged":
@@ -450,6 +463,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     // The list row is the same one from Sending to its outcome. A send that joins one already in
     // flight gets the same outcome, so it adds no row of its own.
     // What goes out is kept with the row, so a failed one can be sent again (memory only).
+    const sentDraftSources = drafts.getState().drafts[request.queryType]?.sources ?? null;
     const submitted = {
       queryType: request.queryType,
       values: valuesToSend(config, request.queryType, request.values, request.state, Date.now()),
@@ -467,7 +481,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const outcome = await submit.getState().submit({ ...submitted, configHash: config.configHash });
     // The list outlives the panel, so the row settles even if the panel has unmounted.
     if (rowId !== null) requests.getState().settle(rowId, outcome);
-    if (mounted.current) handleOutcome(outcome, request);
+    if (mounted.current) handleOutcome(outcome, { ...request, draftSources: sentDraftSources });
   };
 
   const send = (): Promise<void> =>

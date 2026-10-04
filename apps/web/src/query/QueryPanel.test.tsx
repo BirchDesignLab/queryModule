@@ -957,6 +957,48 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       expect(polite()).toHaveTextContent("The values were not accepted. Check the form.");
     });
 
+    it("a background config refresh that changes source eligibility keeps the 400 (the user changed nothing)", async () => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.post(`${API}/api/v1/queries`, async ({ request }) => {
+          submitRecorder.calls.push({ key: null, body: await request.json() });
+          await gate;
+          return HttpResponse.json(REQUIRED_LAST, { status: 400 });
+        }),
+      );
+      const { user, services } = await openPanel();
+      await user.click(screen.getByRole("button", { name: "Person" }));
+      await user.type(screen.getByLabelText(/Last name/), "ZZTEST");
+      await user.click(screen.getByRole("button", { name: "Run query" }));
+      await waitFor(() => expect(submitRecorder.calls).toHaveLength(1));
+      // The refresh drops the national source from Person: the checked sources change, the user did not.
+      act(() =>
+        services.queryClient.setQueryData(["config"], {
+          ...CLIENT_CONFIG,
+          configHash: `${"0".repeat(63)}7`,
+          queryTypes: CLIENT_CONFIG.queryTypes.map((q) =>
+            q.code === "PER"
+              ? { ...q, sources: q.sources.filter((s) => s.sourceId !== "nationalSource") }
+              : q,
+          ),
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole("group", { name: "Sources" })).queryByRole("checkbox", {
+            name: "National system",
+          }),
+        ).not.toBeInTheDocument(),
+      );
+      release();
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Last name/)).toHaveAttribute("aria-invalid", "true"),
+      );
+    });
+
     it("control: a 400 for the values still on screen is shown", async () => {
       let release: () => void = () => {};
       const gate = new Promise<void>((resolve) => {

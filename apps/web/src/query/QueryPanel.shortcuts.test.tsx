@@ -229,14 +229,19 @@ describe("FR-053 FR-056 terminal shortcuts (spec 6.4)", () => {
     // A synthetic keydown has no default action in jsdom: no keypress follows and the form never
     // submits implicitly. Only the shortcut handler (requestSubmit) can send the query, and it
     // claims the key (preventDefault) so the browser's own Enter handling does not run as well.
-    const { user } = await openPanel();
+    const { user, services } = await openPanel();
     await user.click(screen.getByRole("button", { name: "Terminal mode" }));
     const command = screen.getByLabelText("Command");
     await user.type(command, ".ABC123");
     expect(fireEvent.keyDown(command, { code: "Enter", key: "Enter" })).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // A send registers its row synchronously (requests.begin runs before the first await), and
+    // fireEvent flushes React before it returns: nothing in the store means nothing was sent, with
+    // no wait for a send that would have been late.
+    expect(services.requests.getState().items).toHaveLength(0);
+    expect(services.submit.getState().status).toBe("idle");
     expect(polite()).not.toHaveTextContent(/query sent/);
     expect(fireEvent.keyDown(command, { code: "Enter", key: "Enter", ctrlKey: true })).toBe(false);
+    expect(services.requests.getState().items).toHaveLength(1);
     await waitFor(() => expect(polite()).toHaveTextContent(/Vehicle query sent/));
   });
 });
@@ -259,7 +264,7 @@ describe("FR-051 FR-052 site terminal settings (example-ok: Ctrl+Slash, / delimi
     const command = await screen.findByLabelText("Command");
     await waitFor(() => expect(command).toHaveFocus());
     expect(command).toHaveValue("VEH/ZZ-0001");
-    expect(screen.getByText(/such as VEH\/plate\/state/)).toBeInTheDocument();
+    expect(screen.getByText(/such as VEH\/Plate\/State/)).toBeInTheDocument();
   });
 });
 

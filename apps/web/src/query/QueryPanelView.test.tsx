@@ -112,7 +112,7 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
     });
     await user.click(await screen.findByRole("button", { name: "Terminal mode" }));
     expect(
-      screen.getByText("Type a command such as NAM/last name/first name, then press Enter."),
+      screen.getByText("Type a command such as NAM/Last name/First name, then press Enter."),
     ).toBeInTheDocument();
   });
 

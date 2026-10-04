@@ -1062,7 +1062,7 @@ Covers UX-001, UX-012, UX-014, BR-002, PLT-006.
 
 Phase 1 screens: login (standalone mode only); query panel (query-type selector, form or terminal toggle, source checkboxes, quick-access bar, FR-007); results list; credentials settings; preferences (persona override, layout orientation, terminal layout, theme mode, locale); admin audit viewer. M3 adds the delegation screens below; M4 the mobile home with quick queries (6.10). A screen whose `features` flag is off is not rendered (5.8).
 
-Overridden by ADR-0010 for the query-type selector only: it is shown just for types without a quick-access button. The rest of 6.2 stands.
+Overridden in part by ADR-0010 (the type controls of the query panel): the quick-access bar picks the query type, and the query-type selector is shown just for types without a quick-access button, labelled "Other query types"; with an empty `quickAccess` it lists every type. The selected type's visible `role: "type"` fields (4.1) leave their form section and render in `TypeFieldBar` under the bar, which is hidden with the form in terminal mode. The rest of 6.2 stands.
 
 **Generic field renderer.** Forms render only from core's `FormState` (4.3): fields in `order`, grouped by section under `sectionLabelKey`, picklist options from the filtered enabled options, labels from `labelKey`. No per-query-type UI code exists (BR-001). A field with `isDefault` shows a text tag "default"; typing makes it a user value.
 

@@ -4,7 +4,7 @@ import { useId } from "react";
 export interface TerminalInputProps {
   id: string;
   label: string;
-  /** terminal.description with the site delimiter, already resolved. */
+  /** The hint (terminal.descriptionExample or terminal.descriptionPlain), already resolved. */
   description: string;
   value: string;
   onChange(text: string): void;
