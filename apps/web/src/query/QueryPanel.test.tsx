@@ -923,6 +923,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       );
       expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
       expect(polite()).not.toHaveTextContent("needs attention");
+      expect(polite()).toHaveTextContent("The values were not accepted. Check the form.");
     });
 
     it("a 400 that arrives after the user switched source shows nothing either", async () => {
@@ -952,6 +953,8 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
         }),
       );
       expect(screen.getByLabelText(/Last name/)).not.toHaveAttribute("aria-invalid");
+      expect(polite()).not.toHaveTextContent("needs attention");
+      expect(polite()).toHaveTextContent("The values were not accepted. Check the form.");
     });
 
     it("control: a 400 for the values still on screen is shown", async () => {

@@ -412,7 +412,11 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         announcer.announce(outcomeAnnouncement(outcome, t, typeLabel));
         return;
       case "invalid":
-        if (!sameAsSent(request)) return;
+        if (!sameAsSent(request)) {
+          // About values no longer on screen: mark nothing, but the user still hears the outcome.
+          announcer.announce(outcomeAnnouncement(outcome, t, typeLabel));
+          return;
+        }
         setServerErrors(outcome.errors as ValidationError[]);
         if (request.onInvalid !== undefined) {
           request.onInvalid(outcome.errors as ValidationError[]);
@@ -436,7 +440,6 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         });
         announcer.announce(t("submit.configChanged"));
         return;
-      case "rateLimited":
       default:
         announcer.announce(outcomeAnnouncement(outcome, t, typeLabel));
     }
