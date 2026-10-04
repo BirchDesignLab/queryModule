@@ -108,6 +108,8 @@ function existingPointer(doc: JsonObject, pointer: string): string | null {
 
 /** "/queryTypes" itself is not an item the editor can show; its elements are. */
 const isTopArray = (pointer: string) => pointer === "/queryTypes";
+// Marks a quiet snapshot whose server verdict is not captured yet (see quiet).
+const QUIET_PENDING = Symbol("quiet-pending");
 
 /**
  * Marks the selected item in the editor and scrolls to it (A-D1 A2); for the issue button, also
@@ -356,6 +358,8 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   // An undo or redo speaks one announcement, the shared "Undone": the draft summary below updates
   // silently for the restored draft (aria-live off) and is polite again from the next edit (#485).
   // A new server verdict or an unparsable Raw edit is a user action of its own: it speaks again.
+  // The server verdict the restored draft shows is only known once it renders (PublishFlow ties a
+  // verdict to the draft it was found for), so the step marks it pending and an effect captures it.
   const [quiet, setQuiet] = useState<{ doc: JsonObject; issues: unknown } | null>(null);
   const step = useCallback(
     (direction: "undo" | "redo") => {
@@ -365,7 +369,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
       const restored = direction === "undo" ? store.getState().undo() : store.getState().redo();
       if (restored === null) return;
       settle.current = { pointer: restored.meta };
-      setQuiet({ doc: store.getState().doc as JsonObject, issues: flow.serverIssues });
+      setQuiet({ doc: store.getState().doc as JsonObject, issues: QUIET_PENDING });
       // On the Raw tab there is no item to show: keep the tab, restore the selection under it.
       if (restored.meta !== null) {
         const pointer = restored.meta;
@@ -380,8 +384,13 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           : t("admin.config.redone", { count: redos }),
       );
     },
-    [store, onSelect, announcer, t, tab, flow.serverIssues],
+    [store, onSelect, announcer, t, tab],
   );
+  const serverIssues = flow.serverIssues;
+  useEffect(() => {
+    if (quiet?.issues === QUIET_PENDING && doc === quiet.doc)
+      setQuiet({ doc: quiet.doc, issues: serverIssues });
+  }, [quiet, doc, serverIssues]);
   useEffect(() => {
     const waiting = settle.current;
     if (waiting === null || (waiting.pointer !== null && shown.pointer !== waiting.pointer)) return;
@@ -530,7 +539,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
             aria-live={
               quiet !== null &&
               doc === quiet.doc &&
-              flow.serverIssues === quiet.issues &&
+              (quiet.issues === QUIET_PENDING || flow.serverIssues === quiet.issues) &&
               raw.parseError === null
                 ? "off"
                 : "polite"
