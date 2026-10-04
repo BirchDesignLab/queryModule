@@ -170,7 +170,9 @@ export type DisableResult =
  * lands in credentials/** with M3 P1). The sockets of the ended sessions close after commit.
  * An admin cannot disable themselves; inside the transaction the actor must still be an enabled
  * admin and one enabled admin must remain, else 409 lastAdmin with nothing written (G-I1).
- * Disabling an already disabled user is a no-op with no audit row.
+ * Disabling an already disabled user is a no-op with no audit row. M1 has no enable path; one
+ * must delete the user's sessions in the same transaction that clears disabledAt, since a
+ * disabled user's session row is refused only through that flag (#513 G-M1).
  */
 export async function disableUser(
   d: AppDeps,
