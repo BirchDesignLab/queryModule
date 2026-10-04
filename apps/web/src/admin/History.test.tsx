@@ -15,8 +15,15 @@ import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
 
+const REAL_URL = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+
 beforeAll(preloadAdminRoutes);
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  // The export test stubs the Blob URL functions: put back what the environment had.
+  URL.createObjectURL = REAL_URL.create;
+  URL.revokeObjectURL = REAL_URL.revoke;
+});
 
 // Task 33 part 2b (#358, BR-001, UX-004): version history, roll back and export. The history is a
 // named region opened from the toolbar; roll back confirms (spec 6.2), publishes a new version and
@@ -45,9 +52,11 @@ const VERSIONS = () => [
 ];
 
 type Handlers = {
+  /** The admin config GET (live and draft); the default fixture when omitted. */
+  adminGet?: () => Response | undefined | Promise<Response | undefined>;
   versions?: () => Response;
   rollback?: () => Response;
-  exportDoc?: () => Response;
+  exportDoc?: () => Response | undefined | Promise<Response | undefined>;
 };
 
 async function openBuilder(handlers: Handlers = {}) {
@@ -62,9 +71,11 @@ async function openBuilder(handlers: Handlers = {}) {
       calls.configGets++;
       return HttpResponse.json(CLIENT_CONFIG);
     }),
-    http.get(`${API}/api/v1/admin/config`, () => {
+    http.get(`${API}/api/v1/admin/config`, async () => {
       calls.gets++;
-      return HttpResponse.json(adminConfigBody({ liveVersion: live }));
+      return (
+        (await handlers.adminGet?.()) ?? HttpResponse.json(adminConfigBody({ liveVersion: live }))
+      );
     }),
     http.get(`${API}/api/v1/admin/config/versions`, () => {
       calls.versions++;
@@ -76,10 +87,15 @@ async function openBuilder(handlers: Handlers = {}) {
       live = 5;
       return HttpResponse.json(versionRow(5, "published", { rollbackOf: Number(params.version) }));
     }),
-    http.get(`${API}/api/v1/admin/config/versions/:version/export`, ({ params }) => {
+    http.get(`${API}/api/v1/admin/config/versions/:version/export`, async ({ params }) => {
       calls.exports.push(String(params.version));
-      return handlers.exportDoc?.() ?? HttpResponse.json({ siteConfig: RAW_SITE, locales: {} });
+      return (
+        (await handlers.exportDoc?.()) ?? HttpResponse.json({ siteConfig: RAW_SITE, locales: {} })
+      );
     }),
+    http.post(`${API}/api/v1/admin/config/validate`, () =>
+      HttpResponse.json({ errors: [], warnings: [] }),
+    ),
     http.put(`${API}/api/v1/admin/config/draft`, async ({ request }) => {
       const body = (await request.json()) as { baseVersion: number };
       calls.puts.push(body);
@@ -166,6 +182,33 @@ describe("the history drawer", () => {
     await t.user.click(within(region).getByRole("button", { name: "Close history" }));
     expect(screen.queryByRole("region", { name: "Version history" })).not.toBeInTheDocument();
     expect(historyButton()).toHaveFocus();
+  });
+
+  it("9: History names the region it opens with aria-controls", async () => {
+    const t = await openBuilder();
+    const region = await openHistory(t);
+    expect(region.id).not.toBe("");
+    expect(historyButton()).toHaveAttribute("aria-controls", region.id);
+    expect(historyButton()).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("8: Save draft reloads the open list", async () => {
+    const t = await openBuilder();
+    await openHistory(t);
+    await setDelimiter(t, ",");
+    const versions = calls.versions;
+    await t.user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(calls.versions).toBeGreaterThan(versions));
+  });
+
+  it("8: Review and publish reloads the open list when it saved the draft", async () => {
+    const t = await openBuilder();
+    await openHistory(t);
+    await setDelimiter(t, ",");
+    const versions = calls.versions;
+    await t.user.click(screen.getByRole("button", { name: "Review and publish" }));
+    await screen.findByRole("dialog", { name: "Review and publish" });
+    await waitFor(() => expect(calls.versions).toBeGreaterThan(versions));
   });
 
   it("a failed load says so and offers Try again", async () => {
@@ -261,7 +304,7 @@ describe("roll back", () => {
     expect(calls.puts).toEqual([{ baseVersion: 4, document: expect.anything() }]);
   });
 
-  it("a 409 says the live version changed; 400 says the version no longer passes; both leave the list", async () => {
+  it("a 409 says the live version changed and the list reloads (the 400 case is the next test)", async () => {
     const t = await openBuilder({
       rollback: () =>
         HttpResponse.json({ error: { code: "draftConflict", requestId: "r1" } }, { status: 409 }),
@@ -276,11 +319,56 @@ describe("roll back", () => {
         { name: "Roll back to version 3" },
       ),
     );
+    const versions = calls.versions;
     expect(
       await screen.findByText(
         "The live version changed while rolling back. Check the history and try again.",
       ),
     ).toBeInTheDocument();
+    // The list on screen is out of date: it reloads, and the history stays open.
+    await waitFor(() => expect(calls.versions).toBeGreaterThan(versions));
+    expect(screen.getByRole("region", { name: "Version history" })).toBeInTheDocument();
+    expect(screen.queryByText(/^Published version/)).not.toBeInTheDocument();
+  });
+
+  it("when the live view cannot be reloaded after a roll back, it says so and Load again retries once per click", async () => {
+    let failGet = false;
+    let release: () => void = () => {};
+    let hold: Promise<void> | null = null;
+    const t = await openBuilder({
+      adminGet: async () => {
+        if (hold !== null) await hold;
+        return failGet
+          ? HttpResponse.json({ error: { code: "internal", requestId: "r1" } }, { status: 500 })
+          : undefined;
+      },
+    });
+    const region = await openHistory(t);
+    failGet = true;
+    await t.user.click(
+      within(row(region, 2)).getByRole("button", { name: "Roll back to version 2" }),
+    );
+    await t.user.click(
+      within(await screen.findByRole("dialog", { name: "Roll back to version 2?" })).getByRole(
+        "button",
+        { name: "Roll back to version 2" },
+      ),
+    );
+    const reason =
+      "Done, but the latest version could not be loaded. This draft still shows the older one.";
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    // A double click while the reload is in flight asks the server once.
+    failGet = false;
+    hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gets = calls.gets;
+    const retry = screen.getByRole("button", { name: "Load again" });
+    await t.user.click(retry);
+    await t.user.click(retry);
+    release();
+    await waitFor(() => expect(screen.queryByText(reason)).not.toBeInTheDocument());
+    expect(calls.gets).toBe(gets + 1);
   });
 
   it("an invalid version cannot be rolled back and says so", async () => {
@@ -333,9 +421,39 @@ describe("export", () => {
     const blob = create.mock.calls[0] as unknown as [Blob];
     expect(blob[0]).toBeInstanceOf(Blob);
     expect(JSON.parse(await blob[0].text())).toEqual({ siteConfig: RAW_SITE, locales: {} });
-    expect(revoke).toHaveBeenCalledWith("blob:fixture-1");
+    // Some engines drop the download if the URL goes at once: it is revoked a moment later.
+    expect(revoke).not.toHaveBeenCalled();
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:fixture-1"), { timeout: 3000 });
     // Nothing is left in the document: no link stays behind.
     expect(document.querySelector("a[download]")).toBeNull();
+  });
+
+  it("10: a second click while an export is in flight downloads nothing twice", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const t = await openBuilder({
+      exportDoc: async () => {
+        await gate;
+        return undefined;
+      },
+    });
+    const region = await openHistory(t);
+    const create = vi.fn(() => "blob:fixture-2");
+    Object.assign(URL, { createObjectURL: create, revokeObjectURL: vi.fn() });
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this.download);
+    });
+    const button = within(row(region, 3)).getByRole("button", { name: "Export version 3" });
+    await t.user.click(button);
+    await t.user.click(button);
+    release();
+    await waitFor(() => expect(clicked).toHaveLength(1));
+    expect(calls.exports).toEqual(["3"]);
   });
 
   it("a failed export says so", async () => {

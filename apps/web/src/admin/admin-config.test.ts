@@ -103,11 +103,12 @@ describe("startOf (what the builder opens on)", () => {
       liveVersion: 3,
       draft: { version: 4, siteConfig: { ...RAW_SITE, terminal: { delimiter: ";" } } },
     });
-    return startOf({ ...body, draft: { ...body.draft, baseVersion } } as never, {});
+    if (body.draft === null) throw new Error("fixture has no draft");
+    return startOf({ ...body, draft: { ...body.draft, baseVersion } }, {});
   };
 
   it("opens on the live version when there is no draft", () => {
-    const start = startOf(adminConfigBody({ liveVersion: 3 }) as never);
+    const start = startOf(adminConfigBody({ liveVersion: 3 }));
     expect(start.server).toMatchObject({ baseVersion: 3, draftVersion: null });
     expect(start.doc).toEqual(start.server.liveDoc);
     expect(start.server.savedDoc).toBe(start.doc);
@@ -129,8 +130,9 @@ describe("startOf (what the builder opens on)", () => {
       liveVersion: 3,
       draft: { version: 4, siteConfig: { ...RAW_SITE, terminal: { delimiter: ";" } } },
     });
+    if (body.draft === null) throw new Error("fixture has no draft");
     const stale = { ...body, draft: { ...body.draft, baseVersion: 2 } };
-    const start = startOf(stale as never, { preferLive: true });
+    const start = startOf(stale, { preferLive: true });
     expect(start.server).toMatchObject({ baseVersion: 3, draftVersion: null });
     expect((start.doc.terminal as JsonObject).delimiter).toBe(".");
     // A current draft is kept.
@@ -142,7 +144,7 @@ function withDraftBody() {
   return adminConfigBody({
     liveVersion: 3,
     draft: { version: 4, siteConfig: RAW_SITE },
-  }) as never;
+  });
 }
 
 describe("startOf carries the site id (export file names)", () => {

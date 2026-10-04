@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SiteConfigSchema, toClientSiteConfig } from "@querymodule/core/config";
+import type { ConfigVersion } from "@querymodule/core/contracts";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { EN_BUNDLE } from "./en-bundle.js";
@@ -32,12 +33,14 @@ export const CLIENT_CONFIG = toClientSiteConfig(
 export const RAW_SITE: Record<string, unknown> = JSON.parse(readFileSync(defaultSitePath, "utf8"));
 
 const FIXTURE_ID = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+/** Later versions are later in time, as on a real site. */
+const FIXTURE_TIME = Date.UTC(2026, 8, 29, 17, 0, 0);
 /** One site_config_version row as the admin API answers it (metadata only, no document). */
 export function versionRow(
   version: number,
   status: "draft" | "published" | "superseded",
-  over: Record<string, unknown> = {},
-) {
+  over: Partial<ConfigVersion> = {},
+): ConfigVersion {
   return {
     id: FIXTURE_ID,
     version,
@@ -45,9 +48,9 @@ export function versionRow(
     configHash: status === "draft" ? null : "a".repeat(64),
     baseVersion: status === "draft" ? version - 1 : null,
     createdBy: "user-0001",
-    createdAt: Date.UTC(2026, 8, 29, 17, 0, 0),
+    createdAt: FIXTURE_TIME + version * 1000,
     publishedBy: status === "draft" ? null : "user-0001",
-    publishedAt: status === "draft" ? null : Date.UTC(2026, 8, 29, 17, 0, 0),
+    publishedAt: status === "draft" ? null : FIXTURE_TIME + version * 1000,
     rollbackOf: null,
     ...over,
   };

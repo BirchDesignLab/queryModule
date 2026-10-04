@@ -513,6 +513,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
             type="button"
             className="qm-button qm-button--secondary"
             aria-expanded={historyOpen}
+            aria-controls={`${uid}-history`}
             onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
           >
             {t("admin.config.history")}
@@ -528,6 +529,7 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
           <PublishNotices flow={flow} />
           {historyOpen && (
             <HistoryDrawer
+              id={`${uid}-history`}
               stamp={flow.historyStamp}
               onClose={closeHistory}
               onRollback={flow.askRollback}
@@ -595,6 +597,9 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
         flow={flow}
         doc={doc}
         fallback={() =>
+          scopeRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ?? null
+        }
+        rollbackFallback={() =>
           historyRef.current ??
           scopeRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ??
           null

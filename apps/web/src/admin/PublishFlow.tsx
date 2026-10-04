@@ -105,6 +105,8 @@ export function usePublishFlow(): PublishFlow {
   const [historyStamp, setHistoryStamp] = useState(0);
   // Which reload failed after a publish ("replace": the draft) or a roll back ("live": the diff).
   const [stale, setStale] = useState<"replace" | "live" | null>(null);
+  // A "Load again" reload in flight: a second click while it runs asks the server nothing.
+  const retrying = useRef(false);
 
   const unsaved = useMemo(() => {
     if (server === null || doc === null) return false;
@@ -146,6 +148,8 @@ export function usePublishFlow(): PublishFlow {
       return { ok: false };
     }
     store.getState().markSaved(result.version.version, document, sent);
+    // A saved draft is a version of its own: an open history shows it.
+    setHistoryStamp((n) => n + 1);
     return { ok: true, version: result.version.version, document };
   }, [api, store, t]);
 
@@ -349,7 +353,10 @@ export function usePublishFlow(): PublishFlow {
         setConfirmReload(true);
         return;
       }
+      if (retrying.current) return;
+      retrying.current = true;
       void (stale === "replace" ? load(false) : refreshLive()).then((ok) => {
+        retrying.current = false;
         if (ok) setStale(null);
       });
     },
@@ -462,15 +469,24 @@ export function PublishDialogs({
   flow,
   doc,
   fallback,
+  rollbackFallback,
 }: {
   flow: PublishFlow;
   doc: JsonObject;
+  /** Focus target for the review and reload dialogs when their opener is gone. */
   fallback?: () => HTMLElement | null;
+  /** The same for the roll back dialog, which the history opened: the History button. */
+  rollbackFallback?: () => HTMLElement | null;
 }) {
   const t = useT();
   const open = flow.reviewing !== null;
   // Nothing differs from the live version (the edits went back to it): there is nothing to confirm.
-  const nothing = flow.changeCount === 0;
+  // Decided when the dialog opens: a live check that finds no changes while it is open must not
+  // take the focused Publish button away.
+  const [latched, setLatched] = useState<boolean | null>(null);
+  if (open && latched === null) setLatched(flow.changeCount === 0);
+  else if (!open && latched !== null) setLatched(null);
+  const nothing = latched ?? flow.changeCount === 0;
   return (
     <>
       <LeaveDialog
@@ -513,7 +529,7 @@ export function PublishDialogs({
         leavePrimary
         busy={flow.busy}
         busyReason={t("admin.rollback.busy")}
-        fallback={fallback}
+        fallback={rollbackFallback ?? fallback}
       />
       <LeaveDialog
         open={flow.confirmingReload}
