@@ -635,6 +635,22 @@ describe("SEC-010 M7 further details invariants stated by the spec", () => {
   });
 });
 
+describe("SEC-010 C-M2 host rows carry hostSubject (#98, spec 5.6)", () => {
+  it("rejects a host row with no hostSubject", () => {
+    expect(parses(eventOf("submitted", { identitySource: "host" }))).toBe(false);
+  });
+  it("rejects a host auth row with no hostSubject", () => {
+    const logout = {
+      type: "logout",
+      actor: USER_ACTOR,
+      identitySource: "host",
+      details: samples.logout,
+    };
+    expect(parses(logout)).toBe(false);
+    expect(parses({ ...logout, hostSubject: "host|0001" })).toBe(true);
+  });
+});
+
 describe("SEC-011 C-M1 envelope credentialUserId equals details credentialOwnerUserId (#98)", () => {
   for (const type of ["sourceDispatched", "sourceResponded"] as const) {
     const owned = { ...samples[type], credentialOwnerUserId: "u2", delegationId: DID };
@@ -796,6 +812,8 @@ describe("SEC-021 retentionPurged", () => {
     ["retention with no cutoff", { ...row, details: { ...row.details, reason: "retention" } }],
     ["a user actor", { ...row, actor: user, identitySource: "local" }],
     ["a correlationId", { ...row, correlationId: "01890a5d-ac96-774b-bcce-b302099a8057" }],
+    ["a partId", { ...row, partId: 0 }],
+    ["a credentialUserId", { ...row, credentialUserId: "user1" }],
     ["a negative count", { ...row, details: { ...row.details, keysDeleted: -1 } }],
   ])("rejects %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(false));
 });

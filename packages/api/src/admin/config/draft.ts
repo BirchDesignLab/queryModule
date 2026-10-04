@@ -178,5 +178,14 @@ export async function validateDocument(d: AppDeps, document: unknown): Promise<C
       key: "config.mfaNotEnforced",
       params: {},
     });
+  // #505 T27 Q6 (ADR-0011 item 6): with adminConfig off the config API answers 404, so a publish
+  // or rollback could not be undone in the app. Refused like any error, and shown before publish.
+  if (r.config.siteConfig.features.adminConfig !== true)
+    errors.push({
+      level: "error",
+      path: "/features/adminConfig",
+      key: "config.adminConfigOff",
+      params: {},
+    });
   return errors.length > 0 ? { ok: false, errors, warnings: r.config.warnings } : r;
 }

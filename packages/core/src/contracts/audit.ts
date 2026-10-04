@@ -458,6 +458,14 @@ export const AuditEventSchema = z
         message: "hostSubject needs identitySource host",
       });
     }
+    // Spec 5.6 (SEC-010, #98 C-M2): and every host row names its host subject.
+    if (e.identitySource === "host" && e.hostSubject === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["hostSubject"],
+        message: "identitySource host needs hostSubject",
+      });
+    }
     // Spec 4.7 (D-A2): system types are written by the system actor only.
     const systemType = e.type === "configLoaded" || e.type === "retentionPurged";
     if (systemType && !systemRole) {

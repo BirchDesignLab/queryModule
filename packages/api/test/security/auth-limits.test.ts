@@ -1,6 +1,7 @@
 import { ApiErrorSchema } from "@querymodule/core/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { sessionCookieName } from "../../src/auth/auth";
+import { session } from "../../src/db/schema";
 import { createTestApp } from "../helpers/test-app";
 
 const MIN = 60_000;
@@ -77,6 +78,37 @@ describe("SEC-005 auth limits and lockout", () => {
     expect((await t.auditRows("loginFailed")).at(-1)?.details).toMatchObject({
       reason: "lockedOut",
     });
+  });
+  it("#505 G-m2: a throwing disabled-account session delete still answers the same 401 and audits accountDisabled", async () => {
+    const t = await createTestApp();
+    const id = await t.createUser(EMAIL, PW);
+    await t.deps.db.$client.execute({
+      sql: "UPDATE user SET disabled_at = 1 WHERE id = ?",
+      args: [id],
+    });
+    const SECRET = "ZZ-delete-failure-detail";
+    const del = t.deps.db.delete.bind(t.deps.db);
+    vi.spyOn(t.deps.db, "delete").mockImplementation(((table: Parameters<typeof del>[0]) => {
+      if (table === session) throw new TypeError(SECRET);
+      return del(table);
+    }) as typeof del);
+    const r = await t.signIn(EMAIL, PW);
+    expect(r.status).toBe(401);
+    expect(r.headers.getSetCookie()).toEqual([]);
+    expect(((await r.json()) as { code?: string }).code).toBe("INVALID_EMAIL_OR_PASSWORD");
+    const failed = await t.auditRows("loginFailed");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]?.details).toMatchObject({ targetUserId: id, reason: "accountDisabled" });
+    const line = t.logLines.find((l) => l.includes("disabled sign-in session delete failed"));
+    expect(line).toContain("TypeError");
+    expect(t.logLines.join(" ")).not.toContain(SECRET);
+    // The session the right password created stays refused: identity checks disabled_at.
+    const left = await t.deps.db.$client.execute({
+      sql: "SELECT id FROM session WHERE user_id = ?",
+      args: [id],
+    });
+    expect(left.rows).toHaveLength(1);
+    expect(await t.deps.identity.isSessionLive(String(left.rows[0]?.id))).toBe(false);
   });
   it("rr:N-I1: a malformed sign-in body answers the same for a disabled and an active account", async () => {
     const t = await createTestApp();
