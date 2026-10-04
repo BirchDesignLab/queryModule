@@ -29,7 +29,7 @@ const STATUS_TEXT = {
 } as const;
 
 /** How long the Blob URL outlives the click. */
-const REVOKE_DELAY_MS = 1000;
+export const REVOKE_DELAY_MS = 1000;
 
 /** Hands the document to the browser as `<siteId>-v<n>.json`; the Blob URL is revoked after the click. */
 function download(text: string, name: string): void {
@@ -107,12 +107,14 @@ export function HistoryDrawer({
     [locale],
   );
 
-  // One export at a time: a second click while one is in flight downloads nothing twice.
-  const exporting = useRef(false);
+  // One export per version at a time: a second click on a version whose export is in flight
+  // downloads nothing twice. An export of another version is its own request and goes ahead, so
+  // no click is dropped without a trace.
+  const exporting = useRef(new Set<number>());
   const doExport = useCallback(
     async (version: number) => {
-      if (exporting.current) return;
-      exporting.current = true;
+      if (exporting.current.has(version)) return;
+      exporting.current.add(version);
       try {
         setExportError(null);
         const doc = await exportVersion(api, version);
@@ -123,7 +125,7 @@ export function HistoryDrawer({
         }
         download(JSON.stringify(doc, null, 2), `${siteId}-v${version}.json`);
       } finally {
-        exporting.current = false;
+        exporting.current.delete(version);
       }
     },
     [api, store],

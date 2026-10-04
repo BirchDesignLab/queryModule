@@ -10,7 +10,8 @@ import { PublishDialogs } from "./PublishControls.js";
 import type { PublishFlow } from "./PublishFlow.js";
 
 // Task 33 part 2b (#507 items 5 and 6): what the publish dialogs do with the flow they are given,
-// without the whole builder. UX-004.
+// without the whole builder. Spec 6.2 (dialogs: focus returns to the opener), ADR-0011 item 5 (the
+// publish loop). No UX-/FR- ID covers dialog focus.
 
 const noop = () => {};
 const FLOW: PublishFlow = {

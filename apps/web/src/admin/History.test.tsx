@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import {
   API,
@@ -14,6 +14,7 @@ import {
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
+import { REVOKE_DELAY_MS } from "./HistoryDrawer.js";
 
 const REAL_URL = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
 
@@ -282,6 +283,34 @@ describe("roll back", () => {
     expect(screen.getByRole("region", { name: "Version history" })).toBeInTheDocument();
   });
 
+  // Q2 (#507 item 6), the real wiring in BuilderBody: when the control that opened a dialog is gone
+  // by the time it closes, the roll back dialog falls back to the History button and the others to
+  // the selected tab. The opener is removed by hand: nothing in a real flow can unmount a row while
+  // a modal dialog is open over it, but the fallback exists for exactly that.
+  it("Q2 item 6 wiring: the roll back dialog, its opener gone, returns focus to the History button", async () => {
+    const t = await openBuilder();
+    const region = await openHistory(t);
+    const opener = within(row(region, 2)).getByRole("button", { name: "Roll back to version 2" });
+    await t.user.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Roll back to version 2?" });
+    opener.remove();
+    await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(historyButton()).toHaveFocus());
+  });
+
+  it("Q2 item 6 wiring: the review dialog, its opener gone, returns focus to the selected tab, not History", async () => {
+    const t = await openBuilder();
+    await openHistory(t);
+    await setDelimiter(t, ",");
+    const opener = screen.getByRole("button", { name: "Review and publish" });
+    await t.user.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    opener.remove();
+    await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.getByRole("tab", { selected: true })).toHaveFocus());
+    expect(historyButton()).not.toHaveFocus();
+  });
+
   it("leaves the draft as it is: the edit stays, and the next save takes the 409 path", async () => {
     const t = await openBuilder();
     await setDelimiter(t, ",");
@@ -408,6 +437,12 @@ describe("export", () => {
     const create = vi.fn(() => "blob:fixture-1");
     const revoke = vi.fn();
     Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke });
+    // Only the timer is faked, and the fake clock still follows real time (so MSW and waitFor run);
+    // the deferred revoke is then stepped, not waited for.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const clicked: { download: string; href: string }[] = [];
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
       this: HTMLAnchorElement,
@@ -423,7 +458,8 @@ describe("export", () => {
     expect(JSON.parse(await blob[0].text())).toEqual({ siteConfig: RAW_SITE, locales: {} });
     // Some engines drop the download if the URL goes at once: it is revoked a moment later.
     expect(revoke).not.toHaveBeenCalled();
-    await waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:fixture-1"), { timeout: 3000 });
+    vi.advanceTimersByTime(REVOKE_DELAY_MS);
+    expect(revoke).toHaveBeenCalledWith("blob:fixture-1");
     // Nothing is left in the document: no link stays behind.
     expect(document.querySelector("a[download]")).toBeNull();
   });
@@ -454,6 +490,36 @@ describe("export", () => {
     release();
     await waitFor(() => expect(clicked).toHaveLength(1));
     expect(calls.exports).toEqual(["3"]);
+  });
+
+  it("C1: an export of another version while one is in flight is not dropped", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const t = await openBuilder({
+      exportDoc: async () => {
+        await gate;
+        return undefined;
+      },
+    });
+    const region = await openHistory(t);
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => "blob:fixture-3"),
+      revokeObjectURL: vi.fn(),
+    });
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this.download);
+    });
+    await t.user.click(within(row(region, 3)).getByRole("button", { name: "Export version 3" }));
+    await t.user.click(within(row(region, 2)).getByRole("button", { name: "Export version 2" }));
+    release();
+    await waitFor(() => expect(clicked).toHaveLength(2));
+    expect([...clicked].sort()).toEqual(["default-v2.json", "default-v3.json"]);
+    expect([...calls.exports].sort()).toEqual(["2", "3"]);
   });
 
   it("a failed export says so", async () => {

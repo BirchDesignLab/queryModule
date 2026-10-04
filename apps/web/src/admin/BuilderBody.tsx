@@ -34,10 +34,6 @@ import {
 import { TABS, type TabId, tabAfterKey } from "./tabs.js";
 import { useUndoKeys } from "./undo-keys.js";
 
-export { configDraftStore } from "./builder-store.js";
-
-export { TABS } from "./tabs.js";
-
 // Marks a quiet snapshot whose server verdict is not captured yet (see quiet).
 const QUIET_PENDING = Symbol("quiet-pending");
 
