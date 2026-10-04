@@ -156,6 +156,27 @@ describe("undo and redo (B1)", () => {
     expect(summary.textContent).not.toMatch(/undo|redo/i);
   });
 
+  it("an undo speaks one announcement: the summary region updates silently (#485)", async () => {
+    const t = await openBuilder();
+    const spy = vi.spyOn(t.services.announcer, "announce");
+    // "/" collides with a single-key shortcut, so the draft gains an error the undo then removes.
+    await editDelimiter(t, "/");
+    const summary = screen.getByTestId("draft-summary");
+    await waitFor(() => expect(summary.textContent).toMatch(/[1-9]\d* error/));
+    const withError = summary.textContent;
+    expect(summary).toHaveAttribute("aria-live", "polite");
+    spy.mockClear();
+    await t.user.click(undoButton());
+    // The counts change under the undo, but the region is not live while they do.
+    await waitFor(() => expect(summary.textContent).not.toBe(withError));
+    expect(summary).toHaveAttribute("aria-live", "off");
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(polite(t)).toBe("Undone. Undo steps left: 0.");
+    // The next edit makes it a polite region again.
+    await editDelimiter(t, "/");
+    expect(summary).toHaveAttribute("aria-live", "polite");
+  });
+
   it("undoing a setting edit and then a label edit, in the order they were made", async () => {
     const t = await openBuilder();
     act(() => store(t).setLabel("en", "site.x", "X"));

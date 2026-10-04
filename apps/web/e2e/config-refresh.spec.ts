@@ -1,5 +1,5 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { seededUser, signIn } from "./helpers.js";
+import { liveResponse, seededUser, signIn } from "./helpers.js";
 
 // ADR-0011 item 3 (#361): an open form follows a newer config within 15 s. The server keeps one
 // config here, so the "published" one is the same body with a new hash and one more field.
@@ -12,7 +12,7 @@ test("[#361] the open form picks up a newer config: new field, one polite announ
   const background: (string | undefined)[] = [];
   await page.route("**/api/v1/config", async (route) => {
     background.push(route.request().headers()["x-background"]);
-    const response = await route.fetch();
+    const response = await liveResponse(route);
     const body = (await response.json()) as {
       configHash: string;
       queryTypes: { code: string; fields: { key: string; labelKey?: string }[] }[];
@@ -63,7 +63,7 @@ for (const persona of [
     let stage: "extra" | "removed" = "extra";
     let hash = "c".repeat(64);
     await page.route("**/api/v1/config", async (route) => {
-      const response = await route.fetch();
+      const response = await liveResponse(route);
       const body = (await response.json()) as {
         configHash: string;
         queryTypes: { code: string; fields: { key: string; labelKey?: string }[] }[];

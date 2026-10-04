@@ -3,20 +3,16 @@ import { fileURLToPath } from "node:url";
 import type { Locator, Page, Route } from "@playwright/test";
 import { SiteConfigSchema, toClientSiteConfig } from "@querymodule/core/config";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { chooseQueryType, hexToRgb, signIn } from "./helpers.js";
+import { chooseQueryType, hexToRgb, liveResponse, signIn } from "./helpers.js";
 
 const read = (name: string): unknown =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./sites/${name}`, import.meta.url)), "utf8"));
 const fixture = SiteConfigSchema.parse(read("boolean-form.json"));
 const overlay = read("boolean-form.en.json") as Record<string, string>;
 
-/** Fetch the live response, failing loudly on a non-2xx so a 401 never hides behind a mock. */
-async function liveJson<T>(route: Route): Promise<T> {
-  const response = await route.fetch();
-  if (!response.ok())
-    throw new Error(`live ${route.request().url()} answered ${response.status()}`);
-  return (await response.json()) as T;
-}
+/** The live JSON body, through the shared ok check. */
+const liveJson = async <T>(route: Route): Promise<T> =>
+  (await (await liveResponse(route)).json()) as T;
 
 // #309: serve the e2e-only site from this side. The production image and default.json stay untouched.
 test.beforeEach(async ({ page }) => {

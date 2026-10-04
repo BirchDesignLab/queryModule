@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL as NodeURL } from "node:url";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 
 type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
 
@@ -208,4 +208,15 @@ export async function chooseQueryType(page: Page, code: string): Promise<void> {
   await select.focus();
   await page.keyboard.type(label);
   await expect(select).toHaveValue(code);
+}
+
+/**
+ * Fetches the live response behind a mocked route and fails loudly on a non-2xx, so a 401 from the
+ * live server never hides behind a mock that fulfils 200 (#319). Fulfil with `{ response, json }`.
+ */
+export async function liveResponse(route: Route): Promise<APIResponse> {
+  const response = await route.fetch();
+  if (!response.ok())
+    throw new Error(`live ${route.request().url()} answered ${response.status()}`);
+  return response;
 }

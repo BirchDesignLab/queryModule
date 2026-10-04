@@ -353,6 +353,9 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
   // Focus lost to an undo (the item it was in went away) goes to the selected tree row; the keys
   // work from there. `settle` waits for the restored selection to be on screen.
   const settle = useRef<{ pointer: string | null } | null>(null);
+  // An undo or redo speaks one announcement, the shared "Undone": the draft summary below updates
+  // silently for the restored draft (aria-live off) and is polite again from the next edit (#485).
+  const [quietDoc, setQuietDoc] = useState<JsonObject | null>(null);
   const step = useCallback(
     (direction: "undo" | "redo") => {
       // The raw text follows the draft again: an undone step can bring back a document the raw
@@ -361,13 +364,14 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
       const restored = direction === "undo" ? store.getState().undo() : store.getState().redo();
       if (restored === null) return;
       settle.current = { pointer: restored.meta };
+      setQuietDoc(store.getState().doc as JsonObject);
       // On the Raw tab there is no item to show: keep the tab, restore the selection under it.
       if (restored.meta !== null) {
         const pointer = restored.meta;
         if (tab !== "form") setSelection((s) => ({ pointer, seq: s.seq + 1 }));
         else onSelect(pointer);
       }
-      // The shared live region only: the builder's own summary is not touched.
+      // The shared live region only: the builder's own summary is quiet for this draft (quietDoc).
       const { undoCount: undos, redoCount: redos } = store.getState();
       announcer.announce(
         direction === "undo"
@@ -520,7 +524,11 @@ function BuilderBody({ doc }: { doc: JsonObject }) {
             />
           )}
           {/* The issue button shows the counts; this stays as the polite announcement (Task 33). */}
-          <div data-testid="draft-summary" aria-live="polite" style={visuallyHiddenStyle}>
+          <div
+            data-testid="draft-summary"
+            aria-live={doc === quietDoc ? "off" : "polite"}
+            style={visuallyHiddenStyle}
+          >
             {raw.parseError !== null ? (
               <p>{t("admin.config.raw.notParsed")}</p>
             ) : checks.status === "error" ? (

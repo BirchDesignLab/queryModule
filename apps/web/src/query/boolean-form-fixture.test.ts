@@ -16,7 +16,7 @@ const en = read("../../../../packages/config/locales/en.json") as Record<string,
 const bundle = { ...en, ...(read("boolean-form.en.json") as Record<string, string>) };
 const NOW = Date.UTC(2026, 8, 29);
 
-describe("FR-006 UX-011 e2e fixture boolean-form.json (#309)", () => {
+describe("FR-005 FR-006 e2e fixture boolean-form.json (#309)", () => {
   it("parses and validates against the shipped schema and the en bundle plus its overlay", () => {
     const result = validateSiteConfig(config, { en: bundle }, { now: NOW });
     expect(result.errors).toEqual([]);
