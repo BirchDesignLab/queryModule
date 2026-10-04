@@ -20,7 +20,7 @@ import { buildDeps } from "../../src/deps";
 import { AeadError } from "../../src/keys/aead";
 import { checkKeyCanaries, KeyCanaryError } from "../../src/keys/canary";
 import { createRequestKeys, unwrapRequestKey } from "../../src/keys/request-keys";
-import { openTempDatabase, TEST_DB_KEY, tempDbFile } from "../helpers/db";
+import { TEST_DB_KEY, tempDbFile } from "../helpers/db";
 import { migratedDb as migratedEnvDb, TEST_SECRETS, testEnv } from "../helpers/fixture";
 
 const MIGRATIONS = resolve(import.meta.dirname, "../../drizzle");
@@ -186,30 +186,48 @@ describe("storage: SEC-006, SEC-010", () => {
   });
 });
 
-describe("storage: key canaries", () => {
+/** The canary refusal message: fixed text naming the key, never key bytes in any encoding (spec 5.9). */
+function expectNoKeyMaterial(message: string, keys: readonly Buffer[]) {
+  for (const key of keys) {
+    for (const enc of ["base64", "base64url", "hex"] as const) {
+      expect(message).not.toContain(key.toString(enc));
+    }
+  }
+}
+
+describe("storage: key canaries (spec 10.3)", () => {
   const keys = { credentialKey: Buffer.alloc(32, 2), dataKey: Buffer.alloc(32, 3) };
-  it("a mismatched CREDENTIAL_KEY fails the canary", async () => {
-    const db = await openTempDatabase();
-    await runMigrations(db, MIGRATIONS);
-    await checkKeyCanaries(db, keys, systemClock);
-    const err = await checkKeyCanaries(
-      db,
-      { ...keys, credentialKey: Buffer.alloc(32, 7) },
-      systemClock,
-    ).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(KeyCanaryError);
-    expect((err as KeyCanaryError).keyName).toBe("credential");
+  it("a mismatched CREDENTIAL_KEY fails the canary, names CREDENTIAL_KEY and carries no key material", async () => {
+    const db = await migratedDb();
+    try {
+      await checkKeyCanaries(db, keys, systemClock);
+      const wrong = Buffer.alloc(32, 7);
+      const err = await checkKeyCanaries(db, { ...keys, credentialKey: wrong }, systemClock).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(KeyCanaryError);
+      expect((err as KeyCanaryError).keyName).toBe("credential");
+      expect((err as Error).message).toBe("key canary for CREDENTIAL_KEY does not decrypt");
+      expectNoKeyMaterial((err as Error).message, [keys.credentialKey, keys.dataKey, wrong]);
+    } finally {
+      db.$client.close();
+    }
   });
-  it("a mismatched DATA_KEY fails the canary and names only data", async () => {
-    const db = await openTempDatabase();
-    await runMigrations(db, MIGRATIONS);
-    await checkKeyCanaries(db, keys, systemClock);
-    const err = await checkKeyCanaries(
-      db,
-      { ...keys, dataKey: Buffer.alloc(32, 8) },
-      systemClock,
-    ).catch((e: unknown) => e);
-    expect((err as KeyCanaryError).keyName).toBe("data");
+  it("a mismatched DATA_KEY fails the canary, names only DATA_KEY and carries no key material", async () => {
+    const db = await migratedDb();
+    try {
+      await checkKeyCanaries(db, keys, systemClock);
+      const wrong = Buffer.alloc(32, 8);
+      const err = await checkKeyCanaries(db, { ...keys, dataKey: wrong }, systemClock).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(KeyCanaryError);
+      expect((err as KeyCanaryError).keyName).toBe("data");
+      expect((err as Error).message).toBe("key canary for DATA_KEY does not decrypt");
+      expectNoKeyMaterial((err as Error).message, [keys.credentialKey, keys.dataKey, wrong]);
+    } finally {
+      db.$client.close();
+    }
   });
 });
 
@@ -217,36 +235,39 @@ describe("storage: DATA_KEY and request_key (SEC-006, spec 10.3)", () => {
   it("a request_key row written under DATA_KEY A fails to unwrap under B; the credential canary still opens", async () => {
     const keysA = { credentialKey: Buffer.alloc(32, 2), dataKey: Buffer.alloc(32, 3) };
     const dataKeyB = Buffer.alloc(32, 9);
-    const db = await openTempDatabase();
-    await runMigrations(db, MIGRATIONS);
-    await checkKeyCanaries(db, keysA, systemClock);
-    const cid = "01890a5d-ac96-774b-bcce-b302099a8057";
-    const { rows, deks } = createRequestKeys(keysA.dataKey, cid, 1_790_000_000_000);
-    await db.insert(requestKey).values(rows);
-    const stored = await db.select().from(requestKey).where(eq(requestKey.correlationId, cid));
-    expect(stored).toHaveLength(2);
-    for (const row of stored) {
-      expect(unwrapRequestKey(keysA.dataKey, row).equals(deks[row.scope])).toBe(true);
-      expect(() => unwrapRequestKey(dataKeyB, row)).toThrow(AeadError);
+    const db = await migratedDb();
+    try {
+      await checkKeyCanaries(db, keysA, systemClock);
+      const cid = "01890a5d-ac96-774b-bcce-b302099a8057";
+      const { rows, deks } = createRequestKeys(keysA.dataKey, cid, 1_790_000_000_000);
+      await db.insert(requestKey).values(rows);
+      const stored = await db.select().from(requestKey).where(eq(requestKey.correlationId, cid));
+      expect(stored).toHaveLength(2);
+      for (const row of stored) {
+        expect(unwrapRequestKey(keysA.dataKey, row).equals(deks[row.scope])).toBe(true);
+        expect(() => unwrapRequestKey(dataKeyB, row)).toThrow(AeadError);
+      }
+      // The credential canary is checked first: a wrong CREDENTIAL_KEY is named before DATA_KEY,
+      // so "data" below means the credential canary opened under CREDENTIAL_KEY A.
+      const both = await checkKeyCanaries(
+        db,
+        { credentialKey: Buffer.alloc(32, 7), dataKey: dataKeyB },
+        systemClock,
+      ).catch((e: unknown) => e);
+      expect((both as KeyCanaryError).keyName).toBe("credential");
+      const err = await checkKeyCanaries(db, { ...keysA, dataKey: dataKeyB }, systemClock).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(KeyCanaryError);
+      expect((err as KeyCanaryError).keyName).toBe("data");
+      // Neither refused check replaced a canary: under keys A both still open.
+      await expect(checkKeyCanaries(db, keysA, systemClock)).resolves.toEqual({
+        credential: "verified",
+        data: "verified",
+      });
+    } finally {
+      db.$client.close();
     }
-    // The credential canary is checked first: a wrong CREDENTIAL_KEY is named before DATA_KEY,
-    // so "data" below means the credential canary opened under CREDENTIAL_KEY A.
-    const both = await checkKeyCanaries(
-      db,
-      { credentialKey: Buffer.alloc(32, 7), dataKey: dataKeyB },
-      systemClock,
-    ).catch((e: unknown) => e);
-    expect((both as KeyCanaryError).keyName).toBe("credential");
-    const err = await checkKeyCanaries(db, { ...keysA, dataKey: dataKeyB }, systemClock).catch(
-      (e: unknown) => e,
-    );
-    expect(err).toBeInstanceOf(KeyCanaryError);
-    expect((err as KeyCanaryError).keyName).toBe("data");
-    // Neither refused check replaced a canary: under keys A both still open.
-    await expect(checkKeyCanaries(db, keysA, systemClock)).resolves.toEqual({
-      credential: "verified",
-      data: "verified",
-    });
   });
 });
 

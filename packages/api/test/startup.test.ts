@@ -7,6 +7,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type * as auditService from "../src/audit/service";
 import type * as dbClient from "../src/db/client";
 import { readPragmas } from "../src/db/client";
+import { KeyCanaryError } from "../src/keys/canary";
 import { bootstrap, loadDeps, type RunningServer, startServer } from "../src/startup";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
@@ -160,6 +161,23 @@ describe("SEC-006 startup fails closed", () => {
     await expect(
       startServer(await envWith({ CREDENTIAL_KEY: k(9) }, data), { logSink: () => {} }),
     ).rejects.toThrow(/CREDENTIAL_KEY/);
+  });
+  it("refuses a mismatched DATA_KEY on the second boot: names DATA_KEY only, no key material, port never bound (spec 10.3, #311)", async () => {
+    const data = tempDir("qm-data-");
+    await stop(await startServer(await envWith({}, data), { logSink: () => {} }));
+    const env = await envWith({ DATA_KEY: k(9) }, data);
+    const err = await startServer(env, { logSink: () => {} }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(KeyCanaryError);
+    expect((err as KeyCanaryError).keyName).toBe("data");
+    const message = (err as Error).message;
+    expect(message).toBe("key canary for DATA_KEY does not decrypt");
+    for (const fill of [1, 2, 3, 9]) {
+      const key = Buffer.alloc(32, fill);
+      for (const enc of ["base64", "hex"] as const)
+        expect(message).not.toContain(key.toString(enc));
+    }
+    expect(await connectError(Number(env.PORT))).toBe("ECONNREFUSED");
+    expect(opened.at(-1)?.$client.closed).toBe(true);
   });
   it("refuses a wrong DB_ENCRYPTION_KEY", async () => {
     const data = tempDir("qm-data-");
