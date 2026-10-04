@@ -174,6 +174,7 @@ describe("restore-test.sh (spec 8.6, NFR-003, SEC-010)", { timeout: 30_000 }, ()
     expect(app, "no app container started").toBeDefined();
     expect(app).toContain("qm:test");
     expect(app).not.toMatch(/ -p | --publish/);
+    expect(app).toContain("-e ALLOW_MOCK_SOURCES=true");
     expect(r.calls).toContain(
       "docker exec qm-restore-test node scripts/ops/audit-stats.js --up-to 7",
     );

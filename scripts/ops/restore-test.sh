@@ -51,7 +51,7 @@ for k in DB_ENCRYPTION_KEY CREDENTIAL_KEY DATA_KEY BETTER_AUTH_SECRET SEED_PASSW
   fi
   secret_mounts+=(--mount "type=bind,src=$QM_SECRETS_DIR/$k,dst=/run/secrets/$k,readonly")
 done
-docker run -d --name "$name" -v "$vol:/data" "${secret_mounts[@]}" -e PUBLIC_ORIGIN=http://localhost:3000 "$image" >/dev/null
+docker run -d --name "$name" -v "$vol:/data" "${secret_mounts[@]}" -e PUBLIC_ORIGIN=http://localhost:3000 -e ALLOW_MOCK_SOURCES=true "$image" >/dev/null
 for i in $(seq 1 60); do
   if docker exec "$name" node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" 2>/dev/null; then break; fi
   if [ "$i" = 60 ]; then docker logs "$name"; echo "restored app never became healthy"; exit 1; fi
