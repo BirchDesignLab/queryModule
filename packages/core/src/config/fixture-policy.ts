@@ -120,6 +120,16 @@ const has = (list: readonly string[], k: string): boolean => list.includes(k);
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** A real calendar date in 1901 (not a leap year), as YYYY-MM-DD. */
+const DAYS_1901 = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+function is1901Date(s: string): boolean {
+  const m = /^1901-(\d{2})-(\d{2})$/.exec(s);
+  if (m === null) return false;
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  return month >= 1 && month <= 12 && day >= 1 && day <= (DAYS_1901[month - 1] ?? 0);
+}
+
 function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unknown): Violation {
   switch (kind) {
     case "plate":
@@ -131,9 +141,7 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
         ? null
         : "fixture.validVin";
     case "dob":
-      return typeof value === "string" && /^1901-\d{2}-\d{2}$/.test(value)
-        ? null
-        : "fixture.plausibleDob";
+      return typeof value === "string" && is1901Date(value) ? null : "fixture.plausibleDob";
     case "name": {
       if (typeof value !== "string") return "fixture.nonSyntheticName";
       const words = value.trim().split(/\s+/);
@@ -153,6 +161,7 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
       if (typeof value === "object" && value !== null) return "fixture.unknownKey";
       return /\d{4,}/.test(String(value)) ? "fixture.freeTextDigits" : null;
     case "other": {
+      if (typeof value === "object" && value !== null) return "fixture.unknownKey";
       if (nk === "year" && (typeof value === "string" || typeof value === "number")) {
         return /^19\d{2}$/.test(String(value)) && Number(value) >= 1901
           ? null

@@ -347,3 +347,25 @@ describe("round 1 review findings", () => {
     expect(check({ status: true })).toEqual([]);
   });
 });
+
+describe("controller follow-ups after round 2", () => {
+  it("an array or object under an other key is rejected, not skipped", () => {
+    expect(check({ make: ["JOHN SMITH 1985-04-12"] })).toEqual([
+      { pointer: `${RESPOND}/make`, key: "fixture.unknownKey" },
+    ]);
+    expect(check({ make: { owner: "JOHN SMITH" } })).toEqual([
+      { pointer: `${RESPOND}/make`, key: "fixture.unknownKey" },
+    ]);
+    expect(check({ year: [1985] })).toHaveLength(1);
+    expect(check({ state: true })).toEqual([]);
+    expect(check({ state: null })).toEqual([]);
+  });
+  it("a DOB must be a real calendar date in 1901", () => {
+    expect(check({ dob: "1901-99-99" })).toEqual([
+      { pointer: `${RESPOND}/dob`, key: "fixture.plausibleDob" },
+    ]);
+    expect(check({ dob: "1901-02-29" })).toHaveLength(1);
+    expect(check({ dob: "1901-00-10" })).toHaveLength(1);
+    expect(check({ dob: "1901-12-31" })).toEqual([]);
+  });
+});
