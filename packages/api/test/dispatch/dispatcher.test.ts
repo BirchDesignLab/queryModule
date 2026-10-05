@@ -299,21 +299,39 @@ describe("createDispatcher caps and queueing (spec 5.2, NFR-002)", () => {
     ]);
   });
 
-  it("a queued job whose deadline passed is timedOut at queue exit without an adapter call", async () => {
+  it("a queued job is timedOut at its own deadline, no adapter call, while its source stays full", async () => {
     const s = setup();
     const running = Array.from({ length: 4 }, () => job({ deadline: T0 + 1_000 }));
     const late = job({ deadline: T0 + 100 });
     s.dispatcher.enqueue([...running, late]);
-    await s.time.advance(999);
+    await s.time.advance(99);
     expect(s.seen).toEqual([]);
     await s.time.advance(1);
     expect(s.calls).toHaveLength(4);
-    expect(s.seen.find((x) => x.job === late)).toEqual({
-      job: late,
-      outcome: { status: "timedOut" },
-      latencyMs: 0,
-    });
-    expect(s.dispatcher.inFlight()).toBe(0);
+    expect(s.seen).toEqual([{ job: late, outcome: { status: "timedOut" }, latencyMs: 0 }]);
+    expect(s.dispatcher.inFlight()).toBe(4);
+    // Only the four running deadline timers remain: the queued job's timer went with it.
+    expect(s.time.timerCount()).toBe(4);
+  });
+
+  it("a queued job that starts before its deadline leaves no queue timer behind", async () => {
+    const s = setup();
+    const jobs = Array.from({ length: 5 }, () => job({ deadline: T0 + 1_000 }));
+    s.dispatcher.enqueue(jobs);
+    expect(s.time.timerCount()).toBe(5);
+    s.calls[0]?.resolve(PAYLOAD);
+    await s.time.advance(0);
+    expect(s.calls).toHaveLength(5);
+    expect(s.time.timerCount()).toBe(4);
+    await s.time.advance(1_000);
+    expect(s.seen.map((x) => x.outcome.status)).toEqual([
+      "returned",
+      "timedOut",
+      "timedOut",
+      "timedOut",
+      "timedOut",
+    ]);
+    expect(s.time.timerCount()).toBe(0);
   });
 
   it("a credentialsMissing job behind a full source settles without waiting for a slot", async () => {

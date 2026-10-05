@@ -68,12 +68,15 @@ interface Running {
  * The in-process dispatcher (spec 5.2 step 5; FR-040, FR-041, FR-043, FR-044, NFR-002). Jobs run
  * FIFO under DISPATCH_CAPS, a job blocked on its source's cap never holding back a free source.
  * Each job gets exactly one outcome: credentialsMissing without an adapter call when the source
- * requires credentials and none is set; timedOut without a call when its deadline passed in the
- * queue; otherwise the adapter's answer raced against the deadline, where the signal aborts and
- * the outcome is timedOut. No retries. Log lines carry ids and error classes only (spec 5.9).
+ * requires credentials and none is set; timedOut without a call, at its deadline, when still
+ * queued then (its own queue timer fires even while its source stays full; FR-044, spec 5.4);
+ * otherwise the adapter's answer raced against the deadline, where the signal aborts and the
+ * outcome is timedOut. No retries. Log lines carry ids and error classes only (spec 5.9).
  */
 export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispatcher {
   const queue: DispatchJob[] = [];
+  /** One deadline timer per queued job, so a deadline passing in the queue is reported on time. */
+  const queueTimers = new Map<DispatchJob, unknown>();
   const running = new Map<DispatchJob, Running>();
   /** Every job not yet finished: queued, running, or waiting on onOutcome. */
   const tracked = new Set<DispatchJob>();
@@ -163,18 +166,25 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
     return n;
   }
 
+  /** Takes the job at i out of the queue and clears its queue deadline timer, if armed. */
+  function dequeue(i: number, job: DispatchJob): void {
+    queue.splice(i, 1);
+    d.timers.clearTimeout(queueTimers.get(job));
+    queueTimers.delete(job);
+  }
+
   /** Starts or settles every queued job it can, in FIFO order. */
   function pump(): void {
     let i = 0;
     while (i < queue.length) {
       const job = queue[i] as DispatchJob;
       if (job.requiresCredentials && job.credentialUserId === null) {
-        queue.splice(i, 1);
+        dequeue(i, job);
         report(job, { status: "credentialsMissing" }, 0);
         continue;
       }
       if (d.clock.now() >= job.deadline) {
-        queue.splice(i, 1);
+        dequeue(i, job);
         report(job, { status: "timedOut" }, 0);
         continue;
       }
@@ -182,10 +192,14 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
         running.size >= DISPATCH_CAPS.global ||
         runningOn(job.sourceId) >= DISPATCH_CAPS.perSource
       ) {
+        // Still waiting for a slot: its deadline fires pump, which reports it timedOut on time.
+        if (!queueTimers.has(job)) {
+          queueTimers.set(job, d.timers.setTimeout(pump, job.deadline - d.clock.now()));
+        }
         i += 1;
         continue;
       }
-      queue.splice(i, 1);
+      dequeue(i, job);
       start(job);
     }
   }
@@ -225,7 +239,11 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
     },
     abortAll() {
       aborted = true;
-      for (const job of queue.splice(0)) untrack(job);
+      for (const job of queue.splice(0)) {
+        d.timers.clearTimeout(queueTimers.get(job));
+        queueTimers.delete(job);
+        untrack(job);
+      }
       for (const [job, r] of [...running]) {
         release(job, r);
         r.controller.abort();
