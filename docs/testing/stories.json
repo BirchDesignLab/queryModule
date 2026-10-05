@@ -23,7 +23,11 @@
   {
     "story": "A4",
     "milestone": "m1",
-    "files": ["packages/core/src/terminal/parse.a4.test.ts", "apps/web/e2e/a4-terminal.spec.ts"]
+    "files": [
+      "packages/core/src/terminal/parse.a4.test.ts",
+      "apps/web/e2e/a4-terminal.spec.ts",
+      "packages/api/test/dispatch/scenarios.test.ts"
+    ]
   },
   {
     "story": "A5",

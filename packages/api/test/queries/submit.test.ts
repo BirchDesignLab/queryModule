@@ -9,12 +9,37 @@ import { describe, expect, it, vi } from "vitest";
 import { auditEvent, queryRequest, requestKey, sourceResult } from "../../src/db/schema";
 import type { Tx } from "../../src/db/tx";
 import { openPartValues, unwrapRequestKey } from "../../src/keys/request-keys";
-import { acknowledge } from "../../src/queries/acknowledge";
+import { type Acknowledged, acknowledge } from "../../src/queries/acknowledge";
 import type { PreparedSubmit } from "../../src/queries/prepare";
-import { lostIdempotencyRace, sanitizeSubmitError } from "../../src/queries/route";
+import {
+  bindJobs,
+  lostIdempotencyRace,
+  planJobs,
+  sanitizeSubmitError,
+} from "../../src/queries/route";
 import type { Principal } from "../../src/seams";
 import { TEST_SECRETS, type TestClock } from "../helpers/fixture";
 import { createTestApp, type TestApp } from "../helpers/test-app";
+
+/**
+ * AW3 critic (b): a switch that makes prepare hand back a plan whose extra pair names a source the
+ * snapshot does not have, so the pre-T1 job planning guard trips. Off by default.
+ */
+const corruptPrepare = vi.hoisted(() => ({ on: false }));
+vi.mock("../../src/queries/prepare", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../src/queries/prepare")>();
+  return {
+    ...m,
+    prepareSubmit: (...args: Parameters<typeof m.prepareSubmit>) => {
+      const r = m.prepareSubmit(...args);
+      const first = r.ok ? r.value.pairs[0] : undefined;
+      if (corruptPrepare.on && r.ok && first) {
+        r.value.pairs.push({ ...first, sourceId: "noSuchSource" });
+      }
+      return r;
+    },
+  };
+});
 
 const PASSWORD = "correct-horse-battery-1";
 const EMAIL = "dispatcher@example.test";
@@ -436,6 +461,7 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
         throw e;
       }),
     );
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
     const key = crypto.randomUUID();
     const [a, b] = await Promise.all([post(body(), { key }), post(body(), { key })]);
     const ra = await accepted(a);
@@ -449,6 +475,10 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
       requestKey: 2,
       queryAudit: 3,
     });
+    // the winner enqueues its one row; the loser's replay enqueues nothing
+    expect(enqueue.mock.calls.flatMap((c) => c[0]).map((j) => j.correlationId)).toEqual([
+      ra.body.correlationId,
+    ]);
   });
 
   it("a race-shaped error with no winner row propagates as 500 internal", async () => {
@@ -625,6 +655,217 @@ describe("POST /api/v1/queries fail closed and middleware (SEC-012, spec 5.9)", 
   });
 });
 
+describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-040, FR-041)", () => {
+  it("a 202 enqueues one job per source_result row with its resultId, the pinned snapshot and deadline", async () => {
+    const { t, post, body, userId } = await setup();
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const pinned = t.deps.config.current();
+    // A publish lands while T1 runs: the jobs keep the snapshot prepare planned against.
+    const record = t.deps.audit.record.bind(t.deps.audit);
+    t.deps.audit.record = async (tx: Tx, e: AuditEvent) => {
+      if (e.type === "acknowledged") t.deps.config.swap({ ...pinned });
+      return record(tx, e);
+    };
+    const { body: ack } = await accepted(
+      await post(body({ queryType: "PER", values: { last: LAST }, mode: "normal" })),
+    );
+    expect(t.deps.config.current()).not.toBe(pinned);
+    const rows = await rowsFor(t, ack.correlationId);
+    expect(rows.results.length).toBeGreaterThan(1);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const jobs = enqueue.mock.calls[0]?.[0] ?? [];
+    expect(jobs.map((j) => j.resultId).sort()).toEqual(rows.results.map((r) => r.resultId).sort());
+    const sources = new Map(pinned.siteConfig.sources.map((s) => [s.id, s]));
+    for (const row of rows.results) {
+      const j = jobs.find((x) => x.resultId === row.resultId);
+      const part = rows.parts.find((x) => x.partId === row.partId);
+      expect(j).toEqual({
+        correlationId: ack.correlationId,
+        partId: row.partId,
+        sourceId: row.sourceId,
+        resultId: row.resultId,
+        userId,
+        actor: { id: userId, email: EMAIL, role: "user" },
+        identitySource: "local",
+        queryType: part?.queryType,
+        types: part?.typeValues,
+        values: openValues(t, rows, row.partId),
+        snapshot: pinned,
+        adapterKind: "mock",
+        credentialUserId: null,
+        delegationId: null,
+        requiresCredentials: sources.get(row.sourceId)?.requiresCredentials,
+        deadline: ack.acknowledgedAt + 10_000,
+        acknowledgedMonoMs: expect.any(Number),
+      });
+      expect(j?.snapshot).toBe(pinned);
+    }
+  });
+
+  it("a replayed Idempotency-Key enqueues nothing", async () => {
+    const { t, post, body } = await setup();
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const key = crypto.randomUUID();
+    await accepted(await post(body(), { key }));
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    await accepted(await post(body(), { key }));
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  function plannedVeh(config: PreparedSubmit["config"], configHash: string): PreparedSubmit {
+    return {
+      config,
+      request: {
+        queryType: "VEH",
+        values: { plate: PLATE },
+        sourceIds: ["stateSource"],
+        mode: "normal",
+        configHash,
+      },
+      plan: {
+        mode: "normal",
+        droppedSourceIds: [],
+        parts: [
+          {
+            partId: 0,
+            parentPartId: null,
+            origin: "primary",
+            queryType: "VEH",
+            typeValues: {},
+            values: { plate: PLATE },
+            sourceIds: ["stateSource"],
+            droppedSourceIds: [],
+            mode: "normal",
+            status: "planned",
+          },
+        ],
+      },
+      pairs: [
+        {
+          partId: 0,
+          sourceId: "stateSource",
+          adapterKind: "mock",
+          credentialUserId: null,
+          delegationId: null,
+        },
+      ],
+    };
+  }
+  const principalOf = (userId: string): Principal => ({
+    userId,
+    email: null,
+    role: "user",
+    sessionId: "session-1",
+    identitySource: "local",
+    authenticatedAt: 1,
+  });
+
+  it("planJobs refuses a pair with no plan part or source config, before T1 (bug guards)", async () => {
+    const { t, userId, configHash } = await setup();
+    const prepared = plannedVeh(t.deps.config.current(), configHash);
+    const principal = principalOf(userId);
+    expect(() =>
+      planJobs({ ...prepared, plan: { ...prepared.plan, parts: [] } }, principal),
+    ).toThrow("dispatch: pair has no plan part");
+    const pair = prepared.pairs[0];
+    if (!pair) throw new Error("no pair");
+    expect(() =>
+      planJobs({ ...prepared, pairs: [{ ...pair, sourceId: "noSuchSource" }] }, principal),
+    ).toThrow("dispatch: pair has no source config");
+    const [local] = planJobs(prepared, principal);
+    expect(local).not.toHaveProperty("hostSubject");
+    const [host] = planJobs(prepared, {
+      ...principal,
+      identitySource: "host",
+      hostSubject: "host-subject-1",
+    });
+    expect(host).toMatchObject({ identitySource: "host", hostSubject: "host-subject-1" });
+  });
+
+  it("bindJobs zips T1's results onto the planned jobs; a replay binds nothing", async () => {
+    const { t, userId, configHash } = await setup();
+    const config = t.deps.config.current();
+    const timeoutMs = config.siteConfig.sources.find((x) => x.id === "stateSource")?.timeoutMs;
+    const templates = planJobs(plannedVeh(config, configHash), principalOf(userId));
+    const ack: Acknowledged = {
+      body: { correlationId: "corr-1", acknowledgedAt: 1_000, parts: [] },
+      acknowledgedAt: 1_000,
+      results: [{ partId: 0, sourceId: "stateSource", resultId: "result-1" }],
+    };
+    expect(bindJobs(templates, ack, 0)).toEqual([
+      expect.objectContaining({
+        correlationId: "corr-1",
+        resultId: "result-1",
+        sourceId: "stateSource",
+        deadline: 1_000 + (timeoutMs ?? Number.NaN),
+      }),
+    ]);
+    expect(bindJobs(templates, { ...ack, results: [] }, 0)).toEqual([]);
+    // a result that does not line up with its pair is a bug: the route's backstop catches it
+    expect(() =>
+      bindJobs(
+        templates,
+        {
+          ...ack,
+          results: [{ partId: 0, sourceId: "nationalSource", resultId: "r" }],
+        },
+        0,
+      ),
+    ).toThrow("dispatch: result does not match its pair");
+  });
+
+  it("AW3 critic (b): a planning guard trips before T1: 500, nothing committed, nothing enqueued", async () => {
+    const { t, post, body, userId } = await setup();
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    corruptPrepare.on = true;
+    try {
+      const r = await post(body());
+      expect(r.status).toBe(500);
+      expect(ApiErrorSchema.parse(await r.json()).error.code).toBe("internal");
+    } finally {
+      corruptPrepare.on = false;
+    }
+    expect(enqueue).not.toHaveBeenCalled();
+    const requests = await t.deps.db
+      .select()
+      .from(queryRequest)
+      .where(eq(queryRequest.userId, userId));
+    expect(requests).toEqual([]);
+    const results = await t.deps.db
+      .select()
+      .from(sourceResult)
+      .where(eq(sourceResult.userId, userId));
+    expect(results).toEqual([]);
+    const audit = await t.deps.db
+      .select()
+      .from(auditEvent)
+      .where(eq(auditEvent.actorUserId, userId));
+    // only the sign-in row: no submitted, dispatched or acknowledged row
+    expect(audit.filter((a) => a.correlationId !== null)).toEqual([]);
+    expect(t.fatals).toEqual([]);
+  });
+
+  it("AW3 critic (b) backstop: a throw after T1 commits logs ids and class only and fails closed", async () => {
+    const { t, post, body } = await setup();
+    vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {
+      throw new TypeError("enqueue broke");
+    });
+    const { body: ack } = await accepted(await post(body()));
+    const rows = await rowsFor(t, ack.correlationId);
+    expect(rows.results.length).toBeGreaterThan(0);
+    expect(rows.results.filter((r) => r.status !== "pending")).toEqual([]);
+    expect(t.fatals).toHaveLength(1);
+    const line = t.logLines.find((l) => l.includes("dispatch jobs failed"));
+    expect(JSON.parse(line ?? "{}")).toMatchObject({
+      correlationId: ack.correlationId,
+      error: { name: "TypeError" },
+    });
+    const all = t.logLines.join("\n");
+    expect(all).not.toContain("enqueue broke");
+    expect(all).not.toContain(PLATE);
+  });
+});
+
 describe("acknowledge envelope and the race detector (SEC-011, spec 5.2 step 1)", () => {
   it("a pair's credential owner and a host principal's subject reach the audit envelope", async () => {
     const { t, userId, configHash } = await setup();
@@ -679,7 +920,11 @@ describe("acknowledge envelope and the race detector (SEC-011, spec 5.2 step 1)"
       receivedAt: 1,
       receivedMono: t.deps.monotonic.nowMs(),
     });
-    const rows = await rowsFor(t, ack.correlationId);
+    const rows = await rowsFor(t, ack.body.correlationId);
+    expect(ack.acknowledgedAt).toBe(ack.body.acknowledgedAt);
+    expect(ack.results).toEqual([
+      { partId: 0, sourceId: "stateSource", resultId: rows.results[0]?.resultId },
+    ]);
     expect(rows.audit.map((a) => [a.type, a.credentialUserId, a.hostSubject])).toEqual([
       ["submitted", null, "host-subject-0001"],
       ["sourceDispatched", userId, "host-subject-0001"],

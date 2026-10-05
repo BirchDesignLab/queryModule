@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { readdirSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   checkFixturePolicy,
@@ -19,7 +19,7 @@ import {
   preResolvedChecks,
   tokensContrast,
 } from "../../packages/api/src/config/load";
-import { generate, MOCK_SITE_IDS } from "../mock-data/generate";
+import { generate, MOCK_SITE_IDS, mockFileStates } from "../mock-data/generate";
 import { toPosixRel } from "./cli-io";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -180,36 +180,34 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
 /**
  * Generator drift (spec 5.4, 10.8): each committed mock file under `mockDir` must equal what
  * scripts/mock-data/generate.ts emits for its site, and every mock file there must belong to a
- * generator site (AW1 review G-M2). A generator that throws is reported, not raised (G-M3).
- * One fixed-text message per problem. `gen` is injectable for tests.
+ * generator site (AW1 review G-M2). A generator that throws is reported, not raised (G-M3), and
+ * so is an unreadable directory (AW2 review G-G-M1).
+ * One fixed-text message per problem. `gen` is injectable for tests. The per-site check is
+ * mockFileStates, shared with generate.ts --check (AW2 review G-G-M2).
  */
 export function mockDriftErrors(
   mockDir: string,
   gen: (siteId: string) => string = generate,
 ): string[] {
   const out: string[] = [];
-  for (const siteId of MOCK_SITE_IDS) {
-    let expected: string;
-    try {
-      expected = gen(siteId);
-    } catch {
+  for (const { siteId, state } of mockFileStates(mockDir, gen)) {
+    if (state === "generatorFailed") {
       out.push(`mock generator failed: ${siteId} (fix scripts/mock-data/sites/${siteId}.ts)`);
-      continue;
-    }
-    let actual: string | undefined;
-    try {
-      actual = readFileSync(join(mockDir, `${siteId}.json`), "utf8");
-    } catch {
-      actual = undefined; // missing or unreadable: drift
-    }
-    if (actual !== expected) {
+    } else if (state === "drift") {
       out.push(
         `mock file drift: mock/${siteId}.json (run scripts/mock-data/generate.ts ${siteId})`,
       );
     }
   }
   const owned = new Set(MOCK_SITE_IDS.map((id) => `${id}.json`));
-  for (const name of readdirSync(mockDir).sort()) {
+  let names: string[];
+  try {
+    names = readdirSync(mockDir).sort();
+  } catch {
+    out.push("mock directory unreadable: mock/ (restore packages/config/mock)");
+    return out;
+  }
+  for (const name of names) {
     if (name.endsWith(".json") && !owned.has(name)) {
       out.push(
         `mock file without a generator site: mock/${name} (add it to scripts/mock-data/generate.ts or delete it)`,

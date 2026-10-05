@@ -350,6 +350,14 @@ describe("config:validate mock drift (#531, spec 10.8)", () => {
       "mock generator failed: default (fix scripts/mock-data/sites/default.ts)",
     ]);
   });
+  it("AW2 review G-G-M1: an unreadable mock directory is a fixed-text error, not a stack", () => {
+    const d = join(tmp(), "missing");
+    expect(mockDriftErrors(d)).toEqual([
+      "mock file drift: mock/default.json (run scripts/mock-data/generate.ts default)",
+      "mock file drift: mock/example-ok.json (run scripts/mock-data/generate.ts example-ok)",
+      "mock directory unreadable: mock/ (restore packages/config/mock)",
+    ]);
+  });
 });
 
 describe("config:validate contrast and unreadable files (Task 9)", () => {

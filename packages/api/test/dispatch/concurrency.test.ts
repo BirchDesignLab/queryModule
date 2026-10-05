@@ -1,16 +1,25 @@
 import { type SubmitQueryResponse, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { manualTime } from "../helpers/manual-time";
 import { createTestApp } from "../helpers/test-app";
 
 // Spec 10.4, NFR-002: parallel submits against the file-backed WAL database serialize through
-// the IMMEDIATE transaction T1 without a SQLITE_BUSY reaching any caller.
+// the IMMEDIATE transaction T1 without a SQLITE_BUSY reaching any caller. The dispatcher then
+// runs every job under its caps and writes each outcome in its own T2: every row leaves pending,
+// no SQLITE_BUSY reaches a caller or d.fatal, and each user's event_log seqs are gapless.
 const PASSWORD = "correct-horse-battery-1";
 const USERS = 5;
 const PER_USER = 4;
 
 describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
-  it("20 parallel submits from 5 users each get a 202 with a full, ordered row set", async () => {
-    const t = await createTestApp();
+  it("20 parallel submits from 5 users each get a 202 with a full, ordered row set, then all dispatch", async () => {
+    // manual dispatch time: the mock's latency and the deadlines fire only when the test runs them
+    const time = manualTime();
+    const t = await createTestApp({
+      clock: time.clock,
+      timers: time.timers,
+      monotonic: time.monotonic,
+    });
     const mode = (await t.deps.db.$client.execute("PRAGMA journal_mode")).rows[0];
     expect(String(Object.values(mode ?? {})[0]).toLowerCase()).toBe("wal");
     expect(t.env.dbFile).not.toBe(":memory:");
@@ -19,9 +28,10 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
     let inFlight = 0;
     let maxInFlight = 0;
     const cookies: string[] = [];
+    const userIds: string[] = [];
     for (let i = 0; i < USERS; i += 1) {
       const email = `dispatcher${i}@example.test`;
-      await t.createUser(email, PASSWORD);
+      userIds.push(await t.createUser(email, PASSWORD));
       cookies.push(await t.cookieFor(email, PASSWORD));
     }
     const { configHash } = (await (
@@ -47,7 +57,7 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
       return r;
     };
 
-    // commit order: T1 resolves with the 202 body only after its COMMIT
+    // commit order: T1 resolves with the 202 body (Acknowledged.body) only after its COMMIT
     const committed: string[] = [];
     const failures: unknown[] = [];
     const transaction = t.deps.db.transaction.bind(t.deps.db);
@@ -60,7 +70,9 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
         })
         .then(
           (r: unknown) => {
-            const parsed = SubmitQueryResponseSchema.safeParse(r);
+            const parsed = SubmitQueryResponseSchema.safeParse(
+              (r as { body?: unknown } | undefined)?.body,
+            );
             if (parsed.success) committed.push(parsed.data.correlationId);
             return r as never;
           },
@@ -82,7 +94,8 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
             "idempotency-key": crypto.randomUUID(),
           },
           body: JSON.stringify(
-            // alternate a one-part VEH and a two-part PER with its WNT check
+            // alternate a one-part VEH (plateOnly drops nationalSource) and a two-part PER with
+            // its WNT check on nationalSource
             (u + k) % 2 === 0
               ? {
                   queryType: "VEH",
@@ -123,6 +136,14 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
     const audit = await rows(
       "SELECT id, correlation_id, part_id, type FROM audit_event WHERE correlation_id IS NOT NULL ORDER BY id",
     );
+    // AW3 critic (e): 10 VEH x 1 row (stateSource) + 10 PER x 3 rows (PER on both, WNT on
+    // nationalSource) = 40; a planner change that drops a part or a source fails here
+    const shapes = acks.map((a) => a.parts.map((p) => `${p.queryType}:${p.sourceIds.join("+")}`));
+    expect(shapes.filter((x) => x.join() === "VEH:stateSource")).toHaveLength(10);
+    expect(
+      shapes.filter((x) => x.join() === "PER:stateSource+nationalSource,WNT:nationalSource"),
+    ).toHaveLength(10);
+    expect(results).toHaveLength(40);
     for (const ack of acks) {
       const cid = ack.correlationId;
       expect(
@@ -158,5 +179,35 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
       if (blocks[blocks.length - 1] !== cid) blocks.push(cid);
     }
     expect(blocks).toEqual(committed);
+
+    // dispatch: the mock answers within 800 ms and the caps (4 a source) clear every queued job
+    // well inside the 10 s deadline, so every job returns; its T2s contend for the write lock
+    expect(t.deps.dispatcher.inFlight()).toBe(results.length);
+    await time.run(10_000);
+    await vi.waitFor(() => expect(t.deps.dispatcher.inFlight()).toBe(0), { timeout: 30_000 });
+    const settled = await rows("SELECT result_id, user_id, status FROM source_result");
+    expect(settled).toHaveLength(results.length);
+    expect(settled.filter((r) => r.status !== "returned")).toEqual([]);
+    expect(failures).toEqual([]);
+    expect(t.fatals).toEqual([]);
+    const logs = t.logLines.join("\n");
+    expect(logs).not.toContain("SQLITE_BUSY");
+    expect(logs).not.toContain("dispatch outcome failed");
+    expect(logs).not.toContain("dispatch outcome write failed");
+
+    // each user's event_log: one sourceStatus per row, seqs 1..n in commit order
+    const events = await rows(
+      "SELECT user_id, seq, result_id FROM event_log ORDER BY user_id, seq",
+    );
+    for (const userId of userIds) {
+      const mine = events.filter((e) => e.user_id === userId);
+      const owned = settled.filter((r) => r.user_id === userId);
+      expect(owned.length).toBeGreaterThan(0);
+      expect(mine.map((e) => Number(e.seq))).toEqual(owned.map((_, i) => i + 1));
+      expect(mine.map((e) => String(e.result_id)).sort()).toEqual(
+        owned.map((r) => String(r.result_id)).sort(),
+      );
+    }
+    expect(events).toHaveLength(results.length);
   }, 60_000);
 });

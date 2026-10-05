@@ -56,7 +56,7 @@ function track<T>(p: Promise<T>) {
   return s;
 }
 
-const instantTimers: Timers = { sleep: async () => {} };
+const instantTimers: Timers = { ...systemTimers, sleep: async () => {} };
 
 describe("createMockAdapter (fake timers)", () => {
   beforeEach(() => {
@@ -410,6 +410,57 @@ describe("mock factory on a snapshot", () => {
         f: { configHash: "h1", versionId: "01890a5d-ac96-774b-bcce-b302099a8001" },
       },
     ]);
+  });
+});
+
+describe("AW2 review C-m1, C-m2: the adapter serves only a checked private copy", () => {
+  /** The default mock with one non-synthetic name in the WNT WANTED scenario. */
+  function withSmith(mock: MockFile): MockFile {
+    const wnt = mock.sources.nationalSource?.responses[3];
+    const respond = wnt?.scenarios[0]?.respond as { subject: { last: string } };
+    respond.subject.last = "SMITH";
+    return mock;
+  }
+  const wanted = () => req("nationalSource", "WNT", { last: "WANTED" });
+
+  it("C-m1: createMockAdapter itself fails closed on a mock that breaks the fixture policy", async () => {
+    const a = createMockAdapter({
+      mock: withSmith(structuredClone(DEFAULT_MOCK)),
+      timers: instantTimers,
+      random: () => 0,
+    });
+    const e = await a.query(wanted(), null, new AbortController().signal).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(SourceError);
+    expect((e as SourceError).code).toBe("failed");
+  });
+
+  it("C-m2: a change to the mock after createMockAdapter is never served", async () => {
+    const mock = structuredClone(DEFAULT_MOCK);
+    const a = createMockAdapter({ mock, timers: instantTimers, random: () => 0 });
+    withSmith(mock);
+    const v = await a.query(wanted(), null, new AbortController().signal);
+    expect(JSON.stringify(v)).not.toContain("SMITH");
+  });
+
+  it("C-m2: a change to the snapshot's mock after the factory checked it is never served", async () => {
+    const { document } = await bootstrapDocument(DEFAULT_SITE, OPTS);
+    const snapshot = await loadConfigDocument(document, {
+      label: "test",
+      configDir: configDirOf(DEFAULT_SITE),
+      ...OPTS,
+    });
+    const logger = captureLogger();
+    const reg = createAdapterRegistry({
+      allowMockSources: true,
+      timers: instantTimers,
+      random: () => 0,
+      logger,
+    });
+    const a = reg.get("mock", snapshot);
+    if (snapshot.mock !== null) withSmith(snapshot.mock);
+    const v = await a.query(wanted(), null, new AbortController().signal);
+    expect(JSON.stringify(v)).not.toContain("SMITH");
+    expect(logger.entries).toEqual([]);
   });
 });
 

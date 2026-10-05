@@ -1,7 +1,10 @@
-/** Timer seam for adapters and the dispatcher, so tests drive time (spec 5.4). */
+/** Timer seam for adapters and the dispatcher, so tests drive time (spec 5.2 step 5, 5.4). */
 export interface Timers {
+  /** Runs fn once after ms; the handle goes to clearTimeout. */
+  setTimeout(fn: () => void, ms: number): unknown;
+  clearTimeout(h: unknown): void;
   /** Resolves after ms; rejects with an AbortError, clearing its timer, when signal aborts. */
-  sleep(ms: number, signal: AbortSignal): Promise<void>;
+  sleep(ms: number, signal?: AbortSignal): Promise<void>;
 }
 
 /** The AbortError every timer and adapter wait rejects with when its signal aborts. */
@@ -10,9 +13,11 @@ export function abortError(): DOMException {
 }
 
 export const systemTimers: Timers = {
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
   sleep: (ms, signal) =>
     new Promise<void>((resolve, reject) => {
-      if (signal.aborted) {
+      if (signal?.aborted) {
         reject(abortError());
         return;
       }
@@ -21,9 +26,9 @@ export const systemTimers: Timers = {
         reject(abortError());
       };
       const timer = setTimeout(() => {
-        signal.removeEventListener("abort", onAbort);
+        signal?.removeEventListener("abort", onAbort);
         resolve();
       }, ms);
-      signal.addEventListener("abort", onAbort, { once: true });
+      signal?.addEventListener("abort", onAbort, { once: true });
     }),
 };

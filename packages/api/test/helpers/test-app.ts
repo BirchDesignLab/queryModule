@@ -2,10 +2,13 @@ import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { serve } from "@hono/node-server";
+import { onTestFinished } from "vitest";
 import { createApp } from "../../src/app";
 import { sessionCookieName } from "../../src/auth/auth";
 import { createLocalUser } from "../../src/auth/users";
+import type { MonotonicClock } from "../../src/clock";
 import { buildDeps } from "../../src/deps";
+import type { Timers } from "../../src/dispatch/timers";
 import { attachWebSocket } from "../../src/ws/server";
 import {
   closeWhenTestFinishes,
@@ -14,19 +17,40 @@ import {
   type TestClock,
   testEnv,
 } from "./fixture";
+import { manualTime } from "./manual-time";
 
-/** The assembled app on a fresh database, closed when the test finishes. Call inside it() only. */
-export async function createTestApp(o: { env?: NodeJS.ProcessEnv; clock?: TestClock } = {}) {
+/**
+ * The assembled app on a fresh database, closed when the test finishes. Call inside it() only.
+ * Dispatch timers are held by default (manual time nobody runs), so no adapter answers and no
+ * outcome is written unless a test passes its own timers and runs them; the dispatcher is aborted
+ * when the test finishes. d.fatal records into `fatals` unless the test passes onFatal.
+ */
+export async function createTestApp(
+  o: {
+    env?: NodeJS.ProcessEnv;
+    clock?: TestClock;
+    timers?: Timers;
+    monotonic?: MonotonicClock;
+    random?: () => number;
+    onFatal?: (e: unknown) => void;
+  } = {},
+) {
   const env = testEnv(o.env);
   const clock = o.clock ?? createTestClock();
   const logLines: string[] = [];
+  const fatals: unknown[] = [];
   const deps = await buildDeps({
     env,
     secrets: TEST_SECRETS,
     clock,
     logSink: (l) => logLines.push(l),
+    timers: o.timers ?? manualTime().timers,
+    ...(o.monotonic ? { monotonic: o.monotonic } : {}),
+    ...(o.random ? { random: o.random } : {}),
+    onFatal: o.onFatal ?? ((e) => fatals.push(e)),
   });
   closeWhenTestFinishes(deps.db, "createTestApp");
+  onTestFinished(() => deps.dispatcher.abortAll());
   const app = createApp(deps);
   const request = (path: string, init: RequestInit = {}) =>
     Promise.resolve(
@@ -50,6 +74,7 @@ export async function createTestApp(o: { env?: NodeJS.ProcessEnv; clock?: TestCl
     env,
     clock,
     logLines,
+    fatals,
     request,
     signIn,
     createUser: async (email: string, password: string) =>
