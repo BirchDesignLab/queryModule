@@ -1017,8 +1017,10 @@ test.describe("Admin parity (item 5)", () => {
           expect(b.tree?.w ?? 0, "tree width").toBeGreaterThanOrEqual(230);
           expect(b.editor?.w ?? 0, "editor width").toBeGreaterThanOrEqual(360);
           // Two rows (developer ruling 10-05-26, #546): every control on the first row, the status
-          // line and the reasons for the disabled buttons on the second.
-          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(95);
+          // line and the reasons for the disabled buttons below it. At 1366 a long status (a later
+          // version, from specs that publish earlier in the run) wraps that text onto a second line:
+          // 105 holds the controls row plus two text lines (80 with one, 99 measured with two).
+          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(105);
           // A section's label column sits beside its controls, not above them.
           expect(
             (b.label?.x ?? 0) + (b.label?.w ?? 0),
