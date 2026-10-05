@@ -9,9 +9,9 @@ import { describe, expect, it, vi } from "vitest";
 import { auditEvent, queryRequest, requestKey, sourceResult } from "../../src/db/schema";
 import type { Tx } from "../../src/db/tx";
 import { openPartValues, unwrapRequestKey } from "../../src/keys/request-keys";
-import { acknowledge } from "../../src/queries/acknowledge";
+import { type Acknowledged, acknowledge } from "../../src/queries/acknowledge";
 import type { PreparedSubmit } from "../../src/queries/prepare";
-import { lostIdempotencyRace, sanitizeSubmitError } from "../../src/queries/route";
+import { dispatchJobs, lostIdempotencyRace, sanitizeSubmitError } from "../../src/queries/route";
 import type { Principal } from "../../src/seams";
 import { TEST_SECRETS, type TestClock } from "../helpers/fixture";
 import { createTestApp, type TestApp } from "../helpers/test-app";
@@ -436,6 +436,7 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
         throw e;
       }),
     );
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
     const key = crypto.randomUUID();
     const [a, b] = await Promise.all([post(body(), { key }), post(body(), { key })]);
     const ra = await accepted(a);
@@ -449,6 +450,10 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
       requestKey: 2,
       queryAudit: 3,
     });
+    // the winner enqueues its one row; the loser's replay enqueues nothing
+    expect(enqueue.mock.calls.flatMap((c) => c[0]).map((j) => j.correlationId)).toEqual([
+      ra.body.correlationId,
+    ]);
   });
 
   it("a race-shaped error with no winner row propagates as 500 internal", async () => {
@@ -625,6 +630,105 @@ describe("POST /api/v1/queries fail closed and middleware (SEC-012, spec 5.9)", 
   });
 });
 
+describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-040, FR-041)", () => {
+  it("a 202 enqueues one job per source_result row with its resultId, the pinned snapshot and deadline", async () => {
+    const { t, post, body, userId } = await setup();
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const pinned = t.deps.config.current();
+    // A publish lands while T1 runs: the jobs keep the snapshot prepare planned against.
+    const record = t.deps.audit.record.bind(t.deps.audit);
+    t.deps.audit.record = async (tx: Tx, e: AuditEvent) => {
+      if (e.type === "acknowledged") t.deps.config.swap({ ...pinned });
+      return record(tx, e);
+    };
+    const { body: ack } = await accepted(
+      await post(body({ queryType: "PER", values: { last: LAST }, mode: "normal" })),
+    );
+    expect(t.deps.config.current()).not.toBe(pinned);
+    const rows = await rowsFor(t, ack.correlationId);
+    expect(rows.results.length).toBeGreaterThan(1);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const jobs = enqueue.mock.calls[0]?.[0] ?? [];
+    expect(jobs.map((j) => j.resultId).sort()).toEqual(rows.results.map((r) => r.resultId).sort());
+    const sources = new Map(pinned.siteConfig.sources.map((s) => [s.id, s]));
+    for (const row of rows.results) {
+      const j = jobs.find((x) => x.resultId === row.resultId);
+      const part = rows.parts.find((x) => x.partId === row.partId);
+      expect(j).toEqual({
+        correlationId: ack.correlationId,
+        partId: row.partId,
+        sourceId: row.sourceId,
+        resultId: row.resultId,
+        userId,
+        queryType: part?.queryType,
+        types: part?.typeValues,
+        values: openValues(t, rows, row.partId),
+        snapshot: pinned,
+        adapterKind: "mock",
+        credentialUserId: null,
+        delegationId: null,
+        requiresCredentials: sources.get(row.sourceId)?.requiresCredentials,
+        deadline: ack.acknowledgedAt + 10_000,
+      });
+      expect(j?.snapshot).toBe(pinned);
+    }
+  });
+
+  it("a replayed Idempotency-Key enqueues nothing", async () => {
+    const { t, post, body } = await setup();
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const key = crypto.randomUUID();
+    await accepted(await post(body(), { key }));
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    await accepted(await post(body(), { key }));
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatchJobs refuses a result with no plan part, source or pair (bug guards)", async () => {
+    const { t, userId, configHash } = await setup();
+    const prepared: PreparedSubmit = {
+      config: t.deps.config.current(),
+      request: {
+        queryType: "VEH",
+        values: { plate: PLATE },
+        sourceIds: ["stateSource"],
+        mode: "normal",
+        configHash,
+      },
+      plan: { mode: "normal", droppedSourceIds: [], parts: [] },
+      pairs: [],
+    };
+    const ack = (partId: number, sourceId: string): Acknowledged => ({
+      body: { correlationId: "corr-1", acknowledgedAt: 1, parts: [] },
+      acknowledgedAt: 1,
+      results: [{ partId, sourceId, resultId: "result-1" }],
+    });
+    expect(() => dispatchJobs(prepared, ack(0, "stateSource"), userId)).toThrow(
+      "dispatch: result has no plan part",
+    );
+    const part = {
+      partId: 0,
+      parentPartId: null,
+      origin: "primary",
+      queryType: "VEH",
+      typeValues: {},
+      values: { plate: PLATE },
+      sourceIds: ["stateSource"],
+      droppedSourceIds: [],
+      mode: "normal",
+      status: "planned",
+    } as const;
+    prepared.plan.parts.push({ ...part, sourceIds: [...part.sourceIds], droppedSourceIds: [] });
+    expect(() => dispatchJobs(prepared, ack(0, "noSuchSource"), userId)).toThrow(
+      "dispatch: result has no source config",
+    );
+    expect(() => dispatchJobs(prepared, ack(0, "stateSource"), userId)).toThrow(
+      "dispatch: result has no dispatch pair",
+    );
+    expect(dispatchJobs(prepared, { ...ack(0, "stateSource"), results: [] }, userId)).toEqual([]);
+  });
+});
+
 describe("acknowledge envelope and the race detector (SEC-011, spec 5.2 step 1)", () => {
   it("a pair's credential owner and a host principal's subject reach the audit envelope", async () => {
     const { t, userId, configHash } = await setup();
@@ -679,7 +783,11 @@ describe("acknowledge envelope and the race detector (SEC-011, spec 5.2 step 1)"
       receivedAt: 1,
       receivedMono: t.deps.monotonic.nowMs(),
     });
-    const rows = await rowsFor(t, ack.correlationId);
+    const rows = await rowsFor(t, ack.body.correlationId);
+    expect(ack.acknowledgedAt).toBe(ack.body.acknowledgedAt);
+    expect(ack.results).toEqual([
+      { partId: 0, sourceId: "stateSource", resultId: rows.results[0]?.resultId },
+    ]);
     expect(rows.audit.map((a) => [a.type, a.credentialUserId, a.hostSubject])).toEqual([
       ["submitted", null, "host-subject-0001"],
       ["sourceDispatched", userId, "host-subject-0001"],

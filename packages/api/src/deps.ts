@@ -1,5 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { createAdapterRegistry } from "./adapters/registry";
+import type { AdapterRegistry } from "./adapters/types";
 import { loadLiveConfig } from "./admin/config/store";
 import { createAuditService } from "./audit/service";
 import { type Auth, createAuth } from "./auth/auth";
@@ -14,6 +16,8 @@ import {
   checkQueryTriggers,
   runMigrations,
 } from "./db/migrate";
+import { createDispatcher, type Dispatcher } from "./dispatch/dispatcher";
+import { systemTimers, type Timers } from "./dispatch/timers";
 import type { DeployEnv } from "./env";
 import { type AppEventBus, createEventBus } from "./events/bus";
 import { checkKeyCanaries } from "./keys/canary";
@@ -56,6 +60,13 @@ export interface AppDeps {
   /** DATA_KEY: wraps each request's DEKs (spec 5.5 request_key, SEC-006). */
   dataKey: Buffer;
   eventBus: AppEventBus;
+  /** Adapters per config snapshot (spec 5.4); mock only when allowMockSources. */
+  adapters: AdapterRegistry;
+  /** Runs acknowledged (part, source) jobs under deadlines and caps (spec 5.2 step 5). */
+  dispatcher: Dispatcher;
+  timers: Timers;
+  /** Fail closed on an error that leaves the process unsafe to continue (spec 8.1). */
+  fatal(e: unknown): void;
 }
 
 export async function buildDeps(o: {
@@ -101,6 +112,18 @@ export async function buildDeps(o: {
       });
     for (const w of config.warnings) logger.warn("config warning", { key: w.key, path: w.path });
     const holder = createConfigHolder(config);
+    const timers = systemTimers;
+    const adapters = createAdapterRegistry({
+      allowMockSources: o.env.allowMockSources,
+      timers,
+      random: Math.random,
+      logger,
+    });
+    // Task 9 (#536) replaces this stub onOutcome with recordOutcome (transaction T2).
+    const dispatcher = createDispatcher(
+      { adapters, clock, monotonic: systemMonotonic, timers, logger },
+      async () => {},
+    );
     // Better Auth's own expiry is fixed at boot; the app limits below are read at use.
     const auth = createAuth({
       db,
@@ -128,6 +151,17 @@ export async function buildDeps(o: {
       audit: createAuditService(clock),
       limiter: createRateLimiter(db, clock),
       eventBus: createEventBus({ log: logger }),
+      adapters,
+      dispatcher,
+      timers,
+      // Task 9 (#536) routes this through main.ts fail(); until then: stop every adapter call,
+      // then rethrow outside any promise chain so the process-level handler fails closed.
+      fatal(e) {
+        dispatcher.abortAll();
+        queueMicrotask(() => {
+          throw e;
+        });
+      },
     };
   } catch (e) {
     db.$client.close();

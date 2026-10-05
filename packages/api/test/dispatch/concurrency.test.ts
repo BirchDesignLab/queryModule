@@ -47,7 +47,7 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
       return r;
     };
 
-    // commit order: T1 resolves with the 202 body only after its COMMIT
+    // commit order: T1 resolves with the 202 body (Acknowledged.body) only after its COMMIT
     const committed: string[] = [];
     const failures: unknown[] = [];
     const transaction = t.deps.db.transaction.bind(t.deps.db);
@@ -60,7 +60,9 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
         })
         .then(
           (r: unknown) => {
-            const parsed = SubmitQueryResponseSchema.safeParse(r);
+            const parsed = SubmitQueryResponseSchema.safeParse(
+              (r as { body?: unknown } | undefined)?.body,
+            );
             if (parsed.success) committed.push(parsed.data.correlationId);
             return r as never;
           },

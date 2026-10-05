@@ -8,6 +8,13 @@ import { createRequestKeys, sealPartValues } from "../keys/request-keys";
 import { actorOf, type Principal } from "../seams";
 import type { PreparedSubmit } from "./prepare";
 
+/** T1's answer: the 202 body, and one entry per pending source_result row for the dispatcher. */
+export interface Acknowledged {
+  body: SubmitQueryResponse;
+  acknowledgedAt: number;
+  results: { partId: number; sourceId: string; resultId: string }[];
+}
+
 /**
  * Transaction T1 (spec 5.2 step 4): request keys, one query_request row per part, one pending
  * source_result row per pair, then submitted, partSkipped, sourceDispatched and acknowledged
@@ -21,7 +28,7 @@ export async function acknowledge(
   principal: Principal,
   p: PreparedSubmit,
   a: { idempotencyKey: string; receivedAt: number; receivedMono: number },
-): Promise<SubmitQueryResponse> {
+): Promise<Acknowledged> {
   const { request, plan, pairs } = p;
   // The hash of the snapshot prepare planned against, even if a publish swapped it since.
   const { configHash } = p.config;
@@ -142,14 +149,22 @@ export async function acknowledge(
       });
       // the route parses this body with SubmitQueryResponseSchema before sending
       return {
-        correlationId,
+        body: {
+          correlationId,
+          acknowledgedAt,
+          parts: plan.parts.map((part) => ({
+            partId: part.partId,
+            queryType: part.queryType,
+            status: part.status === "planned" ? "dispatched" : "skipped",
+            sourceIds: part.sourceIds,
+            droppedSourceIds: part.droppedSourceIds,
+          })),
+        },
         acknowledgedAt,
-        parts: plan.parts.map((part) => ({
-          partId: part.partId,
-          queryType: part.queryType,
-          status: part.status === "planned" ? "dispatched" : "skipped",
-          sourceIds: part.sourceIds,
-          droppedSourceIds: part.droppedSourceIds,
+        results: dispatched.map(({ partId, sourceId, resultId }) => ({
+          partId,
+          sourceId,
+          resultId,
         })),
       };
     } finally {

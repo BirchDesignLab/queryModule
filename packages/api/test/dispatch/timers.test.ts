@@ -51,3 +51,39 @@ describe("systemTimers.sleep", () => {
     await expect(p).rejects.toMatchObject({ name: "AbortError" });
   });
 });
+
+// Task 8 (spec 5.2 step 5): the dispatcher's deadlines use setTimeout and clearTimeout through
+// the same seam, and sleep works without a signal.
+describe("systemTimers.setTimeout, clearTimeout and sleep without a signal", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("setTimeout runs fn after ms, and clearTimeout cancels it", async () => {
+    const fired: string[] = [];
+    systemTimers.setTimeout(() => fired.push("a"), 100);
+    const h = systemTimers.setTimeout(() => fired.push("b"), 100);
+    systemTimers.clearTimeout(h);
+    await vi.advanceTimersByTimeAsync(99);
+    expect(fired).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fired).toEqual(["a"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("sleep without a signal resolves after ms", async () => {
+    let done = false;
+    const p = systemTimers.sleep(50).then(() => {
+      done = true;
+    });
+    await vi.advanceTimersByTimeAsync(49);
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await p;
+    expect(done).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});

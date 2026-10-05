@@ -56,7 +56,7 @@ function track<T>(p: Promise<T>) {
   return s;
 }
 
-const instantTimers: Timers = { sleep: async () => {} };
+const instantTimers: Timers = { ...systemTimers, sleep: async () => {} };
 
 describe("createMockAdapter (fake timers)", () => {
   beforeEach(() => {

@@ -1,17 +1,14 @@
-import {
-  type Role,
-  type SubmitQueryResponse,
-  SubmitQueryResponseSchema,
-} from "@querymodule/core/contracts";
+import { type Role, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
 import type { Hono } from "hono";
 import type { AppDeps } from "../deps";
+import type { DispatchJob } from "../dispatch/dispatcher";
 import { apiError } from "../http/errors";
 import { requireSession } from "../http/session";
 import type { AppEnv } from "../http/types";
-import { acknowledge } from "./acknowledge";
+import { type Acknowledged, acknowledge } from "./acknowledge";
 import { admitSubmit, replayResponse } from "./admission";
 import { sanitizeSubmitError } from "./errors";
-import { prepareSubmit } from "./prepare";
+import { type PreparedSubmit, prepareSubmit } from "./prepare";
 
 export { SubmitTransactionError, sanitizeSubmitError } from "./errors";
 
@@ -40,10 +37,45 @@ export const mayQuery = (role: string): boolean =>
   (QUERY_ROLES as readonly string[]).includes(role);
 
 /**
+ * One dispatch job per pending source_result row T1 wrote (spec 5.2 step 5): the part's values
+ * and type values from prepare's plan (D-A13), the pair's credential owner, and the deadline and
+ * requiresCredentials from the snapshot prepare pinned, never the live config.
+ */
+export function dispatchJobs(p: PreparedSubmit, ack: Acknowledged, userId: string): DispatchJob[] {
+  return ack.results.map((r) => {
+    const part = p.plan.parts.find((x) => x.partId === r.partId);
+    if (!part) throw new Error("dispatch: result has no plan part");
+    const source = p.config.siteConfig.sources.find((s) => s.id === r.sourceId);
+    if (!source) throw new Error("dispatch: result has no source config");
+    const pair = p.pairs.find((x) => x.partId === r.partId && x.sourceId === r.sourceId);
+    if (!pair) throw new Error("dispatch: result has no dispatch pair");
+    return {
+      correlationId: ack.body.correlationId,
+      partId: r.partId,
+      sourceId: r.sourceId,
+      resultId: r.resultId,
+      userId,
+      queryType: part.queryType,
+      types: part.typeValues,
+      values: part.values,
+      snapshot: p.config,
+      adapterKind: pair.adapterKind,
+      credentialUserId: pair.credentialUserId,
+      delegationId: pair.delegationId,
+      requiresCredentials: source.requiresCredentials,
+      deadline: ack.acknowledgedAt + source.timeoutMs,
+    };
+  });
+}
+
+/**
  * POST /api/v1/queries (spec 5.2 steps 1 to 4), mounted after the body cap and the
  * X-Requested-With check. Nothing from the body is logged; any other throw reaches
  * app.onError as 500 internal, a T1 failure only as a SubmitTransactionError. A role outside
- * QUERY_ROLES gets 403 before anything is read.
+ * QUERY_ROLES gets 403 before anything is read. The committed rows go to the dispatcher as soon as
+ * T1 returns, before the body is parsed, so no later throw leaves them undispatched; the 202 never
+ * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
+ * nothing: the winner enqueued its own rows.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
   app.post("/api/v1/queries", requireSession(d.identity), async (c) => {
@@ -54,15 +86,16 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     const principal = c.get("principal");
     const p = prepareSubmit(c, d, a.raw, principal);
     if (!p.ok) return p.response;
-    let body: SubmitQueryResponse;
+    let ack: Acknowledged;
     try {
-      body = await acknowledge(d, principal, p.value, a);
+      ack = await acknowledge(d, principal, p.value, a);
     } catch (e) {
       if (!lostIdempotencyRace(e)) throw sanitizeSubmitError(e);
       const winner = await replayResponse(d.db, principal.userId, a.idempotencyKey);
       if (winner === null) throw sanitizeSubmitError(e);
-      body = winner;
+      ack = { body: winner, acknowledgedAt: winner.acknowledgedAt, results: [] };
     }
-    return c.json(SubmitQueryResponseSchema.parse(body), 202);
+    d.dispatcher.enqueue(dispatchJobs(p.value, ack, principal.userId));
+    return c.json(SubmitQueryResponseSchema.parse(ack.body), 202);
   });
 }
