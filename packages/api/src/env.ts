@@ -50,7 +50,10 @@ function readPort(v: string | undefined): number {
   return port;
 }
 
-/** Fail closed (spec 8.1): a positive decimal integer, else a startup error naming `name`; never the value. */
+/**
+ * Fail closed (spec 8.1): a positive decimal integer, else a startup error naming `name`; never the
+ * value.
+ */
 function readPositiveInt(name: string, v: string | undefined, fallback: number): number {
   // unset or empty (a blank line in an .env file) keeps the default
   if (v === undefined || v === "") return fallback;

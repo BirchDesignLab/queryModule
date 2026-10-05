@@ -24,7 +24,10 @@ export interface DispatchJob {
   sourceId: string;
   resultId: string;
   userId: string;
-  /** The requester's audit envelope from T1, so sourceResponded is findable per user (spec 4.7, SEC-010). */
+  /**
+   * The requester's audit envelope from T1, so sourceResponded is findable per user (spec 4.7,
+   * SEC-010).
+   */
   actor: AuditActor;
   identitySource: "local" | "host";
   hostSubject?: string;
@@ -55,7 +58,10 @@ export type Outcome =
   | { status: "credentialsMissing" };
 
 export interface Dispatcher {
-  /** After stopIntake() or abortAll() it refuses: the rows stay pending and the next start sweeps them. */
+  /**
+   * After stopIntake() or abortAll() it refuses: the rows stay pending and the next start sweeps
+   * them.
+   */
   enqueue(jobs: readonly DispatchJob[]): void;
   /** Queued, running, and reported but with onOutcome not yet resolved. */
   inFlight(): number;
@@ -77,7 +83,9 @@ type OnOutcome = (job: DispatchJob, outcome: Outcome, latencyMs: number) => Prom
 interface Running {
   controller: AbortController;
   deadlineTimer: unknown;
-  /** True once an outcome is reported or abortAll dropped the job; later settlements change nothing. */
+  /**
+   * True once an outcome is reported or abortAll dropped the job; later settlements change nothing.
+   */
   done: boolean;
 }
 
@@ -153,7 +161,8 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       }
       // abortAll dropped the job: the process is failing closed, so nothing more is said.
       if (aborted) return;
-      // An AbortError after our own abort is the adapter honouring it, not a late answer (AW3 critic c).
+      // An AbortError after our own abort is the adapter honouring it, not a late answer (AW3
+      // critic c).
       if (abortAck) return;
       d.logger.warn("dispatch late settlement", { resultId: job.resultId, sourceId: job.sourceId });
     };

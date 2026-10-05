@@ -81,8 +81,8 @@ export function planJobs(p: PreparedSubmit, principal: Principal): JobTemplate[]
 
 /**
  * T1's results bound to the planned jobs by index (acknowledge writes one row per pair, in pair
- * order), with the monotonic reading taken as T1 returned; a replay's empty results bind nothing. A result that does not line up with its pair is
- * a bug, thrown for the route's post-commit backstop.
+ * order), with the monotonic reading taken as T1 returned; a replay's empty results bind nothing. A
+ * result that does not line up with its pair is a bug, thrown for the route's post-commit backstop.
  */
 export function bindJobs(
   templates: readonly JobTemplate[],
