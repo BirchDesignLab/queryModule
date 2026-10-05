@@ -6,6 +6,14 @@ import type { AppDeps } from "../deps";
 import { errorFields } from "../log/error-fields";
 import type { Logger } from "../log/logger";
 
+/**
+ * Node's largest timer delay (2^31 - 1 ms, about 24.8 days); a larger delay fires after 1 ms. Every
+ * dispatcher timer is clamped to it (AW3 review C-C-m2), so a huge configured timeoutMs ends a
+ * job at about 24.8 days instead of at once.
+ */
+export const MAX_TIMER_MS = 2_147_483_647;
+const timerMs = (ms: number): number => Math.min(ms, MAX_TIMER_MS);
+
 /** Spec 5.2 defaults; constants, not config (D-A15). */
 export const DISPATCH_CAPS = { perSource: 4, global: 32 } as const;
 
@@ -131,10 +139,13 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       report(job, outcome, sinceAck(job));
       pump();
     };
-    r.deadlineTimer = d.timers.setTimeout(() => {
-      controller.abort();
-      finish({ status: "timedOut" });
-    }, job.deadline - d.clock.now());
+    r.deadlineTimer = d.timers.setTimeout(
+      () => {
+        controller.abort();
+        finish({ status: "timedOut" });
+      },
+      timerMs(job.deadline - d.clock.now()),
+    );
     const settled = (outcome: Outcome, abortAck = false) => {
       if (!r.done) {
         finish(outcome);
@@ -210,7 +221,7 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       ) {
         // Still waiting for a slot: its deadline fires pump, which reports it timedOut on time.
         if (!queueTimers.has(job)) {
-          queueTimers.set(job, d.timers.setTimeout(pump, job.deadline - d.clock.now()));
+          queueTimers.set(job, d.timers.setTimeout(pump, timerMs(job.deadline - d.clock.now())));
         }
         i += 1;
         continue;
@@ -249,7 +260,7 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
           d.timers.clearTimeout(bound);
           resolve();
         };
-        const bound = d.timers.setTimeout(wake, boundMs);
+        const bound = d.timers.setTimeout(wake, timerMs(boundMs));
         idleWaiters.add(wake);
       });
     },

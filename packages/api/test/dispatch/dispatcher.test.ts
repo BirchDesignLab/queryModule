@@ -11,6 +11,7 @@ import {
   createDispatcher,
   DISPATCH_CAPS,
   type DispatchJob,
+  MAX_TIMER_MS,
   type Outcome,
 } from "../../src/dispatch/dispatcher";
 import { abortError, type Timers } from "../../src/dispatch/timers";
@@ -254,6 +255,27 @@ describe("createDispatcher outcomes (spec 5.2 step 5, FR-043, FR-044)", () => {
     await s.time.advance(1);
     expect(s.seen.map((x) => x.outcome.status)).toEqual(["timedOut"]);
     expect(s.logger.entries).toEqual([]);
+  });
+
+  it("AW3 review C-C-m2: timer delays are clamped to Node's maximum, never wrapped to 1 ms", async () => {
+    const s = setup();
+    const delays: number[] = [];
+    const setTimeoutReal = s.time.timers.setTimeout;
+    vi.spyOn(s.time.timers, "setTimeout").mockImplementation((fn, ms) => {
+      delays.push(ms);
+      return setTimeoutReal(fn, ms);
+    });
+    const far = T0 + MAX_TIMER_MS + 60_000;
+    // four running on stateSource, a fifth queued behind them: both timer kinds
+    s.dispatcher.enqueue(Array.from({ length: 5 }, () => job({ deadline: far })));
+    const drained = s.dispatcher.drain(MAX_TIMER_MS * 2);
+    await s.time.advance(1_000);
+    expect(s.seen).toEqual([]);
+    expect(delays.length).toBe(6);
+    for (const ms of delays) expect(ms).toBe(MAX_TIMER_MS);
+    s.dispatcher.abortAll();
+    await s.time.advance(MAX_TIMER_MS);
+    await drained;
   });
 
   it("requiresCredentials with no credential gives credentialsMissing without an adapter call", async () => {
