@@ -341,6 +341,7 @@ One line per contract change after the M0 P0 freeze: date, PR or branch, change,
 | Date | PR / branch | Change | Kind | Consumers |
 |---|---|---|---|---|
 | 10-05-26 | `feat/m2-p0-wave-1` (#521) | WS `resultHidden` event (in `WsEventSchema`) and `resync` server message; ADR-0013 tolerant client receipt | additive (no `MIN_CLIENT_VERSION` bump, ADR-0013) | M2 P0.5 B Task 5 feed parser; M2 P1 replay; M3 P2 hide |
+| 10-05-26 | `feat/m2-p0-wave-1` (#520) | audit `configLoaded.details.versionId` (optional): the stored config version loaded, so the served `configHash` joins to a `site_config_version` row (#511 CFG-3) | additive (optional field) | audit readers; M2 config console history |
 
 ## 9 Machine setup
 

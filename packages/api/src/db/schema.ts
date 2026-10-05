@@ -265,6 +265,9 @@ export const siteConfigVersion = sqliteTable(
     document: text().notNull(),
     // set once the version validates at publish; a draft has none
     configHash: text(),
+    // #511 CFG-3 (D-M2P0-2): SHA-256 of canonicalJson(document) as stored, set once at publish (or
+    // seed) and frozen (0009); a draft has none. Boot verifies it before defaults apply.
+    documentHash: text(),
     baseVersion: integer(),
     createdBy: text().notNull(),
     createdAt: integer().notNull(),

@@ -41,3 +41,14 @@ Spec v2 meets BR-001 ("common site customizations through configuration, without
 - Admin UI files live in `apps/web/src/admin/**` and `packages/web-ui/src/admin/**`, built by Track A as a declared exception to master plan section 2 (D-A28), disjoint from Track B's panel files.
 - Risk: a bad publish reaches every form within 15 s. Mitigations: publish is refused on any validation error, the preview is the production renderer, rollback is one action, and `configPublished` plus `configLoaded` make every change traceable.
 - Issue #333 moves from M2 to M1 P3 (D-A29).
+
+## Addendum 10-05-26: the stored document's hash (#511 CFG-3, D-M2P0-2)
+
+Item 1's boot check compared the stored `config_hash` with the hash of the document resolved by the current schema, so a field the schema later defaults refused startup with `config.hashMismatch` (M1 phase review CFG-3). Developer ruling 10-05-26 (D-M2P0-2), a prototype shortcut:
+
+- `site_config_version` gains `document_hash` (migration 0009): the SHA-256 of `canonicalJson` of the stored document as stored, set once at publish (and at the seed), NULL on drafts. The frozen trigger keeps a set hash unchanged and never back to NULL.
+- Boot verifies `document_hash` against the published row first (a mismatch still refuses with `config.hashMismatch`, NFR-003, SEC-010), then parses with the current schema and recomputes the served `configHash` from the resolved `siteConfig` (its spec meaning is unchanged). The served hash may then differ from the row's stored `config_hash`.
+- A published row from before 0009 gets its `document_hash` once at first boot, only if its `config_hash` is the hash of its stored `siteConfig` or of today's defaults-applied resolve; otherwise startup refuses.
+- The live snapshot carries the stored `versionId`; publish detects a stale snapshot by version id, `previousConfigHash` is the served hash, and `configLoaded` gains optional `versionId` so the served hash joins to a stored version.
+
+The proper fix is a config schema version with an audited migration of stored rows: #558.
