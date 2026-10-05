@@ -1016,34 +1016,43 @@ test.describe("Admin parity (item 5)", () => {
           expect(Math.round(b.preview?.w ?? 0), "preview width").toBeLessThanOrEqual(450);
           expect(b.tree?.w ?? 0, "tree width").toBeGreaterThanOrEqual(230);
           expect(b.editor?.w ?? 0, "editor width").toBeGreaterThanOrEqual(360);
-          // Two rows: the status line and the view tabs, then Undo, Redo, History, Save draft and Review
-          // and publish (Tasks 33 and 34 added the last four to the old one-row bar).
-          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(130);
+          // Two rows (developer ruling 10-05-26, #546): every control on the first row, the status
+          // line and the reasons for the disabled buttons on the second.
+          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(95);
           // A section's label column sits beside its controls, not above them.
           expect(
             (b.label?.x ?? 0) + (b.label?.w ?? 0),
             "label column beside controls",
           ).toBeLessThanOrEqual(b.body1?.x ?? 0);
-          // The reasons for the disabled buttons sit in one or two rows inside the toolbar.
-          const reasons = await page.evaluate(() => {
-            const tops = [...document.querySelectorAll(".qm-builder__reason")].map(
-              (el) => el.getBoundingClientRect().top,
-            );
-            return { tops };
+          const bar = await page.evaluate(() => {
+            const toolbar = document.querySelector(".qm-builder__toolbar");
+            const rect = (el: Element) => el.getBoundingClientRect();
+            const controls = [...(toolbar?.querySelectorAll("button, [role='tab']") ?? [])]
+              .map(rect)
+              .filter((r) => r.width > 0);
+            const status = toolbar?.querySelector(".qm-builder__status");
+            return {
+              centres: controls.map((r) => r.top + r.height / 2),
+              controlsBottom: Math.max(...controls.map((r) => r.bottom)),
+              statusTop: status === null || status === undefined ? 0 : rect(status).top,
+              reasonTops: [...(toolbar?.querySelectorAll(".qm-builder__reason") ?? [])].map(
+                (el) => rect(el).top,
+              ),
+            };
           });
-          expect(reasons.tops.length, "reasons").toBeGreaterThan(0);
-          // Three reasons now (history, save, review): at 1366 they wrap to two rows, no more.
-          expect(Math.max(...reasons.tops) - Math.min(...reasons.tops), "two rows").toBeLessThan(
-            40,
+          expect(bar.centres.length, "controls").toBeGreaterThan(0);
+          expect(
+            Math.max(...bar.centres) - Math.min(...bar.centres),
+            "controls in one row",
+          ).toBeLessThan(2);
+          expect(bar.statusTop, "status under the controls").toBeGreaterThanOrEqual(
+            bar.controlsBottom,
           );
-          // They flow in the toolbar's last row after the buttons (shell.css order 3), so a reason
-          // can start beside the last button on a wrapped bar: only "inside the toolbar" holds.
-          expect(Math.min(...reasons.tops), "inside the toolbar").toBeGreaterThanOrEqual(
-            b.toolbar?.y ?? 0,
-          );
-          expect(Math.max(...reasons.tops), "inside the toolbar").toBeLessThan(
-            b.toolbar?.bottom ?? 0,
-          );
+          expect(bar.reasonTops.length, "reasons").toBeGreaterThan(0);
+          for (const top of bar.reasonTops) {
+            expect(top, "reason under the controls").toBeGreaterThanOrEqual(bar.controlsBottom);
+            expect(top, "reason inside the toolbar").toBeLessThan(b.toolbar?.bottom ?? 0);
+          }
           // With unpublished changes the status line is longer and the toolbar may wrap more: the
           // panes still end inside the window and the page still does not scroll.
           await page

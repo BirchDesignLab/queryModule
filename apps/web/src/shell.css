@@ -630,7 +630,9 @@ main[tabindex="-1"]:focus {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--qm-space-1) var(--qm-space-3);
+  /* 8 px between controls, so all of them keep the first row at 1366 (developer ruling 10-05-26,
+     issue 546: controls on row 1, status and reasons on row 2). */
+  gap: var(--qm-space-1) var(--qm-space-2);
   min-inline-size: 0;
   padding: var(--qm-space-2) var(--qm-space-3);
   background: var(--qm-color-surface-base);

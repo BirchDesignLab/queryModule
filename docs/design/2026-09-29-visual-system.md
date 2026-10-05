@@ -150,7 +150,7 @@ One Opus 5.5 medium critic read the mockup and this document (25 findings: 1 blo
 1. Mock responses editor mockup (tab "Admin: mock responses") approved. A response's query type is fixed once it exists. Review and audit lines omit trigger values. A scenario needs at least one trigger field with a value; the default response is the catch-all. No `mock_credential_state` UI: the "Credentials rejected" result is enough for the demo (M3 P1 owns credentials). "Try a match" comes after the demo (#565).
 2. Builder panes (#486, design lead): editor and preview stay `surface.base` panes (#436). The preview body is an edge-to-edge sunken well under a ruled head. The editor takes the mockup's 20 px block inset; its inline inset stays 12 px, because 24 px would push a section's label column above its controls at 1366.
 3. Breakpoints are px (#484, design lead): see Spacing, radius, density.
-4. Builder toolbar at 1366 (#546): two rows, the status line on top and all controls on the second row.
+4. Builder toolbar (#546, re-ruled 10-05-26): two rows, every control on the first row and the status line with the reasons for the disabled buttons on the second; 8 px between controls so the first row holds at 1366.
 
 ## Implementation plan
 
