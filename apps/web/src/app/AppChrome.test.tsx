@@ -81,6 +81,26 @@ describe("FR-065 the feed socket runs while signed in (spec 6.7)", () => {
   });
 });
 
+describe("FR-065 unmounting the app closes the feed socket (spec 6.7)", () => {
+  it("closes the socket while the user is still signed in", async () => {
+    const sockets: FakeSocket[] = [];
+    const t = renderRoot({
+      createSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    t.unmount();
+    expect(t.services.authStore.getState().status).toBe("signedIn");
+    expect(sockets[0]?.closed).toBe(true);
+  });
+});
+
 describe("sign-in: a slow preferences load does not pull the user back", () => {
   it("a page opened while the preferences load is still pending stays open after it lands", async () => {
     let release = () => {};

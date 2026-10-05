@@ -12,7 +12,7 @@ export class FakeSocket implements SocketLike {
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onclose: ((event: { code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
-  /** Make the next send() throw, as a browser socket does when it is not open. */
+  /** Make send() throw, as a browser socket does while it is still connecting. */
   throwOnSend = false;
 
   constructor(readonly url = "ws://api.test/api/v1/ws") {}

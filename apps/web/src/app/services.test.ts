@@ -127,6 +127,7 @@ describe("FR-065 feed socket in the composition root (spec 6.7, 6.8)", () => {
     expect(t.sockets).toHaveLength(0);
     t.services.feed.open();
     expect(t.urls).toEqual([heartbeatUrl(location)]);
+    t.services.reset.resetAll();
   });
 
   it("resetAll closes the feed and its socket", () => {

@@ -181,6 +181,28 @@ describe("FR-065 feed socket: heartbeat (spec 6.8)", () => {
     expect(socket.closed).toBe(false);
   });
 
+  it("a welcome after one missed tick clears the miss", () => {
+    const t = setup();
+    t.feed.open();
+    t.sockets[0]?.open();
+    vi.advanceTimersByTime(PING_MS);
+    t.sockets[0]?.receive({ v: 1, type: "welcome", latestSeq: 0 });
+    // Tick 2 pings, tick 3 counts the first unanswered ping; a lingering miss would go stale here.
+    vi.advanceTimersByTime(PING_MS * 2);
+    expect(t.feed.state()).toBe("open");
+  });
+
+  it("a pong after one miss clears it", () => {
+    const t = setup();
+    t.feed.open();
+    const socket = t.connect(0);
+    vi.advanceTimersByTime(PING_MS * 2);
+    t.pong(socket);
+    // Ticks 3 and 4: ping, then one miss; a lingering miss would go stale at tick 4.
+    vi.advanceTimersByTime(PING_MS * 2);
+    expect(t.feed.state()).toBe("open");
+  });
+
   it("a pong with an unknown nonce does not count", () => {
     const t = setup();
     t.feed.open();
@@ -327,6 +349,17 @@ describe("FR-065 feed socket: reconnect (spec 6.8)", () => {
     expect(t.feed.state()).toBe("stale");
     vi.advanceTimersByTime(1000);
     expect(t.sockets).toHaveLength(2);
+  });
+
+  it("open() while waiting to reconnect does not start a second socket", () => {
+    const t = setup();
+    t.feed.open();
+    t.connect(0).serverClose();
+    t.feed.open();
+    expect(t.sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1000);
+    expect(t.sockets).toHaveLength(2);
+    expect(vi.getTimerCount()).toBe(1);
   });
 
   it("a late close from a socket already replaced is ignored", () => {
