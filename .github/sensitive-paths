@@ -34,6 +34,9 @@ packages/core/src/contracts/ws.ts
 packages/core/src/contracts/version.ts
 packages/core/contracts/ws-events.schema.json
 packages/core/src/planner/**
+# Config loading: computes configHash, enforces the mock gate, carries LoadedConfig.mock
+# and versionId into every dispatch snapshot (M2 P0.5)
+packages/api/src/config/**
 # Query routes and the access policy (spec 5.2, SEC-014)
 packages/api/src/queries/**
 # Admin console (ADR-0011 Consequences): config swaps live config and writes audit;
@@ -95,6 +98,9 @@ packages/api/src/events/**
 # Admin console floor (ADR-0011 Consequences): admin/users is auth; anything new under
 # admin/ is at least gate
 packages/api/src/admin/**
+# Mock fixture policy: mock data only, no fixtures that look like real person, vehicle or
+# property records (spec 5.4, 10.8; CLAUDE.md)
+packages/core/src/config/fixture-policy.ts
 # Request guards (#338, checker 09-29-26)
 # X-Requested-With CSRF guard, security headers, body cap
 packages/api/src/http/security.ts

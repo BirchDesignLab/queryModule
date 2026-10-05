@@ -60,7 +60,9 @@ describe("ADR-0011 item 6 admin config route access", () => {
           expect((await errorOf(r)).code).toBe(want === 401 ? "unauthenticated" : "forbidden");
       }
     }
-  });
+    // 35 sequential requests with sign-ins: about 1 s alone, over the 5 s default under full-suite
+    // coverage load (#560).
+  }, 30_000);
 
   it("every caller gets 404 notFound while adminConfig is off", async () => {
     const a = await adminConfigApp({ siteConfig: FLAGS_OFF_SITE });

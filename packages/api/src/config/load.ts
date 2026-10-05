@@ -14,7 +14,12 @@ import {
   toClientSiteConfig,
   validateResolved,
 } from "@querymodule/core/config";
-import { type ConfigDocument, ConfigDocumentSchema } from "@querymodule/core/contracts";
+import {
+  type ConfigDocument,
+  ConfigDocumentSchema,
+  type MockFile,
+  MockFileSchema,
+} from "@querymodule/core/contracts";
 import {
   contrastFailures,
   contrastRatio,
@@ -22,6 +27,7 @@ import {
   type TokenName,
   tokenValue,
 } from "@querymodule/tokens";
+import { BUILTIN_ADAPTER_KINDS } from "../adapters/kinds";
 
 export interface LoadedConfig {
   siteConfig: SiteConfig;
@@ -34,6 +40,11 @@ export interface LoadedConfig {
   extendsChain: string[];
   /** Non-fatal diagnostics (keys, pointers, params only) for the caller to log. */
   warnings: Diagnostic[];
+  /**
+   * The mock the chain checked (spec 5.4; #493): the stored document's own, or the site's mock
+   * file when loaded from SITE_CONFIG. Null when the site has no mock-kind source.
+   */
+  mock: MockFile | null;
 }
 
 /** The live snapshot: a loaded config and the stored version it came from (#511 CFG-3). */
@@ -41,8 +52,8 @@ export interface VersionedConfig extends LoadedConfig {
   versionId: string;
 }
 
-/** Adapter kinds this build supports; plugins from ADAPTER_DIR arrive with the registry (M1 P3). */
-export const BUILTIN_ADAPTER_KINDS: readonly string[] = ["mock"];
+/** Re-exported from the leaf module so config:validate imports stay unchanged (spec 5.4). */
+export { BUILTIN_ADAPTER_KINDS };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -242,6 +253,7 @@ async function checkChain(
   const colour = colourTokenChecks(siteConfig);
   if (colour.length > 0) return fail(colour, warnings);
 
+  let mock: MockFile | null = null;
   const mockIndex = siteConfig.sources.findIndex((s) => s.kind === "mock");
   if (mockIndex >= 0) {
     if (!o.allowMockSources)
@@ -249,12 +261,12 @@ async function checkChain(
         [{ level: "error", path: `/sources/${mockIndex}/kind`, key: MOCK_NOT_ALLOWED, params: {} }],
         warnings,
       );
-    const mockErrors = checkMockCoverage(
-      siteConfig,
-      await src.readMock(siteConfig.site.id),
-      `${siteConfig.site.id}.json`,
-    );
+    const rawMock = await src.readMock(siteConfig.site.id);
+    const mockErrors = checkMockCoverage(siteConfig, rawMock, `${siteConfig.site.id}.json`);
     if (mockErrors.length > 0) return fail(mockErrors, warnings);
+    // Coverage passed, so the mock parsed there (it reports config.mockSchema otherwise); kept for
+    // the mock adapter (#493). parse() cannot throw here; if it ever did, loading fails closed.
+    mock = MockFileSchema.parse(rawMock.ok ? rawMock.value : undefined);
   }
 
   const locales: Record<string, Record<string, unknown>> = {};
@@ -273,6 +285,7 @@ async function checkChain(
       locales,
       extendsChain: shape.extendsChain,
       warnings,
+      mock,
     },
   };
 }

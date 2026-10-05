@@ -396,10 +396,18 @@ describe("sign out everywhere", () => {
       }),
     );
     await t.user.click(signOutButton("Rose Dispatch"));
-    expect(await screen.findByText("Rose Dispatch is signed out of 250 sessions.")).toBeVisible();
+    // 250 mocked DELETEs across repeated list passes: over findBy's 1 s default under full-suite load
+    // (#560), so the wait and the test carry explicit timeouts.
+    expect(
+      await screen.findByText(
+        "Rose Dispatch is signed out of 250 sessions.",
+        {},
+        { timeout: 10_000 },
+      ),
+    ).toBeVisible();
     expect(ended).toHaveLength(250);
     expect(live.size).toBe(0);
-  });
+  }, 20_000);
 
   it("AC-1 does not claim success when sessions are still live after the passes", async () => {
     const t = await openUsers();

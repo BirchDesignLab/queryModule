@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { FIELDS, KNOWN_LABELS, MILESTONES } from "./board-config.mjs";
 import { parseBoardData } from "./board-data.mjs";
 import { validateBoardData } from "./board-data-schema.mjs";
+import { phaseLabel } from "./board-model.mjs";
 
 // docs/board/board-data.json holds the issue-content board data that used to
 // live inline in gh-setup-project.mjs (`[gate]`, ADR-0007): PHASES,
@@ -24,6 +25,14 @@ function loadBoardData(): unknown {
 }
 
 describe("validateBoardData: the shipped docs/board/board-data.json", () => {
+  it("every Phase option has its label in scripts/ops/gh-setup-labels.sh (AW1 review G-M1)", () => {
+    const sh = readFileSync(resolve(ROOT, "scripts/ops/gh-setup-labels.sh"), "utf8");
+    const defined = new Set([...sh.matchAll(/^\s*"([a-z0-9-]+)\|/gm)].map((m) => m[1]));
+    const phase = FIELDS.find((x) => x.name === "Phase");
+    if (phase === undefined) throw new Error("no Phase field");
+    for (const o of phase.options ?? []) expect(defined, o.name).toContain(phaseLabel(o.name));
+  });
+
   it("validates with no errors", () => {
     const result = validateBoardData(loadBoardData(), known);
     expect(result.ok).toBe(true);

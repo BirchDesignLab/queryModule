@@ -23,6 +23,17 @@ function emittedKeys(dir: string): string[] {
   );
 }
 
+describe("NFR-001 every fixture policy key has an en string (#532 review Q2)", () => {
+  it("each fixture.* key in fixture-policy.ts has a message", () => {
+    const src = readFileSync(new URL("./fixture-policy.ts", import.meta.url), "utf8");
+    const keys = [
+      ...new Set([...src.matchAll(/"(fixture\.[A-Za-z]+)"/g)].map((m) => m[1] as string)),
+    ];
+    expect(keys).toHaveLength(7);
+    expect(keys.filter((k) => !has(k))).toEqual([]);
+  });
+});
+
 describe("NFR-001 every emitted message key has an en string", () => {
   it.each(["rules", "terminal", "planner"])("core %s", (dir) => {
     expect([...new Set(emittedKeys(dir))].filter((k) => !has(k))).toEqual([]);

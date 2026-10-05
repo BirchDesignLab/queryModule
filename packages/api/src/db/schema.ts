@@ -286,3 +286,28 @@ export const siteConfigVersion = sqliteTable(
     ),
   ],
 );
+
+// event_log: the per-user outbox for EventBus and the replay source (spec 5.3, 5.5). seq is the
+// previous max for the user + 1, allocated in the writer's transaction (dispatch/event-log.ts).
+// Reference-only: ids and status, never a value or payload. status carries the SourceStatus so
+// replay rebuilds sourceStatus without joining source_result. Pruning keeps each user's newest
+// row so seq never restarts (D-A14).
+export const eventLog = sqliteTable(
+  "event_log",
+  {
+    userId: text().notNull(),
+    seq: integer().notNull(),
+    type: text().notNull(),
+    correlationId: text(),
+    partId: integer(),
+    sourceId: text(),
+    resultId: text(),
+    delegationId: text(),
+    status: text(),
+    createdAt: integer().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.seq] }),
+    index("event_log_created_at_idx").on(t.createdAt),
+  ],
+);

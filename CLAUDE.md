@@ -68,17 +68,22 @@ have no code yet):
 
 - Critical (Opus 5.5 `high` artifact, #92): credential handling
   `packages/api/src/secrets.ts`, `packages/api/src/keys/**`,
-  `packages/api/src/db/**` (encryption at rest); audit logging
+  `packages/api/src/db/**` (encryption at rest),
+  `packages/api/src/credentials/**` (`Secret<T>`, M2 P0.5); audit logging
   `packages/api/src/audit/**`, `packages/api/src/seams.ts`,
   `packages/api/src/startup.ts`, `packages/api/src/main.ts`,
   `packages/api/drizzle/**` (migrations),
   `packages/core/src/contracts/audit.ts`, `audit-auth.ts`, `primitives.ts`,
   `identity.ts`; query
   dispatch `packages/api/src/queries/**` (submit and access policy, #318),
+  `packages/api/src/dispatch/**` and `packages/api/src/adapters/**` (dispatcher,
+  outcome writer, `event_log`, Adapter API v1, mock adapter; M2 P0.5),
   `packages/core/src/planner/**`,
   `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
   `packages/core/contracts/ws-events.schema.json`; terminal command parser
-  `packages/core/src/terminal/**`; the live site config store
+  `packages/core/src/terminal/**`; config loading `packages/api/src/config/**`
+  (computes `configHash`, enforces the mock gate, carries `LoadedConfig.mock` and
+  `versionId`; M2 P0.5); the live site config store
   `packages/api/src/admin/config/**` and the shared admin files
   `packages/api/src/admin/*.ts` (ADR-0011: swaps live config, writes audit); the
   sensitive-review gate itself `.github/sensitive-paths`,
@@ -88,9 +93,8 @@ have no code yet):
   `scripts/ci/is-main-module.mjs` (#311 C-m1);
   reserved: TokenStore implementations `**/*token-store*` and the case- and
   separator-insensitive `**/*[Tt][Oo][Kk][Ee][Nn]*[Ss][Tt][Oo][Rr][Ee]*`, file
-  and directory forms (SEC-006, #85, #96); reserved: credentials, dispatch,
-  adapters, delegation, write-back and results directories named in
-  `.github/sensitive-paths`.
+  and directory forms (SEC-006, #85, #96); reserved: delegation, write-back
+  and results directories named in `.github/sensitive-paths`.
 - Gate (Opus 5.5 `medium` artifact, #92): the verify gate and merge path
   `.github/**`, `scripts/ci/**`, `scripts/ops/**`, `**/biome.json`,
   `.gitignore`, `**/vitest.config.ts`, `**/vite.config.ts`,
@@ -104,7 +108,9 @@ have no code yet):
   (CSRF and Origin), `packages/api/src/http/web.ts` and `packages/api/src/app.ts`
   (#338, #343); the admin console floor `packages/api/src/admin/**` (user
   administration is auth; anything new under `admin/` is at least gate,
-  ADR-0011).
+  ADR-0011); the mock fixture policy `packages/core/src/config/fixture-policy.ts`
+  (mock data only, no fixtures that look like real person, vehicle or property
+  records; spec 5.4, 10.8; M2 P0.5).
 - Deps (automated checks only, no artifact): `pnpm-lock.yaml`, and a
   version-only change of an existing package (`package.json`) or action (the
   ref of an existing workflow `uses:` line). `.github/dependabot.yml` is gate.

@@ -96,6 +96,23 @@ describe("sensitive-review (spec 9.1)", () => {
       expect(c(f), f).toBeNull();
   });
 
+  it("the shipped tier file classifies the M2 P0.5 dispatch paths (plan AW2 paths chore)", () => {
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const shipped = parseSensitiveTiers(
+      readFileSync(join(repoRoot, ".github/sensitive-paths"), "utf8"),
+    );
+    const c = (f: string) => tierOf(f, [shipped]);
+    for (const f of [
+      "packages/api/src/config/load.ts",
+      "packages/api/src/dispatch/dispatcher.ts",
+      "packages/api/src/adapters/mock.ts",
+      "packages/api/src/credentials/secret.ts",
+    ])
+      expect(c(f), f).toBe("critical");
+    expect(c("packages/core/src/config/fixture-policy.ts")).toBe("gate");
+    expect(c("packages/core/src/config/fixture-policy.test.ts")).toBeNull();
+  });
+
   it("the shipped tier file classifies the P1 api paths (developer ruling 09-27-26)", () => {
     const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
     const shipped = parseSensitiveTiers(
