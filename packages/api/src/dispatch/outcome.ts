@@ -75,7 +75,8 @@ function flush(bus: EventBus, q: Slot[]): void {
  * the credential owner, and a sourceStatus event_log row. Zero rows updated: nothing else is written.
  * The event is published only after the commit, in seq order. Any throw rolls everything back,
  * leaves the row pending for the startup sweep, logs ids and the error class only, and calls
- * d.fatal (fail closed). The DEK and the plaintext payload are zeroed in finally.
+ * d.fatal (fail closed). The DEK and the plaintext payload buffer are zeroed in finally; the
+ * JSON string the buffer is made from is a JS string and cannot be zeroed (AW3 critic m3).
  */
 export async function recordOutcome(
   d: AppDeps,
