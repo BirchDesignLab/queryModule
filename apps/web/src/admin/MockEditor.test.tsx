@@ -61,9 +61,23 @@ describe("the tree and the coverage grid", () => {
     await openBuilder();
     const tree = within(await mockTree());
     expect(tree.getByRole("treeitem", { name: /^Coverage/ })).toBeInTheDocument();
-    expect(tree.getByRole("treeitem", { name: /^State system/ })).toBeInTheDocument();
-    expect(tree.getByRole("treeitem", { name: /^National system/ })).toBeInTheDocument();
-    expect(tree.getAllByRole("treeitem", { name: /^Vehicle VEH/ })).toHaveLength(2);
+    expect(tree.getByRole("treeitem", { name: /^Mock source: State system/ })).toBeInTheDocument();
+    expect(
+      tree.getByRole("treeitem", { name: /^Mock source: National system/ }),
+    ).toBeInTheDocument();
+    expect(tree.getAllByRole("treeitem", { name: /^Mock response: Vehicle, / })).toHaveLength(2);
+  });
+
+  it("no two tree rows share an accessible name: mock rows carry their source and a Mock prefix", async () => {
+    await openBuilder();
+    const rows = within(await nav()).getAllByRole("treeitem");
+    const names = rows.map((row) => row.textContent ?? "");
+    expect(names.length).toBeGreaterThan(10);
+    expect(names.filter((name, i) => names.indexOf(name) !== i)).toEqual([]);
+    // A mock row never starts like a query type's row ("Vehicle VEH"): lookups by that name stay unique.
+    const mock = within(await mockTree()).getAllByRole("treeitem");
+    for (const row of mock)
+      expect(row.textContent).toMatch(/^(Coverage|Mock source: |Mock response: )/);
   });
 
   it("the Coverage item is a table of query types by mock source, with Not asked cells explained", async () => {
@@ -104,7 +118,7 @@ describe("the tree and the coverage grid", () => {
 describe("a source", () => {
   it("shows its response time as two numeric inputs and its responses", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^State system/);
+    await selectRow(t.user, /^Mock source: State system/);
     expect(await screen.findByLabelText("Shortest wait")).toHaveValue("50");
     expect(screen.getByLabelText("Longest wait")).toHaveValue("400");
     expect(screen.getByRole("button", { name: /Vehicle/ })).toBeInTheDocument();
@@ -112,7 +126,7 @@ describe("a source", () => {
 
   it("a change to the response time goes to the draft, one undo step", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^State system/);
+    await selectRow(t.user, /^Mock source: State system/);
     const shortest = await screen.findByLabelText("Shortest wait");
     await t.user.clear(shortest);
     await t.user.type(shortest, "10");
@@ -124,7 +138,7 @@ describe("a source", () => {
 
   it("a shortest wait longer than the longest is flagged and not written", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^State system/);
+    await selectRow(t.user, /^Mock source: State system/);
     const shortest = await screen.findByLabelText("Shortest wait");
     await t.user.clear(shortest);
     await t.user.type(shortest, "900");
@@ -139,7 +153,7 @@ describe("a source", () => {
 
   it("Add mock response adds a second response for a type with a type field, and refuses a duplicate", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^National system/);
+    await selectRow(t.user, /^Mock source: National system/);
     await t.user.selectOptions(await screen.findByLabelText("Query type"), "PRO");
     await t.user.selectOptions(screen.getByLabelText("Property type"), "FIREARM");
     await t.user.click(screen.getByRole("button", { name: "Add mock response" }));
@@ -149,7 +163,7 @@ describe("a source", () => {
       types: { propertyType: "FIREARM" },
     });
     // The same one again: the button says why it cannot, and offers the existing response.
-    await selectRow(t.user, /^National system/);
+    await selectRow(t.user, /^Mock source: National system/);
     await t.user.selectOptions(await screen.findByLabelText("Query type"), "PRO");
     await t.user.selectOptions(screen.getByLabelText("Property type"), "FIREARM");
     const add = screen.getByRole("button", { name: "Add mock response" });
@@ -162,7 +176,7 @@ describe("a source", () => {
 describe("a response", () => {
   it("shows the query type read-only, the default and the scenarios in order", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1); // National system
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/); // National system
     const type = await screen.findByLabelText("Query type");
     expect(type).toHaveAttribute("readonly");
     expect(type).toHaveValue("Vehicle (VEH)");
@@ -173,7 +187,7 @@ describe("a response", () => {
 
   it("adds a scenario with a trigger and a record payload, and writes them to the draft", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Add scenario" }));
     const card = scenarioCard(3);
     // The new scenario opens, with focus on its first trigger value.
@@ -192,7 +206,7 @@ describe("a response", () => {
 
   it("the key picker offers exactly the fixture allowlist", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
     const key = within(scenarioCard(1)).getByLabelText(/^Key, row 1$/);
     const list = document.getElementById(key.getAttribute("list") ?? "");
@@ -204,7 +218,7 @@ describe("a response", () => {
 
   it("a non-synthetic name shows the diagnostic at the row, without the value", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 0); // State system: scenario 1 has an owner group
+    await selectRow(t.user, /^Mock response: Vehicle, State system VEH/); // State system: scenario 1 has an owner group
     await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
     const last = within(scenarioCard(1)).getByLabelText(/^Value for last/);
     await t.user.clear(last);
@@ -221,7 +235,7 @@ describe("a response", () => {
 
   it("moving a scenario changes the order and announces it without values; undo restores it", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Move scenario 1 down" }));
     expect(
       draftMock(t).sources.nationalSource?.responses[0]?.scenarios.map((s) => s.when.plate),
@@ -238,7 +252,7 @@ describe("a response", () => {
 
   it("the first Move up and the last Move down stay focusable with aria-disabled", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     expect(await screen.findByRole("button", { name: "Move scenario 1 up" })).toHaveAttribute(
       "aria-disabled",
       "true",
@@ -251,7 +265,7 @@ describe("a response", () => {
 
   it("removing a scenario moves focus to the next scenario's Edit, and the last one to Add scenario", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Remove scenario 1" }));
     expect(draftMock(t).sources.nationalSource?.responses[0]?.scenarios).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Edit scenario 1" })).toHaveFocus();
@@ -261,7 +275,7 @@ describe("a response", () => {
 
   it("the result radios change a scenario to a behavior and back", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
     await t.user.click(within(scenarioCard(1)).getByRole("radio", { name: /Source error/ }));
     expect(draftMock(t).sources.nationalSource?.responses[0]?.scenarios[0]).toEqual({
@@ -272,7 +286,7 @@ describe("a response", () => {
 
   it("a scenario needs a trigger value: blank is an error at the control", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Add scenario" }));
     const value = within(scenarioCard(3)).getByLabelText("Value for trigger field 1");
     await waitFor(() => expect(value).toHaveAttribute("aria-invalid", "true"));
@@ -281,7 +295,7 @@ describe("a response", () => {
 
   it("Edit and Close toggle a scenario (aria-expanded), and Escape closes it to its Edit button", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     const edit = await screen.findByRole("button", { name: "Edit scenario 1" });
     expect(edit).toHaveAttribute("aria-expanded", "false");
     await t.user.click(edit);
@@ -295,7 +309,7 @@ describe("a response", () => {
 
   it("the type field of a response with one can be set, and the query type cannot", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Property PRO/, 0); // State system
+    await selectRow(t.user, /^Mock response: Property, State system PRO/); // State system
     const select = await screen.findByLabelText("Property type");
     await t.user.selectOptions(select, "FIREARM");
     expect(
@@ -310,7 +324,7 @@ describe("a response", () => {
 describe("focus and counts (critic round 1)", () => {
   it("a moved scenario keeps focus on its own Move button, so a second press moves it again", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 0); // State system: three scenarios
+    await selectRow(t.user, /^Mock response: Vehicle, State system VEH/); // State system: three scenarios
     await t.user.click(await screen.findByRole("button", { name: "Move scenario 3 up" }));
     expect(screen.getByRole("button", { name: "Move scenario 2 up" })).toHaveFocus();
     await t.user.keyboard("{Enter}");
@@ -322,7 +336,7 @@ describe("focus and counts (critic round 1)", () => {
 
   it("a fix keeps focus on the row, and removing a row goes to Add field", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 0);
+    await selectRow(t.user, /^Mock response: Vehicle, State system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
     const card = scenarioCard(1);
     const last = within(card).getByLabelText(/^Value for last/);
@@ -336,7 +350,7 @@ describe("focus and counts (critic round 1)", () => {
 
   it("removing a trigger field goes to Add trigger field", async () => {
     const t = await openBuilder();
-    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
     await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
     const card = scenarioCard(1);
     await t.user.click(within(card).getByRole("button", { name: "Add trigger field" }));
@@ -357,7 +371,9 @@ describe("focus and counts (critic round 1)", () => {
     });
     const tree = within(await mockTree());
     await waitFor(() =>
-      expect(tree.getByRole("treeitem", { name: /^State system.*, 1 error$/ })).toBeInTheDocument(),
+      expect(
+        tree.getByRole("treeitem", { name: /^Mock source: State system.*, 1 error$/ }),
+      ).toBeInTheDocument(),
     );
     expect(tree.queryByText(/2 errors/)).not.toBeInTheDocument();
   });

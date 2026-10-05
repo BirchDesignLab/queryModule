@@ -877,5 +877,7 @@
   "admin.diff.mock.latencyChanged": "Response time changed",
   "admin.diff.mock.other": "The mock file changed",
   "admin.mock.addForSource": "Add a no-record response for each query type that asks {source}",
-  "admin.mock.addedForSource": "Mock responses added for {source}: {count}. Default: no record."
+  "admin.mock.addedForSource": "Mock responses added for {source}: {count}. Default: no record.",
+  "admin.mock.responseRow": "Mock response: {type}, {source}",
+  "admin.mock.sourceRow": "Mock source: {source}"
 }

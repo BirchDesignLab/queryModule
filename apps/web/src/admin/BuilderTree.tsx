@@ -17,7 +17,7 @@ import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
 import { ChecksContext } from "./checks.js";
-import { asObjects, str } from "./controls.js";
+import { asObjects, str, useLabelText } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
 import { useItemName } from "./FormTab.js";
 import { mockPointer } from "./mock-edit.js";
@@ -56,6 +56,7 @@ function useTreeNodes(
 ): { types: TreeNode[]; site: TreeNode[]; mock: TreeNode[] } {
   const name = useItemName();
   const t = useT();
+  const labelText = useLabelText();
   const { issues } = useContext(ChecksContext);
   return useMemo(() => {
     // Issues at or under a pointer. A section's fields live under /fields, not under the section,
@@ -150,26 +151,35 @@ function useTreeNodes(
       for (const id of ids) {
         const source = parsed.mock.sources[id];
         if (source === undefined) continue;
+        const sourceName = labelText(labelKeys.get(id)) || id;
         const responses = source.responses.map((r, i) =>
           node(
             mockPointer.response(id, i),
-            r.queryType,
+            // Named with a "Mock response:" prefix and its source: the query type's own row is
+            // "<type> <code>", and rows that share a name cannot be told apart by a lookup by name.
+            t("admin.mock.responseRow", {
+              type: labelText(typeKeys.get(r.queryType)) || r.queryType,
+              source: sourceName,
+            }),
             r.types === undefined
               ? r.queryType
               : `${r.queryType} ${Object.values(r.types).join(" ")}`,
-            [],
-            false,
-            typeKeys.get(r.queryType) ?? "",
           ),
         );
         mockNodes.push(
           // Not rolled up: the source's pointer already covers every issue under its responses.
-          node(mockPointer.source(id), id, id, responses, false, labelKeys.get(id) ?? ""),
+          node(
+            mockPointer.source(id),
+            t("admin.mock.sourceRow", { source: sourceName }),
+            id,
+            responses,
+            false,
+          ),
         );
       }
     }
     return { types, site, mock: mockNodes };
-  }, [doc, mock, issues, name, t]);
+  }, [doc, mock, issues, name, t, labelText]);
 }
 
 /** A row's text as the editor shows it: the draft's text, else the shipped one, else the key. */
