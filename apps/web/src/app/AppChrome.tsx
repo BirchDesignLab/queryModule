@@ -230,7 +230,7 @@ export function useIsFreshLoad(): boolean {
 
 /** Layout of every signed-in screen that runs the app: the header, then the page. */
 export function AppShell() {
-  const { api, queryClient, configRefresh, authStore } = useServices();
+  const { api, queryClient, configRefresh, feed, authStore } = useServices();
   const signedInAs = useStore(authStore, (s) => s.user?.email);
   // Refetch the config every 15 s and when the tab becomes visible, while signed in (ADR-0011
   // item 3). A reset (sign-out, 401, user change) stops it; a new user restarts it.
@@ -239,6 +239,17 @@ export function AppShell() {
     configRefresh.start();
     return () => configRefresh.stop();
   }, [configRefresh, signedInAs]);
+  const config = useCachedConfig();
+  const configLoaded = config !== undefined;
+  // The feed socket carries per-source status while signed in (spec 6.7, 6.8). It waits for the
+  // first config, so a session still owing a password change (a 403 on the config) never opens a
+  // socket (D-A26). A reset (sign-out, 401, user change) closes it through the ResetController and
+  // empties the config; unmounting closes it too.
+  useEffect(() => {
+    if (signedInAs === undefined || !configLoaded) return;
+    feed.open();
+    return () => feed.close();
+  }, [feed, signedInAs, configLoaded]);
   // Load GET /api/v1/config on every signed-in screen, not only the panel, so SiteConfig.theme
   // applies after a reload on /status too (spec 6.5); the panel reuses the cached entry.
   useEffect(() => {
@@ -252,7 +263,7 @@ export function AppShell() {
   useEffect(() => {
     if (locationKey !== firstKey.current) onLoadEntry.current = false;
   }, [locationKey]);
-  const shortcuts = useCachedConfig()?.shortcuts;
+  const shortcuts = config?.shortcuts;
   const bindings = useMemo(() => resolveShortcuts(shortcuts), [shortcuts]);
   return (
     <ShortcutProvider bindings={bindings}>

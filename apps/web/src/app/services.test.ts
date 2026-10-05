@@ -1,5 +1,8 @@
+import type { SocketLike } from "@querymodule/client";
 import { HttpResponse, http } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { heartbeatUrl } from "../status/use-status-checks.js";
+import { FakeSocket } from "../test/fake-socket.js";
 import { API, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
 import { testServices } from "../test/render-routes.js";
 
@@ -100,5 +103,66 @@ describe("spec 6.7 requests list (memory only)", () => {
     expect(services.requests.getState().items).toHaveLength(1);
     services.reset.resetAll();
     expect(services.requests.getState().items).toEqual([]);
+  });
+});
+
+describe("FR-065 feed socket in the composition root (spec 6.7, 6.8)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function feedServices() {
+    const sockets: FakeSocket[] = [];
+    const urls: string[] = [];
+    const createSocket = (url: string): SocketLike => {
+      urls.push(url);
+      const socket = new FakeSocket();
+      sockets.push(socket);
+      return socket;
+    };
+    return { services: testServices({ createSocket }), sockets, urls };
+  }
+
+  it("builds the feed on createSocket and does not connect until opened", () => {
+    const t = feedServices();
+    expect(t.services.feed.state()).toBe("closed");
+    expect(t.sockets).toHaveLength(0);
+    t.services.feed.open();
+    expect(t.urls).toEqual([heartbeatUrl(location)]);
+  });
+
+  it("resetAll closes the feed and its socket", () => {
+    const t = feedServices();
+    t.services.feed.open();
+    t.services.reset.resetAll();
+    expect(t.services.feed.state()).toBe("closed");
+    expect(t.sockets[0]?.closed).toBe(true);
+  });
+
+  it("sign-out closes the feed", async () => {
+    const t = feedServices();
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    t.services.feed.open();
+    await t.services.session.signOut();
+    expect(t.services.feed.state()).toBe("closed");
+    expect(t.sockets[0]?.closed).toBe(true);
+  });
+
+  it("a 4001 close from the server arrives with its code and does not reconnect", () => {
+    vi.useFakeTimers();
+    const t = feedServices();
+    t.services.feed.open();
+    t.sockets[0]?.onclose?.({ code: 4001 });
+    expect(t.services.feed.state()).toBe("closed");
+    vi.advanceTimersByTime(120_000);
+    expect(t.sockets).toHaveLength(1);
+  });
+
+  it("any other close reconnects", () => {
+    vi.useFakeTimers();
+    const t = feedServices();
+    t.services.feed.open();
+    t.sockets[0]?.onclose?.({ code: 1006 });
+    vi.advanceTimersByTime(1000);
+    expect(t.sockets).toHaveLength(2);
+    t.services.reset.resetAll();
   });
 });

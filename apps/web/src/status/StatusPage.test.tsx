@@ -12,6 +12,9 @@ async function openStatus(
   beforeOpen?: (t: ReturnType<typeof renderRoot>) => void,
 ) {
   const t = renderRoot({ createSocket });
+  // These tests count the heartbeat probe's sockets; the app's feed socket (AppShell) shares
+  // createSocket, so keep it from opening here. The feed has its own tests (AppChrome.test.tsx).
+  vi.spyOn(t.services.feed, "open").mockImplementation(() => undefined);
   beforeOpen?.(t);
   await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
   await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
