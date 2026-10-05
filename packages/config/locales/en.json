@@ -864,5 +864,16 @@
   "admin.mock.errorsIn": "{errors} in mock responses",
   "admin.mock.fixed": "Fixed. {errors} left.",
   "admin.mock.pane.title": "Mock responses",
-  "admin.mock.pane.note": "Select a response to edit its answers."
+  "admin.mock.pane.note": "Select a response to edit its answers.",
+  "admin.diff.mock.title": "Mock responses",
+  "admin.diff.mock.responseAdded": "Response added",
+  "admin.diff.mock.responseRemoved": "Response removed",
+  "admin.diff.mock.matchChanged": "Type match changed",
+  "admin.diff.mock.defaultChanged": "Default answer changed",
+  "admin.diff.mock.scenariosReordered": "Scenarios reordered",
+  "admin.diff.mock.scenarioAdded": "Scenario {n} added",
+  "admin.diff.mock.scenarioRemoved": "Scenario {n} removed",
+  "admin.diff.mock.scenarioChanged": "Scenario {n} changed",
+  "admin.diff.mock.latencyChanged": "Response time changed",
+  "admin.diff.mock.other": "The mock file changed"
 }

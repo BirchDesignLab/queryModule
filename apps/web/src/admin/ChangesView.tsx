@@ -18,6 +18,8 @@ import { useLabelText } from "./controls.js";
 import type { JsonObject } from "./draft.js";
 import { useItemName } from "./FormTab.js";
 import { languageName } from "./LabelOverlay.js";
+import { type MockEntry, mockChangeEntries, unexplainedEntry } from "./mock-changes.js";
+import { mockSiteOf } from "./mock-site.js";
 import { useConditionWords } from "./RulesEditor.js";
 import { useLiveDoc } from "./use-cached-config.js";
 
@@ -53,7 +55,7 @@ export function ChangesView({
   const t = useT();
   const translator = useTranslator();
   const { doc: live, check } = useLiveDoc();
-  const { labels } = useDraft();
+  const { labels, mock, server } = useDraft();
   const { issues, status, served } = useContext(ChecksContext);
   const labelText = useLabelText();
   const itemName = useItemName();
@@ -82,6 +84,17 @@ export function ChangesView({
     );
     return overlay === null ? list : [...list, overlay];
   }, [live, doc, deps, labels, served, language, t]);
+  // The mock responses (CFG-2): the lines name the source, the query type and what happened.
+  const mockEntries = useMemo<MockEntry[]>(() => {
+    const site = mockSiteOf(doc);
+    const names = {
+      source: (id: string) => labelText(site.sources.find((s) => s.id === id)?.labelKey) || id,
+      type: (code: string) =>
+        labelText(site.queryTypes.find((q) => q.code === code)?.labelKey) || code,
+    };
+    const lines = mockChangeEntries(server?.liveMock, mock, names, t);
+    return [...lines, ...unexplainedEntry(server?.liveMock, mock, lines, t)];
+  }, [doc, mock, server?.liveMock, labelText, t]);
   const missing = useMemo(
     () =>
       missingLabels(
@@ -112,11 +125,30 @@ export function ChangesView({
         <p>{t("admin.diff.noLive")}</p>
       ) : (
         groups.length === 0 &&
+        mockEntries.length === 0 &&
         check !== "checking" && <p data-testid="diff-empty">{t("admin.diff.noChanges")}</p>
       )}
       {groups.map((group) => (
         <GroupView key={group.id} group={group} onOpen={onOpen} />
       ))}
+      {mockEntries.length > 0 && (
+        <section className="qm-diff__group">
+          <h4 className="qm-diff__title">{t("admin.diff.mock.title")}</h4>
+          <ul className="qm-diff__list">
+            {mockEntries.map((entry) => (
+              <li key={entry.id}>
+                <Row onOpen={onOpen === undefined ? undefined : () => onOpen(entry.target)}>
+                  <span className="qm-badge qm-diff__kind">
+                    {t(`admin.diff.kind.${entry.kind}`)}
+                  </span>
+                  <span className="qm-diff__what">{entry.what}</span>
+                  <span className="qm-diff__values">{entry.text}</span>
+                </Row>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {status === "ready" && missing.length > 0 && (
         <section className="qm-diff__group">
           <h4 className="qm-diff__title">{t("admin.diff.missing.title")}</h4>
