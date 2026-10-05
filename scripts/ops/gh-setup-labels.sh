@@ -55,6 +55,7 @@ labels=(
   "core|0e8a16|Core: packages/core, config sites and locales, contract files; either track"
   "mobile|bf3989|Track D mobile (from M4): apps/mobile (Expo), packages/rn-ui, Maestro"
   "p0|c5def5|Phase P0 contracts"
+  "p0-5|c5def5|Phase 0.5 (M2 P0.5 dispatch, ADR-0012)"
   "p1|9ec5f0|Phase P1"
   "p2|6fa8e6|Phase P2"
   "p3|3f8bd9|Phase P3"

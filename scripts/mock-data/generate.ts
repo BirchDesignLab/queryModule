@@ -22,6 +22,9 @@ const SITES: Readonly<Record<string, (b: typeof builders) => MockFile>> = {
   "example-ok": exampleOkSite,
 };
 
+/** The site ids the generator owns, one committed mock file each. */
+export const MOCK_SITE_IDS: readonly string[] = Object.keys(SITES);
+
 export const MOCK_DIR = new URL("../../packages/config/mock/", import.meta.url);
 export const USAGE = "usage: generate.ts <siteId> | --check";
 

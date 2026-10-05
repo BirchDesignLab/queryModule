@@ -327,6 +327,29 @@ describe("config:validate mock drift (#531, spec 10.8)", () => {
   it("the committed mock files have no drift", () => {
     expect(mockDriftErrors(cfg("mock"))).toEqual([]);
   });
+
+  it("AW1 review G-M2: a mock file with no generator site fails", () => {
+    const d = tmp();
+    writeFileSync(join(d, "default.json"), generate("default"));
+    writeFileSync(join(d, "example-ok.json"), generate("example-ok"));
+    writeFileSync(join(d, "orphan.json"), "{}\n");
+    writeFileSync(join(d, "notes.txt"), "not a mock file\n");
+    expect(mockDriftErrors(d)).toEqual([
+      "mock file without a generator site: mock/orphan.json (add it to scripts/mock-data/generate.ts or delete it)",
+    ]);
+  });
+
+  it("AW1 review G-M3: a generator that throws is a fixed-text error, not a stack", () => {
+    const d = tmp();
+    writeFileSync(join(d, "example-ok.json"), generate("example-ok"));
+    const gen = (id: string) => {
+      if (id === "default") throw new Error("mock-data: fixture policy violation");
+      return generate(id);
+    };
+    expect(mockDriftErrors(d, gen)).toEqual([
+      "mock generator failed: default (fix scripts/mock-data/sites/default.ts)",
+    ]);
+  });
 });
 
 describe("config:validate contrast and unreadable files (Task 9)", () => {
