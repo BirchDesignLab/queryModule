@@ -34,12 +34,22 @@ export function MockSource({ sourceId }: { sourceId: string }) {
   ];
   const pair = [wait(shown[0]), wait(shown[1])] as const;
   const bad = pair[0] === null || pair[1] === null || pair[0] > pair[1];
-  const commit = (next: [string, string]) => {
-    setText(next);
-    const a = wait(next[0]);
-    const b = wait(next[1]);
-    if (a !== null && b !== null && a <= b)
-      env.edit((m) => setSourceLatency(m, sourceId, [a, b]), { coalesce: `latency:${sourceId}` });
+  // Which field the message is about: a wait that is not a count, else the shortest when it is the longer.
+  const invalid = [
+    pair[0] === null || (pair[1] !== null && pair[0] > pair[1]),
+    pair[1] === null,
+  ] as const;
+  // The wait is written when the person leaves the field: a half-typed value ("150" on the way to
+  // "1500") never reaches the draft, and an invalid pair never does at all.
+  const commit = () => {
+    if (text === null) return;
+    if (bad) {
+      announcer.announce(t("admin.mock.latency.announce"));
+      return;
+    }
+    const [a, b] = pair as readonly [number, number];
+    env.edit((m) => setSourceLatency(m, sourceId, [a, b]));
+    setText(null);
   };
   const asked = env.site.queryTypes.filter((q) => q.sourceIds.includes(sourceId));
   const typeCode = asked.some((q) => q.code === adding.type) ? adding.type : (asked[0]?.code ?? "");
@@ -54,7 +64,7 @@ export function MockSource({ sourceId }: { sourceId: string }) {
   return (
     <>
       <p className="qm-mock__lead">{t("admin.mock.source.lead", { id: sourceId })}</p>
-      <Sect title={t("admin.mock.latency")} hint={t("admin.mock.latency.hint")}>
+      <Sect title={t("admin.mock.latency.title")} hint={t("admin.mock.latency.hint")}>
         <fieldset
           className="qm-mock__two qm-mock__group"
           aria-label={t("admin.mock.latency.group")}
@@ -70,17 +80,17 @@ export function MockSource({ sourceId }: { sourceId: string }) {
                 inputMode="numeric"
                 autoComplete="off"
                 value={shown[n as 0 | 1]}
-                aria-invalid={(bad && n === 0) || undefined}
-                aria-describedby={bad && n === 0 ? `${uid}-lat-e` : undefined}
+                aria-invalid={invalid[n as 0 | 1] || undefined}
+                aria-describedby={bad ? `${uid}-lat-e` : undefined}
                 data-owner={mockPointer.source(sourceId)}
                 data-role={n === 0 ? "latency" : undefined}
                 onChange={(e) =>
-                  commit(n === 0 ? [e.target.value, shown[1]] : [shown[0], e.target.value])
+                  setText(n === 0 ? [e.target.value, shown[1]] : [shown[0], e.target.value])
                 }
-                onBlur={() => {
-                  if (bad) announcer.announce(t("admin.mock.latency.announce"));
-                  else setText(null);
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commit();
                 }}
+                onBlur={commit}
               />{" "}
               <span>{t("admin.mock.ms")}</span>
             </div>
@@ -93,7 +103,7 @@ export function MockSource({ sourceId }: { sourceId: string }) {
           </p>
         )}
       </Sect>
-      <Sect title={t("admin.mock.responses")}>
+      <Sect title={t("admin.mock.responses.title")}>
         {source.responses.length === 0 ? (
           <p className="qm-sect__hint">{t("admin.mock.responses.none")}</p>
         ) : (
@@ -130,10 +140,10 @@ export function MockSource({ sourceId }: { sourceId: string }) {
           </ul>
         )}
       </Sect>
-      <Sect title={t("admin.mock.addResponse")} hint={t("admin.mock.addResponse.hint")}>
+      <Sect title={t("admin.mock.addResponse.label")} hint={t("admin.mock.addResponse.hint")}>
         <div className="qm-mock__two">
           <div>
-            <label htmlFor={`${uid}-nr-qt`}>{t("admin.mock.queryType")}</label>{" "}
+            <label htmlFor={`${uid}-nr-qt`}>{t("admin.mock.queryType.label")}</label>{" "}
             <select
               id={`${uid}-nr-qt`}
               className="qm-field__input"
@@ -207,7 +217,7 @@ export function MockSource({ sourceId }: { sourceId: string }) {
             requestMockFocus(mockPointer.response(sourceId, index), "heading");
           }}
         >
-          {t("admin.mock.addResponse")}
+          {t("admin.mock.addResponse.label")}
         </button>
       </Sect>
     </>

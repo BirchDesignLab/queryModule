@@ -70,11 +70,6 @@ function fromDiagnostic(d: Diagnostic): DraftIssue {
     : { level: d.level, pointer: d.path, key: d.key, params: d.params };
 }
 
-/**
- * The checks with the mock's issues added. Gaps the server found (at the source) move to the
- * Coverage item so the two never show twice. The same checks come back when the draft has no mock,
- * or while the base checks are not ready.
- */
 /** The mock's own issues for this draft: coverage and fixture findings, and the editor's rules. */
 export function mockIssuesOf(doc: JsonObject, rawMock: JsonObject | null): DraftIssue[] {
   if (rawMock === null) return [];

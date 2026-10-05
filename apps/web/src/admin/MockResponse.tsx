@@ -71,7 +71,7 @@ function ResultRadios({
             onChange={() => onChange(result)}
           />{" "}
           <b>{t(`admin.mock.result.${RESULT_KEY[result]}`)}</b>{" "}
-          <span>{t(`admin.mock.result.${RESULT_KEY[result]}.effect`)}</span>
+          <span>{t(`admin.mock.effect.${RESULT_KEY[result]}`)}</span>
         </label>
       ))}
     </div>
@@ -138,9 +138,11 @@ function Scenario({
         className="qm-button qm-button--ghost qm-mock__icon"
         aria-disabled={blocked ? "true" : undefined}
         aria-label={t(kind === "up" ? "admin.mock.moveUp" : "admin.mock.moveDown", { n })}
+        data-owner={base}
+        data-role={kind}
         onClick={() => {
           if (blocked) return;
-          respondTo.move(index, target);
+          respondTo.move(index, target, kind);
           env.announce(t("admin.mock.moved", { n, position: target + 1 }));
         }}
       >
@@ -163,7 +165,7 @@ function Scenario({
         <div className="qm-mock__scenario-head">
           <h5 id={`${uid}-h`}>{t("admin.mock.scenario", { n })}</h5>
           <span className="qm-mock__summary">
-            {t("admin.mock.summary", {
+            {t("admin.mock.summary.line", {
               when: summary,
               result: t(`admin.mock.result.${RESULT_KEY[result]}`).toLowerCase(),
             })}
@@ -190,7 +192,7 @@ function Scenario({
               data-owner={`${base}`}
               data-role="edit"
               aria-expanded={open}
-              aria-controls={`${uid}-b`}
+              aria-controls={open ? `${uid}-b` : undefined}
               onClick={() => setOpen(!open)}
             >
               {t(open ? "admin.mock.close" : "admin.mock.edit")}{" "}
@@ -211,7 +213,7 @@ function Scenario({
         {open && (
           <div className="qm-mock__scenario-body" id={`${uid}-b`}>
             <div className="qm-mock__triggers">
-              <span className="qm-mock__label">{t("admin.mock.triggers")}</span>{" "}
+              <span className="qm-mock__label">{t("admin.mock.triggers.title")}</span>{" "}
               <span className="qm-sect__hint">{t("admin.mock.triggers.hint")}</span>
               {triggers.map(([field, value], w) => {
                 const pointer = `${base}/when/${field.replaceAll("~", "~0").replaceAll("/", "~1")}`;
@@ -270,8 +272,9 @@ function Scenario({
                       aria-disabled={triggers.length === 1 ? "true" : undefined}
                       aria-label={t("admin.mock.removeTrigger", { n: w + 1 })}
                       onClick={() => {
-                        if (triggers.length > 1)
-                          write({ ...scenario, when: removeTrigger(scenario.when, field) });
+                        if (triggers.length === 1) return;
+                        write({ ...scenario, when: removeTrigger(scenario.when, field) });
+                        requestMockFocus(base, "add-trigger");
                       }}
                     >
                       <span aria-hidden="true">×</span>
@@ -290,12 +293,14 @@ function Scenario({
               {triggers.length === 0 && (
                 <p className="qm-mock__error" id={`${uid}-none`}>
                   <span aria-hidden="true">⚠</span>
-                  <span>{t("admin.mock.triggerMissing")}</span>
+                  <span data-issue-pointer={`${base}/when`}>{t("admin.mock.triggerMissing")}</span>
                 </p>
               )}
               <button
                 type="button"
                 className="qm-button qm-button--ghost"
+                data-owner={base}
+                data-role="add-trigger"
                 onClick={() => write({ ...scenario, when: addTrigger(scenario.when, fieldKeys) })}
               >
                 {t("admin.mock.addTrigger")}
@@ -305,14 +310,14 @@ function Scenario({
               name={`${uid}-result`}
               value={result}
               options={MOCK_RESULTS}
-              label={t("admin.mock.result")}
+              label={t("admin.mock.result.label")}
               onChange={(next) => write(withResult(scenario, next))}
             />
             {result === "record" && scenario.respond !== undefined && (
               <MockPayload
                 base={`${base}/respond`}
                 payload={scenario.respond}
-                title={t("admin.mock.payload")}
+                title={t("admin.mock.payload.title")}
                 hint={t("admin.mock.payload.hint")}
                 onChange={(next, coalesce) => write({ ...scenario, respond: next }, coalesce)}
               />
@@ -325,7 +330,7 @@ function Scenario({
 }
 
 interface MockResponseActions {
-  move(from: number, to: number): void;
+  move(from: number, to: number, kind: "up" | "down"): void;
   remove(index: number): void;
 }
 
@@ -361,8 +366,10 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
   const currentCode = typeCode === null ? "" : (response.types?.[typeCode.key] ?? "");
   const defaultResult = resultOf(response.default);
   const actions: MockResponseActions = {
-    move(from, to) {
+    move(from, to, kind) {
       env.edit((m: MockFile) => moveScenario(m, { sourceId, response: index, scenario: from }, to));
+      // Scenarios are keyed by position, so focus follows the moved one: the same button, one place on.
+      requestMockFocus(`${base}/scenarios/${to}`, kind);
       // Where each open scenario sits after the move.
       const after = (k: number): number =>
         k === from
@@ -402,14 +409,14 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
         })}
       </p>
       <Sect
-        title={t("admin.mock.matches")}
+        title={t("admin.mock.matches.title")}
         hint={t(typeCode === null ? "admin.mock.matches.noType" : "admin.mock.matches.hint", {
           type: env.typeName(response.queryType),
         })}
       >
         <div className="qm-mock__two">
           <div>
-            <label htmlFor={`${base}-qt`}>{t("admin.mock.queryType")}</label>{" "}
+            <label htmlFor={`${base}-qt`}>{t("admin.mock.queryType.label")}</label>{" "}
             <input
               id={`${base}-qt`}
               className="qm-field__input"
@@ -456,7 +463,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
           )}
         </div>
       </Sect>
-      <Sect title={t("admin.mock.default")} hint={t("admin.mock.default.hint")}>
+      <Sect title={t("admin.mock.default.title")} hint={t("admin.mock.default.hint")}>
         <ResultRadios
           name={`${base}-default`}
           value={defaultResult}
@@ -477,7 +484,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
           <MockPayload
             base={`${base}/default`}
             payload={response.default}
-            title={t("admin.mock.payload")}
+            title={t("admin.mock.payload.title")}
             hint={t("admin.mock.payload.hint")}
             onChange={(next, coalesce) =>
               env.edit(
@@ -488,7 +495,10 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
           />
         )}
       </Sect>
-      <Sect title={`${t("admin.mock.scenarios")} ${count}`} hint={t("admin.mock.scenarios.hint")}>
+      <Sect
+        title={`${t("admin.mock.scenarios.title")} ${count}`}
+        hint={t("admin.mock.scenarios.hint")}
+      >
         {count === 0 ? (
           <p className="qm-sect__hint">{t("admin.mock.scenarios.none")}</p>
         ) : (

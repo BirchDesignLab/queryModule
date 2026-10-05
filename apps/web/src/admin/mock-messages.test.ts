@@ -35,7 +35,15 @@ describe("the mock editor's messages", () => {
   it("the result labels built from a result name all exist", () => {
     for (const r of ["record", "noRecord", "error", "timeout", "creds"]) {
       expect(`admin.mock.result.${r}` in EN_BUNDLE).toBe(true);
-      expect(`admin.mock.result.${r}.effect` in EN_BUNDLE).toBe(true);
+      expect(`admin.mock.effect.${r}` in EN_BUNDLE).toBe(true);
     }
+  });
+});
+
+describe("the bundle's shape", () => {
+  it("no admin message key is also the parent of another (the nested bundle cannot hold both)", () => {
+    const keys = Object.keys(EN_BUNDLE).filter((k) => k.startsWith("admin."));
+    const parents = keys.filter((k) => keys.some((o) => o.startsWith(`${k}.`)));
+    expect(parents).toEqual([]);
   });
 });

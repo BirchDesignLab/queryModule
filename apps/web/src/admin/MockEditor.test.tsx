@@ -7,6 +7,7 @@ import {
   adminConfigBody,
   CLIENT_CONFIG,
   RAW_MOCK,
+  RAW_SITE,
   server,
   TEST_USER,
 } from "../test/msw-server.js";
@@ -115,7 +116,10 @@ describe("a source", () => {
     const shortest = await screen.findByLabelText("Shortest wait");
     await t.user.clear(shortest);
     await t.user.type(shortest, "10");
-    await waitFor(() => expect(draftMock(t).sources.stateSource?.latencyMs).toEqual([10, 400]));
+    // Leaving the field commits it: a half-typed value never reaches the draft.
+    expect(draftMock(t).sources.stateSource?.latencyMs).toEqual([50, 400]);
+    await t.user.tab();
+    expect(draftMock(t).sources.stateSource?.latencyMs).toEqual([10, 400]);
   });
 
   it("a shortest wait longer than the longest is flagged and not written", async () => {
@@ -125,11 +129,12 @@ describe("a source", () => {
     await t.user.clear(shortest);
     await t.user.type(shortest, "900");
     expect(shortest).toHaveAttribute("aria-invalid", "true");
-    // Typing "9" and "90" were valid waits and were kept; the invalid "900" was not.
+    await t.user.tab();
     expect(
       screen.getByText("Enter both waits, the shortest no longer than the longest."),
     ).toBeInTheDocument();
-    expect(draftMock(t).sources.stateSource?.latencyMs).toEqual([90, 400]);
+    // Nothing was written, not even the valid prefixes typed on the way to it.
+    expect(draftMock(t).sources.stateSource?.latencyMs).toEqual([50, 400]);
   });
 
   it("Add mock response adds a second response for a type with a type field, and refuses a duplicate", async () => {
@@ -166,7 +171,7 @@ describe("a response", () => {
     expect(scenarioCard(2)).toBeInTheDocument();
   });
 
-  it("adds a scenario with trigger plate ZZ-0002 that returns a record with status STOLEN", async () => {
+  it("adds a scenario with a trigger and a record payload, and writes them to the draft", async () => {
     const t = await openBuilder();
     await selectRow(t.user, /^Vehicle VEH/, 1);
     await t.user.click(await screen.findByRole("button", { name: "Add scenario" }));
@@ -299,6 +304,99 @@ describe("a response", () => {
       propertyType: "FIREARM",
     });
     expect(screen.getByLabelText("Query type")).toHaveAttribute("readonly");
+  });
+});
+
+describe("focus and counts (critic round 1)", () => {
+  it("a moved scenario keeps focus on its own Move button, so a second press moves it again", async () => {
+    const t = await openBuilder();
+    await selectRow(t.user, /^Vehicle VEH/, 0); // State system: three scenarios
+    await t.user.click(await screen.findByRole("button", { name: "Move scenario 3 up" }));
+    expect(screen.getByRole("button", { name: "Move scenario 2 up" })).toHaveFocus();
+    await t.user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Move scenario 1 up" })).toHaveFocus();
+    expect(
+      draftMock(t).sources.stateSource?.responses[0]?.scenarios.map((s) => s.when.plate),
+    ).toEqual(["FAIL1", "ZZ-0001", "ABC123"]);
+  });
+
+  it("a fix keeps focus on the row, and removing a row goes to Add field", async () => {
+    const t = await openBuilder();
+    await selectRow(t.user, /^Vehicle VEH/, 0);
+    await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
+    const card = scenarioCard(1);
+    const last = within(card).getByLabelText(/^Value for last/);
+    await t.user.clear(last);
+    await t.user.type(last, "SMITH");
+    await t.user.click(within(card).getByRole("button", { name: "Use TESTERSON" }));
+    await waitFor(() => expect(within(card).getByLabelText(/^Value for last/)).toHaveFocus());
+    await t.user.click(within(card).getByRole("button", { name: "Remove last" }));
+    expect(within(card).getByRole("button", { name: "Add field" })).toHaveFocus();
+  });
+
+  it("removing a trigger field goes to Add trigger field", async () => {
+    const t = await openBuilder();
+    await selectRow(t.user, /^Vehicle VEH/, 1);
+    await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
+    const card = scenarioCard(1);
+    await t.user.click(within(card).getByRole("button", { name: "Add trigger field" }));
+    await t.user.click(within(card).getByRole("button", { name: "Remove trigger field 2" }));
+    expect(within(card).getByRole("button", { name: "Add trigger field" })).toHaveFocus();
+  });
+
+  it("a source row counts the errors of its responses once", async () => {
+    const t = await openBuilder();
+    act(() => {
+      const store = configDraftStore(t.services).getState();
+      const parsed = parseMock(store.mock);
+      if (!parsed.ok) throw new Error("fixture");
+      const mock = structuredClone(parsed.mock);
+      const first = mock.sources.stateSource?.responses[0];
+      if (first !== undefined) first.default = { status: "STOLEN", plate: "REALPLATE1" };
+      store.setMock(mock as Record<string, unknown>);
+    });
+    const tree = within(await mockTree());
+    await waitFor(() =>
+      expect(tree.getByRole("treeitem", { name: /^State system.*, 1 error$/ })).toBeInTheDocument(),
+    );
+    expect(tree.queryByText(/2 errors/)).not.toBeInTheDocument();
+  });
+
+  it("a site source with no mock data is explained, with a fix that adds a response per query type", async () => {
+    const site = structuredClone(RAW_SITE) as {
+      sources: Record<string, unknown>[];
+      queryTypes: { code: string; sources: { sourceId: string; selectedByDefault: boolean }[] }[];
+    };
+    site.sources.push({
+      id: "extraSource",
+      labelKey: "source.stateSource",
+      scope: "state",
+      kind: "mock",
+      timeoutMs: 10000,
+      maxConcurrent: 4,
+      requiresCredentials: false,
+    });
+    site.queryTypes
+      .find((q) => q.code === "PER")
+      ?.sources.push({ sourceId: "extraSource", selectedByDefault: false });
+    const user = { ...TEST_USER, role: "implementer" };
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user }),
+      ),
+      http.get(`${API}/api/v1/config`, () => HttpResponse.json(CLIENT_CONFIG)),
+      http.get(`${API}/api/v1/admin/config`, () =>
+        HttpResponse.json(adminConfigBody({ mock: RAW_MOCK, siteConfig: site })),
+      ),
+    );
+    const t = renderRoot({ path: "/admin/config" });
+    await screen.findByRole("tab", { name: "Form" });
+    await selectRow(t.user, /^Coverage/);
+    expect(await screen.findByText(/has no mock data/)).toBeInTheDocument();
+    await t.user.click(screen.getByRole("button", { name: /Add a no-record response/ }));
+    const added = draftMock(t).sources.extraSource?.responses.map((r) => r.queryType);
+    expect(added).toEqual(["PER"]);
+    expect(screen.queryByText(/has no mock data/)).not.toBeInTheDocument();
   });
 });
 

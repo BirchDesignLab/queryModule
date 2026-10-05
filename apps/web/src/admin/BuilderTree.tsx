@@ -142,7 +142,7 @@ function useTreeNodes(
       const typeKeys = new Map(
         asObjects(doc.queryTypes).map((q) => [str(q.code), str(q.labelKey)]),
       );
-      mockNodes.push(node(mockPointer.coverage, t("admin.mock.coverage"), ""));
+      mockNodes.push(node(mockPointer.coverage, t("admin.mock.coverage.label"), ""));
       const ids = [
         ...[...labelKeys.keys()].filter((id) => id in parsed.mock.sources),
         ...Object.keys(parsed.mock.sources).filter((id) => !labelKeys.has(id)),
@@ -163,7 +163,8 @@ function useTreeNodes(
           ),
         );
         mockNodes.push(
-          node(mockPointer.source(id), id, id, responses, true, labelKeys.get(id) ?? ""),
+          // Not rolled up: the source's pointer already covers every issue under its responses.
+          node(mockPointer.source(id), id, id, responses, false, labelKeys.get(id) ?? ""),
         );
       }
     }

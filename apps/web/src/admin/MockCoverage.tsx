@@ -38,6 +38,39 @@ export function MockCoverage() {
   return (
     <>
       <p className="qm-mock__lead">{t("admin.mock.coverage.intro")}</p>
+      {env.site.sources
+        .filter((s) => !(s.id in env.mock.sources))
+        .map((s) => {
+          // A source of the site with no mock data at all: one message and one fix for the source.
+          const asks = env.site.queryTypes.filter((q) => q.sourceIds.includes(s.id));
+          const pointer = toPointer(["mock", "coverage", s.id]);
+          const id = `${gapId(s.id, "source")}-issue`;
+          return (
+            <div key={s.id} className="qm-mock__gap">
+              <IssueMessages id={id} issues={checks.byPointer.get(pointer)} />
+              {asks.length > 0 && (
+                <button
+                  type="button"
+                  className="qm-button"
+                  aria-describedby={checks.byPointer.has(pointer) ? id : undefined}
+                  onClick={() => {
+                    env.edit((m) =>
+                      asks.reduce((acc, q) => addResponse(acc, s.id, scaffoldResponse(q.code)), m),
+                    );
+                    env.announce(
+                      t("admin.mock.addedForSource", {
+                        source: env.sourceName(s.id),
+                        count: asks.length,
+                      }),
+                    );
+                  }}
+                >
+                  {t("admin.mock.addForSource", { source: env.sourceName(s.id) })}
+                </button>
+              )}
+            </div>
+          );
+        })}
       <div className="qm-mock__table-wrap">
         <table className="qm-mock__table">
           <caption>
@@ -45,7 +78,7 @@ export function MockCoverage() {
           </caption>
           <thead>
             <tr>
-              <th scope="col">{t("admin.mock.queryType")}</th>
+              <th scope="col">{t("admin.mock.queryType.label")}</th>
               {sources.map((s) => {
                 const latency = env.mock.sources[s.id]?.latencyMs;
                 return (
@@ -98,7 +131,11 @@ export function MockCoverage() {
                           <button
                             type="button"
                             className="qm-button"
-                            aria-describedby={`${gapId(s.id, q.code)}-issue`}
+                            aria-describedby={
+                              checks.byPointer.has(gapPointer(s.id, q.code))
+                                ? `${gapId(s.id, q.code)}-issue`
+                                : undefined
+                            }
                             onClick={() => {
                               const index = env.mock.sources[s.id]?.responses.length ?? 0;
                               env.edit((m) => addResponse(m, s.id, scaffoldResponse(q.code)));
@@ -112,7 +149,7 @@ export function MockCoverage() {
                               requestMockFocus(mockPointer.response(s.id, index), "heading");
                             }}
                           >
-                            {t("admin.mock.addResponse")}{" "}
+                            {t("admin.mock.addResponse.label")}{" "}
                             <VisuallyHidden>
                               {t("admin.mock.addResponseFor", {
                                 source: env.sourceName(s.id),

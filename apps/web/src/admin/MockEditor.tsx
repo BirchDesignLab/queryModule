@@ -21,7 +21,11 @@ export function MockEditor({ doc }: { doc: JsonObject }) {
   const crumb = t("admin.tree.mock");
   if (env === null)
     return (
-      <EditorSection pointer={mockPointer.coverage} label={t("admin.mock.coverage")} crumb={crumb}>
+      <EditorSection
+        pointer={mockPointer.coverage}
+        label={t("admin.mock.coverage.label")}
+        crumb={crumb}
+      >
         <p>{t("admin.mock.unreadable")}</p>
       </EditorSection>
     );

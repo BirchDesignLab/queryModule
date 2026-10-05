@@ -5,7 +5,7 @@ import { useContext, useId, useRef } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext } from "./checks.js";
 import type { PathSegment } from "./draft.js";
-import { useMockEnv } from "./mock-context.js";
+import { requestMockFocus, useMockEnv } from "./mock-context.js";
 import {
   addPayloadChild,
   payloadPointer,
@@ -194,6 +194,8 @@ export function MockPayload({
                   </label>
                   <input
                     id={id(row.path, "v")}
+                    data-owner={pointer}
+                    data-role="value"
                     className="qm-field__input qm-mock__mono"
                     value={String(row.value)}
                     autoComplete="off"
@@ -247,7 +249,11 @@ export function MockPayload({
                   aria-label={t(container ? "admin.mock.removeRowWith" : "admin.mock.removeRow", {
                     name,
                   })}
-                  onClick={() => onChange(removePayloadAt(payload, row.path))}
+                  onClick={() => {
+                    onChange(removePayloadAt(payload, row.path));
+                    // The row (and what is in it) is gone: focus goes to Add field, never to the page.
+                    requestMockFocus(base, "add");
+                  }}
                 >
                   <span aria-hidden="true">×</span>
                 </button>
@@ -265,12 +271,16 @@ export function MockPayload({
                       type="button"
                       className="qm-button qm-button--ghost"
                       onClick={() => {
+                        const removes = fix === null || keyBad;
                         onChange(
-                          fix === null || keyBad
+                          removes
                             ? removePayloadAt(payload, row.path)
                             : setPayloadValue(payload, row.path, fix.value),
                         );
-                        // Focus stays where the row was: the fix button went with the message.
+                        // The fix button went with its message: focus goes to the row's value, or to
+                        // Add field when the row itself is gone.
+                        if (removes) requestMockFocus(base, "add");
+                        else requestMockFocus(pointer, "value");
                         const next = env.errorCount();
                         env.announce(
                           t("admin.mock.fixed", {
@@ -294,6 +304,8 @@ export function MockPayload({
         <button
           type="button"
           className="qm-button qm-button--ghost"
+          data-owner={base}
+          data-role="add"
           onClick={() => onChange(addPayloadChild(payload, [], "value"))}
         >
           {t("admin.mock.addField")}
