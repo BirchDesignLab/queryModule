@@ -1,6 +1,19 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { ClientSiteConfigSchema } from "../config/client-config";
+import {
+  AdminAuditExportQuerySchema,
+  AdminAuditPageSchema,
+  AdminAuditQuerySchema,
+} from "./admin-audit";
 import { ApiErrorSchema } from "./api-error";
+import {
+  AdminQueryDetailSchema,
+  AdminQueryQuerySchema,
+  ListQueriesQuerySchema,
+  QueryDetailSchema,
+  QueryListResponseSchema,
+  QueryParamsSchema,
+} from "./queries";
 import {
   findRoute,
   LocaleParamsSchema,
@@ -90,6 +103,11 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["setAdminUserRole", "put", "/api/v1/admin/users/{id}/role", "admin", "m1", "live"],
       ["listAdminUserSessions", "get", "/api/v1/admin/users/{id}/sessions", "admin", "m1", "live"],
       ["revokeAdminSession", "delete", "/api/v1/admin/sessions/{sessionId}", "admin", "m1", "live"],
+      ["listQueries", "get", "/api/v1/queries", "sessionOwn", "m2", "planned"],
+      ["getQuery", "get", "/api/v1/queries/{correlationId}", "policy", "m2", "planned"],
+      ["listAdminAudit", "get", "/api/v1/admin/audit", "admin", "m2", "planned"],
+      ["exportAdminAudit", "get", "/api/v1/admin/audit/export", "admin", "m2", "planned"],
+      ["getAdminQuery", "get", "/api/v1/admin/queries/{correlationId}", "admin", "m2", "planned"],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
@@ -118,6 +136,11 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       | "setAdminUserRole"
       | "listAdminUserSessions"
       | "revokeAdminSession"
+      | "listQueries"
+      | "getQuery"
+      | "listAdminAudit"
+      | "exportAdminAudit"
+      | "getAdminQuery"
     >();
     expectTypeOf(findRoute).parameter(0).toEqualTypeOf<RouteId>();
     expect(Object.isFrozen(ROUTES)).toBe(true);
@@ -131,6 +154,34 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       health.status = "planned";
     }).toThrow(TypeError);
     expect(findRoute("getHealth").status).toBe("live");
+  });
+
+  it("FR-062, FR-063, SEC-012 (spec 5.1): the M2 read routes are contract only until mounted", () => {
+    const ids = [
+      "listQueries",
+      "getQuery",
+      "listAdminAudit",
+      "exportAdminAudit",
+      "getAdminQuery",
+    ] as const;
+    for (const id of ids) {
+      const r = findRoute(id);
+      expect(r.status, id).toBe("planned");
+      expect(r.method, id).toBe("get");
+      expect(r.requiresRequestedWith, id).toBe(false);
+      expect(r.responses[401]?.schema, id).toBe(ApiErrorSchema);
+    }
+    expect(findRoute("listQueries").request?.query).toBe(ListQueriesQuerySchema);
+    expect(findRoute("listQueries").responses[200]?.schema).toBe(QueryListResponseSchema);
+    expect(findRoute("getQuery").request?.params).toBe(QueryParamsSchema);
+    expect(findRoute("getQuery").responses[200]?.schema).toBe(QueryDetailSchema);
+    expect(findRoute("getAdminQuery").request?.query).toBe(AdminQueryQuerySchema);
+    expect(findRoute("getAdminQuery").responses[200]?.schema).toBe(AdminQueryDetailSchema);
+    expect(findRoute("listAdminAudit").request?.query).toBe(AdminAuditQuerySchema);
+    expect(findRoute("listAdminAudit").responses[200]?.schema).toBe(AdminAuditPageSchema);
+    expect(findRoute("exportAdminAudit").request?.query).toBe(AdminAuditExportQuerySchema);
+    // NDJSON has no JSON body schema: the OpenAPI generator only emits application/json.
+    expect(findRoute("exportAdminAudit").responses[200]?.schema).toBeUndefined();
   });
 
   it("meta body per spec 5.1", () => {
