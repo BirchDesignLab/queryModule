@@ -34,20 +34,35 @@ const openapi = JSON.parse(
 ) as {
   paths: Record<string, Record<string, { operationId: string; "x-feature"?: string }>>;
 };
-const OPERATIONS: Operation[] = Object.entries(openapi.paths).flatMap(([path, methods]) =>
-  Object.entries(methods).map(([method, op]) => {
-    const route = ROUTES.find((r) => r.id === op.operationId);
-    if (!route) throw new Error(`openapi operation ${op.operationId} is not in ROUTES`);
-    return {
-      key: `${method.toUpperCase()} ${path}`,
-      id: op.operationId,
-      method: method.toUpperCase(),
-      path,
-      feature: op["x-feature"],
-      access: route.access,
-    };
-  }),
-);
+/**
+ * Contract-only routes (spec 5.1, M2 P0): in ROUTES and openapi.json, status planned, no handler
+ * mounted until P1/P2. The matrix does not call them as an allowed caller; a named test below
+ * asserts each answers 404. A route leaves this list when its handler mounts and gets a CALLS row.
+ */
+const CONTRACT_ONLY: ReadonlyMap<string, string> = new Map([
+  ["listQueries", "GET /api/v1/queries"],
+  ["getQuery", "GET /api/v1/queries/{correlationId}"],
+  ["listAdminAudit", "GET /api/v1/admin/audit"],
+  ["exportAdminAudit", "GET /api/v1/admin/audit/export"],
+  ["getAdminQuery", "GET /api/v1/admin/queries/{correlationId}"],
+]);
+
+const OPERATIONS: Operation[] = Object.entries(openapi.paths)
+  .flatMap(([path, methods]) =>
+    Object.entries(methods).map(([method, op]) => {
+      const route = ROUTES.find((r) => r.id === op.operationId);
+      if (!route) throw new Error(`openapi operation ${op.operationId} is not in ROUTES`);
+      return {
+        key: `${method.toUpperCase()} ${path}`,
+        id: op.operationId,
+        method: method.toUpperCase(),
+        path,
+        feature: op["x-feature"],
+        access: route.access,
+      };
+    }),
+  )
+  .filter((o) => !CONTRACT_ONLY.has(o.id));
 
 type Who = Caller | "mustChangePassword";
 type Expected = { status: number; code?: ApiErrorCode } | "ok";
@@ -235,10 +250,35 @@ describe("spec 10.3 route by caller matrix (D-A30, admin routes from openapi.jso
 
   it("covers every openapi.json operation, each one in ROUTES", () => {
     expect(Object.keys(CALLS).sort()).toEqual(OPERATIONS.map((o) => o.id).sort());
-    expect(OPERATIONS.map((o) => o.id).sort()).toEqual(ROUTES.map((r: RouteDef) => r.id).sort());
+    const live = ROUTES.filter((r: RouteDef) => !CONTRACT_ONLY.has(r.id));
+    expect(OPERATIONS.map((o) => o.id).sort()).toEqual(live.map((r: RouteDef) => r.id).sort());
     // Every admin route carries its feature flag, so the flags-off run covers all of them.
     for (const o of OPERATIONS.filter((x) => x.path.startsWith("/api/v1/admin/")))
       expect(o.feature, o.id).toMatch(/^admin(Config|Users)$/);
+  });
+
+  it("the contract-only list is exactly the planned routes, each in openapi.json", () => {
+    expect([...CONTRACT_ONLY.keys()].sort()).toEqual(
+      ROUTES.filter((r: RouteDef) => r.status === "planned")
+        .map((r: RouteDef) => r.id)
+        .sort(),
+    );
+    const documented = Object.entries(openapi.paths).flatMap(([p, ms]) =>
+      Object.keys(ms).map((m) => `${m.toUpperCase()} ${p}`),
+    );
+    for (const key of CONTRACT_ONLY.values()) expect(documented, key).toContain(key);
+  });
+
+  it("contract-only routes are not mounted: an admin gets 404 on each (until P1/P2)", async () => {
+    const a = await adminConfigApp({ siteConfig: ALL_ON });
+    const cid = "01890000-0000-7000-8000-000000000001";
+    for (const key of CONTRACT_ONLY.values()) {
+      const [method, template] = key.split(" ") as [string, string];
+      const path = template.replace("{correlationId}", cid);
+      // /api/v1/queries also carries the live POST; only the GET is unmounted.
+      const r = await a.call("admin", method, path);
+      expect(r.status, key).toBe(404);
+    }
   });
 
   it.each([...ROLE_CALLERS, "mustChangePassword" as const])(

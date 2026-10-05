@@ -47,7 +47,7 @@ Access levels:
 | admin | `admin` only |
 
 "X-Requested-With" is `yes` when the header is required. "M1" is the status in this milestone:
-`live` means the handler is merged and answers as listed.
+`live` means the handler is merged and answers as listed; `planned` means the contract is merged and no handler is mounted yet, so the route answers 404 until P1/P2.
 
 | Method | Path | Access | X-Requested-With | M1 | Responses |
 |---|---|---|---|---|---|
@@ -58,6 +58,11 @@ Access levels:
 | GET | `/api/v1/me/preferences` | sessionOwn | no | live | 200, 401, 403 |
 | PUT | `/api/v1/me/preferences` | sessionOwn | yes | live | 200, 400, 401, 403 |
 | POST | `/api/v1/queries` | session | yes | live | 202, 400, 401, 403, 409, 413, 429, 500, 503 |
+| GET | `/api/v1/queries` | sessionOwn | no | planned | 200, 400, 401, 403 |
+| GET | `/api/v1/queries/{correlationId}` | policy | no | planned | 200, 400, 401, 403, 404 |
+| GET | `/api/v1/admin/audit` | admin | no | planned | 200, 400, 401, 403 |
+| GET | `/api/v1/admin/audit/export` | admin | no | planned | 200, 400, 401, 403 |
+| GET | `/api/v1/admin/queries/{correlationId}` | admin | no | planned | 200, 400, 401, 403, 404 |
 | GET | `/api/v1/admin/config` | configEditor | no | live | 200, 401, 403 |
 | PUT | `/api/v1/admin/config/draft` | configEditor | yes | live | 200, 400, 401, 403, 409, 413 |
 | POST | `/api/v1/admin/config/validate` | configEditor | yes | live | 200, 400, 401, 403, 413 |
@@ -80,6 +85,11 @@ What each route does:
 | `GET /meta` | `apiVersion`, `coreVersion`, `configSchemaVersion`, `configHash` and `minClientVersion` (null when unset). The client refuses to run below `minClientVersion`. |
 | `GET /locales/{locale}` | A locale bundle of UI strings. `400 validationFailed` for a malformed locale, `404 notFound` for a well-formed locale the site does not list. |
 | `GET /config` | The `ClientSiteConfig` allowlist. Never carries `Source.server`, `auth`, `retention`, `extends` or mock data. |
+| `GET /queries` | Planned. The caller's own requests, newest first, cursor and limit (at most 100); parts nested with per-source status; hidden results excluded. |
+| `GET /queries/{correlationId}` | Planned. One request with parts, per-source status and payloads for `returned` results; hidden results excluded; a shredded part or result answers `purged: true` with no values or payload. |
+| `GET /admin/audit` | Planned, admin. Filters `user` (actor or credential owner), `correlationId`, `type`; `from` and `to` required, at most 31 days apart; `cursor`; `limit` at most 200. Rows go through a tolerant read schema so rows written before later fields still parse. |
+| `GET /admin/audit/export` | Planned, admin. The same filters as NDJSON, one audit row per line. |
+| `GET /admin/queries/{correlationId}` | Planned, admin. A request with payloads; `includeHidden=true` adds hidden results. |
 | `GET /me/preferences` | The caller's own preference row: `themeMode`, `personaOverride`, `layout`. Each is `null` when unset. |
 | `PUT /me/preferences` | Replaces the caller's own row. |
 | `POST /queries` | Submit a query. See "Submitting a query". |

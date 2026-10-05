@@ -22,10 +22,21 @@ import {
   ValidateConfigResponseSchema,
   VersionParamsSchema,
 } from "./admin";
+import {
+  AdminAuditExportQuerySchema,
+  AdminAuditPageSchema,
+  AdminAuditQuerySchema,
+} from "./admin-audit";
 import { ApiErrorSchema } from "./api-error";
 import { SemverSchema, Sha256HexSchema } from "./primitives";
 import {
+  AdminQueryDetailSchema,
+  AdminQueryQuerySchema,
   IdempotencyKeySchema,
+  ListQueriesQuerySchema,
+  QueryDetailSchema,
+  QueryListResponseSchema,
+  QueryParamsSchema,
   SubmitQueryRequestSchema,
   SubmitQueryResponseSchema,
 } from "./queries";
@@ -456,6 +467,96 @@ const ROUTE_DEFS = [
       204: { description: "Revoked" },
       400: error("Malformed session id (validationFailed)"),
       404: error("No such session (notFound)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "listQueries",
+    method: "get",
+    path: `${API_BASE_PATH}/queries`,
+    summary: "The caller's requests, newest first, cursor-paged; hidden results excluded",
+    access: "sessionOwn",
+    since: "m2",
+    status: "planned",
+    requiresRequestedWith: false,
+    request: { query: ListQueriesQuerySchema },
+    responses: {
+      200: {
+        description: "Requests with parts and per-source status",
+        schema: QueryListResponseSchema,
+      },
+      400: error("Malformed cursor or limit (validationFailed)"),
+      401: error("No session"),
+      403: error(`Session refused: ${PASSWORD_CHANGE}`),
+    },
+  },
+  {
+    id: "getQuery",
+    method: "get",
+    path: `${API_BASE_PATH}/queries/{correlationId}`,
+    summary:
+      "One request with parts, per-source status and payloads; hidden results excluded; a shredded part or result answers purged: true",
+    access: "policy",
+    since: "m2",
+    status: "planned",
+    requiresRequestedWith: false,
+    request: { params: QueryParamsSchema },
+    responses: {
+      200: { description: "The request", schema: QueryDetailSchema },
+      400: error("Malformed correlation id (validationFailed)"),
+      401: error("No session"),
+      403: error(`Read policy refused the caller (forbidden); or ${PASSWORD_CHANGE}`),
+      404: error("No such request, or not visible to the caller (notFound)"),
+    },
+  },
+  {
+    id: "listAdminAudit",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/audit`,
+    summary:
+      "Audit rows by user (actor or credential owner), correlation id and type; window at most 31 days; writes auditViewed",
+    access: "admin",
+    since: "m2",
+    status: "planned",
+    requiresRequestedWith: false,
+    request: { query: AdminAuditQuerySchema },
+    responses: {
+      200: { description: "A page of audit rows", schema: AdminAuditPageSchema },
+      400: error("Malformed filters, or a window over 31 days (validationFailed)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "exportAdminAudit",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/audit/export`,
+    summary: "The same filters as a NDJSON stream, one audit row per line; writes auditExported",
+    access: "admin",
+    since: "m2",
+    status: "planned",
+    requiresRequestedWith: false,
+    request: { query: AdminAuditExportQuerySchema },
+    responses: {
+      200: { description: "application/x-ndjson, one AuditExportLineSchema row per line" },
+      400: error("Malformed filters, or a window over 31 days (validationFailed)"),
+      ...adminErrors,
+    },
+  },
+  {
+    id: "getAdminQuery",
+    method: "get",
+    path: `${API_BASE_PATH}/admin/queries/{correlationId}`,
+    summary:
+      "A request with payloads; includeHidden=true adds hidden results; writes adminViewed with viewerBasis admin",
+    access: "admin",
+    since: "m2",
+    status: "planned",
+    requiresRequestedWith: false,
+    request: { params: QueryParamsSchema, query: AdminQueryQuerySchema },
+    responses: {
+      200: { description: "The request", schema: AdminQueryDetailSchema },
+      400: error("Malformed correlation id or includeHidden (validationFailed)"),
+      404: error("No such request (notFound)"),
       ...adminErrors,
     },
   },
