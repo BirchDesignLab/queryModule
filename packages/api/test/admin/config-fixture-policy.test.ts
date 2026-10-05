@@ -108,6 +108,26 @@ describe("#511 T27 IC1 draft save refuses a fixture finding", () => {
     expect(a.t.logLines.join("\n")).not.toContain(BAD_NAME);
   });
 
+  it("a mock that fails MockFileSchema is refused as config.mockSchema and stores nothing (ruling IC1)", async () => {
+    const a = await adminConfigApp();
+    const document = structuredClone(await a.exportVersion(1));
+    // An unknown root key: the strict MockFileSchema fails, so the policy walk cannot reach it.
+    (document.mock as Json).extra = { last: BAD_NAME };
+    const r = await a.call("implementer", "PUT", `${API}/draft`, { baseVersion: 1, document });
+    expect(r.status).toBe(400);
+    const text = await r.text();
+    expect(text).not.toContain(BAD_NAME);
+    const e = await errorOf(new Response(text));
+    expect(e.code).toBe("validationFailed");
+    expect(e.errors).toEqual([
+      { key: "config.mockSchema", params: { path: "/mock", code: "unrecognized_keys" } },
+    ]);
+    const rows = await a.versionRows();
+    expect(rows.map((v) => [v.version, v.status])).toEqual([[1, "published"]]);
+    expect(JSON.stringify(rows)).not.toContain(BAD_NAME);
+    expect(a.t.logLines.join("\n")).not.toContain(BAD_NAME);
+  });
+
   it("a draft with a non-fixture validation error still saves", async () => {
     const a = await adminConfigApp();
     const bad = withSiteConfig(await a.exportVersion(1), (s) => {

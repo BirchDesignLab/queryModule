@@ -114,6 +114,24 @@ export function fixtureFindings(document: unknown): Diagnostic[] {
   }));
 }
 
+/**
+ * Ruling IC1 (#511 T27): a mock the fixture policy cannot walk fails closed at draft save. One
+ * config.mockSchema error per zod issue, with the escaped JSON pointer and the issue code only;
+ * never the issue message or the input value (spec 5.9).
+ */
+function mockSchemaErrors(document: ConfigDocument): ValidationError[] {
+  if (document.mock === undefined) return [];
+  const mock = MockFileSchema.safeParse(document.mock);
+  if (mock.success) return [];
+  return mock.error.issues.map((issue) => ({
+    key: "config.mockSchema",
+    params: {
+      path: `/mock${issue.path.map((s) => `/${String(s).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("")}`,
+      code: issue.code,
+    },
+  }));
+}
+
 export type SaveDraftResult =
   | { ok: true; row: VersionRow }
   | { ok: false; code: "draftConflict" }
@@ -124,7 +142,9 @@ export type SaveDraftResult =
  * base must be the live version) and writes the shared draft. A draft is not validated (it may
  * be work in progress) and not audited (item 7: the row records its author), with one exception:
  * a mock that breaks the fixture policy is refused before anything is stored, so non-fixture
- * data never reaches the database even as a draft (#511 T27 IC1; spec 5.4, 10.8). The draft keeps
+ * data never reaches the database even as a draft (#511 T27 IC1; spec 5.4, 10.8). A mock that
+ * fails MockFileSchema cannot be policy-checked, so it is refused the same way (config.mockSchema,
+ * ruling IC1); validation errors outside /mock still save. The draft keeps
  * its version while it is the newest row; once a publish or rollback has passed it, the save
  * removes it (a draft row is never history) and writes the draft as the next version, so
  * versions stay in history order.
@@ -134,6 +154,8 @@ export async function saveDraft(
   principal: Principal,
   body: { baseVersion: number; document: ConfigDocument },
 ): Promise<SaveDraftResult> {
+  const schema = mockSchemaErrors(body.document);
+  if (schema.length > 0) return { ok: false, code: "validationFailed", errors: schema };
   const fixtures = fixtureFindings(body.document);
   if (fixtures.length > 0)
     return {
