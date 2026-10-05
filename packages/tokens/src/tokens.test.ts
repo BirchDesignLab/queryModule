@@ -174,10 +174,13 @@ describe("inert opacity, scrim and layout constant (cloud3 item 1)", () => {
 
   it("the breakpoints are fixed layout constants: emitted once on :root, never tokens", () => {
     expect(LAYOUT_CONSTANTS).toEqual({
-      "layout.wide": "64rem",
-      "layout.stack": "54rem",
-      "layout.toolbar": "45rem",
+      "layout.wide": "1024px",
+      "layout.stack": "864px",
+      "layout.toolbar": "720px",
     });
+    // px like the tokens they guard: a media-query rem follows the browser's default font size,
+    // which the px tokens ignore (#484).
+    for (const value of Object.values(LAYOUT_CONSTANTS)) expect(value).toMatch(/^\d+px$/);
     const css = buildCss();
     const themed = css.slice(css.indexOf(':root[data-theme="night"]'));
     for (const [name, value] of Object.entries(LAYOUT_CONSTANTS)) {

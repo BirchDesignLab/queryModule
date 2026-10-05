@@ -1578,9 +1578,8 @@ test.describe("Layout robustness (cloud3 item 3)", () => {
 });
 
 test.describe("Queries at the layout constants (cloud3 item 4)", () => {
-  // Query conditions are the constants' rem values; a rem is 16 px in the test browser.
-  const px = (name: keyof typeof LAYOUT_CONSTANTS) =>
-    Number.parseFloat(LAYOUT_CONSTANTS[name]) * 16;
+  // Query conditions are the constants' px values (#484).
+  const px = (name: keyof typeof LAYOUT_CONSTANTS) => Number.parseFloat(LAYOUT_CONSTANTS[name]);
   const parts = (page: Page) =>
     page.evaluate(() => {
       const r = (sel: string) => {

@@ -35,9 +35,9 @@
   --qm-target-min: 48px;
   --qm-control-height-dense: 36px;
   --qm-control-height-touch: 56px;
-  --qm-layout-wide: 64rem;
-  --qm-layout-stack: 54rem;
-  --qm-layout-toolbar: 45rem;
+  --qm-layout-wide: 1024px;
+  --qm-layout-stack: 864px;
+  --qm-layout-toolbar: 720px;
   --qm-color-text-body: #121820;
   --qm-color-text-muted: #4d5968;
   --qm-color-surface-sunken: #eceff3;

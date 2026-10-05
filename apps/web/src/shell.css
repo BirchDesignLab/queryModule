@@ -382,7 +382,7 @@ main[tabindex="-1"]:focus {
   padding: var(--qm-space-4) var(--qm-space-5);
 }
 
-@media (min-width: 54rem) {
+@media (min-width: 864px) {
   .qm-admin {
     flex-direction: row;
   }
@@ -598,14 +598,14 @@ main[tabindex="-1"]:focus {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
-@container (min-width: 45rem) {
+@container (min-width: 720px) {
   .qm-builder {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
   }
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 1024px) {
   .qm-builder {
     block-size: max(
       calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2 - var(--qm-space-4) * 2),
@@ -720,7 +720,7 @@ main[tabindex="-1"]:focus {
   overflow-y: auto;
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 1024px) {
   .qm-tree,
   .qm-builder__editor,
   .qm-builder__panes > .qm-admin__preview {

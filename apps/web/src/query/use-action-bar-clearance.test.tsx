@@ -33,7 +33,7 @@ beforeEach(() => {
   );
   vi.stubGlobal("matchMedia", (query: string) => ({
     get matches() {
-      return short && query === "(max-height: 20rem)";
+      return short && query === "(max-height: 320px)";
     },
     addEventListener: (_type: string, listener: () => void) => mediaListeners.push(listener),
     removeEventListener: (_type: string, listener: () => void) => {

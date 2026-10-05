@@ -188,7 +188,7 @@ for (const persona of PERSONAS) {
         // Enough stops that the pass cannot be vacuous (mode, quick access, fields, sources, Run, Clear).
         expect(first.stops, "Tab stops visited").toBeGreaterThan(8);
         expect(first.obscured, "focus hidden behind the action bar").toEqual([]);
-        // The hook keeps the bar's height clear wherever the bar sticks; under 20rem tall it does not stick.
+        // The hook keeps the bar's height clear wherever the bar sticks; under 320 px tall it does not stick.
         const padding = await page.evaluate(
           () => document.documentElement.style.scrollPaddingBlockEnd,
         );

@@ -3,7 +3,7 @@ import { type RefObject, useEffect } from "react";
 const PROPERTY = "scroll-padding-block-end";
 
 /** Where the action bar stops sticking (packages/web-ui styles.css): nothing is kept clear there. */
-const SHORT_VIEWPORT = "(max-height: 20rem)";
+const SHORT_VIEWPORT = "(max-height: 320px)";
 
 /**
  * Focus not obscured (WCAG 2.4.11): the action bar sticks to the bottom of the viewport, so a

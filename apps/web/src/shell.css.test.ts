@@ -84,14 +84,15 @@ describe("literal lengths: only in a query condition, and only a layout constant
 
   it("rejects any other length in a condition, even next to a constant", () => {
     expect(check("@media (min-width: 50rem) { .a { top: 0; } }")).toEqual(["50rem"]);
-    expect(check("@media (min-width: 1024px) { .a { top: 0; } }")).toEqual(["1024px"]);
+    expect(check("@media (min-width: 64rem) { .a { top: 0; } }")).toEqual(["64rem"]);
+    expect(check("@media (min-width: 1000px) { .a { top: 0; } }")).toEqual(["1000px"]);
     expect(check("@container (min-width: 40em) { .a { top: 0; } }")).toEqual(["40em"]);
     const [wide = ""] = allowed;
     expect(check(`@media (min-width: ${wide}) and (max-width: 70rem) { .a { top: 0; } }`)).toEqual([
       "70rem",
     ]);
     // A constant's value that is off by a digit is not the constant.
-    expect(check("@media (min-width: 64.5rem) { .a { top: 0; } }")).toEqual(["64.5rem"]);
+    expect(check("@media (min-width: 1024.5px) { .a { top: 0; } }")).toEqual(["1024.5px"]);
   });
 
   it("rejects a length however it is written: case, exponent, leading point", () => {
@@ -114,7 +115,7 @@ describe("literal lengths: only in a query condition, and only a layout constant
   it("rejects every literal length outside a condition, constant values included", () => {
     const [wide = ""] = allowed;
     expect(check(`.a { inline-size: ${wide}; }`)).toEqual([wide]);
-    expect(check("@media (min-width: 64rem) { .a { inline-size: 12px; } }")).toEqual(["12px"]);
+    expect(check(`@media (min-width: ${wide}) { .a { inline-size: 12px; } }`)).toEqual(["12px"]);
     expect(check(".a { margin: 4px 8px; padding: 1.5em; }")).toEqual(["4px", "8px", "1.5em"]);
   });
 });

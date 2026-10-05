@@ -262,24 +262,24 @@ describe("hardening: reflow at 320 px and 400% zoom (WCAG 1.4.10, 2.4.11)", () =
     expect(echo).not.toMatch(/overflow-x:\s*(auto|scroll)/);
   });
 
-  it("the action bar stops sticking on a viewport under 20rem tall (it would cover most of it)", () => {
+  it("the action bar stops sticking on a viewport under 320 px tall (it would cover most of it)", () => {
     expect(css).toMatch(
-      /@media \(max-height: 20rem\)\s*\{\s*\.qm-action-bar\s*\{\s*position:\s*static/,
+      /@media \(max-height: 320px\)\s*\{\s*\.qm-action-bar\s*\{\s*position:\s*static/,
     );
   });
 });
 
 describe("dispatch app bar keeps one row at 200% zoom (683 px)", () => {
-  it("below 52rem the account email is visually hidden, not removed", () => {
+  it("below 832 px the account email is visually hidden, not removed", () => {
     expect(css).toMatch(
-      /@media \(max-width: 52rem\)\s*\{\s*\.qm-app-header \.qm-account__email\s*\{[^}]*clip-path:\s*inset\(50%\)/,
+      /@media \(max-width: 832px\)\s*\{\s*\.qm-app-header \.qm-account__email\s*\{[^}]*clip-path:\s*inset\(50%\)/,
     );
     expect(css).not.toMatch(/\.qm-account__email\s*\{[^}]*display:\s*none/);
   });
-  it("from 36rem to 62.5rem the site name shrinks to a 12ch minimum; below 36rem it is left to wrap", () => {
-    // 62.5rem (1000 px): a 32ch site name fits the widest bar from here up (#482).
+  it("from 576 to 1000 px the site name shrinks to a 12ch minimum; below 576 px it is left to wrap", () => {
+    // 1000 px: a 32ch site name fits the widest bar from here up (#482).
     expect(css).toMatch(
-      /@media \(min-width: 36rem\) and \(max-width: 62\.5rem\)\s*\{\s*\.qm-app-header \.qm-app-header__site\s*\{\s*flex:\s*1 1 12ch/,
+      /@media \(min-width: 576px\) and \(max-width: 1000px\)\s*\{\s*\.qm-app-header \.qm-app-header__site\s*\{\s*flex:\s*1 1 12ch/,
     );
   });
 });

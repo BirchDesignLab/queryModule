@@ -229,7 +229,7 @@ for (const { persona, email, row, minTarget } of [
 test("B1 header just above the shrink width: the widest bar (admin) is one row with the email shown", async ({
   page,
 }) => {
-  // 52rem = 832 px: the full account button returns, and the bar must still fit on one row.
+  // 832 px: the full account button returns, and the bar must still fit on one row.
   await page.setViewportSize({ width: 833, height: 600 });
   await signIn(page, seededUser("admin@example.test"));
   await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
