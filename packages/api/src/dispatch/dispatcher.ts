@@ -126,13 +126,15 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       controller.abort();
       finish({ status: "timedOut" });
     }, job.deadline - d.clock.now());
-    const settled = (outcome: Outcome) => {
+    const settled = (outcome: Outcome, abortAck = false) => {
       if (!r.done) {
         finish(outcome);
         return;
       }
       // abortAll dropped the job: the process is failing closed, so nothing more is said.
       if (aborted) return;
+      // An AbortError after our own abort is the adapter honouring it, not a late answer (AW3 critic c).
+      if (abortAck) return;
       d.logger.warn("dispatch late settlement", { resultId: job.resultId, sourceId: job.sourceId });
     };
     // The executor runs now, so the adapter call starts synchronously; a throw from the registry
@@ -159,6 +161,7 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
           e instanceof SourceError
             ? { status: e.code, errorCode: e.code }
             : { status: "failed", errorCode: "failed" },
+          controller.signal.aborted && e instanceof DOMException && e.name === "AbortError",
         ),
     );
   }

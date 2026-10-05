@@ -13,7 +13,7 @@ import {
   type DispatchJob,
   type Outcome,
 } from "../../src/dispatch/dispatcher";
-import type { Timers } from "../../src/dispatch/timers";
+import { abortError, type Timers } from "../../src/dispatch/timers";
 import { captureLogger } from "../helpers/fixture";
 
 // Spec 5.2 step 5, FR-040, FR-041, FR-043, FR-044, NFR-002: per-source deadlines and caps, one
@@ -240,6 +240,18 @@ describe("createDispatcher outcomes (spec 5.2 step 5, FR-043, FR-044)", () => {
       },
     ]);
     expect(JSON.stringify(s.logger.entries)).not.toMatch(/ZZ-0001|mock/);
+  });
+
+  it("an adapter honouring the deadline abort (AbortError) is not a late settlement (AW3 critic c)", async () => {
+    const s = setup();
+    const j = job({ deadline: T0 + 1_000 });
+    s.dispatcher.enqueue([j]);
+    await s.time.advance(1_000);
+    expect(s.calls[0]?.signal.aborted).toBe(true);
+    s.calls[0]?.reject(abortError());
+    await s.time.advance(1);
+    expect(s.seen.map((x) => x.outcome.status)).toEqual(["timedOut"]);
+    expect(s.logger.entries).toEqual([]);
   });
 
   it("requiresCredentials with no credential gives credentialsMissing without an adapter call", async () => {
