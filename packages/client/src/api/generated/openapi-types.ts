@@ -93,7 +93,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** The caller's requests, newest first, cursor-paged; hidden results excluded */
+        get: operations["listQueries"];
         put?: never;
         /** Submit a query; answers 202 with the correlation id once the request is recorded */
         post: operations["submitQuery"];
@@ -303,6 +304,74 @@ export interface paths {
         post?: never;
         /** Revoke one session */
         delete: operations["revokeAdminSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queries/{correlationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One request with parts, per-source status and payloads; hidden results excluded; a shredded part or result answers purged: true */
+        get: operations["getQuery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit rows by user (actor or credential owner), correlation id and type; window at most 31 days; writes auditViewed */
+        get: operations["listAdminAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The same filters as a NDJSON stream, one audit row per line; writes auditExported */
+        get: operations["exportAdminAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/queries/{correlationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A request with payloads; includeHidden=true adds hidden results; writes adminViewed with viewerBasis admin */
+        get: operations["getAdminQuery"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -986,6 +1055,142 @@ export interface components {
                 current: boolean;
             }[];
         };
+        listQueries200: {
+            requests: {
+                correlationId: string;
+                submittedAt: number;
+                configHash: string;
+                parts: {
+                    partId: number;
+                    parentPartId: 0 | null;
+                    /** @enum {string} */
+                    origin: "primary" | "alsoRun";
+                    queryType: string;
+                    typeValues: {
+                        [key: string]: string;
+                    };
+                    plateOnly: boolean;
+                    skippedReason: string | null;
+                    droppedSourceIds: string[];
+                    purged: boolean;
+                    values?: {
+                        [key: string]: string | number | boolean | null;
+                    };
+                    sources: {
+                        resultId: string;
+                        sourceId: string;
+                        /** @enum {string} */
+                        status: "pending" | "returned" | "failed" | "timedOut" | "interrupted" | "credentialsMissing" | "credentialsRejected";
+                        adapterKind: string;
+                        errorCode: string | null;
+                        createdAt: number;
+                        receivedAt: number | null;
+                        timedOutAt: number | null;
+                        purged: boolean;
+                        payload?: {
+                            [key: string]: unknown;
+                        };
+                    }[];
+                }[];
+            }[];
+            nextCursor: string | null;
+        };
+        getQuery200: {
+            correlationId: string;
+            submittedAt: number;
+            configHash: string;
+            parts: {
+                partId: number;
+                parentPartId: 0 | null;
+                /** @enum {string} */
+                origin: "primary" | "alsoRun";
+                queryType: string;
+                typeValues: {
+                    [key: string]: string;
+                };
+                plateOnly: boolean;
+                skippedReason: string | null;
+                droppedSourceIds: string[];
+                purged: boolean;
+                values?: {
+                    [key: string]: string | number | boolean | null;
+                };
+                sources: {
+                    resultId: string;
+                    sourceId: string;
+                    /** @enum {string} */
+                    status: "pending" | "returned" | "failed" | "timedOut" | "interrupted" | "credentialsMissing" | "credentialsRejected";
+                    adapterKind: string;
+                    errorCode: string | null;
+                    createdAt: number;
+                    receivedAt: number | null;
+                    timedOutAt: number | null;
+                    purged: boolean;
+                    payload?: {
+                        [key: string]: unknown;
+                    };
+                }[];
+            }[];
+        };
+        listAdminAudit200: {
+            events: {
+                id: number;
+                type: string;
+                at: number;
+                correlationId?: string;
+                partId?: number;
+                actor: {
+                    id: string;
+                    email: string | null;
+                    role: string;
+                };
+                credentialUserId?: string;
+                identitySource: string;
+                hostSubject?: string;
+                details: {
+                    [key: string]: unknown;
+                };
+            }[];
+            nextCursor: string | null;
+        };
+        getAdminQuery200: {
+            correlationId: string;
+            submittedAt: number;
+            configHash: string;
+            parts: {
+                partId: number;
+                parentPartId: 0 | null;
+                /** @enum {string} */
+                origin: "primary" | "alsoRun";
+                queryType: string;
+                typeValues: {
+                    [key: string]: string;
+                };
+                plateOnly: boolean;
+                skippedReason: string | null;
+                droppedSourceIds: string[];
+                purged: boolean;
+                values?: {
+                    [key: string]: string | number | boolean | null;
+                };
+                sources: {
+                    resultId: string;
+                    sourceId: string;
+                    /** @enum {string} */
+                    status: "pending" | "returned" | "failed" | "timedOut" | "interrupted" | "credentialsMissing" | "credentialsRejected";
+                    adapterKind: string;
+                    errorCode: string | null;
+                    createdAt: number;
+                    receivedAt: number | null;
+                    timedOutAt: number | null;
+                    purged: boolean;
+                    payload?: {
+                        [key: string]: unknown;
+                    };
+                    hidden: boolean;
+                }[];
+            }[];
+        };
     };
     responses: never;
     parameters: never;
@@ -1174,6 +1379,56 @@ export interface operations {
                 };
             };
             /** @description Malformed preferences body (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Session refused: the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listQueries: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Requests with parts and per-source status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["listQueries200"];
+                };
+            };
+            /** @description Malformed cursor or limit (validationFailed) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2030,6 +2285,230 @@ export interface operations {
                 };
             };
             /** @description No such session (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                correlationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["getQuery200"];
+                };
+            };
+            /** @description Malformed correlation id (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Read policy refused the caller (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such request, or not visible to the caller (notFound) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listAdminAudit: {
+        parameters: {
+            query: {
+                user?: string;
+                correlationId?: string;
+                type?: string;
+                from: number;
+                to: number;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of audit rows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["listAdminAudit200"];
+                };
+            };
+            /** @description Malformed filters, or a window over 31 days (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    exportAdminAudit: {
+        parameters: {
+            query: {
+                user?: string;
+                correlationId?: string;
+                type?: string;
+                from: number;
+                to: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description application/x-ndjson, one AuditExportLineSchema row per line */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed filters, or a window over 31 days (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAdminQuery: {
+        parameters: {
+            query?: {
+                includeHidden?: "true" | "false";
+            };
+            header?: never;
+            path: {
+                correlationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["getAdminQuery200"];
+                };
+            };
+            /** @description Malformed correlation id or includeHidden (validationFailed) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Role not allowed, or missing X-Requested-With on a write (forbidden); or the temporary password is not yet changed (passwordChangeRequired) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description No such request (notFound) */
             404: {
                 headers: {
                     [name: string]: unknown;

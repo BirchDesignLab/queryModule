@@ -1,4 +1,5 @@
 export * from "./admin";
+export * from "./admin-audit";
 export * from "./api-error";
 export * from "./assess";
 export * from "./audit";

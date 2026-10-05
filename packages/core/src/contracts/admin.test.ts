@@ -152,7 +152,8 @@ describe("ADR-0011 item 8 admin user contracts (D-A26)", () => {
 });
 
 describe("ADR-0011 admin routes (items 5, 6, 8)", () => {
-  const admin = ROUTES.filter((r) => r.path.startsWith("/api/v1/admin/"));
+  // The M2 audit and query reads are contract only and tested in routes.test.ts.
+  const admin = ROUTES.filter((r) => r.path.startsWith("/api/v1/admin/") && r.since === "m1");
 
   it("config routes are configEditor behind adminConfig; user and session routes admin behind adminUsers", () => {
     expect(admin).toHaveLength(13);
