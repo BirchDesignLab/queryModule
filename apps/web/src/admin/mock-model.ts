@@ -118,7 +118,9 @@ export function setResponseDefault(
   response: number,
   payload: SourcePayload,
 ): MockFile {
-  return withResponse(mock, sourceId, response, (r) => ({ ...r, default: payload }));
+  return withResponse(mock, sourceId, response, (r) =>
+    canon(r.default) === canon(payload) ? null : { ...r, default: payload },
+  );
 }
 
 /** The type-field match of a response (a type code list), or undefined for any type. */
@@ -129,6 +131,7 @@ export function setResponseTypes(
   types: MockResponse["types"],
 ): MockFile {
   return withResponse(mock, sourceId, response, (r) => {
+    if (canon(r.types) === canon(types)) return null;
     const { types: _old, ...rest } = r;
     return types === undefined ? rest : { ...rest, types };
   });
@@ -147,11 +150,11 @@ export function addScenario(
 }
 
 export function updateScenario(mock: MockFile, at: ScenarioAt, s: MockScenario): MockFile {
-  return withResponse(mock, at.sourceId, at.response, (r) =>
-    r.scenarios[at.scenario] === undefined
-      ? null
-      : { ...r, scenarios: r.scenarios.map((x, i) => (i === at.scenario ? s : x)) },
-  );
+  return withResponse(mock, at.sourceId, at.response, (r) => {
+    const current = r.scenarios[at.scenario];
+    if (current === undefined || canon(current) === canon(s)) return null;
+    return { ...r, scenarios: r.scenarios.map((x, i) => (i === at.scenario ? s : x)) };
+  });
 }
 
 export function removeScenario(mock: MockFile, at: ScenarioAt): MockFile {
@@ -316,5 +319,5 @@ export function mockChangeCount(live: unknown, edited: unknown): number {
   const now =
     edited === null || edited === undefined ? { ok: true as const, mock: null } : parseMock(edited);
   if (!was.ok || !now.ok) return 1;
-  return diffMock(was.mock, now.mock).length;
+  return Math.max(1, diffMock(was.mock, now.mock).length);
 }

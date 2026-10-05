@@ -6,6 +6,7 @@ import {
   addResponse,
   addScenario,
   diffMock,
+  mockChangeCount,
   mockCoverage,
   mockDiagnostics,
   moveScenario,
@@ -14,6 +15,7 @@ import {
   removeScenario,
   scaffoldResponse,
   setResponseDefault,
+  setResponseTypes,
   setSourceLatency,
   updateScenario,
 } from "./mock-model.js";
@@ -282,5 +284,34 @@ describe("diffMock (Review lines: pointers and counts only, never values)", () =
     const lines = diffMock(null, mock);
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.every((l) => l.kind === "responseAdded")).toBe(true);
+  });
+});
+
+describe("no-op identity and the change count", () => {
+  it("re-submitting an unchanged default, types or scenario returns the same mock", () => {
+    const first = mock.sources.stateSource?.responses[0];
+    expect(setResponseDefault(mock, "stateSource", 0, structuredClone(first?.default ?? {}))).toBe(
+      mock,
+    );
+    expect(setResponseTypes(mock, "stateSource", 0, first?.types)).toBe(mock);
+    const scenario = first?.scenarios[0];
+    if (scenario !== undefined)
+      expect(
+        updateScenario(
+          mock,
+          { sourceId: "stateSource", response: 0, scenario: 0 },
+          structuredClone(scenario),
+        ),
+      ).toBe(mock);
+  });
+
+  it("a change that lists no Review line still counts as one change", () => {
+    const edited = { ...mock, siteId: "other" };
+    expect(diffMock(mock, edited)).toEqual([]);
+    expect(mockChangeCount(mock, edited)).toBe(1);
+  });
+
+  it("an equal mock is no change", () => {
+    expect(mockChangeCount(mock, structuredClone(mock))).toBe(0);
   });
 });
