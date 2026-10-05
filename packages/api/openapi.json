@@ -5112,30 +5112,6 @@
                       "purged": {
                         "type": "boolean"
                       },
-                      "values": {
-                        "type": "object",
-                        "propertyNames": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}$"
-                        },
-                        "additionalProperties": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "maxLength": 4096
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
                       "sources": {
                         "maxItems": 8,
                         "type": "array",
@@ -5208,13 +5184,6 @@
                             },
                             "purged": {
                               "type": "boolean"
-                            },
-                            "payload": {
-                              "type": "object",
-                              "propertyNames": {
-                                "type": "string"
-                              },
-                              "additionalProperties": {}
                             }
                           },
                           "required": [
@@ -5361,30 +5330,6 @@
                 "purged": {
                   "type": "boolean"
                 },
-                "values": {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}$"
-                  },
-                  "additionalProperties": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "maxLength": 4096
-                      },
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
                 "sources": {
                   "maxItems": 8,
                   "type": "array",
@@ -5478,6 +5423,30 @@
                       "purged"
                     ],
                     "additionalProperties": false
+                  }
+                },
+                "values": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}$"
+                  },
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               },
@@ -5705,30 +5674,6 @@
                 "purged": {
                   "type": "boolean"
                 },
-                "values": {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}$"
-                  },
-                  "additionalProperties": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "maxLength": 4096
-                      },
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
                 "sources": {
                   "maxItems": 8,
                   "type": "array",
@@ -5826,6 +5771,30 @@
                       "hidden"
                     ],
                     "additionalProperties": false
+                  }
+                },
+                "values": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9]{0,63}$"
+                  },
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               },

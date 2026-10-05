@@ -118,14 +118,30 @@ describe("FR-062 GET /queries shapes (spec 5.1, 5.5)", () => {
     const purged = { ...bare, purged: true, sources: [{ ...bareResult, purged: true }] };
     expect(QueryDetailSchema.safeParse({ ...detail, parts: [purged] }).success).toBe(true);
   });
+  it("a list item never carries values or payloads (spec 5.1: detail route only)", () => {
+    const { values: _v, ...listPart } = part;
+    const { payload: _p, ...listResult } = returned;
+    const item = { ...detail, parts: [{ ...listPart, sources: [listResult] }] };
+    const parse = (r: unknown) =>
+      QueryListResponseSchema.safeParse({ requests: [r], nextCursor: null }).success;
+    expect(parse(item)).toBe(true);
+    expect(parse(detail)).toBe(false);
+    expect(
+      parse({ ...item, parts: [{ ...listPart, values: part.values, sources: [listResult] }] }),
+    ).toBe(false);
+    expect(parse({ ...item, parts: [{ ...listPart, sources: [returned] }] })).toBe(false);
+  });
   it("rejects an unknown source status and unknown keys", () => {
     const bad = { ...part, sources: [{ ...returned, status: "weird" }] };
     expect(QueryDetailSchema.safeParse({ ...detail, parts: [bad] }).success).toBe(false);
     expect(QueryDetailSchema.safeParse({ ...detail, extra: 1 }).success).toBe(false);
   });
   it("the list is newest first with a cursor, at most 100 per page", () => {
+    const { values: _v, ...listPart } = part;
+    const { payload: _p, ...listResult } = returned;
+    const listItem = { ...detail, parts: [{ ...listPart, sources: [listResult] }] };
     expect(
-      QueryListResponseSchema.safeParse({ requests: [detail], nextCursor: null }).success,
+      QueryListResponseSchema.safeParse({ requests: [listItem], nextCursor: null }).success,
     ).toBe(true);
     expect(ListQueriesQuerySchema.parse({ limit: "25", cursor: "abc" })).toEqual({
       limit: 25,

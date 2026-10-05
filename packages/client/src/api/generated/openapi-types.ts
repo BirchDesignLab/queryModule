@@ -1073,9 +1073,6 @@ export interface components {
                     skippedReason: string | null;
                     droppedSourceIds: string[];
                     purged: boolean;
-                    values?: {
-                        [key: string]: string | number | boolean | null;
-                    };
                     sources: {
                         resultId: string;
                         sourceId: string;
@@ -1087,9 +1084,6 @@ export interface components {
                         receivedAt: number | null;
                         timedOutAt: number | null;
                         purged: boolean;
-                        payload?: {
-                            [key: string]: unknown;
-                        };
                     }[];
                 }[];
             }[];
@@ -1112,9 +1106,6 @@ export interface components {
                 skippedReason: string | null;
                 droppedSourceIds: string[];
                 purged: boolean;
-                values?: {
-                    [key: string]: string | number | boolean | null;
-                };
                 sources: {
                     resultId: string;
                     sourceId: string;
@@ -1130,6 +1121,9 @@ export interface components {
                         [key: string]: unknown;
                     };
                 }[];
+                values?: {
+                    [key: string]: string | number | boolean | null;
+                };
             }[];
         };
         listAdminAudit200: {
@@ -1170,9 +1164,6 @@ export interface components {
                 skippedReason: string | null;
                 droppedSourceIds: string[];
                 purged: boolean;
-                values?: {
-                    [key: string]: string | number | boolean | null;
-                };
                 sources: {
                     resultId: string;
                     sourceId: string;
@@ -1189,6 +1180,9 @@ export interface components {
                     };
                     hidden: boolean;
                 }[];
+                values?: {
+                    [key: string]: string | number | boolean | null;
+                };
             }[];
         };
     };

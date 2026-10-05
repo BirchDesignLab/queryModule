@@ -67,7 +67,7 @@ export const ListQueriesQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(QUERY_LIST_MAX_LIMIT).optional(),
 });
 
-const sourceResultShape = {
+const sourceResultBase = {
   resultId: Uuid7Schema,
   sourceId: BoundedIdSchema,
   status: SourceStatusSchema,
@@ -77,18 +77,23 @@ const sourceResultShape = {
   receivedAt: EpochMsSchema.nullable(),
   timedOutAt: EpochMsSchema.nullable(),
   purged: z.boolean(),
+};
+const sourceResultShape = {
+  ...sourceResultBase,
   /** Present for a `returned`, unpurged result only. */
   payload: z.record(z.string(), z.unknown()).optional(),
 };
 export const QuerySourceResultSchema = z.strictObject(sourceResultShape);
+/** List item result: status only, no payload (payloads are detail-route only, spec 5.1). */
+export const QueryListSourceResultSchema = z.strictObject(sourceResultBase);
 /** Admin read with includeHidden: each result also says whether its owner hid it (FR-063). */
 export const AdminQuerySourceResultSchema = z.strictObject({
   ...sourceResultShape,
   hidden: z.boolean(),
 });
 
-function partSchema<S extends z.ZodType>(sources: S) {
-  return z.strictObject({
+function partBase<S extends z.ZodType>(sources: S) {
+  return {
     partId: PartIdSchema,
     parentPartId: ParentPartIdSchema.nullable(),
     origin: z.enum(["primary", "alsoRun"]),
@@ -98,9 +103,15 @@ function partSchema<S extends z.ZodType>(sources: S) {
     skippedReason: BoundedIdSchema.nullable(),
     droppedSourceIds: z.array(BoundedIdSchema),
     purged: z.boolean(),
+    sources: z.array(sources).max(MAX_SOURCES_PER_SUBMIT),
+  };
+}
+
+function partSchema<S extends z.ZodType>(sources: S) {
+  return z.strictObject({
+    ...partBase(sources),
     /** Absent when the part's values were shredded. */
     values: z.record(FieldKeySchema, SubmitValueSchema).optional(),
-    sources: z.array(sources).max(MAX_SOURCES_PER_SUBMIT),
   });
 }
 
@@ -118,8 +129,11 @@ function detailSchema<P extends z.ZodType>(parts: P) {
 
 export const QueryPartSchema = partSchema(QuerySourceResultSchema);
 export const QueryDetailSchema = detailSchema(QueryPartSchema);
+/** List item part: per-source status, no decrypted values or payloads (spec 5.1). */
+export const QueryListPartSchema = z.strictObject(partBase(QueryListSourceResultSchema));
+export const QueryListItemSchema = detailSchema(QueryListPartSchema);
 export const QueryListResponseSchema = z.strictObject({
-  requests: z.array(QueryDetailSchema).max(QUERY_LIST_MAX_LIMIT),
+  requests: z.array(QueryListItemSchema).max(QUERY_LIST_MAX_LIMIT),
   nextCursor: z.string().min(1).max(256).nullable(),
 });
 
