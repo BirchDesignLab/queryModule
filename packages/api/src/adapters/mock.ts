@@ -6,13 +6,9 @@ import type {
   SourcePayload,
 } from "@querymodule/core/contracts";
 import type { LoadedConfig } from "../config/load";
-import type { Timers } from "../dispatch/timers";
+import { abortError, type Timers } from "../dispatch/timers";
 import type { Logger } from "../log/logger";
 import { type AdapterFactory, type SourceAdapter, SourceError, type SourceRequest } from "./types";
-
-function abortError(): DOMException {
-  return new DOMException("The operation was aborted", "AbortError");
-}
 
 /**
  * The source's response entry for the request (spec 5.4): queryType matches and every `types`

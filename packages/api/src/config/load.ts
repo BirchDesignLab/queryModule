@@ -264,11 +264,9 @@ async function checkChain(
     const rawMock = await src.readMock(siteConfig.site.id);
     const mockErrors = checkMockCoverage(siteConfig, rawMock, `${siteConfig.site.id}.json`);
     if (mockErrors.length > 0) return fail(mockErrors, warnings);
-    // Coverage passed, so the mock parses; kept for the mock adapter (#493).
-    const parsed = MockFileSchema.safeParse(rawMock.ok ? rawMock.value : undefined);
-    if (!parsed.success)
-      return fail([{ level: "error", path: "/mock", key: "config.mockSchema", params: {} }]);
-    mock = parsed.data;
+    // Coverage passed, so the mock parsed there (it reports config.mockSchema otherwise); kept for
+    // the mock adapter (#493). parse() cannot throw here; if it ever did, loading fails closed.
+    mock = MockFileSchema.parse(rawMock.ok ? rawMock.value : undefined);
   }
 
   const locales: Record<string, Record<string, unknown>> = {};

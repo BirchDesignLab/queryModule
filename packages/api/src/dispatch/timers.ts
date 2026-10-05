@@ -4,7 +4,8 @@ export interface Timers {
   sleep(ms: number, signal: AbortSignal): Promise<void>;
 }
 
-function abortError(): DOMException {
+/** The AbortError every timer and adapter wait rejects with when its signal aborts. */
+export function abortError(): DOMException {
   return new DOMException("The operation was aborted", "AbortError");
 }
 
