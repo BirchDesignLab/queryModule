@@ -1,20 +1,18 @@
 import { type ConfigDocument, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
-import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import type { LoadedConfig } from "../../src/config/load";
-import { requestKey, sourceResult } from "../../src/db/schema";
-import { open } from "../../src/keys/aead";
-import { payloadAad, unwrapRequestKey } from "../../src/keys/request-keys";
 import { grantRole } from "../../src/ops/grant-role";
 import { ALL_ON, API, withSiteConfig } from "../helpers/admin-config";
-import { TEST_SECRETS } from "../helpers/fixture";
 import { manualTime } from "../helpers/manual-time";
+import { openResults } from "../helpers/results";
 import { createTestApp } from "../helpers/test-app";
 
 // ADR-0011 item 3, spec 5.2 step 5 and 10.4 (FR-044): a job runs on the config snapshot pinned at
 // prepare. A publish while the job waits in the dispatcher queue changes neither its deadline
 // (the TIMEOUT source's timeoutMs) nor the mock it is answered from; a submit after the publish
-// runs on the new version. Mock data only: TIMEOUT and ZZ-#### plates (spec 5.4, 10.8).
+// runs on the new version. Both of the pinned submit's jobs are queued across the publish (each
+// source's cap is full), so the national one proves the deadline and the state one the mock.
+// Mock data only: TIMEOUT and ZZ-#### plates (spec 5.4, 10.8).
 const PASSWORD = "correct-horse-battery-1";
 /** stateSource's VEH default in version 2, so an answer names the mock it came from. */
 const V2_DEFAULT = { status: "NO RECORD", remarks: "VERSION TWO" };
@@ -26,7 +24,7 @@ interface MockShape {
 describe("dispatch reads the snapshot pinned at prepare (ADR-0011 item 3, spec 10.4)", () => {
   it("a job queued across a publish keeps version 1's deadline and mock; a later submit uses version 2", async () => {
     const time = manualTime();
-    // random 0: stateSource answers at 50 ms; nationalSource never answers TIMEOUT
+    // random 0: stateSource answers at 50 ms, nationalSource at 100 ms but never to TIMEOUT
     const t = await createTestApp({
       env: { SITE_CONFIG: ALL_ON },
       clock: time.clock,
@@ -73,40 +71,22 @@ describe("dispatch reads the snapshot pinned at prepare (ADR-0011 item 3, spec 1
       expect(r.status).toBe(202);
       return SubmitQueryResponseSchema.parse(await r.json());
     }
-    async function rows(correlationId: string) {
-      const [key] = await t.deps.db
-        .select()
-        .from(requestKey)
-        .where(and(eq(requestKey.correlationId, correlationId), eq(requestKey.scope, "payload")));
-      if (!key) throw new Error("no payload request key");
-      const dek = unwrapRequestKey(TEST_SECRETS.dataKey, key);
-      const all = await t.deps.db
-        .select()
-        .from(sourceResult)
-        .where(eq(sourceResult.correlationId, correlationId))
-        .orderBy(asc(sourceResult.sourceId));
-      return all.map((r) => ({
+    /** The request's rows (one part) with their payloads opened. */
+    const rows = async (correlationId: string) =>
+      (await openResults(t, correlationId)).map((r) => ({
         sourceId: r.sourceId,
         status: r.status,
         timedOutAt: r.timedOutAt,
-        payload:
-          r.payloadCiphertext && r.payloadIv && r.payloadTag
-            ? (JSON.parse(
-                open(
-                  dek,
-                  { ciphertext: r.payloadCiphertext, iv: r.payloadIv, tag: r.payloadTag },
-                  payloadAad(r.resultId),
-                ).toString("utf8"),
-              ) as unknown)
-            : null,
+        payload: r.payload,
       }));
-    }
 
-    // four state-only jobs fill stateSource's cap (4), so the next state job waits in the queue
+    // four state-only and four national-only jobs fill both sources' caps (4), so both of the next
+    // submit's jobs wait in the queue across the publish
     for (let k = 1; k <= 4; k += 1) await submit(`ZZ-000${k}`, ["stateSource"]);
+    for (let k = 1; k <= 4; k += 1) await submit(`ZZ-010${k}`, ["nationalSource"]);
     const pinned = await submit("TIMEOUT", ["stateSource", "nationalSource"]);
-    expect(gets).toHaveLength(5);
-    expect(t.deps.dispatcher.inFlight()).toBe(6);
+    expect(gets).toHaveLength(8);
+    expect(t.deps.dispatcher.inFlight()).toBe(10);
 
     // publish version 2 while that job is queued: nationalSource timeoutMs 2000, a changed mock
     const exported = await t.request(`${API}/versions/1/export`, {
@@ -141,18 +121,23 @@ describe("dispatch reads the snapshot pinned at prepare (ADR-0011 item 3, spec 1
     const v2 = t.deps.config.current();
     expect(v2.configHash).not.toBe(v1.configHash);
     expect(v2.siteConfig.sources.find((s) => s.id === "nationalSource")?.timeoutMs).toBe(2_000);
-    expect(gets).toHaveLength(5);
+    expect(gets).toHaveLength(8);
 
-    // the four answers free the cap; the queued job starts after the publish, on version 1
+    // the state answers (50 ms) free stateSource's cap, the national answers (100 ms)
+    // nationalSource's: both queued jobs start after the publish, on version 1
     await time.run(50);
-    await vi.waitFor(() => expect(gets).toHaveLength(6));
-    // identity, not equality: every call so far, the queued job's included, got version 1
+    await vi.waitFor(() => expect(gets).toHaveLength(9));
+    await time.run(50);
+    await vi.waitFor(() => expect(gets).toHaveLength(10));
+    // identity, not equality: every call so far, the queued jobs' included, got version 1
     expect(gets.every((s) => s === v1)).toBe(true);
     const after = await submit("TIMEOUT", ["stateSource", "nationalSource"]);
-    expect(gets).toHaveLength(8);
-    expect(gets.slice(6).every((s) => s === v2)).toBe(true);
+    expect(gets).toHaveLength(12);
+    expect(gets.slice(10).every((s) => s === v2)).toBe(true);
 
-    // version 2's deadline (2 s) passes: only the later submit's national row times out
+    // version 2's deadline (2 s from the later submit, ack + 2100 for the pinned one) passes: only
+    // the later submit's national row times out; the pinned national job, queued across the
+    // publish and started at ack + 100, keeps version 1's 10 s deadline
     await time.run(2_000);
     await vi.waitFor(async () =>
       expect((await rows(after.correlationId)).map((r) => r.status)).toEqual([
@@ -175,7 +160,12 @@ describe("dispatch reads the snapshot pinned at prepare (ADR-0011 item 3, spec 1
     ]);
 
     // version 1's deadline (10 s): the pinned job times out, its state answer from version 1's mock
-    await time.run(10_000 - 2_050);
+    await time.run(10_000 - 2_100 - 1);
+    expect((await rows(pinned.correlationId)).map((r) => r.status)).toEqual([
+      "pending",
+      "returned",
+    ]);
+    await time.run(1);
     await vi.waitFor(() => expect(t.deps.dispatcher.inFlight()).toBe(0));
     expect(await rows(pinned.correlationId)).toEqual([
       {

@@ -1,11 +1,7 @@
 import { SubmitQueryResponseSchema } from "@querymodule/core/contracts";
-import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { requestKey, sourceResult } from "../../src/db/schema";
-import { open } from "../../src/keys/aead";
-import { payloadAad, unwrapRequestKey } from "../../src/keys/request-keys";
-import { TEST_SECRETS } from "../helpers/fixture";
 import { manualTime } from "../helpers/manual-time";
+import { openResults } from "../helpers/results";
 import { createTestApp } from "../helpers/test-app";
 
 // Spec 10.4 (FR-043): submits run end to end through the dispatcher, the shipped mock and T2.
@@ -46,34 +42,13 @@ async function setup() {
     return ack;
   }
   /** Each row of the request with its sealed payload opened (null when none). */
-  async function results(correlationId: string) {
-    const [key] = await t.deps.db
-      .select()
-      .from(requestKey)
-      .where(and(eq(requestKey.correlationId, correlationId), eq(requestKey.scope, "payload")));
-    if (!key) throw new Error("no payload request key");
-    const dek = unwrapRequestKey(TEST_SECRETS.dataKey, key);
-    const rows = await t.deps.db
-      .select()
-      .from(sourceResult)
-      .where(eq(sourceResult.correlationId, correlationId))
-      .orderBy(asc(sourceResult.partId), asc(sourceResult.sourceId));
-    return rows.map((r) => ({
+  const results = async (correlationId: string) =>
+    (await openResults(t, correlationId)).map((r) => ({
       partId: r.partId,
       sourceId: r.sourceId,
       status: r.status,
-      payload:
-        r.payloadCiphertext && r.payloadIv && r.payloadTag
-          ? (JSON.parse(
-              open(
-                dek,
-                { ciphertext: r.payloadCiphertext, iv: r.payloadIv, tag: r.payloadTag },
-                payloadAad(r.resultId),
-              ).toString("utf8"),
-            ) as unknown)
-          : null,
+      payload: r.payload,
     }));
-  }
   return { t, submit, results };
 }
 
