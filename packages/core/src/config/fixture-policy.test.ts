@@ -137,8 +137,23 @@ describe("key allowlist", () => {
       }),
     ).toEqual([]);
   });
-  it("ignores null and scalar array members", () => {
-    expect(check({ warrants: [null, 3, { offense: "FAILURE TO APPEAR" }] })).toEqual([]);
+  it("r1:N1 rejects scalar array elements under container keys", () => {
+    expect(
+      check({ warrants: [null, 3, "DOB 04/12/1985", true, { offense: "FAILURE TO APPEAR" }] }),
+    ).toEqual([
+      { pointer: `${RESPOND}/warrants/0`, key: "fixture.unknownKey" },
+      { pointer: `${RESPOND}/warrants/1`, key: "fixture.unknownKey" },
+      { pointer: `${RESPOND}/warrants/2`, key: "fixture.unknownKey" },
+      { pointer: `${RESPOND}/warrants/3`, key: "fixture.unknownKey" },
+    ]);
+    expect(check({ owners: ["JOHN SMITH"] })).toEqual([
+      { pointer: `${RESPOND}/owners/0`, key: "fixture.unknownKey" },
+    ]);
+  });
+  it("r1:N1 rejects a scalar in a nested array", () => {
+    expect(check({ owners: [["JOHN SMITH"]] })).toEqual([
+      { pointer: `${RESPOND}/owners/0/0`, key: "fixture.unknownKey" },
+    ]);
   });
   it("escapes ~ and / in pointers", () => {
     expect(check({ "a/b~c": 1 })).toEqual([

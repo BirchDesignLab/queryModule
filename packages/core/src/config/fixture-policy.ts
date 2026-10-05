@@ -173,7 +173,9 @@ const escapePointer = (s: string): string => s.replace(/~/g, "~0").replace(/\//g
 function walk(value: unknown, pointer: string, out: FixtureDiagnostic[]): void {
   if (Array.isArray(value)) {
     value.forEach((v, i) => {
-      walk(v, `${pointer}/${i}`, out);
+      const at = `${pointer}/${i}`;
+      if (Array.isArray(v) || isPlainObject(v)) walk(v, at, out);
+      else out.push({ pointer: at, key: "fixture.unknownKey" });
     });
     return;
   }
