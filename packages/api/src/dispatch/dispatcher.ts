@@ -59,10 +59,10 @@ export type Outcome =
 
 export interface Dispatcher {
   /**
-   * After stopIntake() or abortAll() it refuses: the rows stay pending and the next start sweeps
-   * them.
+   * True when the jobs are taken. After stopIntake() or abortAll() it refuses and returns false:
+   * the rows stay pending and the next start sweeps them.
    */
-  enqueue(jobs: readonly DispatchJob[]): void;
+  enqueue(jobs: readonly DispatchJob[]): boolean;
   /** Queued, running, and reported but with onOutcome not yet resolved. */
   inFlight(): number;
   /** The latest deadline among in-flight jobs (the drain bound); null when idle. */
@@ -244,13 +244,14 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
     enqueue(jobs) {
       if (!intake || aborted) {
         d.logger.warn("dispatch enqueue refused", { count: jobs.length });
-        return;
+        return false;
       }
       for (const job of jobs) {
         queue.push(job);
         tracked.add(job);
       }
       pump();
+      return true;
     },
     inFlight: () => tracked.size,
     maxDeadline() {

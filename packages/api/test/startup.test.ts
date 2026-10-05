@@ -172,6 +172,17 @@ describe("SEC-006 startup fails closed", () => {
     await stop(s);
     await expect(fetch(`http://127.0.0.1:${s.port}/api/v1/health`)).rejects.toThrow();
   });
+  it("close() (the fatal path) aborts dispatch and closes the port and the DB, never draining", async () => {
+    const s = await startServer(await envWith(), { logSink: () => {} });
+    const abortAll = vi.spyOn(s.deps.dispatcher, "abortAll");
+    const drain = vi.spyOn(s.deps.dispatcher, "drain");
+    await s.close();
+    expect(abortAll).toHaveBeenCalledTimes(1);
+    expect(drain).not.toHaveBeenCalled();
+    expect(s.deps.lifecycle.draining).toBe(false);
+    expect(s.deps.db.$client.closed).toBe(true);
+    await expect(fetch(`http://127.0.0.1:${s.port}/api/v1/health`)).rejects.toThrow();
+  });
   it("refuses without DATA_KEY", async () => {
     await expect(
       startServer(await envWith({ DATA_KEY: "" }), { logSink: () => {} }),

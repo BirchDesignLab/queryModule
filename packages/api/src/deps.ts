@@ -66,6 +66,8 @@ export interface AppDeps {
   /** Runs acknowledged (part, source) jobs under deadlines and caps (spec 5.2 step 5). */
   dispatcher: Dispatcher;
   timers: Timers;
+  /** Set by the SIGTERM drain (spec 5.2): new submits get 503 unavailable from then on. */
+  lifecycle: { draining: boolean };
   /**
    * Fail closed on an error that leaves the process unsafe to continue (spec 8.1): aborts every
    * adapter call first (SEC-010), then exits through main.ts fail(), never the SIGTERM drain.
@@ -174,6 +176,7 @@ export async function buildDeps(o: {
       adapters,
       dispatcher,
       timers,
+      lifecycle: { draining: false },
       // No adapter call continues while audit is broken (SEC-010); then fail closed.
       fatal(e) {
         dispatcher.abortAll();

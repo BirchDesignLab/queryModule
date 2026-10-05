@@ -15,7 +15,7 @@ import { DeployEnvError, readDeployEnv } from "./env";
 import { KeyCanaryError } from "./keys/canary";
 import { type ErrorFields, errorFields } from "./log/error-fields";
 import { loadSecrets, SecretConfigError } from "./secrets";
-import { attachWebSocket } from "./ws/server";
+import { attachWebSocket, type WsHandle } from "./ws/server";
 
 export class StartupRefusedError extends Error {
   constructor(reason: string) {
@@ -131,10 +131,76 @@ export async function bootstrap(
   return deps;
 }
 
+/** The drain's slack past the latest in-flight deadline (spec 5.2), for T2 to commit. */
+export const DRAIN_SLACK_MS = 5_000;
+
+/**
+ * Counts the server's in-flight HTTP requests (WebSocket upgrades are not requests), so the
+ * drain waits for them without waiting on open feed sockets.
+ */
+function trackRequests(server: Server): () => Promise<void> {
+  let open = 0;
+  const waiters = new Set<() => void>();
+  server.on("request", (_req, res) => {
+    open += 1;
+    res.once("close", () => {
+      open -= 1;
+      if (open > 0) return;
+      for (const wake of waiters) wake();
+      waiters.clear();
+    });
+  });
+  return () =>
+    open === 0
+      ? Promise.resolve()
+      : new Promise<void>((r) => {
+          waiters.add(r);
+        });
+}
+
+/**
+ * The SIGTERM drain (spec 5.2; NFR-003), in this order: mark the app draining (new submits get
+ * 503 unavailable), refuse new WebSocket upgrades, stop listening and wait for in-flight HTTP
+ * requests (a submit already past the 503 check finishes T1 and enqueues), stop dispatch intake
+ * (anything later stays pending for the next start's sweep), wait for in-flight dispatch up to
+ * max(0, maxDeadline - now) + DRAIN_SLACK_MS, then close the sockets and the DB and log stopped.
+ * The fatal path (AppDeps.fatal) never runs this drain. Call right after the server listens.
+ */
+export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): () => Promise<void> {
+  const httpIdle = trackRequests(server);
+  return async () => {
+    deps.lifecycle.draining = true;
+    ws.stopAccepting();
+    server.close();
+    server.closeIdleConnections();
+    await httpIdle();
+    // keep-alive connections that served the last requests are idle now
+    server.closeIdleConnections();
+    deps.dispatcher.stopIntake();
+    const now = deps.clock.now();
+    const latest = deps.dispatcher.maxDeadline() ?? now;
+    await deps.dispatcher.drain(Math.max(0, latest - now) + DRAIN_SLACK_MS);
+    await ws.close();
+    closeDb(deps);
+    deps.logger.info("stopped");
+  };
+}
+
+/** Idempotent: the fatal close and a SIGTERM drain may both reach it. */
+function closeDb(deps: AppDeps): void {
+  if (!deps.db.$client.closed) deps.db.$client.close();
+}
+
 export interface RunningServer {
   port: number;
   deps: AppDeps;
+  /** The SIGTERM drain (createDrainStop). */
   stop(): Promise<void>;
+  /**
+   * The fatal path's close (spec 8.1), never the drain: aborts every adapter call, then closes
+   * the sockets, the server and the DB without waiting on dispatch.
+   */
+  close(): Promise<void>;
 }
 
 export async function startServer(
@@ -155,6 +221,7 @@ export async function startServer(
     throw e;
   }
   const ws = attachWebSocket(server, deps);
+  const stop = createDrainStop(deps, server, ws);
   const port = (server.address() as AddressInfo).port;
   const live = deps.config.current();
   deps.logger.info("listening", {
@@ -165,15 +232,16 @@ export async function startServer(
   return {
     port,
     deps,
-    async stop() {
+    stop,
+    async close() {
+      deps.dispatcher.abortAll();
       ws.stopAccepting();
       await ws.close();
       await new Promise<void>((r) => {
         server.close(() => r());
         server.closeIdleConnections();
       });
-      deps.db.$client.close();
-      deps.logger.info("stopped");
+      closeDb(deps);
     },
   };
 }

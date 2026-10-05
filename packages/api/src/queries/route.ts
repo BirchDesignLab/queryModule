@@ -29,6 +29,14 @@ export function lostIdempotencyRace(e: unknown): boolean {
   return false;
 }
 
+/** The dispatcher refused jobs whose T1 has committed (intake stopped or aborted). */
+export class DispatchRefusedError extends Error {
+  constructor() {
+    super("dispatch: enqueue refused");
+    this.name = "DispatchRefusedError";
+  }
+}
+
 /**
  * The roles that may submit a query (ADR-0011 item 6, checker ruling 09-29-26; #505 T27 Q2): an
  * allowlist, so implementer (config only) and any role added later are refused until listed.
@@ -114,7 +122,9 @@ export function bindJobs(
  * are bound to T1's rows as soon as it returns; a throw there is logged by class and ids and
  * fails closed (d.fatal), so committed rows are never silently left undispatched. The 202 never
  * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
- * nothing: the winner enqueued its own rows.
+ * nothing: the winner enqueued its own rows. While the server drains (spec 5.2) a new submit gets
+ * 503 unavailable before T1; a replay of an acknowledged one still gets its stored 202. A refused
+ * enqueue after T1 (a bug path under the stop order) takes the same backstop.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
   app.post("/api/v1/queries", requireSession(d.identity), async (c) => {
@@ -122,6 +132,8 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     const a = await admitSubmit(c, d);
     if (a.kind === "reject") return a.response;
     if (a.kind === "replay") return c.json(a.body, 202);
+    // SIGTERM drain (spec 5.2): a new submit is refused before T1, so no row is written.
+    if (d.lifecycle.draining) return apiError(c, "unavailable");
     const principal = c.get("principal");
     const p = prepareSubmit(c, d, a.raw, principal);
     if (!p.ok) return p.response;
@@ -139,7 +151,9 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       acknowledgedMonoMs = d.monotonic.nowMs();
     }
     try {
-      d.dispatcher.enqueue(bindJobs(templates, ack, acknowledgedMonoMs));
+      if (!d.dispatcher.enqueue(bindJobs(templates, ack, acknowledgedMonoMs))) {
+        throw new DispatchRefusedError();
+      }
     } catch (e) {
       // Backstop (AW3 critic b): T1 committed, so the 202 stands; the process fails closed and the
       // restart sweep settles the pending rows as interrupted, with audit (spec 5.2, 8.1).

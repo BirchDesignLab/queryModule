@@ -57,7 +57,7 @@ async function setup(o: { onFatal?: (e: unknown) => void } = {}) {
   const enqueue = t.deps.dispatcher.enqueue.bind(t.deps.dispatcher);
   const enqueueSpy = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation((js) => {
     jobs.push(...js);
-    enqueue(js);
+    return enqueue(js);
   });
   async function submit(plate: string, sourceIds = ["stateSource", "nationalSource"]) {
     const r = await t.request("/api/v1/queries", {
@@ -353,11 +353,12 @@ describe("recordOutcome: transaction T2 (spec 5.2 step 6, FR-043, SEC-010, SEC-0
       partId: 0,
       error: { name: "Error" },
     });
-    // the dispatcher refuses after abortAll: a later submit is acknowledged but calls no adapter
+    // the dispatcher refuses after abortAll: a later submit is acknowledged but calls no adapter,
+    // and its refused enqueue takes the route's backstop, failing closed again (manager ruling M1)
     await submit(PLATE, ["stateSource"]);
     await time.run(10_000);
     expect(get).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(["abortAll", "exit"]);
+    expect(order).toEqual(["abortAll", "exit", "abortAll", "exit"]);
     expectCleanLogs(t, await payloadDek(t, ack.correlationId));
   });
 
@@ -370,6 +371,7 @@ describe("recordOutcome: transaction T2 (spec 5.2 step 6, FR-043, SEC-010, SEC-0
     const s = await setup();
     s.enqueueSpy.mockImplementation((js) => {
       s.jobs.push(...js);
+      return true;
     });
     await s.submit(PLATE);
     const [a, b] = s.jobs;
@@ -427,6 +429,7 @@ describe("recordOutcome edges (SEC-011, SEC-012, spec 5.9)", () => {
     // capture only: no adapter runs, the test settles each job itself
     s.enqueueSpy.mockImplementation((js) => {
       s.jobs.push(...js);
+      return true;
     });
     const ack = await s.submit(PLATE, ["stateSource"]);
     const job = s.jobs[0];

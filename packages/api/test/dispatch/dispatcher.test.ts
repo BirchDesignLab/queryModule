@@ -495,7 +495,7 @@ describe("createDispatcher in-flight, drain and shutdown (spec 5.2, 11)", () => 
   it("after stopIntake enqueue refuses: no adapter call, nothing in flight, one log line", async () => {
     const s = setup();
     s.dispatcher.stopIntake();
-    s.dispatcher.enqueue([job(), job()]);
+    expect(s.dispatcher.enqueue([job(), job()])).toBe(false);
     await s.time.advance(0);
     expect(s.calls).toHaveLength(0);
     expect(s.seen).toHaveLength(0);
@@ -507,7 +507,7 @@ describe("createDispatcher in-flight, drain and shutdown (spec 5.2, 11)", () => 
 
   it("a job already running when intake stops still settles", async () => {
     const s = setup();
-    s.dispatcher.enqueue([job()]);
+    expect(s.dispatcher.enqueue([job()])).toBe(true);
     s.dispatcher.stopIntake();
     s.calls[0]?.resolve(PAYLOAD);
     await s.time.advance(0);
@@ -532,7 +532,7 @@ describe("createDispatcher in-flight, drain and shutdown (spec 5.2, 11)", () => 
   it("after abortAll enqueue refuses and no new adapter call starts", async () => {
     const s = setup();
     s.dispatcher.abortAll();
-    s.dispatcher.enqueue([job()]);
+    expect(s.dispatcher.enqueue([job()])).toBe(false);
     await s.time.advance(0);
     expect(s.calls).toHaveLength(0);
     expect(s.dispatcher.inFlight()).toBe(0);
