@@ -29,5 +29,28 @@
     "story": "A5",
     "milestone": "m1",
     "files": ["packages/core/src/terminal/roundtrip.a5.test.ts", "apps/web/e2e/a5-toggle.spec.ts"]
+  },
+  {
+    "story": "A6",
+    "milestone": "m2",
+    "files": ["packages/api/test/queries/submit.a6.test.ts", "apps/web/e2e/a6-ack.spec.ts"]
+  },
+  {
+    "story": "A7",
+    "milestone": "m2",
+    "files": [
+      "packages/core/src/response/assess-result.a7.test.ts",
+      "apps/web/e2e/a7-highlight.spec.ts"
+    ]
+  },
+  {
+    "story": "A8",
+    "milestone": "m2",
+    "files": ["packages/core/src/response/map-response.a8.test.ts", "apps/web/e2e/a8-mapping.spec.ts"]
+  },
+  {
+    "story": "A9",
+    "milestone": "m2",
+    "files": ["packages/api/test/audit/query-audit.a9.test.ts"]
   }
 ]
