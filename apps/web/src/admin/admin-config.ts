@@ -96,7 +96,11 @@ function viewOf(siteConfig: JsonObject): JsonObject {
 
 /** The server document as the builder's draft: the client-shaped siteConfig and the label overlay. */
 export function editorOf(document: ConfigDocument): EditState {
-  return { doc: viewOf(document.siteConfig), labels: structuredClone(document.locales) };
+  return {
+    doc: viewOf(document.siteConfig),
+    labels: structuredClone(document.locales),
+    mock: document.mock === undefined ? null : structuredClone(document.mock),
+  };
 }
 
 /**
@@ -124,6 +128,8 @@ export function startOf(
       liveLabels: live.labels,
       savedDoc: own.doc,
       savedLabels: own.labels,
+      savedMock: own.mock ?? null,
+      liveMock: live.mock ?? null,
     },
   };
 }
@@ -171,12 +177,14 @@ function mergeKey(key: string, base: unknown, edited: unknown): unknown {
 /**
  * The builder's draft as a server document. A section the builder did not change keeps the base
  * document's own value (no defaults written in, no server-only keys lost); a changed one takes the
- * edit with its server-only keys merged back.
+ * edit with its server-only keys merged back. The mock (CFG-2) is the same: an edit replaces the
+ * base mock, an untouched one (or none passed) leaves the base's own.
  */
 export function documentFrom(
   base: ConfigDocument,
   doc: JsonObject,
   labels: LabelOverlay,
+  mock?: JsonObject | null,
 ): ConfigDocument {
   const view = viewOf(base.siteConfig);
   const siteConfig: JsonObject = { ...base.siteConfig };
@@ -189,7 +197,9 @@ export function documentFrom(
       .filter(([, texts]) => Object.keys(texts).length > 0)
       .map(([locale, texts]) => [locale, { ...texts }]),
   );
-  return { siteConfig, locales, ...(base.mock === undefined ? {} : { mock: base.mock }) };
+  const edited = mock !== undefined && mock !== null && !same(mock, base.mock);
+  const kept = edited ? mock : base.mock;
+  return { siteConfig, locales, ...(kept === undefined ? {} : { mock: kept }) };
 }
 
 export type AdminConfig = ReturnType<typeof AdminConfigResponseSchema.parse>;

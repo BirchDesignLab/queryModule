@@ -15,6 +15,7 @@ import {
 import { configDraftStore, useDraft } from "./builder-store.js";
 import type { JsonObject, LabelOverlay } from "./draft.js";
 import type { DraftIssue } from "./issues.js";
+import { mockChangeCount } from "./mock-model.js";
 
 /**
  * Save, review and publish on the server draft (Task 33 part 2a, #358, BR-001, UX-004). The draft
@@ -27,6 +28,7 @@ import type { DraftIssue } from "./issues.js";
 interface ServerIssues {
   doc: JsonObject;
   labels: LabelOverlay;
+  mock: JsonObject | null;
   issues: DraftIssue[];
 }
 
@@ -67,6 +69,7 @@ export interface PublishFlow {
 }
 
 const labelText = (labels: LabelOverlay): string => JSON.stringify(labels);
+const mockText = (mock: JsonObject | null | undefined): string => JSON.stringify(mock ?? null);
 
 function labelChanges(labels: LabelOverlay, live: LabelOverlay): number {
   let n = 0;
@@ -84,7 +87,7 @@ export function usePublishFlow(): PublishFlow {
   const { api, announcer, queryClient } = services;
   const t = useT();
   const store = configDraftStore(services);
-  const { doc, labels, server } = useDraft();
+  const { doc, labels, mock, server } = useDraft();
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
   const [conflict, setConflict] = useState(false);
@@ -103,13 +106,18 @@ export function usePublishFlow(): PublishFlow {
     if (server === null || doc === null) return false;
     return (
       (doc !== server.savedDoc && JSON.stringify(doc) !== JSON.stringify(server.savedDoc)) ||
-      labelText(labels) !== labelText(server.savedLabels)
+      labelText(labels) !== labelText(server.savedLabels) ||
+      mockText(mock) !== mockText(server.savedMock)
     );
-  }, [doc, labels, server]);
+  }, [doc, labels, mock, server]);
   const changeCount = useMemo(() => {
     if (server === null || doc === null) return 0;
-    return diffConfig(server.liveDoc, doc).length + labelChanges(labels, server.liveLabels);
-  }, [doc, labels, server]);
+    return (
+      diffConfig(server.liveDoc, doc).length +
+      labelChanges(labels, server.liveLabels) +
+      mockChangeCount(server.liveMock, mock)
+    );
+  }, [doc, labels, mock, server]);
 
   /** Runs `work` as the one action in flight; a second request while it runs does nothing. */
   const exclusive = useCallback(async (work: () => Promise<void>) => {
@@ -130,8 +138,8 @@ export function usePublishFlow(): PublishFlow {
   > => {
     const s = store.getState();
     if (s.server === null || s.doc === null) return { ok: false };
-    const sent = { doc: s.doc, labels: s.labels };
-    const document = documentFrom(s.server.document, sent.doc, sent.labels);
+    const sent = { doc: s.doc, labels: s.labels, mock: s.mock };
+    const document = documentFrom(s.server.document, sent.doc, sent.labels, sent.mock);
     const result = await saveDraft(api, s.server.baseVersion, document);
     if (!result.ok) {
       if (result.reason === "conflict") setConflict(true);
@@ -163,7 +171,7 @@ export function usePublishFlow(): PublishFlow {
         setNotice(null);
         const s = store.getState();
         if (s.server === null || s.doc === null) return;
-        const current = { doc: s.doc, labels: s.labels };
+        const current = { doc: s.doc, labels: s.labels, mock: s.mock };
         let version = s.server.draftVersion;
         let document = s.server.document;
         if (version === null || unsaved) {
@@ -221,7 +229,7 @@ export function usePublishFlow(): PublishFlow {
     try {
       const config = await fetchAdminConfig(api);
       const live = editorOf(config.live.document);
-      store.getState().setLive(live.doc, live.labels);
+      store.getState().setLive(live.doc, live.labels, live.mock);
       return true;
     } catch {
       return false;
@@ -243,6 +251,7 @@ export function usePublishFlow(): PublishFlow {
               setFound({
                 doc: s.doc,
                 labels: s.labels,
+                mock: s.mock,
                 issues: result.errors.map((e) => ({
                   level: "error",
                   pointer: typeof e.params?.path === "string" ? e.params.path : "",
@@ -314,7 +323,9 @@ export function usePublishFlow(): PublishFlow {
   }, [doc]);
 
   const serverIssues =
-    found !== null && found.doc === doc && found.labels === labels ? found.issues : null;
+    found !== null && found.doc === doc && found.labels === labels && found.mock === mock
+      ? found.issues
+      : null;
   return {
     unsaved,
     changeCount,

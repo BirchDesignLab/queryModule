@@ -27,7 +27,7 @@ export function useLiveDoc(): { doc: JsonObject | null; check: LiveCheck } {
         // for the previous session is dropped.
         if (!open || store.getState().doc === null) return;
         const live = editorOf(next.live.document);
-        store.getState().setLive(live.doc, live.labels);
+        store.getState().setLive(live.doc, live.labels, live.mock);
         setCheck("done");
       },
       () => {
