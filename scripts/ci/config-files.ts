@@ -1,6 +1,7 @@
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  checkFixturePolicy,
   checkMockCoverage,
   type Diagnostic,
   extendsOf,
@@ -9,6 +10,7 @@ import {
   resolveSiteShape,
   validateResolved,
 } from "@querymodule/core/config";
+import { MockFileSchema } from "@querymodule/core/contracts";
 import { TOKEN_NAMES } from "@querymodule/tokens";
 import {
   BUILTIN_ADAPTER_KINDS,
@@ -16,6 +18,7 @@ import {
   preResolvedChecks,
   tokensContrast,
 } from "../../packages/api/src/config/load";
+import { checkMockFiles } from "../mock-data/generate";
 import { toPosixRel } from "./cli-io";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -151,6 +154,19 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
     mockErrors = isUnreadable(mock)
       ? [unreadableAt("/mock", { file: mockFile })]
       : checkMockCoverage(config, mock, mockFile);
+    // Fixture policy (spec 5.4, 10.8): only on a mock that parses; schema faults are reported above.
+    const parsed =
+      !isUnreadable(mock) && mock.ok ? MockFileSchema.safeParse(mock.value) : undefined;
+    if (parsed?.success) {
+      for (const d of checkFixturePolicy(parsed.data)) {
+        mockErrors.push({
+          level: "error",
+          path: `/mock${d.pointer}`,
+          key: d.key,
+          params: { file: mockFile },
+        });
+      }
+    }
   }
   return {
     file,
@@ -158,4 +174,15 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
     warnings: result.warnings,
     resolved: shape.merged,
   };
+}
+
+/**
+ * Generator drift (spec 5.4, 10.8): each committed mock file under `mockDir` must equal what
+ * scripts/mock-data/generate.ts emits for its site. One fixed-text message per drifted file.
+ */
+export function mockDriftErrors(mockDir: string): string[] {
+  return checkMockFiles(mockDir).map((name) => {
+    const siteId = name.replace(/\.json$/, "");
+    return `mock file drift: mock/${name} (run scripts/mock-data/generate.ts ${siteId})`;
+  });
 }

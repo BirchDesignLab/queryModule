@@ -8,6 +8,8 @@ import {
   leafDates,
   matchParent,
   parentStatus,
+  phaseLabel,
+  phasePlanLine,
   rollUp,
   titleUpdate,
   waveParentStatus,
@@ -438,5 +440,23 @@ describe("parentStatus: Wave/Phase/Milestone Status roll-up from children (#193)
     // one level up using their Status values, so nesting composes.
     expect(parentStatus(["In Progress", "Todo"], "Todo")).toBe("In Progress");
     expect(parentStatus(["Done", "Done"], "Todo")).toBe("Done");
+  });
+});
+
+describe("phaseLabel: the GitHub label for a Phase option (M2 P0.5, ADR-0012)", () => {
+  it("lower-cases whole phases and maps the point to a hyphen", () => {
+    expect(phaseLabel("P0")).toBe("p0");
+    expect(phaseLabel("P3")).toBe("p3");
+    expect(phaseLabel("P0.5")).toBe("p0-5");
+  });
+});
+
+describe("phasePlanLine: a phase parent body names its plan or plans", () => {
+  it("names one plan, several plans, or none yet", () => {
+    expect(phasePlanLine(null)).toBe("Plan: written at phase start (master plan 6.1).");
+    expect(phasePlanLine("a.md")).toBe("Plan: `docs/superpowers/plans/a.md`.");
+    expect(phasePlanLine(["a.md", "b.md"])).toBe(
+      "Plans: `docs/superpowers/plans/a.md` and `docs/superpowers/plans/b.md`.",
+    );
   });
 });

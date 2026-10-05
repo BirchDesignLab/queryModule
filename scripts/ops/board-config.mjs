@@ -73,16 +73,17 @@ export const FIELDS = [
   },
   {
     name: "Phase",
-    options: ["P0", "P1", "P2", "P3"].map((p, i) => ({
-      name: p,
-      color: ["GRAY", "BLUE", "YELLOW", "GREEN"][i],
-      description: [
-        "Contracts",
-        "Foundation or first build",
-        "Engine or core feature",
-        "Flow, hardening or exit",
-      ][i],
-    })),
+    options: [
+      { name: "P0", color: "GRAY", description: "Contracts" },
+      {
+        name: "P0.5",
+        color: "PINK",
+        description: "Dispatch: an interim build between contracts and P1 (ADR-0012)",
+      },
+      { name: "P1", color: "BLUE", description: "Foundation or first build" },
+      { name: "P2", color: "YELLOW", description: "Engine or core feature" },
+      { name: "P3", color: "GREEN", description: "Flow, hardening or exit" },
+    ],
   },
   {
     name: "Wave",
@@ -138,6 +139,7 @@ export const KNOWN_LABELS = [
   "core",
   "mobile",
   "p0",
+  "p0-5",
   "p1",
   "p2",
   "p3",

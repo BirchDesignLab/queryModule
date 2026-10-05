@@ -56,6 +56,8 @@ import {
   leafDates,
   matchParent,
   parentStatus,
+  phaseLabel,
+  phasePlanLine,
   rollUp,
   titleUpdate,
   waveParentStatus,
@@ -548,14 +550,12 @@ for (const mp of MILESTONE_PARENTS) {
 
 const phaseIssue = new Map();
 for (const p of PHASES) {
-  const planLine = p.plan
-    ? `Plan: \`docs/superpowers/plans/${p.plan}\`.`
-    : "Plan: written at phase start (master plan 6.1).";
+  const planLine = phasePlanLine(p.plan);
   const name = p.title.replace(/ \([^)]*\)$/, "");
   const issue = ensureIssue({
     number: p.number,
     title: p.title,
-    labels: ["epic", p.phase.toLowerCase()],
+    labels: ["epic", phaseLabel(p.phase)],
     milestone: p.milestone,
     body: `Phase parent for ${name} (${p.milestone} ${p.phase}). Progress comes from its sub-issues.\n\n**Gate:** ${p.gate}.\n\n${planLine} Grid and handoffs: ${statusDocs}.`,
   });

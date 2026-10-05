@@ -5,6 +5,7 @@ export * from "./defaults";
 export * from "./diagnostic";
 export * from "./diff";
 export * from "./features";
+export * from "./fixture-policy";
 export * from "./merge";
 export * from "./migrate";
 export * from "./resolve";

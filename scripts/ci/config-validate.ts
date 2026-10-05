@@ -7,6 +7,7 @@ import {
   ConfigUnreadableError,
   checkConfigFile,
   configTargets,
+  mockDriftErrors,
 } from "./config-files";
 
 // Re-exported for existing call sites/tests (item 2): the shared
@@ -111,6 +112,13 @@ function main(): void {
     else console.log(`ok ${rel} (${report.warnings.length} warnings)`);
     if (printResolved && report.resolved !== undefined)
       console.log(JSON.stringify(report.resolved, null, 2));
+  }
+  // Generator drift is a repo-tree check: run it on the default (whole tree) run only.
+  if (explicit.length === 0) {
+    const drift = mockDriftErrors(join(root, "packages/config/mock"));
+    for (const line of drift) console.error(`ERROR ${line}`);
+    if (drift.length > 0) failed = true;
+    else console.log("ok packages/config/mock (generator, no drift)");
   }
   process.exit(failed ? 1 : 0);
 }

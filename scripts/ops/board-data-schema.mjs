@@ -67,7 +67,7 @@ export function buildBoardDataSchema({ milestoneNames, labelNames, fields }) {
       milestone: Milestone,
       phase: PhaseCode,
       gate: z.string().min(1).nullable(),
-      plan: z.string().min(1).nullable(),
+      plan: z.union([z.string().min(1), z.array(z.string().min(1)).min(2)]).nullable(),
     })
     .strict();
 

@@ -1,13 +1,16 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TOKEN_NAMES } from "@querymodule/tokens";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { generate } from "../mock-data/generate";
 import {
   type ConfigIo,
   ConfigUnreadableError,
   checkConfigFile,
   configTargets,
+  mockDriftErrors,
 } from "./config-files";
 
 type Json = Record<string, unknown>;
@@ -254,6 +257,31 @@ describe("config:validate failures carry JSON paths", () => {
     });
   });
 
+  it("a mock payload breaking the fixture policy fails with its pointer and file (#531, spec 10.8)", () => {
+    const mock = structuredClone(fsIo.readJson(cfg("mock/default.json"))) as {
+      sources: { stateSource: { responses: Array<{ scenarios: Array<{ respond: Json }> }> } };
+    };
+    const first = mock.sources.stateSource.responses[0]?.scenarios[0];
+    if (first === undefined) throw new Error("default mock has no first scenario");
+    first.respond.plate = "ABC1234";
+    const r = checkConfigFile(
+      cfg("sites/default.json"),
+      layered({ [cfg("mock/default.json")]: mock }),
+    );
+    expect(r.errors).toContainEqual({
+      level: "error",
+      path: "/mock/sources/stateSource/responses/0/scenarios/0/respond/plate",
+      key: "fixture.realPlate",
+      params: { file: "packages/config/mock/default.json" },
+    });
+  });
+
+  it("the shipped mock files pass the fixture policy", () => {
+    for (const rel of ["sites/default.json", "sites/example-ok.json"]) {
+      expect(checkConfigFile(cfg(rel), fsIo).errors).toEqual([]);
+    }
+  });
+
   it("referential errors from validateSiteConfig pass through", () => {
     const site = defaultSite();
     site.quickAccess = ["VEH", "XYZ"];
@@ -273,6 +301,31 @@ describe("config:validate failures carry JSON paths", () => {
         key: "config.unknownToken",
       }),
     );
+  });
+});
+
+describe("config:validate mock drift (#531, spec 10.8)", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+  const tmp = () => {
+    const d = mkdtempSync(join(tmpdir(), "config-files-drift-"));
+    dirs.push(d);
+    return d;
+  };
+
+  it("a drifted mock file fails with the regenerate hint", () => {
+    const d = tmp();
+    writeFileSync(join(d, "default.json"), `${generate("default")} `);
+    writeFileSync(join(d, "example-ok.json"), generate("example-ok"));
+    expect(mockDriftErrors(d)).toEqual([
+      "mock file drift: mock/default.json (run scripts/mock-data/generate.ts default)",
+    ]);
+  });
+
+  it("the committed mock files have no drift", () => {
+    expect(mockDriftErrors(cfg("mock"))).toEqual([]);
   });
 });
 
