@@ -22,6 +22,7 @@ import {
   type TokenName,
   tokenValue,
 } from "@querymodule/tokens";
+import { BUILTIN_ADAPTER_KINDS } from "../adapters/kinds";
 
 export interface LoadedConfig {
   siteConfig: SiteConfig;
@@ -41,8 +42,8 @@ export interface VersionedConfig extends LoadedConfig {
   versionId: string;
 }
 
-/** Adapter kinds this build supports; plugins from ADAPTER_DIR arrive with the registry (M1 P3). */
-export const BUILTIN_ADAPTER_KINDS: readonly string[] = ["mock"];
+/** Re-exported from the leaf module so config:validate imports stay unchanged (spec 5.4). */
+export { BUILTIN_ADAPTER_KINDS };
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
