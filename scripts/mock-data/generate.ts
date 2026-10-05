@@ -73,20 +73,49 @@ export function generate(siteId: string): string {
   return `${format(sortKeys(file), "")}\n`;
 }
 
-/** File names under `dir` (a directory URL ending in "/", or a path) that are missing or differ from the generated text. */
-export function checkMockFiles(dir: URL | string): string[] {
+/** One generator site's committed file: equal to the generated text, different or missing, or the generator threw. */
+export interface MockFileState {
+  siteId: string;
+  state: "ok" | "drift" | "generatorFailed";
+}
+
+/**
+ * The one drift check (AW2 review G-G-M2), shared by --check and config:validate
+ * (scripts/ci/config-files.ts mockDriftErrors): each generator site's file under `dir` (a
+ * directory URL ending in "/", or a path) against `gen` (injectable for tests). A generator
+ * that throws is reported, not raised.
+ */
+export function mockFileStates(
+  dir: URL | string,
+  gen: (siteId: string) => string = generate,
+): MockFileState[] {
   const root = typeof dir === "string" ? dir : fileURLToPath(dir);
-  return Object.keys(SITES)
-    .map((id) => `${id}.json`)
-    .filter((name) => {
-      // A generator error (schema or fixture policy) throws here: it is a bug, not drift.
-      const expected = generate(name.replace(/\.json$/, ""));
-      try {
-        return readFileSync(join(root, name), "utf8") !== expected;
-      } catch {
-        return true; // missing or unreadable file: out of date
-      }
-    });
+  return MOCK_SITE_IDS.map((siteId) => {
+    let expected: string;
+    try {
+      expected = gen(siteId);
+    } catch {
+      return { siteId, state: "generatorFailed" };
+    }
+    try {
+      return {
+        siteId,
+        state: readFileSync(join(root, `${siteId}.json`), "utf8") === expected ? "ok" : "drift",
+      };
+    } catch {
+      return { siteId, state: "drift" }; // missing or unreadable file: out of date
+    }
+  });
+}
+
+/** File names under `dir` that are missing, differ from the generated text, or whose generator threw. */
+export function checkMockFiles(
+  dir: URL | string,
+  gen: (siteId: string) => string = generate,
+): string[] {
+  return mockFileStates(dir, gen)
+    .filter((f) => f.state !== "ok")
+    .map((f) => `${f.siteId}.json`);
 }
 
 export function main(args: string[]): number {

@@ -5,7 +5,7 @@ import { checkFixturePolicy, vinCheckDigitValid } from "@querymodule/core/config
 import { type MockFile, MockFileSchema } from "@querymodule/core/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { address, dob, person, plate, vehicleRecord, vin, warrantRecord } from "./builders";
-import { checkMockFiles, generate, main } from "./generate";
+import { checkMockFiles, generate, main, mockFileStates } from "./generate";
 
 // Frozen from the hand-written default.json and example-ok.json as shipped at M1 (be75721):
 // [source, queryType, when (JSON), behavior or respond status].
@@ -147,6 +147,34 @@ describe("--check", () => {
 
   it("the committed files are up to date", () => {
     expect(checkMockFiles(new URL("../../packages/config/mock/", import.meta.url))).toEqual([]);
+  });
+
+  it("AW2 review G-G-M2: mockFileStates is the one drift check (ok, drift, generatorFailed)", () => {
+    const d = tmp();
+    writeFileSync(join(d, "default.json"), `${generate("default")} `);
+    expect(mockFileStates(d)).toEqual([
+      { siteId: "default", state: "drift" },
+      { siteId: "example-ok", state: "drift" },
+    ]);
+    writeFileSync(join(d, "example-ok.json"), generate("example-ok"));
+    const gen = (id: string) => {
+      if (id === "default") throw new Error("mock-data: fixture policy violation");
+      return generate(id);
+    };
+    expect(mockFileStates(d, gen)).toEqual([
+      { siteId: "default", state: "generatorFailed" },
+      { siteId: "example-ok", state: "ok" },
+    ]);
+  });
+
+  it("AW2 review G-G-M2: a generator that throws is named, not raised", () => {
+    const d = tmp();
+    for (const id of ["default", "example-ok"]) writeFileSync(join(d, `${id}.json`), generate(id));
+    const gen = (id: string) => {
+      if (id === "default") throw new Error("mock-data: fixture policy violation");
+      return generate(id);
+    };
+    expect(checkMockFiles(d, gen)).toEqual(["default.json"]);
   });
 
   it("controller r0:Q1 reads a path containing # and %", () => {
