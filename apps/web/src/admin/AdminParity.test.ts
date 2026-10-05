@@ -37,7 +37,7 @@ describe("admin parity: surfaces", () => {
     expect(decls(".qm-admin")).toMatch(/flex-direction:\s*column/);
     expect(decls(".qm-admin")).toMatch(/min-block-size:/);
     expect(decls(".qm-admin__main")).toMatch(/container-type:\s*inline-size/);
-    expect(css).toMatch(/@media \(min-width: 54rem\) \{\s*\.qm-admin \{\s*flex-direction:\s*row/);
+    expect(css).toMatch(/@media \(min-width: 864px\) \{\s*\.qm-admin \{\s*flex-direction:\s*row/);
     expect(decls(".qm-admin__rail")).toMatch(/grid-template-columns:\s*repeat\(auto-fit/);
   });
 
@@ -60,9 +60,9 @@ describe("admin parity: surfaces", () => {
     // The heading and toolbar share a row by the section's width; the window caps the section from
     // layout.wide up.
     expect(css).toMatch(
-      /@container \(min-width: 45rem\) \{\s*\.qm-builder \{[^}]*auto minmax\(0, 1fr\)/,
+      /@container \(min-width: 720px\) \{\s*\.qm-builder \{[^}]*auto minmax\(0, 1fr\)/,
     );
-    expect(css).toMatch(/@media \(min-width: 64rem\) \{\s*\.qm-builder \{\s*block-size:/);
+    expect(css).toMatch(/@media \(min-width: 1024px\) \{\s*\.qm-builder \{\s*block-size:/);
     expect(decls(".qm-builder__body")).toMatch(/flex-direction:\s*column/);
     expect(decls(".qm-builder__panes")).toMatch(/min-block-size:\s*0/);
     for (const sel of [".qm-tree", ".qm-builder__editor"])
@@ -109,10 +109,9 @@ describe("admin parity: layout", () => {
 });
 
 describe("admin parity: the preview follows the dispatcher's card", () => {
-  it("the panel is a sunken well holding a base card with the panel radius", () => {
-    expect(decls(".qm-preview__panel--dispatch")).toMatch(
-      /background:\s*var\(--qm-color-surface-sunken\)/,
-    );
+  it("the body is a sunken well holding a base card with the panel radius (#486)", () => {
+    expect(decls(".qm-preview__body")).toMatch(/background:\s*var\(--qm-color-surface-sunken\)/);
+    expect(decls(".qm-preview__panel--dispatch")).toMatch(/background:\s*transparent/);
     const card = decls(".qm-preview__panel--dispatch .qm-preview__card");
     expect(card).toMatch(BASE);
     expect(card).toMatch(/border-radius:\s*var\(--qm-radius-panel\)/);

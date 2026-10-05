@@ -946,8 +946,23 @@ test.describe("Admin parity (item 5)", () => {
         tree: one(".qm-tree"),
         editor: one(".qm-builder__editor"),
         preview: one(".qm-builder__panes > .qm-admin__preview"),
-        well: one(".qm-preview__panel"),
+        well: one(".qm-preview__body"),
+        head: one(".qm-preview__head"),
         card: one(".qm-preview__panel--dispatch .qm-preview__card"),
+        editorPadding: (() => {
+          const el = document.querySelector(".qm-builder__editor");
+          if (el === null) return null;
+          const cs = getComputedStyle(el);
+          return { block: cs.paddingTop, inline: cs.paddingLeft };
+        })(),
+        paneInnerRight: (() => {
+          const el = document.querySelector(".qm-builder__panes > .qm-admin__preview");
+          return el === null ? 0 : el.getBoundingClientRect().left + el.clientLeft + el.clientWidth;
+        })(),
+        headRule: (() => {
+          const el = document.querySelector(".qm-preview__head");
+          return el === null ? null : getComputedStyle(el).borderBottomWidth;
+        })(),
         label: one(".qm-sect__label"),
         body1: one(".qm-sect__body"),
       };
@@ -973,6 +988,24 @@ test.describe("Admin parity (item 5)", () => {
             expect(b[part]?.bg, part).toBe(surface(mode, "base"));
           expect(b.well?.bg, "preview well").toBe(surface(mode, "sunken"));
           expect(b.card?.bg, "preview card").toBe(surface(mode, "base"));
+          // #486: the editor takes the mockup's 20 px block inset (inline stays 12 px so the label
+          // column keeps beside the controls at 1366); the preview body is an edge-to-edge sunken
+          // well directly under a ruled head.
+          expect(b.editorPadding, "editor inset").toEqual({ block: "20px", inline: "12px" });
+          expect(b.headRule, "preview head rule").toBe("1px");
+          const pane = b.preview;
+          expect(Math.abs((b.well?.x ?? 0) - (pane?.x ?? 0)), "well left edge").toBeLessThanOrEqual(
+            1,
+          );
+          expect(
+            // Against the pane's inner edge, so a classic scrollbar does not count as a gap.
+            Math.abs((b.well?.x ?? 0) + (b.well?.w ?? 0) - b.paneInnerRight),
+            "well right edge",
+          ).toBeLessThanOrEqual(1);
+          expect(
+            Math.abs((b.well?.y ?? 0) - (b.head?.bottom ?? 0)),
+            "well under the head",
+          ).toBeLessThanOrEqual(0.5);
           // Panes end inside the window and the page itself does not scroll.
           for (const part of ["tree", "editor", "preview"] as const)
             expect(b[part]?.bottom ?? 0, `${part} bottom`).toBeLessThanOrEqual(viewport.height);
@@ -983,34 +1016,45 @@ test.describe("Admin parity (item 5)", () => {
           expect(Math.round(b.preview?.w ?? 0), "preview width").toBeLessThanOrEqual(450);
           expect(b.tree?.w ?? 0, "tree width").toBeGreaterThanOrEqual(230);
           expect(b.editor?.w ?? 0, "editor width").toBeGreaterThanOrEqual(360);
-          // Two rows: the status line and the view tabs, then Undo, Redo, History, Save draft and Review
-          // and publish (Tasks 33 and 34 added the last four to the old one-row bar).
-          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(130);
+          // Two rows (developer ruling 10-05-26, #546): every control on the first row, the status
+          // line and the reasons for the disabled buttons below it. At 1366 a long status (a later
+          // version, from specs that publish earlier in the run) wraps that text onto a second line:
+          // 105 holds the controls row plus two text lines (80 with one, 99 measured with two).
+          expect(b.toolbar?.h ?? 0, "toolbar height").toBeLessThanOrEqual(105);
           // A section's label column sits beside its controls, not above them.
           expect(
             (b.label?.x ?? 0) + (b.label?.w ?? 0),
             "label column beside controls",
           ).toBeLessThanOrEqual(b.body1?.x ?? 0);
-          // The reasons for the disabled buttons sit in one or two rows inside the toolbar.
-          const reasons = await page.evaluate(() => {
-            const tops = [...document.querySelectorAll(".qm-builder__reason")].map(
-              (el) => el.getBoundingClientRect().top,
-            );
-            return { tops };
+          const bar = await page.evaluate(() => {
+            const toolbar = document.querySelector(".qm-builder__toolbar");
+            const rect = (el: Element) => el.getBoundingClientRect();
+            const controls = [...(toolbar?.querySelectorAll("button, [role='tab']") ?? [])]
+              .map(rect)
+              .filter((r) => r.width > 0);
+            const status = toolbar?.querySelector(".qm-builder__status");
+            return {
+              centres: controls.map((r) => r.top + r.height / 2),
+              controlsBottom: Math.max(...controls.map((r) => r.bottom)),
+              statusTop: status === null || status === undefined ? 0 : rect(status).top,
+              reasonTops: [...(toolbar?.querySelectorAll(".qm-builder__reason") ?? [])].map(
+                (el) => rect(el).top,
+              ),
+            };
           });
-          expect(reasons.tops.length, "reasons").toBeGreaterThan(0);
-          // Three reasons now (history, save, review): at 1366 they wrap to two rows, no more.
-          expect(Math.max(...reasons.tops) - Math.min(...reasons.tops), "two rows").toBeLessThan(
-            40,
+          expect(bar.centres.length, "controls").toBeGreaterThan(0);
+          expect(
+            Math.max(...bar.centres) - Math.min(...bar.centres),
+            "controls in one row",
+          ).toBeLessThan(2);
+          expect(bar.statusTop, "status under the controls").toBeGreaterThanOrEqual(
+            bar.controlsBottom,
           );
-          // They flow in the toolbar's last row after the buttons (shell.css order 3), so a reason
-          // can start beside the last button on a wrapped bar: only "inside the toolbar" holds.
-          expect(Math.min(...reasons.tops), "inside the toolbar").toBeGreaterThanOrEqual(
-            b.toolbar?.y ?? 0,
-          );
-          expect(Math.max(...reasons.tops), "inside the toolbar").toBeLessThan(
-            b.toolbar?.bottom ?? 0,
-          );
+          expect(bar.reasonTops.length, "reasons").toBeGreaterThan(0);
+          for (const top of bar.reasonTops) {
+            expect(top, "reason under the controls").toBeGreaterThanOrEqual(bar.controlsBottom);
+            expect(top, "reason inside the toolbar").toBeLessThan(b.toolbar?.bottom ?? 0);
+          }
           // With unpublished changes the status line is longer and the toolbar may wrap more: the
           // panes still end inside the window and the page still does not scroll.
           await page
@@ -1578,9 +1622,8 @@ test.describe("Layout robustness (cloud3 item 3)", () => {
 });
 
 test.describe("Queries at the layout constants (cloud3 item 4)", () => {
-  // Query conditions are the constants' rem values; a rem is 16 px in the test browser.
-  const px = (name: keyof typeof LAYOUT_CONSTANTS) =>
-    Number.parseFloat(LAYOUT_CONSTANTS[name]) * 16;
+  // Query conditions are the constants' px values (#484).
+  const px = (name: keyof typeof LAYOUT_CONSTANTS) => Number.parseFloat(LAYOUT_CONSTANTS[name]);
   const parts = (page: Page) =>
     page.evaluate(() => {
       const r = (sel: string) => {

@@ -571,7 +571,7 @@ h1 {
   max-width: 90rem;
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 1024px) {
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes {
     grid-template-columns:
       minmax(0, calc(40rem + var(--qm-space-5) * 2 + var(--qm-border-width) * 2))
@@ -892,7 +892,7 @@ h1 {
 }
 
 /* The form on a 12-column grid: each cell's width comes from its type and maxLength (fieldSpan),
-   never from the query type. Under 36rem every cell is full width. */
+   never from the query type. Under 576 px every cell is full width. */
 .qm-form-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -949,7 +949,7 @@ h1 {
   margin-block-end: var(--qm-space-2);
 }
 
-@media (min-width: 36rem) {
+@media (min-width: 576px) {
   .qm-span-2 {
     grid-column: span 2;
   }
@@ -1038,10 +1038,10 @@ h1 {
   border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
-/* On a viewport under 20rem tall (400% zoom of a laptop screen) the bar would cover most of it: it
+/* On a viewport under 320 px tall (400% zoom of a laptop screen) the bar would cover most of it: it
    flows with the form instead. Taller, the live panel keeps the page's scroll-padding as tall as the
    bar (apps/web use-action-bar-clearance), so a focused field is never hidden behind it (WCAG 2.4.11). */
-@media (max-height: 20rem) {
+@media (max-height: 320px) {
   .qm-action-bar {
     position: static;
   }
@@ -1146,12 +1146,12 @@ h1 {
   padding: var(--qm-space-4) var(--qm-space-6);
 }
 
-/* Dispatch app bar below 52rem (a 1366 px screen at 200% zoom is 683 px): one row, not two. The
+/* Dispatch app bar below 832 px (a 1366 px screen at 200% zoom is 683 px): one row, not two. The
    account button shrinks to its avatar, its name kept for assistive technology the way the officer
    bar keeps it. The seeded admin bar (longest nav, an 18-character email) needs about 790 px with
-   the full button, so the button stays whole above this width; a site name near its 32ch cap can
-   still wrap the bar above it. */
-@media (max-width: 52rem) {
+   the full button, so the button stays whole above this width; the site name rule below keeps a
+   name near its 32ch cap from wrapping the bar above it. */
+@media (max-width: 832px) {
   .qm-app-header .qm-account__email {
     position: absolute;
     inline-size: var(--qm-border-width);
@@ -1164,10 +1164,11 @@ h1 {
   }
 }
 
-/* From 36rem the site name takes the room that is left and truncates, so the bar keeps its row; it
-   wraps to its own row rather than shrink under 12ch. Below 36rem (320 px reflow) it keeps its
-   full width and wraps, so the name is never cut there (WCAG 1.4.10). */
-@media (min-width: 36rem) and (max-width: 52rem) {
+/* From 576 px the site name takes the room that is left and truncates, so the bar keeps its row; it
+   wraps to its own row rather than shrink under 12ch. Below 576 px (320 px reflow) it keeps its
+   full width and wraps, so the name is never cut there (WCAG 1.4.10). Up to 1000 px, the
+   width where a 32ch name fits beside the widest bar with the full account button (#482). */
+@media (min-width: 576px) and (max-width: 1000px) {
   .qm-app-header .qm-app-header__site {
     flex: 1 1 12ch;
   }

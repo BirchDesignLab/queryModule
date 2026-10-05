@@ -162,52 +162,54 @@ export function BuilderPreview({
           ))}
         </fieldset>
       </div>
-      {empty && <p className="qm-preview__state">{t("admin.preview.empty")}</p>}
-      {paused && (
-        <div ref={bannerRef} className="qm-preview__banner" tabIndex={-1}>
-          <p>{showPanel ? `${pausedText} ${t("admin.preview.showingLast")}` : pausedText}</p>
-          {onGoToError !== undefined && (
-            <button ref={goRef} type="button" className="qm-button" onClick={onGoToError}>
-              {t("admin.preview.goToError")}
-            </button>
-          )}
-        </div>
-      )}
-      {loading && !empty && (
-        <div className="qm-preview__skeleton" aria-busy="true">
-          <VisuallyHidden>{t("admin.preview.loading")}</VisuallyHidden>
-          <i aria-hidden="true" />
-          <i aria-hidden="true" />
-          <i aria-hidden="true" />
-        </div>
-      )}
-      {config !== null && (
-        <div
-          ref={panelRef}
-          className={
-            persona === "officer"
-              ? "qm-preview__panel qm-layout--mobile-unit"
-              : "qm-preview__panel qm-preview__panel--dispatch"
-          }
-          hidden={empty}
-          inert={paused}
-          data-paused={paused ? "true" : undefined}
-        >
-          <I18nProvider translator={translator}>
-            <div className="qm-preview__card">
-              <QueryPanelView
-                config={config}
-                drafts={drafts}
-                mode="preview"
-                idPrefix={idPrefix}
-                selectType={selectedTypeCode(doc, selected)}
-                selectTypeSeq={selectSeq}
-              />
-            </div>
-          </I18nProvider>
-        </div>
-      )}
-      <p className="qm-preview__note">{t("admin.preview.note")}</p>
+      <div className="qm-preview__body">
+        {empty && <p className="qm-preview__state">{t("admin.preview.empty")}</p>}
+        {paused && (
+          <div ref={bannerRef} className="qm-preview__banner" tabIndex={-1}>
+            <p>{showPanel ? `${pausedText} ${t("admin.preview.showingLast")}` : pausedText}</p>
+            {onGoToError !== undefined && (
+              <button ref={goRef} type="button" className="qm-button" onClick={onGoToError}>
+                {t("admin.preview.goToError")}
+              </button>
+            )}
+          </div>
+        )}
+        {loading && !empty && (
+          <div className="qm-preview__skeleton" aria-busy="true">
+            <VisuallyHidden>{t("admin.preview.loading")}</VisuallyHidden>
+            <i aria-hidden="true" />
+            <i aria-hidden="true" />
+            <i aria-hidden="true" />
+          </div>
+        )}
+        {config !== null && (
+          <div
+            ref={panelRef}
+            className={
+              persona === "officer"
+                ? "qm-preview__panel qm-layout--mobile-unit"
+                : "qm-preview__panel qm-preview__panel--dispatch"
+            }
+            hidden={empty}
+            inert={paused}
+            data-paused={paused ? "true" : undefined}
+          >
+            <I18nProvider translator={translator}>
+              <div className="qm-preview__card">
+                <QueryPanelView
+                  config={config}
+                  drafts={drafts}
+                  mode="preview"
+                  idPrefix={idPrefix}
+                  selectType={selectedTypeCode(doc, selected)}
+                  selectTypeSeq={selectSeq}
+                />
+              </div>
+            </I18nProvider>
+          </div>
+        )}
+        <p className="qm-preview__note">{t("admin.preview.note")}</p>
+      </div>
     </section>
   );
 }

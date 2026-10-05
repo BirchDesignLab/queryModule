@@ -382,7 +382,7 @@ main[tabindex="-1"]:focus {
   padding: var(--qm-space-4) var(--qm-space-5);
 }
 
-@media (min-width: 54rem) {
+@media (min-width: 864px) {
   .qm-admin {
     flex-direction: row;
   }
@@ -598,14 +598,14 @@ main[tabindex="-1"]:focus {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
-@container (min-width: 45rem) {
+@container (min-width: 720px) {
   .qm-builder {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
   }
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 1024px) {
   .qm-builder {
     block-size: max(
       calc(100dvh - var(--qm-control-height-dense) - var(--qm-space-2) * 2 - var(--qm-space-4) * 2),
@@ -630,7 +630,9 @@ main[tabindex="-1"]:focus {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--qm-space-1) var(--qm-space-3);
+  /* 8 px between controls, so all of them keep the first row at 1366 (developer ruling 10-05-26,
+     issue 546: controls on row 1, status and reasons on row 2). */
+  gap: var(--qm-space-1) var(--qm-space-2);
   min-inline-size: 0;
   padding: var(--qm-space-2) var(--qm-space-3);
   background: var(--qm-color-surface-base);
@@ -720,7 +722,7 @@ main[tabindex="-1"]:focus {
   overflow-y: auto;
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 1024px) {
   .qm-tree,
   .qm-builder__editor,
   .qm-builder__panes > .qm-admin__preview {
@@ -759,8 +761,14 @@ main[tabindex="-1"]:focus {
 .qm-builder__editor,
 .qm-builder__panes > .qm-admin__preview {
   box-sizing: border-box;
-  padding: var(--qm-space-3);
   scroll-padding: calc(var(--qm-focus-ring-width) + var(--qm-focus-ring-offset));
+}
+
+/* The editor is the reading pane: the mockup's 20 px block inset (issue 486). Its 24 px inline inset
+   would leave about 320 px at 1366, under the 336 px a section's label column and controls need
+   side by side, so the inline inset stays 12 px. */
+.qm-builder__editor {
+  padding: var(--qm-space-5) var(--qm-space-3);
 }
 
 .qm-tree {
@@ -779,6 +787,8 @@ main[tabindex="-1"]:focus {
 .qm-builder__panes > .qm-admin__preview {
   flex: 0 1 calc(var(--qm-space-12) * 9.2);
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-inline-size: 0;
   background: var(--qm-color-surface-base);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
@@ -786,14 +796,22 @@ main[tabindex="-1"]:focus {
 }
 
 /* Preview (A4): the head carries the Dispatcher or Officer switch; below it the panel, or one of
-   the three states. The panel sits in a sunken well like the mockup's preview body. */
+   the three states. Like the mockup, the head is a ruled bar and the body under it is one sunken
+   well, edge to edge in the pane (issue 486). */
 .qm-preview__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--qm-space-2);
-  padding-block-end: var(--qm-space-3);
+  padding: var(--qm-space-3) var(--qm-space-4);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-preview__body {
+  flex: 1 1 auto;
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-sunken);
 }
 
 .qm-preview__head h3 {
@@ -808,13 +826,12 @@ main[tabindex="-1"]:focus {
   background: var(--qm-color-surface-base);
 }
 
-/* With the dispatcher persona the panel is a sunken well holding the dispatcher's own card (one
-   surface.base card on the sunken page, its sections without boxes), so the preview reads as the
-   page the dispatcher sees. The officer's touch layout keeps its own bordered panel. */
+/* With the dispatcher persona the panel is just the dispatcher's own card on the body's sunken
+   well (one surface.base card on the sunken page, its sections without boxes), so the preview reads
+   as the page the dispatcher sees. The officer's touch layout keeps its own bordered panel. */
 .qm-preview__panel--dispatch {
-  padding: var(--qm-space-3);
   border: 0;
-  background: var(--qm-color-surface-sunken);
+  background: transparent;
 }
 
 .qm-preview__panel--dispatch .qm-preview__card {

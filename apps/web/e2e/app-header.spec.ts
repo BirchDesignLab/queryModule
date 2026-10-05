@@ -114,12 +114,15 @@ test.describe("B1 theme focus survives a persona flip", () => {
 // instead of taking a second row, and nothing scrolls sideways. Officer targets stay 48 px.
 const ROW = { dispatch: 52, compact: 64 } as const;
 
+/** A site name at the 32ch cap: a message key with no translation renders as the key itself. */
+const CAP_SITE_NAME = "site.thirtyTwoCharacterSiteNameX";
+
 /** A longer site name than the seeded "Default site", so a squashed label shows up as truncation. */
-async function useLongSiteName(page: Page): Promise<void> {
+async function useLongSiteName(page: Page, labelKey = "site.exampleOk"): Promise<void> {
   await page.route("**/api/v1/config", async (route) => {
     const response = await liveResponse(route);
     const body = (await response.json()) as { site: { labelKey: string } };
-    body.site.labelKey = "site.exampleOk";
+    body.site.labelKey = labelKey;
     await route.fulfill({ response, json: body });
   });
 }
@@ -153,6 +156,14 @@ async function headerMetrics(page: Page) {
       overflowX: scroller === null ? 0 : scroller.scrollWidth - scroller.clientWidth,
       accountRight: account === null || account === undefined ? 0 : box(account).right,
       accountWidth: account === null || account === undefined ? 0 : box(account).width,
+      productNameWidth: (() => {
+        const n = header?.querySelector(".qm-app-header__name");
+        return n === null || n === undefined ? 0 : box(n).width;
+      })(),
+      themeButtons: [...(header?.querySelectorAll(".qm-seg button") ?? [])].map((el) => {
+        const b = box(el);
+        return { w: b.width, h: b.height };
+      }),
       targets,
     };
   });
@@ -178,6 +189,21 @@ for (const { persona, email, row, minTarget } of [
       // A long name may truncate here (the bar keeps its row) but stays readable, never a stub.
       expect(m.siteWidth === 0 || m.siteWidth >= 100).toBe(true);
       expect(m.accountRight).toBeLessThanOrEqual(683);
+      if (persona === "officer") {
+        // The officer bar's own rules (#482): no site name, the product name and the email hidden
+        // but named, the account as its 48 px initial, the theme choice as 48 px icon squares.
+        expect(m.siteWidth).toBe(0);
+        // Hidden, not removed: the product name stays in the accessibility tree.
+        await expect(page.locator(".qm-app-header__name")).toBeAttached();
+        await expect(page.locator(".qm-app-header__name")).not.toBeEmpty();
+        expect(m.productNameWidth).toBeLessThanOrEqual(1);
+        expect(m.accountWidth).toBeLessThan(120);
+        expect(m.themeButtons.length).toBeGreaterThanOrEqual(2);
+        for (const b of m.themeButtons) {
+          expect(b.w).toBeGreaterThanOrEqual(minTarget - 0.5);
+          expect(b.h).toBeGreaterThanOrEqual(minTarget - 0.5);
+        }
+      }
       for (const t of m.targets) {
         expect(t.w, `${t.name} width`).toBeGreaterThanOrEqual(minTarget - 0.5);
         expect(t.h, `${t.name} height`).toBeGreaterThanOrEqual(minTarget - 0.5);
@@ -206,7 +232,7 @@ for (const { persona, email, row, minTarget } of [
 test("B1 header just above the shrink width: the widest bar (admin) is one row with the email shown", async ({
   page,
 }) => {
-  // 52rem = 832 px: the full account button returns, and the bar must still fit on one row.
+  // 832 px: the full account button returns, and the bar must still fit on one row.
   await page.setViewportSize({ width: 833, height: 600 });
   await signIn(page, seededUser("admin@example.test"));
   await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
@@ -216,3 +242,23 @@ test("B1 header just above the shrink width: the widest bar (admin) is one row w
   // The email text is in the button again, not clipped to the avatar.
   expect(m.accountWidth).toBeGreaterThan(120);
 });
+
+// #482: between the shrink width and about 1000 px a site name at its 32ch cap truncates instead of
+// wrapping the widest bar (admin, full account button) to a second row.
+// 1001 and 1100 px: above the rule the name keeps its natural width and the bar still fits.
+for (const width of [833, 900, 960, 999, 1001, 1100]) {
+  test(`B1 header at ${width} px with a 32ch site name: the admin bar keeps one row`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 600 });
+    await useLongSiteName(page, CAP_SITE_NAME);
+    await signIn(page, seededUser("admin@example.test"));
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+    await expect(page.getByTitle(CAP_SITE_NAME)).toBeVisible();
+    const m = await headerMetrics(page);
+    expect(Math.round(m.height)).toBe(ROW.dispatch);
+    expect(m.overflowX).toBeLessThanOrEqual(0);
+    expect(m.siteWidth).toBeGreaterThanOrEqual(100);
+    expect(m.accountWidth).toBeGreaterThan(120);
+  });
+}

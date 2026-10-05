@@ -80,14 +80,16 @@ export const SCALE_TOKENS = {
  * because a breakpoint is a layout decision, never a theme one. A query
  * condition cannot read var(), so shell.css writes these values literally in its @media and
  * @container conditions; shell.css.test.ts accepts a literal length there only if it equals one.
+ * px, like the tokens they guard: a media-query rem follows the browser's default font size, which
+ * the px tokens ignore (#484).
  */
 export const LAYOUT_CONSTANTS = {
   /** At or above this width each admin pane scrolls on its own under the toolbar; below it the page flows as one column. */
-  "layout.wide": "64rem",
+  "layout.wide": "1024px",
   /** At or above this width the admin rail sits beside the section; below it the rail is stacked above it. */
-  "layout.stack": "54rem",
+  "layout.stack": "864px",
   /** At or above this section width the builder's heading and toolbar share a row; below it the toolbar sits under the heading. */
-  "layout.toolbar": "45rem",
+  "layout.toolbar": "720px",
 } as const;
 
 export type ColorTokenName = keyof typeof COLOR_TOKENS;
