@@ -433,6 +433,35 @@ describe("AW2 review C-m1, C-m2: the adapter serves only a checked private copy"
     expect(e).toBeInstanceOf(SourceError);
     expect((e as SourceError).code).toBe("failed");
   });
+
+  it("C-m2: a change to the mock after createMockAdapter is never served", async () => {
+    const mock = structuredClone(DEFAULT_MOCK);
+    const a = createMockAdapter({ mock, timers: instantTimers, random: () => 0 });
+    withSmith(mock);
+    const v = await a.query(wanted(), null, new AbortController().signal);
+    expect(JSON.stringify(v)).not.toContain("SMITH");
+  });
+
+  it("C-m2: a change to the snapshot's mock after the factory checked it is never served", async () => {
+    const { document } = await bootstrapDocument(DEFAULT_SITE, OPTS);
+    const snapshot = await loadConfigDocument(document, {
+      label: "test",
+      configDir: configDirOf(DEFAULT_SITE),
+      ...OPTS,
+    });
+    const logger = captureLogger();
+    const reg = createAdapterRegistry({
+      allowMockSources: true,
+      timers: instantTimers,
+      random: () => 0,
+      logger,
+    });
+    const a = reg.get("mock", snapshot);
+    if (snapshot.mock !== null) withSmith(snapshot.mock);
+    const v = await a.query(wanted(), null, new AbortController().signal);
+    expect(JSON.stringify(v)).not.toContain("SMITH");
+    expect(logger.entries).toEqual([]);
+  });
 });
 
 describe("#493: the pinned snapshot's stored mock, never the image's file", () => {
