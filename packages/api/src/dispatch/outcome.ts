@@ -71,8 +71,8 @@ function flush(bus: EventBus, q: Slot[]): void {
 /**
  * Transaction T2 (spec 5.2 step 6; FR-043, SEC-010, SEC-011, SEC-012): in one IMMEDIATE
  * transaction, the write-once update of the pending source_result row (a returned payload sealed
- * under the request's payload DEK), a sourceResponded audit row by the system actor naming the
- * credential owner, and a sourceStatus event_log row. Zero rows updated: nothing else is written.
+ * under the request's payload DEK), a sourceResponded audit row by the requester's envelope naming
+ * the credential owner, and a sourceStatus event_log row. Zero rows updated: nothing else is written.
  * The event is published only after the commit, in seq order. Any throw rolls everything back,
  * leaves the row pending for the startup sweep, logs ids and the error class only, and calls
  * d.fatal (fail closed). The DEK and the plaintext payload are zeroed in finally.

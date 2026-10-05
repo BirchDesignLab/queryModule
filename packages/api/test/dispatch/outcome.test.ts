@@ -14,7 +14,6 @@ import type { DispatchJob, Outcome } from "../../src/dispatch/dispatcher";
 import { OutcomeWriteError, recordOutcome } from "../../src/dispatch/outcome";
 import { open } from "../../src/keys/aead";
 import { payloadAad, unwrapRequestKey } from "../../src/keys/request-keys";
-import { QUERY_LIMIT } from "../../src/queries/admission";
 import { closeWhenTestFinishes, TEST_SECRETS, testEnv } from "../helpers/fixture";
 import { manualTime } from "../helpers/manual-time";
 import { createTestApp, type TestApp } from "../helpers/test-app";
@@ -362,33 +361,64 @@ describe("recordOutcome: transaction T2 (spec 5.2 step 6, FR-043, SEC-010, SEC-0
     expectCleanLogs(t, await payloadDek(t, ack.correlationId));
   });
 
-  it("two outcomes of one submit settling in the same tick reach the socket in seq order (50 runs)", async () => {
-    const { t, userId, published, jobs, enqueueSpy, submit } = await setup();
-    // capture only: no adapter runs, the test settles each pair itself
-    enqueueSpy.mockImplementation((js) => {
-      jobs.push(...js);
+  /**
+   * AW3 critic (f): A takes the write lock first and commits seq 1, but its continuation is held
+   * until B's whole recordOutcome has returned. A naive publish after the await would send seq 2
+   * first; the outbox holds B's slot behind A's, so the socket still sees 1 then 2.
+   */
+  async function heldFirstCommit(o: { failAfterCommit?: boolean } = {}) {
+    const s = await setup();
+    s.enqueueSpy.mockImplementation((js) => {
+      s.jobs.push(...js);
     });
+    await s.submit(PLATE);
+    const [a, b] = s.jobs;
+    if (!a || !b) throw new Error("expected two jobs");
+    const transaction = s.t.deps.db.transaction.bind(s.t.deps.db);
+    let openGate = () => {};
+    const gate = new Promise<void>((resolve) => {
+      openGate = resolve;
+    });
+    let calls = 0;
+    vi.spyOn(s.t.deps.db, "transaction").mockImplementation((async (
+      fn: Parameters<typeof transaction>[0],
+      config: Parameters<typeof transaction>[1],
+    ) => {
+      calls += 1;
+      const first = calls === 1;
+      const r = await transaction(fn, config);
+      if (first) {
+        await gate;
+        if (o.failAfterCommit) throw new Error("commit failed");
+      }
+      return r;
+    }) as unknown as typeof transaction);
     const outcome: Outcome = { status: "returned", payload: { status: "NO RECORD" } };
-    for (let run = 0; run < 50; run += 1) {
-      // QUERY_LIMIT is 30 a minute: move past the window halfway through
-      if (run === 25) t.clock.advance(QUERY_LIMIT.windowMs);
-      jobs.length = 0;
-      await submit(PLATE);
-      const pair = [...jobs];
-      expect(pair).toHaveLength(2);
-      if (Math.random() < 0.5) pair.reverse();
-      const latencies = [Math.floor(Math.random() * 800), Math.floor(Math.random() * 800)];
-      // both writes start in the same tick and contend for the write lock
-      await Promise.all(pair.map((j, i) => recordOutcome(t.deps, j, outcome, latencies[i] ?? 0)));
-    }
-    const seqs = published.map((e) => e.seq);
-    expect(seqs).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
-    const events = await eventsFor(t, userId);
-    expect(published.map((e) => (e.type === "sourceStatus" ? e.resultId : null))).toEqual(
-      events.map((e) => e.resultId),
-    );
+    const pa = recordOutcome(s.t.deps, a, outcome, 1);
+    await recordOutcome(s.t.deps, b, outcome, 2);
+    openGate();
+    await pa;
+    return { ...s, a, b };
+  }
+
+  it("a T2 that commits first publishes first even when its continuation resumes last (outbox)", async () => {
+    const { t, userId, published, a, b } = await heldFirstCommit();
+    expect(published.map((e) => e.seq)).toEqual([1, 2]);
+    expect(published.map((e) => (e.type === "sourceStatus" ? e.resultId : null))).toEqual([
+      a.resultId,
+      b.resultId,
+    ]);
+    expect((await eventsFor(t, userId)).map((e) => e.resultId)).toEqual([a.resultId, b.resultId]);
     expect(t.fatals).toEqual([]);
-  }, 30_000);
+  });
+
+  it("a held first slot whose write then fails is skipped: the later slot still publishes", async () => {
+    const { t, published, b } = await heldFirstCommit({ failAfterCommit: true });
+    expect(published.map((e) => (e.type === "sourceStatus" ? e.resultId : null))).toEqual([
+      b.resultId,
+    ]);
+    expect(t.fatals).toHaveLength(1);
+  });
 });
 
 describe("recordOutcome edges (SEC-011, SEC-012, spec 5.9)", () => {
