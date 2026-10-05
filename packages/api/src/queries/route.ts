@@ -124,7 +124,9 @@ export function bindJobs(
  * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
  * nothing: the winner enqueued its own rows. While the server drains (spec 5.2) a new submit gets
  * 503 unavailable before T1; a replay of an acknowledged one still gets its stored 202. A refused
- * enqueue after T1 (a bug path under the stop order) takes the same backstop.
+ * enqueue after T1 takes the same backstop, except during the drain, where only a request the
+ * drain cut off past its HTTP bound reaches it: that one logs a warning and leaves its rows
+ * pending for the next start's sweep.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
   app.post("/api/v1/queries", requireSession(d.identity), async (c) => {
@@ -151,8 +153,13 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       acknowledgedMonoMs = d.monotonic.nowMs();
     }
     try {
-      if (!d.dispatcher.enqueue(bindJobs(templates, ack, acknowledgedMonoMs))) {
-        throw new DispatchRefusedError();
+      const jobs = bindJobs(templates, ack, acknowledgedMonoMs);
+      // a lost race replays the winner and has nothing to enqueue (critic Q2)
+      if (jobs.length > 0 && !d.dispatcher.enqueue(jobs)) {
+        if (!d.lifecycle.draining) throw new DispatchRefusedError();
+        // The drain cut this request off past its HTTP bound (critic C1) and stopped intake: the
+        // rows stay pending for the next start's sweep, and the drain still exits 0 (spec 5.2).
+        d.logger.warn("dispatch refused during drain", { correlationId: ack.body.correlationId });
       }
     } catch (e) {
       // Backstop (AW3 critic b): T1 committed, so the 202 stands; the process fails closed and the

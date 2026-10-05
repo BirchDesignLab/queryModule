@@ -135,10 +135,17 @@ export async function bootstrap(
 export const DRAIN_SLACK_MS = 5_000;
 
 /**
+ * The drain's bound on in-flight HTTP requests (critic C1): a client that trickles its body must
+ * not hold stop() until Node's requestTimeout. With the 20 s source timeout docs/deploy.md allows
+ * and DRAIN_SLACK_MS, the drain still ends inside the 30 s stop_grace_period (spec 8.3).
+ */
+export const HTTP_DRAIN_MS = 5_000;
+
+/**
  * Counts the server's in-flight HTTP requests (WebSocket upgrades are not requests), so the
  * drain waits for them without waiting on open feed sockets.
  */
-function trackRequests(server: Server): () => Promise<void> {
+function trackRequests(server: Server): { idle(): Promise<void>; open(): number } {
   let open = 0;
   const waiters = new Set<() => void>();
   server.on("request", (_req, res) => {
@@ -150,30 +157,47 @@ function trackRequests(server: Server): () => Promise<void> {
       waiters.clear();
     });
   });
-  return () =>
-    open === 0
-      ? Promise.resolve()
-      : new Promise<void>((r) => {
-          waiters.add(r);
-        });
+  return {
+    idle: () =>
+      open === 0
+        ? Promise.resolve()
+        : new Promise<void>((r) => {
+            waiters.add(r);
+          }),
+    open: () => open,
+  };
 }
 
 /**
  * The SIGTERM drain (spec 5.2; NFR-003), in this order: mark the app draining (new submits get
  * 503 unavailable), refuse new WebSocket upgrades, stop listening and wait for in-flight HTTP
- * requests (a submit already past the 503 check finishes T1 and enqueues), stop dispatch intake
- * (anything later stays pending for the next start's sweep), wait for in-flight dispatch up to
- * max(0, maxDeadline - now) + DRAIN_SLACK_MS, then close the sockets and the DB and log stopped.
- * The fatal path (AppDeps.fatal) never runs this drain. Call right after the server listens.
+ * requests up to HTTP_DRAIN_MS (a submit already past the 503 check finishes T1 and enqueues),
+ * then cut every connection still open, stop dispatch intake (anything later stays pending for
+ * the next start's sweep; the route logs a refused enqueue during the drain without d.fatal),
+ * wait for in-flight dispatch up to max(0, maxDeadline - now) + DRAIN_SLACK_MS, then close the
+ * sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this drain. Call
+ * right after the server listens.
  */
 export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): () => Promise<void> {
-  const httpIdle = trackRequests(server);
+  const requests = trackRequests(server);
   return async () => {
     deps.lifecycle.draining = true;
     ws.stopAccepting();
     server.close();
     server.closeIdleConnections();
-    await httpIdle();
+    let timer: unknown;
+    const timedOut = await Promise.race([
+      requests.idle().then(() => false),
+      new Promise<boolean>((r) => {
+        timer = deps.timers.setTimeout(() => r(true), HTTP_DRAIN_MS);
+      }),
+    ]);
+    deps.timers.clearTimeout(timer);
+    if (timedOut) {
+      deps.logger.warn("drain http wait timed out", { open: requests.open() });
+      // upgraded WS sockets are no longer the server's connections, so the feed stays open
+      server.closeAllConnections();
+    }
     // keep-alive connections that served the last requests are idle now
     server.closeIdleConnections();
     deps.dispatcher.stopIntake();

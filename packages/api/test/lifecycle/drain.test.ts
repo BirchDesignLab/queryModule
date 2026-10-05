@@ -7,7 +7,7 @@ import { describe, expect, it, onTestFinished, vi } from "vitest";
 import WebSocket from "ws";
 import type { SourceAdapter } from "../../src/adapters/types";
 import { createDispatcher } from "../../src/dispatch/dispatcher";
-import { createDrainStop } from "../../src/startup";
+import { createDrainStop, DRAIN_SLACK_MS, HTTP_DRAIN_MS } from "../../src/startup";
 import { attachWebSocket } from "../../src/ws/server";
 import { manualTime, settle } from "../helpers/manual-time";
 import { createTestApp } from "../helpers/test-app";
@@ -230,6 +230,54 @@ describe("SIGTERM drain (spec 5.2, NFR-003)", () => {
     expect(s.dbClosed).toEqual([{ inFlight: 0 }]);
     expect(await s.statuses()).toEqual(["returned"]);
     expect(s.t.fatals).toEqual([]);
+  }, 20_000);
+
+  it("a held, unfinished request does not keep stop() past the HTTP bound; its late enqueue is not fatal", async () => {
+    const s = await setup({ adapter: slowAdapter });
+    // hold the submit inside T1, past the 503 check, for longer than the HTTP bound
+    const record = s.t.deps.audit.record.bind(s.t.deps.audit);
+    let reached: () => void = () => {};
+    const atGate = new Promise<void>((r) => {
+      reached = r;
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    s.t.deps.audit.record = async (tx, event) => {
+      if (event.type === "submitted") {
+        reached();
+        await gate;
+      }
+      return record(tx, event);
+    };
+    const held = s.submitHttp().then(
+      (r) => r.status,
+      () => "cut off",
+    );
+    await atGate;
+    const stopping = s.startStop();
+    await s.time.run(HTTP_DRAIN_MS - 1);
+    expect(s.stopped()).toBe(false);
+    // at the HTTP bound the connection is cut; nothing is in flight in dispatch, so stop() ends
+    // after the slack at most
+    await s.time.run(1 + DRAIN_SLACK_MS);
+    await vi.waitFor(() => expect(s.stopped()).toBe(true));
+    await stopping;
+    expect(await held).toBe("cut off");
+    expect(s.t.logLines.some((l) => l.includes('"msg":"drain http wait timed out"'))).toBe(true);
+    // the cut-off handler commits T1 after stopIntake: its rows stay pending for the next start's
+    // sweep, without d.fatal (the drain exits 0)
+    release();
+    await vi.waitFor(() =>
+      expect(s.t.logLines.some((l) => l.includes('"msg":"dispatch refused during drain"'))).toBe(
+        true,
+      ),
+    );
+    const line = s.t.logLines.find((l) => l.includes('"msg":"dispatch refused during drain"'));
+    expect(line).not.toContain("ZZ-0001");
+    expect(s.t.fatals).toEqual([]);
+    expect(await s.statuses()).toEqual(["pending"]);
   }, 20_000);
 });
 
