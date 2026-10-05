@@ -94,7 +94,8 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
             "idempotency-key": crypto.randomUUID(),
           },
           body: JSON.stringify(
-            // alternate a one-part VEH and a two-part PER with its WNT check
+            // alternate a one-part VEH (plateOnly drops nationalSource) and a two-part PER with
+            // its WNT check on nationalSource
             (u + k) % 2 === 0
               ? {
                   queryType: "VEH",
@@ -135,6 +136,14 @@ describe("POST /api/v1/queries concurrency (spec 10.4, NFR-002)", () => {
     const audit = await rows(
       "SELECT id, correlation_id, part_id, type FROM audit_event WHERE correlation_id IS NOT NULL ORDER BY id",
     );
+    // AW3 critic (e): 10 VEH x 1 row (stateSource) + 10 PER x 3 rows (PER on both, WNT on
+    // nationalSource) = 40; a planner change that drops a part or a source fails here
+    const shapes = acks.map((a) => a.parts.map((p) => `${p.queryType}:${p.sourceIds.join("+")}`));
+    expect(shapes.filter((x) => x.join() === "VEH:stateSource")).toHaveLength(10);
+    expect(
+      shapes.filter((x) => x.join() === "PER:stateSource+nationalSource,WNT:nationalSource"),
+    ).toHaveLength(10);
+    expect(results).toHaveLength(40);
     for (const ack of acks) {
       const cid = ack.correlationId;
       expect(
