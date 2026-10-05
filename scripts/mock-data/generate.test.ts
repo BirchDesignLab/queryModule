@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkFixturePolicy, vinCheckDigitValid } from "@querymodule/core/config";
@@ -147,6 +147,21 @@ describe("--check", () => {
 
   it("the committed files are up to date", () => {
     expect(checkMockFiles(new URL("../../packages/config/mock/", import.meta.url))).toEqual([]);
+  });
+
+  it("controller r0:Q1 reads a path containing # and %", () => {
+    const d = join(tmp(), "a#b%20c");
+    mkdirSync(d);
+    for (const id of ["default", "example-ok"]) writeFileSync(join(d, `${id}.json`), generate(id));
+    expect(checkMockFiles(d)).toEqual([]);
+  });
+});
+
+describe("controller r0:Q3 builders refuse inputs that would break the policy", () => {
+  it.each([-1, 1.5, Number.NaN])("plate, vin and address throw on %s", (n) => {
+    expect(() => plate(n)).toThrow(RangeError);
+    expect(() => vin(n)).toThrow(RangeError);
+    expect(() => address(n)).toThrow(RangeError);
   });
 });
 

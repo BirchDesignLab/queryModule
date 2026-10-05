@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkFixturePolicy } from "@querymodule/core/config";
 import { type MockFile, MockFileSchema } from "@querymodule/core/contracts";
@@ -71,14 +72,16 @@ export function generate(siteId: string): string {
 
 /** File names under `dir` (a directory URL ending in "/", or a path) that are missing or differ from the generated text. */
 export function checkMockFiles(dir: URL | string): string[] {
-  const base = typeof dir === "string" ? new URL(`file:///${dir.replaceAll("\\", "/")}/`) : dir;
+  const root = typeof dir === "string" ? dir : fileURLToPath(dir);
   return Object.keys(SITES)
     .map((id) => `${id}.json`)
     .filter((name) => {
+      // A generator error (schema or fixture policy) throws here: it is a bug, not drift.
+      const expected = generate(name.replace(/\.json$/, ""));
       try {
-        return readFileSync(new URL(name, base), "utf8") !== generate(name.replace(/\.json$/, ""));
+        return readFileSync(join(root, name), "utf8") !== expected;
       } catch {
-        return true;
+        return true; // missing or unreadable file: out of date
       }
     });
 }

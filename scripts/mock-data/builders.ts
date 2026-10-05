@@ -6,9 +6,17 @@ import type { SourcePayload } from "@querymodule/core/contracts";
  * synthetic names, addresses on Example Ave, and no digit runs in free text.
  */
 
+/** Builders take a non-negative integer index; anything else would emit a policy-failing value. */
+function index(n: number): number {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new RangeError("mock-data: index must be a non-negative integer");
+  }
+  return n;
+}
+
 /** "ZZ-" plus a 4-digit, zero-padded number. */
 export function plate(n: number): string {
-  return `ZZ-${String(n % 10000).padStart(4, "0")}`;
+  return `ZZ-${String(index(n) % 10000).padStart(4, "0")}`;
 }
 
 /**
@@ -17,7 +25,7 @@ export function plate(n: number): string {
  * is (n + 9) % 10, so vin(1) keeps the "ZZZZZZZZZZZZZZZZ0" value of the M1 mock files.
  */
 export function vin(n: number): string {
-  return `${"Z".repeat(16)}${(n + 9) % 10}`;
+  return `${"Z".repeat(16)}${(index(n) + 9) % 10}`;
 }
 
 const DAYS_1901 = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
@@ -52,7 +60,7 @@ export function person(n: number): { last: string; first: string; dob: string } 
 }
 
 export function address(n: number): string {
-  return `${n % 10000} Example Ave`;
+  return `${index(n) % 10000} Example Ave`;
 }
 
 /**
