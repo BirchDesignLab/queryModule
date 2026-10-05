@@ -46,7 +46,10 @@
   {
     "story": "A8",
     "milestone": "m2",
-    "files": ["packages/core/src/response/map-response.a8.test.ts", "apps/web/e2e/a8-mapping.spec.ts"]
+    "files": [
+      "packages/core/src/response/map-response.a8.test.ts",
+      "apps/web/e2e/a8-mapping.spec.ts"
+    ]
   },
   {
     "story": "A9",
