@@ -5,6 +5,7 @@ import type { DispatchJob } from "../dispatch/dispatcher";
 import { apiError } from "../http/errors";
 import { requireSession } from "../http/session";
 import type { AppEnv } from "../http/types";
+import { errorFields } from "../log/error-fields";
 import { actorOf, type Principal } from "../seams";
 import { type Acknowledged, acknowledge } from "./acknowledge";
 import { admitSubmit, replayResponse } from "./admission";
@@ -37,29 +38,27 @@ export const QUERY_ROLES: readonly Role[] = ["user", "trainingOfficer", "admin"]
 export const mayQuery = (role: string): boolean =>
   (QUERY_ROLES as readonly string[]).includes(role);
 
+/** A dispatch job before T1: everything but the ids and the deadline T1 fixes. */
+export type JobTemplate = Omit<DispatchJob, "correlationId" | "resultId" | "deadline"> & {
+  timeoutMs: number;
+};
+
 /**
- * One dispatch job per pending source_result row T1 wrote (spec 5.2 step 5): the part's values
- * and type values from prepare's plan (D-A13), the pair's credential owner, and the deadline and
- * requiresCredentials from the snapshot prepare pinned, never the live config. Each job carries the
- * requester's audit envelope, the same one T1 wrote (spec 4.7, SEC-010).
+ * One planned job per dispatch pair, in pair order (spec 5.2 step 5): the part's values and type
+ * values from prepare's plan (D-A13), the pair's credential owner, timeoutMs and
+ * requiresCredentials from the snapshot prepare pinned, never the live config, and the requester's
+ * audit envelope, the same one T1 writes (spec 4.7, SEC-010). Runs before T1, so a guard that
+ * trips is a 500 with nothing committed (AW3 critic b).
  */
-export function dispatchJobs(
-  p: PreparedSubmit,
-  ack: Acknowledged,
-  principal: Principal,
-): DispatchJob[] {
-  return ack.results.map((r) => {
-    const part = p.plan.parts.find((x) => x.partId === r.partId);
-    if (!part) throw new Error("dispatch: result has no plan part");
-    const source = p.config.siteConfig.sources.find((s) => s.id === r.sourceId);
-    if (!source) throw new Error("dispatch: result has no source config");
-    const pair = p.pairs.find((x) => x.partId === r.partId && x.sourceId === r.sourceId);
-    if (!pair) throw new Error("dispatch: result has no dispatch pair");
+export function planJobs(p: PreparedSubmit, principal: Principal): JobTemplate[] {
+  return p.pairs.map((pair) => {
+    const part = p.plan.parts.find((x) => x.partId === pair.partId);
+    if (!part) throw new Error("dispatch: pair has no plan part");
+    const source = p.config.siteConfig.sources.find((s) => s.id === pair.sourceId);
+    if (!source) throw new Error("dispatch: pair has no source config");
     return {
-      correlationId: ack.body.correlationId,
-      partId: r.partId,
-      sourceId: r.sourceId,
-      resultId: r.resultId,
+      partId: pair.partId,
+      sourceId: pair.sourceId,
       userId: principal.userId,
       actor: actorOf(principal),
       identitySource: principal.identitySource,
@@ -72,7 +71,28 @@ export function dispatchJobs(
       credentialUserId: pair.credentialUserId,
       delegationId: pair.delegationId,
       requiresCredentials: source.requiresCredentials,
-      deadline: ack.acknowledgedAt + source.timeoutMs,
+      timeoutMs: source.timeoutMs,
+    };
+  });
+}
+
+/**
+ * T1's results bound to the planned jobs by index (acknowledge writes one row per pair, in pair
+ * order); a replay's empty results bind nothing. A result that does not line up with its pair is
+ * a bug, thrown for the route's post-commit backstop.
+ */
+export function bindJobs(templates: readonly JobTemplate[], ack: Acknowledged): DispatchJob[] {
+  return ack.results.map((r, i) => {
+    const t = templates[i];
+    if (!t || t.partId !== r.partId || t.sourceId !== r.sourceId) {
+      throw new Error("dispatch: result does not match its pair");
+    }
+    const { timeoutMs, ...job } = t;
+    return {
+      ...job,
+      correlationId: ack.body.correlationId,
+      resultId: r.resultId,
+      deadline: ack.acknowledgedAt + timeoutMs,
     };
   });
 }
@@ -81,9 +101,10 @@ export function dispatchJobs(
  * POST /api/v1/queries (spec 5.2 steps 1 to 4), mounted after the body cap and the
  * X-Requested-With check. Nothing from the body is logged; any other throw reaches
  * app.onError as 500 internal, a T1 failure only as a SubmitTransactionError. A role outside
- * QUERY_ROLES gets 403 before anything is read. The committed rows go to the dispatcher as soon as
- * T1 returns, before the body is parsed, so no later throw leaves them undispatched; the 202 never
- * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
+ * QUERY_ROLES gets 403 before anything is read. Jobs are planned before T1 (a guard that trips is
+ * a 500 with nothing committed) and bound to T1's rows as soon as it returns, before the body is
+ * parsed; a throw there is logged by class and ids and fails closed (d.fatal), so committed rows
+ * are never silently left undispatched. The 202 never waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
  * nothing: the winner enqueued its own rows.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
@@ -95,6 +116,7 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     const principal = c.get("principal");
     const p = prepareSubmit(c, d, a.raw, principal);
     if (!p.ok) return p.response;
+    const templates = planJobs(p.value, principal);
     let ack: Acknowledged;
     try {
       ack = await acknowledge(d, principal, p.value, a);
@@ -104,7 +126,17 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       if (winner === null) throw sanitizeSubmitError(e);
       ack = { body: winner, acknowledgedAt: winner.acknowledgedAt, results: [] };
     }
-    d.dispatcher.enqueue(dispatchJobs(p.value, ack, principal));
+    try {
+      d.dispatcher.enqueue(bindJobs(templates, ack));
+    } catch (e) {
+      // Backstop (AW3 critic b): T1 committed, so the 202 stands; the process fails closed and the
+      // restart sweep settles the pending rows as interrupted, with audit (spec 5.2, 8.1).
+      d.logger.error("dispatch jobs failed", {
+        correlationId: ack.body.correlationId,
+        error: { name: errorFields(e).name },
+      });
+      d.fatal(e);
+    }
     return c.json(SubmitQueryResponseSchema.parse(ack.body), 202);
   });
 }
