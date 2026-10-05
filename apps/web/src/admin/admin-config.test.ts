@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminConfigBody, CLIENT_CONFIG, RAW_SITE } from "../test/msw-server.js";
+import { adminConfigBody, CLIENT_CONFIG, RAW_MOCK, RAW_SITE } from "../test/msw-server.js";
 import { documentFrom, editorOf, startOf } from "./admin-config.js";
 import { docFromClient, type JsonObject } from "./draft.js";
 
@@ -150,5 +150,42 @@ function withDraftBody() {
 describe("startOf carries the site id (export file names)", () => {
   it("takes it from the admin config response", () => {
     expect(startOf(adminConfigBody()).server.siteId).toBe("default");
+  });
+});
+
+describe("the mock document in the builder (Task 2, #548, CFG-2)", () => {
+  const base = { siteConfig: RAW_SITE, locales: {}, mock: RAW_MOCK };
+
+  it("editorOf carries the document's mock, or null when it has none", () => {
+    expect(editorOf(base).mock).toEqual(RAW_MOCK);
+    expect(editorOf({ siteConfig: RAW_SITE, locales: {} }).mock).toBeNull();
+  });
+
+  it("startOf seeds the live mock and the saved mock from the document", () => {
+    const start = startOf({
+      ...adminConfigBody(),
+      live: { ...adminConfigBody().live, document: base },
+    });
+    expect(start.mock).toEqual(RAW_MOCK);
+    expect(start.server.liveMock).toEqual(RAW_MOCK);
+    expect(start.server.savedMock).toEqual(RAW_MOCK);
+  });
+
+  it("an untouched mock passes through exactly", () => {
+    const { doc, labels } = editorOf(base);
+    expect(documentFrom(base, doc, labels, base.mock)).toEqual(base);
+    expect(documentFrom(base, doc, labels)).toEqual(base);
+  });
+
+  it("an edited mock replaces the base mock in the built document", () => {
+    const { doc, labels } = editorOf(base);
+    const edited = { ...RAW_MOCK, siteId: "default", sources: {} };
+    expect(documentFrom(base, doc, labels, edited).mock).toEqual(edited);
+  });
+
+  it("a site with no mock builds a document with no mock key", () => {
+    const bare = { siteConfig: RAW_SITE, locales: {} };
+    const { doc, labels } = editorOf(bare);
+    expect(documentFrom(bare, doc, labels, null)).not.toHaveProperty("mock");
   });
 });

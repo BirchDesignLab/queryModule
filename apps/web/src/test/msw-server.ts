@@ -32,6 +32,11 @@ export const CLIENT_CONFIG = toClientSiteConfig(
 /** The raw default site file: what an empty config store seeds as version 1 (ADR-0011 item 1). */
 export const RAW_SITE: Record<string, unknown> = JSON.parse(readFileSync(defaultSitePath, "utf8"));
 
+/** The default site's mock file (synthetic canned responses only; spec 5.4). */
+export const RAW_MOCK: Record<string, unknown> = JSON.parse(
+  readFileSync(join(dirname(defaultSitePath), "../mock/default.json"), "utf8"),
+);
+
 const FIXTURE_ID = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 /** Later versions are later in time, as on a real site. */
 const FIXTURE_TIME = Date.UTC(2026, 8, 29, 17, 0, 0);
@@ -68,7 +73,10 @@ export function adminConfigBody(
       version: number;
       siteConfig: Record<string, unknown>;
       locales?: Record<string, Record<string, string>>;
+      mock?: Record<string, unknown>;
     } | null;
+    /** The live mock responses document (a mock site only); none when omitted. */
+    mock?: Record<string, unknown>;
   } = {},
 ) {
   const liveVersion = options.liveVersion ?? 1;
@@ -79,6 +87,7 @@ export function adminConfigBody(
       document: {
         siteConfig: options.siteConfig ?? RAW_SITE,
         locales: options.liveLocales ?? {},
+        ...(options.mock === undefined ? {} : { mock: options.mock }),
       },
     },
     draft:
@@ -89,6 +98,7 @@ export function adminConfigBody(
             document: {
               siteConfig: options.draft.siteConfig,
               locales: options.draft.locales ?? {},
+              ...(options.draft.mock === undefined ? {} : { mock: options.draft.mock }),
             },
           },
   };

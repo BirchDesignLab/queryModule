@@ -136,6 +136,8 @@ export function validateDraft(
 interface Snapshot {
   doc: JsonObject | null;
   labels: LabelOverlay;
+  /** The mock document (CFG-2); null when the site has none. */
+  mock: JsonObject | null;
   /** The builder's selection (a tree pointer) then; opaque to the store. */
   meta: string | null;
 }
@@ -167,12 +169,17 @@ export interface ServerBase {
   /** The edits as last loaded or saved: what "unsaved" is measured against. */
   savedDoc: JsonObject;
   savedLabels: LabelOverlay;
+  /** The mock as last loaded or saved, and the live version's mock (CFG-2); absent means none. */
+  savedMock?: JsonObject | null;
+  liveMock?: JsonObject | null;
 }
 
 /** The edits at one moment. */
 export interface EditState {
   doc: JsonObject;
   labels: LabelOverlay;
+  /** The mock document; null or absent when the site has none. */
+  mock?: JsonObject | null;
 }
 
 export interface StartOptions {
@@ -187,6 +194,8 @@ export interface SetPathOptions {
 export interface ConfigDraftState {
   doc: JsonObject | null;
   labels: LabelOverlay;
+  /** The mock responses document (CFG-2), taken from the server document; null when the site has none. */
+  mock: JsonObject | null;
   /** Steps that can be undone and redone (memory only, cleared with the draft). */
   undoCount: number;
   redoCount: number;
@@ -205,10 +214,12 @@ export interface ConfigDraftState {
    * The live version moved on the server (a check, a roll back): its view replaces the one the
    * diff compares with. The edits, the draft's base version and the undo steps stay.
    */
-  setLive(liveDoc: JsonObject, liveLabels: LabelOverlay): void;
+  setLive(liveDoc: JsonObject, liveLabels: LabelOverlay, liveMock?: JsonObject | null): void;
   /** `coalesce`: a text entry, whose consecutive edits of one control are one undo step. */
   setPath(path: readonly PathSegment[], value: unknown, options?: SetPathOptions): void;
   setDoc(doc: JsonObject): void;
+  /** Replaces the mock document; every call is one undo step. */
+  setMock(mock: JsonObject): void;
   setLabel(locale: string, key: string, text: string): void;
   removeLabel(locale: string, key: string): void;
   /** Records the builder's selection, so an undo can restore it. Not a step. */
@@ -244,7 +255,12 @@ export function createConfigDraftStore(): ConfigDraftStore {
     state = { ...state, ...patch, undoCount: past.length, redoCount: future.length };
     for (const l of [...listeners]) l();
   };
-  const snapshot = (): Snapshot => ({ doc: state.doc, labels: state.labels, meta });
+  const snapshot = (): Snapshot => ({
+    doc: state.doc,
+    labels: state.labels,
+    mock: state.mock,
+    meta,
+  });
   /** Records the state before an edit as a step, unless it continues the same edit. */
   const record = (key: string | null): void => {
     if (key !== null && key === lastKey && past.length > 0) return;
@@ -255,25 +271,31 @@ export function createConfigDraftStore(): ConfigDraftStore {
   const restore = (from: Snapshot): Restored => {
     meta = from.meta;
     lastKey = null;
-    publish({ doc: from.doc, labels: from.labels });
+    publish({ doc: from.doc, labels: from.labels, mock: from.mock });
     return { meta: from.meta };
   };
   state = {
     doc: null,
     labels: {},
+    mock: null,
     undoCount: 0,
     redoCount: 0,
     server: null,
     start(doc, options) {
       if (state.doc === null)
-        publish({ doc, labels: options?.labels ?? {}, server: options?.server ?? null });
+        publish({
+          doc,
+          labels: options?.labels ?? {},
+          mock: options?.server?.document.mock ?? null,
+          server: options?.server ?? null,
+        });
     },
     load(doc, labels, server) {
       meta = null;
       past = [];
       future = [];
       lastKey = null;
-      publish({ doc, labels, server });
+      publish({ doc, labels, mock: server.document.mock ?? null, server });
     },
     markSaved(draftVersion, document, saved) {
       if (state.server === null) return;
@@ -284,12 +306,20 @@ export function createConfigDraftStore(): ConfigDraftStore {
           draftVersion,
           savedDoc: saved.doc,
           savedLabels: saved.labels,
+          savedMock: saved.mock ?? null,
         },
       });
     },
-    setLive(liveDoc, liveLabels) {
+    setLive(liveDoc, liveLabels, liveMock) {
       if (state.server === null) return;
-      publish({ server: { ...state.server, liveDoc, liveLabels } });
+      publish({
+        server: {
+          ...state.server,
+          liveDoc,
+          liveLabels,
+          ...(liveMock === undefined ? {} : { liveMock }),
+        },
+      });
     },
     setPath(path, value, options) {
       if (state.doc === null || Object.is(valueAt(state.doc, path), value)) return;
@@ -300,6 +330,11 @@ export function createConfigDraftStore(): ConfigDraftStore {
       if (Object.is(state.doc, doc)) return;
       record("doc");
       publish({ doc });
+    },
+    setMock(mock) {
+      if (state.doc === null || Object.is(state.mock, mock)) return;
+      record(null);
+      publish({ mock });
     },
     setLabel(locale, key, text) {
       if (state.labels[locale]?.[key] === text) return;
@@ -338,7 +373,7 @@ export function createConfigDraftStore(): ConfigDraftStore {
       past = [];
       future = [];
       lastKey = null;
-      publish({ doc: null, labels: {}, server: null });
+      publish({ doc: null, labels: {}, mock: null, server: null });
     },
   };
   return {
