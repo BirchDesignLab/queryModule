@@ -276,9 +276,10 @@ describe("dispatch app bar keeps one row at 200% zoom (683 px)", () => {
     );
     expect(css).not.toMatch(/\.qm-account__email\s*\{[^}]*display:\s*none/);
   });
-  it("from 36rem to 52rem the site name shrinks to a 12ch minimum; below 36rem it is left to wrap", () => {
+  it("from 36rem to 62.5rem the site name shrinks to a 12ch minimum; below 36rem it is left to wrap", () => {
+    // 62.5rem (1000 px): a 32ch site name fits the widest bar from here up (#482).
     expect(css).toMatch(
-      /@media \(min-width: 36rem\) and \(max-width: 52rem\)\s*\{\s*\.qm-app-header \.qm-app-header__site\s*\{\s*flex:\s*1 1 12ch/,
+      /@media \(min-width: 36rem\) and \(max-width: 62\.5rem\)\s*\{\s*\.qm-app-header \.qm-app-header__site\s*\{\s*flex:\s*1 1 12ch/,
     );
   });
 });
