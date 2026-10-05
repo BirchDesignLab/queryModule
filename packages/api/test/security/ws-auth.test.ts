@@ -313,6 +313,26 @@ describe("WebSocket upgrade rate limit (D-A9, spec 5.3; #225, #315)", () => {
     expect(Number(res.retryAfter)).toBeGreaterThan(0);
     expect(resolve).not.toHaveBeenCalled();
   });
+  it("takes the limit and window from the deploy env (WS_UPGRADE_LIMIT, WS_UPGRADE_WINDOW_MS)", async () => {
+    const t = await createTestApp({ env: { WS_UPGRADE_LIMIT: "2", WS_UPGRADE_WINDOW_MS: "5000" } });
+    await t.createUser(EMAIL, PW);
+    const cookie = await t.cookieFor(EMAIL, PW);
+    const s = await startTestServer(t);
+    closers.push(s.close);
+    const keys = hitKeys(t);
+    const limits: [number, number][] = [];
+    const spy = vi.mocked(t.deps.limiter.hit);
+    for (let i = 0; i < 2; i++) (await open(s.wsUrl, { origin: ORIGIN, cookie })).close();
+    const res = await status(s.wsUrl, { origin: ORIGIN, cookie });
+    expect(res.status).toBe(429);
+    for (const c of spy.mock.calls) limits.push([c[1], c[2]]);
+    expect(limits).toEqual([
+      [2, 5000],
+      [2, 5000],
+      [2, 5000],
+    ]);
+    expect(keys).toHaveLength(3);
+  });
   it("counts cheap rejected upgrades (foreign Origin) against the limit", async () => {
     const { t, s, cookie } = await setup();
     const keys = hitKeys(t);

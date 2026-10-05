@@ -15,7 +15,11 @@ import type { Principal } from "../seams";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
-/** Upgrade attempts per client IP per window (decision D-A9, spec 5.3; no FR/SEC ID covers it). */
+/**
+ * The default upgrade attempts per client IP per window (decision D-A9, spec 5.3; no FR/SEC ID
+ * covers it). The deploy env may change it (WS_UPGRADE_LIMIT, WS_UPGRADE_WINDOW_MS): the e2e
+ * harness raises it, since every signed-in page opens a feed socket from one IP.
+ */
 export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
 export const WS_LOCAL_CLOSE = { idle: 4000, badMessage: 1008, shutdown: 1001 } as const;
 export interface WsHandle {
@@ -165,8 +169,8 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     );
     const hit = await d.limiter.hit(
       `ws:ip:${ip}`,
-      WS_UPGRADE_LIMIT.limit,
-      WS_UPGRADE_LIMIT.windowMs,
+      d.env.wsUpgradeLimit.limit,
+      d.env.wsUpgradeLimit.windowMs,
     );
     if (!hit.allowed) return rejectLimited(socket, hit.retryAfterSeconds);
     const origin = req.headers.origin;
