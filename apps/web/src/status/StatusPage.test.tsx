@@ -48,7 +48,7 @@ describe("NFR-003 authenticated heartbeat on the status page (spec 5.3, 6.8, 9.3
         onclose: null,
         onerror: null,
       };
-      queueMicrotask(() => socket.onclose?.());
+      queueMicrotask(() => socket.onclose?.({ code: 1006 }));
       return socket;
     });
     expect(
@@ -118,7 +118,7 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
   it("Connection: Failed uses the critical (error) badge and keeps the reason in the sentence", async () => {
     await openStatus(() => {
       const socket = new FakeSocket();
-      queueMicrotask(() => socket.onclose?.());
+      queueMicrotask(() => socket.onclose?.({ code: 1006 }));
       return socket;
     });
     const failed = await screen.findByText("Failed", { selector: ".qm-badge" });
