@@ -5,6 +5,7 @@ import { createAdapterRegistry } from "../../src/adapters/registry";
 import { type AdapterFactory, type SourceAdapter, SourceError } from "../../src/adapters/types";
 import { BUILTIN_ADAPTER_KINDS as LOAD_KINDS, type LoadedConfig } from "../../src/config/load";
 import { systemTimers } from "../../src/dispatch/timers";
+import { captureLogger } from "../helpers/fixture";
 
 // Spec 5.4 (FR-043): adapters are created per config snapshot and memoised per snapshot, so a
 // publish never swaps an adapter under a running job; mock is refused unless allowed.
@@ -18,7 +19,7 @@ function fakeFactory(kind = "mock") {
   return { factory, create };
 }
 
-const base = { timers: systemTimers, random: () => 0.5 };
+const base = { timers: systemTimers, random: () => 0.5, logger: captureLogger() };
 
 describe("BUILTIN_ADAPTER_KINDS", () => {
   it("is exactly mock, and config/load re-exports the same definition", () => {
@@ -46,6 +47,7 @@ describe("createAdapterRegistry", () => {
       allowMockSources: true,
       timers: systemTimers,
       random,
+      logger: captureLogger(),
       factories: [f.factory],
     });
     const s = snapshot();
