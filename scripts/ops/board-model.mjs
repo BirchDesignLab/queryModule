@@ -273,3 +273,10 @@ export function parentStatus(children, current) {
 export function phaseLabel(phase) {
   return phase.toLowerCase().replace(".", "-");
 }
+
+/** The plan line of a phase parent body: one plan file, several (a phase run in two lanes), or none yet. */
+export function phasePlanLine(plan) {
+  if (plan === null) return "Plan: written at phase start (master plan 6.1).";
+  const paths = (Array.isArray(plan) ? plan : [plan]).map((p) => `\`docs/superpowers/plans/${p}\``);
+  return paths.length === 1 ? `Plan: ${paths[0]}.` : `Plans: ${paths.join(" and ")}.`;
+}

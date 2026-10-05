@@ -39,6 +39,13 @@ describe("validateBoardData: the shipped docs/board/board-data.json", () => {
       milestone: "M2 Results and audit",
     });
     expect(KNOWN_LABELS).toContain("p0-5");
+    // Carried into the P0.5 plans and linked under #519 by the planning PR (#557).
+    const followUps = (
+      loadBoardData() as { followUps: Array<{ number: number; parent: number; phase: string }> }
+    ).followUps;
+    for (const n of [482, 484, 486, 493]) {
+      expect(followUps.find((f) => f.number === n)).toMatchObject({ parent: 519, phase: "P0.5" });
+    }
   });
 
   it("carries the two Task 604 follow-ups (#92, #94) with their GitHub titles", () => {

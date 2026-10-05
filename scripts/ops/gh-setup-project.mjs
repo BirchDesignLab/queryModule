@@ -57,6 +57,7 @@ import {
   matchParent,
   parentStatus,
   phaseLabel,
+  phasePlanLine,
   rollUp,
   titleUpdate,
   waveParentStatus,
@@ -549,9 +550,7 @@ for (const mp of MILESTONE_PARENTS) {
 
 const phaseIssue = new Map();
 for (const p of PHASES) {
-  const planLine = p.plan
-    ? `Plan: \`docs/superpowers/plans/${p.plan}\`.`
-    : "Plan: written at phase start (master plan 6.1).";
+  const planLine = phasePlanLine(p.plan);
   const name = p.title.replace(/ \([^)]*\)$/, "");
   const issue = ensureIssue({
     number: p.number,

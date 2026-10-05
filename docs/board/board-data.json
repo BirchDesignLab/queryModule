@@ -45,8 +45,8 @@
       "title": "Dispatch (M2 P0.5)",
       "milestone": "M2 Results and audit",
       "phase": "P0.5",
-      "gate": "A4 clean no-record; smoke 1 to 5",
-      "plan": null
+      "gate": "A4 clean no-record at the API layer and in the UI status list; smoke 1 to 5; dispatch and lifecycle tests; source-status.spec.ts",
+      "plan": ["2026-10-05-m2-track-a-p0-5.md", "2026-10-05-m2-track-b-p0-5.md"]
     },
     {
       "number": 44,
@@ -1339,8 +1339,8 @@
     {
       "number": 482,
       "milestone": "M2 Results and audit",
-      "parent": 46,
-      "phase": "P3",
+      "parent": 519,
+      "phase": "P0.5",
       "labels": ["web", "p3", "follow-up", "accessibility"],
       "track": "Web (B)",
       "size": "S",
@@ -1365,8 +1365,8 @@
     {
       "number": 484,
       "milestone": "M2 Results and audit",
-      "parent": 46,
-      "phase": "P3",
+      "parent": 519,
+      "phase": "P0.5",
       "labels": ["web", "p3", "follow-up"],
       "track": "Web (B)",
       "size": "S",
@@ -1391,8 +1391,8 @@
     {
       "number": 486,
       "milestone": "M2 Results and audit",
-      "parent": 46,
-      "phase": "P3",
+      "parent": 519,
+      "phase": "P0.5",
       "labels": ["web", "p3", "follow-up", "decision"],
       "track": "Web (B)",
       "size": "S",
@@ -1443,8 +1443,8 @@
     {
       "number": 493,
       "milestone": "M2 Results and audit",
-      "parent": 44,
-      "phase": "P1",
+      "parent": 519,
+      "phase": "P0.5",
       "track": "Platform (A)",
       "size": "S",
       "priority": "Medium",
