@@ -3,11 +3,13 @@ import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { CONFIG_SCHEMA_VERSION, CORE_VERSION } from "@querymodule/core/contracts";
+import { inArray } from "drizzle-orm";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type * as auditService from "../src/audit/service";
 import { ConfigLoadError } from "../src/config/load";
 import type * as dbClient from "../src/db/client";
 import { readPragmas } from "../src/db/client";
+import { sourceResult } from "../src/db/schema";
 import { readDeployEnv } from "../src/env";
 import { KeyCanaryError } from "../src/keys/canary";
 import { SecretConfigError } from "../src/secrets";
@@ -19,12 +21,20 @@ import {
   startServer,
   startupErrorFields,
 } from "../src/startup";
+import { seedResult } from "./helpers/results";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
-// Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert of a
-// configLoaded event only, so the fail-closed case proves the transaction rolls that row back
-// (A2 review M1) and cannot pass because some earlier audit write failed instead (#303).
-const failAudit = vi.hoisted(() => ({ on: false }));
+// Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert of an
+// event of failAudit.type only (configLoaded by default), so the fail-closed case proves the
+// transaction rolls that row back (A2 review M1) and cannot pass because some earlier audit write
+// failed instead (#303). failAudit.error builds the thrown error; failAudit.seen runs before each
+// write, so a test can observe the process state at that write.
+const failAudit = vi.hoisted(() => ({
+  on: false,
+  type: "configLoaded",
+  error: (): Error => new Error("audit store unavailable"),
+  seen: undefined as ((type: string) => Promise<void>) | undefined,
+}));
 vi.mock("../src/audit/service", async (importOriginal) => {
   const real = await importOriginal<typeof auditService>();
   return {
@@ -32,9 +42,9 @@ vi.mock("../src/audit/service", async (importOriginal) => {
       const svc = real.createAuditService(...args);
       return {
         record: async (...a: Parameters<typeof svc.record>) => {
+          await failAudit.seen?.(a[1].type);
           const written = await svc.record(...a);
-          if (failAudit.on && a[1].type === "configLoaded")
-            throw new Error("audit store unavailable");
+          if (failAudit.on && a[1].type === failAudit.type) throw failAudit.error();
           return written;
         },
       };
@@ -43,6 +53,9 @@ vi.mock("../src/audit/service", async (importOriginal) => {
 });
 afterEach(() => {
   failAudit.on = false;
+  failAudit.type = "configLoaded";
+  failAudit.error = () => new Error("audit store unavailable");
+  failAudit.seen = undefined;
 });
 
 // Records every database a start opens, so a failed start can be shown to close its handle
@@ -373,6 +386,133 @@ describe("SEC-010 SEC-012 BR-001 configLoaded at startup (spec 5.8 step 7)", () 
     const rows = await configLoadedRows(next);
     next.db.$client.close();
     expect(rows.length).toBe(1);
+  });
+});
+
+describe("#511 C-M-1 the configLoaded refusal logs error fields, never the message (spec 5.9)", () => {
+  it("a forced SQLITE_FULL logs error { name, code } and no message text; the refusal stays fixed text", async () => {
+    const env = await envWith();
+    const lines: string[] = [];
+    failAudit.on = true;
+    failAudit.error = () =>
+      Object.assign(new Error("SQLITE_FULL: database or disk is full ZZ-0001"), {
+        code: "SQLITE_FULL",
+      });
+    const refusal = await bootstrap(env, { logSink: (l) => lines.push(l) }).catch((e) => e);
+    expect(refusal).toBeInstanceOf(StartupRefusedError);
+    expect(refusal.message).toBe("startup refused: configLoaded audit write failed");
+    expect(refusal.cause).toBeUndefined();
+    const refused = lines.map((l) => JSON.parse(l)).filter((l) => l.msg === "startup refused");
+    expect(refused).toEqual([
+      expect.objectContaining({
+        level: "error",
+        reason: "configLoaded audit write failed",
+        error: { name: "Error", code: "SQLITE_FULL" },
+      }),
+    ]);
+    const logged = lines.join("\n");
+    expect(logged).not.toContain("disk is full");
+    expect(logged).not.toContain("ZZ-0001");
+    expect(opened.at(-1)?.$client.closed).toBe(true);
+  });
+});
+
+describe("spec 5.2 startup sweep: pending results become interrupted before the server listens (NFR-003, SEC-010, SEC-012)", () => {
+  /** A data dir whose database holds two pending rows and one returned row, left by a prior start. */
+  async function dataWithPending() {
+    const data = tempDir("qm-data-");
+    const env = await envWith({}, data);
+    const first = await bootstrap(env, { logSink: () => {} });
+    const pending = [
+      await seedResult(first.db, { userId: "user-startup-a" }),
+      await seedResult(first.db, { userId: "user-startup-b", credentialUserId: "user-owner" }),
+    ];
+    const done = await seedResult(first.db, { userId: "user-startup-a", status: "returned" });
+    first.db.$client.close();
+    return { env, pending, done };
+  }
+
+  async function statusOf(deps: Awaited<ReturnType<typeof loadDeps>>, ids: string[]) {
+    const rows = await deps.db
+      .select({ resultId: sourceResult.resultId, status: sourceResult.status })
+      .from(sourceResult)
+      .where(inArray(sourceResult.resultId, ids));
+    return Object.fromEntries(rows.map((r) => [r.resultId, r.status]));
+  }
+
+  async function interruptedCount(deps: Awaited<ReturnType<typeof loadDeps>>) {
+    const r = await deps.db.$client.execute(
+      "SELECT count(*) AS n FROM audit_event WHERE type = 'interrupted'",
+    );
+    return Number(r.rows[0]?.n);
+  }
+
+  it("startServer sweeps every pending row, audits each once, and the port is closed while it does", async () => {
+    const { env, pending, done } = await dataWithPending();
+    const atSweep: string[] = [];
+    failAudit.seen = async (type) => {
+      if (type === "interrupted") atSweep.push(await connectError(Number(env.PORT)));
+    };
+    const lines: string[] = [];
+    const s = await startServer(env, { logSink: (l) => lines.push(l) });
+    // spec 5.2: the sweep wrote its audit rows before the server listened
+    expect(atSweep).toEqual(["ECONNREFUSED", "ECONNREFUSED"]);
+    const ids = [...pending.map((p) => p.resultId), done.resultId];
+    expect(await statusOf(s.deps, ids)).toEqual({
+      [pending[0]?.resultId ?? ""]: "interrupted",
+      [pending[1]?.resultId ?? ""]: "interrupted",
+      [done.resultId]: "returned",
+    });
+    expect(await interruptedCount(s.deps)).toBe(2);
+    const sweepLine = lines.map((l) => JSON.parse(l)).find((l) => l.msg === "startup sweep");
+    expect(sweepLine).toMatchObject({ level: "info", interrupted: 2, pruned: 0 });
+    await stop(s);
+  });
+
+  it("loadDeps (the ops scripts' entry) never sweeps: a live process's pending rows stay pending", async () => {
+    const { env, pending } = await dataWithPending();
+    const deps = await loadDeps(env, { logSink: () => {} });
+    const ids = pending.map((p) => p.resultId);
+    const status = await statusOf(deps, ids);
+    const audited = await interruptedCount(deps);
+    deps.db.$client.close();
+    expect(Object.values(status)).toEqual(["pending", "pending"]);
+    expect(audited).toBe(0);
+  });
+
+  it("a failed sweep refuses startup with fixed text, closes the database, and leaves every row pending", async () => {
+    const { env, pending } = await dataWithPending();
+    const lines: string[] = [];
+    failAudit.on = true;
+    failAudit.type = "interrupted";
+    failAudit.error = () => new Error("audit store unavailable ZZ-0001");
+    opened.length = 0;
+    const refusal = await startServer(env, { logSink: (l) => lines.push(l) }).catch((e) => e);
+    expect(refusal).toBeInstanceOf(StartupRefusedError);
+    expect(refusal.message).toBe("startup refused: startup sweep failed");
+    expect(refusal.cause).toBeUndefined();
+    const refused = lines.map((l) => JSON.parse(l)).filter((l) => l.msg === "startup refused");
+    expect(refused).toEqual([
+      expect.objectContaining({
+        level: "error",
+        reason: "startup sweep failed",
+        error: { name: "Error" },
+      }),
+    ]);
+    expect(lines.join("\n")).not.toContain("ZZ-0001");
+    expect(await connectError(Number(env.PORT))).toBe("ECONNREFUSED");
+    expect(opened.map((db) => db.$client.closed)).toEqual([true]);
+    // the transaction rolled back: the rows are pending and no interrupted row was kept
+    failAudit.on = false;
+    const deps = await loadDeps(env, { logSink: () => {} });
+    const status = await statusOf(
+      deps,
+      pending.map((p) => p.resultId),
+    );
+    const audited = await interruptedCount(deps);
+    deps.db.$client.close();
+    expect(Object.values(status)).toEqual(["pending", "pending"]);
+    expect(audited).toBe(0);
   });
 });
 

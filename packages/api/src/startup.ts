@@ -10,6 +10,7 @@ import { DatabaseLockTimeoutError, DatabaseOpenError } from "./db/client";
 import { TriggerMissingError } from "./db/migrate";
 import { withTransaction } from "./db/tx";
 import { type AppDeps, buildDeps } from "./deps";
+import { sweepPending } from "./dispatch/sweep";
 import { DeployEnvError, readDeployEnv } from "./env";
 import { KeyCanaryError } from "./keys/canary";
 import { type ErrorFields, errorFields } from "./log/error-fields";
@@ -23,7 +24,11 @@ export class StartupRefusedError extends Error {
   }
 }
 
-/** The startup errors whose message is fixed text: key names, file paths, trigger names. */
+/**
+ * The startup errors whose message is app-built fixed text, never a value: key names, file
+ * paths, trigger names. Their message reaches stderr (main.ts), so a class added to this list
+ * must never embed a runtime value (a query param, a config value, a key, an adapter's text).
+ */
 const FIXED_TEXT_STARTUP_ERRORS = [
   StartupRefusedError,
   DeployEnvError,
@@ -71,8 +76,26 @@ export async function loadDeps(
 }
 
 /**
+ * Refuses startup after a failed step (spec 8.1): one "startup refused" line with the fixed
+ * reason and the error's name and driver code only, never its message, which can quote query
+ * values (spec 5.9; #511 C-M-1); then closes the database. The thrown error is fixed text with
+ * no cause, so nothing of the original error reaches main.ts's stderr line (LS-2).
+ */
+function refuse(deps: AppDeps, reason: string, e: unknown): StartupRefusedError {
+  deps.logger.error("startup refused", {
+    reason,
+    site: deps.config.current().siteConfig.site.id,
+    error: errorFields(e),
+  });
+  deps.db.$client.close();
+  return new StartupRefusedError(reason);
+}
+
+/**
  * The server's startup sequence: loadDeps, then one configLoaded audit row per start (spec 5.8
- * step 7, SEC-010); a failed write closes the database and refuses startup.
+ * step 7, SEC-010), then the startup sweep that settles every pending result as interrupted
+ * (spec 5.2), all before the server listens. A failed step closes the database and refuses
+ * startup.
  */
 export async function bootstrap(
   processEnv: NodeJS.ProcessEnv,
@@ -96,16 +119,14 @@ export async function bootstrap(
         },
       }),
     );
-  } catch {
-    // Fixed reason, like the MFA guard: the error itself is neither logged nor rethrown (LS-2),
-    // so no query value can reach the log or main.ts's stderr line.
-    const reason = "configLoaded audit write failed";
-    deps.logger.error("startup refused", {
-      reason,
-      site: deps.config.current().siteConfig.site.id,
-    });
-    deps.db.$client.close();
-    throw new StartupRefusedError(reason);
+  } catch (e) {
+    throw refuse(deps, "configLoaded audit write failed", e);
+  }
+  try {
+    const swept = await sweepPending(deps);
+    deps.logger.info("startup sweep", swept);
+  } catch (e) {
+    throw refuse(deps, "startup sweep failed", e);
   }
   return deps;
 }
