@@ -107,6 +107,8 @@ function job(over: Partial<DispatchJob> = {}): DispatchJob {
     delegationId: null,
     requiresCredentials: false,
     deadline: T0 + 10_000,
+    // fakeTime's monotonic reading at T0: the job was acknowledged then
+    acknowledgedMonoMs: 5,
     ...over,
   };
 }
@@ -257,11 +259,13 @@ describe("createDispatcher outcomes (spec 5.2 step 5, FR-043, FR-044)", () => {
   it("requiresCredentials with no credential gives credentialsMissing without an adapter call", async () => {
     const s = setup();
     const j = job({ requiresCredentials: true, credentialUserId: null });
+    // m2 ruling: latency runs from the acknowledgment, so time before enqueue counts
+    await s.time.advance(250);
     s.dispatcher.enqueue([j]);
     await s.time.advance(0);
     expect(s.get).not.toHaveBeenCalled();
     expect(s.calls).toHaveLength(0);
-    expect(s.seen).toEqual([{ job: j, outcome: { status: "credentialsMissing" }, latencyMs: 0 }]);
+    expect(s.seen).toEqual([{ job: j, outcome: { status: "credentialsMissing" }, latencyMs: 250 }]);
   });
 
   it("requiresCredentials with a credential owner calls the adapter", async () => {
@@ -298,6 +302,24 @@ describe("createDispatcher caps and queueing (spec 5.2, NFR-002)", () => {
     expect(s.calls).toHaveLength(33);
   });
 
+  it("latencyMs runs from the acknowledgment to the outcome, queue wait included (m2 ruling)", async () => {
+    const s = setup();
+    const jobs = Array.from({ length: 5 }, () => job());
+    s.dispatcher.enqueue(jobs);
+    expect(s.calls).toHaveLength(4);
+    await s.time.advance(300);
+    s.calls[0]?.resolve(PAYLOAD);
+    await s.time.advance(0);
+    expect(s.calls).toHaveLength(5);
+    await s.time.advance(200);
+    s.calls[4]?.resolve(PAYLOAD);
+    await s.time.advance(0);
+    expect(s.seen.map((x) => [x.job.resultId, x.latencyMs])).toEqual([
+      [jobs[0]?.resultId, 300],
+      [jobs[4]?.resultId, 500],
+    ]);
+  });
+
   it("a job blocked on its source does not hold back a later job on a free source", () => {
     const s = setup();
     s.dispatcher.enqueue([
@@ -322,7 +344,7 @@ describe("createDispatcher caps and queueing (spec 5.2, NFR-002)", () => {
     expect(s.seen).toEqual([]);
     await s.time.advance(1);
     expect(s.calls).toHaveLength(4);
-    expect(s.seen).toEqual([{ job: late, outcome: { status: "timedOut" }, latencyMs: 0 }]);
+    expect(s.seen).toEqual([{ job: late, outcome: { status: "timedOut" }, latencyMs: 100 }]);
     expect(s.dispatcher.inFlight()).toBe(4);
     // Only the four running deadline timers remain: the queued job's timer went with it.
     expect(s.time.timerCount()).toBe(4);

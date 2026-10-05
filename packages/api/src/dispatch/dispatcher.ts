@@ -33,6 +33,11 @@ export interface DispatchJob {
   requiresCredentials: boolean;
   /** Epoch ms: acknowledgedAt + the source's timeoutMs from the snapshot. */
   deadline: number;
+  /**
+   * The monotonic clock at the acknowledgment: latencyMs runs from here to the outcome, queue
+   * wait included, for every outcome (SEC-012 ack and response times; manager ruling m2).
+   */
+  acknowledgedMonoMs: number;
 }
 
 export type Outcome =
@@ -106,6 +111,11 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       .finally(() => untrack(job));
   }
 
+  /** Monotonic ms from the job's acknowledgment to now. */
+  function sinceAck(job: DispatchJob): number {
+    return d.monotonic.nowMs() - job.acknowledgedMonoMs;
+  }
+
   function release(job: DispatchJob, r: Running): void {
     r.done = true;
     d.timers.clearTimeout(r.deadlineTimer);
@@ -113,13 +123,12 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
   }
 
   function start(job: DispatchJob): void {
-    const startedMs = d.monotonic.nowMs();
     const controller = new AbortController();
     const r: Running = { controller, deadlineTimer: undefined, done: false };
     running.set(job, r);
     const finish = (outcome: Outcome) => {
       release(job, r);
-      report(job, outcome, d.monotonic.nowMs() - startedMs);
+      report(job, outcome, sinceAck(job));
       pump();
     };
     r.deadlineTimer = d.timers.setTimeout(() => {
@@ -187,12 +196,12 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       const job = queue[i] as DispatchJob;
       if (job.requiresCredentials && job.credentialUserId === null) {
         dequeue(i, job);
-        report(job, { status: "credentialsMissing" }, 0);
+        report(job, { status: "credentialsMissing" }, sinceAck(job));
         continue;
       }
       if (d.clock.now() >= job.deadline) {
         dequeue(i, job);
-        report(job, { status: "timedOut" }, 0);
+        report(job, { status: "timedOut" }, sinceAck(job));
         continue;
       }
       if (

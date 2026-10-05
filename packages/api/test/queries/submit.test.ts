@@ -696,6 +696,7 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
         delegationId: null,
         requiresCredentials: sources.get(row.sourceId)?.requiresCredentials,
         deadline: ack.acknowledgedAt + 10_000,
+        acknowledgedMonoMs: expect.any(Number),
       });
       expect(j?.snapshot).toBe(pinned);
     }
@@ -791,7 +792,7 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
       acknowledgedAt: 1_000,
       results: [{ partId: 0, sourceId: "stateSource", resultId: "result-1" }],
     };
-    expect(bindJobs(templates, ack)).toEqual([
+    expect(bindJobs(templates, ack, 0)).toEqual([
       expect.objectContaining({
         correlationId: "corr-1",
         resultId: "result-1",
@@ -799,13 +800,17 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
         deadline: 1_000 + (timeoutMs ?? Number.NaN),
       }),
     ]);
-    expect(bindJobs(templates, { ...ack, results: [] })).toEqual([]);
+    expect(bindJobs(templates, { ...ack, results: [] }, 0)).toEqual([]);
     // a result that does not line up with its pair is a bug: the route's backstop catches it
     expect(() =>
-      bindJobs(templates, {
-        ...ack,
-        results: [{ partId: 0, sourceId: "nationalSource", resultId: "r" }],
-      }),
+      bindJobs(
+        templates,
+        {
+          ...ack,
+          results: [{ partId: 0, sourceId: "nationalSource", resultId: "r" }],
+        },
+        0,
+      ),
     ).toThrow("dispatch: result does not match its pair");
   });
 

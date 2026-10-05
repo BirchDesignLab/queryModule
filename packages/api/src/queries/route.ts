@@ -39,7 +39,10 @@ export const mayQuery = (role: string): boolean =>
   (QUERY_ROLES as readonly string[]).includes(role);
 
 /** A dispatch job before T1: everything but the ids and the deadline T1 fixes. */
-export type JobTemplate = Omit<DispatchJob, "correlationId" | "resultId" | "deadline"> & {
+export type JobTemplate = Omit<
+  DispatchJob,
+  "correlationId" | "resultId" | "deadline" | "acknowledgedMonoMs"
+> & {
   timeoutMs: number;
 };
 
@@ -78,10 +81,14 @@ export function planJobs(p: PreparedSubmit, principal: Principal): JobTemplate[]
 
 /**
  * T1's results bound to the planned jobs by index (acknowledge writes one row per pair, in pair
- * order); a replay's empty results bind nothing. A result that does not line up with its pair is
+ * order), with the monotonic reading taken as T1 returned; a replay's empty results bind nothing. A result that does not line up with its pair is
  * a bug, thrown for the route's post-commit backstop.
  */
-export function bindJobs(templates: readonly JobTemplate[], ack: Acknowledged): DispatchJob[] {
+export function bindJobs(
+  templates: readonly JobTemplate[],
+  ack: Acknowledged,
+  acknowledgedMonoMs: number,
+): DispatchJob[] {
   return ack.results.map((r, i) => {
     const t = templates[i];
     if (!t || t.partId !== r.partId || t.sourceId !== r.sourceId) {
@@ -93,6 +100,7 @@ export function bindJobs(templates: readonly JobTemplate[], ack: Acknowledged): 
       correlationId: ack.body.correlationId,
       resultId: r.resultId,
       deadline: ack.acknowledgedAt + timeoutMs,
+      acknowledgedMonoMs,
     };
   });
 }
@@ -118,16 +126,19 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     if (!p.ok) return p.response;
     const templates = planJobs(p.value, principal);
     let ack: Acknowledged;
+    let acknowledgedMonoMs: number;
     try {
       ack = await acknowledge(d, principal, p.value, a);
+      acknowledgedMonoMs = d.monotonic.nowMs();
     } catch (e) {
       if (!lostIdempotencyRace(e)) throw sanitizeSubmitError(e);
       const winner = await replayResponse(d.db, principal.userId, a.idempotencyKey);
       if (winner === null) throw sanitizeSubmitError(e);
       ack = { body: winner, acknowledgedAt: winner.acknowledgedAt, results: [] };
+      acknowledgedMonoMs = d.monotonic.nowMs();
     }
     try {
-      d.dispatcher.enqueue(bindJobs(templates, ack));
+      d.dispatcher.enqueue(bindJobs(templates, ack, acknowledgedMonoMs));
     } catch (e) {
       // Backstop (AW3 critic b): T1 committed, so the 202 stands; the process fails closed and the
       // restart sweep settles the pending rows as interrupted, with audit (spec 5.2, 8.1).
