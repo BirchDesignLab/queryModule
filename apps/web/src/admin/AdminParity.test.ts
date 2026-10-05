@@ -109,10 +109,9 @@ describe("admin parity: layout", () => {
 });
 
 describe("admin parity: the preview follows the dispatcher's card", () => {
-  it("the panel is a sunken well holding a base card with the panel radius", () => {
-    expect(decls(".qm-preview__panel--dispatch")).toMatch(
-      /background:\s*var\(--qm-color-surface-sunken\)/,
-    );
+  it("the body is a sunken well holding a base card with the panel radius (#486)", () => {
+    expect(decls(".qm-preview__body")).toMatch(/background:\s*var\(--qm-color-surface-sunken\)/);
+    expect(decls(".qm-preview__panel--dispatch")).toMatch(/background:\s*transparent/);
     const card = decls(".qm-preview__panel--dispatch .qm-preview__card");
     expect(card).toMatch(BASE);
     expect(card).toMatch(/border-radius:\s*var\(--qm-radius-panel\)/);

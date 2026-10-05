@@ -946,8 +946,19 @@ test.describe("Admin parity (item 5)", () => {
         tree: one(".qm-tree"),
         editor: one(".qm-builder__editor"),
         preview: one(".qm-builder__panes > .qm-admin__preview"),
-        well: one(".qm-preview__panel"),
+        well: one(".qm-preview__body"),
+        head: one(".qm-preview__head"),
         card: one(".qm-preview__panel--dispatch .qm-preview__card"),
+        editorPadding: (() => {
+          const el = document.querySelector(".qm-builder__editor");
+          if (el === null) return null;
+          const cs = getComputedStyle(el);
+          return { block: cs.paddingTop, inline: cs.paddingLeft };
+        })(),
+        headRule: (() => {
+          const el = document.querySelector(".qm-preview__head");
+          return el === null ? null : getComputedStyle(el).borderBottomWidth;
+        })(),
         label: one(".qm-sect__label"),
         body1: one(".qm-sect__body"),
       };
@@ -973,6 +984,23 @@ test.describe("Admin parity (item 5)", () => {
             expect(b[part]?.bg, part).toBe(surface(mode, "base"));
           expect(b.well?.bg, "preview well").toBe(surface(mode, "sunken"));
           expect(b.card?.bg, "preview card").toBe(surface(mode, "base"));
+          // #486: the editor takes the mockup's 20 px block inset (inline stays 12 px so the label
+          // column keeps beside the controls at 1366); the preview body is an edge-to-edge sunken
+          // well directly under a ruled head.
+          expect(b.editorPadding, "editor inset").toEqual({ block: "20px", inline: "12px" });
+          expect(b.headRule, "preview head rule").toBe("1px");
+          const pane = b.preview;
+          expect(Math.abs((b.well?.x ?? 0) - (pane?.x ?? 0)), "well left edge").toBeLessThanOrEqual(
+            1,
+          );
+          expect(
+            Math.abs((b.well?.x ?? 0) + (b.well?.w ?? 0) - ((pane?.x ?? 0) + (pane?.w ?? 0))),
+            "well right edge",
+          ).toBeLessThanOrEqual(1);
+          expect(
+            Math.abs((b.well?.y ?? 0) - (b.head?.bottom ?? 0)),
+            "well under the head",
+          ).toBeLessThanOrEqual(0.5);
           // Panes end inside the window and the page itself does not scroll.
           for (const part of ["tree", "editor", "preview"] as const)
             expect(b[part]?.bottom ?? 0, `${part} bottom`).toBeLessThanOrEqual(viewport.height);
