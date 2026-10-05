@@ -771,7 +771,7 @@ Steps for `POST /api/v1/queries`:
 
 **Startup sweep.** Before the server listens, one transaction sets every `pending` `source_result` to `interrupted`, writes an `interrupted` audit row per result (system actor, 4.7) and an `event_log` row per owner; clients receive them on replay. Nothing is re-dispatched.
 
-**Sweeper.** One in-process sweeper runs every 60 s. It (a) marks pending delegation requests past their deadline `requestExpired` and writes `delegationRequestExpired`; (b) marks active delegations past `expires_at` `expired` and writes `delegationExpired`; (c) deletes sessions past the idle or absolute limit, writes `sessionRevoked { reason: "expired" }`, revokes delegations bound to them with reason `sessionEnded` and signals `EventBus.onSessionEnded` (5.5), which closes the session's sockets with 4001; (d) once an hour, prunes `event_log` rows older than 24 h. Step-3 resolution still checks `expires_at` and session liveness directly, so sweep lag never grants access.
+**Sweeper.** One in-process sweeper runs every 60 s. It (a) marks pending delegation requests past their deadline `requestExpired` and writes `delegationRequestExpired`; (b) marks active delegations past `expires_at` `expired` and writes `delegationExpired`; (c) deletes sessions past the idle or absolute limit, writes `sessionRevoked { reason: "expired" }`, revokes delegations bound to them with reason `sessionEnded` and signals `EventBus.onSessionEnded` (5.5), which closes the session's sockets with 4001; (d) once an hour, prunes `event_log` rows older than 24 h, except each user's newest row, so `seq` never restarts (D-A14). Step-3 resolution still checks `expires_at` and session liveness directly, so sweep lag never grants access.
 
 **SIGTERM drain.** Stop accepting `POST /api/v1/queries` (503 `unavailable`) and new WebSocket upgrades; let in-flight dispatch reach outcome or deadline, bounded by the maximum configured `timeoutMs` plus 5 s; then close sockets and exit. Compose `stop_grace_period` exceeds that bound (8.3). Anything still pending is swept at next start.
 
@@ -797,7 +797,7 @@ Browser sessions authenticate with the `__Host-` prefixed session cookie (5.6). 
 
 **Messages:** 4.7.
 
-**Replay.** `seq` is per user, monotonically increasing, assigned inside the writing transaction (single writer). On `hello` the server sends `event_log` rows with `seq > lastSeq`, created within the last 24 h, skipping `sourceStatus` for results the user has hidden, up to 500 events. If `lastSeq` is unknown, older than the 24 h window, or more than 500 events are due, the server sends `resync` and the client refetches its list over HTTP. The server closes a socket that has sent no `ping` for 60 s. `event_log` rows older than 24 h are pruned at startup, by `scripts/ops/purge.ts`, and hourly by the sweeper (5.2).
+**Replay.** `seq` is per user, monotonically increasing, assigned inside the writing transaction (single writer). On `hello` the server sends `event_log` rows with `seq > lastSeq`, created within the last 24 h, skipping `sourceStatus` for results the user has hidden, up to 500 events. If `lastSeq` is unknown, older than the 24 h window, or more than 500 events are due, the server sends `resync` and the client refetches its list over HTTP. The server closes a socket that has sent no `ping` for 60 s. `event_log` rows older than 24 h (except each user's newest row, D-A14) are pruned at startup, by `scripts/ops/purge.ts`, and hourly by the sweeper (5.2).
 
 Delivery is at-least-once over intermittent links without an external broker.
 
