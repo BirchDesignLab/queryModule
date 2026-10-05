@@ -5,6 +5,7 @@ import type { DispatchJob } from "../dispatch/dispatcher";
 import { apiError } from "../http/errors";
 import { requireSession } from "../http/session";
 import type { AppEnv } from "../http/types";
+import { actorOf, type Principal } from "../seams";
 import { type Acknowledged, acknowledge } from "./acknowledge";
 import { admitSubmit, replayResponse } from "./admission";
 import { sanitizeSubmitError } from "./errors";
@@ -39,9 +40,14 @@ export const mayQuery = (role: string): boolean =>
 /**
  * One dispatch job per pending source_result row T1 wrote (spec 5.2 step 5): the part's values
  * and type values from prepare's plan (D-A13), the pair's credential owner, and the deadline and
- * requiresCredentials from the snapshot prepare pinned, never the live config.
+ * requiresCredentials from the snapshot prepare pinned, never the live config. Each job carries the
+ * requester's audit envelope, the same one T1 wrote (spec 4.7, SEC-010).
  */
-export function dispatchJobs(p: PreparedSubmit, ack: Acknowledged, userId: string): DispatchJob[] {
+export function dispatchJobs(
+  p: PreparedSubmit,
+  ack: Acknowledged,
+  principal: Principal,
+): DispatchJob[] {
   return ack.results.map((r) => {
     const part = p.plan.parts.find((x) => x.partId === r.partId);
     if (!part) throw new Error("dispatch: result has no plan part");
@@ -54,7 +60,10 @@ export function dispatchJobs(p: PreparedSubmit, ack: Acknowledged, userId: strin
       partId: r.partId,
       sourceId: r.sourceId,
       resultId: r.resultId,
-      userId,
+      userId: principal.userId,
+      actor: actorOf(principal),
+      identitySource: principal.identitySource,
+      ...(principal.hostSubject ? { hostSubject: principal.hostSubject } : {}),
       queryType: part.queryType,
       types: part.typeValues,
       values: part.values,
@@ -95,7 +104,7 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       if (winner === null) throw sanitizeSubmitError(e);
       ack = { body: winner, acknowledgedAt: winner.acknowledgedAt, results: [] };
     }
-    d.dispatcher.enqueue(dispatchJobs(p.value, ack, principal.userId));
+    d.dispatcher.enqueue(dispatchJobs(p.value, ack, principal));
     return c.json(SubmitQueryResponseSchema.parse(ack.body), 202);
   });
 }

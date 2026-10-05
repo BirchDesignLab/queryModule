@@ -1,4 +1,3 @@
-import { SYSTEM_ACTOR } from "@querymodule/core/contracts";
 import { and, eq } from "drizzle-orm";
 import { requestKey, sourceResult } from "../db/schema";
 import { withTransaction } from "../db/tx";
@@ -133,8 +132,9 @@ export async function recordOutcome(
         type: "sourceResponded",
         correlationId: job.correlationId,
         partId: job.partId,
-        actor: SYSTEM_ACTOR,
-        identitySource: "system",
+        actor: job.actor,
+        identitySource: job.identitySource,
+        ...(job.hostSubject !== undefined ? { hostSubject: job.hostSubject } : {}),
         ...(job.credentialUserId !== null ? { credentialUserId: job.credentialUserId } : {}),
         details: {
           partId: job.partId,

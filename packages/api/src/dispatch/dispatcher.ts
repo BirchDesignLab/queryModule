@@ -1,4 +1,4 @@
-import type { AdapterErrorCode, SourcePayload } from "@querymodule/core/contracts";
+import type { AdapterErrorCode, AuditActor, SourcePayload } from "@querymodule/core/contracts";
 import type { CanonicalValue } from "@querymodule/core/rules";
 import { SourceError } from "../adapters/types";
 import type { LoadedConfig } from "../config/load";
@@ -16,6 +16,10 @@ export interface DispatchJob {
   sourceId: string;
   resultId: string;
   userId: string;
+  /** The requester's audit envelope from T1, so sourceResponded is findable per user (spec 4.7, SEC-010). */
+  actor: AuditActor;
+  identitySource: "local" | "host";
+  hostSubject?: string;
   queryType: string;
   types: Readonly<Record<string, string>>;
   /** The part's visible effective values, in memory from prepare (D-A13); never logged. */

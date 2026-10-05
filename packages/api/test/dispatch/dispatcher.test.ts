@@ -96,6 +96,8 @@ function job(over: Partial<DispatchJob> = {}): DispatchJob {
     sourceId: "stateSource",
     resultId: `result-${n}`,
     userId: "user-1",
+    actor: { id: "user-1", email: null, role: "user" },
+    identitySource: "local",
     queryType: "VEH",
     types: { vehicleType: "PC" },
     values: { plate: PLATE },

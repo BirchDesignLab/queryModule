@@ -159,18 +159,37 @@ describe("recordOutcome: transaction T2 (spec 5.2 step 6, FR-043, SEC-010, SEC-0
     }
 
     const audit = await auditFor(t, ack.correlationId);
+    const acked = audit.find((a) => a.type === "acknowledged");
     const afterAck = audit.slice(audit.findIndex((a) => a.type === "acknowledged") + 1);
     expect(afterAck.map((a) => a.type)).toEqual(["sourceResponded", "sourceResponded"]);
+    // AW3 critic (a): the requester's envelope, as on sourceDispatched (spec 4.7, SEC-010)
     for (const a of afterAck) {
       expect(a).toMatchObject({
         partId: 0,
-        actorUserId: "system",
-        actorEmail: null,
-        actorRole: "system",
-        identitySource: "system",
+        actorUserId: userId,
+        actorEmail: EMAIL,
+        actorRole: acked?.actorRole,
+        identitySource: "local",
+        hostSubject: null,
         credentialUserId: null,
       });
     }
+    // the per-user audit search (audit_event_actor_at_idx) finds the whole query
+    const byUser = await t.deps.db
+      .select({ type: auditEvent.type })
+      .from(auditEvent)
+      .where(
+        and(eq(auditEvent.actorUserId, userId), eq(auditEvent.correlationId, ack.correlationId)),
+      )
+      .orderBy(asc(auditEvent.id));
+    expect(byUser.map((a) => a.type)).toEqual([
+      "submitted",
+      "sourceDispatched",
+      "sourceDispatched",
+      "acknowledged",
+      "sourceResponded",
+      "sourceResponded",
+    ]);
     expect(afterAck.map((a) => a.details)).toEqual([
       {
         partId: 0,
@@ -387,12 +406,26 @@ describe("recordOutcome edges (SEC-011, SEC-012, spec 5.9)", () => {
   const returned: Outcome = { status: "returned", payload: { status: "NO RECORD" } };
 
   it("a credentialed job names the owner in the envelope and in details (SEC-011)", async () => {
-    const { t, ack, job } = await captured();
+    const { t, userId, ack, job } = await captured();
     await recordOutcome(t.deps, { ...job, credentialUserId: "officer-1" }, returned, 12.6);
     const row = (await auditFor(t, ack.correlationId)).find((a) => a.type === "sourceResponded");
+    // the requester (a trainee) is the actor; the credential owner stays in credentialUserId
+    expect(row?.actorUserId).toBe(userId);
     expect(row?.credentialUserId).toBe("officer-1");
     expect(row?.details).toMatchObject({ credentialOwnerUserId: "officer-1", latencyMs: 13 });
     expect(t.fatals).toEqual([]);
+  });
+
+  it("a host-identity requester keeps identitySource host and the hostSubject (spec 4.7)", async () => {
+    const { t, ack, job } = await captured();
+    await recordOutcome(
+      t.deps,
+      { ...job, identitySource: "host", hostSubject: "host-subject-1" },
+      returned,
+      1,
+    );
+    const row = (await auditFor(t, ack.correlationId)).find((a) => a.type === "sourceResponded");
+    expect(row).toMatchObject({ identitySource: "host", hostSubject: "host-subject-1" });
   });
 
   it("a missing payload key fails closed with the row pending and the error class logged", async () => {

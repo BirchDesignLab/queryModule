@@ -660,6 +660,8 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
         sourceId: row.sourceId,
         resultId: row.resultId,
         userId,
+        actor: { id: userId, email: EMAIL, role: "user" },
+        identitySource: "local",
         queryType: part?.queryType,
         types: part?.typeValues,
         values: openValues(t, rows, row.partId),
@@ -698,12 +700,20 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
       plan: { mode: "normal", droppedSourceIds: [], parts: [] },
       pairs: [],
     };
+    const principal: Principal = {
+      userId,
+      email: null,
+      role: "user",
+      sessionId: "session-1",
+      identitySource: "local",
+      authenticatedAt: 1,
+    };
     const ack = (partId: number, sourceId: string): Acknowledged => ({
       body: { correlationId: "corr-1", acknowledgedAt: 1, parts: [] },
       acknowledgedAt: 1,
       results: [{ partId, sourceId, resultId: "result-1" }],
     });
-    expect(() => dispatchJobs(prepared, ack(0, "stateSource"), userId)).toThrow(
+    expect(() => dispatchJobs(prepared, ack(0, "stateSource"), principal)).toThrow(
       "dispatch: result has no plan part",
     );
     const part = {
@@ -719,13 +729,31 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
       status: "planned",
     } as const;
     prepared.plan.parts.push({ ...part, sourceIds: [...part.sourceIds], droppedSourceIds: [] });
-    expect(() => dispatchJobs(prepared, ack(0, "noSuchSource"), userId)).toThrow(
+    expect(() => dispatchJobs(prepared, ack(0, "noSuchSource"), principal)).toThrow(
       "dispatch: result has no source config",
     );
-    expect(() => dispatchJobs(prepared, ack(0, "stateSource"), userId)).toThrow(
+    expect(() => dispatchJobs(prepared, ack(0, "stateSource"), principal)).toThrow(
       "dispatch: result has no dispatch pair",
     );
-    expect(dispatchJobs(prepared, { ...ack(0, "stateSource"), results: [] }, userId)).toEqual([]);
+    expect(dispatchJobs(prepared, { ...ack(0, "stateSource"), results: [] }, principal)).toEqual(
+      [],
+    );
+    prepared.pairs.push({
+      partId: 0,
+      sourceId: "stateSource",
+      adapterKind: "mock",
+      credentialUserId: null,
+      delegationId: null,
+    });
+    const [hostJob] = dispatchJobs(prepared, ack(0, "stateSource"), {
+      ...principal,
+      identitySource: "host",
+      hostSubject: "host-subject-1",
+    });
+    expect(hostJob).toMatchObject({ identitySource: "host", hostSubject: "host-subject-1" });
+    expect(dispatchJobs(prepared, ack(0, "stateSource"), principal)[0]).not.toHaveProperty(
+      "hostSubject",
+    );
   });
 });
 
