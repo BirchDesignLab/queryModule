@@ -10,12 +10,12 @@ import { ConfigLoadError, configDirOf, loadConfigDocument } from "../../config/l
 import { siteConfigVersion } from "../../db/schema";
 import { withTransaction } from "../../db/tx";
 import type { AppDeps } from "../../deps";
-import { parseStored } from "./store";
+import { documentHashOf, parseStored } from "./store";
 
 /**
  * ADR-0011 item 3 (checker ruling 1, AC1): activates stored draft `version` of the live site.
  * The stored document runs the full spec 5.8 chain first; then ONE transaction supersedes the
- * published row, publishes the draft with its hash, and writes configLoaded and the caller's
+ * published row, publishes the draft with its hashes, and writes configLoaded and the caller's
  * `event` (Task 27 passes configPublished). The in-process snapshot swaps only after commit, so
  * any failure (validation, audit, database) leaves the old snapshot live and the statuses
  * unchanged. Errors name the site and version only, never document content (spec 5.9).
@@ -43,7 +43,9 @@ export async function activate(
   if (row.status !== "draft") throw new ConfigLoadError(label, "", "config.versionNotDraft");
   if (expected !== undefined && row.document !== expected.document)
     throw new ConfigLoadError(label, "", "config.versionChanged");
-  const config = await loadConfigDocument(parseStored(row.document, label), {
+  const stored = parseStored(row.document, label);
+  const documentHash = documentHashOf(stored);
+  const config = await loadConfigDocument(stored, {
     label,
     configDir: configDirOf(resolve(d.env.siteConfigFile)),
     allowMockSources: d.env.allowMockSources,
@@ -68,6 +70,7 @@ export async function activate(
       .set({
         status: "published",
         configHash: config.configHash,
+        documentHash,
         publishedBy: event?.actor.id ?? SYSTEM_ACTOR.id,
         publishedAt: d.clock.now(),
       })
@@ -88,6 +91,7 @@ export async function activate(
       identitySource: "system",
       details: {
         siteId,
+        versionId: done.id,
         configHash: config.configHash,
         configSchemaVersion: CONFIG_SCHEMA_VERSION,
         coreVersion: CORE_VERSION,
@@ -99,6 +103,6 @@ export async function activate(
   });
   // Before the swap, so no reader of the new snapshot logs a new field key unredacted (C1).
   d.logger.addRedactKeys(config.fieldKeys);
-  d.config.swap(config);
+  d.config.swap({ ...config, versionId: activated.id });
   return activated;
 }

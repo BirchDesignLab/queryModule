@@ -132,7 +132,9 @@ async function prepare(
   rollbackOf?: number,
 ): Promise<Prepared> {
   const snapshot = d.config.current();
-  if (live.configHash === null || snapshot.configHash !== live.configHash)
+  // By version id, not hash: the served hash is the current schema's resolve, which may differ
+  // from the row's stored config_hash once a schema default applies (#511 CFG-3).
+  if (snapshot.versionId !== live.id)
     return { ok: false, result: { ok: false, code: "draftConflict" } };
   const candidate = parseStored(document, label);
   const checked = await validateDocument(d, candidate);
@@ -142,7 +144,7 @@ async function prepare(
     resolvedView(snapshot, documentOf(live)),
     resolvedView(config, ConfigDocumentSchema.parse(candidate)),
   );
-  const previousConfigHash = live.configHash;
+  const previousConfigHash = snapshot.configHash;
   return {
     ok: true,
     event: (row) => ({

@@ -64,6 +64,13 @@
       "when": 1791012458628,
       "tag": "0008_config_superseded_frozen_must_change_password",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791206788715,
+      "tag": "0009_config_document_hash",
+      "breakpoints": true
     }
   ]
 }

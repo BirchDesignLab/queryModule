@@ -213,10 +213,13 @@ export const AUDIT_DETAILS_SCHEMAS = {
    * Spec 4.7 admin and ops table, spec 5.8 step 7: one row per successful config load. One overlay
    * level (spec 4.1). extendsChain is always [] for a load from the config store (ADR-0011): the
    * stored document is the resolved site, extends already merged, and the store keeps no chain
-   * (developer ruling 10-03-26, #494; a chain is recorded later only if needed).
+   * (developer ruling 10-03-26, #494; a chain is recorded later only if needed). versionId (#511
+   * CFG-3, optional and additive) names the stored version loaded, so the served configHash joins
+   * to a site_config_version row.
    */
   configLoaded: z.strictObject({
     siteId: BoundedIdSchema,
+    versionId: Uuid7Schema.optional(),
     configHash: Sha256HexSchema,
     configSchemaVersion: z.int().min(1),
     coreVersion: SemverSchema,

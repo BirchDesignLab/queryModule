@@ -290,5 +290,11 @@ same `nonce` and its own `serverTime`. A socket with no ping for 60 seconds is c
 | `pong` | server to client, `{ nonce, serverTime }` | live. |
 | `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The metric is recorded from M2 P1. |
 | `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | planned. The contract and the event bus exist; nothing publishes it until dispatch lands (M2 P0.5), and replay by `lastSeq` follows with the feed (M2 P1). |
+| `resultHidden` | server to client, `{ seq, at, correlationId, resultIds }` | planned (contract since M2 P0). Sent after a delete from view so the owner's other devices drop the results; replayable (M3 P2). |
+| `resync` | server to client, `{ reason: "tooOld" or "tooMany" or "unknownCursor", latestSeq }` | planned (contract since M2 P0). Replay refused: the client refetches over HTTP and sets its mark to `latestSeq` (M2 P1). |
+
+Receipt policy (ADR-0013; the feed client lands in M2 P0.5): clients parse server messages
+tolerantly, the server stays strict. An unknown `type` is dropped and unknown keys
+are stripped, so a new message type or optional field needs no minimum client version bump.
 
 The web app uses the socket in M1 for the heartbeat shown on the Status page.

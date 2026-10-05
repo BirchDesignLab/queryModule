@@ -20,8 +20,8 @@ export const API = "/api/v1/admin/config";
  * The assembled app with one signed-in user per role (created on first use) and a caller-aware
  * request helper that sends X-Requested-With. Call inside it() only (createTestApp).
  */
-export async function adminConfigApp(o: { siteConfig?: string } = {}) {
-  const t = await createTestApp({ env: { SITE_CONFIG: o.siteConfig ?? ALL_ON } });
+export async function adminConfigApp(o: { siteConfig?: string; env?: NodeJS.ProcessEnv } = {}) {
+  const t = await createTestApp({ env: { SITE_CONFIG: o.siteConfig ?? ALL_ON, ...o.env } });
   const cookies = new Map<Role, string>();
   const ids = new Map<Role, string>();
   async function signedIn(role: Role): Promise<string> {
