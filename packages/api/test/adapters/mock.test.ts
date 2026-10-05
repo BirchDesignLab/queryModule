@@ -413,6 +413,28 @@ describe("mock factory on a snapshot", () => {
   });
 });
 
+describe("AW2 review C-m1, C-m2: the adapter serves only a checked private copy", () => {
+  /** The default mock with one non-synthetic name in the WNT WANTED scenario. */
+  function withSmith(mock: MockFile): MockFile {
+    const wnt = mock.sources.nationalSource?.responses[3];
+    const respond = wnt?.scenarios[0]?.respond as { subject: { last: string } };
+    respond.subject.last = "SMITH";
+    return mock;
+  }
+  const wanted = () => req("nationalSource", "WNT", { last: "WANTED" });
+
+  it("C-m1: createMockAdapter itself fails closed on a mock that breaks the fixture policy", async () => {
+    const a = createMockAdapter({
+      mock: withSmith(structuredClone(DEFAULT_MOCK)),
+      timers: instantTimers,
+      random: () => 0,
+    });
+    const e = await a.query(wanted(), null, new AbortController().signal).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(SourceError);
+    expect((e as SourceError).code).toBe("failed");
+  });
+});
+
 describe("#493: the pinned snapshot's stored mock, never the image's file", () => {
   it("a mock-only publish answers from the new stored mock; the old snapshot keeps its own", async () => {
     const t = await createTestApp();

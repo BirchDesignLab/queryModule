@@ -52,18 +52,20 @@ function untilAborted(signal: AbortSignal): Promise<never> {
   });
 }
 
+const failClosed: SourceAdapter = {
+  query: async () => {
+    throw new SourceError("failed");
+  },
+};
+
 /**
- * The mock adapter over one stored mock (spec 5.4; FR-043, FR-044): the prototype's canned
+ * The adapter over one already-checked mock (spec 5.4; FR-043, FR-044): the prototype's canned
  * responses, never real CJIS data. Latency `min + floor(random() * (max - min + 1))` ms through
  * timers.sleep, then the matched scenario's respond or behaviour, else the entry's default. An
  * unknown source or query type fails closed. Answers are copies, so a caller never changes the
  * snapshot's mock. Errors carry the code only, never request values (spec 5.9).
  */
-export function createMockAdapter(o: {
-  mock: MockFile;
-  timers: Timers;
-  random: () => number;
-}): SourceAdapter {
+function adapterOver(o: { mock: MockFile; timers: Timers; random: () => number }): SourceAdapter {
   return {
     async query(req, _creds, signal) {
       const source = Object.hasOwn(o.mock.sources, req.sourceId)
@@ -88,11 +90,18 @@ export function createMockAdapter(o: {
   };
 }
 
-const failClosed: SourceAdapter = {
-  query: async () => {
-    throw new SourceError("failed");
-  },
-};
+/**
+ * The mock adapter over one mock (spec 5.4, 10.8): it runs the fixture policy itself, so no
+ * caller can serve an unchecked mock (AW2 review C-m1). A mock that breaks the policy gives an
+ * adapter that fails every call closed, SourceError("failed").
+ */
+export function createMockAdapter(o: {
+  mock: MockFile;
+  timers: Timers;
+  random: () => number;
+}): SourceAdapter {
+  return checkFixturePolicy(o.mock).length > 0 ? failClosed : adapterOver(o);
+}
 
 /** The snapshot's ids for a log line: configHash, and versionId when the snapshot is stored. */
 function snapshotIds(snapshot: LoadedConfig): Record<string, string> {
@@ -127,7 +136,7 @@ export function createMockFactory(logger: Logger): AdapterFactory {
         });
         return failClosed;
       }
-      return createMockAdapter({ mock: snapshot.mock, timers, random });
+      return adapterOver({ mock: snapshot.mock, timers, random });
     },
   };
 }
