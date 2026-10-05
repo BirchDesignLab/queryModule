@@ -1,107 +1,191 @@
 {
   "siteId": "default",
   "sources": {
-    "stateSource": {
-      "latencyMs": [50, 400],
-      "responses": [
-        {
-          "queryType": "VEH",
-          "default": { "status": "NO RECORD" },
-          "scenarios": [
-            {
-              "when": { "plate": "ZZ-0001" },
-              "respond": {
-                "status": "STOLEN",
-                "plate": "ZZ-0001",
-                "state": "TX",
-                "vehicle": {
-                  "make": "TESTMAKE",
-                  "model": "SAMPLEMODEL",
-                  "year": 1901,
-                  "vin": "ZZZZZZZZZZZZZZZZ0"
-                },
-                "owner": { "last": "TESTERSON", "first": "SAMPLE", "address": "1 Example Ave" },
-                "remarks": "STOLEN VEHICLE"
-              }
-            },
-            { "when": { "plate": "ABC123" }, "respond": { "status": "NO RECORD" } },
-            { "when": { "plate": "FAIL1" }, "behavior": "error" }
-          ]
-        },
-        { "queryType": "PER", "default": { "status": "NO RECORD" }, "scenarios": [] },
-        {
-          "queryType": "PRO",
-          "default": { "status": "NO RECORD" },
-          "scenarios": [
-            {
-              "when": { "serial": "ZZSTOLEN1" },
-              "respond": {
-                "status": "STOLEN",
-                "serial": "ZZSTOLEN1",
-                "propertyType": "ARTICLE",
-                "description": "SAMPLE ARTICLE",
-                "remarks": "STOLEN PROPERTY"
-              }
-            }
-          ]
-        },
-        { "queryType": "DL", "default": { "status": "NO RECORD" }, "scenarios": [] }
-      ]
-    },
     "nationalSource": {
       "latencyMs": [100, 800],
       "responses": [
         {
+          "default": {
+            "status": "NO RECORD"
+          },
           "queryType": "VEH",
-          "default": { "status": "NO RECORD" },
           "scenarios": [
             {
-              "when": { "plate": "ZZ-0001" },
-              "respond": { "status": "STOLEN", "plate": "ZZ-0001", "remarks": "STOLEN VEHICLE" }
-            },
-            { "when": { "plate": "TIMEOUT" }, "behavior": "timeout" }
-          ]
-        },
-        { "queryType": "PER", "default": { "status": "NO RECORD" }, "scenarios": [] },
-        {
-          "queryType": "PRO",
-          "default": { "status": "NO RECORD" },
-          "scenarios": [
-            {
-              "when": { "serial": "ZZSTOLEN1" },
               "respond": {
-                "status": "STOLEN",
-                "serial": "ZZSTOLEN1",
-                "propertyType": "ARTICLE",
-                "description": "SAMPLE ARTICLE",
-                "remarks": "STOLEN PROPERTY"
+                "plate": "ZZ-0001",
+                "remarks": "STOLEN VEHICLE",
+                "status": "STOLEN"
+              },
+              "when": {
+                "plate": "ZZ-0001"
+              }
+            },
+            {
+              "behavior": "timeout",
+              "when": {
+                "plate": "TIMEOUT"
               }
             }
           ]
         },
         {
-          "queryType": "WNT",
-          "default": { "status": "NO WANTS OR WARRANTS" },
+          "default": {
+            "status": "NO RECORD"
+          },
+          "queryType": "PER",
+          "scenarios": []
+        },
+        {
+          "default": {
+            "status": "NO RECORD"
+          },
+          "queryType": "PRO",
           "scenarios": [
             {
-              "when": { "last": "WANTED" },
+              "respond": {
+                "description": "SAMPLE ARTICLE",
+                "propertyType": "ARTICLE",
+                "remarks": "STOLEN PROPERTY",
+                "serial": "ZZSTOLEN1",
+                "status": "STOLEN"
+              },
+              "when": {
+                "serial": "ZZSTOLEN1"
+              }
+            }
+          ]
+        },
+        {
+          "default": {
+            "status": "NO WANTS OR WARRANTS"
+          },
+          "queryType": "WNT",
+          "scenarios": [
+            {
               "respond": {
                 "status": "WANTED",
-                "subject": { "last": "SAMPLEWORTH", "first": "TEST", "dob": "1901-01-01" },
-                "warrants": [{ "offense": "FAILURE TO APPEAR", "issued": "1901-01-02" }]
+                "subject": {
+                  "dob": "1901-01-01",
+                  "first": "TEST",
+                  "last": "SAMPLEWORTH"
+                },
+                "warrants": [
+                  {
+                    "issued": "1901-01-02",
+                    "offense": "FAILURE TO APPEAR"
+                  }
+                ]
+              },
+              "when": {
+                "last": "WANTED"
               }
             },
             {
-              "when": { "last": "MISSING" },
               "respond": {
+                "remarks": "MISSING PERSON",
                 "status": "MISSING PERSON",
-                "subject": { "last": "EXAMPLESON", "first": "TEST", "dob": "1901-01-03" },
-                "remarks": "MISSING PERSON"
+                "subject": {
+                  "dob": "1901-01-03",
+                  "first": "TEST",
+                  "last": "EXAMPLESON"
+                }
+              },
+              "when": {
+                "last": "MISSING"
               }
             }
           ]
         },
-        { "queryType": "DL", "default": { "status": "NO RECORD" }, "scenarios": [] }
+        {
+          "default": {
+            "status": "NO RECORD"
+          },
+          "queryType": "DL",
+          "scenarios": []
+        }
+      ]
+    },
+    "stateSource": {
+      "latencyMs": [50, 400],
+      "responses": [
+        {
+          "default": {
+            "status": "NO RECORD"
+          },
+          "queryType": "VEH",
+          "scenarios": [
+            {
+              "respond": {
+                "owner": {
+                  "address": "1 Example Ave",
+                  "first": "SAMPLE",
+                  "last": "TESTERSON"
+                },
+                "plate": "ZZ-0001",
+                "remarks": "STOLEN VEHICLE",
+                "state": "TX",
+                "status": "STOLEN",
+                "vehicle": {
+                  "make": "TESTMAKE",
+                  "model": "SAMPLEMODEL",
+                  "vin": "ZZZZZZZZZZZZZZZZ0",
+                  "year": 1901
+                }
+              },
+              "when": {
+                "plate": "ZZ-0001"
+              }
+            },
+            {
+              "respond": {
+                "status": "NO RECORD"
+              },
+              "when": {
+                "plate": "ABC123"
+              }
+            },
+            {
+              "behavior": "error",
+              "when": {
+                "plate": "FAIL1"
+              }
+            }
+          ]
+        },
+        {
+          "default": {
+            "status": "NO RECORD"
+          },
+          "queryType": "PER",
+          "scenarios": []
+        },
+        {
+          "default": {
+            "status": "NO RECORD"
+          },
+          "queryType": "PRO",
+          "scenarios": [
+            {
+              "respond": {
+                "description": "SAMPLE ARTICLE",
+                "propertyType": "ARTICLE",
+                "remarks": "STOLEN PROPERTY",
+                "serial": "ZZSTOLEN1",
+                "status": "STOLEN"
+              },
+              "when": {
+                "serial": "ZZSTOLEN1"
+              }
+            }
+          ]
+        },
+        {
+          "default": {
+            "status": "NO RECORD"
+          },
+          "queryType": "DL",
+          "scenarios": []
+        }
       ]
     }
   }
