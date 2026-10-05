@@ -41,7 +41,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | idle (starts at wave AW1) | 10-05-26 |
 | Windows 11 | B (`C:\git\queryModule`) | M2 P0 contracts, then M2 P0.5 B | running (P0-W1, session "M2 B lane P0 contracts") | 10-05-26 13:20 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | idle (start brief from "M2 planning 1") | 10-05-26 |
-| Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | running | 10-05-26 |
+| Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
