@@ -193,6 +193,9 @@ for (const { persona, email, row, minTarget } of [
         // The officer bar's own rules (#482): no site name, the product name and the email hidden
         // but named, the account as its 48 px initial, the theme choice as 48 px icon squares.
         expect(m.siteWidth).toBe(0);
+        // Hidden, not removed: the product name stays in the accessibility tree.
+        await expect(page.locator(".qm-app-header__name")).toBeAttached();
+        await expect(page.locator(".qm-app-header__name")).not.toBeEmpty();
         expect(m.productNameWidth).toBeLessThanOrEqual(1);
         expect(m.accountWidth).toBeLessThan(120);
         expect(m.themeButtons.length).toBeGreaterThanOrEqual(2);
@@ -242,7 +245,8 @@ test("B1 header just above the shrink width: the widest bar (admin) is one row w
 
 // #482: between the shrink width and about 1000 px a site name at its 32ch cap truncates instead of
 // wrapping the widest bar (admin, full account button) to a second row.
-for (const width of [833, 900, 960, 999]) {
+// 1001 and 1100 px: above the rule the name keeps its natural width and the bar still fits.
+for (const width of [833, 900, 960, 999, 1001, 1100]) {
   test(`B1 header at ${width} px with a 32ch site name: the admin bar keeps one row`, async ({
     page,
   }) => {

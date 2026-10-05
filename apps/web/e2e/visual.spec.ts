@@ -955,6 +955,10 @@ test.describe("Admin parity (item 5)", () => {
           const cs = getComputedStyle(el);
           return { block: cs.paddingTop, inline: cs.paddingLeft };
         })(),
+        paneInnerRight: (() => {
+          const el = document.querySelector(".qm-builder__panes > .qm-admin__preview");
+          return el === null ? 0 : el.getBoundingClientRect().left + el.clientLeft + el.clientWidth;
+        })(),
         headRule: (() => {
           const el = document.querySelector(".qm-preview__head");
           return el === null ? null : getComputedStyle(el).borderBottomWidth;
@@ -994,7 +998,8 @@ test.describe("Admin parity (item 5)", () => {
             1,
           );
           expect(
-            Math.abs((b.well?.x ?? 0) + (b.well?.w ?? 0) - ((pane?.x ?? 0) + (pane?.w ?? 0))),
+            // Against the pane's inner edge, so a classic scrollbar does not count as a gap.
+            Math.abs((b.well?.x ?? 0) + (b.well?.w ?? 0) - b.paneInnerRight),
             "well right edge",
           ).toBeLessThanOrEqual(1);
           expect(
