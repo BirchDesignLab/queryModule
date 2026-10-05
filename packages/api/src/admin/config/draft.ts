@@ -114,21 +114,43 @@ export function fixtureFindings(document: unknown): Diagnostic[] {
   }));
 }
 
+/** The MockFileSchema issues of a mock: escaped JSON pointer into /mock and the zod code only. */
+function mockSchemaIssues(mock: unknown): { path: string; code: string }[] {
+  if (mock === undefined) return [];
+  const parsed = MockFileSchema.safeParse(mock);
+  if (parsed.success) return [];
+  return parsed.error.issues.map((issue) => ({
+    path: `/mock${issue.path.map((s) => `/${String(s).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("")}`,
+    code: issue.code,
+  }));
+}
+
 /**
  * Ruling IC1 (#511 T27): a mock the fixture policy cannot walk fails closed at draft save. One
  * config.mockSchema error per zod issue, with the escaped JSON pointer and the issue code only;
  * never the issue message or the input value (spec 5.9).
  */
 function mockSchemaErrors(document: ConfigDocument): ValidationError[] {
-  if (document.mock === undefined) return [];
-  const mock = MockFileSchema.safeParse(document.mock);
-  if (mock.success) return [];
-  return mock.error.issues.map((issue) => ({
+  return mockSchemaIssues(document.mock).map(({ path, code }) => ({
     key: "config.mockSchema",
-    params: {
-      path: `/mock${issue.path.map((s) => `/${String(s).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("")}`,
-      code: issue.code,
-    },
+    params: { path, code },
+  }));
+}
+
+/**
+ * Critic C1 (#511 T27): validate, publish and rollback fail closed on a mock that fails
+ * MockFileSchema whenever the document carries one, even when the chain never parses it (no mock
+ * source, or an earlier step failed). Same shape as the chain's config.mockSchema (path into the
+ * mock, params code and file); key, pointer and code only, never the value (spec 5.9).
+ */
+function mockSchemaDiagnostics(document: unknown, siteId: string): Diagnostic[] {
+  const doc = ConfigDocumentSchema.safeParse(document);
+  if (!doc.success) return [];
+  return mockSchemaIssues(doc.data.mock).map(({ path, code }) => ({
+    level: "error",
+    path,
+    key: "config.mockSchema",
+    params: { code, file: `${siteId}.json` },
   }));
 }
 
@@ -217,13 +239,18 @@ export async function saveDraft(
  */
 export async function validateDocument(d: AppDeps, document: unknown): Promise<ChainResult> {
   const siteId = siteIdOf(d);
-  const fixtures = fixtureFindings(document);
   const r = await checkConfigDocument(document, {
     label: `store site ${siteId} candidate`,
     configDir: configDirOf(resolve(d.env.siteConfigFile)),
     allowMockSources: d.env.allowMockSources,
     now: d.clock.now(),
   });
+  // The chain reports config.mockSchema itself when it reaches the mock step; never twice.
+  const chainSawMock = !r.ok && r.errors.some((e) => e.key === "config.mockSchema");
+  const fixtures = [
+    ...(chainSawMock ? [] : mockSchemaDiagnostics(document, siteId)),
+    ...fixtureFindings(document),
+  ];
   if (!r.ok) return fixtures.length > 0 ? { ...r, errors: [...r.errors, ...fixtures] } : r;
   const errors: Diagnostic[] = [];
   if (r.config.siteConfig.site.id !== siteId)

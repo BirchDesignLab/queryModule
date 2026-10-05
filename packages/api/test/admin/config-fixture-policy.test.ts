@@ -15,7 +15,7 @@ import {
 } from "../helpers/admin-config";
 
 /*
- * #511 T27 IC1 (spec 5.4, 10.8; ADR-0011 items 2, 3 and 5; SEC-010): the admin config API holds
+ * #511 T27 IC1 (spec 5.4, 10.8; ADR-0011 items 2, 3 and 5): the admin config API holds
  * document.mock to the fixture policy. Validate answers each finding as a fixture.* diagnostic at
  * its /mock pointer; draft save refuses a document with any finding (nothing stored); publish and
  * rollback refuse it with no version change and no configPublished row. Bad values here are
@@ -88,6 +88,35 @@ describe("#511 T27 IC1 validate applies the fixture policy to document.mock", ()
       expect.objectContaining({ path: "/sources/0/kind", key: "config.unknownAdapterKind" }),
     );
     expect(errors).toContainEqual({ level: "error", path, key: FINDING, params: {} });
+  });
+
+  it("critic C1: a schema-invalid mock fails closed even when the chain never reaches the mock", async () => {
+    const a = await adminConfigApp();
+    const document = structuredClone(await a.exportVersion(1));
+    (document.mock as Json).extra = { last: BAD_NAME };
+    // An unknown adapter kind stops the chain before its mock step: the mock is never parsed there.
+    const bad = withSiteConfig(document, (s) => {
+      for (const src of s.sources as Json[]) src.kind = "noSuchKind";
+    });
+    const r = await a.call("implementer", "POST", `${API}/validate`, { document: bad });
+    const text = await r.text();
+    expect(text).not.toContain(BAD_NAME);
+    const { errors } = ValidateConfigResponseSchema.parse(JSON.parse(text));
+    expect(errors).toContainEqual({
+      level: "error",
+      path: "/mock",
+      key: "config.mockSchema",
+      params: { code: "unrecognized_keys", file: "default.json" },
+    });
+  });
+
+  it("critic C1: the chain's own config.mockSchema is not reported twice", async () => {
+    const a = await adminConfigApp();
+    const document = structuredClone(await a.exportVersion(1));
+    (document.mock as Json).extra = { last: BAD_NAME };
+    const r = await a.call("implementer", "POST", `${API}/validate`, { document });
+    const { errors } = ValidateConfigResponseSchema.parse(await r.json());
+    expect(errors.filter((e) => e.key === "config.mockSchema")).toHaveLength(1);
   });
 });
 
