@@ -1,7 +1,8 @@
 import type { MockFile } from "../contracts/mock-file";
 
 /**
- * Fixture policy for mock payloads (spec 5.4, 10.8; SEC-002: no real CJIS data).
+ * Fixture policy for mock payloads (spec 5.4, 10.8; CLAUDE.md: mock data only, no fixtures that
+ * look like real person, vehicle or property records).
  * Payloads are free-form, so the policy is an allowlist of normalised keys, not a deny list.
  * Pure: no I/O, no Node APIs. Messages carry fixed text and pointers only, never values (spec 5.9).
  */
