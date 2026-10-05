@@ -368,6 +368,14 @@ describe("ci.yml step 12: the M0 Playwright suite against the boot-smoke contain
     expect(run).toContain("E2E_BASE_URL=$QM_BASE_URL ");
   });
 
+  it("the step 12 container raises the WebSocket upgrade limit: every signed-in page opens a feed socket from one IP", () => {
+    const lines = readFileSync(resolve(root, "scripts/ci/boot-smoke.sh"), "utf8").split("\n");
+    // the long-running container step 12 drives, published on 127.0.0.1:3000
+    const up = lines.findIndex((l) => l.includes("-p 127.0.0.1:3000:3000"));
+    expect(up).toBeGreaterThan(-1);
+    expect(lines.slice(up, up + 3).join("\n")).toMatch(/-e WS_UPGRADE_LIMIT=\S+/);
+  });
+
   it("masks the derived smoke password before exporting it and never echoes it otherwise", () => {
     const run = String(step()?.run ?? "");
     expect(step12Violations(run)).toEqual([]);
