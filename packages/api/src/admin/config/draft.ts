@@ -1,10 +1,12 @@
 import { resolve } from "node:path";
-import type { Diagnostic } from "@querymodule/core/config";
+import { checkFixturePolicy, type Diagnostic } from "@querymodule/core/config";
 import {
   type ConfigDocument,
   ConfigDocumentSchema,
   type ConfigVersion,
   ConfigVersionSchema,
+  MockFileSchema,
+  type ValidationError,
 } from "@querymodule/core/contracts";
 import { and, desc, eq, isNull, max } from "drizzle-orm";
 import { type ChainResult, checkConfigDocument, configDirOf } from "../../config/load";
@@ -94,21 +96,51 @@ export async function nextVersion(tx: Tx, siteId: string): Promise<number> {
   return (row?.top ?? 0) + 1;
 }
 
-export type SaveDraftResult = { ok: true; row: VersionRow } | { ok: false; code: "draftConflict" };
+/**
+ * #511 T27 IC1 (spec 5.4, 10.8): the fixture policy on the document's mock, whenever it parses
+ * as a mock file (schema faults are the chain's config.mockSchema). One error per finding, at
+ * /mock plus the policy pointer; key and pointer only, never the value (spec 5.9).
+ */
+export function fixtureFindings(document: unknown): Diagnostic[] {
+  const doc = ConfigDocumentSchema.safeParse(document);
+  if (!doc.success || doc.data.mock === undefined) return [];
+  const mock = MockFileSchema.safeParse(doc.data.mock);
+  if (!mock.success) return [];
+  return checkFixturePolicy(mock.data).map((f) => ({
+    level: "error",
+    path: `/mock${f.pointer}`,
+    key: f.key,
+    params: {},
+  }));
+}
+
+export type SaveDraftResult =
+  | { ok: true; row: VersionRow }
+  | { ok: false; code: "draftConflict" }
+  | { ok: false; code: "validationFailed"; errors: ValidationError[] };
 
 /**
  * PUT /admin/config/draft (ADR-0011 item 5): one transaction checks the optimistic lock (the
  * base must be the live version) and writes the shared draft. A draft is not validated (it may
- * be work in progress) and not audited (item 7: the row records its author). The draft keeps
+ * be work in progress) and not audited (item 7: the row records its author), with one exception:
+ * a mock that breaks the fixture policy is refused before anything is stored, so non-fixture
+ * data never reaches the database even as a draft (#511 T27 IC1; spec 5.4, 10.8). The draft keeps
  * its version while it is the newest row; once a publish or rollback has passed it, the save
  * removes it (a draft row is never history) and writes the draft as the next version, so
  * versions stay in history order.
  */
-export function saveDraft(
+export async function saveDraft(
   d: AppDeps,
   principal: Principal,
   body: { baseVersion: number; document: ConfigDocument },
 ): Promise<SaveDraftResult> {
+  const fixtures = fixtureFindings(body.document);
+  if (fixtures.length > 0)
+    return {
+      ok: false,
+      code: "validationFailed",
+      errors: fixtures.map((f) => ({ key: f.key, params: { path: f.path } })),
+    };
   const siteId = siteIdOf(d);
   return withTransaction(d.db, async (tx): Promise<SaveDraftResult> => {
     const live = await liveRow(tx, siteId);
@@ -158,17 +190,19 @@ export function saveDraft(
  * server-only adapter kind and mock coverage checks), then the checks activate() applies (the
  * document names the live site; auth.mfaRequired stays false until MFA is enforced, #216), and
  * one only this chain applies: features.adminConfig stays true, so a publish cannot lock the
- * config API (#505 T27 Q6).
+ * config API (#505 T27 Q6). The fixture policy findings on the mock (#511 T27 IC1) join the
+ * errors whatever the chain answers, so publish and rollback refuse them too.
  */
 export async function validateDocument(d: AppDeps, document: unknown): Promise<ChainResult> {
   const siteId = siteIdOf(d);
+  const fixtures = fixtureFindings(document);
   const r = await checkConfigDocument(document, {
     label: `store site ${siteId} candidate`,
     configDir: configDirOf(resolve(d.env.siteConfigFile)),
     allowMockSources: d.env.allowMockSources,
     now: d.clock.now(),
   });
-  if (!r.ok) return r;
+  if (!r.ok) return fixtures.length > 0 ? { ...r, errors: [...r.errors, ...fixtures] } : r;
   const errors: Diagnostic[] = [];
   if (r.config.siteConfig.site.id !== siteId)
     errors.push({ level: "error", path: "/site/id", key: "config.siteMismatch", params: {} });
@@ -189,5 +223,6 @@ export async function validateDocument(d: AppDeps, document: unknown): Promise<C
       key: "config.adminConfigOff",
       params: {},
     });
+  errors.push(...fixtures);
   return errors.length > 0 ? { ok: false, errors, warnings: r.config.warnings } : r;
 }

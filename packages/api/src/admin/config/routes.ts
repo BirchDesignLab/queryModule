@@ -86,7 +86,10 @@ export function mountAdminConfigRoutes(app: Hono<AppEnv>, d: AppDeps): void {
     const body = await bodyOf(c, PutDraftBodySchema);
     if (!body.success) return apiError(c, "validationFailed");
     const r = await saveDraft(d, c.get("principal"), body.data);
-    if (!r.ok) return apiError(c, r.code);
+    if (!r.ok)
+      return r.code === "validationFailed"
+        ? apiError(c, r.code, undefined, r.errors)
+        : apiError(c, r.code);
     return c.json(toConfigVersion(r.row));
   });
 
