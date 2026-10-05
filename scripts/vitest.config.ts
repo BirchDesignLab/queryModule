@@ -4,6 +4,6 @@ export default defineProject({
   test: {
     name: "scripts",
     environment: "node",
-    include: ["ci/**/*.test.ts", "ops/**/*.test.ts", "dev/**/*.test.ts"],
+    include: ["ci/**/*.test.ts", "ops/**/*.test.ts", "dev/**/*.test.ts", "mock-data/**/*.test.ts"],
   },
 });
