@@ -49,6 +49,24 @@ export const SourceStatusEventSchema = z.strictObject({
   resultId: Uuid7Schema,
   status: SourceStatusSchema,
 });
+/** Delete from view (spec 4.7, 5.5): pushed after the hide commits so the owner's other devices drop the results. Carries seq, so it is replayable. */
+export const ResultHiddenEventSchema = z.strictObject({
+  v,
+  type: z.literal("resultHidden"),
+  seq: Seq,
+  at: EpochMsSchema,
+  correlationId: Uuid7Schema,
+  resultIds: z.array(Uuid7Schema).min(1),
+});
+/** Why replay was refused (spec 4.7, 5.5): cursor older than 24 h, more than 500 events due, or a cursor the server does not know. */
+export const RESYNC_REASONS = ["tooOld", "tooMany", "unknownCursor"] as const;
+/** Replay refused: the client refetches over HTTP and sets its high-water mark to latestSeq. Not an event (no seq, never stored). */
+export const ResyncMessageSchema = z.strictObject({
+  v,
+  type: z.literal("resync"),
+  reason: z.enum(RESYNC_REASONS),
+  latestSeq: z.int().min(0),
+});
 
 export const WsClientMessageSchema = z.discriminatedUnion("type", [
   HelloMessageSchema,
@@ -57,13 +75,19 @@ export const WsClientMessageSchema = z.discriminatedUnion("type", [
 ]);
 export type WsClientMessage = z.infer<typeof WsClientMessageSchema>;
 
+/** Strict on the server. Clients parse receipt tolerantly (ADR-0013): unknown types dropped, unknown keys stripped. */
 export const WsServerMessageSchema = z.discriminatedUnion("type", [
   WelcomeMessageSchema,
   PongMessageSchema,
   SourceStatusEventSchema,
+  ResultHiddenEventSchema,
+  ResyncMessageSchema,
 ]);
 export type WsServerMessage = z.infer<typeof WsServerMessageSchema>;
 
 /** State-changing server events: carry seq, stored in event_log, pushed by EventBus.publish. */
-export const WsEventSchema = z.discriminatedUnion("type", [SourceStatusEventSchema]);
+export const WsEventSchema = z.discriminatedUnion("type", [
+  SourceStatusEventSchema,
+  ResultHiddenEventSchema,
+]);
 export type WsEvent = z.infer<typeof WsEventSchema>;

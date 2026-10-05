@@ -36,6 +36,11 @@ export interface LoadedConfig {
   warnings: Diagnostic[];
 }
 
+/** The live snapshot: a loaded config and the stored version it came from (#511 CFG-3). */
+export interface VersionedConfig extends LoadedConfig {
+  versionId: string;
+}
+
 /** Adapter kinds this build supports; plugins from ADAPTER_DIR arrive with the registry (M1 P3). */
 export const BUILTIN_ADAPTER_KINDS: readonly string[] = ["mock"];
 

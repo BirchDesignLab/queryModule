@@ -6,7 +6,7 @@ import { type Auth, createAuth } from "./auth/auth";
 import { type AppIdentityService, createIdentityService } from "./auth/identity";
 import { createRateLimiter, type RateLimiter } from "./auth/rate-limit";
 import { type Clock, type MonotonicClock, systemClock, systemMonotonic } from "./clock";
-import type { LoadedConfig } from "./config/load";
+import type { VersionedConfig } from "./config/load";
 import { type Db, openDatabase } from "./db/client";
 import {
   checkAuditTriggers,
@@ -26,11 +26,11 @@ import type { Secrets } from "./secrets";
  * snapshot for the rest of their work; swap replaces it atomically for the next reader.
  */
 export interface ConfigHolder {
-  current(): LoadedConfig;
-  swap(next: LoadedConfig): void;
+  current(): VersionedConfig;
+  swap(next: VersionedConfig): void;
 }
 
-export function createConfigHolder(initial: LoadedConfig): ConfigHolder {
+export function createConfigHolder(initial: VersionedConfig): ConfigHolder {
   let live = initial;
   return {
     current: () => live,

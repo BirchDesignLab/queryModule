@@ -4,6 +4,9 @@ import {
   HelloMessageSchema,
   PingMessageSchema,
   PongMessageSchema,
+  RESYNC_REASONS,
+  ResultHiddenEventSchema,
+  ResyncMessageSchema,
   SourceStatusEventSchema,
   WelcomeMessageSchema,
   WS_CLOSE_CODES,
@@ -16,6 +19,7 @@ import {
 /** Synthetic UUIDv7 fixtures (ADR-0005). */
 const CID = "0199a0b0-0000-7000-8000-000000000001";
 const RID = "0199a0b0-0000-7000-8000-0000000000a1";
+const RID2 = "0199a0b0-0000-7000-8000-0000000000a2";
 
 const sourceStatus = {
   v: 1,
@@ -33,6 +37,15 @@ const ping = { v: 1, type: "ping", nonce: "n1" };
 const ackReceipt = { v: 1, type: "ackReceipt", correlationId: CID, receivedAt: 1790000000000 };
 const welcome = { v: 1, type: "welcome", latestSeq: 12 };
 const pong = { v: 1, type: "pong", nonce: "n1", serverTime: 1790000000000 };
+const resultHidden = {
+  v: 1,
+  type: "resultHidden",
+  seq: 8,
+  at: 1790000000000,
+  correlationId: CID,
+  resultIds: [RID, RID2],
+};
+const resync = { v: 1, type: "resync", reason: "tooOld", latestSeq: 40 };
 
 describe("SEC-014 FR-043 WebSocket messages (spec 4.7)", () => {
   it("parses every client message", () => {
@@ -72,6 +85,8 @@ describe("SEC-014 FR-043 WebSocket messages (spec 4.7)", () => {
       [WelcomeMessageSchema, welcome],
       [PongMessageSchema, pong],
       [SourceStatusEventSchema, sourceStatus],
+      [ResultHiddenEventSchema, resultHidden],
+      [ResyncMessageSchema, resync],
     ] as const;
     for (const [schema, message] of cases) {
       expect(schema.safeParse(message).success).toBe(true);
@@ -128,5 +143,53 @@ describe("SEC-014 FR-043 WebSocket messages (spec 4.7)", () => {
 
   it("close codes match spec 4.7/5.3: 4001 on every session end, Origin is an HTTP rejection (ADR-0004)", () => {
     expect(WS_CLOSE_CODES).toEqual({ sessionEnded: 4001 });
+  });
+
+  describe("FR-065 NFR-003 M2 P0 additions: resultHidden and resync (spec 4.7, ADR-0013)", () => {
+    it("resultHidden with two result ids parses as a server message and as a replayable event", () => {
+      expect(WsServerMessageSchema.parse(resultHidden)).toEqual(resultHidden);
+      expect(WsEventSchema.parse(resultHidden)).toEqual(resultHidden);
+    });
+
+    it("resultHidden: the server union stays strict on unknown keys", () => {
+      expect(WsServerMessageSchema.safeParse({ ...resultHidden, extra: 1 }).success).toBe(false);
+      expect(WsEventSchema.safeParse({ ...resultHidden, extra: 1 }).success).toBe(false);
+    });
+
+    it("resultHidden carries seq from 1, UUIDv7 ids and at least one result id", () => {
+      expect(WsEventSchema.safeParse({ ...resultHidden, seq: 0 }).success).toBe(false);
+      expect(WsEventSchema.safeParse({ ...resultHidden, resultIds: [] }).success).toBe(false);
+      expect(WsEventSchema.safeParse({ ...resultHidden, resultIds: ["r1"] }).success).toBe(false);
+      expect(WsEventSchema.safeParse({ ...resultHidden, correlationId: "c1" }).success).toBe(false);
+    });
+
+    it("resync parses with each reason as a server message", () => {
+      expect(RESYNC_REASONS).toEqual(["tooOld", "tooMany", "unknownCursor"]);
+      for (const reason of RESYNC_REASONS) {
+        const m = { ...resync, reason };
+        expect(WsServerMessageSchema.parse(m)).toEqual(m);
+      }
+    });
+
+    it("resync rejects an unknown reason, a negative latestSeq and a seq key; it is not an event", () => {
+      expect(WsServerMessageSchema.safeParse({ ...resync, reason: "expired" }).success).toBe(false);
+      expect(WsServerMessageSchema.safeParse({ ...resync, latestSeq: -1 }).success).toBe(false);
+      expect(WsServerMessageSchema.parse({ ...resync, latestSeq: 0 })).toEqual({
+        ...resync,
+        latestSeq: 0,
+      });
+      expect(WsServerMessageSchema.safeParse({ ...resync, seq: 41 }).success).toBe(false);
+      expect(WsEventSchema.safeParse(resync).success).toBe(false);
+    });
+
+    it("sourceStatus parsing is unchanged", () => {
+      expect(WsEventSchema.parse(sourceStatus)).toEqual(sourceStatus);
+      expect(WsServerMessageSchema.parse(sourceStatus)).toEqual(sourceStatus);
+    });
+
+    it("neither new message is a client message", () => {
+      expect(WsClientMessageSchema.safeParse(resultHidden).success).toBe(false);
+      expect(WsClientMessageSchema.safeParse(resync).success).toBe(false);
+    });
   });
 });

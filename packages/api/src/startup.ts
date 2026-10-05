@@ -88,6 +88,7 @@ export async function bootstrap(
         identitySource: "system",
         details: {
           siteId: c.siteConfig.site.id,
+          versionId: c.versionId,
           configHash: c.configHash,
           configSchemaVersion: CONFIG_SCHEMA_VERSION,
           coreVersion: CORE_VERSION,

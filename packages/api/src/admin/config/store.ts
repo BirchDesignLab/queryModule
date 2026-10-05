@@ -1,15 +1,16 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { BOUNDED_ID_PATTERN, SYSTEM_ACTOR } from "@querymodule/core/contracts";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   bootstrapDocument,
   ConfigLoadError,
   canonicalJson,
   configDirOf,
-  type LoadedConfig,
   loadConfigDocument,
   loadSiteConfig,
+  type VersionedConfig,
 } from "../../config/load";
 import type { Db } from "../../db/client";
 import { siteConfigVersion } from "../../db/schema";
@@ -24,8 +25,7 @@ export interface ConfigBootstrap {
 }
 
 /** The live version's config, validated by the full spec 5.8 chain, and where it came from. */
-export interface LiveConfig extends LoadedConfig {
-  versionId: string;
+export interface LiveConfig extends VersionedConfig {
   version: number;
   /** This boot seeded version 1 from the file (the store was empty for the site). */
   seeded: boolean;
@@ -71,6 +71,35 @@ export function parseStored(text: string, label: string): unknown {
   }
 }
 
+const sha256 = (v: unknown) => createHash("sha256").update(canonicalJson(v)).digest("hex");
+
+/** #511 CFG-3: a row's document_hash, the SHA-256 of its parsed stored document as stored. */
+export const documentHashOf = (document: unknown): string => sha256(document);
+
+/**
+ * #511 CFG-3: the one-time document_hash of a published row from before migration 0009. The row
+ * is accepted only if its config_hash is the hash of its stored siteConfig (seed and publish store
+ * the resolved siteConfig) or today's rule (`resolvedHash`, the defaults-applied resolve); else it
+ * was altered outside the app and startup refuses (fail closed).
+ */
+async function backfillDocumentHash(
+  db: Db,
+  row: typeof siteConfigVersion.$inferSelect,
+  document: unknown,
+  resolvedHash: string,
+  label: string,
+): Promise<void> {
+  const { siteConfig } = document as { siteConfig: unknown };
+  if (row.configHash !== sha256(siteConfig) && row.configHash !== resolvedHash)
+    throw new ConfigLoadError(label, "", "config.hashMismatch");
+  await withTransaction(db, async (tx) => {
+    await tx
+      .update(siteConfigVersion)
+      .set({ documentHash: documentHashOf(document) })
+      .where(and(eq(siteConfigVersion.id, row.id), isNull(siteConfigVersion.documentHash)));
+  });
+}
+
 /**
  * ADR-0011 items 1 and 2, spec 5.8 (overridden by ADR-0011): the live site config at startup. An
  * empty store for the file's site seeds version 1 from the file (resolved, validated); afterwards
@@ -89,13 +118,15 @@ export async function loadLiveConfig(db: Db, bootstrap: ConfigBootstrap): Promis
     if (any) throw new ConfigLoadError(`store site ${siteId}`, "", "config.noPublishedVersion");
     const boot = await bootstrapDocument(file, bootstrap);
     const now = bootstrap.now;
+    const text = JSON.stringify(boot.document);
     const row: typeof siteConfigVersion.$inferSelect = {
       id: uuidv7(now),
       siteId,
       version: 1,
       status: "published",
-      document: JSON.stringify(boot.document),
+      document: text,
       configHash: boot.config.configHash,
+      documentHash: documentHashOf(JSON.parse(text)),
       baseVersion: null,
       createdBy: SYSTEM_ACTOR.id,
       createdAt: now,
@@ -124,6 +155,12 @@ export async function loadLiveConfig(db: Db, bootstrap: ConfigBootstrap): Promis
   });
   const label = `store site ${siteId} version ${published.version}`;
   const document = parseStored(published.document, label);
+  // Prototype shortcut (D-M2P0-2): verify the stored document as stored, then apply defaults. The
+  // proper fix is a config schema version with an audited migration of stored rows; see #558.
+  // A mismatch means the row was altered outside the app (the triggers refuse it from inside), so
+  // refuse to boot (fail closed).
+  if (published.documentHash !== null && published.documentHash !== documentHashOf(document))
+    throw new ConfigLoadError(label, "", "config.hashMismatch");
   const config = await loadConfigDocument(document, {
     label,
     configDir: configDirOf(file),
@@ -132,10 +169,8 @@ export async function loadLiveConfig(db: Db, bootstrap: ConfigBootstrap): Promis
   });
   if (config.siteConfig.site.id !== siteId)
     throw new ConfigLoadError(label, "/siteConfig/site/id", "config.siteMismatch");
-  // The stored hash must be the one this document hashes to: a mismatch means the row was
-  // altered outside the app (the triggers refuse it from inside), so refuse to boot (fail closed).
-  if (published.configHash !== config.configHash)
-    throw new ConfigLoadError(label, "", "config.hashMismatch");
+  if (published.documentHash === null)
+    await backfillDocumentHash(db, published, document, config.configHash, label);
   const fileIgnored =
     !seeded &&
     (await bootstrapDocument(file, bootstrap).then(
