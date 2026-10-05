@@ -19,7 +19,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | M0 | P1 foundation | done · [plan](2026-09-25-track-a-p1.md) · [issues][m0-p1-a] | done · [plan](2026-09-25-track-b-p1.md) · [issues][m0-p1-b] | n/a | done · in B plan · [issues][m0-p1-c] | done · M0 exit · [all][m0-p1] |
 | M1 | P2 engine | done · [plan](2026-09-28-track-a-p2.md) · [issues][m1-p2-a] | done · [plan](2026-09-28-track-b-p2.md) · [issues][m1-p2-b] | n/a | done · in A and B plans · [issues][m1-p2-c] | done · Form on `GET config`; parser property tests · [all][m1-p2] |
 | M1 | P3 flow | done · [plan](2026-09-29-track-a-p3.md), UI-first re-plan (ADR-0011, ADR-0012); waves AC0 to AC3 and the M1 exit notes (`docs/releases/m1.md`) · [issues][m1-p3-a] | done · [plan](2026-09-29-track-b-p3.md), UI-first re-plan (ADR-0012); waves B1 to B8, design system and cloud pass (#344 to #446); wave B6 parked to M2 P0.5 · [issues][m1-p3-b] | n/a | n/a | done · M1 exit (v1 demo, ADR-0012): #517, `m1` promoted 10-04-26 (manual m1 smoke held until the next host visit, #237) · [all][m1-p3] |
-| M2 | P0 contracts | n/a | n/a | n/a | next · [plan](2026-10-05-m2-p0-contracts.md), run in the B lane · [issues][m2-p0] | planned · Contracts frozen; OpenAPI diff reviewed · [all][m2-p0] |
+| M2 | P0 contracts | n/a | n/a | n/a | active · [plan](2026-10-05-m2-p0-contracts.md), run in the B lane · [issues][m2-p0] | planned · Contracts frozen; OpenAPI diff reviewed · [all][m2-p0] |
 | M2 | P0.5 dispatch (ADR-0012) | next · [plan](2026-10-05-m2-track-a-p0-5.md); AW1 first, AW2 waits for M2 P0-W1 · [issues][m2-p05-a] | planned · [plan](2026-10-05-m2-track-b-p0-5.md), after M2 P0 in the B lane · [issues][m2-p05-b] | n/a | n/a | planned · A4 clean no-record; smoke 1 to 5 · [all][m2-p05] |
 | M2 | P1 feed | planned · `<date>-m2-track-a-p1.md` · [issues][m2-p1-a] | planned · `<date>-m2-track-b-p1.md` · [issues][m2-p1-b] | n/a | planned · in B plan · [issues][m2-p1-c] | planned · A6; replay test · [all][m2-p1] |
 | M2 | P2 audit | planned · `<date>-m2-track-a-p2.md` · [issues][m2-p2-a] | planned · `<date>-m2-track-b-p2.md` · [issues][m2-p2-b] | n/a | planned · in A plan · [issues][m2-p2-c] | planned · A7 to A9 · [all][m2-p2] |
@@ -39,7 +39,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 |---|---|---|---|---|
 | Linux laptop (deploy host) | Host lane (host steps only) | M1 exit | idle (`m1` promoted 10-04-26; manual m1 smoke held until the next visit) | 10-04-26 |
 | Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | idle (starts at wave AW1) | 10-05-26 |
-| Windows 11 | B (`C:\git\queryModule`) | M2 P0 contracts, then M2 P0.5 B | idle (starts at wave P0-W1) | 10-05-26 |
+| Windows 11 | B (`C:\git\queryModule`) | M2 P0 contracts, then M2 P0.5 B | running (P0-W1, session "M2 B lane P0 contracts") | 10-05-26 13:20 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | idle (start brief from "M2 planning 1") | 10-05-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | running | 10-05-26 |
 
