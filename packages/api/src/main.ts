@@ -1,4 +1,5 @@
 import { writeSync } from "node:fs";
+import { OutcomeWriteError } from "./dispatch/outcome";
 import { errorFields } from "./log/error-fields";
 import { type RunningServer, startServer, startupErrorFields } from "./startup";
 
@@ -20,13 +21,23 @@ let failing = false;
 /**
  * #224: an error that escapes the request path (a listener, a timer, a stream) fails closed
  * (spec 8.1): one fatal line, a bounded drain of the server and the DB, exit 1. A second fatal
- * event during the drain exits at once without another line.
+ * event during the drain exits at once without another line. A failed outcome write (#536)
+ * reaches here through AppDeps.fatal, after the dispatcher is aborted: its line names the
+ * write's ids and the failing error's class, never the SIGTERM drain of in-flight jobs.
  */
 function fail(event: "uncaughtException" | "unhandledRejection", err: unknown): void {
   if (failing) process.exit(1);
   failing = true;
   process.exitCode = 1;
-  writeFatal("uncaught error, exiting", { event, error: { name: errorFields(err).name } });
+  if (err instanceof OutcomeWriteError) {
+    writeFatal("dispatch outcome write failed", {
+      event: "dispatchOutcome",
+      ...err.ids,
+      error: { name: err.causeName },
+    });
+  } else {
+    writeFatal("uncaught error, exiting", { event, error: { name: errorFields(err).name } });
+  }
   setTimeout(() => process.exit(1), FATAL_DRAIN_MS).unref();
   const s = server;
   if (!s) process.exit(1);

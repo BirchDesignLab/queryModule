@@ -54,7 +54,7 @@ const AUTH_SECRET = k(4);
  * Boots src/main.ts in a child process, waits for "listening", then has the preloaded fixture
  * raise `kind` with a message that embeds a loaded secret. Resolves with the exit code and output.
  */
-async function runFatal(kind: "exception" | "rejection" | "double" | "sigterm") {
+async function runFatal(kind: "exception" | "rejection" | "double" | "sigterm" | "outcome") {
   const secrets = tempDir("qm-fatal-sec-");
   const files = {
     DB_ENCRYPTION_KEY: k(1),
@@ -125,6 +125,26 @@ describe("#224 main.ts fails closed on an error outside the request path (spec 8
     expect(code).toBe(1);
     expect(fatalLines(stderr)).toHaveLength(1);
     expect(`${stdout}${stderr}`).not.toContain(AUTH_SECRET);
+    expect(stderr).not.toMatch(/^\s+at /m);
+  }, 60_000);
+
+  it("a failed outcome write exits 1 with one dispatch outcome line naming ids only (#536)", async () => {
+    const { code, stdout, stderr } = await runFatal("outcome");
+    expect(stdout, `child stderr: ${stderr}`).toContain('"msg":"listening"');
+    expect(code).toBe(1);
+    const lines = fatalLines(stderr);
+    expect(lines).toHaveLength(1);
+    const { time: _time, ...line } = JSON.parse(lines[0] ?? "{}");
+    expect(line).toEqual({
+      level: "fatal",
+      msg: "dispatch outcome write failed",
+      event: "dispatchOutcome",
+      correlationId: "0190a000-0000-7000-8000-000000000001",
+      resultId: "0190a000-0000-7000-8000-000000000002",
+      sourceId: "stateSource",
+      partId: 0,
+      error: { name: "Error" },
+    });
     expect(stderr).not.toMatch(/^\s+at /m);
   }, 60_000);
 
