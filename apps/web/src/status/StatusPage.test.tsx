@@ -12,6 +12,9 @@ async function openStatus(
   beforeOpen?: (t: ReturnType<typeof renderRoot>) => void,
 ) {
   const t = renderRoot({ createSocket });
+  // These tests count the heartbeat probe's sockets; the app's feed socket (AppShell) shares
+  // createSocket, so keep it from opening here. The feed has its own tests (AppChrome.test.tsx).
+  vi.spyOn(t.services.feed, "open").mockImplementation(() => undefined);
   beforeOpen?.(t);
   await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
   await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
@@ -48,7 +51,7 @@ describe("NFR-003 authenticated heartbeat on the status page (spec 5.3, 6.8, 9.3
         onclose: null,
         onerror: null,
       };
-      queueMicrotask(() => socket.onclose?.());
+      queueMicrotask(() => socket.onclose?.({ code: 1006 }));
       return socket;
     });
     expect(
@@ -118,7 +121,7 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
   it("Connection: Failed uses the critical (error) badge and keeps the reason in the sentence", async () => {
     await openStatus(() => {
       const socket = new FakeSocket();
-      queueMicrotask(() => socket.onclose?.());
+      queueMicrotask(() => socket.onclose?.({ code: 1006 }));
       return socket;
     });
     const failed = await screen.findByText("Failed", { selector: ".qm-badge" });
