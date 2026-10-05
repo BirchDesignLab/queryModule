@@ -1,4 +1,4 @@
-import { type Role, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
+import type { Role } from "@querymodule/core/contracts";
 import type { Hono } from "hono";
 import type { AppDeps } from "../deps";
 import type { DispatchJob } from "../dispatch/dispatcher";
@@ -110,9 +110,10 @@ export function bindJobs(
  * X-Requested-With check. Nothing from the body is logged; any other throw reaches
  * app.onError as 500 internal, a T1 failure only as a SubmitTransactionError. A role outside
  * QUERY_ROLES gets 403 before anything is read. Jobs are planned before T1 (a guard that trips is
- * a 500 with nothing committed) and bound to T1's rows as soon as it returns, before the body is
- * parsed; a throw there is logged by class and ids and fails closed (d.fatal), so committed rows
- * are never silently left undispatched. The 202 never waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
+ * a 500 with nothing committed), and T1 parses the 202 body before it commits (C-C-m1). The jobs
+ * are bound to T1's rows as soon as it returns; a throw there is logged by class and ids and
+ * fails closed (d.fatal), so committed rows are never silently left undispatched. The 202 never
+ * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
  * nothing: the winner enqueued its own rows.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
@@ -148,6 +149,6 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       });
       d.fatal(e);
     }
-    return c.json(SubmitQueryResponseSchema.parse(ack.body), 202);
+    return c.json(ack.body, 202);
   });
 }

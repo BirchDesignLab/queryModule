@@ -845,6 +845,28 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
     expect(t.fatals).toEqual([]);
   });
 
+  it("AW3 review C-C-m1: a 202 body that fails its schema rolls T1 back: 500, nothing committed", async () => {
+    const { t, post, body, userId } = await setup();
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    vi.spyOn(SubmitQueryResponseSchema, "parse").mockImplementationOnce(() => {
+      throw new Error("response schema mismatch");
+    });
+    const r = await post(body());
+    expect(r.status).toBe(500);
+    expect(enqueue).not.toHaveBeenCalled();
+    const requests = await t.deps.db
+      .select()
+      .from(queryRequest)
+      .where(eq(queryRequest.userId, userId));
+    expect(requests).toEqual([]);
+    const results = await t.deps.db
+      .select()
+      .from(sourceResult)
+      .where(eq(sourceResult.userId, userId));
+    expect(results).toEqual([]);
+    expect(t.fatals).toEqual([]);
+  });
+
   it("AW3 critic (b) backstop: a throw after T1 commits logs ids and class only and fails closed", async () => {
     const { t, post, body } = await setup();
     vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {
