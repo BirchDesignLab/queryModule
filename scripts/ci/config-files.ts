@@ -180,7 +180,8 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
 /**
  * Generator drift (spec 5.4, 10.8): each committed mock file under `mockDir` must equal what
  * scripts/mock-data/generate.ts emits for its site, and every mock file there must belong to a
- * generator site (AW1 review G-M2). A generator that throws is reported, not raised (G-M3).
+ * generator site (AW1 review G-M2). A generator that throws is reported, not raised (G-M3), and
+ * so is an unreadable directory (AW2 review G-G-M1).
  * One fixed-text message per problem. `gen` is injectable for tests.
  */
 export function mockDriftErrors(
@@ -209,7 +210,14 @@ export function mockDriftErrors(
     }
   }
   const owned = new Set(MOCK_SITE_IDS.map((id) => `${id}.json`));
-  for (const name of readdirSync(mockDir).sort()) {
+  let names: string[];
+  try {
+    names = readdirSync(mockDir).sort();
+  } catch {
+    out.push("mock directory unreadable: mock/ (restore packages/config/mock)");
+    return out;
+  }
+  for (const name of names) {
     if (name.endsWith(".json") && !owned.has(name)) {
       out.push(
         `mock file without a generator site: mock/${name} (add it to scripts/mock-data/generate.ts or delete it)`,
