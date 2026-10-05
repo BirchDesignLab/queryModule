@@ -90,6 +90,23 @@ describe("the draft's mock slice", () => {
     expect(store.getState().undoCount).toBe(1);
   });
 
+  it("consecutive edits of one control are one undo step; another control starts a new one", () => {
+    const store = started(MOCK_A);
+    store.getState().setMock({ ...MOCK_A, siteId: "a" }, { coalesce: "value:1" });
+    store.getState().setMock({ ...MOCK_A, siteId: "ab" }, { coalesce: "value:1" });
+    store.getState().setMock({ ...MOCK_A, siteId: "abc" }, { coalesce: "value:1" });
+    expect(store.getState().undoCount).toBe(1);
+    store.getState().setMock({ ...MOCK_A, siteId: "abcd" }, { coalesce: "value:2" });
+    expect(store.getState().undoCount).toBe(2);
+    store.getState().setMock({ ...MOCK_A, siteId: "x" });
+    store.getState().setMock({ ...MOCK_A, siteId: "y" });
+    expect(store.getState().undoCount).toBe(4);
+    store.getState().undo();
+    store.getState().undo();
+    store.getState().undo();
+    expect(store.getState().mock).toEqual({ ...MOCK_A, siteId: "abc" });
+  });
+
   it("setMock before the draft is started does nothing; reset clears the mock", () => {
     const store = createConfigDraftStore();
     store.getState().setMock(MOCK_B);

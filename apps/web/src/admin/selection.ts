@@ -35,6 +35,8 @@ export function topItem(pointer: string): string {
  */
 export function isRootIssue(doc: Readonly<Record<string, unknown>>, pointer: string): boolean {
   if (pointer === "") return true;
+  // The mock responses (CFG-2) are items of their own in the tree, not part of the site config.
+  if (pointer === "/mock" || pointer.startsWith("/mock/")) return false;
   const top = topItem(pointer);
   return HIDDEN_KEYS.has(top) || !(top in doc);
 }

@@ -20,6 +20,8 @@ import { ChecksContext } from "./checks.js";
 import { asObjects, str } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
 import { useItemName } from "./FormTab.js";
+import { mockPointer } from "./mock-edit.js";
+import { parseMock } from "./mock-model.js";
 import { HIDDEN_KEYS, isRootIssue, issueWords, LABELS_ITEM } from "./selection.js";
 import { type FlatItem, isTypeAheadKey, treeAction, typeAhead } from "./tree-nav.js";
 
@@ -48,8 +50,12 @@ interface TreeNode {
   warnings: number;
 }
 
-function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } {
+function useTreeNodes(
+  doc: JsonObject,
+  mock: JsonObject | null,
+): { types: TreeNode[]; site: TreeNode[]; mock: TreeNode[] } {
   const name = useItemName();
+  const t = useT();
   const { issues } = useContext(ChecksContext);
   return useMemo(() => {
     // Issues at or under a pointer. A section's fields live under /fields, not under the section,
@@ -128,8 +134,41 @@ function useTreeNodes(doc: JsonObject): { types: TreeNode[]; site: TreeNode[] } 
       .filter((k) => k !== "queryTypes" && !HIDDEN_KEYS.has(k))
       .map((k) => node(toPointer([k]), name(k), k));
     site.push(node(LABELS_ITEM, name(LABELS_ITEM), ""));
-    return { types, site };
-  }, [doc, issues, name]);
+    // Mock responses (CFG-2): coverage first, then each mock source with its responses.
+    const parsed = mock === null ? null : parseMock(mock);
+    const mockNodes: TreeNode[] = [];
+    if (parsed?.ok === true) {
+      const labelKeys = new Map(asObjects(doc.sources).map((s) => [str(s.id), str(s.labelKey)]));
+      const typeKeys = new Map(
+        asObjects(doc.queryTypes).map((q) => [str(q.code), str(q.labelKey)]),
+      );
+      mockNodes.push(node(mockPointer.coverage, t("admin.mock.coverage"), ""));
+      const ids = [
+        ...[...labelKeys.keys()].filter((id) => id in parsed.mock.sources),
+        ...Object.keys(parsed.mock.sources).filter((id) => !labelKeys.has(id)),
+      ];
+      for (const id of ids) {
+        const source = parsed.mock.sources[id];
+        if (source === undefined) continue;
+        const responses = source.responses.map((r, i) =>
+          node(
+            mockPointer.response(id, i),
+            r.queryType,
+            r.types === undefined
+              ? r.queryType
+              : `${r.queryType} ${Object.values(r.types).join(" ")}`,
+            [],
+            false,
+            typeKeys.get(r.queryType) ?? "",
+          ),
+        );
+        mockNodes.push(
+          node(mockPointer.source(id), id, id, responses, true, labelKeys.get(id) ?? ""),
+        );
+      }
+    }
+    return { types, site, mock: mockNodes };
+  }, [doc, mock, issues, name, t]);
 }
 
 /** A row's text as the editor shows it: the draft's text, else the shipped one, else the key. */
@@ -243,16 +282,19 @@ const treeId = (uid: string, pointer: string) =>
  */
 export function BuilderTree({
   doc,
+  mock,
   selected,
   onSelect,
 }: {
   doc: JsonObject;
+  /** The draft's mock responses (CFG-2), or null when the site has none. */
+  mock: JsonObject | null;
   selected: string | null;
   onSelect(pointer: string): void;
 }) {
   const t = useT();
   const uid = useId();
-  const { types, site } = useTreeNodes(doc);
+  const { types, site, mock: mockRows } = useTreeNodes(doc, mock);
   const text = useLabelResolver();
   // Whole-config issues have no row of their own: one line lists them, so the rows add up to the
   // toolbar total (critic I1).
@@ -267,6 +309,7 @@ export function BuilderTree({
   // Without a search these are the nodes themselves, so the memoized rows see the same arrays.
   const shownTypes = useMemo(() => filterNodes(types, q, text), [types, q, text]);
   const shownSite = useMemo(() => filterNodes(site, q, text), [site, q, text]);
+  const shownMock = useMemo(() => filterNodes(mockRows, q, text), [mockRows, q, text]);
   // Only the selected type is expanded unless the user toggles one; a search shows every match.
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const selectedType =
@@ -298,7 +341,7 @@ export function BuilderTree({
   // Keyboard: one Tab stop for both trees, so Tab comes back to the selected row (APG single-select
   // tree); when a search hides it, the row last focused, else the first. The rows on screen are
   // what the keys walk.
-  const flat = flattenVisible([shownTypes, shownSite], expanded, q !== "", text);
+  const flat = flattenVisible([shownTypes, shownSite, shownMock], expanded, q !== "", text);
   const flatRef = useRef(flat);
   flatRef.current = flat;
   const [active, setActive] = useState<string | null>(null);
@@ -389,7 +432,7 @@ export function BuilderTree({
           <VisuallyHidden>, {issueWords(t, rootErrors, rootWarnings)}</VisuallyHidden>
         </p>
       )}
-      {shownTypes.length === 0 && shownSite.length === 0 ? (
+      {shownTypes.length === 0 && shownSite.length === 0 && shownMock.length === 0 ? (
         <div className="qm-tree__empty">
           <p>{t("admin.tree.noMatches", { text: query.trim() })}</p>
           <button
@@ -443,6 +486,24 @@ export function BuilderTree({
                 labelledBy={`${uid}-site`}
               />
               <p className="qm-tree__note">{t("admin.config.serverOnly")}</p>
+            </>
+          )}
+          {shownMock.length > 0 && (
+            <>
+              <p className="qm-tree__group" id={`${uid}-mock`}>
+                {t("admin.tree.mock")}
+              </p>
+              <TreeRows
+                uid={uid}
+                nodes={shownMock}
+                selected={selected}
+                tabStop={tabStop}
+                onSelect={onSelect}
+                onItemFocus={onItemFocus}
+                onItemKeyDown={onItemKeyDown}
+                onItemBlur={onItemBlur}
+                labelledBy={`${uid}-mock`}
+              />
             </>
           )}
         </>

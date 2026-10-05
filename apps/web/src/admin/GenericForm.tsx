@@ -254,6 +254,7 @@ export function EditorSection({
   configKey,
   crumb,
   countPointer = pointer,
+  focusOwner,
   children,
 }: {
   pointer: string;
@@ -263,6 +264,8 @@ export function EditorSection({
   crumb?: string;
   /** The item whose issues the heading counts; the section's own pointer by default. */
   countPointer?: string;
+  /** Makes the heading focusable by a focus request (data-owner, role "heading"): a new item's heading. */
+  focusOwner?: string;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -277,7 +280,12 @@ export function EditorSection({
   return (
     <section className="qm-editor__section" data-path={pointer}>
       {crumb !== undefined && <p className="qm-editor__crumb">{crumb}</p>}
-      <h3 className="qm-editor__title">
+      <h3
+        className="qm-editor__title"
+        {...(focusOwner === undefined
+          ? {}
+          : { tabIndex: -1, "data-owner": focusOwner, "data-role": "heading" })}
+      >
         {label}
         {configKey !== undefined && configKey !== label && (
           <>

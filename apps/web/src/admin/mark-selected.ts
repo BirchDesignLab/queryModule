@@ -7,6 +7,8 @@ import type { TabId } from "./tabs.js";
 
 /** A top-level item's own pointer ("/commands", "/queryTypes/2"), which the editor shows whole. */
 function isTopPointer(pointer: string): boolean {
+  // A mock item (the coverage grid, a source, a response) is shown whole, like a query type.
+  if (pointer === "/mock" || pointer.startsWith("/mock/")) return true;
   const depth = pointer.split("/").length - 1;
   return depth <= (topItem(pointer) === "queryTypes" ? 2 : 1);
 }

@@ -1705,3 +1705,292 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+/* Mock responses editor (CFG-2, design 10-05-26): coverage grid, source, response, scenarios, payload. */
+.qm-mock__lead {
+  margin: 0 0 var(--qm-space-3);
+  color: var(--qm-color-text-muted);
+}
+
+.qm-mock__label {
+  padding: 0;
+  font-weight: 500;
+}
+
+.qm-mock__mono {
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-mock__two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--qm-space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.qm-mock__two > div {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--qm-space-1) * 1.5);
+  min-inline-size: 0;
+}
+
+.qm-mock__table-wrap {
+  overflow-x: auto;
+}
+
+.qm-mock__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.qm-mock__table :where(th, td) {
+  padding: var(--qm-space-2) var(--qm-space-3);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  text-align: start;
+  vertical-align: top;
+}
+
+.qm-mock__table thead th {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-mock__table td {
+  min-inline-size: calc(var(--qm-space-12) * 3);
+}
+
+.qm-mock__na {
+  color: var(--qm-color-text-muted);
+  font-style: italic;
+}
+
+.qm-mock__cells {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+}
+
+.qm-mock__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--qm-space-1) / 2);
+  inline-size: 100%;
+  min-block-size: var(--qm-control-height-dense);
+  text-align: start;
+}
+
+.qm-mock__cell span:not(.qm-badge) {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* A gap: text, an icon and a dashed edge, so the state never rests on colour alone. */
+.qm-mock__gap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qm-space-1);
+  padding: var(--qm-space-2);
+  border: var(--qm-border-width) dashed var(--qm-field-required);
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-mock__missing {
+  color: var(--qm-field-required);
+  font-weight: 600;
+}
+
+.qm-mock__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2) var(--qm-space-4);
+}
+
+.qm-mock__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-mock__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1) var(--qm-space-2);
+  margin: 0;
+  color: var(--qm-field-required);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-mock__scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-mock__scenario {
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-mock__scenario--error {
+  border-color: var(--qm-field-required);
+}
+
+.qm-mock__scenario-box {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.qm-mock__scenario-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1) var(--qm-space-2);
+  padding: var(--qm-space-1) var(--qm-space-1) var(--qm-space-1) var(--qm-space-3);
+}
+
+.qm-mock__scenario-head h5 {
+  margin: 0;
+  font-size: var(--qm-type-size-md);
+  white-space: nowrap;
+}
+
+.qm-mock__summary {
+  flex: 1 1 calc(var(--qm-space-12) * 3);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-mock__scenario-tools {
+  display: flex;
+  gap: calc(var(--qm-space-1) / 2);
+  margin-inline-start: auto;
+}
+
+.qm-mock__scenario-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-4);
+  padding: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-mock__icon {
+  min-inline-size: var(--qm-control-height-dense);
+  min-block-size: var(--qm-control-height-dense);
+  padding-inline: var(--qm-space-2);
+}
+
+.qm-mock__trigger {
+  display: grid;
+  grid-template-columns: minmax(0, calc(var(--qm-space-12) * 3.5)) auto minmax(0, 1fr) auto;
+  gap: var(--qm-space-1) var(--qm-space-2);
+  align-items: center;
+  margin-block: var(--qm-space-1);
+}
+
+.qm-mock__trigger .qm-mock__error {
+  grid-column: 1 / -1;
+}
+
+.qm-mock__radios {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--qm-space-1) / 2);
+}
+
+.qm-mock__radio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--qm-space-2);
+  min-block-size: var(--qm-control-height-dense);
+  padding: calc(var(--qm-space-1) / 2) var(--qm-space-3);
+  border: var(--qm-border-width) solid transparent;
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-mock__radio:has(input:checked) {
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
+}
+
+.qm-mock__radio span {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-mock__payload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.qm-mock__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-mock__row {
+  display: grid;
+  grid-template-columns: minmax(0, calc(var(--qm-space-12) * 3.5)) minmax(0, 1fr) auto;
+  gap: var(--qm-space-1) var(--qm-space-2);
+  align-items: center;
+}
+
+/* Nested rows: an indent and a guide line. */
+.qm-mock__row--nested {
+  padding-inline-start: var(--qm-space-2);
+  border-inline-start: var(--qm-border-width) solid var(--qm-color-border);
+}
+
+.qm-mock__row .qm-mock__error {
+  grid-column: 1 / -1;
+}
+
+.qm-mock__item {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-mock__tag {
+  justify-self: start;
+  padding: calc(var(--qm-space-1) / 2) var(--qm-space-2);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-mock__tools {
+  display: flex;
+  gap: calc(var(--qm-space-1) / 2);
+}
+
+.qm-mock__add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2);
+}

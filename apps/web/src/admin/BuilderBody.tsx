@@ -19,7 +19,10 @@ import type { JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
 import { HistoryDrawer } from "./HistoryDrawer.js";
 import { LeaveGuard } from "./LeaveGuard.js";
+import { MockPane } from "./MockPane.js";
 import { useMarkSelected } from "./mark-selected.js";
+import { withMockIssues } from "./mock-checks.js";
+import { mockPointer } from "./mock-edit.js";
 import { BuilderPreview } from "./Preview.js";
 import { PublishButtons, PublishDialogs, PublishNotices } from "./PublishControls.js";
 import { usePublishFlow } from "./PublishFlow.js";
@@ -40,14 +43,15 @@ const QUIET_PENDING = Symbol("quiet-pending");
 export function BuilderBody({ doc }: { doc: JsonObject }) {
   const t = useT();
   const uid = useId();
-  const { labels, undoCount, redoCount, server } = useDraft();
+  const { labels, mock, undoCount, redoCount, server } = useDraft();
   const { announcer } = useServices();
   const localChecks = useDraftChecks(doc, labels, server?.liveLabels);
   const flow = usePublishFlow();
   // Issues the server found when the draft was last checked join the browser's own, until an edit.
+  // The mock responses' own findings (CFG-2) join them: gaps, fixture findings, scenario rules.
   const checks = useMemo(
-    () => withServerIssues(localChecks, flow.serverIssues),
-    [localChecks, flow.serverIssues],
+    () => withMockIssues(withServerIssues(localChecks, flow.serverIssues), mock),
+    [localChecks, flow.serverIssues, mock],
   );
   const [tab, setTab] = useState<TabId>("form");
   const [raw, setRaw] = useState<RawState>(() => ({
@@ -106,9 +110,9 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
   useEffect(() => {
     const p = selection.pointer;
     if (p === null) return;
-    const next = existingPointer(doc, p);
+    const next = existingPointer(doc, p, mock);
     if (next !== p) setSelection((s) => ({ pointer: next, seq: s.seq }));
-  }, [doc, selection.pointer]);
+  }, [doc, mock, selection.pointer]);
   const historyRef = useRef<HTMLButtonElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   // Esc and Close return focus to the button that opened the history.
@@ -325,7 +329,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
             )}
           </div>
           <div className="qm-builder__panes">
-            <BuilderTree doc={doc} selected={shown.pointer} onSelect={onSelect} />
+            <BuilderTree doc={doc} mock={mock} selected={shown.pointer} onSelect={onSelect} />
             <div
               ref={panelRef}
               className="qm-builder__editor"
@@ -343,18 +347,22 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
                 <ChangesView doc={doc} onOpen={onOpen} />
               )}
             </div>
-            {checks.doc !== null && (
-              <BuilderPreview
-                doc={checks.doc}
-                labels={checks.labels}
-                blocked={raw.parseError !== null || errorCount > 0}
-                pending={checks.doc !== doc || checks.labels !== labels}
-                selected={shown.pointer}
-                selectSeq={shown.seq}
-                errorCount={errorCount}
-                parseError={raw.parseError !== null}
-                onGoToError={canGoToError && errorCount > 0 ? goToFirstIssue : undefined}
-              />
+            {shown.pointer !== null && mockPointer.is(shown.pointer) ? (
+              <MockPane />
+            ) : (
+              checks.doc !== null && (
+                <BuilderPreview
+                  doc={checks.doc}
+                  labels={checks.labels}
+                  blocked={raw.parseError !== null || errorCount > 0}
+                  pending={checks.doc !== doc || checks.labels !== labels}
+                  selected={shown.pointer}
+                  selectSeq={shown.seq}
+                  errorCount={errorCount}
+                  parseError={raw.parseError !== null}
+                  onGoToError={canGoToError && errorCount > 0 ? goToFirstIssue : undefined}
+                />
+              )
             )}
           </div>
         </div>
