@@ -265,3 +265,11 @@ export function parentStatus(children, current) {
   if (current === "Blocked" && next !== "Done" && next !== "In Review") return current;
   return next;
 }
+
+/**
+ * The GitHub label for a Phase option: "P0" -> "p0", "P0.5" -> "p0-5" (labels carry no point;
+ * scripts/ops/gh-setup-labels.sh and the M2 P0.5 issues use "p0-5").
+ */
+export function phaseLabel(phase) {
+  return phase.toLowerCase().replace(".", "-");
+}

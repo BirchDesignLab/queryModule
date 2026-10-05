@@ -29,6 +29,18 @@ describe("validateBoardData: the shipped docs/board/board-data.json", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("carries the Dispatch (M2 P0.5) phase parent #519 with the P0.5 phase option (ADR-0012)", () => {
+    const data = loadBoardData() as {
+      phases: Array<{ number: number; title: string; phase: string; milestone: string }>;
+    };
+    expect(data.phases.find((p) => p.number === 519)).toMatchObject({
+      title: "Dispatch (M2 P0.5)",
+      phase: "P0.5",
+      milestone: "M2 Results and audit",
+    });
+    expect(KNOWN_LABELS).toContain("p0-5");
+  });
+
   it("carries the two Task 604 follow-ups (#92, #94) with their GitHub titles", () => {
     const data = loadBoardData() as { followUps: Array<{ number: number; title: string }> };
     const f92 = data.followUps.find((f) => f.number === 92);

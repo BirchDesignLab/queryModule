@@ -41,6 +41,14 @@
       "plan": null
     },
     {
+      "number": 519,
+      "title": "Dispatch (M2 P0.5)",
+      "milestone": "M2 Results and audit",
+      "phase": "P0.5",
+      "gate": "A4 clean no-record; smoke 1 to 5",
+      "plan": null
+    },
+    {
       "number": 44,
       "title": "Feed (M2 P1)",
       "milestone": "M2 Results and audit",

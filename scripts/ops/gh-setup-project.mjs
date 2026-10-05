@@ -56,6 +56,7 @@ import {
   leafDates,
   matchParent,
   parentStatus,
+  phaseLabel,
   rollUp,
   titleUpdate,
   waveParentStatus,
@@ -555,7 +556,7 @@ for (const p of PHASES) {
   const issue = ensureIssue({
     number: p.number,
     title: p.title,
-    labels: ["epic", p.phase.toLowerCase()],
+    labels: ["epic", phaseLabel(p.phase)],
     milestone: p.milestone,
     body: `Phase parent for ${name} (${p.milestone} ${p.phase}). Progress comes from its sub-issues.\n\n**Gate:** ${p.gate}.\n\n${planLine} Grid and handoffs: ${statusDocs}.`,
   });

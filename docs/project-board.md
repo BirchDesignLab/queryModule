@@ -26,7 +26,7 @@ Every level above is matched by issue number, never by title (`scripts/ops/board
 | Status | Todo, In Progress, In Review, Blocked, Done | Todo: not started. In Progress: a session is on it. In Review: PR open. Blocked: waits on a decision, issue or admin step. Done: merged or closed. |
 | Level | Milestone, Phase, Wave, Task, Follow-up | What kind of item this is (developer decision, #80); the setup script sets it on every item it owns. Used instead of a title regex to identify parents and drive Start/Finish roll-up. |
 | Track | Platform (A), Web (B), Core, Mobile (D) | Owning track (master plan 3). Same as the track label. |
-| Phase | P0 to P3 | Phase within the milestone. |
+| Phase | P0, P0.5, P1, P2, P3 | Phase within the milestone. P0.5 (label `p0-5`) is the M2 dispatch phase (ADR-0012). |
 | Wave | W1 to W6 | P0 wave (plan "Waves"). |
 | Size | S, M, L, XL | Tasks: plan section length (up to 150, 300, 450 lines, more). Follow-ups: judged. |
 | Priority | Urgent, High, Medium, Low | Urgent blocks a gate or a freeze; High is the current or next wave. |
