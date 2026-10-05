@@ -149,7 +149,10 @@ describe("#511 T27 IC1 draft save refuses a fixture finding", () => {
     const e = await errorOf(new Response(text));
     expect(e.code).toBe("validationFailed");
     expect(e.errors).toEqual([
-      { key: "config.mockSchema", params: { path: "/mock", code: "unrecognized_keys" } },
+      {
+        key: "config.mockSchema",
+        params: { path: "/mock", code: "unrecognized_keys", file: "default.json" },
+      },
     ]);
     const rows = await a.versionRows();
     expect(rows.map((v) => [v.version, v.status])).toEqual([[1, "published"]]);

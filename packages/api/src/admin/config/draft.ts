@@ -130,10 +130,10 @@ function mockSchemaIssues(mock: unknown): { path: string; code: string }[] {
  * config.mockSchema error per zod issue, with the escaped JSON pointer and the issue code only;
  * never the issue message or the input value (spec 5.9).
  */
-function mockSchemaErrors(document: ConfigDocument): ValidationError[] {
+function mockSchemaErrors(document: ConfigDocument, siteId: string): ValidationError[] {
   return mockSchemaIssues(document.mock).map(({ path, code }) => ({
     key: "config.mockSchema",
-    params: { path, code },
+    params: { path, code, file: `${siteId}.json` },
   }));
 }
 
@@ -176,7 +176,7 @@ export async function saveDraft(
   principal: Principal,
   body: { baseVersion: number; document: ConfigDocument },
 ): Promise<SaveDraftResult> {
-  const schema = mockSchemaErrors(body.document);
+  const schema = mockSchemaErrors(body.document, siteIdOf(d));
   if (schema.length > 0) return { ok: false, code: "validationFailed", errors: schema };
   const fixtures = fixtureFindings(body.document);
   if (fixtures.length > 0)
