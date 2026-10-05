@@ -342,6 +342,8 @@ One line per contract change after the M0 P0 freeze: date, PR or branch, change,
 |---|---|---|---|---|
 | 10-05-26 | `feat/m2-p0-wave-1` (#521) | WS `resultHidden` event (in `WsEventSchema`) and `resync` server message; ADR-0013 tolerant client receipt | additive (no `MIN_CLIENT_VERSION` bump, ADR-0013) | M2 P0.5 B Task 5 feed parser; M2 P1 replay; M3 P2 hide |
 | 10-05-26 | `feat/m2-p0-wave-1` (#520) | audit `configLoaded.details.versionId` (optional): the stored config version loaded, so the served `configHash` joins to a `site_config_version` row (#511 CFG-3) | additive (optional field) | audit readers; M2 config console history |
+| 10-05-26 | `feat/m2-p0-wave-2` (#522) | `AssessmentSchema` (severity `critical`/`warning`/`info`/null, `matches { keyword, severity, path }`), `AssessResult`, `MapResponse`, `MappedResult`, `RenderElement`, `Highlight`, `Segment` signatures (spec 4.5) | additive (new module, signatures only) | M2 P1 Core mapper, `assessResult`, highlighter; M2 P1 B result cards |
+| 10-05-26 | `feat/m2-p0-wave-2` (#526) | routes `GET /api/v1/queries`, `GET /api/v1/queries/{correlationId}`, `GET /api/v1/admin/audit`, `GET /api/v1/admin/audit/export`, `GET /api/v1/admin/queries/{correlationId}` (status planned, unmounted); `admin-audit.ts` with the tolerant audit read schema | additive (new paths and operations) | M2 P1 A and B (queries list and one); M2 P2 A and B (admin audit viewer, export, admin queries) |
 
 ## 9 Machine setup
 
