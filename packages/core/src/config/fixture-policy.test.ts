@@ -292,3 +292,43 @@ describe("FIXTURE_LEAF_KEYS", () => {
     expect(new Set(all).size).toBe(all.length);
   });
 });
+
+describe("round 1 review findings", () => {
+  it("C1: a scalar under a container key is rejected", () => {
+    for (const k of ["owner", "owners", "subject", "vehicle", "warrant", "warrants"]) {
+      expect(check({ [k]: "JOHN SMITH" })).toEqual([
+        { pointer: `${RESPOND}/${k}`, key: "fixture.unknownKey" },
+      ]);
+    }
+    expect(check({ owner: 5 })).toHaveLength(1);
+    expect(check({ owner: null })).toHaveLength(1);
+  });
+  it("C2: a numeric leaf with a 4-digit run is rejected under other", () => {
+    expect(check({ serial: 123456789 })).toEqual([
+      { pointer: `${RESPOND}/serial`, key: "fixture.freeTextDigits" },
+    ]);
+    expect(check({ state: 19850412 })).toHaveLength(1);
+    expect(check({ serial: 12 })).toEqual([]);
+  });
+  it("C3: an address must be a short number then Example Ave", () => {
+    expect(check({ address: "JOHN SMITH 1985 1 Example Ave" })).toEqual([
+      { pointer: `${RESPOND}/address`, key: "fixture.nonExampleAddress" },
+    ]);
+    expect(check({ address: "12345 Example Ave" })).toHaveLength(1);
+    expect(check({ address: "12 Example Ave" })).toEqual([]);
+  });
+  it("C3: a VIN must be 17 valid VIN characters failing the check digit", () => {
+    expect(check({ vin: "123-45-6789 SMITH" })).toEqual([
+      { pointer: `${RESPOND}/vin`, key: "fixture.validVin" },
+    ]);
+    expect(check({ vin: "ZZZZZZZZZZZZZZZZ0" })).toEqual([]);
+  });
+  it("C3: status may not carry a run of 4 digits", () => {
+    expect(check({ status: "JOHN SMITH DOB 04/12/1985" })).toEqual([
+      { pointer: `${RESPOND}/status`, key: "fixture.freeTextDigits" },
+    ]);
+    expect(check({ status: 19850412 })).toHaveLength(1);
+    expect(check({ status: "NO RECORD" })).toEqual([]);
+    expect(check({ status: true })).toEqual([]);
+  });
+});

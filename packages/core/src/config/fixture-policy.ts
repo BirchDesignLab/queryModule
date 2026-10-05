@@ -21,9 +21,9 @@ export interface FixtureDiagnostic {
 /**
  * Allowlist of payload keys by kind (spec 5.4); listed in docs/site-config.md.
  * Keys are normalised before lookup: lower-cased, "_" and "-" removed.
- * `other` holds structural keys (objects and arrays) and descriptive vehicle, property and
- * warrant keys; its strings may not carry a run of 4 or more digits (a `year` of 1901 to 1999
- * is the one exception).
+ * `container` keys must hold an object or array (recursed); a scalar there is a violation.
+ * `other` holds descriptive vehicle, property and warrant leaf keys; its strings and numbers may
+ * not carry a run of 4 or more digits (a `year` of 1901 to 1999 is the one exception).
  */
 export const FIXTURE_LEAF_KEYS: {
   plate: readonly string[];
@@ -33,6 +33,7 @@ export const FIXTURE_LEAF_KEYS: {
   address: readonly string[];
   status: readonly string[];
   freeText: readonly string[];
+  container: readonly string[];
   other: readonly string[];
 } = {
   plate: ["plate"],
@@ -54,22 +55,8 @@ export const FIXTURE_LEAF_KEYS: {
   address: ["address", "street", "addressline1"],
   status: ["status"],
   freeText: ["remarks", "note", "caution", "description", "offense"],
-  other: [
-    "make",
-    "model",
-    "year",
-    "type",
-    "state",
-    "serial",
-    "propertytype",
-    "warrant",
-    "agency",
-    "vehicle",
-    "owner",
-    "owners",
-    "subject",
-    "warrants",
-  ],
+  container: ["vehicle", "owner", "owners", "subject", "warrant", "warrants"],
+  other: ["make", "model", "year", "type", "state", "serial", "propertytype", "agency"],
 };
 
 export const SYNTHETIC_NAMES: ReadonlySet<string> = new Set([
@@ -138,7 +125,9 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
     case "plate":
       return typeof value === "string" && /^ZZ-\d{4}$/.test(value) ? null : "fixture.realPlate";
     case "vin":
-      return typeof value === "string" && value.length === 17 && !vinCheckDigitValid(value)
+      return typeof value === "string" &&
+        /^[A-HJ-NPR-Z0-9]{17}$/i.test(value) &&
+        !vinCheckDigitValid(value)
         ? null
         : "fixture.validVin";
     case "dob":
@@ -153,20 +142,26 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
         : "fixture.nonSyntheticName";
     }
     case "address":
-      return typeof value === "string" && /\bExample Ave$/i.test(value.trim())
+      return typeof value === "string" && /^\d{1,4} Example Ave$/i.test(value.trim())
         ? null
         : "fixture.nonExampleAddress";
     case "freeText":
       return typeof value === "string" && !/\d/.test(value) ? null : "fixture.freeTextDigits";
+    case "container":
+      return "fixture.unknownKey";
     case "status":
-      return typeof value === "object" && value !== null ? "fixture.unknownKey" : null;
+      if (typeof value === "object" && value !== null) return "fixture.unknownKey";
+      return /\d{4,}/.test(String(value)) ? "fixture.freeTextDigits" : null;
     case "other": {
       if (nk === "year" && (typeof value === "string" || typeof value === "number")) {
         return /^19\d{2}$/.test(String(value)) && Number(value) >= 1901
           ? null
           : "fixture.freeTextDigits";
       }
-      return typeof value === "string" && /\d{4,}/.test(value) ? "fixture.freeTextDigits" : null;
+      return (typeof value === "string" || typeof value === "number") &&
+        /\d{4,}/.test(String(value))
+        ? "fixture.freeTextDigits"
+        : null;
     }
   }
 }
@@ -191,7 +186,7 @@ function walk(value: unknown, pointer: string, out: FixtureDiagnostic[]): void {
       out.push({ pointer: at, key: "fixture.unknownKey" });
       continue;
     }
-    if (kind === "other" && (Array.isArray(v) || isPlainObject(v))) {
+    if (kind === "container" && (Array.isArray(v) || isPlainObject(v))) {
       walk(v, at, out);
       continue;
     }
