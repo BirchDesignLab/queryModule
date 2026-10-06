@@ -344,6 +344,32 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
     });
   }
 
+  // A multi-part request ("Also run: ...") shows a part label per part; on the officer layout it
+  // must not be muted either (D0.3). PER runs WNT beside it when a name and a date of birth are given.
+  test("night: a two-part request's part labels are not muted on the officer layout", async ({
+    page,
+  }) => {
+    await asUser(page, "officer@example.test", "night", async () => {
+      await page.getByRole("button", { name: "Person", exact: true }).click();
+      await page.getByLabel("Last name").fill("TESTERSON");
+      await page.getByLabel("First name").fill("SAMPLE");
+      await page.getByLabel("Date of birth").fill("01011901");
+      const sent = page.waitForResponse(
+        (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Run query" }).click();
+      const res = await sent;
+      expect(res.status()).toBe(202);
+      expect(((await res.json()) as { parts: unknown[] }).parts).toHaveLength(2);
+      const labels = page.locator(".qm-layout--mobile-unit .qm-request__part-label");
+      await expect(labels.first()).toBeVisible();
+      expect(
+        await textInColor(page, ".qm-layout--mobile-unit", rgb("night", "color.text.muted")),
+        "officer muted text after a two-part run",
+      ).toEqual([]);
+    });
+  });
+
   test("the muted check is live: a .qm-tag in the dispatch layout is muted, the same tag in the officer layout is not", async ({
     page,
   }) => {
