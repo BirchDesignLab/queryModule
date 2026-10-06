@@ -1995,7 +1995,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   gap: var(--qm-space-2);
 }
 
-/* New query type and new source flows (Task 4, #551): one row per mock source, the action at the end. */
+/* New query type and new source flows (Task 4, issue 551): one row per mock source, the action at the end. */
 .qm-mock__flow {
   display: flex;
   flex-direction: column;
