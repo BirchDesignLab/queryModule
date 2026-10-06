@@ -52,3 +52,5 @@ export function createFakePlatform(
     setVisible: (v) => visible.set(v),
   };
 }
+
+export { FakeSocket } from "./fake-socket";

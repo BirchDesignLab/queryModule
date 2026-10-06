@@ -13,6 +13,7 @@ import { I18nProvider } from "../app/i18n-context.js";
 import { createServices, type Services, type ServicesOptions } from "../app/services.js";
 import { ServicesProvider } from "../app/services-context.js";
 import { EN_BUNDLE } from "./en-bundle.js";
+import { FakeSocket } from "./fake-socket.js";
 import { API } from "./msw-server.js";
 
 export function testPlatform(): ClientPlatform {
@@ -20,7 +21,13 @@ export function testPlatform(): ClientPlatform {
 }
 
 export function testServices(options: Partial<ServicesOptions> = {}): Services {
-  return createServices({ baseUrl: API, platform: testPlatform(), ...options });
+  // Default to a socket that never opens, so a signed-in screen never reaches for the network.
+  return createServices({
+    baseUrl: API,
+    platform: testPlatform(),
+    createSocket: () => new FakeSocket(),
+    ...options,
+  });
 }
 
 /** Renders routes inside the providers the app uses, with the shipped English bundle. */

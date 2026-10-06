@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
+import { FakeSocket } from "../test/fake-socket.js";
 import {
   API,
   CLIENT_CONFIG,
@@ -50,6 +51,53 @@ describe("ADR-0011 item 3 the config refresh runs while signed in (#361)", () =>
     await signOutViaMenu(t.user);
     await screen.findByRole("heading", { name: "Sign in" });
     await waitFor(() => expect(stop).toHaveBeenCalled());
+  });
+});
+
+describe("FR-065 the feed socket runs while signed in (spec 6.7)", () => {
+  it("AppShell opens it once, and signing out closes it", async () => {
+    const sockets: FakeSocket[] = [];
+    const t = renderRoot({
+      createSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    // Nothing opens a feed socket before sign-in.
+    await screen.findByRole("heading", { name: "Sign in" });
+    expect(sockets).toHaveLength(0);
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Query Module" });
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    expect(t.services.feed.state()).toBe("connecting");
+    expect(sockets).toHaveLength(1);
+    await signOutViaMenu(t.user);
+    await screen.findByRole("heading", { name: "Sign in" });
+    await waitFor(() => expect(sockets[0]?.closed).toBe(true));
+    expect(t.services.feed.state()).toBe("closed");
+  });
+});
+
+describe("FR-065 unmounting the app closes the feed socket (spec 6.7)", () => {
+  it("closes the socket while the user is still signed in", async () => {
+    const sockets: FakeSocket[] = [];
+    const t = renderRoot({
+      createSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    t.unmount();
+    expect(t.services.authStore.getState().status).toBe("signedIn");
+    expect(sockets[0]?.closed).toBe(true);
   });
 });
 

@@ -5,7 +5,7 @@ export interface SocketLike {
   close(code?: number): void;
   onopen: (() => void) | null;
   onmessage: ((event: { data: unknown }) => void) | null;
-  onclose: (() => void) | null;
+  onclose: ((event: { code: number }) => void) | null;
   onerror: (() => void) | null;
 }
 

@@ -11,6 +11,7 @@ import {
   createAuthStore,
   createConfigRefresh,
   createDraftStore,
+  createFeedSocket,
   createPreferencesStore,
   createQueryClient,
   createRequestsStore,
@@ -18,6 +19,7 @@ import {
   createSessionController,
   createSubmitController,
   type DraftStore,
+  type FeedSocket,
   type PreferencesStore,
   type RequestsStore,
   type ResetController,
@@ -29,6 +31,7 @@ import {
 } from "@querymodule/client";
 import { createBrowserSocket } from "../platform/browser-socket.js";
 import { createStorageSignOutMarker } from "../platform/sign-out-marker.js";
+import { heartbeatUrl } from "../status/use-status-checks.js";
 
 export interface ServicesOptions {
   baseUrl: string;
@@ -52,6 +55,8 @@ export interface Services {
   requests: RequestsStore;
   /** Keeps the cached config current while signed in (ADR-0011 item 3); AppShell starts it. */
   configRefresh: ConfigRefresh;
+  /** The live feed of per-source status events; AppShell opens it while signed in (spec 6.7, 6.8). */
+  feed: FeedSocket;
   reset: ResetController;
   createSocket: (url: string) => SocketLike;
 }
@@ -85,7 +90,18 @@ export function createServices(options: ServicesOptions): Services {
   const submit = createSubmitController({ api, queryClient, online: options.platform.online });
   const requests = createRequestsStore();
   const configRefresh = createConfigRefresh({ api, queryClient, platform: options.platform });
+  const createSocket = options.createSocket ?? createBrowserSocket;
+  const feed = createFeedSocket({
+    createSocket,
+    url: heartbeatUrl(location),
+    timers: {
+      setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+      clearTimeout: (id) => globalThis.clearTimeout(id as number),
+    },
+    random: Math.random,
+  });
   registerQueryCacheReset(reset, queryClient);
+  reset.register(() => feed.close());
   reset.register(() => configRefresh.stop());
   reset.register(() => authStore.getState().setSignedOut());
   reset.register(() => announcer.clear());
@@ -106,7 +122,8 @@ export function createServices(options: ServicesOptions): Services {
     submit,
     requests,
     configRefresh,
+    feed,
     reset,
-    createSocket: options.createSocket ?? createBrowserSocket,
+    createSocket,
   };
 }

@@ -218,8 +218,11 @@ export interface ConfigDraftState {
   /** `coalesce`: a text entry, whose consecutive edits of one control are one undo step. */
   setPath(path: readonly PathSegment[], value: unknown, options?: SetPathOptions): void;
   setDoc(doc: JsonObject): void;
-  /** Replaces the mock document; every call is one undo step. */
-  setMock(mock: JsonObject): void;
+  /**
+   * Replaces the mock document. Every call is one undo step; `coalesce` names a text control, whose
+   * consecutive edits are one step (typing is not a hundred undos).
+   */
+  setMock(mock: JsonObject, options?: { coalesce?: string }): void;
   setLabel(locale: string, key: string, text: string): void;
   removeLabel(locale: string, key: string): void;
   /** Records the builder's selection, so an undo can restore it. Not a step. */
@@ -331,9 +334,9 @@ export function createConfigDraftStore(): ConfigDraftStore {
       record("doc");
       publish({ doc });
     },
-    setMock(mock) {
+    setMock(mock, options) {
       if (state.doc === null || Object.is(state.mock, mock)) return;
-      record(null);
+      record(options?.coalesce === undefined ? null : `mock:${options.coalesce}`);
       publish({ mock });
     },
     setLabel(locale, key, text) {

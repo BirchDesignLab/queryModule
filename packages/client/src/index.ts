@@ -38,6 +38,15 @@ export type {
 } from "./draft/draft-store.js";
 export { createDraftStore } from "./draft/draft-store.js";
 export type {
+  FeedSocket,
+  FeedSocketOptions,
+  FeedState,
+  SourceStatusEvent,
+  Timers,
+} from "./feed/feed-socket.js";
+export { createFeedSocket } from "./feed/feed-socket.js";
+export { parseServerMessage } from "./feed/parse-server-message.js";
+export type {
   HeartbeatProbeOptions,
   HeartbeatResult,
   SocketLike,

@@ -13,7 +13,7 @@ export function createBrowserSocket(url: string): SocketLike {
   };
   ws.onopen = () => socket.onopen?.();
   ws.onmessage = (event) => socket.onmessage?.({ data: event.data });
-  ws.onclose = () => socket.onclose?.();
+  ws.onclose = (event) => socket.onclose?.({ code: event.code });
   ws.onerror = () => socket.onerror?.();
   return socket;
 }
