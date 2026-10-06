@@ -96,6 +96,21 @@ describe("a new query type on a mock site", () => {
     ).toHaveFocus();
   });
 
+  it("Open mock response selects the response and puts focus on its heading", async () => {
+    const t = await openBuilder();
+    await addType(t, "BOAT", ["stateSource"]);
+    await t.user.click(
+      within(await mockGroup()).getByRole("button", { name: /Add mock response for State system/ }),
+    );
+    await t.user.click(
+      within(await mockGroup()).getByRole("button", {
+        name: /Open mock response for State system/,
+      }),
+    );
+    // The type editor is gone; the response's own heading holds focus (never the page).
+    await waitFor(() => expect(screen.getByRole("heading", { name: /BOAT/ })).toHaveFocus());
+  });
+
   it("Add all adds one no-record response for each missing source, one undo step", async () => {
     const t = await openBuilder();
     await addType(t, "BOAT", ["stateSource", "nationalSource"]);
@@ -229,6 +244,18 @@ describe("a new source on a mock site", () => {
       });
     expect(store(t).undoCount).toBe(before + 1);
     expect(document.body).not.toHaveFocus();
+  });
+
+  it("Open mock source puts focus on the source's heading", async () => {
+    const t = await openBuilder();
+    await addSource(t, "countySource", ["VEH"]);
+    await t.user.click(
+      within(await panel()).getByRole("button", { name: /Add a no-record response for each/ }),
+    );
+    await t.user.click(within(await panel()).getByRole("button", { name: /Open mock source/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /countySource/ })).toHaveFocus(),
+    );
   });
 
   it("says no query type asks the source yet, and offers no button", async () => {

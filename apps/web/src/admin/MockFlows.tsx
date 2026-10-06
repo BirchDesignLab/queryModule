@@ -22,6 +22,18 @@ import { SelectionContext } from "./selection.js";
 const hasResponse = (mock: MockFile, sourceId: string, code: string): boolean =>
   mock.sources[sourceId]?.responses.some((r) => r.queryType === code) ?? false;
 
+/**
+ * Focuses an element that renders after the selection changes: the editor that holds the button
+ * unmounts first (and with it any pending focus request), so look for the target for a few frames.
+ */
+function focusWhenRendered(owner: string, role: string, tries = 20): void {
+  const el = document.querySelector<HTMLElement>(
+    `[data-owner="${CSS.escape(owner)}"][data-role="${role}"]`,
+  );
+  if (el !== null) el.focus();
+  else if (tries > 0) requestAnimationFrame(() => focusWhenRendered(owner, role, tries - 1));
+}
+
 const rowId = (...parts: string[]): string => `qm-flow-${parts.join("-")}`.replace(/[^\w-]/g, "_");
 
 function useFlowEnv(): MockEnv | null {
@@ -63,7 +75,10 @@ export function TypeMockResponses({
   const open = (sourceId: string) => {
     const index =
       env.mock.sources[sourceId]?.responses.findIndex((r) => r.queryType === name) ?? -1;
-    if (index >= 0) select?.(mockPointer.response(sourceId, index));
+    if (index < 0) return;
+    const pointer = mockPointer.response(sourceId, index);
+    select?.(pointer);
+    focusWhenRendered(pointer, "heading");
   };
   return (
     <Sect title={t("admin.mock.flow.type.title")} hint={t("admin.mock.flow.type.hint")}>
@@ -228,7 +243,10 @@ export function SourceMockResponses() {
                   className="qm-button"
                   data-owner={rowId("source", r.id)}
                   data-role="open"
-                  onClick={() => select?.(mockPointer.source(r.id))}
+                  onClick={() => {
+                    select?.(mockPointer.source(r.id));
+                    focusWhenRendered(mockPointer.source(r.id), "heading");
+                  }}
                 >
                   {t("admin.mock.flow.source.open", { source: env.sourceName(r.id) })}
                 </button>
