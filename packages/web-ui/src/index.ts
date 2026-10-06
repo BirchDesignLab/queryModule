@@ -27,7 +27,12 @@ export type { QueryTypeSelectProps } from "./panel/QueryTypeSelect.js";
 export { QueryTypeSelect } from "./panel/QueryTypeSelect.js";
 export type { QuickAccessBarProps } from "./panel/QuickAccessBar.js";
 export { QuickAccessBar } from "./panel/QuickAccessBar.js";
-export type { RequestListProps, RequestRowView } from "./panel/RequestList.js";
+export type {
+  RequestListProps,
+  RequestPartView,
+  RequestRowView,
+  SourceLineView,
+} from "./panel/RequestList.js";
 export { formatAckTime, RequestList, shortReference } from "./panel/RequestList.js";
 export type { SourceCheckboxesProps } from "./panel/SourceCheckboxes.js";
 export { SourceCheckboxes } from "./panel/SourceCheckboxes.js";

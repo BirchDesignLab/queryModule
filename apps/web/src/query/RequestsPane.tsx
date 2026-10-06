@@ -1,6 +1,11 @@
 import { isRetryable, type RequestEntry, retryRequest, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
-import { RequestList, type RequestRowView } from "@querymodule/web-ui";
+import {
+  RequestList,
+  type RequestPartView,
+  type RequestRowView,
+  type SourceLineView,
+} from "@querymodule/web-ui";
 import { memo, useEffect, useRef } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -59,17 +64,40 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
       status: "acknowledged",
       reference: entry.correlationId,
       acknowledgedAt: entry.acknowledgedAt,
-      // The 202 only acknowledges: each source the query went to is pending, and a part that was
-      // skipped says only that it was not run (#382 A1).
-      notes: [
-        ...entry.parts
-          .filter((part) => part.status === "skipped")
-          .map((part) => t("submit.partNotRun", { queryType: typeLabel(part.queryType) })),
-        // Two parts can go to one source: it is pending once.
-        ...[
-          ...new Set(entry.parts.filter((p) => p.status !== "skipped").flatMap((p) => p.sourceIds)),
-        ].map((id) => t("requests.sourcePending", { source: sourceLabel(id) })),
-      ],
+      notes: [],
+      // The 202 starts every dispatched pair at pending and the feed moves it (FR-043): a line is
+      // keyed by request, part and source, so an event updates it in place and never remounts the
+      // row. The first part is the primary query; any other is an alsoRun part (spec 6.2). A
+      // skipped part names only that it was not run: the 202 carries no reason.
+      parts: entry.parts.map((part, index): RequestPartView => {
+        const key = `${entry.correlationId}:${part.partId}`;
+        const label =
+          index === 0
+            ? {}
+            : { label: t("sourceStatus.alsoRun", { queryType: typeLabel(part.queryType) }) };
+        return {
+          key,
+          ...label,
+          ...(part.status === "skipped"
+            ? { skippedText: t("sourceStatus.skipped", { queryType: typeLabel(part.queryType) }) }
+            : {}),
+          lines: part.sources.map(
+            (source): SourceLineView => ({
+              key: `${key}:${source.sourceId}`,
+              tone:
+                source.status === "pending"
+                  ? "pending"
+                  : source.status === "returned"
+                    ? "ok"
+                    : "problem",
+              text: t("sourceStatus.line", {
+                source: sourceLabel(source.sourceId),
+                status: t(`sourceStatus.status.${source.status}`),
+              }),
+            }),
+          ),
+        };
+      }),
     };
   };
   return (

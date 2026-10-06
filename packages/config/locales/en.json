@@ -128,7 +128,7 @@
   "sourceStatus.heading": "Source status for {summary}",
   "sourceStatus.line": "{source}: {status}",
   "sourceStatus.alsoRun": "Also run: {queryType}",
-  "sourceStatus.skipped": "{queryType}: skipped",
+  "sourceStatus.skipped": "{queryType} was not run.",
   "sourceStatus.status.pending": "pending",
   "sourceStatus.status.returned": "returned",
   "sourceStatus.status.failed": "failed",

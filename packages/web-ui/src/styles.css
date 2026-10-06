@@ -670,6 +670,56 @@ h1 {
   color: var(--qm-field-required);
 }
 
+/* Per-source status under a request row (FR-043, spec 6.2): the text says the status, the icon only
+   repeats it, so no state is colour alone. Pending reads quieter; a problem is heavier, not recoloured. */
+.qm-request__parts,
+.qm-request__sources {
+  display: grid;
+  gap: var(--qm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-request__parts {
+  grid-column: 2 / -1;
+  min-inline-size: 0;
+  border: 0;
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-request__sources {
+  padding-inline-start: var(--qm-space-4);
+}
+
+.qm-request__part-label {
+  color: var(--qm-color-text-muted);
+  font-weight: 600;
+}
+
+.qm-source {
+  display: flex;
+  align-items: baseline;
+  gap: var(--qm-space-2);
+}
+
+.qm-source__icon {
+  inline-size: 1.25em;
+  text-align: center;
+}
+
+.qm-source--pending {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-source--problem {
+  font-weight: 600;
+}
+
+.qm-layout--mobile-unit .qm-request__parts {
+  font-size: var(--qm-type-body-size);
+}
+
 /* Terminal mode (FR-050, FR-055, spec 6.2) */
 .qm-terminal__errors {
   margin: 0;

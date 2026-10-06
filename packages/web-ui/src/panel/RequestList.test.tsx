@@ -1,7 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { formatAckTime, RequestList, type RequestRowView } from "./RequestList.js";
+import {
+  formatAckTime,
+  RequestList,
+  type RequestPartView,
+  type RequestRowView,
+} from "./RequestList.js";
 
 const LABELS: Record<string, string> = {
   "requests.status.sending": "Sending",
@@ -13,6 +18,7 @@ const LABELS: Record<string, string> = {
   "submit.copyReference": "Copy reference",
   "requests.retry": "Retry",
   "requests.retryOf": "Retry {summary}",
+  "sourceStatus.heading": "Source status for {summary}",
 };
 const t = (key: string, params?: Readonly<Record<string, string | number | boolean>>) =>
   Object.entries(params ?? {}).reduce(
@@ -236,5 +242,97 @@ describe("failed-row retry (the list only shows the button; the owner sends)", (
     expect(document.body).toHaveFocus();
     rerender(<RequestList {...props} rows={[{ ...SENDING, id: "r9" }]} />);
     expect(document.body).toHaveFocus();
+  });
+});
+
+describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
+  const PARTS: readonly RequestPartView[] = [
+    {
+      key: "c1:1",
+      lines: [
+        { key: "c1:1:state", tone: "pending", text: "State source: pending" },
+        { key: "c1:1:national", tone: "ok", text: "National source: returned" },
+      ],
+    },
+    {
+      key: "c1:2",
+      label: "Also run: Warrant",
+      lines: [{ key: "c1:2:state", tone: "problem", text: "State source: timed out" }],
+    },
+    { key: "c1:3", label: "Also run: Property", skippedText: "Property was not run.", lines: [] },
+  ];
+  const WITH_PARTS: RequestRowView = { ...ACKED, notes: [], parts: PARTS };
+
+  it("lists each source with its status in words, under a list named for the command", () => {
+    render(<RequestList {...base} rows={[WITH_PARTS]} />);
+    const sources = screen.getByRole("group", { name: "Source status for VEH.ZZ-0001.TX" });
+    expect(sources).toHaveTextContent("State source: pending");
+    expect(sources).toHaveTextContent("National source: returned");
+    expect(sources).toHaveTextContent("State source: timed out");
+  });
+
+  it("labels a nested part with its origin and shows a skipped part as skipped", () => {
+    render(<RequestList {...base} rows={[WITH_PARTS]} />);
+    expect(screen.getByText("Also run: Warrant")).toBeInTheDocument();
+    expect(screen.getByText("Also run: Property")).toBeInTheDocument();
+    expect(screen.getByText("Property was not run.")).toBeInTheDocument();
+  });
+
+  it("no status is colour alone: every line is text, and every icon is aria-hidden", () => {
+    render(<RequestList {...base} rows={[WITH_PARTS]} />);
+    const sources = screen.getByRole("group", { name: "Source status for VEH.ZZ-0001.TX" });
+    const icons = sources.querySelectorAll(".qm-source__icon");
+    expect(icons.length).toBe(4);
+    for (const icon of icons) expect(icon).toHaveAttribute("aria-hidden", "true");
+    // The accessible text carries the status without the icon's glyph.
+    expect(screen.getByText("State source: timed out")).toBeInTheDocument();
+  });
+
+  it("an update changes a line in place: same DOM node, and focus stays where it was", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <>
+        <input aria-label="Plate" />
+        <RequestList {...base} rows={[WITH_PARTS]} />
+      </>,
+    );
+    await user.type(screen.getByLabelText("Plate"), "ABC");
+    const line = screen.getByText("State source: pending").closest(".qm-source");
+    const item = screen.getAllByRole("listitem")[0];
+    const updated: RequestRowView = {
+      ...WITH_PARTS,
+      parts: [
+        {
+          ...PARTS[0],
+          key: "c1:1",
+          lines: [
+            { key: "c1:1:state", tone: "ok", text: "State source: returned" },
+            { key: "c1:1:national", tone: "ok", text: "National source: returned" },
+          ],
+        },
+        ...PARTS.slice(1),
+      ],
+    };
+    rerender(
+      <>
+        <input aria-label="Plate" />
+        <RequestList {...base} rows={[updated]} />
+      </>,
+    );
+    expect(screen.getAllByRole("listitem")[0]).toBe(item);
+    expect(screen.getByText("State source: returned").closest(".qm-source")).toBe(line);
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+    expect(screen.getByLabelText("Plate")).toHaveValue("ABC");
+  });
+
+  it("the status block is not a live region (the announcer speaks)", () => {
+    render(<RequestList {...base} rows={[WITH_PARTS]} />);
+    const section = screen.getByRole("region", { name: "Requests this shift" });
+    expect(section.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
+  });
+
+  it("a row without parts shows no status list", () => {
+    render(<RequestList {...base} rows={[ACKED]} />);
+    expect(screen.queryByRole("group", { name: /Source status/ })).toBeNull();
   });
 });

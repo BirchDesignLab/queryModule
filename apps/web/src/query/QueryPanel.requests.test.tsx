@@ -161,7 +161,7 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     expect(row).not.toHaveTextContent("linked query has no sources");
   });
 
-  it("two parts to one source show that source pending once", async () => {
+  it("two parts to one source list that source under each part (FR-043: status is per part and source)", async () => {
     server.use(
       http.post(`${API}/api/v1/queries`, () =>
         HttpResponse.json(
@@ -192,7 +192,7 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const row = await screen.findByRole("listitem");
     await waitFor(() => expect(row).toHaveTextContent("Acknowledged"));
-    expect(within(row).getAllByText("State system: pending")).toHaveLength(1);
+    expect(within(row).getAllByText("State system: pending")).toHaveLength(2);
   });
 
   it("Copy reference copies the full ID, names its row, and announces once", async () => {

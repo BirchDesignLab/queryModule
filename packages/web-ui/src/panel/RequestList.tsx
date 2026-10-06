@@ -1,5 +1,25 @@
 import { type JSX, useId, useLayoutEffect, useRef } from "react";
 
+/** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
+export interface SourceLineView {
+  /** Stable across updates (correlation ID, part, source), so a line is never rebuilt. */
+  key: string;
+  /** Picks the icon and its weight; never the only carrier of the status. */
+  tone: "pending" | "ok" | "problem";
+  /** Already in words, for example "State source: timed out". */
+  text: string;
+}
+
+/** A part of a request: the primary part has no label, a nested one is labelled with its origin. */
+export interface RequestPartView {
+  key: string;
+  /** For example "Also run: Warrant"; absent on the primary part. */
+  label?: string;
+  /** A skipped part says so here and has no lines. */
+  skippedText?: string;
+  lines: readonly SourceLineView[];
+}
+
 export interface RequestRowView {
   /** Stable across Sending, Acknowledged and Failed, so a row is never rebuilt (spec 6.6). */
   id: string;
@@ -15,6 +35,8 @@ export interface RequestRowView {
   failureText?: string;
   /** Short lines under the row, for example "State source: pending". */
   notes: readonly string[];
+  /** An acknowledged row's parts with per-source status lines (spec 6.2). */
+  parts?: readonly RequestPartView[];
   /** A failed row the owner can send again; shows a Retry button when the list has onRetry. */
   retryable?: boolean;
 }
@@ -58,6 +80,9 @@ export function formatAckTime(epochMs: number): string {
   const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("month")}-${get("day")}-${get("year")} ${pad(Number(get("hour")))}:${get("minute")}:${get("second")}`;
 }
+
+/** Decorative: the line's text says the status (aria-hidden at the use site). */
+const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!" } as const;
 
 const BADGE_CLASS = {
   sending: "qm-badge qm-badge--status",
@@ -173,6 +198,44 @@ export function RequestList({
                     </span>
                   ))}
                 </div>
+              )}
+              {row.parts === undefined || row.parts.length === 0 ? null : (
+                // A labelled group of divs, not nested lists: the row stays one list item (an
+                // assistive technology reads the list's count as requests), and each line is text.
+                <fieldset
+                  className="qm-request__parts"
+                  aria-label={t("sourceStatus.heading", {
+                    summary: row.summary === "" ? row.typeLabel : row.summary,
+                  })}
+                >
+                  {row.parts.map((part) => (
+                    <div key={part.key} className="qm-request__part">
+                      {part.label === undefined ? null : (
+                        <span className="qm-request__part-label">{part.label}</span>
+                      )}
+                      {part.skippedText === undefined ? null : (
+                        <span className="qm-source qm-source--skipped">
+                          <span aria-hidden="true" className="qm-source__icon">
+                            –
+                          </span>
+                          <span>{part.skippedText}</span>
+                        </span>
+                      )}
+                      {part.lines.length === 0 ? null : (
+                        <div className="qm-request__sources">
+                          {part.lines.map((line) => (
+                            <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
+                              <span aria-hidden="true" className="qm-source__icon">
+                                {SOURCE_ICON[line.tone]}
+                              </span>
+                              <span>{line.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </fieldset>
               )}
             </li>
           ))}
