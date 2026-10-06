@@ -34,13 +34,15 @@ const die = (why: string) => {
 const finish = () => {
   const n = expected?.length ?? 0;
   const k = expected?.filter((e) => settled.has(e)).length ?? 0;
-  if (k === n) process.stdout.write(`4 ok: ${n} sources settled\n`);
+  // n === 0 (no dispatched part) fails: nothing answered, so step 4 cannot pass.
+  const ok = n > 0 && k === n;
+  if (ok) process.stdout.write(`4 ok: ${n} sources settled\n`);
   else process.stdout.write(`4 FAILED: ${k} of ${n} sources settled\n`);
   ws.terminate();
-  process.exit(k === n ? 0 : 1);
+  process.exit(ok ? 0 : 1);
 };
 const check = () => {
-  if (expected?.every((e) => settled.has(e))) finish();
+  if (expected && expected.length > 0 && expected.every((e) => settled.has(e))) finish();
 };
 
 ws.on("open", () => ws.send(JSON.stringify({ v: 1, type: "hello", lastSeq: null })));
@@ -72,6 +74,7 @@ const poll = setInterval(() => {
       .filter((p) => p.status === "dispatched")
       .flatMap((p) => p.sourceIds.map((s) => key(correlationId, p.partId, s)));
     deadline = Date.now() + boundMs;
+    if (expected.length === 0) finish();
     check();
   }
   if (expected !== null && Date.now() >= deadline) {

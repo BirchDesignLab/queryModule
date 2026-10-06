@@ -25,6 +25,7 @@ let base: string;
 let signInBody: string | undefined;
 let submitBody: string | undefined;
 let submitStatus = 202;
+let partStatus = "dispatched";
 const stubHash = "a".repeat(64);
 const stubCorrelationId = "01900000-0000-7000-8000-000000000001";
 let dir: string;
@@ -32,6 +33,7 @@ beforeEach(async () => {
   signInBody = undefined;
   submitBody = undefined;
   submitStatus = 202;
+  partStatus = "dispatched";
   wsMode = "all";
   events = [];
   dir = mkdtempSync(join(tmpdir(), "qm-smoke-"));
@@ -72,8 +74,8 @@ beforeEach(async () => {
               {
                 partId: 0,
                 queryType: "VEH",
-                status: "dispatched",
-                sourceIds: ["stateSource", "nationalSource"],
+                status: partStatus,
+                sourceIds: partStatus === "dispatched" ? ["stateSource", "nationalSource"] : [],
                 droppedSourceIds: [],
               },
             ],
@@ -339,6 +341,15 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     const r = await smoke(base, [], { SMOKE_SETTLE_MS: "1500" });
     expect(r.code).not.toBe(0);
     expect(r.out).toContain("4 FAILED: 1 of 2 sources settled");
+    expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails when the 202 has no dispatched part (nothing to settle)", async () => {
+    partStatus = "skipped";
+    const r = await smoke(base, [], { SMOKE_SETTLE_MS: "1500" });
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: 0 of 0 sources settled");
     expect(r.out).not.toMatch(/4 ok/);
     expect(r.out).not.toMatch(/5 ok/);
   });
