@@ -26,6 +26,9 @@ const env = {
   SITE_CONFIG: resolve(root, "packages/config/sites/default.json"),
   MIGRATIONS_DIR: resolve(root, "packages/api/drizzle"),
   WEB_DIST: resolve(root, "apps/web/dist"),
+  // Every signed-in page opens a feed socket from this one IP; the default 60 a minute would
+  // throttle the run (and the status probe) with 429s. A caller's own value wins.
+  WS_UPGRADE_LIMIT: process.env.WS_UPGRADE_LIMIT ?? "10000",
 };
 const healthUrl = target.healthUrl;
 

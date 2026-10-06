@@ -6,6 +6,14 @@ import type { AppDeps } from "../deps";
 import { errorFields } from "../log/error-fields";
 import type { Logger } from "../log/logger";
 
+/**
+ * Node's largest timer delay (2^31 - 1 ms, about 24.8 days); a larger delay fires after 1 ms. Every
+ * dispatcher timer is clamped to it (AW3 review C-C-m2), so a huge configured timeoutMs ends a
+ * job at about 24.8 days instead of at once.
+ */
+export const MAX_TIMER_MS = 2_147_483_647;
+const timerMs = (ms: number): number => Math.min(ms, MAX_TIMER_MS);
+
 /** Spec 5.2 defaults; constants, not config (D-A15). */
 export const DISPATCH_CAPS = { perSource: 4, global: 32 } as const;
 
@@ -16,7 +24,10 @@ export interface DispatchJob {
   sourceId: string;
   resultId: string;
   userId: string;
-  /** The requester's audit envelope from T1, so sourceResponded is findable per user (spec 4.7, SEC-010). */
+  /**
+   * The requester's audit envelope from T1, so sourceResponded is findable per user (spec 4.7,
+   * SEC-010).
+   */
   actor: AuditActor;
   identitySource: "local" | "host";
   hostSubject?: string;
@@ -47,8 +58,11 @@ export type Outcome =
   | { status: "credentialsMissing" };
 
 export interface Dispatcher {
-  /** After stopIntake() or abortAll() it refuses: the rows stay pending and the next start sweeps them. */
-  enqueue(jobs: readonly DispatchJob[]): void;
+  /**
+   * True when the jobs are taken. After stopIntake() or abortAll() it refuses and returns false:
+   * the rows stay pending and the next start sweeps them.
+   */
+  enqueue(jobs: readonly DispatchJob[]): boolean;
   /** Queued, running, and reported but with onOutcome not yet resolved. */
   inFlight(): number;
   /** The latest deadline among in-flight jobs (the drain bound); null when idle. */
@@ -69,7 +83,9 @@ type OnOutcome = (job: DispatchJob, outcome: Outcome, latencyMs: number) => Prom
 interface Running {
   controller: AbortController;
   deadlineTimer: unknown;
-  /** True once an outcome is reported or abortAll dropped the job; later settlements change nothing. */
+  /**
+   * True once an outcome is reported or abortAll dropped the job; later settlements change nothing.
+   */
   done: boolean;
 }
 
@@ -131,10 +147,13 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       report(job, outcome, sinceAck(job));
       pump();
     };
-    r.deadlineTimer = d.timers.setTimeout(() => {
-      controller.abort();
-      finish({ status: "timedOut" });
-    }, job.deadline - d.clock.now());
+    r.deadlineTimer = d.timers.setTimeout(
+      () => {
+        controller.abort();
+        finish({ status: "timedOut" });
+      },
+      timerMs(job.deadline - d.clock.now()),
+    );
     const settled = (outcome: Outcome, abortAck = false) => {
       if (!r.done) {
         finish(outcome);
@@ -142,7 +161,8 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       }
       // abortAll dropped the job: the process is failing closed, so nothing more is said.
       if (aborted) return;
-      // An AbortError after our own abort is the adapter honouring it, not a late answer (AW3 critic c).
+      // An AbortError after our own abort is the adapter honouring it, not a late answer (AW3
+      // critic c).
       if (abortAck) return;
       d.logger.warn("dispatch late settlement", { resultId: job.resultId, sourceId: job.sourceId });
     };
@@ -210,7 +230,7 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       ) {
         // Still waiting for a slot: its deadline fires pump, which reports it timedOut on time.
         if (!queueTimers.has(job)) {
-          queueTimers.set(job, d.timers.setTimeout(pump, job.deadline - d.clock.now()));
+          queueTimers.set(job, d.timers.setTimeout(pump, timerMs(job.deadline - d.clock.now())));
         }
         i += 1;
         continue;
@@ -224,13 +244,14 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
     enqueue(jobs) {
       if (!intake || aborted) {
         d.logger.warn("dispatch enqueue refused", { count: jobs.length });
-        return;
+        return false;
       }
       for (const job of jobs) {
         queue.push(job);
         tracked.add(job);
       }
       pump();
+      return true;
     },
     inFlight: () => tracked.size,
     maxDeadline() {
@@ -249,7 +270,7 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
           d.timers.clearTimeout(bound);
           resolve();
         };
-        const bound = d.timers.setTimeout(wake, boundMs);
+        const bound = d.timers.setTimeout(wake, timerMs(boundMs));
         idleWaiters.add(wake);
       });
     },

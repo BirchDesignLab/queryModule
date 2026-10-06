@@ -18,6 +18,8 @@ export interface DeployEnv {
   frameAncestors: string[];
   webDist: string | null;
   migrationsDir: string;
+  /** WebSocket upgrades per client IP per window (D-A9, spec 5.3); default 60 per 60 s. */
+  wsUpgradeLimit: { limit: number; windowMs: number };
 }
 
 export const DEV_ORIGINS: readonly string[] = ["http://localhost:5173", "http://localhost:3000"];
@@ -46,6 +48,19 @@ function readPort(v: string | undefined): number {
   if (!(port >= 1 && port <= 65535))
     throw new DeployEnvError("PORT must be an integer from 1 to 65535");
   return port;
+}
+
+/**
+ * Fail closed (spec 8.1): a positive decimal integer, else a startup error naming `name`; never the
+ * value.
+ */
+function readPositiveInt(name: string, v: string | undefined, fallback: number): number {
+  // unset or empty (a blank line in an .env file) keeps the default
+  if (v === undefined || v === "") return fallback;
+  const n = /^\d+$/.test(v) ? Number.parseInt(v, 10) : Number.NaN;
+  if (!(n >= 1 && Number.isSafeInteger(n)))
+    throw new DeployEnvError(`${name} must be a positive integer`);
+  return n;
 }
 
 export function readDeployEnv(env: NodeJS.ProcessEnv, defaults?: BundledPaths): DeployEnv {
@@ -87,5 +102,9 @@ export function readDeployEnv(env: NodeJS.ProcessEnv, defaults?: BundledPaths): 
     frameAncestors: list(env.FRAME_ANCESTORS),
     webDist: env.WEB_DIST === "" ? null : (env.WEB_DIST ?? def().webDist),
     migrationsDir: env.MIGRATIONS_DIR ?? def().migrationsDir,
+    wsUpgradeLimit: {
+      limit: readPositiveInt("WS_UPGRADE_LIMIT", env.WS_UPGRADE_LIMIT, 60),
+      windowMs: readPositiveInt("WS_UPGRADE_WINDOW_MS", env.WS_UPGRADE_WINDOW_MS, 60_000),
+    },
   };
 }

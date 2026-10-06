@@ -67,6 +67,12 @@ export interface AppDeps {
   dispatcher: Dispatcher;
   timers: Timers;
   /**
+   * draining: set by the SIGTERM drain (spec 5.2). failed: set by fatal before it aborts dispatch,
+   * and by the fatal close (spec 8.1); a drain in progress then ends without logging stopped, and
+   * a later SIGTERM never drains. Either way new submits get 503 unavailable from then on.
+   */
+  lifecycle: { draining: boolean; failed: boolean };
+  /**
    * Fail closed on an error that leaves the process unsafe to continue (spec 8.1): aborts every
    * adapter call first (SEC-010), then exits through main.ts fail(), never the SIGTERM drain.
    */
@@ -152,6 +158,7 @@ export async function buildDeps(o: {
         queueMicrotask(() => {
           throw e;
         }));
+    const lifecycle = { draining: false, failed: false };
     const deps: AppDeps = {
       env: o.env,
       db,
@@ -174,8 +181,10 @@ export async function buildDeps(o: {
       adapters,
       dispatcher,
       timers,
+      lifecycle,
       // No adapter call continues while audit is broken (SEC-010); then fail closed.
       fatal(e) {
+        lifecycle.failed = true;
         dispatcher.abortAll();
         onFatal(e);
       },
