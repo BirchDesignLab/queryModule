@@ -52,7 +52,11 @@ async function setup() {
   const s = await startTestServer(t);
   closers.push(s.close);
   const { configHash } = t.deps.config.current();
-  async function submit(cookie: string, plate: string) {
+  async function submit(
+    cookie: string,
+    plate: string,
+    sourceIds = ["stateSource", "nationalSource"],
+  ) {
     const r = await t.request("/api/v1/queries", {
       method: "POST",
       headers: {
@@ -64,7 +68,7 @@ async function setup() {
       body: JSON.stringify({
         queryType: "VEH",
         values: { plate, state: "TX" },
-        sourceIds: ["stateSource", "nationalSource"],
+        sourceIds,
         mode: "normal",
         configHash,
       }),
@@ -119,13 +123,25 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
 
   it("sends nothing to a socket closed by logout", async () => {
     const c = await setup();
+    // the server's own subscription for this socket, so the unsubscribe is seen server side
+    // (AW4 critic weak test 1), not only through a client that is already closed
+    const subscribe = c.t.deps.eventBus.subscribe.bind(c.t.deps.eventBus);
+    const offs: ReturnType<typeof vi.fn>[] = [];
+    vi.spyOn(c.t.deps.eventBus, "subscribe").mockImplementation((userId, h) => {
+      const off = vi.fn(subscribe(userId, h));
+      offs.push(off);
+      return off;
+    });
     const a = await c.sock(c.cookieA);
+    expect(offs).toHaveLength(1);
+    expect(offs[0]).not.toHaveBeenCalled();
     const closed = new Promise<number>((r) => a.ws.once("close", (code) => r(code)));
     await c.t.request("/api/v1/auth/sign-out", {
       method: "POST",
       headers: { cookie: c.cookieA, "x-requested-with": "querymodule" },
     });
     expect(await closed).toBe(4001);
+    await vi.waitFor(() => expect(offs[0]).toHaveBeenCalledTimes(1));
     // A second session of the same user keeps working and submits.
     await c.submit(c.cookieA2, "ZZ-0001");
     await c.time.run(200);
@@ -162,5 +178,63 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     const line = c.t.logLines.find((l) => l.includes('"msg":"ws welcome latestSeq failed"'));
     expect(line).toContain('"errorName":"Error"');
     expect(line).not.toContain("db down");
+  });
+
+  /**
+   * AW4 critic weak test 2: hello arrives while T2 holds its transaction open. The latestSeq read
+   * queues behind the DB lock, so it sees exactly what T2 left: seq 1 after a commit (and the
+   * event is delivered once), 0 after a rollback (and nothing is delivered).
+   */
+  async function helloDuringT2(commit: boolean) {
+    const c = await setup();
+    const record = c.t.deps.audit.record.bind(c.t.deps.audit);
+    let reached: () => void = () => {};
+    const atGate = new Promise<void>((r) => {
+      reached = r;
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    c.t.deps.audit.record = async (tx, event) => {
+      if (event.type === "sourceResponded") {
+        reached();
+        await gate;
+        if (!commit) throw new Error("audit down");
+      }
+      return record(tx, event);
+    };
+    const a = await c.sock(c.cookieA);
+    await c.submit(c.cookieA, "ZZ-0001", ["stateSource"]);
+    await c.time.run(200);
+    await atGate;
+    const welcome = c.hello(a.ws, a.got);
+    // the hello is held behind T2's lock, not answered from a stale read
+    await new Promise((r) => setTimeout(r, 50));
+    expect(a.got.some((m) => (m as { type?: string }).type === "welcome")).toBe(false);
+    release();
+    await welcome;
+    const w = a.got.find((m) => (m as { type?: string }).type === "welcome");
+    const rows = await c.t.deps.db.select().from(eventLog).where(eq(eventLog.userId, c.aId));
+    return { c, a, w, rows };
+  }
+
+  it("hello during a committing T2: welcome.latestSeq 1 and seq 1 delivered once", async () => {
+    const { c, a, w, rows } = await helloDuringT2(true);
+    expect(w).toMatchObject({ type: "welcome", latestSeq: 1 });
+    expect(rows).toHaveLength(1);
+    await vi.waitFor(() => expect(c.statuses(a.got)).toHaveLength(1));
+    expect(c.statuses(a.got)).toMatchObject([{ seq: 1 }]);
+    expect(c.t.fatals).toEqual([]);
+    a.ws.close();
+  });
+
+  it("hello during a T2 that rolls back: welcome.latestSeq 0, no event_log row, nothing delivered", async () => {
+    const { c, a, w, rows } = await helloDuringT2(false);
+    expect(w).toMatchObject({ type: "welcome", latestSeq: 0 });
+    expect(rows).toEqual([]);
+    expect(c.statuses(a.got)).toEqual([]);
+    await vi.waitFor(() => expect(c.t.fatals).toHaveLength(1));
+    a.ws.close();
   });
 });
