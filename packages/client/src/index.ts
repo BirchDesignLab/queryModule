@@ -76,11 +76,15 @@ export { createQueryClient, registerQueryCacheReset } from "./query/query-client
 export type {
   RequestEntry,
   RequestFailure,
+  RequestPart,
+  RequestSource,
   RequestsState,
   RequestsStore,
+  StatusAnnouncement,
+  StatusSummary,
   SubmittedQuery,
 } from "./query/requests.js";
-export { createRequestsStore } from "./query/requests.js";
+export { createRequestsStore, statusSummary } from "./query/requests.js";
 export type { RetryResult } from "./query/retry.js";
 export { isRetryable, retryRequest } from "./query/retry.js";
 export type {

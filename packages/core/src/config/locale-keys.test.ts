@@ -114,6 +114,35 @@ describe("NFR-001 M1 P3 submit, acknowledgment, mode and terminal UI strings", (
   });
 });
 
+describe("NFR-001 FR-043 per-source status strings (M2 P0.5 Task 6)", () => {
+  const statuses = [
+    "pending",
+    "returned",
+    "failed",
+    "timedOut",
+    "interrupted",
+    "credentialsMissing",
+    "credentialsRejected",
+  ];
+  it("every status has a word and the lines and summary exist", () => {
+    const keys = [
+      ...statuses.map((s) => `sourceStatus.status.${s}`),
+      "sourceStatus.summary.one",
+      "sourceStatus.summary.other",
+      "sourceStatus.detail",
+      "sourceStatus.heading",
+      "sourceStatus.line",
+      "sourceStatus.alsoRun",
+      "sourceStatus.skipped",
+    ];
+    expect(keys.filter((k) => !(k in en))).toEqual([]);
+  });
+  it("the summary says counts and a reference, never a value", () => {
+    expect(en["sourceStatus.summary.other"]).toContain("{reference}");
+    expect(en["sourceStatus.summary.other"]).not.toMatch(/\{(value|payload|plate)/);
+  });
+});
+
 describe("#382 W4 terminal.description is gone (the hint is built from the config)", () => {
   it("is not in en.json and the example and plain keys that replace it are", () => {
     expect("terminal.description" in en).toBe(false);
