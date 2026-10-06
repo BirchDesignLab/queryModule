@@ -5,13 +5,21 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type WebSocket, WebSocketServer } from "ws";
 import { derivePassword } from "../../packages/api/src/seed/password";
 
 const here = import.meta.dirname;
 const secret = "smoke-test-secret-not-real";
 const email = "smoke@example.test";
 
-// Stub API: health, meta, sign-in (records the body), config and submit (records the body). No WebSocket, so step 5 fails.
+// Stub API: health, meta, sign-in (records the body), config and submit (records the body), and a
+// WebSocket feed. wsMode picks what the feed does after the 202: "all" settles both sources,
+// "partial" settles one, "pong" settles both and answers pings (step 5 passes), "none" has no feed.
+type WsMode = "all" | "partial" | "pong" | "none";
+let wsMode: WsMode = "all";
+let events: string[] = [];
+const sockets = new Set<WebSocket>();
+let wss: WebSocketServer;
 let server: Server;
 let base: string;
 let signInBody: string | undefined;
@@ -24,6 +32,8 @@ beforeEach(async () => {
   signInBody = undefined;
   submitBody = undefined;
   submitStatus = 202;
+  wsMode = "all";
+  events = [];
   dir = mkdtempSync(join(tmpdir(), "qm-smoke-"));
   writeFileSync(join(dir, "SEED_PASSWORD_SECRET"), `${secret}\n`);
   server = createServer((req, res) => {
@@ -52,26 +62,96 @@ beforeEach(async () => {
           /^[A-Za-z0-9_-]{16,128}$/.test(String(req.headers["idempotency-key"]));
         if (!ok) return res.writeHead(403).end();
         submitBody = body;
+        events.push("submit");
         res.writeHead(submitStatus, { "content-type": "application/json" });
-        return res.end(
-          JSON.stringify({ correlationId: stubCorrelationId, acknowledgedAt: 1, parts: [] }),
+        res.end(
+          JSON.stringify({
+            correlationId: stubCorrelationId,
+            acknowledgedAt: 1,
+            parts: [
+              {
+                partId: 0,
+                queryType: "VEH",
+                status: "dispatched",
+                sourceIds: ["stateSource", "nationalSource"],
+                droppedSourceIds: [],
+              },
+            ],
+          }),
         );
+        if (submitStatus === 202) setTimeout(settle, 50);
+        return;
       }
       res.writeHead(404).end();
+    });
+  });
+  wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (req, socket, head) => {
+    const ok =
+      wsMode !== "none" &&
+      req.url === "/api/v1/ws" &&
+      req.headers.cookie === "qm_session=abc123" &&
+      req.headers.origin === base;
+    if (!ok) return void socket.destroy();
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      sockets.add(ws);
+      ws.on("close", () => sockets.delete(ws));
+      ws.on("message", (d) => {
+        const m = JSON.parse(String(d)) as { type?: string; nonce?: string };
+        if (m.type === "hello") {
+          events.push("hello");
+          ws.send(JSON.stringify({ v: 1, type: "welcome", latestSeq: 0 }));
+        } else if (m.type === "ping") {
+          if (wsMode === "pong") ws.send(JSON.stringify({ v: 1, type: "pong", nonce: m.nonce }));
+          else ws.close(1011);
+        }
+      });
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
+const status = (sourceId: string, s: string, seq: number) =>
+  JSON.stringify({
+    v: 1,
+    type: "sourceStatus",
+    seq,
+    at: 1,
+    correlationId: stubCorrelationId,
+    partId: 0,
+    sourceId,
+    resultId: `01900000-0000-7000-8000-00000000010${seq}`,
+    status: s,
+  });
+function settle() {
+  const frames = [
+    status("stateSource", "pending", 1),
+    status("nationalSource", "pending", 2),
+    status("stateSource", "complete", 3),
+    ...(wsMode === "partial" ? [] : [status("nationalSource", "complete", 4)]),
+  ];
+  for (const ws of sockets) for (const f of frames) ws.send(f);
+}
 afterEach(async () => {
+  for (const ws of sockets) ws.terminate();
+  sockets.clear();
+  wss.close();
   await new Promise((r) => server.close(r));
   rmSync(dir, { recursive: true, force: true });
 });
 
-function smoke(url: string): Promise<{ code: number | null; out: string }> {
+function smoke(
+  url: string,
+  extra: string[] = [],
+  env: Record<string, string> = {},
+): Promise<{ code: number | null; out: string }> {
   return new Promise((done) => {
-    const p = spawn("bash", [resolve(here, "smoke.sh"), url], {
-      env: { ...process.env, SEED_PASSWORD_SECRET_FILE: join(dir, "SEED_PASSWORD_SECRET") },
+    const p = spawn("bash", [resolve(here, "smoke.sh"), url, ...extra], {
+      env: {
+        ...process.env,
+        SEED_PASSWORD_SECRET_FILE: join(dir, "SEED_PASSWORD_SECRET"),
+        ...env,
+      },
     });
     let out = "";
     p.stdout.on("data", (d) => {
@@ -181,7 +261,7 @@ describe("smoke.sh on the deploy host (G-I3, #167)", { timeout: 30_000 }, () => 
   it("finds the compose file when the checkout path contains a space (G-m3)", async () => {
     const checkout = join(dir, "my checkout");
     mkdirSync(join(checkout, "scripts", "ops"), { recursive: true });
-    for (const f of ["smoke.sh", "ws-soak.ts"])
+    for (const f of ["smoke.sh", "ws-soak.ts", "smoke-feed.ts"])
       cpSync(join(here, f), join(checkout, "scripts", "ops", f));
     const docker = [
       'printf "%s\\n" "$*" >> "$STUB_DIR/docker.log"',
@@ -212,7 +292,7 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     const pw = derivedPassword();
     expect(pw).toHaveLength(43);
     expect(JSON.parse(signInBody ?? "{}")).toEqual({ email, password: pw });
-    // No WebSocket on the stub: step 5 fails, and nothing secret is printed on the way.
+    // The stub closes the socket on a ping: step 5 fails, and nothing secret is printed on the way.
     expect(r.code).not.toBe(0);
     expect(r.out).not.toContain(pw);
     expect(r.out).not.toContain(secret);
@@ -240,6 +320,36 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     expect(r.out).not.toMatch(/3 ok/);
     expect(r.out).not.toMatch(/5 ok/);
     expect(r.out).not.toContain(stubCorrelationId);
+  });
+
+  it("runs steps 1 to 5 in order, the feed opening before the submit", async () => {
+    wsMode = "pong";
+    const r = await smoke(base, ["--soak", "1s"]);
+    expect(r.code).toBe(0);
+    const at = ["1 ok", "2 ok", "3 ok", "4 ok: 2 sources settled", "5 ok"].map((t) =>
+      r.out.indexOf(t),
+    );
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(events.slice(0, 2)).toEqual(["hello", "submit"]);
+  });
+
+  it("step 4 fails within the bound when one source never settles, with the exact text", async () => {
+    wsMode = "partial";
+    const r = await smoke(base, [], { SMOKE_SETTLE_MS: "1500" });
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: 1 of 2 sources settled");
+    expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 never prints the cookie, the password or the payload", async () => {
+    wsMode = "partial";
+    const r = await smoke(base, [], { SMOKE_SETTLE_MS: "1000" });
+    expect(r.out).not.toContain("abc123");
+    expect(r.out).not.toContain(derivedPassword());
+    expect(r.out).not.toContain("ZZ-");
+    expect(r.out).not.toContain(stubHash);
   });
 
   it("accepts a base URL with a trailing slash (G-M5)", async () => {
