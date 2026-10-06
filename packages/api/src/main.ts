@@ -3,7 +3,7 @@ import { OutcomeWriteError } from "./dispatch/outcome";
 import { errorFields } from "./log/error-fields";
 import { type RunningServer, startServer, startupErrorFields } from "./startup";
 
-/** Upper bound on the drain after a fatal error; the exit code is already 1 by then. */
+/** Upper bound on the close after a fatal error; the exit code is already 1 by then. */
 const FATAL_DRAIN_MS = 10_000;
 
 /**
@@ -20,8 +20,9 @@ let failing = false;
 
 /**
  * #224: an error that escapes the request path (a listener, a timer, a stream) fails closed
- * (spec 8.1): one fatal line, a bounded drain of the server and the DB, exit 1. A second fatal
- * event during the drain exits at once without another line. A failed outcome write (#536)
+ * (spec 8.1): one fatal line, a bounded close of the server and the DB (never the SIGTERM drain:
+ * every adapter call is aborted first), exit 1. A second fatal event during the close exits at
+ * once without another line. A failed outcome write (#536)
  * reaches here through AppDeps.fatal, after the dispatcher is aborted: its line names the
  * write's ids and the failing error's class, never the SIGTERM drain of in-flight jobs.
  */
@@ -41,7 +42,7 @@ function fail(event: "uncaughtException" | "unhandledRejection", err: unknown): 
   setTimeout(() => process.exit(1), FATAL_DRAIN_MS).unref();
   const s = server;
   if (!s) process.exit(1);
-  s.stop().then(
+  s.close().then(
     () => process.exit(1),
     () => process.exit(1),
   );

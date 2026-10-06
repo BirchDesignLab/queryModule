@@ -72,11 +72,11 @@ function flush(bus: EventBus, q: Slot[]): void {
  * Transaction T2 (spec 5.2 step 6; FR-043, SEC-010, SEC-011, SEC-012): in one IMMEDIATE
  * transaction, the write-once update of the pending source_result row (a returned payload sealed
  * under the request's payload DEK), a sourceResponded audit row by the requester's envelope naming
- * the credential owner, and a sourceStatus event_log row. Zero rows updated: nothing else is written.
- * The event is published only after the commit, in seq order. Any throw rolls everything back,
- * leaves the row pending for the startup sweep, logs ids and the error class only, and calls
- * d.fatal (fail closed). The DEK and the plaintext payload buffer are zeroed in finally; the
- * JSON string the buffer is made from is a JS string and cannot be zeroed (AW3 critic m3).
+ * the credential owner, and a sourceStatus event_log row. Zero rows updated: nothing else is
+ * written. The event is published only after the commit, in seq order. Any throw rolls everything
+ * back, leaves the row pending for the startup sweep, logs ids and the error class only, and calls
+ * d.fatal (fail closed). The DEK and the plaintext payload buffer are zeroed in finally; the JSON
+ * string the buffer is made from is a JS string and cannot be zeroed (AW3 critic m3).
  */
 export async function recordOutcome(
   d: AppDeps,
@@ -91,7 +91,9 @@ export async function recordOutcome(
     partId: job.partId,
   };
   const q = outboxOf(d.eventBus);
-  /** Set inside the transaction; a holder, so the catch sees a slot taken before a failed commit. */
+  /**
+   * Set inside the transaction; a holder, so the catch sees a slot taken before a failed commit.
+   */
   const mine: { slot?: Slot } = {};
   try {
     await withTransaction(d.db, async (tx) => {

@@ -30,7 +30,7 @@ async function returnedRow() {
   const enqueue = t.deps.dispatcher.enqueue.bind(t.deps.dispatcher);
   vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation((js) => {
     jobs.push(...js);
-    enqueue(js);
+    return enqueue(js);
   });
   const r = await t.request("/api/v1/queries", {
     method: "POST",
