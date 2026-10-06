@@ -95,6 +95,8 @@ packages/api/src/seed/**
 packages/api/src/ops/**
 packages/api/src/deps.ts
 packages/api/src/events/**
+# SEC-005 password minimum: Better Auth minPasswordLength reads it (AW5 review 2 G-I1)
+packages/core/src/config/password.ts
 # Admin console floor (ADR-0011 Consequences): admin/users is auth; anything new under
 # admin/ is at least gate
 packages/api/src/admin/**

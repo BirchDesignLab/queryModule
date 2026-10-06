@@ -96,12 +96,18 @@ const poll = setInterval(() => {
   if (expected === null && existsSync(goFile)) {
     const body = JSON.parse(readFileSync(bodyFile, "utf8")) as {
       correlationId: string;
-      parts: { partId: number; status: string; sourceIds: string[] }[];
+      parts?: unknown;
     };
     correlationId = body.correlationId;
-    expected = body.parts
-      .filter((p) => p.status === "dispatched")
-      .flatMap((p) => p.sourceIds.map((s) => key(correlationId, p.partId, s)));
+    // a 202 without a parts array has nothing to settle: n = 0, "4 FAILED" (G-M1)
+    const parts = (Array.isArray(body.parts) ? body.parts : []) as {
+      partId: number;
+      status: string;
+      sourceIds?: unknown;
+    }[];
+    expected = parts
+      .filter((p) => p?.status === "dispatched" && Array.isArray(p.sourceIds))
+      .flatMap((p) => (p.sourceIds as string[]).map((s) => key(correlationId, p.partId, s)));
     deadline = Date.now() + boundMs;
     if (expected.length === 0 || lost) finish();
     check();

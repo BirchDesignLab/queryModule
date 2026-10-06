@@ -27,6 +27,7 @@ let signInBody: string | undefined;
 let submitBody: string | undefined;
 let submitStatus = 202;
 let partStatus = "dispatched";
+let omitParts = false;
 const stubHash = "a".repeat(64);
 const stubCorrelationId = "01900000-0000-7000-8000-000000000001";
 let dir: string;
@@ -35,6 +36,7 @@ beforeEach(async () => {
   submitBody = undefined;
   submitStatus = 202;
   partStatus = "dispatched";
+  omitParts = false;
   wsMode = "all";
   events = [];
   dir = mkdtempSync(join(tmpdir(), "qm-smoke-"));
@@ -71,15 +73,17 @@ beforeEach(async () => {
           JSON.stringify({
             correlationId: stubCorrelationId,
             acknowledgedAt: 1,
-            parts: [
-              {
-                partId: 0,
-                queryType: "VEH",
-                status: partStatus,
-                sourceIds: partStatus === "dispatched" ? ["stateSource", "nationalSource"] : [],
-                droppedSourceIds: [],
-              },
-            ],
+            parts: omitParts
+              ? undefined
+              : [
+                  {
+                    partId: 0,
+                    queryType: "VEH",
+                    status: partStatus,
+                    sourceIds: partStatus === "dispatched" ? ["stateSource", "nationalSource"] : [],
+                    droppedSourceIds: [],
+                  },
+                ],
           }),
         );
         if (submitStatus === 202) setTimeout(settle, 50);
@@ -356,6 +360,15 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     expect(r.code).not.toBe(0);
     expect(r.out).toContain("4 FAILED: 0 of 0 sources settled");
     expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails with the exact text when the 202 body has no parts array (G-M1)", async () => {
+    omitParts = true;
+    const r = await smoke(base, [], { SMOKE_SETTLE_MS: "1500" });
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: 0 of 0 sources settled");
+    expect(r.out).not.toMatch(/TypeError|at .*smoke-feed/);
     expect(r.out).not.toMatch(/5 ok/);
   });
 

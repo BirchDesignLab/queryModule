@@ -104,7 +104,8 @@ have no code yet):
   `packages/api/src/http/session.ts`, `packages/api/src/ws/**`,
   `packages/api/src/seed/**`, `packages/api/src/ops/**`,
   `packages/api/src/deps.ts`, `packages/api/src/events/**` (event bus: session end closes
-  sockets, #212); HTTP security guards `packages/api/src/http/security.ts`
+  sockets, #212), `packages/core/src/config/password.ts` (SEC-005 password minimum that
+  Better Auth reads); HTTP security guards `packages/api/src/http/security.ts`
   (CSRF and Origin), `packages/api/src/http/web.ts` and `packages/api/src/app.ts`
   (#338, #343); the admin console floor `packages/api/src/admin/**` (user
   administration is auth; anything new under `admin/` is at least gate,

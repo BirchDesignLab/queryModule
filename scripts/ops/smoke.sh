@@ -40,9 +40,10 @@ echo "2 ok: login as smoke and GET /api/v1/config"
 # $ready on welcome, and after the submit ($go) waits for one non-pending sourceStatus per source.
 cookie=$(awk -F'\t' '$6 ~ /qm_session$/ {print $6"="$7}' "$jar")
 [ -n "$cookie" ] || { echo "no session cookie"; exit 1; }
-ready=$(mktemp -u); go=$(mktemp -u); feedout=$(mktemp); resp=$(mktemp)
+# ready and go are created later (welcome, submit), so they live in a private mktemp -d dir (G-M2)
+sig=$(mktemp -d); ready=$sig/ready; go=$sig/go; feedout=$(mktemp); resp=$(mktemp)
 feedpid=
-trap 'rm -f "$jar" "$resp" "$ready" "$go" "$feedout"; [ -z "$feedpid" ] || kill "$feedpid" 2>/dev/null || true' EXIT
+trap 'rm -f "$jar" "$resp" "$feedout"; rm -rf "$sig"; [ -z "$feedpid" ] || kill "$feedpid" 2>/dev/null || true' EXIT
 QM_COOKIE=$cookie node "$here/smoke-feed.ts" "$base" "$ready" "$go" "$resp" >"$feedout" 2>&1 &
 feedpid=$!
 for _ in $(seq 1 100); do
