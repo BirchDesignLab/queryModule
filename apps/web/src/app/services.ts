@@ -100,6 +100,8 @@ export function createServices(options: ServicesOptions): Services {
     },
     random: Math.random,
   });
+  // Status events land in the requests store, which holds the ones that outrun their 202 (spec 6.7).
+  feed.onSourceStatus((event) => requests.getState().applyEvent(event));
   registerQueryCacheReset(reset, queryClient);
   reset.register(() => feed.close());
   reset.register(() => configRefresh.stop());

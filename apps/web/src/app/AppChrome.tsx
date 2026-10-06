@@ -19,6 +19,7 @@ import {
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
+import { statusAnnouncementText } from "../query/announce-status.js";
 import { AccountMenu } from "./AccountMenu.js";
 import { useCachedConfig } from "./cached-config.js";
 import { useT } from "./i18n-context.js";
@@ -230,7 +231,8 @@ export function useIsFreshLoad(): boolean {
 
 /** Layout of every signed-in screen that runs the app: the header, then the page. */
 export function AppShell() {
-  const { api, queryClient, configRefresh, feed, authStore } = useServices();
+  const { api, queryClient, configRefresh, feed, authStore, requests, announcer } = useServices();
+  const t = useT();
   const signedInAs = useStore(authStore, (s) => s.user?.email);
   // Refetch the config every 15 s and when the tab becomes visible, while signed in (ADR-0011
   // item 3). A reset (sign-out, 401, user change) stops it; a new user restarts it.
@@ -250,6 +252,21 @@ export function AppShell() {
     feed.open();
     return () => feed.close();
   }, [feed, signedInAs, configLoaded]);
+  // Per-source status changes are announced here, not by a pane, so they are spoken whichever
+  // screen shows (spec 6.6): one polite sentence per request per 1500 ms, counts and words only.
+  // The store coalesces; labels read from the cached config at the time of speaking.
+  const queryTypes = config?.queryTypes;
+  useEffect(() => {
+    if (signedInAs === undefined) return;
+    return requests.getState().onStatusSummary((announcement) => {
+      const labelKey = queryTypes?.find((q) => q.code === announcement.queryType)?.labelKey;
+      announcer.announce(
+        statusAnnouncementText(announcement, t, (code) =>
+          labelKey === undefined ? code : t(labelKey),
+        ),
+      );
+    });
+  }, [requests, announcer, signedInAs, queryTypes, t]);
   // Load GET /api/v1/config on every signed-in screen, not only the panel, so SiteConfig.theme
   // applies after a reload on /status too (spec 6.5); the panel reuses the cached entry.
   useEffect(() => {
