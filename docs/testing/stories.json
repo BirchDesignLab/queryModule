@@ -26,6 +26,7 @@
     "files": [
       "packages/core/src/terminal/parse.a4.test.ts",
       "apps/web/e2e/a4-terminal.spec.ts",
+      "apps/web/e2e/source-status.spec.ts",
       "packages/api/test/dispatch/scenarios.test.ts"
     ]
   },
