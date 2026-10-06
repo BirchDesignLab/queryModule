@@ -25,6 +25,7 @@ import {
 } from "./controls.js";
 import { type JsonObject, type PathSegment, toPointer } from "./draft.js";
 import { OtherKeys } from "./GenericForm.js";
+import { TypeMockResponses } from "./MockFlows.js";
 import { RulesEditor, SectionCondition } from "./RulesEditor.js";
 import { SelectionContext, useSelectedIndex } from "./selection.js";
 
@@ -203,6 +204,10 @@ function QueryTypeEditor({
       <Sect title={t("admin.config.sect.rules")} hint={t("admin.config.sect.rulesHint")}>
         <RulesEditor type={type} path={[...path, "rules"]} idPrefix={idPrefix} />
       </Sect>
+      <TypeMockResponses
+        code={code}
+        sourceIds={asObjects(type.sources).map((s) => str(s.sourceId))}
+      />
       <Advanced
         path={path}
         keys={["labelKey", ...Object.keys(type).filter((k) => !TYPE_KEYS.has(k))]}

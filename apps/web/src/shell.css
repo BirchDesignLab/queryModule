@@ -1994,3 +1994,25 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   flex-wrap: wrap;
   gap: var(--qm-space-2);
 }
+
+/* New query type and new source flows (Task 4, issue 551): one row per mock source, the action at the end. */
+.qm-mock__flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  margin: 0 0 var(--qm-space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.qm-mock__flow-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+}
+
+.qm-mock__flow-row.qm-mock__gap {
+  flex-direction: row;
+  align-items: center;
+}

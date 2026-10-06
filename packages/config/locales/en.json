@@ -879,5 +879,17 @@
   "admin.mock.addForSource": "Add a no-record response for each query type that asks {source}",
   "admin.mock.addedForSource": "Mock responses added for {source}: {count}. Default: no record.",
   "admin.mock.responseRow": "Mock response: {type}, {source}",
-  "admin.mock.sourceRow": "Mock source: {source}"
+  "admin.mock.sourceRow": "Mock source: {source}",
+  "admin.mock.addedForType": "Mock responses added for {type}: {count}. Default: no record.",
+  "admin.mock.flow.type.title": "Mock responses for this type",
+  "admin.mock.flow.type.hint": "Each mock source this type asks needs a response before you can publish.",
+  "admin.mock.flow.type.needs": "Give the type a code and at least one source to see its mock responses.",
+  "admin.mock.flow.open": "Open mock response",
+  "admin.mock.flow.addAll": "Add a no-record response for each missing source ({count})",
+  "admin.mock.flow.source.title": "Mock responses to add",
+  "admin.mock.flow.source.hint": "A mock source answers only the query types it has a response for.",
+  "admin.mock.flow.source.gaps": "{source}: mock responses missing: {count}",
+  "admin.mock.flow.source.done": "{source}: mock responses added. Set its response time on the mock source.",
+  "admin.mock.flow.source.open": "Open mock source {source}",
+  "admin.mock.flow.source.unasked": "No query type asks {source} yet. Add it to a query type's sources."
 }

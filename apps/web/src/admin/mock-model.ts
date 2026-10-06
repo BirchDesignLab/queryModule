@@ -268,13 +268,23 @@ function diffScenarios(
   return out;
 }
 
+/** A change and the response of the edited file it is about (its index there); null for a removed response and a source-level change. */
+export interface LocatedMockChange {
+  change: MockChange;
+  response: number | null;
+}
+
 /**
  * What changed between the live mock and the edited one, as lines with ids and indices only (Q2,
  * 10-05-26: Review and audit lines never carry trigger values or payload content). Responses are
- * matched by query type, then by order among responses of one type; scenarios by trigger.
+ * matched by query type, then by order among responses of one type; scenarios by trigger. Each change
+ * also says which response of the edited file it is about, so a Review line can open that one.
  */
-export function diffMock(live: MockFile | null, edited: MockFile | null): MockChange[] {
-  const out: MockChange[] = [];
+export function locateMockChanges(
+  live: MockFile | null,
+  edited: MockFile | null,
+): LocatedMockChange[] {
+  const out: LocatedMockChange[] = [];
   const liveSources = live?.sources ?? {};
   const editedSources = edited?.sources ?? {};
   const ids = [...new Set([...Object.keys(editedSources), ...Object.keys(liveSources)])];
@@ -282,7 +292,7 @@ export function diffMock(live: MockFile | null, edited: MockFile | null): MockCh
     const was = liveSources[sourceId];
     const now = editedSources[sourceId];
     if (was !== undefined && now !== undefined && canon(was.latencyMs) !== canon(now.latencyMs))
-      out.push({ kind: "latencyChanged", sourceId });
+      out.push({ change: { kind: "latencyChanged", sourceId }, response: null });
     const wasResponses = was?.responses ?? [];
     const nowResponses = now?.responses ?? [];
     const nth = (list: readonly MockResponse[], i: number): number =>
@@ -295,20 +305,31 @@ export function diffMock(live: MockFile | null, edited: MockFile | null): MockCh
       );
       const at = { sourceId, queryType: r.queryType };
       if (j < 0) {
-        out.push({ kind: "responseAdded", ...at });
+        out.push({ change: { kind: "responseAdded", ...at }, response: i });
         return;
       }
       matched.add(j);
       const w = wasResponses[j] as MockResponse;
-      if (canon(w.types) !== canon(r.types)) out.push({ kind: "matchChanged", ...at });
-      if (canon(w.default) !== canon(r.default)) out.push({ kind: "defaultChanged", ...at });
-      out.push(...diffScenarios(w.scenarios, r.scenarios, at));
+      if (canon(w.types) !== canon(r.types))
+        out.push({ change: { kind: "matchChanged", ...at }, response: i });
+      if (canon(w.default) !== canon(r.default))
+        out.push({ change: { kind: "defaultChanged", ...at }, response: i });
+      for (const change of diffScenarios(w.scenarios, r.scenarios, at))
+        out.push({ change, response: i });
     });
     wasResponses.forEach((w, j) => {
-      if (!matched.has(j)) out.push({ kind: "responseRemoved", sourceId, queryType: w.queryType });
+      if (!matched.has(j))
+        out.push({
+          change: { kind: "responseRemoved", sourceId, queryType: w.queryType },
+          response: null,
+        });
     });
   }
   return out;
+}
+
+export function diffMock(live: MockFile | null, edited: MockFile | null): MockChange[] {
+  return locateMockChanges(live, edited).map((c) => c.change);
 }
 
 /** How many Review lines the edited mock has against the live one; an unreadable mock counts as one change when it differs. */
