@@ -22,6 +22,10 @@ export const WS_IDLE_MS = 60_000;
  * harness raises it, since every signed-in page opens a feed socket from one IP.
  */
 export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
+/**
+ * Server-local close codes, RFC 6455 or local, outside the contract (WS_CLOSE_CODES): any close
+ * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: welcome.latestSeq failed.
+ */
 export const WS_LOCAL_CLOSE = {
   idle: 4000,
   badMessage: 1008,

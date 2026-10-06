@@ -3,15 +3,27 @@ import { asc, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { eventLog } from "../../src/db/schema";
+import { WS_LOCAL_CLOSE } from "../../src/ws/server";
 import { manualTime } from "../helpers/manual-time";
 import { createTestApp, startTestServer } from "../helpers/test-app";
 
 // Spec 5.3, 12.7 M2 row "no cross-user events" (FR-065, SEC-014): sourceStatus events reach
 // only the owner's sockets, in event_log order, and welcome.latestSeq reads event_log.
+// A latestSeq read failure, switched per test (AW4 critic 3).
+const failSeq = vi.hoisted(() => ({ on: false }));
+vi.mock("../../src/dispatch/event-log", async (importOriginal) => {
+  const m = await importOriginal<typeof import("../../src/dispatch/event-log")>();
+  return {
+    ...m,
+    latestSeq: (...a: Parameters<typeof m.latestSeq>) =>
+      failSeq.on ? Promise.reject(new Error("db down")) : m.latestSeq(...a),
+  };
+});
 const PW = "correct-horse-battery-1";
 const ORIGIN = "http://localhost:3000";
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  failSeq.on = false;
   for (const c of closers.splice(0)) await c();
 });
 
@@ -136,5 +148,19 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     await c.hello(other.ws, other.got);
     expect(other.got.at(-1)).toMatchObject({ type: "welcome", latestSeq: 0 });
     for (const x of [first.ws, fresh.ws, other.ws]) x.close();
+  });
+
+  it("a latestSeq failure closes the socket with 1011, which the client treats as reconnect (AW4 critic 3)", async () => {
+    const c = await setup();
+    const a = await c.sock(c.cookieA);
+    const closed = new Promise<number>((r) => a.ws.once("close", (code) => r(code)));
+    failSeq.on = true;
+    a.ws.send(JSON.stringify({ v: 1, type: "hello", lastSeq: null }));
+    expect(await closed).toBe(WS_LOCAL_CLOSE.internal);
+    expect(WS_LOCAL_CLOSE.internal).toBe(1011);
+    expect(a.got).toEqual([]);
+    const line = c.t.logLines.find((l) => l.includes('"msg":"ws welcome latestSeq failed"'));
+    expect(line).toContain('"errorName":"Error"');
+    expect(line).not.toContain("db down");
   });
 });
