@@ -111,6 +111,8 @@ describe("sensitive-review (spec 9.1)", () => {
       expect(c(f), f).toBe("critical");
     expect(c("packages/core/src/config/fixture-policy.ts")).toBe("gate");
     expect(c("packages/core/src/config/fixture-policy.test.ts")).toBeNull();
+    // the SEC-005 password minimum Better Auth reads is auth, gate tier (AW5 review 2 G-I1)
+    expect(c("packages/core/src/config/password.ts")).toBe("gate");
   });
 
   it("the shipped tier file classifies the P1 api paths (developer ruling 09-27-26)", () => {

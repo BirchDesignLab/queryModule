@@ -254,6 +254,45 @@ describe("SEC-006 startup fails closed", () => {
   });
 });
 
+// Spec 10.3 "Mock gate", 5.4 Kind (SEC-006): a mock-kind source refuses startup unless
+// ALLOW_MOCK_SOURCES is true, whether it comes from the site file or from the stored document
+// (ADR-0011). The load-time cases are in test/security/mock-gate.test.ts.
+describe("spec 10.3 mock gate: startup refuses mock sources without ALLOW_MOCK_SOURCES", () => {
+  const MOCK_REFUSED = "mock sources need ALLOW_MOCK_SOURCES=true";
+  /** envWith less ALLOW_MOCK_SOURCES: a deploy that never set it. */
+  async function envWithoutMocks(dataDir?: string) {
+    const { ALLOW_MOCK_SOURCES: _unset, ...env } = await envWith({}, dataDir);
+    return env;
+  }
+
+  it("the site file's mock source refuses a first start: nothing listens, the DB is closed", async () => {
+    const env = await envWithoutMocks();
+    const err = await startServer(env, { logSink: () => {} }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConfigLoadError);
+    expect(err).toMatchObject({ path: "/sources/0/kind", reason: MOCK_REFUSED });
+    expect((err as ConfigLoadError).file).toMatch(/sites[\\/]default\.json$/);
+    expect(await connectError(Number(env.PORT))).toBe("ECONNREFUSED");
+    expect(opened.at(-1)?.$client.closed).toBe(true);
+  });
+
+  it("a stored document with a mock source refuses startup on a deploy without the flag", async () => {
+    const data = tempDir("qm-data-");
+    // the first start seeds the store with version 1, which has mock sources
+    await stop(await startServer(await envWith({}, data), { logSink: () => {} }));
+    const env = await envWithoutMocks(data);
+    const err = await startServer(env, { logSink: () => {} }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConfigLoadError);
+    // the stored version is what was checked, not the site file
+    expect(err).toMatchObject({
+      file: "store site default version 1",
+      path: "/sources/0/kind",
+      reason: MOCK_REFUSED,
+    });
+    expect(await connectError(Number(env.PORT))).toBe("ECONNREFUSED");
+    expect(opened.at(-1)?.$client.closed).toBe(true);
+  });
+});
+
 // Checker ruling 09-28-26 (T19 spec:CV1): SEC-005 MFA is not enforced until M3 P1 (#216), so a
 // site config that requires it must not start. #216 removes this guard when MFA lands.
 describe("SEC-005 startup refuses a site config that requires MFA before MFA exists", () => {

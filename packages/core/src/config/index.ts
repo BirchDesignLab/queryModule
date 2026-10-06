@@ -8,6 +8,7 @@ export * from "./features";
 export * from "./fixture-policy";
 export * from "./merge";
 export * from "./migrate";
+export * from "./password";
 export * from "./resolve";
 export * from "./schema";
 export * from "./schema-fields";

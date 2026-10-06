@@ -208,7 +208,7 @@
   "password.change.submit": "Change password",
   "password.change.submitting": "Changing the password",
   "password.change.mismatch": "The passwords do not match.",
-  "password.change.tooShort": "Use at least 12 characters.",
+  "password.change.tooShort": "Use at least {min} characters.",
   "password.change.same": "Choose a password different from the temporary one",
   "password.change.incorrect": "The current password is not correct.",
   "password.change.sessionEnded": "Your session has ended. Sign out and sign in again.",
