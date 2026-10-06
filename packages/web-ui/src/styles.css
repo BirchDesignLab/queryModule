@@ -843,7 +843,8 @@ h1 {
 .qm-layout--mobile-unit .qm-tag,
 .qm-layout--mobile-unit .qm-field__tag,
 .qm-layout--mobile-unit .qm-chip__meta,
-.qm-layout--mobile-unit .qm-source--pending {
+.qm-layout--mobile-unit .qm-source--pending,
+.qm-layout--mobile-unit .qm-request__part-label {
   color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);
 }
