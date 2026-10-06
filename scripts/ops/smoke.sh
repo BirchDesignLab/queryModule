@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # scripts/ops/smoke.sh <baseUrl> [--soak 10m]   Spec 8.7. Run after every promote and at every milestone exit.
-# Needs Node >= 24 and a root `pnpm install` on the machine that runs it (ws-soak.ts uses `ws`).
+# Needs Node >= 24 and a root `pnpm install` on the machine that runs it (smoke-feed.ts and ws-soak.ts use `ws`).
 # Secrets never go on argv (G-I2): the seed password is derived in Node, the sign-in body goes on
-# stdin, the submit body goes on stdin and the session cookie reaches ws-soak.ts through QM_COOKIE.
+# stdin, the submit body goes on stdin and the session cookie reaches smoke-feed.ts (step 4, the
+# feed per D-A10 option a) and ws-soak.ts (step 5) through QM_COOKIE.
 set -euo pipefail
 base=${1:?usage: smoke.sh <baseUrl> [--soak <n>m|<n>s]}
 base=${base%/}

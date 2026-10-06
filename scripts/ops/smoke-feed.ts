@@ -17,7 +17,13 @@ if (!baseArg || !readyFile || !goFile || !bodyFile || !cookie) {
   process.exit(2);
 }
 const base = baseArg.replace(/\/$/, "");
-const boundMs = Number(process.env.SMOKE_SETTLE_MS ?? "20000");
+// The 20 s bound may only shrink (tests); anything else is refused before the submit.
+const boundArg = process.env.SMOKE_SETTLE_MS ?? "20000";
+const boundMs = /^[0-9]{1,5}$/.test(boundArg) ? Number(boundArg) : 0;
+if (boundMs < 1 || boundMs > 20_000) {
+  process.stderr.write("SMOKE_SETTLE_MS must be an integer from 1 to 20000\n");
+  process.exit(2);
+}
 const settled = new Set<string>();
 let expected: string[] | null = null;
 let correlationId = "";
@@ -30,6 +36,17 @@ const ws = new WebSocket(`${base.replace(/^http/, "ws")}/api/v1/ws`, {
 const die = (why: string) => {
   process.stderr.write(`smoke feed failed: ${why}\n`);
   process.exit(1);
+};
+// After welcome the submit follows, so a lost socket still ends in step 4's "k of n" line once
+// the 202 body is read; before welcome there is nothing to count.
+let welcomed = false;
+let lost = false;
+const lose = (why: string) => {
+  if (!welcomed) die(why);
+  if (lost) return;
+  lost = true;
+  process.stderr.write(`smoke feed lost: ${why}\n`);
+  if (expected !== null) finish();
 };
 const finish = () => {
   const n = expected?.length ?? 0;
@@ -46,22 +63,34 @@ const check = () => {
 };
 
 ws.on("open", () => ws.send(JSON.stringify({ v: 1, type: "hello", lastSeq: null })));
+type Frame = {
+  type?: string;
+  status?: string;
+  correlationId?: string;
+  partId?: unknown;
+  sourceId?: unknown;
+};
+const parse = (raw: string): Frame | null => {
+  try {
+    return JSON.parse(raw) as Frame;
+  } catch {
+    return null;
+  }
+};
 ws.on("message", (d) => {
-  const m = JSON.parse(String(d)) as {
-    type?: string;
-    status?: string;
-    correlationId?: string;
-    partId?: unknown;
-    sourceId?: unknown;
-  };
-  if (m.type === "welcome") writeFileSync(readyFile, "ready");
-  else if (m.type === "sourceStatus" && m.status !== "pending" && m.correlationId)
+  // a frame that is not JSON is skipped, never echoed (it could carry a value)
+  const m = parse(String(d));
+  if (m === null) return;
+  if (m.type === "welcome") {
+    welcomed = true;
+    writeFileSync(readyFile, "ready");
+  } else if (m.type === "sourceStatus" && m.status !== "pending" && m.correlationId)
     settled.add(key(m.correlationId, m.partId, m.sourceId));
   check();
 });
 ws.on("unexpected-response", (_req, res) => die(`upgrade answered HTTP ${res.statusCode}`));
-ws.on("error", (e) => die(e.message));
-ws.on("close", (code) => die(`socket closed with ${code}`));
+ws.on("error", (e) => lose(e.message));
+ws.on("close", (code) => lose(`socket closed with ${code}`));
 
 const poll = setInterval(() => {
   if (expected === null && existsSync(goFile)) {
@@ -74,7 +103,7 @@ const poll = setInterval(() => {
       .filter((p) => p.status === "dispatched")
       .flatMap((p) => p.sourceIds.map((s) => key(correlationId, p.partId, s)));
     deadline = Date.now() + boundMs;
-    if (expected.length === 0) finish();
+    if (expected.length === 0 || lost) finish();
     check();
   }
   if (expected !== null && Date.now() >= deadline) {

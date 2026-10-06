@@ -14,8 +14,9 @@ const email = "smoke@example.test";
 
 // Stub API: health, meta, sign-in (records the body), config and submit (records the body), and a
 // WebSocket feed. wsMode picks what the feed does after the 202: "all" settles both sources,
-// "partial" settles one, "pong" settles both and answers pings (step 5 passes), "none" has no feed.
-type WsMode = "all" | "partial" | "pong" | "none";
+// "partial" settles one, "pong" settles both and answers pings (step 5 passes), "none" has no feed,
+// "garbage" sends a non-JSON frame first and then settles both, "drop" settles one and closes.
+type WsMode = "all" | "partial" | "pong" | "none" | "garbage" | "drop";
 let wsMode: WsMode = "all";
 let events: string[] = [];
 const sockets = new Set<WebSocket>();
@@ -127,12 +128,16 @@ const status = (sourceId: string, s: string, seq: number) =>
   });
 function settle() {
   const frames = [
+    ...(wsMode === "garbage" ? ["not json ZZ-9999"] : []),
     status("stateSource", "pending", 1),
     status("nationalSource", "pending", 2),
     status("stateSource", "complete", 3),
-    ...(wsMode === "partial" ? [] : [status("nationalSource", "complete", 4)]),
+    ...(wsMode === "partial" || wsMode === "drop" ? [] : [status("nationalSource", "complete", 4)]),
   ];
-  for (const ws of sockets) for (const f of frames) ws.send(f);
+  for (const ws of sockets) {
+    for (const f of frames) ws.send(f);
+    if (wsMode === "drop") ws.close(1011);
+  }
 }
 afterEach(async () => {
   for (const ws of sockets) ws.terminate();
@@ -362,6 +367,31 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     expect(r.out).not.toContain("ZZ-");
     expect(r.out).not.toContain(stubHash);
   });
+
+  it("step 4 skips a non-JSON frame without echoing it (AW5 T14 Q5)", async () => {
+    wsMode = "garbage";
+    const r = await smoke(base);
+    expect(r.out).toContain("4 ok: 2 sources settled");
+    expect(r.out).not.toContain("ZZ-9999");
+  });
+
+  it("step 4 reports k of n when the feed closes before every source settles (AW5 T14 Q4)", async () => {
+    wsMode = "drop";
+    const r = await smoke(base, [], { SMOKE_SETTLE_MS: "5000" });
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: 1 of 2 sources settled");
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it.each(["abc", "0", "60000"])(
+    "refuses SMOKE_SETTLE_MS=%s before the submit: the bound is 1 to 20000 ms (AW5 T14 Q3)",
+    async (v) => {
+      const r = await smoke(base, [], { SMOKE_SETTLE_MS: v });
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain("SMOKE_SETTLE_MS must be an integer from 1 to 20000");
+      expect(events).not.toContain("submit");
+    },
+  );
 
   it("accepts a base URL with a trailing slash (G-M5)", async () => {
     const r = await smoke(`${base}/`);
