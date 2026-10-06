@@ -17,6 +17,14 @@ import { type ErrorFields, errorFields } from "./log/error-fields";
 import { loadSecrets, SecretConfigError } from "./secrets";
 import { attachWebSocket, type WsHandle } from "./ws/server";
 
+/** A fatal error ended the SIGTERM drain (spec 8.1): the fatal close owns the teardown. */
+export class DrainAbortedError extends Error {
+  constructor() {
+    super("drain: fatal close");
+    this.name = "DrainAbortedError";
+  }
+}
+
 export class StartupRefusedError extends Error {
   constructor(reason: string) {
     super(`startup refused: ${reason}`);
@@ -175,12 +183,20 @@ function trackRequests(server: Server): { idle(): Promise<void>; open(): number 
  * then cut every connection still open, stop dispatch intake (anything later stays pending for
  * the next start's sweep; the route logs a refused enqueue during the drain without d.fatal),
  * wait for in-flight dispatch up to max(0, maxDeadline - now) + DRAIN_SLACK_MS, then close the
- * sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this drain. Call
- * right after the server listens.
+ * sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this drain: once
+ * lifecycle.failed is set, at the start or after any wait, the drain logs "drain ended by fatal
+ * error", never "stopped", and rejects with DrainAbortedError, leaving the sockets and the DB to
+ * the fatal close (main.ts exits 1). Call right after the server listens.
  */
 export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): () => Promise<void> {
   const requests = trackRequests(server);
+  const endIfFailed = () => {
+    if (!deps.lifecycle.failed) return;
+    deps.logger.error("drain ended by fatal error");
+    throw new DrainAbortedError();
+  };
   return async () => {
+    endIfFailed();
     deps.lifecycle.draining = true;
     ws.stopAccepting();
     server.close();
@@ -193,6 +209,7 @@ export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): ()
       }),
     ]);
     deps.timers.clearTimeout(timer);
+    endIfFailed();
     if (timedOut) {
       deps.logger.warn("drain http wait timed out", { open: requests.open() });
       // upgraded WS sockets are no longer the server's connections, so the feed stays open
@@ -204,7 +221,9 @@ export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): ()
     const now = deps.clock.now();
     const latest = deps.dispatcher.maxDeadline() ?? now;
     await deps.dispatcher.drain(Math.max(0, latest - now) + DRAIN_SLACK_MS);
+    endIfFailed();
     await ws.close();
+    endIfFailed();
     closeDb(deps);
     deps.logger.info("stopped");
   };
@@ -221,8 +240,9 @@ export interface RunningServer {
   /** The SIGTERM drain (createDrainStop). */
   stop(): Promise<void>;
   /**
-   * The fatal path's close (spec 8.1), never the drain: aborts every adapter call, then closes
-   * the sockets, the server and the DB without waiting on dispatch.
+   * The fatal path's close (spec 8.1), never the drain: sets lifecycle.failed, aborts every
+   * adapter call, then closes the sockets, the server (cutting open requests) and the DB without
+   * waiting on dispatch.
    */
   close(): Promise<void>;
 }
@@ -258,12 +278,14 @@ export async function startServer(
     deps,
     stop,
     async close() {
+      deps.lifecycle.failed = true;
       deps.dispatcher.abortAll();
       ws.stopAccepting();
       await ws.close();
       await new Promise<void>((r) => {
         server.close(() => r());
-        server.closeIdleConnections();
+        // a request still open (a trickled body, a held T1) must not hold the fatal close
+        server.closeAllConnections();
       });
       closeDb(deps);
     },

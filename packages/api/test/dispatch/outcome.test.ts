@@ -59,8 +59,8 @@ async function setup(o: { onFatal?: (e: unknown) => void } = {}) {
     jobs.push(...js);
     return enqueue(js);
   });
-  async function submit(plate: string, sourceIds = ["stateSource", "nationalSource"]) {
-    const r = await t.request("/api/v1/queries", {
+  const post = (plate: string, sourceIds: string[]) =>
+    t.request("/api/v1/queries", {
       method: "POST",
       headers: {
         cookie,
@@ -76,12 +76,14 @@ async function setup(o: { onFatal?: (e: unknown) => void } = {}) {
         configHash,
       }),
     });
+  async function submit(plate: string, sourceIds = ["stateSource", "nationalSource"]) {
+    const r = await post(plate, sourceIds);
     expect(r.status).toBe(202);
     return SubmitQueryResponseSchema.parse(await r.json());
   }
   /** Until every job's outcome write has resolved (real I/O, so polled, never slept). */
   const idle = () => vi.waitFor(() => expect(t.deps.dispatcher.inFlight()).toBe(0));
-  return { t, time, userId, published, jobs, enqueueSpy, submit, idle };
+  return { t, time, userId, published, jobs, enqueueSpy, post, submit, idle };
 }
 
 async function resultsFor(t: TestApp, correlationId: string) {
@@ -316,7 +318,7 @@ describe("recordOutcome: transaction T2 (spec 5.2 step 6, FR-043, SEC-010, SEC-0
 
   it("an audit failure on sourceResponded leaves the row pending, publishes nothing and fails closed", async () => {
     const order: string[] = [];
-    const { t, time, userId, published, submit, idle } = await setup({
+    const { t, time, userId, published, post, submit, idle } = await setup({
       onFatal: () => order.push("exit"),
     });
     const abortAll = t.deps.dispatcher.abortAll.bind(t.deps.dispatcher);
@@ -353,12 +355,13 @@ describe("recordOutcome: transaction T2 (spec 5.2 step 6, FR-043, SEC-010, SEC-0
       partId: 0,
       error: { name: "Error" },
     });
-    // the dispatcher refuses after abortAll: a later submit is acknowledged but calls no adapter,
-    // and its refused enqueue takes the route's backstop, failing closed again (manager ruling M1)
-    await submit(PLATE, ["stateSource"]);
+    // after the fatal a later submit gets 503 before T1 (AW4 critic 2): no row, no adapter call,
+    // no second fail-closed
+    const late = await post(PLATE, ["stateSource"]);
+    expect(late.status).toBe(503);
     await time.run(10_000);
     expect(get).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(["abortAll", "exit", "abortAll", "exit"]);
+    expect(order).toEqual(["abortAll", "exit"]);
     expectCleanLogs(t, await payloadDek(t, ack.correlationId));
   });
 

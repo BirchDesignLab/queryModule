@@ -1,4 +1,5 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { Server } from "node:http";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -176,10 +177,15 @@ describe("SEC-006 startup fails closed", () => {
     const s = await startServer(await envWith(), { logSink: () => {} });
     const abortAll = vi.spyOn(s.deps.dispatcher, "abortAll");
     const drain = vi.spyOn(s.deps.dispatcher, "drain");
+    // a request still open must not hold the fatal close (AW4 critic minor)
+    const cutAll = vi.spyOn(Server.prototype, "closeAllConnections");
     await s.close();
     expect(abortAll).toHaveBeenCalledTimes(1);
     expect(drain).not.toHaveBeenCalled();
+    expect(cutAll).toHaveBeenCalled();
     expect(s.deps.lifecycle.draining).toBe(false);
+    // new submits get 503 during the fatal close, and a later SIGTERM never drains
+    expect(s.deps.lifecycle.failed).toBe(true);
     expect(s.deps.db.$client.closed).toBe(true);
     await expect(fetch(`http://127.0.0.1:${s.port}/api/v1/health`)).rejects.toThrow();
   });

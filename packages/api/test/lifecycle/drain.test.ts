@@ -297,3 +297,40 @@ describe("an enqueue refused after T1 commits (manager ruling M1)", () => {
     expect(await s.statuses()).toEqual(["pending"]);
   }, 20_000);
 });
+
+describe("a fatal error and the drain (AW4 critic 2; spec 5.2, 8.1: the fatal path never drains)", () => {
+  it("a fatal during the drain ends it: stop() rejects, no stopped line", async () => {
+    const s = await setup({ adapter: slowAdapter });
+    expect((await s.submit()).status).toBe(202);
+    const stopping = s.startStop();
+    const outcome = stopping.then(
+      () => "resolved",
+      (e: unknown) => (e as Error).name,
+    );
+    await settle();
+    s.t.deps.fatal(new Error("x"));
+    expect(await outcome).toBe("DrainAbortedError");
+    expect(s.t.fatals).toHaveLength(1);
+    expect(s.t.logLines.some((l) => l.includes('"msg":"drain ended by fatal error"'))).toBe(true);
+    expect(s.t.logLines.some((l) => l.includes('"msg":"stopped"'))).toBe(false);
+  }, 20_000);
+
+  it("SIGTERM after a fatal: stop() rejects at once and never starts draining", async () => {
+    const s = await setup({ adapter: slowAdapter });
+    s.t.deps.fatal(new Error("x"));
+    await expect(s.startStop()).rejects.toThrow("drain: fatal close");
+    expect(s.t.deps.lifecycle.draining).toBe(false);
+    expect(s.t.logLines.some((l) => l.includes('"msg":"drain ended by fatal error"'))).toBe(true);
+    expect(s.t.logLines.some((l) => l.includes('"msg":"stopped"'))).toBe(false);
+  }, 20_000);
+
+  it("after a fatal a new submit gets 503 unavailable before T1", async () => {
+    const s = await setup({ adapter: slowAdapter });
+    s.t.deps.fatal(new Error("x"));
+    const r = await s.submit();
+    expect(r.status).toBe(503);
+    expect(((await r.json()) as { error: { code: string } }).error.code).toBe("unavailable");
+    expect(await s.requestRows()).toBe(0);
+    expect(s.t.fatals).toHaveLength(1);
+  }, 20_000);
+});

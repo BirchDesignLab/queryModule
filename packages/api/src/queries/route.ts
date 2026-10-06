@@ -122,8 +122,8 @@ export function bindJobs(
  * are bound to T1's rows as soon as it returns; a throw there is logged by class and ids and
  * fails closed (d.fatal), so committed rows are never silently left undispatched. The 202 never
  * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
- * nothing: the winner enqueued its own rows. While the server drains (spec 5.2) a new submit gets
- * 503 unavailable before T1; a replay of an acknowledged one still gets its stored 202. A refused
+ * nothing: the winner enqueued its own rows. While the server drains (spec 5.2) or fails closed
+ * (spec 8.1) a new submit gets 503 unavailable before T1; a replay of an acknowledged one still gets its stored 202. A refused
  * enqueue after T1 takes the same backstop, except during the drain, where only a request the
  * drain cut off past its HTTP bound reaches it: that one logs a warning and leaves its rows
  * pending for the next start's sweep.
@@ -134,8 +134,9 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     const a = await admitSubmit(c, d);
     if (a.kind === "reject") return a.response;
     if (a.kind === "replay") return c.json(a.body, 202);
-    // SIGTERM drain (spec 5.2): a new submit is refused before T1, so no row is written.
-    if (d.lifecycle.draining) return apiError(c, "unavailable");
+    // SIGTERM drain (spec 5.2) or fatal close (spec 8.1): a new submit is refused before T1, so no
+    // row is written.
+    if (d.lifecycle.draining || d.lifecycle.failed) return apiError(c, "unavailable");
     const principal = c.get("principal");
     const p = prepareSubmit(c, d, a.raw, principal);
     if (!p.ok) return p.response;
