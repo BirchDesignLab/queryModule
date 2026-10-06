@@ -144,10 +144,12 @@ export const DRAIN_SLACK_MS = 5_000;
 
 /**
  * The drain's bound on in-flight HTTP requests (critic C1): a client that trickles its body must
- * not hold stop() until Node's requestTimeout. With the 20 s source timeout docs/deploy.md allows
- * and DRAIN_SLACK_MS, the drain still ends inside the 30 s stop_grace_period (spec 8.3).
+ * not hold stop() until Node's requestTimeout. A submit that commits T1 during this wait gets a
+ * deadline up to its timeoutMs later, so the worst case is HTTP_DRAIN_MS + max timeoutMs +
+ * DRAIN_SLACK_MS: 2 + 18 + 5 = 25 s at the 18 s timeoutMs docs/deploy.md allows, 5 s inside the
+ * 30 s stop_grace_period (spec 8.3) for the sockets, the DB close and the exit.
  */
-export const HTTP_DRAIN_MS = 5_000;
+export const HTTP_DRAIN_MS = 2_000;
 
 /**
  * Counts the server's in-flight HTTP requests (WebSocket upgrades are not requests), so the

@@ -334,3 +334,10 @@ describe("a fatal error and the drain (AW4 critic 2; spec 5.2, 8.1: the fatal pa
     expect(s.t.fatals).toHaveLength(1);
   }, 20_000);
 });
+
+describe("the drain's worst case (AW4 critic minor; spec 8.3)", () => {
+  it("HTTP bound + the 18 s timeoutMs docs/deploy.md allows + slack stays <= 25 s, inside the 30 s stop_grace_period", () => {
+    const DEPLOY_DOC_MAX_TIMEOUT_MS = 18_000;
+    expect(HTTP_DRAIN_MS + DEPLOY_DOC_MAX_TIMEOUT_MS + DRAIN_SLACK_MS).toBeLessThanOrEqual(25_000);
+  });
+});
