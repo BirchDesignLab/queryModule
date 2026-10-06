@@ -1,7 +1,7 @@
 # Site configuration reference
 
 How a site changes what the Query Module does, without a code change or a rebuild (BR-001, BR-005,
-NFR-001). This page covers M1 and was checked against the code on `main` on 10-03-26. Where a thing does not exist yet, the page says which phase brings it and does not
+NFR-001). This page covers M1 plus the M2 P0.5 dispatch and mock adapter, and was checked against the code on 10-05-26. Where a thing does not exist yet, the page says which phase brings it and does not
 describe it.
 
 Mock data only. The prototype uses a mock data source with canned responses and never connects to
@@ -435,11 +435,73 @@ Scenarios shipped in the default site (the mock files are the full list):
 | `WNT` last `MISSING` | national source (default site only) | `MISSING PERSON` |
 | anything else | any mock source | the type's `default`, usually `NO RECORD` |
 
-In M1 the mock files are validated for shape and coverage, but no submit reads them: a submit ends
-at the 202 acknowledgment (FR-064). The mock adapter runs from M2 P0.5 (ADR-0012). The fixture
-policy checks that reject real-looking data in a mock file, and the generator
-`scripts/mock-data/generate.ts`, land in the same phase; until then the mock files are written by
-hand to the policy (plates `ZZ-####`, made-up names, addresses on Example Ave).
+A submit now dispatches to the mock sources (ADR-0012). The mock adapter
+(`packages/api/src/adapters/mock.ts`) serves the mock stored with the pinned config snapshot
+(#493), never the file on the image, so a published version answers the same way for as long as it
+is pinned. For each source request it:
+
+1. picks the source's `responses` entry for the query type; an entry qualifies only if every one of its `types`
+   keys equals the request's; among those the entry with the most `types` keys wins, ties by file order;
+2. waits a random time in the source's `latencyMs` range;
+3. takes the first scenario whose every `when` key equals the request's value (compared as
+   strings), then answers with its `respond` payload or acts out its `behavior`, else answers with
+   the entry's `default`.
+
+An unknown source or query type fails only that call, as a `failed` source status, before any
+latency wait and with no log line. A snapshot with no mock, or a mock that breaks the fixture
+policy below, makes the adapter fail every call closed the same way and logs once per snapshot:
+the `configHash` (and the `versionId` for a stored snapshot), the count and the JSON pointers of
+the problems, never a value.
+
+**`ALLOW_MOCK_SOURCES`.** A source of `kind: "mock"` is accepted only where the server runs with
+`ALLOW_MOCK_SOURCES=true` (and the stored document carries a `mock`, see below). Without it the
+server refuses to start with `mock sources need ALLOW_MOCK_SOURCES=true`, including when the
+mock source comes from a stored config document rather than a file. Each planned source is
+dispatched through its `adapter_kind` (`mock` today; the column is stored on the source result row
+and on the dispatch job, so a real adapter slots in by kind later).
+
+## Fixture policy and the generator
+
+Mock payloads are free-form, so the fixture policy (spec 5.4, 10.8;
+`packages/core/src/config/fixture-policy.ts`) is an allowlist of payload keys, not a deny list. It
+walks every `respond` and `default` payload (never `when`, which holds trigger inputs) and reports
+each violation by JSON pointer and key (`fixture.realPlate`, `fixture.validVin`,
+`fixture.plausibleDob`, `fixture.nonSyntheticName`, `fixture.nonExampleAddress`,
+`fixture.freeTextDigits`, `fixture.unknownKey`). Keys are normalised before lookup: lower-cased,
+`_` and `-` removed. Any key not listed is `fixture.unknownKey`.
+
+`FIXTURE_LEAF_KEYS`, by kind:
+
+| Kind | Keys | Value must be |
+|---|---|---|
+| `plate` | `plate` | `ZZ-` and four digits, e.g. `ZZ-0001` |
+| `vin` | `vin` | 17 valid characters that FAIL the ISO 3779 check digit |
+| `dob` | `dob`, `dateofbirth`, `birthdate`, `issued` | a real date in 1901, `YYYY-MM-DD` |
+| `name` | `last`, `first`, `middle`, `name`, `lastname`, `firstname`, `middlename`, `surname`, `ownername`, `registeredowner` | every word in `SYNTHETIC_NAMES` |
+| `address` | `address`, `street`, `addressline1` | one to four digits and `Example Ave` |
+| `status` | `status` | a scalar with no run of 4 or more digits |
+| `freeText` | `remarks`, `note`, `caution`, `description`, `offense` | text with no digits at all |
+| `container` | `vehicle`, `owner`, `owners`, `subject`, `warrant`, `warrants` | an object or array, checked in turn |
+| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency` | a scalar with no run of 4 or more digits; `year` may be 1901 to 1999 |
+
+`SYNTHETIC_NAMES` is `TESTERSON`, `SAMPLEWORTH`, `EXAMPLESON`, `SAMPLE`, `TEST`, `TESTER` and
+`EXAMPLE` (compared upper-cased).
+
+The checks run in five places: `config:validate` (mock files), the admin draft check (a draft's
+mock), the web admin mock editor (`apps/web/src/admin/mock-model.ts`), the mock adapter (each snapshot's mock, as above) and the generator.
+
+**The generator.** `scripts/mock-data/generate.ts` builds each site's mock file from fixture-safe
+builders (`scripts/mock-data/builders.ts`, site tables under `scripts/mock-data/sites/`), so the
+output passes the policy by construction, and it still checks before writing:
+
+```
+pnpm tsx scripts/mock-data/generate.ts <siteId>   # write packages/config/mock/<siteId>.json
+pnpm tsx scripts/mock-data/generate.ts --check    # exit 1 naming each file that differs
+```
+
+The output is deterministic (sorted keys, 2-space JSON, LF), so the committed files in
+`packages/config/mock/` (`default` and `example-ok`) are edited by changing the generator and
+regenerating, not by hand.
 
 ## Checking and migrating config
 
@@ -508,12 +570,10 @@ built (the `adminAudit` feature, M2).
 The store holds one document per version: the `siteConfig`, the label overlay, and, only where
 `ALLOW_MOCK_SOURCES=true`, the mock file. Routes for all of this are in [api.md](api.md).
 
-## Not in M1
+## Not yet built
 
 | Topic | Where it lands |
 |---|---|
-| Dispatch to sources, the mock adapter at runtime, source answers, `event_log` | M2 P0.5 (ADR-0012) |
-| Fixture policy checks (`FIXTURE_LEAF_KEYS`, `SYNTHETIC_NAMES`) and `scripts/mock-data/generate.ts` | M2 P0.5 |
 | Result highlighting and response mappings applied to real answers | M2 |
 | Credentials, delegation, delete from view (`credentials`, `delegation`, `resultHide`) | M3 |
 | Audit viewer (`adminAudit`) | M2 |

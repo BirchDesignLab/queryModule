@@ -163,10 +163,16 @@ Answer `202 Accepted`, once the request is recorded:
 part 0 and each nested "also run" query follows (at most 4). A nested part can have the status
 `skipped`.
 
-**M1 ends here.** In M1 the 202 is the end of the submit: the request, its parts and the audit row
-are recorded, but nothing is sent to a source and no result comes back. Dispatch, the mock adapter
-at runtime and source answers land in M2 P0.5 (ADR-0012). Until then the recorded source rows stay
-`pending`.
+**Dispatch.** The 202 is the acknowledgment (FR-064); the request, its parts, one `pending` row per
+source and the audit row are recorded first, then each source is queried in the background (the
+mock adapter today, ADR-0012). Each source settles once, to `returned`, `failed`, `timedOut`,
+`credentialsMissing`, `credentialsRejected` or `interrupted`, and the outcome is pushed to the
+owner as a `sourceStatus` message (see WebSocket below). The source's own answer never rides in
+the 202.
+
+While the server drains (SIGTERM) or after a fatal error, a new submit is answered `503
+unavailable` before anything is recorded. A retry that replays an idempotency key already
+recorded still gets its stored 202.
 
 Other answers:
 
@@ -180,7 +186,7 @@ Other answers:
 | 413 | `payloadTooLarge` | Body over 32 KiB. |
 | 429 | `rateLimited` | More than 30 submits per user per minute. `Retry-After` carries the seconds. |
 | 500 | `internal` | Nothing was acknowledged. |
-| 503 | `unavailable` | The server is shutting down or not ready. |
+| 503 | `unavailable` | The server is draining (SIGTERM) or failed fatally; nothing was recorded. An idempotent replay still gets its stored 202. |
 
 ### Admin config
 
@@ -273,7 +279,8 @@ with `"v": 1` (the protocol version) and a `type`. Frames over 4096 bytes close 
 
 **Upgrade checks**, cheapest first, before any socket exists: the path must be exactly
 `/api/v1/ws` with no query string (`400` otherwise, so no token ever rides in a URL); at most 60
-upgrades per client address per minute (`429` with `Retry-After`); the `Origin` must be the site's
+upgrades per client address per 60 seconds (`429` with `Retry-After`; the deploy env may set
+`WS_UPGRADE_LIMIT` and `WS_UPGRADE_WINDOW_MS`, defaults 60 and 60000); the `Origin` must be the site's
 own (`403`), or absent with an `Authorization: Bearer` header; a live session (`401`); and no
 pending forced password change (`403`).
 
@@ -285,26 +292,41 @@ same `nonce` and its own `serverTime`. A socket with no ping for 60 seconds is c
 
 | Code | Meaning |
 |---|---|
-| 4001 | The session ended: sign-out, expiry, revocation or the user was disabled. |
+| 4001 | The session ended: sign-out, expiry, revocation or the user was disabled. The only code in the contract (`WS_CLOSE_CODES.sessionEnded`): the client signs the user out. |
 | 4000 | No ping for 60 seconds. |
 | 1008 | A frame that does not parse as a client message. |
 | 1001 | The server is shutting down. |
+| 1011 | An internal error (for example the `welcome` could not be built). |
+
+4001 is the only close code a client must act on. The others are server-local
+(`WS_LOCAL_CLOSE` in `packages/api/src/ws/server.ts`: 1001 shutdown, 1008 badMessage, 1011
+internal, 4000 idle) and all mean the same thing: reconnect with backoff, send `hello` and refetch
+over HTTP what you missed (replay by `lastSeq` is M2 P1).
 
 **Messages.**
 
-| Message | Direction | M1 status |
+| Message | Direction | Status |
 |---|---|---|
 | `hello` | client to server, `{ lastSeq: int or null }` | live. The server answers `welcome`. |
-| `welcome` | server to client, `{ latestSeq }` | live. `latestSeq` is always 0 in M1; the real value arrives with `event_log` (M2 P0.5). |
+| `welcome` | server to client, `{ latestSeq }` | live. `latestSeq` is the owner's newest `event_log` seq (0 when none), read live at each `hello`. Replay from `hello.lastSeq` is M2 P1; no HTTP route returns per-source status, so a missed `sourceStatus` is lost until replay lands. |
 | `ping` | client to server, `{ nonce }` (1 to 64 characters) | live. |
 | `pong` | server to client, `{ nonce, serverTime }` | live. |
 | `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The metric is recorded from M2 P1. |
-| `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | planned. The contract and the event bus exist; nothing publishes it until dispatch lands (M2 P0.5), and replay by `lastSeq` follows with the feed (M2 P1). |
+| `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | live. Published after each source outcome commits, to the owner's sockets only (never another user's). Each also lands in `event_log`; replay by `lastSeq` follows with the feed (M2 P1). |
 | `resultHidden` | server to client, `{ seq, at, correlationId, resultIds }` | planned (contract since M2 P0). Sent after a delete from view so the owner's other devices drop the results; replayable (M3 P2). |
 | `resync` | server to client, `{ reason: "tooOld" or "tooMany" or "unknownCursor", latestSeq }` | planned (contract since M2 P0). Replay refused: the client refetches over HTTP and sets its mark to `latestSeq` (M2 P1). |
 
-Receipt policy (ADR-0013; the feed client lands in M2 P0.5): clients parse server messages
+Receipt policy (ADR-0013; the web feed client follows it): clients parse server messages
 tolerantly, the server stays strict. An unknown `type` is dropped and unknown keys
 are stripped, so a new message type or optional field needs no minimum client version bump.
 
-The web app uses the socket in M1 for the heartbeat shown on the Status page.
+The web app uses the socket for the heartbeat shown on the Status page and for the live per-source
+status under each acknowledged request (see [demo.md](demo.md)).
+
+**Startup and shutdown.** At start, before any socket exists, a sweep marks every source result
+still `pending` as `interrupted` (one `interrupted` audit row, whose details carry reason `processRestart`, and one plain
+`sourceStatus` `event_log` row with status `interrupted`, each); nothing is re-dispatched. On SIGTERM the server answers new submits
+`503`, refuses new upgrades, stops listening and waits up to 2 s for in-flight HTTP, stops dispatch intake, then lets in-flight dispatch finish up to the
+latest outstanding source deadline plus 5 s, and only then closes the sockets and the database.
+A source still `pending` after that stays so until the next start's sweep marks it `interrupted`.
+Size `stop_grace_period` from that bound: [deploy.md](deploy.md) has the 18 s `timeoutMs` note.
