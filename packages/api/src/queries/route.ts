@@ -159,6 +159,7 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
         if (!d.lifecycle.draining) throw new DispatchRefusedError();
         // The drain cut this request off past its HTTP bound (critic C1) and stopped intake: the
         // rows stay pending for the next start's sweep, and the drain still exits 0 (spec 5.2).
+        // Its 202 below is never delivered (the socket is gone); a retry with the key replays it.
         d.logger.warn("dispatch refused during drain", { correlationId: ack.body.correlationId });
       }
     } catch (e) {
