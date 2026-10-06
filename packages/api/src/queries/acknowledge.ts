@@ -1,4 +1,4 @@
-import type { SubmitQueryResponse } from "@querymodule/core/contracts";
+import { type SubmitQueryResponse, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
 import type { PlanPart } from "@querymodule/core/planner";
 import { queryRequest, requestKey, sourceResult } from "../db/schema";
 import { withTransaction } from "../db/tx";
@@ -147,9 +147,10 @@ export async function acknowledge(
           partCount: plan.parts.length,
         },
       });
-      // the route parses this body with SubmitQueryResponseSchema before sending
+      // Parsed inside T1 (AW3 review C-C-m1): a body that fails its schema rolls T1 back, so no
+      // path answers 500 for a committed, dispatched query.
       return {
-        body: {
+        body: SubmitQueryResponseSchema.parse({
           correlationId,
           acknowledgedAt,
           parts: plan.parts.map((part) => ({
@@ -159,7 +160,7 @@ export async function acknowledge(
             sourceIds: part.sourceIds,
             droppedSourceIds: part.droppedSourceIds,
           })),
-        },
+        }),
         acknowledgedAt,
         results: dispatched.map(({ partId, sourceId, resultId }) => ({
           partId,

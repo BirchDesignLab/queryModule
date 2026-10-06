@@ -203,8 +203,11 @@ up() {
   docker rm -f "$name" >/dev/null 2>&1 || true
   docker volume rm -f "$vol" >/dev/null 2>&1 || true
   docker volume create "$vol" >/dev/null
+  # WS_UPGRADE_LIMIT: CI step 12 drives this container from one IP and every signed-in page opens a
+  # feed socket, so the default 60 upgrades a minute would throttle the suite with 429s.
   docker run -d --name "$name" -p 127.0.0.1:3000:3000 -v "$vol:/data" -v "$sec:/run/secrets:ro" \
-    -e PUBLIC_ORIGIN=http://localhost:3000 -e ALLOW_MOCK_SOURCES=true --stop-timeout 30 "$image" >/dev/null
+    -e PUBLIC_ORIGIN=http://localhost:3000 -e ALLOW_MOCK_SOURCES=true -e WS_UPGRADE_LIMIT=10000 \
+    --stop-timeout 30 "$image" >/dev/null
   for i in $(seq 1 60); do
     if curl -fsS http://127.0.0.1:3000/api/v1/health >/dev/null 2>&1; then break; fi
     if [ "$i" = 60 ]; then docker logs "$name"; echo "health not ok within 60 s"; exit 1; fi

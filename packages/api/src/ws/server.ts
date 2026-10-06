@@ -10,14 +10,28 @@ import { WebSocket, WebSocketServer } from "ws";
 import { BACKGROUND_HEADER } from "../auth/identity";
 import { trustedClientIp } from "../auth/rate-limit";
 import type { AppDeps } from "../deps";
+import { latestSeq } from "../dispatch/event-log";
 import { DEV_ORIGINS } from "../env";
 import type { Principal } from "../seams";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
-/** Upgrade attempts per client IP per window (decision D-A9, spec 5.3; no FR/SEC ID covers it). */
+/**
+ * The default upgrade attempts per client IP per window (decision D-A9, spec 5.3; no FR/SEC ID
+ * covers it). The deploy env may change it (WS_UPGRADE_LIMIT, WS_UPGRADE_WINDOW_MS): the e2e
+ * harness raises it, since every signed-in page opens a feed socket from one IP.
+ */
 export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
-export const WS_LOCAL_CLOSE = { idle: 4000, badMessage: 1008, shutdown: 1001 } as const;
+/**
+ * Server-local close codes, RFC 6455 or local, outside the contract (WS_CLOSE_CODES): any close
+ * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: welcome.latestSeq failed.
+ */
+export const WS_LOCAL_CLOSE = {
+  idle: 4000,
+  badMessage: 1008,
+  shutdown: 1001,
+  internal: 1011,
+} as const;
 export interface WsHandle {
   stopAccepting(): void;
   close(): Promise<void>;
@@ -108,8 +122,19 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     ws.on("message", async (raw) => {
       const m = WsClientMessageSchema.safeParse(parse(String(raw)));
       if (!m.success) return ws.close(WS_LOCAL_CLOSE.badMessage, "bad message");
-      if (m.data.type === "hello")
-        return send({ v: WS_PROTOCOL_VERSION, type: "welcome", latestSeq: 0 });
+      if (m.data.type === "hello") {
+        // The owner's newest event_log seq (spec 5.3); replay from hello.lastSeq is M2 P1.
+        let seq: number;
+        try {
+          seq = await latestSeq(d.db, p.userId);
+        } catch (err: unknown) {
+          d.logger.error("ws welcome latestSeq failed", {
+            errorName: err instanceof Error ? err.name : typeof err,
+          });
+          return ws.close(WS_LOCAL_CLOSE.internal, "internal error");
+        }
+        return send({ v: WS_PROTOCOL_VERSION, type: "welcome", latestSeq: seq });
+      }
       if (m.data.type === "ping") {
         let live: boolean;
         try {
@@ -165,8 +190,8 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
     );
     const hit = await d.limiter.hit(
       `ws:ip:${ip}`,
-      WS_UPGRADE_LIMIT.limit,
-      WS_UPGRADE_LIMIT.windowMs,
+      d.env.wsUpgradeLimit.limit,
+      d.env.wsUpgradeLimit.windowMs,
     );
     if (!hit.allowed) return rejectLimited(socket, hit.retryAfterSeconds);
     const origin = req.headers.origin;

@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -189,6 +189,8 @@ export function mockDriftErrors(
   mockDir: string,
   gen: (siteId: string) => string = generate,
 ): string[] {
+  const unreadable = "mock directory unreadable: mock/ (restore packages/config/mock)";
+  if (!existsSync(mockDir)) return [unreadable]; // one line for one cause (AW3 review G-G-m1)
   const out: string[] = [];
   for (const { siteId, state } of mockFileStates(mockDir, gen)) {
     if (state === "generatorFailed") {
@@ -204,7 +206,7 @@ export function mockDriftErrors(
   try {
     names = readdirSync(mockDir).sort();
   } catch {
-    out.push("mock directory unreadable: mock/ (restore packages/config/mock)");
+    out.push(unreadable);
     return out;
   }
   for (const name of names) {

@@ -1,5 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
-import { requestKey, sourceResult } from "../../src/db/schema";
+import type { Db } from "../../src/db/client";
+import { queryRequest, requestKey, sourceResult } from "../../src/db/schema";
+import { uuidv7 } from "../../src/ids";
 import { open } from "../../src/keys/aead";
 import { payloadAad, unwrapRequestKey } from "../../src/keys/request-keys";
 import { TEST_SECRETS } from "./fixture";
@@ -46,4 +48,69 @@ export async function openResults(t: TestApp, correlationId: string): Promise<Op
           ) as unknown)
         : null,
   }));
+}
+
+/** One source_result row seeded straight into the database, with its query_request part. */
+export interface SeededResult {
+  correlationId: string;
+  partId: number;
+  sourceId: string;
+  resultId: string;
+  userId: string;
+  credentialUserId: string | null;
+  createdAt: number;
+}
+
+/**
+ * Inserts a query_request part and one source_result row for it (status `pending` unless given),
+ * as a T1 that committed and whose T2 never did. Mock ids and synthetic values only (spec 5.4).
+ */
+export async function seedResult(
+  db: Db,
+  o: {
+    userId: string;
+    credentialUserId?: string | null;
+    partId?: number;
+    sourceId?: string;
+    status?: "pending" | "returned";
+    createdAt?: number;
+  },
+): Promise<SeededResult> {
+  const createdAt = o.createdAt ?? Date.now();
+  const r: SeededResult = {
+    correlationId: uuidv7(createdAt),
+    partId: o.partId ?? 0,
+    sourceId: o.sourceId ?? "stateSource",
+    resultId: uuidv7(createdAt),
+    userId: o.userId,
+    credentialUserId: o.credentialUserId ?? null,
+    createdAt,
+  };
+  await db.insert(queryRequest).values({
+    correlationId: r.correlationId,
+    partId: r.partId,
+    userId: r.userId,
+    origin: "primary",
+    queryType: "VEH",
+    typeValues: {},
+    plateOnly: 1,
+    selectedSourceIds: [r.sourceId],
+    droppedSourceIds: [],
+    configHash: "seeded",
+    submittedAt: createdAt,
+  });
+  const status = o.status ?? "pending";
+  await db.insert(sourceResult).values({
+    resultId: r.resultId,
+    correlationId: r.correlationId,
+    partId: r.partId,
+    sourceId: r.sourceId,
+    userId: r.userId,
+    status,
+    credentialUserId: r.credentialUserId,
+    adapterKind: "mock",
+    createdAt,
+    ...(status === "returned" ? { receivedAt: createdAt } : {}),
+  });
+  return r;
 }

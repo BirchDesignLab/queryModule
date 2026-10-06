@@ -125,10 +125,10 @@ function snapshotIds(snapshot: LoadedConfig): Record<string, string> {
 
 /**
  * The built-in mock factory (spec 5.4): an adapter over a checked private copy of the snapshot's
- * stored mock (#493, never the image's file; C-m2). It fails closed, every call SourceError("failed"), when the snapshot has no
- * mock, or when the stored mock breaks the fixture policy (it may predate it): one error log
- * line per snapshot (the registry memoises) with the ids, the count and the pointers, never a
- * value (spec 5.9, 10.8).
+ * stored mock (#493, never the image's file; C-m2). It fails closed, every call
+ * SourceError("failed"), when the snapshot has no mock, or when the stored mock breaks the fixture
+ * policy (it may predate it): one error log line per snapshot (the registry memoises) with the ids,
+ * the count and the pointers, never a value (spec 5.9, 10.8).
  */
 export function createMockFactory(logger: Logger): AdapterFactory {
   return {

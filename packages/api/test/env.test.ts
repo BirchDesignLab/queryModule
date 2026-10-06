@@ -22,7 +22,29 @@ describe("readDeployEnv", () => {
       corsOrigins: [ORIGIN],
       frameAncestors: [],
       webDist: "/app/web",
+      wsUpgradeLimit: { limit: 60, windowMs: 60_000 },
     });
+  });
+  it("reads the WebSocket upgrade limit and window from the env (D-A9; e2e opens many sockets)", () => {
+    const e = readDeployEnv(
+      { PUBLIC_ORIGIN: ORIGIN, WS_UPGRADE_LIMIT: "1000", WS_UPGRADE_WINDOW_MS: "30000" },
+      defaults,
+    );
+    expect(e.wsUpgradeLimit).toEqual({ limit: 1000, windowMs: 30_000 });
+    expect(
+      readDeployEnv(
+        { PUBLIC_ORIGIN: ORIGIN, WS_UPGRADE_LIMIT: "", WS_UPGRADE_WINDOW_MS: "" },
+        defaults,
+      ).wsUpgradeLimit,
+    ).toEqual({ limit: 60, windowMs: 60_000 });
+    for (const bad of ["0", "-1", "1.5", "abc", " ", "1e3"]) {
+      expect(() =>
+        readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, WS_UPGRADE_LIMIT: bad }, defaults),
+      ).toThrow(new DeployEnvError("WS_UPGRADE_LIMIT must be a positive integer"));
+      expect(() =>
+        readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, WS_UPGRADE_WINDOW_MS: bad }, defaults),
+      ).toThrow(new DeployEnvError("WS_UPGRADE_WINDOW_MS must be a positive integer"));
+    }
   });
   it("adds localhost origins only in development", () => {
     const dev = readDeployEnv(

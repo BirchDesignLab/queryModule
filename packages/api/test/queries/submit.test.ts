@@ -461,7 +461,7 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
         throw e;
       }),
     );
-    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => true);
     const key = crypto.randomUUID();
     const [a, b] = await Promise.all([post(body(), { key }), post(body(), { key })]);
     const ra = await accepted(a);
@@ -658,7 +658,7 @@ describe("POST /api/v1/queries fail closed and middleware (SEC-012, spec 5.9)", 
 describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-040, FR-041)", () => {
   it("a 202 enqueues one job per source_result row with its resultId, the pinned snapshot and deadline", async () => {
     const { t, post, body, userId } = await setup();
-    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => true);
     const pinned = t.deps.config.current();
     // A publish lands while T1 runs: the jobs keep the snapshot prepare planned against.
     const record = t.deps.audit.record.bind(t.deps.audit);
@@ -704,7 +704,7 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
 
   it("a replayed Idempotency-Key enqueues nothing", async () => {
     const { t, post, body } = await setup();
-    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => true);
     const key = crypto.randomUUID();
     await accepted(await post(body(), { key }));
     expect(enqueue).toHaveBeenCalledTimes(1);
@@ -816,7 +816,7 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
 
   it("AW3 critic (b): a planning guard trips before T1: 500, nothing committed, nothing enqueued", async () => {
     const { t, post, body, userId } = await setup();
-    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => {});
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => true);
     corruptPrepare.on = true;
     try {
       const r = await post(body());
@@ -842,6 +842,28 @@ describe("POST /api/v1/queries hands off to the dispatcher (spec 5.2 step 5, FR-
       .where(eq(auditEvent.actorUserId, userId));
     // only the sign-in row: no submitted, dispatched or acknowledged row
     expect(audit.filter((a) => a.correlationId !== null)).toEqual([]);
+    expect(t.fatals).toEqual([]);
+  });
+
+  it("AW3 review C-C-m1: a 202 body that fails its schema rolls T1 back: 500, nothing committed", async () => {
+    const { t, post, body, userId } = await setup();
+    const enqueue = vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => true);
+    vi.spyOn(SubmitQueryResponseSchema, "parse").mockImplementationOnce(() => {
+      throw new Error("response schema mismatch");
+    });
+    const r = await post(body());
+    expect(r.status).toBe(500);
+    expect(enqueue).not.toHaveBeenCalled();
+    const requests = await t.deps.db
+      .select()
+      .from(queryRequest)
+      .where(eq(queryRequest.userId, userId));
+    expect(requests).toEqual([]);
+    const results = await t.deps.db
+      .select()
+      .from(sourceResult)
+      .where(eq(sourceResult.userId, userId));
+    expect(results).toEqual([]);
     expect(t.fatals).toEqual([]);
   });
 

@@ -352,9 +352,8 @@ describe("config:validate mock drift (#531, spec 10.8)", () => {
   });
   it("AW2 review G-G-M1: an unreadable mock directory is a fixed-text error, not a stack", () => {
     const d = join(tmp(), "missing");
+    // AW3 review G-G-m1: one line for one cause, no drift line per site
     expect(mockDriftErrors(d)).toEqual([
-      "mock file drift: mock/default.json (run scripts/mock-data/generate.ts default)",
-      "mock file drift: mock/example-ok.json (run scripts/mock-data/generate.ts example-ok)",
       "mock directory unreadable: mock/ (restore packages/config/mock)",
     ]);
   });

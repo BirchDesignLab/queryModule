@@ -1,4 +1,4 @@
-import { type Role, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
+import type { Role } from "@querymodule/core/contracts";
 import type { Hono } from "hono";
 import type { AppDeps } from "../deps";
 import type { DispatchJob } from "../dispatch/dispatcher";
@@ -27,6 +27,14 @@ export function lostIdempotencyRace(e: unknown): boolean {
     if (x.name !== "DrizzleQueryError" && IDEMPOTENCY_RACE.test(x.message)) return true;
   }
   return false;
+}
+
+/** The dispatcher refused jobs whose T1 has committed (intake stopped or aborted). */
+export class DispatchRefusedError extends Error {
+  constructor() {
+    super("dispatch: enqueue refused");
+    this.name = "DispatchRefusedError";
+  }
 }
 
 /**
@@ -81,8 +89,8 @@ export function planJobs(p: PreparedSubmit, principal: Principal): JobTemplate[]
 
 /**
  * T1's results bound to the planned jobs by index (acknowledge writes one row per pair, in pair
- * order), with the monotonic reading taken as T1 returned; a replay's empty results bind nothing. A result that does not line up with its pair is
- * a bug, thrown for the route's post-commit backstop.
+ * order), with the monotonic reading taken as T1 returned; a replay's empty results bind nothing. A
+ * result that does not line up with its pair is a bug, thrown for the route's post-commit backstop.
  */
 export function bindJobs(
   templates: readonly JobTemplate[],
@@ -110,10 +118,15 @@ export function bindJobs(
  * X-Requested-With check. Nothing from the body is logged; any other throw reaches
  * app.onError as 500 internal, a T1 failure only as a SubmitTransactionError. A role outside
  * QUERY_ROLES gets 403 before anything is read. Jobs are planned before T1 (a guard that trips is
- * a 500 with nothing committed) and bound to T1's rows as soon as it returns, before the body is
- * parsed; a throw there is logged by class and ids and fails closed (d.fatal), so committed rows
- * are never silently left undispatched. The 202 never waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
- * nothing: the winner enqueued its own rows.
+ * a 500 with nothing committed), and T1 parses the 202 body before it commits (C-C-m1). The jobs
+ * are bound to T1's rows as soon as it returns; a throw there is logged by class and ids and
+ * fails closed (d.fatal), so committed rows are never silently left undispatched. The 202 never
+ * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
+ * nothing: the winner enqueued its own rows. While the server drains (spec 5.2) or fails closed
+ * (spec 8.1) a new submit gets 503 unavailable before T1; a replay of an acknowledged one still gets its stored 202. A refused
+ * enqueue after T1 takes the same backstop, except during the drain, where only a request the
+ * drain cut off past its HTTP bound reaches it: that one logs a warning and leaves its rows
+ * pending for the next start's sweep.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
   app.post("/api/v1/queries", requireSession(d.identity), async (c) => {
@@ -121,6 +134,9 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     const a = await admitSubmit(c, d);
     if (a.kind === "reject") return a.response;
     if (a.kind === "replay") return c.json(a.body, 202);
+    // SIGTERM drain (spec 5.2) or fatal close (spec 8.1): a new submit is refused before T1, so no
+    // row is written.
+    if (d.lifecycle.draining || d.lifecycle.failed) return apiError(c, "unavailable");
     const principal = c.get("principal");
     const p = prepareSubmit(c, d, a.raw, principal);
     if (!p.ok) return p.response;
@@ -138,7 +154,15 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       acknowledgedMonoMs = d.monotonic.nowMs();
     }
     try {
-      d.dispatcher.enqueue(bindJobs(templates, ack, acknowledgedMonoMs));
+      const jobs = bindJobs(templates, ack, acknowledgedMonoMs);
+      // a lost race replays the winner and has nothing to enqueue (critic Q2)
+      if (jobs.length > 0 && !d.dispatcher.enqueue(jobs)) {
+        if (!d.lifecycle.draining) throw new DispatchRefusedError();
+        // The drain cut this request off past its HTTP bound (critic C1) and stopped intake: the
+        // rows stay pending for the next start's sweep, and the drain still exits 0 (spec 5.2).
+        // Its 202 below is never delivered (the socket is gone); a retry with the key replays it.
+        d.logger.warn("dispatch refused during drain", { correlationId: ack.body.correlationId });
+      }
     } catch (e) {
       // Backstop (AW3 critic b): T1 committed, so the 202 stands; the process fails closed and the
       // restart sweep settles the pending rows as interrupted, with audit (spec 5.2, 8.1).
@@ -148,6 +172,6 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       });
       d.fatal(e);
     }
-    return c.json(SubmitQueryResponseSchema.parse(ack.body), 202);
+    return c.json(ack.body, 202);
   });
 }
