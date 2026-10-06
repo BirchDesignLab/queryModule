@@ -2,7 +2,7 @@ import type { Translator } from "@querymodule/client";
 import type { JsonObject } from "./draft.js";
 import { mockPointer } from "./mock-edit.js";
 import type { MockChange } from "./mock-model.js";
-import { diffMock, mockChangeCount, parseMock } from "./mock-model.js";
+import { locateMockChanges, mockChangeCount, parseMock } from "./mock-model.js";
 
 /**
  * The mock's changes as Review lines (Task 3b, #550, CFG-2; Q2, developer 10-05-26): the source, the
@@ -49,14 +49,8 @@ export function mockChangeEntries(
     live === null || live === undefined ? { ok: true as const, mock: null } : parseMock(live);
   const after = edited === null ? { ok: true as const, mock: null } : parseMock(edited);
   if (!before.ok || !after.ok) return unreadable(live, edited, t);
-  return diffMock(before.mock, after.mock).map((change, i) => {
+  return locateMockChanges(before.mock, after.mock).map(({ change, response }, i) => {
     const queryType = "queryType" in change ? change.queryType : null;
-    const index =
-      queryType === null
-        ? -1
-        : (after.mock?.sources[change.sourceId]?.responses.findIndex(
-            (r) => r.queryType === queryType,
-          ) ?? -1);
     return {
       id: `${i}:${JSON.stringify(change)}`,
       kind: KIND[change.kind],
@@ -67,10 +61,12 @@ export function mockChangeEntries(
       text: t(`admin.diff.mock.${change.kind}`, {
         n: "scenario" in change ? change.scenario + 1 : 0,
       }),
+      // The response this change is about, found by the diff itself (query type, then type match,
+      // then place among responses of one type); a removed response opens its source.
       target:
-        index < 0
+        response === null
           ? mockPointer.source(change.sourceId)
-          : mockPointer.response(change.sourceId, index),
+          : mockPointer.response(change.sourceId, response),
     };
   });
 }

@@ -9,6 +9,7 @@ import { type JsonObject, type PathSegment, type SetPathOptions, toPointer } fro
 import { EditorSection, NodeEditor } from "./GenericForm.js";
 import { LabelOverlayEditor } from "./LabelOverlay.js";
 import { MockEditor } from "./MockEditor.js";
+import { SourceMockResponses } from "./MockFlows.js";
 import { PicklistsEditor } from "./PicklistEditor.js";
 import {
   HIDDEN_KEYS,
@@ -109,6 +110,11 @@ export function FormTab({ doc }: { doc: JsonObject }) {
             <CommandsEditor value={value} doc={doc} idPrefix={idPrefix} />
           ) : top === "quickAccess" ? (
             <QuickAccessEditor value={value} doc={doc} idPrefix={idPrefix} />
+          ) : top === "sources" ? (
+            <>
+              <NodeEditor value={value} path={[top]} idPrefix={idPrefix} onChange={onChange} />
+              <SourceMockResponses />
+            </>
           ) : (
             <NodeEditor value={value} path={[top]} idPrefix={idPrefix} onChange={onChange} />
           )}
