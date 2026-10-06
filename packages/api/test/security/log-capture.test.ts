@@ -1,17 +1,24 @@
 // packages/api/test/security/log-capture.test.ts
+import { inspect } from "node:util";
 import {
   AdminUserListSchema,
   AdminUserSessionListSchema,
   CreateUserResponseSchema,
+  SubmitQueryResponseSchema,
 } from "@querymodule/core/contracts";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
+import type { Credentials, SourceAdapter } from "../../src/adapters/types";
 import { sessionCookieName, toBetterAuthLogger } from "../../src/auth/auth";
+import { Secret } from "../../src/credentials/secret";
+import { auditEvent, sourceResult } from "../../src/db/schema";
 import type { RequestDeks } from "../../src/keys/request-keys";
 import { createLogger } from "../../src/log/logger";
 import { grantRole } from "../../src/ops/grant-role";
 import { ALL_ON, API, adminConfigApp, withSiteConfig } from "../helpers/admin-config";
 import { TEST_SECRETS } from "../helpers/fixture";
+import { manualTime } from "../helpers/manual-time";
 import { createTestApp, startTestServer, type TestApp } from "../helpers/test-app";
 
 // A pass-through spy on createRequestKeys: T1 zeroes the DEKs when it finishes, so the bytes
@@ -503,5 +510,105 @@ describe("SEC-006 log capture: a failed query on an unsanitized route (M1 phase 
     expect(sinks).toContain("DrizzleQueryError");
     expect(sinks.includes(tokenLike), "token in a log line").toBe(false);
     expect(sinks.includes("Failed query"), "query text in a log line").toBe(false);
+  });
+});
+
+describe("SEC-006 log capture: an adapter that throws with its request (spec 10.3, 5.9)", () => {
+  // Synthetic values only (CLAUDE.md, spec 5.4): the plate is the submitted value, the password a
+  // stand-in for a credential an adapter could quote back in its error.
+  const PLATE = "ZZ-0001";
+  const PASSWORD = "hunter2";
+
+  it("an Error whose message and cause carry the plate and a password reaches no sink", async () => {
+    const time = manualTime();
+    const t = await createTestApp({
+      clock: time.clock,
+      timers: time.timers,
+      monotonic: time.monotonic,
+    });
+    await t.createUser("dispatcher@example.test", PW);
+    const cookie = await t.cookieFor("dispatcher@example.test", PW);
+    const creds = new Secret<Credentials>({ username: "zz-officer-0001", secret: PASSWORD });
+    const calls: string[] = [];
+    // Every source's adapter echoes its request config in the message and the cause, as a real
+    // adapter's HTTP client error can.
+    const throwing: SourceAdapter = {
+      query: async (req) => {
+        calls.push(req.sourceId);
+        const config = { plate: PLATE, password: PASSWORD };
+        throw new Error(`state system refused ${JSON.stringify(config)}`, {
+          cause: { ...config, creds, request: req },
+        });
+      },
+    };
+    vi.spyOn(t.deps.adapters, "get").mockReturnValue(throwing);
+    const r = await t.request("/api/v1/queries", {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        "x-requested-with": "querymodule",
+        "idempotency-key": crypto.randomUUID(),
+      },
+      body: JSON.stringify({
+        queryType: "VEH",
+        values: { plate: PLATE, state: "TX" },
+        sourceIds: ["stateSource", "nationalSource"],
+        mode: "normal",
+        configHash: t.deps.config.current().configHash,
+      }),
+    });
+    expect(r.status).toBe(202);
+    const { correlationId } = SubmitQueryResponseSchema.parse(await r.json());
+    await time.run(0);
+    await vi.waitFor(() => expect(t.deps.dispatcher.inFlight()).toBe(0));
+
+    expect(calls.sort()).toEqual(["nationalSource", "stateSource"]);
+    // the outcome is the enumerated code, never the adapter's text
+    const rows = await t.deps.db
+      .select({ status: sourceResult.status, errorCode: sourceResult.errorCode })
+      .from(sourceResult)
+      .where(eq(sourceResult.correlationId, correlationId));
+    expect(rows).toEqual([
+      { status: "failed", errorCode: "failed" },
+      { status: "failed", errorCode: "failed" },
+    ]);
+    const responded = await t.deps.db
+      .select({ details: auditEvent.details })
+      .from(auditEvent)
+      .where(
+        and(eq(auditEvent.correlationId, correlationId), eq(auditEvent.type, "sourceResponded")),
+      );
+    expect(responded).toHaveLength(2);
+    for (const a of responded) expect(a.details).toMatchObject({ errorCode: "failed" });
+    expect(t.fatals).toEqual([]);
+
+    const sinks = [...t.logLines, ...stray].join("\n");
+    expect(t.logLines.length).toBeGreaterThan(0);
+    const audit = JSON.stringify(responded);
+    for (const f of [PLATE, PASSWORD, "state system refused"]) {
+      expect(sinks.includes(f), `leaked to a log: ${f}`).toBe(false);
+      expect(audit.includes(f), `leaked to sourceResponded: ${f}`).toBe(false);
+    }
+  });
+
+  it("a Secret reaches no sink through the app logger, JSON.stringify, String() or util.inspect", async () => {
+    const t = await createTestApp();
+    const creds = new Secret<Credentials>({ username: "zz-officer-0001", secret: PASSWORD });
+    const bare = new Secret(PASSWORD);
+    // field keys the logger does not redact by name, so only Secret keeps the value out
+    t.deps.logger.error("adapter request", { request: { sourceId: "stateSource", login: creds } });
+    t.deps.logger.warn("adapter login", { login: bare, nested: [{ token2: bare }] });
+    t.deps.logger.info(`adapter login ${JSON.stringify({ login: creds })} ${String(bare)}`);
+    t.deps.logger.error("adapter failed", {
+      error: new Error(`login ${String(creds)}`, { cause: { login: creds } }),
+    });
+    console.error("adapter", creds, inspect({ login: bare }, { showHidden: true, depth: 10 }));
+
+    const sinks = [...t.logLines, ...stray].join("\n");
+    expect(t.logLines.length).toBeGreaterThanOrEqual(4);
+    expect(stray.length).toBeGreaterThan(0);
+    expect(sinks.includes(PASSWORD), "Secret value in a sink").toBe(false);
+    expect(sinks).toContain("[secret]");
   });
 });
