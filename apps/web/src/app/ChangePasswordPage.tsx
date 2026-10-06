@@ -1,12 +1,10 @@
 import type { ChangePasswordCode } from "@querymodule/client";
+import { PASSWORD_MIN_LENGTH } from "@querymodule/core/config";
 import { focusFirstInvalid, TextField } from "@querymodule/web-ui";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useT } from "./i18n-context.js";
 import { useServices } from "./services-context.js";
 import { useSignOut } from "./use-sign-out.js";
-
-/** Better Auth's minPasswordLength for this app (packages/api/src/auth/auth.ts). */
-const MIN_LENGTH = 12;
 
 type Field = "current" | "next" | "confirm";
 type Errors = Partial<Record<Field, string>>;
@@ -61,7 +59,8 @@ export function ChangePasswordPage() {
     const required = (label: string) => t("validation.required", { label: t(label) });
     if (current === "") found.current = required("password.change.current");
     if (next === "") found.next = required("password.change.new");
-    else if (next.length < MIN_LENGTH) found.next = t("password.change.tooShort");
+    else if (next.length < PASSWORD_MIN_LENGTH)
+      found.next = t("password.change.tooShort", { min: PASSWORD_MIN_LENGTH });
     if (confirm === "") found.confirm = required("password.change.confirm");
     else if (next !== "" && confirm !== next) found.confirm = t("password.change.mismatch");
     return found;
@@ -90,7 +89,7 @@ export function ChangePasswordPage() {
         return;
       }
       const refusal = REFUSAL[result.code];
-      const message = t(refusal.key);
+      const message = t(refusal.key, { min: PASSWORD_MIN_LENGTH });
       if (refusal.field === null) setFormError(message);
       else setErrors({ [refusal.field]: message });
       announcer.announce(message);

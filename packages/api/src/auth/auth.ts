@@ -1,3 +1,4 @@
+import { PASSWORD_MIN_LENGTH } from "@querymodule/core/config";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware, isAPIError } from "better-auth/api";
@@ -214,7 +215,11 @@ export function createAuth(o: {
     // withTransaction (packages/api/src/db/**, critical tier) must be the only place that does.
     database: drizzleAdapter(o.db, { provider: "sqlite", schema: authSchema, transaction: false }),
     // Public sign-up disabled (spec 5.6): demo users come from seed.ts, not this endpoint.
-    emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 12 },
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: true,
+      minPasswordLength: PASSWORD_MIN_LENGTH,
+    },
     session: {
       // The idle clock is ours (Task 15); Better Auth only enforces the absolute limit.
       expiresIn: o.session.absoluteMinutes * 60,
