@@ -37,9 +37,9 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
-| Linux laptop (deploy host) | Host lane (host steps only) | M1 exit | idle (`m1` promoted 10-04-26; manual m1 smoke held until the next visit) | 10-04-26 |
+| Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
 | Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | idle (P0.5 done and promoted 10-07-26; M2 P1 planning next) | 10-07-26 |
-| Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B (BW0) | running (session "M2P0 Track B2") | 10-05-26 17:10 |
+| Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B | idle (no local B session; BW2 and BW3 ran in the cloud and merged, cloud credits spent) | 10-07-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | idle (start brief from "M2 planning 1") | 10-05-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
 
@@ -60,6 +60,14 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Notes: developer target 10-04-26: mock responses working, then a demo pause at the M2 P1 gate.
 
 ### Track B
+
+- Issue: none open; M2 P0.5 Track B closed (Tasks 1 to 8, #548 to #556)
+- Branch / PR: none; BW0 #566, BW2 #568 #571 #577, BW3 #570 #579 merged
+- Last green: `pnpm verify` and CI on main 3e85c2b (P0.5 promoted)
+- Next step: M2 P1 planning (developer starts it); follow-ups #572 (mock editor minors), #576 (202 skip reason and alsoRun origin for M2 P1, client minors), #565 (Try a match, post-demo)
+- Blocked by: none
+- Local-only state: none
+- Notes: no local B session; the cloud sessions are done.
 
 
 ### Track D
