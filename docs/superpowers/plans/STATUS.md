@@ -20,7 +20,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | M1 | P2 engine | done · [plan](2026-09-28-track-a-p2.md) · [issues][m1-p2-a] | done · [plan](2026-09-28-track-b-p2.md) · [issues][m1-p2-b] | n/a | done · in A and B plans · [issues][m1-p2-c] | done · Form on `GET config`; parser property tests · [all][m1-p2] |
 | M1 | P3 flow | done · [plan](2026-09-29-track-a-p3.md), UI-first re-plan (ADR-0011, ADR-0012); waves AC0 to AC3 and the M1 exit notes (`docs/releases/m1.md`) · [issues][m1-p3-a] | done · [plan](2026-09-29-track-b-p3.md), UI-first re-plan (ADR-0012); waves B1 to B8, design system and cloud pass (#344 to #446); wave B6 parked to M2 P0.5 · [issues][m1-p3-b] | n/a | n/a | done · M1 exit (v1 demo, ADR-0012): #517, `m1` promoted 10-04-26 (manual m1 smoke held until the next host visit, #237) · [all][m1-p3] |
 | M2 | P0 contracts | n/a | n/a | n/a | active (P0-W3 after the demo; P0-W1 #559 and P0-W2 #562 merged) · [plan](2026-10-05-m2-p0-contracts.md), run in the B lane · [issues][m2-p0] | active · demo-path gate passed 10-05-26 (#528: verify on main, 8.4 log, oasdiff additive); full gate after P0-W3 · [all][m2-p0] |
-| M2 | P0.5 dispatch (ADR-0012) | active · [plan](2026-10-05-m2-track-a-p0-5.md); AW1 #563, AW2 #567, AW3 #569 and AW4 #575 merged, AW5 (Tasks 14 to 16) running · [issues][m2-p05-a] | active · [plan](2026-10-05-m2-track-b-p0-5.md); BW0 demo prep in PR, BW1 design approved 10-05-26 · [issues][m2-p05-b] | n/a | n/a | planned · A4 clean no-record; smoke 1 to 5 · [all][m2-p05] |
+| M2 | P0.5 dispatch (ADR-0012) | done · [plan](2026-10-05-m2-track-a-p0-5.md); AW1 #563 to AW6 #581 and the release note #582 merged · [issues][m2-p05-a] | done · [plan](2026-10-05-m2-track-b-p0-5.md); BW0 #566 to BW3 #579 merged · [issues][m2-p05-b] | n/a | n/a | done · A4 clean no-record; smoke 1 to 5 ok on the host 10-07-26; `:release` promoted at 3e85c2b (#583, no milestone tag; fe47c0f is the release note merge) · [all][m2-p05] |
 | M2 | P1 feed | planned · `<date>-m2-track-a-p1.md` · [issues][m2-p1-a] | planned · `<date>-m2-track-b-p1.md` · [issues][m2-p1-b] | n/a | planned · in B plan · [issues][m2-p1-c] | planned · A6; replay test · [all][m2-p1] |
 | M2 | P2 audit | planned · `<date>-m2-track-a-p2.md` · [issues][m2-p2-a] | planned · `<date>-m2-track-b-p2.md` · [issues][m2-p2-b] | n/a | planned · in A plan · [issues][m2-p2-c] | planned · A7 to A9 · [all][m2-p2] |
 | M2 | P3 hardening | planned · `<date>-m2-track-a-p3.md` · [issues][m2-p3-a] | planned · `<date>-m2-track-b-p3.md` · [issues][m2-p3-b] | n/a | n/a | planned · M2 exit · [all][m2-p3] |
@@ -37,9 +37,9 @@ Read at session start. Update at session end, and in any task PR that changes a 
 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
-| Linux laptop (deploy host) | Host lane (host steps only) | M1 exit | idle (`m1` promoted 10-04-26; manual m1 smoke held until the next visit) | 10-04-26 |
-| Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | running (wave AW5, session "M2P0 Track A3") | 10-06-26 01:30 |
-| Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B (BW0) | running (session "M2P0 Track B2") | 10-05-26 17:10 |
+| Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
+| Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | idle (P0.5 done and promoted 10-07-26; M2 P1 planning next) | 10-07-26 |
+| Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B | idle (no local B session; BW2 and BW3 ran in the cloud and merged, cloud credits spent) | 10-07-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | idle (start brief from "M2 planning 1") | 10-05-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
 
@@ -51,15 +51,23 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: M2 P0.5 Track A Tasks 14 (#541), 15 (#542), 16 (#543), wave AW5
-- Branch / PR: `feat/m2-a-p05-wave-5` (from `main` at 8a9b27b), no PR yet; AW1 #563, AW2 #567, AW3 #569, AW4 #575 merged
-- Last green: `pnpm verify` at dcab066 (AW4) on Windows
-- Next step: Tasks 14 and 15 (sdd-wave), Task 16 inline, then a gate wave-review; AW4 review minors on #574 (not in AW5)
+- Issue: none open; M2 P0.5 Track A closed (Tasks 1 to 18, #529 to #545)
+- Branch / PR: none; AW1 #563 to AW6 #581 and release note #582 merged; `:release` = 3e85c2b (#583)
+- Last green: `pnpm verify` at e6c7a83 (release note) on Windows; main ci 37491206376 green incl publish
+- Next step: M2 P1 planning (developer starts it); open follow-ups #574 (AW4 and AW5 minors, critical follow-up PR, fast path where it fits), #572, #576, #558
 - Blocked by: none
-- Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-05-m2-track-a-p0-5\handover.md` (Task 8 carries, run ids, lessons)
+- Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-05-m2-track-a-p0-5\handover.md` (rulings and lessons)
 - Notes: developer target 10-04-26: mock responses working, then a demo pause at the M2 P1 gate.
 
 ### Track B
+
+- Issue: none open; M2 P0.5 Track B closed (Tasks 1 to 8, #548 to #556)
+- Branch / PR: none; BW0 #566, BW2 #568 #571 #577, BW3 #570 #579 merged
+- Last green: `pnpm verify` and CI on main 3e85c2b (P0.5 promoted)
+- Next step: M2 P1 planning (developer starts it); follow-ups #572 (mock editor minors), #576 (202 skip reason and alsoRun origin for M2 P1, client minors), #565 (Try a match, post-demo)
+- Blocked by: none
+- Local-only state: none
+- Notes: no local B session; the cloud sessions are done.
 
 
 ### Track D
