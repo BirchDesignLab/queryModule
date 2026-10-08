@@ -24,7 +24,7 @@ const MILESTONE_PARENT = 88;
 const P1_PARENT_TITLE = "Feed (M2 P1)";
 const PLAN_A = "docs/superpowers/plans/2026-10-07-m2-track-a-p1.md";
 const PLAN_B = "docs/superpowers/plans/2026-10-07-m2-track-b-p1.md";
-const P1_PARENT_BODY = `Phase parent for Feed (M2 Results and audit P1). Progress comes from its sub-issues. Ends at the developer's demo pause.
+const P1_PARENT_BODY = `Phase parent for Feed (M2 Results and audit P1). Progress comes from its sub-issues. Ends at a normal phase gate and promote; the demo is a decision point, cut from main once the plans' demo sets are merged.
 
 **Gate:** A6 green; socket-close-mid-dispatch replay test; result-card and builder e2e; smoke 1 to 5 with the HTTP payload check; promote :release (no milestone tag).
 
