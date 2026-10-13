@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areas, changedFiles, isDocsOnly, main } from "./changed-paths.mjs";
+import { areas, changedFiles, isBoardOnly, isDocsOnly, main } from "./changed-paths.mjs";
 
 describe("docs-only fast path (master plan 11)", () => {
   it("is true only when every changed file is under docs/ or is Markdown", () => {
@@ -18,6 +18,45 @@ describe("docs-only fast path (master plan 11)", () => {
   it("treats docs/board/ as non-docs, so board data runs its schema test (#96 G-M1)", () => {
     expect(isDocsOnly(["docs/board/board-data.json"])).toBe(false);
     expect(isDocsOnly(["docs/board/board-data.json", "docs/a.md"])).toBe(false);
+  });
+});
+
+describe("board-only fast path (#617)", () => {
+  it("is true only when every changed file is under docs/board/", () => {
+    expect(isBoardOnly(["docs/board/board-data.json"])).toBe(true);
+    expect(isBoardOnly(["docs/board/board-data.json", "docs/board/notes.md"])).toBe(true);
+    expect(isBoardOnly([])).toBe(false);
+  });
+
+  it("is false for a mixed change: board data plus docs, code or CI config", () => {
+    expect(isBoardOnly(["docs/board/board-data.json", "docs/a.md"])).toBe(false);
+    expect(isBoardOnly(["docs/board/board-data.json", "packages/core/src/x.ts"])).toBe(false);
+    expect(isBoardOnly(["docs/board/board-data.json", ".github/workflows/ci.yml"])).toBe(false);
+    expect(isBoardOnly(["docs/boardroom/x.json"])).toBe(false);
+  });
+
+  it("areas reports board_only without docs_only, web or mobile", () => {
+    expect(areas(["docs/board/board-data.json"])).toEqual({
+      docs_only: false,
+      board_only: true,
+      web: false,
+      mobile: false,
+    });
+    expect(areas(["docs/board/board-data.json", "packages/core/src/x.ts"])).toMatchObject({
+      board_only: false,
+      web: true,
+    });
+    expect(areas(["docs/a.md"])).toMatchObject({ docs_only: true, board_only: false });
+  });
+
+  it("main prints board_only=true for a board-only diff", () => {
+    const lines: string[] = [];
+    main({
+      env: { BASE_SHA: "abc", HEAD_SHA: "def", EVENT_NAME: "pull_request" },
+      runGit: () => "docs/board/board-data.json\0",
+      write: (line: string) => lines.push(line),
+    });
+    expect(lines).toEqual(["docs_only=false", "board_only=true", "web=false", "mobile=false"]);
   });
 });
 
@@ -74,10 +113,16 @@ describe("areas (ADR-0008 per-area outputs)", () => {
     expect(areas(["docs/testing/stories.json"]).docs_only).toBe(false);
     expect(areas(["packages/core/src/x.ts"])).toEqual({
       docs_only: false,
+      board_only: false,
       web: true,
       mobile: true,
     });
-    expect(areas([])).toEqual({ docs_only: false, web: false, mobile: false });
+    expect(areas([])).toEqual({
+      docs_only: false,
+      board_only: false,
+      web: false,
+      mobile: false,
+    });
   });
 });
 
@@ -90,7 +135,7 @@ describe("main (fail-closed, ADR-0008)", () => {
   it("fails closed when BASE_SHA is empty (push to a new branch)", () => {
     const { lines, write } = sink();
     main({ env: { BASE_SHA: "", EVENT_NAME: "pull_request" }, runGit: () => "", write });
-    expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    expect(lines).toEqual(["docs_only=false", "board_only=false", "web=true", "mobile=true"]);
   });
 
   it("fails closed when BASE_SHA is all zeros", () => {
@@ -100,13 +145,13 @@ describe("main (fail-closed, ADR-0008)", () => {
       runGit: () => "",
       write,
     });
-    expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    expect(lines).toEqual(["docs_only=false", "board_only=false", "web=true", "mobile=true"]);
   });
 
   it("fails closed on a push to main (EVENT_NAME=push)", () => {
     const { lines, write } = sink();
     main({ env: { BASE_SHA: "abc", EVENT_NAME: "push" }, runGit: () => "", write });
-    expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    expect(lines).toEqual(["docs_only=false", "board_only=false", "web=true", "mobile=true"]);
   });
 
   it("fails closed and warns (not to the output sink) naming the failure when git fails", () => {
@@ -122,7 +167,7 @@ describe("main (fail-closed, ADR-0008)", () => {
     });
     // The output sink is piped straight into $GITHUB_OUTPUT (ci.yml); it must
     // contain only the three key=value lines, never a ::warning:: line.
-    expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    expect(lines).toEqual(["docs_only=false", "board_only=false", "web=true", "mobile=true"]);
     expect(warnLines).toEqual(["::warning::changed-paths: git exited with 128"]);
   });
 
@@ -137,7 +182,7 @@ describe("main (fail-closed, ADR-0008)", () => {
       write,
       warn,
     });
-    expect(lines).toEqual(["docs_only=false", "web=true", "mobile=true"]);
+    expect(lines).toEqual(["docs_only=false", "board_only=false", "web=true", "mobile=true"]);
     expect(warnLines).toHaveLength(1);
     expect(warnLines[0]).toBe(
       "::warning::changed-paths: git exited with 128 fatal: bad object stderr line",
@@ -151,6 +196,6 @@ describe("main (fail-closed, ADR-0008)", () => {
       runGit: () => "docs/a.md\0",
       write,
     });
-    expect(lines).toEqual(["docs_only=true", "web=false", "mobile=false"]);
+    expect(lines).toEqual(["docs_only=true", "board_only=false", "web=false", "mobile=false"]);
   });
 });

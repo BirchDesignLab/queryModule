@@ -20,6 +20,10 @@ const workflow: any = parse(readFileSync(workflowPath, "utf8"));
 const jobs: Record<string, any> = workflow.jobs;
 const jobIds = Object.keys(jobs);
 
+/** #617: the heavy jobs skip on a docs-only or a board-only change. */
+const NOT_DOCS_OR_BOARD_ONLY =
+  "needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.board_only != 'true'";
+
 // biome-ignore lint/suspicious/noExplicitAny: same as above
 function jobNeeds(job: any): string[] {
   if (!job?.needs) return [];
@@ -210,7 +214,7 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     expect(jobs.image).toBeDefined();
     // checks holds the pre-install lockfile guard; image installs, so it runs only after it.
     expect(jobNeeds(jobs.image)).toEqual(["changes", "checks"]);
-    expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
+    expect(jobs.image.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
   });
 
   it("`image` job's boot-smoke down step always runs, even if an earlier step failed", () => {
@@ -255,8 +259,8 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   it("a push to main always builds the image, so every main sha gets a sha- image (#230)", async () => {
     // image skips only on docs_only, and changed-paths fails closed to docs_only=false on any
     // push (a docs-only merge to main still builds, smoke-tests and publishes its image).
-    expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
-    expect(jobs.checks.if).toBe("needs.changes.outputs.docs_only != 'true'");
+    expect(jobs.image.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
+    expect(jobs.checks.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
     const { main } = await import("./changed-paths.mjs");
     const lines: string[] = [];
     main({
@@ -265,6 +269,7 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
       write: (l: string) => lines.push(l),
     });
     expect(lines).toContain("docs_only=false");
+    expect(lines).toContain("board_only=false");
   });
 
   it("the aggregate `ci` job needs `image`", () => {
@@ -483,5 +488,33 @@ ${run}`),
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("ci.yml board-only fast path (#617)", () => {
+  it("`changes` exposes board_only and the heavy jobs skip when it is true", () => {
+    expect(jobs.changes.outputs.board_only).toBe(
+      ["$", "{{ steps.changes.outputs.board_only }}"].join(""),
+    );
+    for (const id of ["checks", "test", "image"]) {
+      expect(jobs[id].if, id).toBe(NOT_DOCS_OR_BOARD_ONLY);
+    }
+    // web and mobile need checks, so they skip with it; their own path flags are false too.
+    expect(jobNeeds(jobs.web)).toContain("checks");
+    expect(jobNeeds(jobs.mobile)).toContain("checks");
+  });
+
+  it("`board` runs only on a board-only change and judges board data: Biome and the schema test", () => {
+    const board = jobs.board;
+    expect(board).toBeDefined();
+    expect(board.if).toBe("needs.changes.outputs.board_only == 'true'");
+    expect(jobNeeds(board)).toEqual(["changes"]);
+    const runs = (board.steps as Array<{ run?: string }>).map((st) => st.run ?? "");
+    expect(runs.some((r) => r.includes("biome ci --error-on-warnings docs/board"))).toBe(true);
+    expect(runs.some((r) => r.includes("scripts/ops/board-data.test.ts"))).toBe(true);
+  });
+
+  it("the aggregate `ci` job needs `board`, so a failing board check fails ci", () => {
+    expect(jobNeeds(jobs.ci)).toContain("board");
   });
 });

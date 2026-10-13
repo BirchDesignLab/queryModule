@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       docs_only: ${{ steps.changes.outputs.docs_only }}
+      board_only: ${{ steps.changes.outputs.board_only }}
       web: ${{ steps.changes.outputs.web }}
       mobile: ${{ steps.changes.outputs.mobile }}
     steps:
@@ -51,7 +52,7 @@ jobs:
   checks:
     name: checks
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.board_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -136,7 +137,7 @@ jobs:
   test:
     name: test
     needs: [changes, checks]
-    if: needs.changes.outputs.docs_only != 'true'
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.board_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -262,7 +263,7 @@ jobs:
   image:
     name: image
     needs: [changes, checks]
-    if: needs.changes.outputs.docs_only != 'true'
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.board_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -341,6 +342,31 @@ jobs:
         if: always()
         run: bash scripts/ci/boot-smoke.sh down querymodule:ci
 
+  # #617: board-only fast path. A change under docs/board/ and nothing else skips the heavy
+  # jobs and runs only what judges board data: Biome and the board-data schema test. A mixed
+  # change, or a failed path detection (board_only=false), keeps the full pipeline.
+  board:
+    name: board
+    needs: changes
+    if: needs.changes.outputs.board_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Biome over docs/board
+        run: pnpm exec biome ci --error-on-warnings docs/board
+      - name: Board data schema test
+        run: pnpm exec vitest run scripts/ops/board-data.test.ts
+
   # ADR-0008: the one required check. Needs every job above (never
   # sensitive-review, which stays its own required check, and never publish,
   # which runs after ci) and runs regardless of their outcome. Allowlist: it
@@ -349,7 +375,7 @@ jobs:
   # unknown result, or no jobs at all fail it.
   ci:
     name: ci
-    needs: [changes, checks, test, web, mobile, image]
+    needs: [changes, board, checks, test, web, mobile, image]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
