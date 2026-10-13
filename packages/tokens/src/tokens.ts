@@ -21,11 +21,11 @@ export const COLOR_TOKENS = {
   "color.border": { day: "#7a8494", night: "#66768a", redShift: "#a05a00" },
   "color.border.subtle": { day: "#dde2e8", night: "#263140", redShift: "#3a1600" },
   "color.severity.critical.fg": { day: "#ffffff", night: "#ffffff", redShift: "#0d0000" },
-  "color.severity.critical.bg": { day: "#a00000", night: "#8b0000", redShift: "#ff4d4d" },
+  "color.severity.critical.bg": { day: "#a00000", night: "#8b0000", redShift: "#ff7070" },
   "color.severity.warning.fg": { day: "#1a1a1a", night: "#121212", redShift: "#0d0000" },
   "color.severity.warning.bg": { day: "#ffd24d", night: "#e0b000", redShift: "#ffb000" },
   "color.severity.info.fg": { day: "#ffffff", night: "#ffffff", redShift: "#0d0000" },
-  "color.severity.info.bg": { day: "#1f5fbf", night: "#1f5fbf", redShift: "#c08040" },
+  "color.severity.info.bg": { day: "#1a4fa3", night: "#1a4fa3", redShift: "#d09050" },
   // E1: the ring never matches the invalid edge (field.required); red shift's ring is pale amber.
   "focus.ring": { day: "#1f5fbf", night: "#ffd24d", redShift: "#ffe0a8" },
   "field.required": { day: "#a00000", night: "#ff8080", redShift: "#ff4d4d" },

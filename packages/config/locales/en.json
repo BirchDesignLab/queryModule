@@ -911,5 +911,20 @@
   "admin.mock.flow.source.gaps": "{source}: mock responses missing: {count}",
   "admin.mock.flow.source.done": "{source}: mock responses added. Set its response time on the mock source.",
   "admin.mock.flow.source.open": "Open mock source {source}",
-  "admin.mock.flow.source.unasked": "No query type asks {source} yet. Add it to a query type's sources."
+  "admin.mock.flow.source.unasked": "No query type asks {source} yet. Add it to a query type's sources.",
+  "severity.critical": "Critical",
+  "severity.warning": "Warning",
+  "severity.info": "Info",
+  "severity.word.critical": "critical",
+  "severity.word.warning": "warning",
+  "severity.word.info": "info",
+  "result.showDetail": "Show detail",
+  "result.hideDetail": "Hide detail",
+  "result.moreItems.one": "{count} more item",
+  "result.moreItems.other": "{count} more items",
+  "result.rowCount.one": "{count} row",
+  "result.rowCount.other": "{count} rows",
+  "result.keywordSeverity": "({severity})",
+  "result.noMapping": "No card is set up for this result, so every field shows under its path.",
+  "result.diagnostics": "Mapping notes (development)"
 }

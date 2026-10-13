@@ -92,19 +92,19 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   {
     fg: "color.severity.critical.fg",
     bg: "color.severity.critical.bg",
-    min: 4.5,
+    min: 7,
     use: "critical severity style",
   },
   {
     fg: "color.severity.warning.fg",
     bg: "color.severity.warning.bg",
-    min: 4.5,
+    min: 7,
     use: "warning severity style",
   },
   {
     fg: "color.severity.info.fg",
     bg: "color.severity.info.bg",
-    min: 4.5,
+    min: 7,
     use: "info severity style",
   },
   { fg: "field.required", bg: "color.surface.base", min: 3, use: "required marker (non-text)" },

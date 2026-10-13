@@ -385,7 +385,9 @@ h1 {
 
 /* Badges: condensed uppercase text. Severity badges use the severity tokens; status badges are outlined. */
 .qm-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-1);
   padding: 0 var(--qm-space-2);
   border: var(--qm-border-width) solid transparent;
   border-radius: var(--qm-radius-sm);
@@ -1226,4 +1228,165 @@ h1 {
   .qm-app-header .qm-app-header__site {
     flex: 1 1 12ch;
   }
+}
+
+/* Result cards (spec 6.2; FR-060, UX-010, UX-011, UX-015, UX-016). Severity colours come inline from
+   the configured token pair; the 4 px start edge is inline too and repeats the badge. */
+.qm-card {
+  display: grid;
+  gap: var(--qm-space-3);
+  padding: var(--qm-space-3) var(--qm-space-4);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-raised);
+}
+
+.qm-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-3);
+}
+
+.qm-card__title {
+  margin: 0;
+  font-size: var(--qm-type-size-md);
+  font-weight: 600;
+}
+
+.qm-card__time {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
+}
+
+.qm-card__head .qm-badge {
+  margin-inline-start: auto;
+}
+
+.qm-card__note {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+}
+
+.qm-card__detail {
+  display: grid;
+  gap: var(--qm-space-3);
+}
+
+.qm-card__detail[hidden] {
+  display: none;
+}
+
+.qm-card__diagnostics {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-xs);
+}
+
+.qm-result-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--qm-space-3);
+  margin: 0;
+}
+
+.qm-result-list__item {
+  min-inline-size: 0;
+}
+
+.qm-result-list dt {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.qm-result-list dd {
+  margin: 0;
+  font-family: var(--qm-type-family-data);
+  overflow-wrap: anywhere;
+}
+
+.qm-view-toggle {
+  justify-self: start;
+}
+
+.qm-view-toggle__count {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-badge__marker,
+.qm-mark__marker {
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-severity-icon {
+  flex: none;
+}
+
+.qm-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-1);
+  padding: 0 var(--qm-space-1);
+  border-radius: var(--qm-radius-sm);
+}
+
+/* A table scrolls in its own box: the page never scrolls sideways (UX-016). */
+.qm-result-table {
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+.qm-result-table table {
+  border-collapse: collapse;
+  inline-size: 100%;
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-result-table caption {
+  text-align: start;
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.qm-result-table th,
+.qm-result-table td {
+  padding: var(--qm-space-1) var(--qm-space-3);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border);
+  text-align: start;
+}
+
+.qm-result-table td {
+  font-family: var(--qm-type-family-data);
+}
+
+/* Officer layout: two columns, 20 px values, body-colour labels, 48 px Show detail, 16 px table text. */
+.qm-layout--mobile-unit .qm-result-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qm-layout--mobile-unit .qm-result-list dt,
+.qm-layout--mobile-unit .qm-card__time,
+.qm-layout--mobile-unit .qm-card__note,
+.qm-layout--mobile-unit .qm-view-toggle__count,
+.qm-layout--mobile-unit .qm-card__diagnostics {
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+.qm-layout--mobile-unit .qm-result-list dd {
+  font-size: var(--qm-type-size-xl);
+}
+
+.qm-layout--mobile-unit .qm-view-toggle {
+  min-height: var(--qm-target-min);
+}
+
+.qm-layout--mobile-unit .qm-result-table table {
+  font-size: var(--qm-type-body-size);
 }
