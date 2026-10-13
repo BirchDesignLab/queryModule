@@ -189,6 +189,40 @@ describe("GET /api/v1/queries, the caller's list (spec 5.1; #561, #589)", () => 
     }
   });
 
+  it("each request_key scope purges on its own: payload only, then values only (AW2 review C-m2)", async () => {
+    const { t, a, list } = await seeded();
+    const shred = (correlationId: string, scope: "values" | "payload") =>
+      t.deps.db.$client.execute({
+        sql: "DELETE FROM request_key WHERE correlation_id = ? AND scope = ?",
+        args: [correlationId, scope],
+      });
+    const [oldest, middle] = a;
+    if (oldest === undefined || middle === undefined) throw new Error("seed");
+    await shred(oldest, "payload");
+    await shred(middle, "values");
+    const items = (await list()).requests;
+    const byId = (id: string) => items.find((i) => i.correlationId === id)?.parts[0];
+    expect(byId(oldest)?.purged).toBe(false);
+    for (const src of byId(oldest)?.sources ?? []) expect(src.purged).toBe(true);
+    expect(byId(middle)?.purged).toBe(true);
+    for (const src of byId(middle)?.sources ?? []) expect(src.purged).toBe(false);
+  });
+
+  it("limit defaults to 25 and limit=100 is accepted (AW2 review C-m3)", async () => {
+    const s = await setup();
+    for (let i = 0; i < 26; i += 1) {
+      await s.submit(s.cookieA);
+      s.time.clock.advance(1000);
+    }
+    await s.settleAll();
+    const first = await s.list();
+    expect(first.requests).toHaveLength(25);
+    expect(first.nextCursor).not.toBeNull();
+    const all = await s.list("?limit=100");
+    expect(all.requests).toHaveLength(26);
+    expect(all.nextCursor).toBeNull();
+  });
+
   it("a stored row that does not parse is 500 internal, logging the error class only", async () => {
     const { t, get } = await seeded();
     const log = captureLogger();
