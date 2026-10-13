@@ -142,21 +142,29 @@ test("[FR-065, spec 6.8] a socket dropped after the 202 replays every status and
   page,
 }) => {
   test.slow();
-  // Hold the server's status events back (the proxy forwards everything else), so the drop below
-  // lands before any status reaches the page; the reconnect then has to replay them all.
+  // Hold the server's status events back (the proxy forwards everything else), and drop the socket
+  // only after the server has emitted both statuses (held >= 2). Neither can then reach the page
+  // live on the next connection: it has to get them by replay or refetch (FR-065, spec 6.8).
   let holding = false;
   let connections = 0;
+  let held = 0;
+  let statusAfterDrop = 0;
+  let refetchesAfterDrop = 0;
+  let dropped = false;
   await page.routeWebSocket("**/api/v1/ws", (ws) => {
     connections += 1;
     const server = ws.connectToServer();
     server.onMessage((message) => {
+      const isStatus = typeof message === "string" && /"type":\s*"sourceStatus"/.test(message);
       if (
         holding &&
         typeof message === "string" &&
         /"type":\s*"(sourceStatus|resultHidden)"/.test(message)
       ) {
+        if (isStatus) held += 1;
         return;
       }
+      if (dropped && isStatus) statusAfterDrop += 1;
       ws.send(message);
     });
     ws.onMessage((message) => server.send(message));
@@ -185,10 +193,19 @@ test("[FR-065, spec 6.8] a socket dropped after the 202 replays every status and
   );
   await runPlate(page, "ZZ-0001");
   expect((await posted).status()).toBe(202);
+  const correlationId = ((await (await posted).json()) as { correlationId: string }).correlationId;
+  page.on("request", (r) => {
+    if (dropped && r.method() === "GET" && r.url().includes(`/api/v1/queries/${correlationId}`)) {
+      refetchesAfterDrop += 1;
+    }
+  });
+  // Both sources' statuses were emitted by the server and withheld from the page.
+  await expect.poll(() => held, { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
+  dropped = true;
+  holding = false;
   await page.evaluate(() => {
     for (const s of (window as unknown as { __qmSockets: WebSocket[] }).__qmSockets) s.close();
   });
-  holding = false;
 
   const row = list.getByRole("listitem").first();
   await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 20_000 });
@@ -204,7 +221,9 @@ test("[FR-065, spec 6.8] a socket dropped after the 202 replays every status and
   await expect(page.getByTestId("announcer-polite")).toContainText(
     "Vehicle ZZ-0001: 2 of 2 sources done.",
   );
-  // All of it came over a second connection: the first was dropped before any status reached the page.
+  // The statuses were all emitted before the drop, so the page got them by recovery, not live:
+  // a second connection, and either the replayed frames or a refetch of the request.
   expect(connections).toBeGreaterThanOrEqual(2);
+  expect(statusAfterDrop + refetchesAfterDrop).toBeGreaterThan(0);
   await expectNoSeriousAxeViolations(page);
 });
