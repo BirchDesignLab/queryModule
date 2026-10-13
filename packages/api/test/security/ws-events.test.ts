@@ -4,7 +4,7 @@ import type WebSocket from "ws";
 import { WS_LOCAL_CLOSE } from "../../src/ws/server";
 import { barrier, closeServers, rowsOf, setupDispatchApp } from "../helpers/ws-replay";
 
-// Spec 5.3, 12.7 M2 row "no cross-user events" (FR-065, SEC-014): sourceStatus events reach
+// Spec 5.3, 12.7 M2 row "no cross-user events" (FR-065): sourceStatus events reach
 // only the owner's sockets, in event_log order, and welcome.latestSeq reads event_log.
 // A latestSeq read failure, switched per test (AW4 critic 3).
 const failSeq = vi.hoisted(() => ({ on: false }));
@@ -36,7 +36,7 @@ async function setup() {
   return { ...base, statuses, hello };
 }
 
-describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
+describe("WebSocket event delivery (spec 5.3, FR-065)", () => {
   it("delivers sourceStatus only to the owner's sockets, matching event_log", async () => {
     const c = await setup();
     const a = await c.sock(c.cookieA);
@@ -211,7 +211,7 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
   const idsOf = (got: unknown[], statuses: (g: unknown[]) => unknown[]) =>
     statuses(got).map((m) => (m as { correlationId: string }).correlationId);
 
-  it("replay after a real dispatch sends each user only their own event_log rows (SEC-014)", async () => {
+  it("replay after a real dispatch sends each user only their own event_log rows (spec 5.3)", async () => {
     const { c, a, b, rowsOf } = await dispatchedForBoth();
     const rowsA = await rowsOf(c.aId);
     const rowsB = await rowsOf(c.bId);
@@ -243,7 +243,7 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     for (const x of [sa.ws, sb.ws]) x.close();
   });
 
-  it("a lastSeq inside another user's seq range gets resync unknownCursor, never their rows (SEC-014)", async () => {
+  it("a lastSeq inside another user's seq range gets resync unknownCursor, never their rows (spec 5.3)", async () => {
     const { c } = await dispatchedForBoth();
     const sa = await c.sock(c.cookieA);
     // seq 3 exists for B only; A's newest is 2

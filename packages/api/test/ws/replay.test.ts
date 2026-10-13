@@ -13,7 +13,7 @@ import { createTestClock } from "../helpers/fixture";
 import { createTestApp, startTestServer, type TestApp } from "../helpers/test-app";
 import { barrier, ORIGIN, openSocket, PW, sendHello } from "../helpers/ws-replay";
 
-// Spec 5.3 replay (FR-043, FR-065, NFR-003, SEC-014; spec 4.7, 6.8; ADR-0013): hello { lastSeq }
+// Spec 5.3 replay (FR-043, FR-065, NFR-003; spec 4.7, 6.8; ADR-0013): hello { lastSeq }
 // gets welcome, then the owner's missed event_log rows in seq order or one resync, then live events.
 // Each test switches the replay read per test: a forced failure, or a hook that runs before it.
 const replayHook = vi.hoisted(() => ({
@@ -104,7 +104,7 @@ async function setup() {
   return { t, clock, aId, bId, cookieA, cookieB, sock, live, hello, barrier, shape };
 }
 
-describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
+describe("replay by lastSeq (spec 5.3, FR-043, FR-065)", () => {
   it("lastSeq 2 of 5 gets welcome, seq 3, 4, 5 in order, then a live 6", async () => {
     const c = await setup();
     const rows = await append(c.t, c.aId, 5, c.clock.now());
@@ -201,7 +201,7 @@ describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
     for (const x of [edge.ws, cursor.ws, past.ws]) x.close();
   });
 
-  it("replays only the socket user's own rows; B's events never reach A (SEC-014)", async () => {
+  it("replays only the socket user's own rows; B's events never reach A (spec 5.3)", async () => {
     const c = await setup();
     await append(c.t, c.bId, 4, c.clock.now());
     await append(c.t, c.aId, 2, c.clock.now());
