@@ -109,7 +109,16 @@ function childArgs(t, base, flow) {
 // ---------- verifyHead (#222) ----------
 // One Haiku agent reads git; only a 40-hex sha it confirmed exists is accepted. The child head is
 // compared and logged on a difference, never used. Returns { head } or { problem }.
-const SHA40 = /^[0-9a-f]{40}$/
+// A git-confirmed sha, tolerating a wrapped answer (#626): revParse must hold exactly one 40-hex
+// value (bare, quoted, in JSON text or in prose; none or several are rejected; a longer hex run is
+// not a 40-hex match), and catFile must contain "EXISTS <that sha>". Only that sha is ever used.
+const SHA40_IN = /(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])/g
+function confirmedSha(revParse, catFile) {
+  const found = String(revParse || '').match(SHA40_IN) || []
+  if (found.length !== 1) return null
+  const sha = found[0]
+  return new RegExp(`(?<![A-Za-z])EXISTS ${sha}(?![0-9a-f])`).test(String(catFile || '')) ? sha : null
+}
 const REPO = String(A.repoDir).replace(/\\/g, '/')
 let verifyCalls = 0
 async function verifyHead(childHead, label) {
@@ -130,8 +139,8 @@ async function verifyHead(childHead, label) {
   }
   verifyCalls++
   const v = await agent(prompt, { label, phase: 'Wave', schema, model: 'haiku' })
-  const head = String((v && v.revParse) || '').trim()
-  if (!SHA40.test(head) || String((v && v.catFile) || '').trim() !== `EXISTS ${head}`) {
+  const head = confirmedSha(v && v.revParse, v && v.catFile)
+  if (!head) {
     return { problem: `verifyHead: ${label} did not return a 40-hex sha that exists in git (${v ? JSON.stringify({ revParse: String(v.revParse).slice(0, 60), catFile: String(v.catFile).slice(0, 20) }) : 'no result'}); fix the repository in ${REPO}, then start a fresh sdd-wave with base set to git rev-parse HEAD and carried set to the returned carried` }
   }
   const c = String(childHead || '').trim().toLowerCase()
