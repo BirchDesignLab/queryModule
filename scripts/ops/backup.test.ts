@@ -54,7 +54,11 @@ function run(version: string) {
   return { ...r, calls: readFileSync(log, "utf8").split("\n").filter(Boolean) };
 }
 
-describe("backup.sh rclone preflight (#487: Ubuntu's rclone 1.60 gets a 501 from R2 on its first PUT)", () => {
+// Each case spawns bash, which is slow under load on Windows; the 30 s bound sits above run()'s
+// 25 s spawn timeout, so a stuck script fails on its own timeout, not on the 5 s default (#610).
+describe("backup.sh rclone preflight (#487: Ubuntu's rclone 1.60 gets a 501 from R2 on its first PUT)", {
+  timeout: 30_000,
+}, () => {
   it("refuses rclone older than 1.65 before any backup step, naming the version", () => {
     const r = run("v1.60.1-DEV");
     expect(r.status).not.toBe(0);

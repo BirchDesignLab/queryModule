@@ -28,7 +28,7 @@ let submitBody: string | undefined;
 let submitStatus = 202;
 let partStatus = "dispatched";
 let omitParts = false;
-let detailMode: "payload" | "noPayload" | "error" = "payload";
+let detailMode: "payload" | "noPayload" | "error" | "reset" | "notJson" | "noReturned" = "payload";
 const stubHash = "a".repeat(64);
 const stubCorrelationId = "01900000-0000-7000-8000-000000000001";
 let dir: string;
@@ -96,6 +96,11 @@ beforeEach(async () => {
         if (req.headers.cookie !== "qm_session=abc123") return res.writeHead(401).end();
         events.push("detail");
         if (detailMode === "error") return res.writeHead(500).end();
+        if (detailMode === "reset") return void req.socket.destroy();
+        if (detailMode === "notJson") {
+          res.writeHead(200, { "content-type": "text/html" });
+          return void res.end("<html>ZZ-HTML</html>");
+        }
         const source = (sourceId: string, s: string, payload?: unknown) => ({
           sourceId,
           status: s,
@@ -110,7 +115,7 @@ beforeEach(async () => {
               sources: [
                 source(
                   "stateSource",
-                  "returned",
+                  detailMode === "noReturned" ? "failed" : "returned",
                   detailMode === "payload" ? { plate: "ZZ-PAYLOAD" } : undefined,
                 ),
                 source("nationalSource", "failed"),
@@ -439,6 +444,33 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     const r = await smoke(base);
     expect(r.code).not.toBe(0);
     expect(r.out).toContain("4 FAILED: detail read answered HTTP 500");
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails with the error class when the detail read cannot connect (#620 G-G-m1)", async () => {
+    detailMode = "reset";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/4 FAILED: detail read failed \(\w+\)/);
+    expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails when the detail body is not JSON, without echoing it (#620 G-G-m1)", async () => {
+    detailMode = "notJson";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: detail read was not JSON");
+    expect(r.out).not.toContain("ZZ-HTML");
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails when the detail has no returned source (#620 G-G-m1)", async () => {
+    detailMode = "noReturned";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: no returned source in the detail read");
+    expect(r.out).not.toMatch(/4 ok/);
     expect(r.out).not.toMatch(/5 ok/);
   });
 

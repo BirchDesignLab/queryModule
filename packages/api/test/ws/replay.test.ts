@@ -193,6 +193,30 @@ describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
     for (const x of [old.ws, fresh.ws, pruned.ws]) x.close();
   });
 
+  it("a row exactly 24 h old is still replayed, for lastSeq 0 and for a cursor (#620 C-m1)", async () => {
+    const c = await setup();
+    // the test clock runs on real time; freeze it so the rows sit exactly on the cutoff (now - DAY)
+    const frozen = c.clock.now();
+    c.clock.now = () => frozen;
+    await append(c.t, c.aId, 2, c.clock.now() - DAY);
+    const edge = await c.sock(c.cookieA);
+    c.hello(edge.ws, 0);
+    await c.barrier(edge.ws, edge.got);
+    expect(c.shape(edge.got)).toEqual(["welcome:2", 1, 2]);
+    const cursor = await c.sock(c.cookieA);
+    c.hello(cursor.ws, 1);
+    await c.barrier(cursor.ws, cursor.got);
+    expect(c.shape(cursor.got)).toEqual(["welcome:2", 2]);
+    // one ms past the edge: lastSeq 2's next row (3) is too old
+    await append(c.t, c.aId, 1, c.clock.now() - DAY - 1);
+    await append(c.t, c.aId, 1, c.clock.now());
+    const past = await c.sock(c.cookieA);
+    c.hello(past.ws, 2);
+    await c.barrier(past.ws, past.got);
+    expect(c.shape(past.got)).toEqual(["welcome:4", "resync:tooOld:4"]);
+    for (const x of [edge.ws, cursor.ws, past.ws]) x.close();
+  });
+
   it("replays only the socket user's own rows; B's events never reach A (SEC-014)", async () => {
     const c = await setup();
     await append(c.t, c.bId, 4, c.clock.now());
