@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type ConfigDocument, type MockFile, MockFileSchema } from "@querymodule/core/contracts";
+import { matchMockScenario } from "@querymodule/core/mock";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockAdapter } from "../../src/adapters/mock";
 import { createAdapterRegistry } from "../../src/adapters/registry";
@@ -504,4 +505,34 @@ describe("#493: the pinned snapshot's stored mock, never the image's file", () =
     await expect(ask(next)).resolves.toEqual({ status: "STOLEN" });
     await expect(ask(old)).resolves.toEqual({ status: "NO RECORD" });
   }, 30_000);
+});
+
+describe("the adapter answers what the shared matcher names (#565)", () => {
+  it("every respond scenario and default of the default mock, as a copy", async () => {
+    const adapter = createMockAdapter({
+      mock: DEFAULT_MOCK,
+      timers: instantTimers,
+      random: () => 0,
+    });
+    for (const [sourceId, source] of Object.entries(DEFAULT_MOCK.sources)) {
+      for (const entry of source.responses) {
+        const asks = [
+          ...entry.scenarios.filter((s) => s.respond !== undefined).map((s) => s.when),
+          { [`${entry.queryType}Unmatched`]: "Q" },
+        ];
+        for (const when of asks) {
+          const r = req(sourceId, entry.queryType, when);
+          const match = matchMockScenario(DEFAULT_MOCK, sourceId, {
+            queryType: r.queryType,
+            typeValues: r.types,
+            values: r.values,
+          });
+          if (match?.outcome.kind !== "respond") throw new Error(`no respond for ${sourceId}`);
+          const got = await adapter.query(r, null, new AbortController().signal);
+          expect(got).toEqual(match.outcome.payload);
+          expect(got).not.toBe(match.outcome.payload);
+        }
+      }
+    }
+  });
 });

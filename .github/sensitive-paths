@@ -34,6 +34,8 @@ packages/core/src/contracts/ws.ts
 packages/core/src/contracts/version.ts
 packages/core/contracts/ws-events.schema.json
 packages/core/src/planner/**
+# The shared mock scenario matcher: decides what the mock source answers (spec 5.4, #565)
+packages/core/src/mock/**
 # Config loading: computes configHash, enforces the mock gate, carries LoadedConfig.mock
 # and versionId into every dispatch snapshot (M2 P0.5)
 packages/api/src/config/**

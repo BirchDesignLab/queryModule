@@ -1,45 +1,10 @@
 import { checkFixturePolicy, type FixtureDiagnostic } from "@querymodule/core/config";
-import type {
-  MockFile,
-  MockResponse,
-  MockScenario,
-  SourcePayload,
-} from "@querymodule/core/contracts";
+import type { MockFile, SourcePayload } from "@querymodule/core/contracts";
+import { matchMockScenario } from "@querymodule/core/mock";
 import type { LoadedConfig } from "../config/load";
 import { abortError, type Timers } from "../dispatch/timers";
 import type { Logger } from "../log/logger";
-import { type AdapterFactory, type SourceAdapter, SourceError, type SourceRequest } from "./types";
-
-/**
- * The source's response entry for the request (spec 5.4): queryType matches and every `types`
- * key equals the request's; most matching types wins, ties by file order. Undefined: none.
- */
-function pickResponse(
-  responses: readonly MockResponse[],
-  req: SourceRequest,
-): MockResponse | undefined {
-  let best: MockResponse | undefined;
-  let bestCount = -1;
-  for (const r of responses) {
-    if (r.queryType !== req.queryType) continue;
-    const types = Object.entries(r.types ?? {});
-    if (!types.every(([k, v]) => Object.hasOwn(req.types, k) && req.types[k] === v)) continue;
-    if (types.length > bestCount) {
-      best = r;
-      bestCount = types.length;
-    }
-  }
-  return best;
-}
-
-/** The first scenario whose every `when` key equals String() of the request's value (spec 5.4). */
-function pickScenario(entry: MockResponse, req: SourceRequest): MockScenario | undefined {
-  return entry.scenarios.find((s) =>
-    Object.entries(s.when).every(
-      ([k, v]) => Object.hasOwn(req.values, k) && String(v) === String(req.values[k]),
-    ),
-  );
-}
+import { type AdapterFactory, type SourceAdapter, SourceError } from "./types";
 
 /** Never settles on its own; rejects with an AbortError when signal aborts. Holds no timer. */
 function untilAborted(signal: AbortSignal): Promise<never> {
@@ -61,30 +26,33 @@ const failClosed: SourceAdapter = {
 /**
  * The adapter over one already-checked mock (spec 5.4; FR-043, FR-044): the prototype's canned
  * responses, never real CJIS data. Latency `min + floor(random() * (max - min + 1))` ms through
- * timers.sleep, then the matched scenario's respond or behaviour, else the entry's default. An
- * unknown source or query type fails closed. Answers are copies, so a caller never changes the
- * snapshot's mock. Errors carry the code only, never request values (spec 5.9).
+ * timers.sleep, then the shared matcher's answer (matchMockScenario, #565): the matched scenario's
+ * respond or behaviour, else the entry's default. An unknown source or query type fails closed.
+ * Answers are copies, so a caller never changes the snapshot's mock. Errors carry the code only,
+ * never request values (spec 5.9).
  */
 function adapterOver(o: { mock: MockFile; timers: Timers; random: () => number }): SourceAdapter {
   return {
     async query(req, _creds, signal) {
-      const source = Object.hasOwn(o.mock.sources, req.sourceId)
-        ? o.mock.sources[req.sourceId]
-        : undefined;
-      const entry = source && pickResponse(source.responses, req);
-      if (!source || !entry) throw new SourceError("failed");
+      const match = matchMockScenario(o.mock, req.sourceId, {
+        queryType: req.queryType,
+        typeValues: req.types,
+        values: req.values,
+      });
+      const source = match && o.mock.sources[req.sourceId];
+      if (!match || !source) throw new SourceError("failed");
       const [min, max] = source.latencyMs;
       await o.timers.sleep(min + Math.floor(o.random() * (max - min + 1)), signal);
-      const scenario = pickScenario(entry, req);
-      switch (scenario?.behavior) {
+      if (match.outcome.kind === "respond") {
+        return structuredClone<SourcePayload>(match.outcome.payload);
+      }
+      switch (match.outcome.behavior) {
         case "timeout":
           return untilAborted(signal);
         case "error":
           throw new SourceError("failed");
         case "credentialsRejected":
           throw new SourceError("credentialsRejected");
-        default:
-          return structuredClone<SourcePayload>(scenario?.respond ?? entry.default);
       }
     },
   };
