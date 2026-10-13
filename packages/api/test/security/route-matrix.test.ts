@@ -4,6 +4,9 @@ import { ClientSiteConfigSchema } from "@querymodule/core/config";
 import type { ApiErrorCode, RouteAccess, RouteDef } from "@querymodule/core/contracts";
 import { ApiErrorSchema, CreateUserResponseSchema, ROUTES } from "@querymodule/core/contracts";
 import { describe, expect, it } from "vitest";
+import type { Db } from "../../src/db/client";
+import { queryRequest } from "../../src/db/schema";
+import { uuidv7 } from "../../src/ids";
 import { ALL_ON, adminConfigApp, type Caller, withSiteConfig } from "../helpers/admin-config";
 import { createTestApp } from "../helpers/test-app";
 
@@ -40,8 +43,6 @@ const openapi = JSON.parse(
  * asserts each answers 404. A route leaves this list when its handler mounts and gets a CALLS row.
  */
 const CONTRACT_ONLY: ReadonlyMap<string, string> = new Map([
-  ["listQueries", "GET /api/v1/queries"],
-  ["getQuery", "GET /api/v1/queries/{correlationId}"],
   ["listAdminAudit", "GET /api/v1/admin/audit"],
   ["exportAdminAudit", "GET /api/v1/admin/audit/export"],
   ["getAdminQuery", "GET /api/v1/admin/queries/{correlationId}"],
@@ -67,6 +68,12 @@ const OPERATIONS: Operation[] = Object.entries(openapi.paths)
 type Who = Caller | "mustChangePassword";
 type Expected = { status: number; code?: ApiErrorCode } | "ok";
 
+/**
+ * Planned in the frozen contract but mounted in M2 P1 (#561): the contract's status flips when
+ * the contracts next change; until then the matrix calls them like any live route.
+ */
+const MOUNTED_PLANNED = new Set(["getQuery", "listQueries"]);
+
 /** Session-access routes the config-only implementer may call (checker ruling 09-29-26). */
 const IMPLEMENTER_SESSION_ROUTES = new Set(["getConfig"]);
 
@@ -82,8 +89,10 @@ function allowed(role: Exclude<Caller, "anonymous">, access: RouteAccess, id: st
       return role === "admin" || role === "implementer";
     case "admin":
       return role === "admin";
+    // The query access policy decides on ownership, not role (spec 5.2): each caller reads its
+    // own request here; reading another user's request is checked separately (404 notFound).
     case "policy":
-      throw new Error(`no policy route expected yet (${id}); extend the matrix`);
+      return true;
   }
 }
 
@@ -105,6 +114,10 @@ interface Fixture {
   doc: unknown;
   targetId: string;
   targetSessionId: string;
+  /** A request owned by the caller (by the target user for anonymous and mustChangePassword). */
+  ownQueryId: string;
+  /** A request owned by the target user, never by the caller. */
+  targetQueryId: string;
 }
 
 interface Call {
@@ -153,13 +166,40 @@ const CALLS: Record<string, Call> = {
   listAdminUserSessions: { params: { id: "target" }, ok: 200 },
   revokeAdminSession: { params: { sessionId: "targetSession" }, ok: 204 },
   disableAdminUser: { params: { id: "target" }, ok: 200 },
+  getQuery: { params: { correlationId: "ownQuery" }, ok: 200 },
+  listQueries: { ok: 200 },
 };
+
+/**
+ * One query_request part 0 owned by `userId`, as a T1 that dispatched nothing: no values, no
+ * source_result and no request_key rows. Mock metadata only (spec 5.4).
+ */
+async function seedQuery(db: Db, userId: string): Promise<string> {
+  const now = Date.now();
+  const correlationId = uuidv7(now);
+  await db.insert(queryRequest).values({
+    correlationId,
+    partId: 0,
+    userId,
+    origin: "primary",
+    queryType: "VEH",
+    typeValues: {},
+    plateOnly: 0,
+    selectedSourceIds: [],
+    droppedSourceIds: [],
+    configHash: "c".repeat(64),
+    submittedAt: now,
+  });
+  return correlationId;
+}
 
 function pathOf(op: Operation, call: Call, f: Fixture): string {
   return op.path.replace(/\{([A-Za-z]+)\}/g, (_m, name: string) => {
     const v = call.params?.[name];
     if (v === "target") return f.targetId;
     if (v === "targetSession") return f.targetSessionId;
+    if (v === "ownQuery") return f.ownQueryId;
+    if (v === "targetQuery") return f.targetQueryId;
     if (v === undefined) throw new Error(`no ${name} for ${op.id}`);
     return v;
   });
@@ -184,7 +224,18 @@ async function runMatrix(who: Who, flagsOn: boolean) {
   // #505 T29 Q2: a missing target session is a setup failure, not a confusing row failure.
   if (targetSessionId === undefined || targetSessionId === null)
     throw new Error("route-matrix setup: the target user has no session");
-  const f: Fixture = { doc, targetId, targetSessionId: String(targetSessionId) };
+  const targetQueryId = await seedQuery(a.t.deps.db, targetId);
+  const ownQueryId =
+    who === "anonymous" || who === "mustChangePassword"
+      ? targetQueryId
+      : await seedQuery(a.t.deps.db, await a.userId(who));
+  const f: Fixture = {
+    doc,
+    targetId,
+    targetSessionId: String(targetSessionId),
+    ownQueryId,
+    targetQueryId,
+  };
 
   let send: (method: string, path: string, body?: unknown) => Promise<Response>;
   if (who === "mustChangePassword") {
@@ -226,6 +277,20 @@ async function runMatrix(who: Who, flagsOn: boolean) {
     const wanted = code === undefined ? `${status}` : `${status} ${code}`;
     if (got !== wanted) failures.push(`${who} ${op.key}: want ${wanted}, got ${got}`);
   }
+  // Policy routes: another user's request answers 404 notFound to every signed-in caller, an admin
+  // included, never 403 (spec 5.2, SEC-014); anonymous and mustChangePassword as on their own.
+  for (const op of OPERATIONS.filter((o) => o.access === "policy")) {
+    const r = await send(
+      op.method,
+      pathOf(op, { params: { correlationId: "targetQuery" }, ok: 404 }, f),
+    );
+    const want = expectedFor(who, op, flagsOn);
+    const wanted = want === "ok" ? "404 notFound" : `${want.status} ${want.code}`;
+    const parsed = ApiErrorSchema.safeParse(await r.json());
+    const got = `${r.status} ${parsed.success ? parsed.data.error.code : "unparsed"}`;
+    if (got !== wanted)
+      failures.push(`${who} ${op.key} (another user's request): want ${wanted}, got ${got}`);
+  }
   // Better Auth's own session route stays open to every caller, a flagged one included.
   const session = await send("GET", "/api/v1/auth/get-session");
   if (session.status !== 200) failures.push(`${who} get-session: ${session.status}`);
@@ -259,7 +324,7 @@ describe("spec 10.3 route by caller matrix (D-A30, admin routes from openapi.jso
 
   it("the contract-only list is exactly the planned routes, each in openapi.json", () => {
     expect([...CONTRACT_ONLY.keys()].sort()).toEqual(
-      ROUTES.filter((r: RouteDef) => r.status === "planned")
+      ROUTES.filter((r: RouteDef) => r.status === "planned" && !MOUNTED_PLANNED.has(r.id))
         .map((r: RouteDef) => r.id)
         .sort(),
     );
@@ -275,7 +340,6 @@ describe("spec 10.3 route by caller matrix (D-A30, admin routes from openapi.jso
     for (const key of CONTRACT_ONLY.values()) {
       const [method, template] = key.split(" ") as [string, string];
       const path = template.replace("{correlationId}", cid);
-      // /api/v1/queries also carries the live POST; only the GET is unmounted.
       const r = await a.call("admin", method, path);
       expect(r.status, key).toBe(404);
     }

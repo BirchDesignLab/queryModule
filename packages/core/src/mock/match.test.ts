@@ -3,6 +3,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import {
+  MOCK_BEHAVIORS,
   type MockFile,
   MockFileSchema,
   type MockResponse,
@@ -212,12 +213,14 @@ const QUERY_TYPES = ["VEH", "PER"] as const;
 const tokenArb = fc.constantFrom(...TOKENS);
 const typeValueArb = fc.constantFrom("PC", "TK", "RED", "BLU");
 const valueArb = fc.oneof(tokenArb, fc.constant(1901), fc.boolean());
-const scenarioArb: fc.Arbitrary<MockScenario> = fc.record({
-  when: fc.dictionary(fc.constantFrom(...KEYS), fc.oneof(tokenArb, fc.constant(1901)), {
-    maxKeys: 2,
-  }),
-  respond: fc.record({ n: fc.nat(9) }),
+const whenArb = fc.dictionary(fc.constantFrom(...KEYS), fc.oneof(tokenArb, fc.constant(1901)), {
+  maxKeys: 2,
 });
+// exactly one of respond or behavior, as the schema requires (C-M1: behaviours in the property)
+const scenarioArb: fc.Arbitrary<MockScenario> = fc.oneof(
+  fc.record({ when: whenArb, respond: fc.record({ n: fc.nat(9) }) }),
+  fc.record({ when: whenArb, behavior: fc.constantFrom(...MOCK_BEHAVIORS) }),
+);
 const responseArb: fc.Arbitrary<MockResponse> = fc.record({
   queryType: fc.constantFrom(...QUERY_TYPES),
   types: fc.option(
@@ -250,10 +253,11 @@ describe("matchMockScenario equals the adapter rules it replaced (property)", ()
           const scenario = oraclePickScenario(entry, { values });
           expect(got?.responseIndex).toBe(responsesParsed.indexOf(entry));
           expect(got?.scenarioIndex).toBe(scenario ? entry.scenarios.indexOf(scenario) : null);
-          expect(got?.outcome).toEqual({
-            kind: "respond",
-            payload: scenario?.respond ?? entry.default,
-          });
+          expect(got?.outcome).toEqual(
+            scenario?.behavior !== undefined
+              ? { kind: "behavior", behavior: scenario.behavior }
+              : { kind: "respond", payload: scenario?.respond ?? entry.default },
+          );
         },
       ),
     );

@@ -1,4 +1,4 @@
-import type { Role } from "@querymodule/core/contracts";
+import { ListQueriesQuerySchema, type Role } from "@querymodule/core/contracts";
 import type { Hono } from "hono";
 import type { AppDeps } from "../deps";
 import type { DispatchJob } from "../dispatch/dispatcher";
@@ -11,6 +11,7 @@ import { type Acknowledged, acknowledge } from "./acknowledge";
 import { admitSubmit, replayResponse } from "./admission";
 import { sanitizeSubmitError } from "./errors";
 import { type PreparedSubmit, prepareSubmit } from "./prepare";
+import { decodeListCursor, listQueries, readQuery } from "./read";
 
 export { SubmitTransactionError, sanitizeSubmitError } from "./errors";
 
@@ -173,5 +174,49 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       d.fatal(e);
     }
     return c.json(ack.body, 202);
+  });
+
+  /**
+   * GET /api/v1/queries (spec 5.1, 6.7; #561, #589): the caller's requests, newest first, cursor
+   * paged; every session role lists its own (sessionOwn). A malformed limit or cursor, an empty
+   * one included, or an unknown parameter is 400 validationFailed, never 500. A read failure
+   * answers 500 internal and logs the error class only. The list writes no audit row.
+   */
+  app.get("/api/v1/queries", requireSession(d.identity), async (c) => {
+    const q = ListQueriesQuerySchema.safeParse(c.req.query());
+    if (!q.success) return apiError(c, "validationFailed");
+    const cursor = q.data.cursor === undefined ? undefined : decodeListCursor(q.data.cursor);
+    if (cursor === null) return apiError(c, "validationFailed");
+    try {
+      const body = await listQueries(d, c.get("principal"), {
+        ...(cursor ? { cursor } : {}),
+        ...(q.data.limit === undefined ? {} : { limit: q.data.limit }),
+      });
+      return c.json(body, 200);
+    } catch (e) {
+      d.logger.error("query list failed", { error: { name: errorFields(e).name } });
+      return apiError(c, "internal");
+    }
+  });
+
+  /**
+   * GET /api/v1/queries/:correlationId (spec 5.1, 5.2; #561): the owner's read through the access
+   * policy. Anyone else, an admin included, and an unknown or malformed id get the same 404
+   * notFound, never 403. A decrypt or parse failure answers 500 internal and logs the error class
+   * and the id only, never a value or a payload (spec 5.9). The owner's read writes no audit row.
+   */
+  app.get("/api/v1/queries/:correlationId", requireSession(d.identity), async (c) => {
+    const correlationId = c.req.param("correlationId");
+    try {
+      const detail = await readQuery(d, c.get("principal"), correlationId);
+      if (detail === null) return apiError(c, "notFound");
+      return c.json(detail, 200);
+    } catch (e) {
+      d.logger.error("query read failed", {
+        correlationId,
+        error: { name: errorFields(e).name },
+      });
+      return apiError(c, "internal");
+    }
   });
 }
