@@ -83,3 +83,39 @@ for (const mode of ["night", "redShift"] as const satisfies readonly ThemeMode[]
     }
   });
 }
+
+// Results keyboard (UX-015; spec 6.4): arrows move the selected request, a new request leaves the selection
+// on the same request. Enter's detail toggle is covered in the web-ui tests: the default config
+// maps no detail row yet, so no card has a toggle here.
+test("arrow keys move between requests and an incoming request keeps the selection", async ({
+  page,
+}) => {
+  await signIn(page);
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+  await page.getByLabel("Year", { exact: true }).fill("26");
+  const plate = page.getByLabel("Plate", { exact: true });
+  await plate.fill("ZZ-0001");
+  await plate.press("Enter");
+  await expect(page.getByRole("region", { name: "State system: returned" })).toBeVisible({
+    timeout: 8000,
+  });
+  await plate.fill("ZZ-0002");
+  await plate.press("Enter");
+  const rows = page.getByRole("region", { name: "Requests this shift" }).getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).focus();
+  await expect(rows.nth(1)).toHaveAttribute("tabindex", "0");
+  await page.keyboard.press("ArrowUp");
+  await expect(rows.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(rows.nth(0)).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(rows.nth(1)).toBeFocused();
+  // A third request arrives on top (typing took focus to the form): the selection stays on the
+  // same request, now third.
+  await plate.fill("ZZ-0003");
+  await plate.press("Enter");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(2)).toHaveAttribute("tabindex", "0");
+  // The after-each axe run (fixtures.ts) covers serious and critical violations on the final page.
+});

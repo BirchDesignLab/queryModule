@@ -1,6 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import { resolveShortcuts } from "@querymodule/core/config";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ReactNode, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { ShortcutProvider } from "../shortcuts/ShortcutProvider.js";
 import {
   formatAckTime,
   RequestList,
@@ -443,5 +446,147 @@ describe("FR-060 cards and the severity badge in the list (spec 6.2)", () => {
       />,
     );
     expect(screen.getByRole("region", { name: "State card" })).toBe(card);
+  });
+});
+
+describe("UX-015 results keyboard (spec 6.4, 6.6)", () => {
+  const row = (id: string, name: string): RequestRowView => ({
+    id,
+    status: "acknowledged",
+    typeLabel: "Vehicle",
+    summary: `VEH.${name}`,
+    name,
+    reference: `${id}-0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b`,
+    acknowledgedAt: new Date(2026, 8, 29, 13, 4, 5).getTime(),
+    notes: [],
+  });
+  const ROWS = [row("a", "Vehicle A"), row("b", "Vehicle B"), row("c", "Vehicle C")];
+
+  /** A card-like toggle, as the app's result cards render it. */
+  function Toggle({ id }: { id: string }) {
+    const [open, setOpen] = useState(false);
+    return (
+      <button
+        type="button"
+        className="qm-view-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        {`toggle ${id}`}
+      </button>
+    );
+  }
+  const withToggle = (r: RequestRowView): RequestRowView => ({
+    ...r,
+    parts: [
+      {
+        key: `${r.id}:1`,
+        lines: [{ key: `${r.id}:1:s`, tone: "ok", text: "ok", card: <Toggle id={r.id} /> }],
+      },
+    ],
+  });
+
+  function setup(rows: readonly RequestRowView[], wrap?: (ui: ReactNode) => ReactNode) {
+    const user = userEvent.setup();
+    const ui = (list: readonly RequestRowView[]) => (
+      <ShortcutProvider bindings={resolveShortcuts()}>
+        {wrap ? wrap(<RequestList {...base} rows={list} />) : <RequestList {...base} rows={list} />}
+      </ShortcutProvider>
+    );
+    const view = render(ui(rows));
+    return { user, rerender: (next: readonly RequestRowView[]) => view.rerender(ui(next)) };
+  }
+  const item = (name: string) => screen.getByRole("listitem", { name });
+  const rowsEl = () => screen.getAllByRole("listitem");
+
+  it("the list is the results context and has one tab stop: the first row", () => {
+    setup(ROWS);
+    expect(screen.getByRole("region", { name: "Requests this shift" })).toHaveAttribute(
+      "data-shortcut-context",
+      "results",
+    );
+    expect(rowsEl().map((el) => el.getAttribute("tabindex"))).toEqual(["0", "-1", "-1"]);
+  });
+
+  it("ArrowDown and ArrowUp move focus and the tab stop, and stop at the ends", async () => {
+    const { user } = setup(ROWS);
+    await user.tab();
+    expect(rowsEl()[0]).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(rowsEl()[1]).toHaveFocus();
+    expect(rowsEl().map((el) => el.getAttribute("tabindex"))).toEqual(["-1", "0", "-1"]);
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(rowsEl()[2]).toHaveFocus();
+    await user.keyboard("{ArrowUp}{ArrowUp}{ArrowUp}");
+    expect(rowsEl()[0]).toHaveFocus();
+  });
+
+  it("selection is tracked by id: a new row on top moves neither focus nor the selection", async () => {
+    const { user, rerender } = setup(ROWS);
+    await user.tab();
+    await user.keyboard("{ArrowDown}");
+    expect(rowsEl()[1]).toHaveFocus();
+    act(() => rerender([row("z", "Vehicle Z"), ...ROWS]));
+    const focused = document.activeElement as HTMLElement;
+    expect(focused).toHaveTextContent("VEH.Vehicle B");
+    expect(rowsEl().map((el) => el.getAttribute("tabindex"))).toEqual(["-1", "-1", "0", "-1"]);
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toHaveTextContent("VEH.Vehicle C");
+  });
+
+  it("a selected row that leaves the list hands the tab stop to the first row", async () => {
+    const { user, rerender } = setup(ROWS);
+    await user.tab();
+    await user.keyboard("{ArrowDown}");
+    act(() => rerender([ROWS[0] as RequestRowView, ROWS[2] as RequestRowView]));
+    expect(rowsEl().map((el) => el.getAttribute("tabindex"))).toEqual(["0", "-1"]);
+  });
+
+  it("Enter on a row toggles the detail of the cards in the selected row only", async () => {
+    const { user } = setup(ROWS.map(withToggle));
+    await user.tab();
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "toggle b" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "toggle a" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(rowsEl()[1]).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "toggle b" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("Enter with no card in the row does nothing", async () => {
+    const { user } = setup(ROWS);
+    await user.tab();
+    await user.keyboard("{Enter}");
+    expect(rowsEl()[0]).toHaveFocus();
+  });
+
+  it("focus moved into a row's button selects that row", async () => {
+    const { user } = setup(ROWS.map(withToggle));
+    act(() => screen.getByRole("button", { name: "toggle c" }).focus());
+    expect(rowsEl().map((el) => el.getAttribute("tabindex"))).toEqual(["-1", "-1", "0"]);
+    await user.keyboard("{ArrowUp}");
+    expect(rowsEl()[1]).toHaveFocus();
+  });
+
+  it("Delete is not bound here (M3)", async () => {
+    const { user } = setup(ROWS);
+    await user.tab();
+    await user.keyboard("{Delete}");
+    expect(rowsEl()).toHaveLength(3);
+  });
+
+  it("a row is named by the request", () => {
+    setup(ROWS);
+    expect(item("Vehicle A")).toBeInTheDocument();
   });
 });

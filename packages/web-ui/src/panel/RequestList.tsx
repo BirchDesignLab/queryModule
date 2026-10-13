@@ -1,4 +1,5 @@
-import { type JSX, type ReactNode, useId, useLayoutEffect, useRef } from "react";
+import { type JSX, type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
+import { useShortcutAction } from "../shortcuts/ShortcutProvider.js";
 
 /** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
 export interface SourceLineView {
@@ -117,6 +118,41 @@ export function RequestList({
   t,
 }: RequestListProps): JSX.Element {
   const headingId = useId();
+  // Roving focus (spec 6.4, UX-015): one row is the tab stop. The selection is tracked by row id, so
+  // a row arriving on top, or an update to a row, never moves it; with none chosen the first row
+  // is the tab stop. Only the user's own keys or focus change it.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const selectedIndex = Math.max(
+    0,
+    rows.findIndex((row) => row.id === selectedId),
+  );
+  const rowElements = (): HTMLElement[] =>
+    Array.from(listRef.current?.children ?? []).filter(
+      (el): el is HTMLElement => el instanceof HTMLElement,
+    );
+  const move = (delta: number): void => {
+    const next = rows[Math.min(rows.length - 1, Math.max(0, selectedIndex + delta))];
+    if (next === undefined) return;
+    setSelectedId(next.id);
+    rowElements()[rows.indexOf(next)]?.focus();
+  };
+  useShortcutAction("selectPrev", () => move(-1));
+  useShortcutAction("selectNext", () => move(1));
+  // The cards of the selected row own their open state; their toggles are the one way to change it
+  // (a button, so a pointer or Space does the same). Enter opens every closed card of the row, or
+  // closes them all when none is closed. Focus stays where it is.
+  useShortcutAction("toggleDetail", () => {
+    const toggles = Array.from(
+      rowElements()[selectedIndex]?.querySelectorAll<HTMLButtonElement>(
+        "button.qm-view-toggle[aria-expanded]",
+      ) ?? [],
+    );
+    const anyClosed = toggles.some((b) => b.getAttribute("aria-expanded") === "false");
+    for (const b of toggles) {
+      if ((b.getAttribute("aria-expanded") === "false") === anyClosed) b.click();
+    }
+  });
   const headingRef = useRef<HTMLHeadingElement>(null);
   // The Retry button that had focus when it was pressed. Where a retry replaces its own row (the
   // officer's "last request" shows one row), or its acknowledgment retires the button (the failed
@@ -138,7 +174,7 @@ export function RequestList({
     if (active === null || active === document.body) headingRef.current?.focus();
   });
   return (
-    <section aria-labelledby={headingId} className="qm-requests">
+    <section aria-labelledby={headingId} className="qm-requests" data-shortcut-context="results">
       <div className="qm-requests__head">
         <h2 id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
           {heading}
@@ -148,9 +184,16 @@ export function RequestList({
       {rows.length === 0 ? (
         <p className="qm-requests__empty">{emptyText}</p>
       ) : (
-        <ol className="qm-requests__list">
-          {rows.map((row) => (
-            <li key={row.id} className={`qm-request qm-request--${row.status}`}>
+        <ol ref={listRef} className="qm-requests__list">
+          {rows.map((row, index) => (
+            <li
+              key={row.id}
+              className={`qm-request qm-request--${row.status}`}
+              aria-label={row.name}
+              tabIndex={index === selectedIndex ? 0 : -1}
+              // Focus entering the row or anything in it (a click, Tab, an arrow) selects it.
+              onFocus={() => setSelectedId(row.id)}
+            >
               <span className="qm-request__type">{row.typeLabel}</span>
               <code className="qm-request__summary">{row.summary}</code>
               <span className="qm-request__badges">
