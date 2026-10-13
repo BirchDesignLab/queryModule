@@ -1621,6 +1621,45 @@
       "reqIds": "none",
       "title": "Live source status follow-ups: 202 skip reason + alsoRun origin (M2 P1), client minors",
       "body": "Follow-ups from cloud BW3 part 2 (live per-source status in the request list, Tasks 6-8, #554 #555 #556). None blocks the P0.5 demo.\n\nContract asks for M2 P1 (frozen contracts: controller stop, plan them in M2 P1 planning):\n- [ ] 202 acknowledgment carries a skip reason per skipped part (the list now reads \"{type} was not run.\" with no reason)\n- [ ] 202 carries an `alsoRun` origin for nested parts (the list labels them \"Also run: ...\" by position, first part primary)\n\nClient minors (ordinary, apps/web):\n- [ ] A spurious \"0 of N done\" summary can follow a 202 when only unmatched events were held\n- [ ] The per-request held-event list is not capped (requests are capped at 50)\n- [ ] A row that leaves the list inside the 1500 ms window drops its summary silently; add a test\n- [ ] The status store calls `globalThis.setTimeout` instead of the injected Timers seam\n- [ ] A source with no config label shows its raw id on its line\n- [ ] The fieldset accessible name includes `row.summary` (may hold a typed query value), as the Copy and Retry labels already do: decide once for all three\n- [ ] Drop the unused `requests.sourcePending` key once en.json is no longer add-only\n- [ ] `announce-status.test.ts` was written after the code: add a mutation check or a failing-first case\n\nRefs #554, #555, #556.\n"
+    },
+    {
+      "number": 610,
+      "labels": ["web", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "test(web): explicit findBy timeout for admin tests that flake under full-suite load on Windows",
+      "body": "Under full `pnpm verify` load on the Windows lane, web admin tests fail at a setup step that waits on Testing Library's default 1000 ms findBy timeout: `findByRole('tab', { name: 'Form' })` or the Preview `region` \"Live preview\". The failing set changes run to run; every file passes alone.\n\nSeen 10-13-26 on `feat/m2-a-p1-wave-1` (changes nothing under `apps/web/src/admin`): BuilderFixes, BuilderTree, GenericForm, History, MockChanges, Publish, Preview, CommandsEditor, RulesEditor, LabelOverlay (`apps/web/src/admin/*.test.tsx`). Also `scripts/ops/backup.test.ts`: 2 tests over the 5000 ms default.\n\n**Fix:** one admin test helper (or the web test setup) that gives these setup waits an explicit timeout, e.g. `findByRole(..., {}, { timeout: 5000 })` or `configure({ asyncUtilTimeout })` in the web test setup; an explicit describe timeout for `backup.test.ts`.\n\n**Tiers:** `apps/web/src/admin` tests are ordinary; a change to `**/vitest.config.ts` is gate; `scripts/ops/**` is gate.\n\n**Acceptance:** three back-to-back full `pnpm verify` runs on the Windows lane with none of these files failing.\n\nRelated: #560 (known Windows load flakes).\n"
+    },
+    {
+      "number": 614,
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 44,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "ci: run oasdiff breaking on api-breaking PRs (report, don't fail)",
+      "body": "The `oasdiff breaking` step in `.github/workflows/ci.yml` (step 7) is skipped entirely on any PR labelled `api-breaking`. So exactly the PRs that change the API contract get no tool-confirmed diff.\n\nSeen on #611 (M2 P1 AW1): the label was set at open, the step never ran, and the expected breaking changes (`skippedReason` removed from three never-served read routes) plus \"no change to the 202\" were confirmed only by hand mapping and the review's expectation. The PR body pointed at a CI result that did not exist.\n\n**Fix:** always run the step on pull requests. With the `api-breaking` label, report the breaking-change list (job log and step summary) but do not fail; without the label, fail on breaking changes as today. Keep the merge-base logic (#171), the rename map and the pinned image digest unchanged.\n\n**Tier:** gate (`.github/**`). Ride the next gate-tier wave PR.\n\n**Acceptance:** a PR with the label shows the oasdiff breaking list in the step summary and passes; a PR without the label and with a breaking change still fails.\n\nFound in: #611 follow-up (10-13-26).\n"
+    },
+    {
+      "number": 615,
+      "labels": ["documentation", "p1"],
+      "milestone": "M2 Results and audit",
+      "parent": 44,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "docs: rebuild the management brief and refresh all documentation at the M2 P1 demo point",
+      "body": "When M2 P1 reaches a demo-able `main` (demo sets in the P1 plans), before the demo:\n\n1. **Rebuild the management brief** (last edition: \"Status as released September 30, 2026, Milestone 1 of 4, final phase\"). Bring it to M2 P1: results inside each request, result cards and the cards builder, Try a match, replay, keyword editor; updated counts (merged changes, work items, ADRs, build hours).\n2. **Refresh all documentation** against what ships: README, `docs/api.md`, user and implementer guides, ops/runbooks, release notes, STATUS, design docs, ADR index, spec cross-references.\n\n**Branding (developer 10-13-26), applies to every Birch Design Lab document:**\n- Header: logo mark + \"BIRCH DESIGN LAB\" wordmark on the left only. No domain on the right.\n- Footer: \"birchdesignlab.com\" on the left (no \"Birch Design Lab\" name before it); page number on the right.\n- Keep both simple.\n\n**Tier:** ordinary (docs). Timing: at the P1 demo point, after AW4's docs and release note, or folded into them.\n"
     }
   ]
 }
