@@ -314,25 +314,43 @@ same `nonce` and its own `serverTime`. A socket with no ping for 60 seconds is c
 | 4000 | No ping for 60 seconds. |
 | 1008 | A frame that does not parse as a client message. |
 | 1001 | The server is shutting down. |
-| 1011 | An internal error (for example the `welcome` could not be built). |
+| 1011 | An internal error (for example the `welcome` or the replay could not be read). |
 
 4001 is the only close code a client must act on. The others are server-local
 (`WS_LOCAL_CLOSE` in `packages/api/src/ws/server.ts`: 1001 shutdown, 1008 badMessage, 1011
-internal, 4000 idle) and all mean the same thing: reconnect with backoff, send `hello` and refetch
-over HTTP what you missed (replay by `lastSeq` is M2 P1).
+internal, 4000 idle) and all mean the same thing: reconnect with backoff and send `hello` with your
+`lastSeq`; the server replays what you missed or answers `resync` (see Replay).
 
 **Messages.**
 
 | Message | Direction | Status |
 |---|---|---|
-| `hello` | client to server, `{ lastSeq: int or null }` | live. The server answers `welcome`. |
-| `welcome` | server to client, `{ latestSeq }` | live. `latestSeq` is the owner's newest `event_log` seq (0 when none), read live at each `hello`. Replay from `hello.lastSeq` is M2 P1; no HTTP route returns per-source status, so a missed `sourceStatus` is lost until replay lands. |
+| `hello` | client to server, `{ lastSeq: int or null }` | live. The server answers `welcome`, then the replay or one `resync` (see Replay). A second `hello` on the same socket is ignored. |
+| `welcome` | server to client, `{ latestSeq }` | live. `latestSeq` is the owner's newest `event_log` seq (0 when none), read live at each `hello`, in the same read as the replay. |
 | `ping` | client to server, `{ nonce }` (1 to 64 characters) | live. |
 | `pong` | server to client, `{ nonce, serverTime }` | live. |
 | `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The metric is recorded from M2 P1. |
-| `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | live. Published after each source outcome commits, to the owner's sockets only (never another user's). Each also lands in `event_log`; replay by `lastSeq` follows with the feed (M2 P1). |
+| `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | live. Published after each source outcome commits, to the owner's sockets only (never another user's). Each also lands in `event_log` and is replayable by `lastSeq`. |
 | `resultHidden` | server to client, `{ seq, at, correlationId, resultIds }` | planned (contract since M2 P0). Sent after a delete from view so the owner's other devices drop the results; replayable (M3 P2). |
-| `resync` | server to client, `{ reason: "tooOld" or "tooMany" or "unknownCursor", latestSeq }` | planned (contract since M2 P0). Replay refused: the client refetches over HTTP and sets its mark to `latestSeq` (M2 P1). |
+| `resync` | server to client, `{ reason: "tooOld" or "tooMany" or "unknownCursor", latestSeq }` | live. Replay refused: the client refetches over HTTP and sets its mark to `latestSeq`. |
+
+**Replay** (spec 4.7, 5.3). `hello.lastSeq` is the highest seq the client has applied. The server
+answers, in this order on the socket: `welcome { latestSeq }`, then either the owner's own
+`event_log` rows with `seq > lastSeq` in seq order (each re-validated against the contract) or one
+`resync`, then live events. Live events published before the answer are held and sent after it,
+only when their seq is above the last replayed seq (or `lastSeq`, or `latestSeq` for a `null`
+cursor or a `resync`), so a row is never sent twice.
+
+| `lastSeq` | Answer |
+|---|---|
+| `null` | `welcome` only, no replay (a fresh client). |
+| above `latestSeq` | `resync` `unknownCursor` (for example a reset database). |
+| equal to `latestSeq` | nothing due, no `resync`, even when the newest row is older than 24 hours. |
+| `0` | every row of the last 24 hours, or `resync` `tooMany` when more than 500 are due. |
+| above 0 | `resync` `tooOld` when row `lastSeq + 1` was pruned or is older than 24 hours; `resync` `tooMany` when more than 500 rows are due; else the rows. |
+
+A replay read failure closes the socket with 1011. Rows are kept for 24 hours (each user's newest
+row is kept longer, so seq never restarts).
 
 Receipt policy (ADR-0013; the web feed client follows it): clients parse server messages
 tolerantly, the server stays strict. An unknown `type` is dropped and unknown keys

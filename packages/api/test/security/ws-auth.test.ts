@@ -119,6 +119,12 @@ describe("WebSocket upgrade and heartbeat (spec 5.3, 10.3)", () => {
     const a = await open(s.wsUrl, { origin: ORIGIN, cookie });
     const b = await open(s.wsUrl, { origin: ORIGIN, cookie: other });
     const bUser = (await t.auditRows("loginSucceeded")).at(-1)?.actorUserId ?? "";
+    // live events are held until hello is answered (spec 5.3 replay), so both say hello first
+    for (const x of [a, b]) {
+      const welcome = nextMsg(x);
+      x.send(JSON.stringify(hello));
+      expect(await welcome).toMatchObject({ type: "welcome", latestSeq: 0 });
+    }
     const got: unknown[] = [];
     a.on("message", (m) => got.push(JSON.parse(String(m))));
     const ev = {
@@ -144,6 +150,31 @@ describe("WebSocket upgrade and heartbeat (spec 5.3, 10.3)", () => {
     const { s, cookie } = await setup({ idleMs: 200 });
     const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
     expect(await closeCode(ws)).toBe(4000);
+  });
+
+  it("a socket that pings but never sends hello still closes at the idle deadline (AW3 critic K-1)", async () => {
+    // Live events are held until hello (spec 5.3); a ping before hello must not keep that
+    // buffer alive past the idle window.
+    const { s, cookie } = await setup({ idleMs: 300 });
+    const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
+    const pinger = setInterval(() => ws.send(JSON.stringify(ping("k1"))), 100);
+    try {
+      expect(await closeCode(ws)).toBe(4000);
+    } finally {
+      clearInterval(pinger);
+    }
+  });
+
+  it("after hello, a ping keeps the socket past the idle window", async () => {
+    const { s, cookie } = await setup({ idleMs: 300 });
+    const ws = await open(s.wsUrl, { origin: ORIGIN, cookie });
+    ws.send(JSON.stringify(hello));
+    await nextMsg(ws);
+    const pinger = setInterval(() => ws.send(JSON.stringify(ping("k2"))), 100);
+    await new Promise((r) => setTimeout(r, 700));
+    clearInterval(pinger);
+    expect(ws.readyState).toBe(ws.OPEN);
+    ws.close();
   });
 
   it("upgrade and ping never bump the session idle clock (X-Background)", async () => {

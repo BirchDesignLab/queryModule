@@ -7,6 +7,9 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { derivePassword } from "../../packages/api/src/seed/password";
 
+/** The oasdiff step's bash array expansion, spelled without a template placeholder. */
+const FAIL_ON_ARGS = ['"$', '{fail_on[@]}"'].join("");
+
 // ADR-0008: one aggregate `ci` check, path-scoped jobs. This test parses the
 // real ci.yml so a structural regression fails here instead of only in CI.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -16,6 +19,10 @@ const workflow: any = parse(readFileSync(workflowPath, "utf8"));
 // biome-ignore lint/suspicious/noExplicitAny: same as above
 const jobs: Record<string, any> = workflow.jobs;
 const jobIds = Object.keys(jobs);
+
+/** #617: the heavy jobs skip on a docs-only or a board-only change. */
+const NOT_DOCS_OR_BOARD_ONLY =
+  "needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.board_only != 'true'";
 
 // biome-ignore lint/suspicious/noExplicitAny: same as above
 function jobNeeds(job: any): string[] {
@@ -82,11 +89,42 @@ describe("ci.yml structure (ADR-0008)", () => {
       "openapi-rename-map.ts base-openapi.json head-openapi.json head-openapi.renamed.json",
     );
     const diff = run.indexOf(
-      "breaking /work/base-openapi.json /work/head-openapi.renamed.json --fail-on ERR",
+      `breaking /work/base-openapi.json /work/head-openapi.renamed.json ${FAIL_ON_ARGS}`,
     );
     expect(rename).toBeGreaterThan(run.indexOf("openapi-base.ts"));
     expect(diff).toBeGreaterThan(rename);
-    expect(step.if).toContain("api-breaking");
+    const checkout = steps.find(
+      (s) => typeof s.uses === "string" && s.uses.startsWith("actions/checkout"),
+    );
+    expect(checkout.with["fetch-depth"]).toBe(0);
+  });
+
+  it("the oasdiff step runs on every pull request; api-breaking reports without failing (#614)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow steps
+    const steps: any[] = jobs.test.steps;
+    const step = steps.find((s) => s.name === "oasdiff breaking");
+    const run: string = step.run;
+    // never skipped for the label: the PRs that change the contract get a tool-confirmed diff
+    expect(step.if).toBe("github.event_name == 'pull_request'");
+    expect(step.env.API_BREAKING).toBe(
+      ["$", "{{ contains(github.event.pull_request.labels.*.name, 'api-breaking') }}"].join(""),
+    );
+    // without the label the diff fails on ERR; with it the same diff runs with no --fail-on
+    expect(run).toMatch(/if \[ "\$API_BREAKING" = "true" \]; then\s+fail_on=\(\)/);
+    expect(run).toContain("fail_on=(--fail-on ERR)");
+    expect(run).toContain(
+      `breaking /work/base-openapi.json /work/head-openapi.renamed.json ${FAIL_ON_ARGS}`,
+    );
+    // the list reaches the job log and the step summary, then the diff's own exit code is kept
+    expect(run).toContain('>> "$GITHUB_STEP_SUMMARY"');
+    expect(run).toMatch(/exit "\$diff_rc"\s*$/);
+    // one pinned image (v1.32.1), never a tag
+    expect(run.match(/tufin\/oasdiff@sha256:[0-9a-f]{64}/g)).toHaveLength(1);
+  });
+
+  it("the oasdiff step keeps the checkout depth the merge base needs", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow steps
+    const steps: any[] = jobs.test.steps;
     const checkout = steps.find(
       (s) => typeof s.uses === "string" && s.uses.startsWith("actions/checkout"),
     );
@@ -172,11 +210,11 @@ type WorkflowStep = {
 };
 
 describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-003)", () => {
-  it("`image` job is gated on docs-only like the other gated jobs and waits for `checks` (#231 G-M1)", () => {
+  it("`image` job is gated on docs-only and board-only like the other gated jobs and waits for `checks` (#231 G-M1, #617)", () => {
     expect(jobs.image).toBeDefined();
     // checks holds the pre-install lockfile guard; image installs, so it runs only after it.
     expect(jobNeeds(jobs.image)).toEqual(["changes", "checks"]);
-    expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
+    expect(jobs.image.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
   });
 
   it("`image` job's boot-smoke down step always runs, even if an earlier step failed", () => {
@@ -219,10 +257,10 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   });
 
   it("a push to main always builds the image, so every main sha gets a sha- image (#230)", async () => {
-    // image skips only on docs_only, and changed-paths fails closed to docs_only=false on any
+    // image skips only on docs_only or board_only, and changed-paths fails closed to both false on any
     // push (a docs-only merge to main still builds, smoke-tests and publishes its image).
-    expect(jobs.image.if).toBe("needs.changes.outputs.docs_only != 'true'");
-    expect(jobs.checks.if).toBe("needs.changes.outputs.docs_only != 'true'");
+    expect(jobs.image.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
+    expect(jobs.checks.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
     const { main } = await import("./changed-paths.mjs");
     const lines: string[] = [];
     main({
@@ -231,6 +269,7 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
       write: (l: string) => lines.push(l),
     });
     expect(lines).toContain("docs_only=false");
+    expect(lines).toContain("board_only=false");
   });
 
   it("the aggregate `ci` job needs `image`", () => {
@@ -449,5 +488,33 @@ ${run}`),
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("ci.yml board-only fast path (#617)", () => {
+  it("`changes` exposes board_only and the heavy jobs skip when it is true", () => {
+    expect(jobs.changes.outputs.board_only).toBe(
+      ["$", "{{ steps.changes.outputs.board_only }}"].join(""),
+    );
+    for (const id of ["checks", "test", "image"]) {
+      expect(jobs[id].if, id).toBe(NOT_DOCS_OR_BOARD_ONLY);
+    }
+    // web and mobile need checks, so they skip with it; their own path flags are false too.
+    expect(jobNeeds(jobs.web)).toContain("checks");
+    expect(jobNeeds(jobs.mobile)).toContain("checks");
+  });
+
+  it("`board` runs only on a board-only change and judges board data: Biome and the schema test", () => {
+    const board = jobs.board;
+    expect(board).toBeDefined();
+    expect(board.if).toBe("needs.changes.outputs.board_only == 'true'");
+    expect(jobNeeds(board)).toEqual(["changes"]);
+    const runs = (board.steps as Array<{ run?: string }>).map((st) => st.run ?? "");
+    expect(runs.some((r) => r.includes("biome ci --error-on-warnings docs/board"))).toBe(true);
+    expect(runs.some((r) => r.includes("scripts/ops/board-data.test.ts"))).toBe(true);
+  });
+
+  it("the aggregate `ci` job needs `board`, so a failing board check fails ci", () => {
+    expect(jobNeeds(jobs.ci)).toContain("board");
   });
 });

@@ -178,6 +178,70 @@ describe("GET /api/v1/queries/:correlationId, the owner's read (spec 5.1, 5.2; #
     }
   });
 
+  it("a failed (FAIL1) and a timed-out (TIMEOUT) source read without a payload (AW2 review C-m1)", async () => {
+    const { submit, time, settleAll, read } = await setup();
+    // FAIL1: stateSource fails; nationalSource answers its default
+    const failed = await submit({
+      queryType: "VEH",
+      values: { plate: "FAIL1", state: "TX" },
+      sourceIds: ["stateSource", "nationalSource"],
+      mode: "normal",
+    });
+    // TIMEOUT: nationalSource never answers; its deadline is ack + timeoutMs (10 000 ms)
+    const timedOut = await submit({
+      queryType: "VEH",
+      values: { plate: "TIMEOUT", state: "TX" },
+      sourceIds: ["nationalSource"],
+      mode: "normal",
+    });
+    await time.run(20_000);
+    await settleAll();
+    const f = (await read(failed.correlationId)).parts[0]?.sources ?? [];
+    expect(f.map((s) => [s.sourceId, s.status])).toEqual([
+      ["stateSource", "failed"],
+      ["nationalSource", "returned"],
+    ]);
+    expect(f[0]).toMatchObject({ errorCode: "failed", timedOutAt: null, purged: false });
+    expect(f[0]).not.toHaveProperty("payload");
+    expect(f[1]?.payload).toBeTypeOf("object");
+    const t = (await read(timedOut.correlationId)).parts[0]?.sources ?? [];
+    expect(t.map((s) => [s.sourceId, s.status])).toEqual([["nationalSource", "timedOut"]]);
+    expect(t[0]).toMatchObject({ purged: false });
+    // the outcome writer stamps both at settle (dispatch/outcome.ts)
+    expect(t[0]?.timedOutAt).toBeTypeOf("number");
+    expect(t[0]?.receivedAt).toBe(t[0]?.timedOutAt);
+    expect(t[0]).not.toHaveProperty("payload");
+  });
+
+  it("each request_key scope purges on its own clock: payload shredded keeps values, and the reverse (AW2 review C-m2)", async () => {
+    const { t, submit, settleAll, read } = await setup();
+    const body = {
+      queryType: "VEH",
+      values: { plate: PLATE, state: "TX" },
+      sourceIds: ["stateSource"],
+      mode: "normal",
+    };
+    const a = await submit(body);
+    const b = await submit(body);
+    await settleAll();
+    const shred = (correlationId: string, scope: "values" | "payload") =>
+      t.deps.db.$client.execute({
+        sql: "DELETE FROM request_key WHERE correlation_id = ? AND scope = ?",
+        args: [correlationId, scope],
+      });
+    await shred(a.correlationId, "payload");
+    await shred(b.correlationId, "values");
+    const pa = (await read(a.correlationId)).parts[0];
+    expect(pa).toMatchObject({ purged: false, values: { plate: PLATE, state: "TX" } });
+    expect(pa?.sources[0]).toMatchObject({ status: "returned", purged: true });
+    expect(pa?.sources[0]).not.toHaveProperty("payload");
+    const pb = (await read(b.correlationId)).parts[0];
+    expect(pb?.purged).toBe(true);
+    expect(pb).not.toHaveProperty("values");
+    expect(pb?.sources[0]).toMatchObject({ status: "returned", purged: false });
+    expect(pb?.sources[0]?.payload).toMatchObject({ plate: PLATE, status: "STOLEN" });
+  });
+
   it("the owner's read writes no audit row (spec 5.2)", async () => {
     const { submit, settleAll, read, count } = await setup();
     const ack = await submit({

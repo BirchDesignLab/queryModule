@@ -45,7 +45,7 @@ async function setup() {
     random: () => 0,
   });
   const aId = await t.createUser("a@example.test", PW);
-  await t.createUser("b@example.test", PW);
+  const bId = await t.createUser("b@example.test", PW);
   const cookieA = await t.cookieFor("a@example.test", PW);
   const cookieA2 = await t.cookieFor("a@example.test", PW);
   const cookieB = await t.cookieFor("b@example.test", PW);
@@ -79,15 +79,15 @@ async function setup() {
   const sock = (cookie: string) => open(s.wsUrl, { origin: ORIGIN, cookie });
   const statuses = (got: unknown[]) =>
     got.filter((m) => (m as { type?: string }).type === "sourceStatus");
-  const hello = (ws: WebSocket, got: unknown[]) => {
+  const hello = (ws: WebSocket, got: unknown[], lastSeq: number | null = null) => {
     const before = got.length;
-    ws.send(JSON.stringify({ v: 1, type: "hello", lastSeq: null }));
+    ws.send(JSON.stringify({ v: 1, type: "hello", lastSeq }));
     return vi.waitFor(() => {
       expect(got.length).toBeGreaterThan(before);
       return WsServerMessageSchema.parse(got[got.length - 1]);
     });
   };
-  return { t, time, aId, cookieA, cookieA2, cookieB, submit, sock, statuses, hello };
+  return { t, time, aId, bId, cookieA, cookieA2, cookieB, submit, sock, statuses, hello };
 }
 
 describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
@@ -96,6 +96,8 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     const a = await c.sock(c.cookieA);
     const a2 = await c.sock(c.cookieA2);
     const b = await c.sock(c.cookieB);
+    // live events are held until hello is answered (spec 5.3 replay)
+    for (const x of [a, a2, b]) await c.hello(x.ws, x.got);
     await c.submit(c.cookieA, "ZZ-0001");
     await c.time.run(200);
     await vi.waitFor(() => expect(c.statuses(a.got)).toHaveLength(2));
@@ -181,11 +183,11 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
   });
 
   /**
-   * AW4 critic weak test 2: hello arrives while T2 holds its transaction open. The latestSeq read
-   * queues behind the DB lock, so it sees exactly what T2 left: seq 1 after a commit (and the
-   * event is delivered once), 0 after a rollback (and nothing is delivered).
+   * AW4 critic weak test 2: hello arrives while T2 holds its transaction open. The read (latestSeq
+   * for lastSeq null, the replay read for lastSeq 0) queues behind the DB lock, so it sees exactly
+   * what T2 left: seq 1 after a commit, 0 after a rollback (and nothing is delivered).
    */
-  async function helloDuringT2(commit: boolean) {
+  async function helloDuringT2(commit: boolean, lastSeq: number | null) {
     const c = await setup();
     const record = c.t.deps.audit.record.bind(c.t.deps.audit);
     let reached: () => void = () => {};
@@ -208,7 +210,7 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     await c.submit(c.cookieA, "ZZ-0001", ["stateSource"]);
     await c.time.run(200);
     await atGate;
-    const welcome = c.hello(a.ws, a.got);
+    const welcome = c.hello(a.ws, a.got, lastSeq);
     // the hello is held behind T2's lock, not answered from a stale read
     await new Promise((r) => setTimeout(r, 50));
     expect(a.got.some((m) => (m as { type?: string }).type === "welcome")).toBe(false);
@@ -219,22 +221,100 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     return { c, a, w, rows };
   }
 
-  it("hello during a committing T2: welcome.latestSeq 1 and seq 1 delivered once", async () => {
-    const { c, a, w, rows } = await helloDuringT2(true);
+  it("hello lastSeq 0 during a committing T2: welcome.latestSeq 1 and seq 1 delivered once", async () => {
+    const { c, a, w, rows } = await helloDuringT2(true, 0);
     expect(w).toMatchObject({ type: "welcome", latestSeq: 1 });
     expect(rows).toHaveLength(1);
     await vi.waitFor(() => expect(c.statuses(a.got)).toHaveLength(1));
     expect(c.statuses(a.got)).toMatchObject([{ seq: 1 }]);
+    // welcome first, then the row exactly once (replayed or live, never both)
+    await new Promise((r) => setTimeout(r, 50));
+    expect(a.got.map((m) => (m as { type?: string }).type)).toEqual(["welcome", "sourceStatus"]);
+    expect(c.t.fatals).toEqual([]);
+    a.ws.close();
+  });
+
+  it("hello null during a committing T2: welcome.latestSeq 1, and seq 1 (already counted) is not sent", async () => {
+    const { c, a, w, rows } = await helloDuringT2(true, null);
+    expect(w).toMatchObject({ type: "welcome", latestSeq: 1 });
+    expect(rows).toHaveLength(1);
+    await vi.waitFor(() => expect(c.t.deps.dispatcher.inFlight()).toBe(0));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(c.statuses(a.got)).toEqual([]);
     expect(c.t.fatals).toEqual([]);
     a.ws.close();
   });
 
   it("hello during a T2 that rolls back: welcome.latestSeq 0, no event_log row, nothing delivered", async () => {
-    const { c, a, w, rows } = await helloDuringT2(false);
+    const { c, a, w, rows } = await helloDuringT2(false, 0);
     expect(w).toMatchObject({ type: "welcome", latestSeq: 0 });
     expect(rows).toEqual([]);
     expect(c.statuses(a.got)).toEqual([]);
     await vi.waitFor(() => expect(c.t.fatals).toHaveLength(1));
     a.ws.close();
+  });
+  /** A owns seq 1 and 2, B owns seq 1 to 4, all from real dispatches (seq is per user). */
+  async function dispatchedForBoth() {
+    const c = await setup();
+    const a = await c.submit(c.cookieA, "ZZ-0001");
+    const b1 = await c.submit(c.cookieB, "ZZ-0001");
+    const b2 = await c.submit(c.cookieB, "ZZ-0001");
+    await c.time.run(1_000);
+    await vi.waitFor(() => expect(c.t.deps.dispatcher.inFlight()).toBe(0));
+    const rowsOf = (userId: string) =>
+      c.t.deps.db
+        .select()
+        .from(eventLog)
+        .where(eq(eventLog.userId, userId))
+        .orderBy(asc(eventLog.seq));
+    return { c, a, b: [b1, b2], rowsOf };
+  }
+  const idsOf = (got: unknown[], statuses: (g: unknown[]) => unknown[]) =>
+    statuses(got).map((m) => (m as { correlationId: string }).correlationId);
+
+  it("replay after a real dispatch sends each user only their own event_log rows (SEC-014)", async () => {
+    const { c, a, b, rowsOf } = await dispatchedForBoth();
+    const rowsA = await rowsOf(c.aId);
+    const rowsB = await rowsOf(c.bId);
+    expect(rowsA.map((r) => r.seq)).toEqual([1, 2]);
+    expect(rowsB.map((r) => r.seq)).toEqual([1, 2, 3, 4]);
+    const sa = await c.sock(c.cookieA);
+    await c.hello(sa.ws, sa.got, 0);
+    const sb = await c.sock(c.cookieB);
+    await c.hello(sb.ws, sb.got, 2);
+    await vi.waitFor(() => expect(c.statuses(sa.got)).toHaveLength(2));
+    await vi.waitFor(() => expect(c.statuses(sb.got)).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sa.got[0]).toMatchObject({ type: "welcome", latestSeq: 2 });
+    expect(sb.got[0]).toMatchObject({ type: "welcome", latestSeq: 4 });
+    const pick = (r: (typeof rowsA)[number]) => ({
+      seq: r.seq,
+      correlationId: r.correlationId,
+      resultId: r.resultId,
+      sourceId: r.sourceId,
+      status: r.status,
+    });
+    expect(c.statuses(sa.got)).toMatchObject(rowsA.map(pick));
+    expect(c.statuses(sb.got)).toMatchObject(rowsB.slice(2).map(pick));
+    expect(new Set(idsOf(sa.got, c.statuses))).toEqual(new Set([a.correlationId]));
+    const bIds = idsOf(sb.got, c.statuses);
+    expect(bIds).not.toContain(a.correlationId);
+    for (const id of bIds) expect(b.map((x) => x.correlationId)).toContain(id);
+    for (const x of [sa.ws, sb.ws]) x.close();
+  });
+
+  it("a lastSeq inside another user's seq range gets resync unknownCursor, never their rows (SEC-014)", async () => {
+    const { c } = await dispatchedForBoth();
+    const sa = await c.sock(c.cookieA);
+    // seq 3 exists for B only; A's newest is 2
+    await c.hello(sa.ws, sa.got, 3);
+    await vi.waitFor(() => expect(sa.got).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sa.got).toMatchObject([
+      { type: "welcome", latestSeq: 2 },
+      { type: "resync", reason: "unknownCursor", latestSeq: 2 },
+    ]);
+    expect(c.statuses(sa.got)).toEqual([]);
+    sa.ws.close();
   });
 });

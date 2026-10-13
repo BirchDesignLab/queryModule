@@ -1,8 +1,14 @@
-import { type SourceStatus, WS_PROTOCOL_VERSION, type WsEvent } from "@querymodule/core/contracts";
-import { and, eq, lt, max, sql } from "drizzle-orm";
+import {
+  type RESYNC_REASONS,
+  type SourceStatus,
+  WS_PROTOCOL_VERSION,
+  type WsEvent,
+  WsEventSchema,
+} from "@querymodule/core/contracts";
+import { and, asc, eq, gt, gte, lt, max, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { eventLog } from "../db/schema";
-import type { Tx } from "../db/tx";
+import { type Tx, withTransaction } from "../db/tx";
 
 export type SourceStatusEvent = Extract<WsEvent, { type: "sourceStatus" }>;
 
@@ -64,4 +70,70 @@ export async function pruneEventLog(tx: Tx, now: number): Promise<number> {
     ),
   );
   return r.rowsAffected;
+}
+
+/** Replay cap (spec 5.3): more rows due than this gets resync tooMany. */
+export const REPLAY_MAX_EVENTS = 500;
+
+export type ReplayResult = { latestSeq: number } & (
+  | { kind: "events"; events: WsEvent[] }
+  | { kind: "resync"; reason: (typeof RESYNC_REASONS)[number] }
+);
+
+/**
+ * The owner's missed events after lastSeq (spec 4.7, 5.3; FR-043, FR-065, SEC-014), read in one
+ * transaction so latestSeq and the rows agree. Owner rows only (user_id = userId), in seq order,
+ * each re-validated with WsEventSchema (server strict, ADR-0013); a row that fails throws.
+ * lastSeq above latestSeq: unknownCursor. Equal: nothing due, even when the newest row is older
+ * than the window. 0: the rows within the window. Above 0: tooOld when row lastSeq + 1 is pruned
+ * or older than the window. More than REPLAY_MAX_EVENTS due: tooMany.
+ * Hidden results: no filter until result_visibility exists (M3 P2); replay must then skip the
+ * sourceStatus rows of hidden results (spec 5.3).
+ */
+export function eventsSince(
+  db: Db,
+  userId: string,
+  lastSeq: number,
+  now: number,
+): Promise<ReplayResult> {
+  const windowStart = now - EVENT_LOG_RETENTION_MS;
+  return withTransaction(db, async (tx): Promise<ReplayResult> => {
+    const latest = await maxSeq(tx, userId);
+    if (lastSeq > latest) return { latestSeq: latest, kind: "resync", reason: "unknownCursor" };
+    if (lastSeq === latest) return { latestSeq: latest, kind: "events", events: [] };
+    const rows = await tx
+      .select()
+      .from(eventLog)
+      .where(
+        and(
+          eq(eventLog.userId, userId),
+          gt(eventLog.seq, lastSeq),
+          // lastSeq 0 asks for everything within the window; older rows are skipped, not tooOld
+          lastSeq === 0 ? gte(eventLog.createdAt, windowStart) : undefined,
+        ),
+      )
+      .orderBy(asc(eventLog.seq))
+      .limit(REPLAY_MAX_EVENTS + 1);
+    const first = rows[0];
+    if (lastSeq > 0 && (first?.seq !== lastSeq + 1 || first.createdAt < windowStart)) {
+      return { latestSeq: latest, kind: "resync", reason: "tooOld" };
+    }
+    if (rows.length > REPLAY_MAX_EVENTS) {
+      return { latestSeq: latest, kind: "resync", reason: "tooMany" };
+    }
+    const events = rows.map((r) =>
+      WsEventSchema.parse({
+        v: WS_PROTOCOL_VERSION,
+        type: r.type,
+        seq: r.seq,
+        at: r.createdAt,
+        correlationId: r.correlationId,
+        partId: r.partId,
+        sourceId: r.sourceId,
+        resultId: r.resultId,
+        status: r.status,
+      }),
+    );
+    return { latestSeq: latest, kind: "events", events };
+  });
 }

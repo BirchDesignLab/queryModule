@@ -3,8 +3,12 @@
 // Smoke step 4 (spec 8.7): opens the feed, sends hello and, once welcome arrives, creates readyFile.
 // smoke.sh then submits and creates goFile; this reads the 202 body from bodyFile and waits for one
 // non-pending sourceStatus per (partId, sourceId) of that body, bounded by SMOKE_SETTLE_MS (20 s).
-// Prints "4 ok: <n> sources settled" or "4 FAILED: <k> of <n> sources settled". The cookie comes from
-// the environment, never argv; nothing printed carries the cookie, a password or a payload.
+// Once every source settles it reads GET /api/v1/queries/:correlationId with the same session and
+// checks that every returned source carries a payload object (Task 7, #592; spec 8.7 step 4).
+// Prints "4 ok: <n> sources settled, <r> returned", or "4 FAILED: <k> of <n> sources settled",
+// "4 FAILED: detail read answered HTTP <status>" or "4 FAILED: <m> of <r> returned sources have no
+// payload". The cookie comes from the environment, never argv; nothing printed carries the cookie,
+// a password, a value or a payload.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import WebSocket from "ws";
 
@@ -48,15 +52,53 @@ const lose = (why: string) => {
   process.stderr.write(`smoke feed lost: ${why}\n`);
   if (expected !== null) finish();
 };
+const end = (line: string, ok: boolean) => {
+  process.stdout.write(`${line}\n`);
+  ws.terminate();
+  process.exit(ok ? 0 : 1);
+};
+type DetailSource = { status?: unknown; payload?: unknown };
+/** The detail over HTTP: every returned source must carry a payload object. Prints counts only. */
+const readDetail = async (n: number) => {
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/v1/queries/${encodeURIComponent(correlationId)}`, {
+      headers: { cookie, origin: base },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (e) {
+    return end(`4 FAILED: detail read failed (${(e as Error).name})`, false);
+  }
+  if (res.status !== 200) return end(`4 FAILED: detail read answered HTTP ${res.status}`, false);
+  let body: { parts?: { sources?: DetailSource[] }[] };
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    return end("4 FAILED: detail read was not JSON", false);
+  }
+  const returned = (Array.isArray(body.parts) ? body.parts : [])
+    .flatMap((p) => (Array.isArray(p?.sources) ? p.sources : []))
+    .filter((s) => s?.status === "returned");
+  const missing = returned.filter(
+    (s) => typeof s.payload !== "object" || s.payload === null || Array.isArray(s.payload),
+  ).length;
+  if (returned.length === 0) return end("4 FAILED: no returned source in the detail read", false);
+  if (missing > 0)
+    return end(
+      `4 FAILED: ${missing} of ${returned.length} returned sources have no payload`,
+      false,
+    );
+  end(`4 ok: ${n} sources settled, ${returned.length} returned`, true);
+};
+let finishing = false;
 const finish = () => {
+  if (finishing) return;
+  finishing = true;
   const n = expected?.length ?? 0;
   const k = expected?.filter((e) => settled.has(e)).length ?? 0;
   // n === 0 (no dispatched part) fails: nothing answered, so step 4 cannot pass.
-  const ok = n > 0 && k === n;
-  if (ok) process.stdout.write(`4 ok: ${n} sources settled\n`);
-  else process.stdout.write(`4 FAILED: ${k} of ${n} sources settled\n`);
-  ws.terminate();
-  process.exit(ok ? 0 : 1);
+  if (n > 0 && k === n) void readDetail(n);
+  else end(`4 FAILED: ${k} of ${n} sources settled`, false);
 };
 const check = () => {
   if (expected && expected.length > 0 && expected.every((e) => settled.has(e))) finish();
