@@ -88,7 +88,7 @@ export function resolvePath(payload: unknown, path: string): unknown[] {
       if (seg.kind === "key") {
         if (isRecord(value) && Object.hasOwn(value, seg.key)) next.push(value[seg.key]);
       } else if (Array.isArray(value)) {
-        if (seg.kind === "all") next.push(...value);
+        if (seg.kind === "all") for (const item of value) next.push(item);
         else if (seg.index < value.length) next.push(value[seg.index]);
       }
     }

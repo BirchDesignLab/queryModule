@@ -94,4 +94,9 @@ describe("resolvePath", () => {
       }),
     );
   });
+
+  it("never throws when [*] projects a very large array (CW critic 1)", () => {
+    const big = { list: Array.from({ length: 300_000 }, (_, i) => i) };
+    expect(resolvePath(big, "list[*]")).toHaveLength(300_000);
+  });
 });
