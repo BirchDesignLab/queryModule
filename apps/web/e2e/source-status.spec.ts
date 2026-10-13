@@ -5,8 +5,9 @@ import { signIn } from "./helpers.js";
 // Live per-source status (FR-043, FR-044, FR-065; spec 6.2, 6.6, 5.4). The local build serves mock
 // sources (ALLOW_MOCK_SOURCES) and the real dispatcher, so each plate below is a canned scenario:
 // ZZ-0001 and ABC123 return, FAIL1 fails at the state source, TIMEOUT times out at the national
-// source. Status only: the content of a response shows with M2 P1. Nothing here reaches any real
-// state or national system.
+// source. A returned source shows as a result card (spec 6.2); the announcements carry the query
+// type, the plate, counts, status words and the severity keyword, never other payload content
+// (ruling 12). Nothing here reaches any real state or national system.
 
 const STATE = "State system";
 const NATIONAL = "National system";
@@ -41,11 +42,20 @@ test("ZZ-0001: both sources return, in the list, and one coalesced polite summar
   await expect(row.getByRole("group", { name: /Source status for Vehicle ZZ-0001/ })).toBeVisible();
   await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
   await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
-  // The summary speaks counts and words only: never the plate, never a payload.
+  // The summary names the request by its plate (ruling 12) and says the keyword that set the
+  // severity; no other payload content.
   const polite = page.getByTestId("announcer-polite");
-  await expect(polite).toContainText("2 of 2 sources done. 2 returned.", { timeout: 5000 });
-  await expect(polite).not.toContainText("ZZ-0001");
-  await expect(polite).not.toContainText("STOLEN");
+  await expect(polite).toContainText(
+    "Vehicle ZZ-0001: 2 of 2 sources done. 2 returned, critical: STOLEN.",
+    { timeout: 5000 },
+  );
+  await expect(polite).not.toContainText("TESTMAKE");
+  await expect(polite).not.toContainText("SAMPLEMODEL");
+  // Each source is a card with a critical badge, and the entry header repeats the severity.
+  await expect(row.getByRole("region", { name: "State system: returned" })).toContainText(
+    "Critical",
+  );
+  await expect(row.locator(".qm-request__severity")).toContainText("Critical");
   await expectNoSeriousAxeViolations(page);
 });
 
@@ -54,7 +64,7 @@ test("[A4] ABC123: a clean no-record request ends with both sources returned", a
   await runPlate(page, "ABC123");
   const row = list.getByRole("listitem").first();
   await expect(row).toContainText("Acknowledged");
-  // No record is a returned source, not a failure; what it returned shows with M2 P1.
+  // No record is a returned source, not a failure; it shows as an info card.
   await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
   await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
   await expect(row).not.toContainText("pending");
@@ -116,11 +126,11 @@ test("[#587] a plate-only VEH shows the National system as not run, in words", a
   await expect(row).toContainText("Acknowledged");
   await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
   await expect(statusLine(page, NATIONAL, "not run (plate only)")).toBeVisible();
-  // The summary counts the dispatched source only and says what was not run; never the plate.
+  // The summary counts the dispatched source only and says what was not run.
   const polite = page.getByTestId("announcer-polite");
-  await expect(polite).toContainText("1 of 1 source done. 1 returned. 1 not run.", {
-    timeout: 5000,
-  });
-  await expect(polite).not.toContainText("ZZ-0001");
+  await expect(polite).toContainText(
+    "Vehicle ZZ-0001: 1 of 1 source done. 1 returned, critical: STOLEN. 1 not run.",
+    { timeout: 5000 },
+  );
   await expectNoSeriousAxeViolations(page);
 });

@@ -1,4 +1,4 @@
-import { type JSX, useId, useLayoutEffect, useRef } from "react";
+import { type JSX, type ReactNode, useId, useLayoutEffect, useRef } from "react";
 
 /** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
 export interface SourceLineView {
@@ -8,6 +8,11 @@ export interface SourceLineView {
   tone: "pending" | "ok" | "problem" | "notRun";
   /** Already in words, for example "State source: timed out". */
   text: string;
+  /**
+   * The source's result card, once its payload is here. It stands in for the status line (its own
+   * heading says "Source: returned"); the key stays, so the line becoming a card is one swap.
+   */
+  card?: ReactNode;
 }
 
 /** A part of a request: the primary part has no label, a nested one is labelled with its origin. */
@@ -32,6 +37,8 @@ export interface RequestRowView {
    * typed field, or the short correlation ID (ruling 12). Already in words.
    */
   name: string;
+  /** The request's highest severity badge (spec 6.2); absent until a returned source has one. */
+  severityBadge?: ReactNode;
   /** The full correlation ID; only an acknowledged row has one. */
   reference?: string;
   /** Epoch milliseconds. */
@@ -146,7 +153,14 @@ export function RequestList({
             <li key={row.id} className={`qm-request qm-request--${row.status}`}>
               <span className="qm-request__type">{row.typeLabel}</span>
               <code className="qm-request__summary">{row.summary}</code>
-              <span className={BADGE_CLASS[row.status]}>{t(`requests.status.${row.status}`)}</span>
+              <span className="qm-request__badges">
+                <span className={BADGE_CLASS[row.status]}>
+                  {t(`requests.status.${row.status}`)}
+                </span>
+                {row.severityBadge === undefined ? null : (
+                  <span className="qm-request__severity">{row.severityBadge}</span>
+                )}
+              </span>
               {row.status === "sending" ? null : (
                 <div className="qm-request__meta">
                   {row.status === "acknowledged" &&
@@ -224,14 +238,20 @@ export function RequestList({
                       )}
                       {part.lines.length === 0 ? null : (
                         <div className="qm-request__sources">
-                          {part.lines.map((line) => (
-                            <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
-                              <span aria-hidden="true" className="qm-source__icon">
-                                {SOURCE_ICON[line.tone]}
-                              </span>
-                              <span>{line.text}</span>
-                            </div>
-                          ))}
+                          {part.lines.map((line) =>
+                            line.card === undefined ? (
+                              <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
+                                <span aria-hidden="true" className="qm-source__icon">
+                                  {SOURCE_ICON[line.tone]}
+                                </span>
+                                <span>{line.text}</span>
+                              </div>
+                            ) : (
+                              <div key={line.key} className="qm-request__card">
+                                {line.card}
+                              </div>
+                            ),
+                          )}
                         </div>
                       )}
                     </div>

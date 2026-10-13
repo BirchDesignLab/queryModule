@@ -71,6 +71,13 @@ export interface StatusSummary {
   notRun: number;
 }
 
+/** A source that just gained its payload: ids only, never the payload (spec 6.6, 6.7). */
+export interface ResultArrival {
+  correlationId: string;
+  partId: number;
+  sourceId: string;
+}
+
 /** What the coalesced announcement is built from: ids and counts, never values (spec 6.6). */
 export interface StatusAnnouncement {
   correlationId: string;
@@ -125,6 +132,12 @@ export interface RequestsState {
   applyDetail(detail: QueryDetail): void;
   /** One call per correlation ID per 1500 ms window that changed something; returns the unsubscribe. */
   onStatusSummary(handler: (announcement: StatusAnnouncement) => void): () => void;
+  /**
+   * One call, at once and never coalesced, for each source that gains its payload from a fetched
+   * detail (a critical result is announced without waiting for the 1500 ms window, spec 6.6).
+   * Ids only: the handler reads the payload from the store. Returns the unsubscribe.
+   */
+  onResult(handler: (arrival: ResultArrival) => void): () => void;
   reset(): void;
 }
 
@@ -280,6 +293,25 @@ function overlay(
   return { parts: next, moved };
 }
 
+/** The (part, source) pairs that have a payload in `after` and had none in `before`. */
+function arrivals(
+  correlationId: string,
+  before: readonly RequestPart[],
+  after: readonly RequestPart[],
+): ResultArrival[] {
+  return after.flatMap((part) =>
+    part.sources.flatMap((source) => {
+      if (source.result === undefined) return [];
+      const was = before
+        .find((p) => p.partId === part.partId)
+        ?.sources.find((s) => s.sourceId === source.sourceId);
+      return was?.result === undefined
+        ? [{ correlationId, partId: part.partId, sourceId: source.sourceId }]
+        : [];
+    }),
+  );
+}
+
 /** A shift's list stays useful at a glance; older rows fall off rather than grow without bound. */
 const MAX_ROWS = 100;
 
@@ -296,6 +328,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
   // Never reset: a stale outcome after a reset can then never match a row begun later.
   let counter = 0;
   const handlers = new Set<(announcement: StatusAnnouncement) => void>();
+  const resultHandlers = new Set<(arrival: ResultArrival) => void>();
   // Per correlation ID: the open coalescing window, and events whose 202 has not landed yet.
   const windows = new Map<string, unknown>();
   const held = new Map<string, SourceStatusEvent[]>();
@@ -511,6 +544,9 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
           set((s) => ({ items: [row, ...s.items].slice(0, MAX_ROWS) }));
           dropGoneWindows();
           if (statusSummary(row).done > 0) announceLater(detail.correlationId);
+          for (const arrival of arrivals(detail.correlationId, [], row.parts)) {
+            for (const handler of resultHandlers) handler(arrival);
+          }
           return;
         }
         const merged = mergeDetail(entry.parts, detail);
@@ -522,11 +558,20 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
           ),
         }));
         if (merged.moved) announceLater(detail.correlationId);
+        for (const arrival of arrivals(detail.correlationId, entry.parts, merged.parts)) {
+          for (const handler of resultHandlers) handler(arrival);
+        }
       },
       onStatusSummary(handler) {
         handlers.add(handler);
         return () => {
           handlers.delete(handler);
+        };
+      },
+      onResult(handler) {
+        resultHandlers.add(handler);
+        return () => {
+          resultHandlers.delete(handler);
         };
       },
       supersede(id) {

@@ -344,7 +344,7 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
     });
   }
 
-  // A multi-part request ("Also run: ...") shows a part label per part; on the officer layout it
+  // A multi-part request ("..., also run from Person") shows a part label per part; on the officer layout it
   // must not be muted either (D0.3). PER runs WNT beside it when a name and a date of birth are given.
   test("night: a two-part request's part labels are not muted on the officer layout", async ({
     page,

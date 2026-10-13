@@ -81,6 +81,7 @@ export type {
   RequestSource,
   RequestsState,
   RequestsStore,
+  ResultArrival,
   StatusAnnouncement,
   StatusSummary,
   SubmittedQuery,

@@ -95,7 +95,71 @@ describe("FR-044 AppShell announces one coalesced summary (spec 6.6)", () => {
     await waitFor(() => expect(polite).toHaveTextContent(/2 of 2 sources done\. 2 returned\./), {
       timeout: 4000,
     });
+    // Ruling 12 (10-13-26): this row kept no values, so the short ID names it.
     expect(polite.textContent).toContain("0198a1b2");
     expect(polite.textContent).not.toContain("ZZ-0001");
+  });
+});
+
+describe("FR-064 spec 6.6 a critical result is announced assertively at once", () => {
+  it("speaks the keyword and source in the assertive region before the polite window, no other payload value", async () => {
+    server.use(
+      http.get(`${API}/api/v1/queries/:id`, () =>
+        HttpResponse.json(
+          detail202([
+            {
+              sourceId: "stateSource",
+              status: "returned",
+              payload: { status: "STOLEN", make: "ZZ-TESTMAKE" },
+            },
+            {
+              sourceId: "nationalSource",
+              status: "returned",
+              payload: { status: "STOLEN", make: "ZZ-TESTMAKE" },
+            },
+          ]),
+        ),
+      ),
+    );
+    const driver = new FeedDriver();
+    const t = renderRoot({ createSocket: driver.createSocket });
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Query Module" });
+    await waitFor(() => expect(t.services.feed.state()).toBe("open"));
+    const id = t.services.requests.getState().begin({
+      queryType: "VEH",
+      summary: "VEH.ZZ-0001",
+      submitted: { queryType: "VEH", values: { plate: "ZZ-0001" }, sourceIds: [], mode: "normal" },
+    });
+    act(() => {
+      t.services.requests
+        .getState()
+        .settle(id, { kind: "acknowledged", response: ACK, queryType: "VEH" });
+    });
+    act(() => {
+      driver.status("stateSource", "returned");
+      driver.status("nationalSource", "returned");
+    });
+    const assertive = screen.getByTestId("announcer-assertive");
+    await waitFor(
+      () =>
+        expect(assertive).toHaveTextContent(
+          /^Vehicle ZZ-0001: critical: STOLEN, (State|National) system\./,
+        ),
+      { timeout: 1200 },
+    );
+    // Said before the 1500 ms window closed: the polite summary is not here yet.
+    expect(screen.getByTestId("announcer-polite")).not.toHaveTextContent(/sources done/);
+    expect(assertive.textContent).not.toContain("TESTMAKE");
+    await waitFor(
+      () =>
+        expect(screen.getByTestId("announcer-polite")).toHaveTextContent(
+          "Vehicle ZZ-0001: 2 of 2 sources done. 2 returned, critical: STOLEN.",
+        ),
+      { timeout: 4000 },
+    );
+    expect(screen.getByTestId("announcer-polite").textContent).not.toContain("TESTMAKE");
   });
 });

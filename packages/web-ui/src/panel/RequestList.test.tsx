@@ -382,3 +382,66 @@ describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
     expect(screen.queryByRole("group", { name: /Source status/ })).toBeNull();
   });
 });
+
+describe("FR-060 cards and the severity badge in the list (spec 6.2)", () => {
+  const WITH_CARD: RequestRowView = {
+    ...ACKED,
+    notes: [],
+    severityBadge: <span data-testid="badge">Critical</span>,
+    parts: [
+      {
+        key: "c1:1",
+        lines: [
+          {
+            key: "c1:1:state",
+            tone: "ok",
+            text: "State system: returned",
+            card: <section aria-label="State card">card body</section>,
+          },
+          { key: "c1:1:national", tone: "pending", text: "National system: pending" },
+        ],
+      },
+    ],
+  };
+
+  it("a line with a card shows the card in place of its status line", () => {
+    render(<RequestList {...base} rows={[WITH_CARD]} />);
+    const group = screen.getByRole("group", { name: /Source status/ });
+    expect(within(group).getByRole("region", { name: "State card" })).toBeVisible();
+    expect(within(group).queryByText("State system: returned")).toBeNull();
+    expect(within(group).getByText("National system: pending")).toBeVisible();
+  });
+
+  it("the entry header carries the severity badge beside the status", () => {
+    render(<RequestList {...base} rows={[WITH_CARD]} />);
+    const row = screen.getByRole("listitem");
+    expect(within(row).getByTestId("badge")).toBeVisible();
+  });
+
+  it("a card keeps its place when the line before it changes (stable key)", () => {
+    const { rerender } = render(<RequestList {...base} rows={[WITH_CARD]} />);
+    const card = screen.getByRole("region", { name: "State card" });
+    const first = WITH_CARD.parts?.[0]?.lines[0];
+    if (first === undefined) throw new Error("fixture");
+    rerender(
+      <RequestList
+        {...base}
+        rows={[
+          {
+            ...WITH_CARD,
+            parts: [
+              {
+                key: "c1:1",
+                lines: [
+                  first,
+                  { key: "c1:1:national", tone: "ok", text: "National system: returned" },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("region", { name: "State card" })).toBe(card);
+  });
+});

@@ -4,13 +4,17 @@ import {
   RequestList,
   type RequestPartView,
   type RequestRowView,
+  SeverityBadge,
   type SourceLineView,
 } from "@querymodule/web-ui";
 import { memo, useEffect, useRef } from "react";
+import { useResolvedPersona } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
 import { requestAccessibleName } from "./request-name.js";
+import { assessEntry, highestSeverity, skipReasonText } from "./result-view.js";
+import { SourceCard } from "./SourceCard.js";
 
 export interface RequestsPaneProps {
   config: ClientSiteConfig;
@@ -28,6 +32,7 @@ export interface RequestsPaneProps {
  */
 export const RequestsPane = memo(function RequestsPane({ config, variant }: RequestsPaneProps) {
   const t = useT();
+  const persona = useResolvedPersona();
   const { announcer, requests, submit } = useServices();
   const mounted = useRef(true);
   useEffect(() => {
@@ -66,32 +71,53 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
         notes: [],
       };
     }
+    const highest = highestSeverity(assessEntry(entry, config.keywords));
+    // The primary part is the one with no parent; a nested part says which type it was run from.
+    const primaryType = entry.parts.find((part) => part.parentPartId === null)?.queryType;
     return {
       ...base,
       status: "acknowledged",
       reference: entry.correlationId,
       acknowledgedAt: entry.acknowledgedAt,
       notes: [],
+      ...(highest === null
+        ? {}
+        : {
+            severityBadge: (
+              <SeverityBadge
+                severity={highest.severity}
+                styles={config.keywordSeverityStyles}
+                t={t}
+              />
+            ),
+          }),
       // The 202 starts every dispatched pair at pending and the feed moves it (FR-043): a line is
       // keyed by request, part and source, so an event updates it in place and never remounts the
-      // row. The primary query is the part with no parent; any other is an alsoRun part (spec 6.2),
-      // wherever it sits in the list and whatever its partId. A skipped part names only that it
-      // was not run: the reason arrives with Task 7.
+      // row. A returned source with its payload shows as a card in the same slot (FR-060, spec 6.2).
+      // The primary query is the part with no parent; any other is an alsoRun part (spec 6.2),
+      // wherever it sits in the list and whatever its partId. A skipped part says why, from its
+      // reason keys (#576).
       parts: entry.parts.map((part): RequestPartView => {
         const key = `${entry.correlationId}:${part.partId}`;
         const label =
           part.parentPartId === null
             ? {}
-            : { label: t("sourceStatus.alsoRun", { queryType: typeLabel(part.queryType) }) };
+            : {
+                label: t("sourceStatus.alsoRun", {
+                  queryType: typeLabel(part.queryType),
+                  from: typeLabel(primaryType ?? entry.queryType),
+                }),
+              };
         return {
           key,
           ...label,
           ...(part.status === "skipped"
-            ? { skippedText: t("sourceStatus.skipped", { queryType: typeLabel(part.queryType) }) }
+            ? { skippedText: skipReasonText(part, config, t, typeLabel(part.queryType)) }
             : {}),
           lines: [
-            ...part.sources.map(
-              (source): SourceLineView => ({
+            ...part.sources.map((source): SourceLineView => {
+              const payload = source.status === "returned" ? source.result?.payload : undefined;
+              return {
                 key: `${key}:${source.sourceId}`,
                 tone:
                   source.status === "pending"
@@ -103,8 +129,26 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
                   source: sourceLabel(source.sourceId),
                   status: t(`sourceStatus.status.${source.status}`),
                 }),
-              }),
-            ),
+                ...(payload === undefined
+                  ? {}
+                  : {
+                      card: (
+                        <SourceCard
+                          config={config}
+                          submitted={entry.submitted}
+                          queryType={part.queryType}
+                          parentPartId={part.parentPartId}
+                          sourceId={source.sourceId}
+                          payload={payload}
+                          persona={persona}
+                          sourceName={sourceLabel(source.sourceId)}
+                          requestName={base.name}
+                          t={t}
+                        />
+                      ),
+                    }),
+              };
+            }),
             // Sources the planner dropped before dispatch (plate-only mode, spec 4.6 step 3): the
             // user must be able to tell "not queried" from "missing" (#587). Their own lines, in words.
             ...(part.status === "skipped" ? [] : part.droppedSourceIds).map(

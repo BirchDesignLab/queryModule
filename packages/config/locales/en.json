@@ -131,10 +131,14 @@
   "sourceStatus.detail": "{count} {status}",
   "sourceStatus.heading": "Source status for {summary}",
   "sourceStatus.line": "{source}: {status}",
-  "sourceStatus.alsoRun": "Also run: {queryType}",
+  "sourceStatus.alsoRun": "{queryType}, also run from {from}",
   "sourceStatus.skipped": "{queryType} was not run.",
+  "sourceStatus.skippedWhy": "{queryType} not run: {reasons}.",
+  "sourceStatus.reasonNeeds": "needs {field}",
   "sourceStatus.notRun": "{source}: not run (plate only)",
   "sourceStatus.notRunCount": "{count} not run.",
+  "sourceStatus.severityDetail": "{severity}: {keyword}",
+  "sourceStatus.criticalNow": "{name}: {severity}: {keyword}, {source}.",
   "sourceStatus.status.pending": "pending",
   "sourceStatus.status.returned": "returned",
   "sourceStatus.status.failed": "failed",
@@ -926,5 +930,6 @@
   "result.rowCount.other": "{count} rows",
   "result.keywordSeverity": "({severity})",
   "result.noMapping": "No card is set up for this result, so every field shows under its path.",
+  "result.toggleContext": "for {source}, {name}",
   "result.diagnostics": "Mapping notes (development)"
 }

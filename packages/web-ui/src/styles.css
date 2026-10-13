@@ -649,6 +649,22 @@ h1 {
   font-weight: 600;
 }
 
+.qm-request__badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2);
+}
+
+.qm-request__severity {
+  display: inline-flex;
+}
+
+/* A result card fills the sources column; min-inline-size 0 lets a wide table scroll in its own box. */
+.qm-request__card {
+  min-inline-size: 0;
+}
+
 .qm-request__summary {
   font-family: var(--qm-type-family-data);
   overflow-wrap: anywhere;
