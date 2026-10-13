@@ -363,7 +363,7 @@ describe("mapResponse [A8]", () => {
     const assignable: MapResponse = mapResponse;
     expectTypeOf(assignable).toBeFunction();
   });
-  it("[A8] limitation (C1): on a past-century field a two-digit year literal in when pivots on a fixed epoch clock, so authors write four digits", () => {
+  it("[A8] without now, a two-digit year literal in when pivots on the epoch (C1 fallback)", () => {
     const raw = minimalSiteConfigInput();
     const vehicle = raw.queryTypes[0];
     if (vehicle === undefined) throw new Error("fixture has no query type");
@@ -381,5 +381,19 @@ describe("mapResponse [A8]", () => {
     expect(pick(2026)).toBeNull();
     // Two digits resolve against 1970 (no clock in core): 26 means 1926 here, not 2026.
     expect(pick(26)).toBe(0);
+  });
+  it("[A8] with the caller's now, a two-digit year literal in when resolves as the form engine does (26 means 2026)", () => {
+    const raw = minimalSiteConfigInput();
+    const vehicle = raw.queryTypes[0];
+    if (vehicle === undefined) throw new Error("fixture has no query type");
+    vehicle.fields.push({ key: "year", labelKey: "field.year", dataType: "year", century: "past" });
+    raw.responseMappings = [{ ...VEH_SUMMARY, when: { field: "year", op: "gte", value: 26 } }];
+    const config = SiteConfigSchema.parse(raw);
+    const now = Date.UTC(2026, 9, 13);
+    const at = (year: number) =>
+      mapResponse(config, { ...CTX, partValues: { ...CTX.partValues, year } }, STATE_PAYLOAD, now)
+        .mappingIndex;
+    expect(at(2001)).toBeNull();
+    expect(at(2026)).toBe(0);
   });
 });

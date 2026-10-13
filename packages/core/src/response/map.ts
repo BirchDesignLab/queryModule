@@ -28,10 +28,10 @@ export type MapResponseConfig = Pick<SiteConfig, "responseMappings" | "queryType
 
 const DEFAULT_LOCALE = "en-US";
 /**
- * Core has no clock and MapContext carries none, so `when` literals and `$default` canonicalise at
- * a fixed instant. Known limitation (review C1, pending ruling): on a century "past" field a
- * two-digit year literal pivots on 1970 (26 means 1926, not 2026 as the form engine reads it), so
- * response mappings should write four-digit years.
+ * Core has no clock and MapContext carries none, so the caller passes `now` (epoch ms) for
+ * canonicalising `when` literals and `$default` (spec 4.2: a two-digit year pivots on the current
+ * year). Without it they canonicalise at the epoch, where 26 on a "past" field means 1926 (review C1;
+ * controller ruling 10-13-26: the browser caller passes Date.now()).
  */
 const NO_CLOCK = 0;
 
@@ -51,6 +51,7 @@ function whenHolds(
   mapping: ResponseMapping,
   ctx: MapContext,
   condition: NonNullable<ResponseMapping["when"]>,
+  now: number,
 ): boolean {
   const qt = compileQueryType(
     {
@@ -59,15 +60,15 @@ function whenHolds(
       queryTypes: config.queryTypes,
     },
     mapping.queryType,
-    NO_CLOCK,
+    now,
   );
   if (qt === undefined) return false;
-  const compiled = compileCondition(condition, qt.fieldByKey, NO_CLOCK);
+  const compiled = compileCondition(condition, qt.fieldByKey, now);
   return evaluateCondition(compiled, (field) => canonicalOrNull(ctx.partValues[field]));
 }
 
 /** Highest score wins; equal scores go to the earlier mapping in config order. */
-function selectMapping(config: MapResponseConfig, ctx: MapContext): number | null {
+function selectMapping(config: MapResponseConfig, ctx: MapContext, now: number): number | null {
   let best: number | null = null;
   let bestScore = -1;
   for (const [index, mapping] of config.responseMappings.entries()) {
@@ -76,7 +77,7 @@ function selectMapping(config: MapResponseConfig, ctx: MapContext): number | nul
     if (mapping.persona !== undefined && mapping.persona !== ctx.persona) continue;
     let score = 0;
     if (mapping.when !== undefined) {
-      if (!whenHolds(config, mapping, ctx, mapping.when)) continue;
+      if (!whenHolds(config, mapping, ctx, mapping.when, now)) continue;
       score += SCORE_WHEN;
     }
     if (mapping.sourceId !== undefined) score += SCORE_SOURCE;
@@ -192,9 +193,10 @@ export const mapResponse: (
   config: MapResponseConfig,
   ctx: MapContext,
   payload: SourcePayload,
-) => MappedResult = (config, ctx, payload) => {
+  now?: number,
+) => MappedResult = (config, ctx, payload, now = NO_CLOCK) => {
   const locale = config.locales?.[0] ?? DEFAULT_LOCALE;
-  const mappingIndex = selectMapping(config, ctx);
+  const mappingIndex = selectMapping(config, ctx, now);
   const mapping = mappingIndex === null ? undefined : config.responseMappings[mappingIndex];
   if (mappingIndex === null || mapping === undefined) {
     return { mappingIndex: null, elements: genericDump(payload, locale), diagnostics: [] };
