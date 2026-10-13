@@ -194,8 +194,12 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
           return endSession();
         }
         if (!live) return endSession();
-        clearTimeout(idle);
-        idle = setTimeout(() => ws.close(WS_LOCAL_CLOSE.idle, "no ping"), idleMs);
+        // Only a socket that has said hello keeps itself alive: before it, live events are
+        // held (spec 5.3), so a ping must not extend that buffer past the idle window (K-1).
+        if (helloSeen) {
+          clearTimeout(idle);
+          idle = setTimeout(() => ws.close(WS_LOCAL_CLOSE.idle, "no ping"), idleMs);
+        }
         return send({
           v: WS_PROTOCOL_VERSION,
           type: "pong",
