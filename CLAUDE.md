@@ -78,7 +78,8 @@ have no code yet):
   dispatch `packages/api/src/queries/**` (submit and access policy, #318),
   `packages/api/src/dispatch/**` and `packages/api/src/adapters/**` (dispatcher,
   outcome writer, `event_log`, Adapter API v1, mock adapter; M2 P0.5),
-  `packages/core/src/planner/**`,
+  `packages/core/src/planner/**`, `packages/core/src/mock/**` (the shared mock
+  scenario matcher, #565),
   `packages/core/src/contracts/source-status.ts`, `ws.ts`, `version.ts`,
   `packages/core/contracts/ws-events.schema.json`; terminal command parser
   `packages/core/src/terminal/**`; config loading `packages/api/src/config/**`
