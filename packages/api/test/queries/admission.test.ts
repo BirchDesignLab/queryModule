@@ -88,6 +88,8 @@ interface SeedPart {
   dropped: string[];
   results: string[];
   skipped?: boolean;
+  /** Raw skipped_reason JSON, in place of the default skip reason. */
+  skippedRaw?: string;
 }
 
 async function seed(
@@ -109,7 +111,10 @@ async function seed(
         p.queryType,
         JSON.stringify(p.selected),
         JSON.stringify(p.dropped),
-        p.skipped ? JSON.stringify([{ key: "validation.required" }]) : null,
+        p.skippedRaw ??
+          (p.skipped
+            ? JSON.stringify([{ key: "validation.required", params: { field: "dob" } }])
+            : null),
         p.partId === 0 ? o.key : null,
       ],
     });
@@ -252,17 +257,20 @@ describe("FR-064 SEC-014 replayResponse", () => {
       parts: [
         {
           partId: 0,
+          parentPartId: null,
+          origin: "primary",
           queryType: "VEH",
           status: "dispatched",
           sourceIds: ["stateSource", "nationalSource"],
           droppedSourceIds: [],
+          skipReasons: [],
         },
       ],
     });
     expect(SubmitQueryResponseSchema.safeParse(body).success).toBe(true);
   });
 
-  it("marks a part with skipped_reason skipped with no sources, and keeps dropped sources", async () => {
+  it("marks a part with skipped_reason skipped with its origin and reasons, no sources, dropped kept (#576)", async () => {
     const { t, userId } = await stubApp();
     await seed(t.deps.db, {
       userId,
@@ -293,12 +301,24 @@ describe("FR-064 SEC-014 replayResponse", () => {
       parts: [
         {
           partId: 0,
+          parentPartId: null,
+          origin: "primary",
           queryType: "VEH",
           status: "dispatched",
           sourceIds: ["stateSource"],
           droppedSourceIds: ["nationalSource"],
+          skipReasons: [],
         },
-        { partId: 1, queryType: "WNT", status: "skipped", sourceIds: [], droppedSourceIds: [] },
+        {
+          partId: 1,
+          parentPartId: 0,
+          origin: "alsoRun",
+          queryType: "WNT",
+          status: "skipped",
+          sourceIds: [],
+          droppedSourceIds: [],
+          skipReasons: [{ key: "validation.required", params: { field: "dob" } }],
+        },
       ],
     });
   });
@@ -330,6 +350,35 @@ describe("FR-064 SEC-014 replayResponse", () => {
     expect((err as Error).cause).toBeUndefined();
     expect(String((err as Error).stack)).not.toContain("ZZSECRET");
   });
+
+  it.each([
+    ["free text in place of a key", JSON.stringify([{ key: "dob required for ZZSECRET" }])],
+    [
+      "a value-shaped param",
+      JSON.stringify([{ key: "validation.required", params: { value: "ZZSECRET" } }]),
+    ],
+    ["an empty reason list", "[]"],
+    ["not a list", JSON.stringify({ key: "ZZSECRET" })],
+  ])(
+    "a skipped_reason with %s throws a fixed-text ReplayIntegrityError (#576)",
+    async (_n, skippedRaw) => {
+      const { t, userId } = await stubApp();
+      await seed(t.deps.db, {
+        userId,
+        cid: CID_SKIP,
+        key: KEY,
+        ack: true,
+        parts: [
+          TWO_SOURCES,
+          { partId: 1, queryType: "WNT", selected: [], dropped: [], results: [], skippedRaw },
+        ],
+      });
+      const err = await replayResponse(t.deps.db, userId, KEY).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ReplayIntegrityError);
+      expect(err).toMatchObject({ message: "replay: stored row failed its schema" });
+      expect(String((err as Error).stack)).not.toContain("ZZSECRET");
+    },
+  );
 
   it("answers the original 202 on a repeated key, through the per-user limiter", async () => {
     const { t, userId, post } = await stubApp();

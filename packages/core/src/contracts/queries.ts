@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_SOURCES_PER_SUBMIT } from "../config/validate-rules";
+import { AuditValidationErrorSchema } from "./audit";
 import {
   BoundedIdSchema,
   EpochMsSchema,
@@ -31,14 +32,30 @@ export const SubmitQueryRequestSchema = z.strictObject({
   configHash: Sha256HexSchema,
 });
 
-/** FR-040, FR-041: one entry per planned part; nested parts may be skipped (spec 4.6 step 5). */
-export const SubmitQueryPartSchema = z.strictObject({
-  partId: PartIdSchema,
-  queryType: BoundedIdSchema,
-  status: z.enum(["dispatched", "skipped"]),
-  sourceIds: z.array(BoundedIdSchema),
-  droppedSourceIds: z.array(BoundedIdSchema),
-});
+/**
+ * FR-040, FR-041: one entry per planned part; nested parts may be skipped (spec 4.6 steps 4 and 5).
+ * origin labels an alsoRun part, parentPartId is 0 for a nested part and null for the primary, and
+ * skipReasons says why a part was skipped as message keys and params only, never a field value
+ * (spec 5.9, #576). The refine (not visible in OpenAPI): a part is skipped exactly when it has
+ * reasons, and is the primary exactly when parentPartId is null.
+ */
+export const SubmitQueryPartSchema = z
+  .strictObject({
+    partId: PartIdSchema,
+    parentPartId: ParentPartIdSchema.nullable(),
+    origin: z.enum(["primary", "alsoRun"]),
+    queryType: BoundedIdSchema,
+    status: z.enum(["dispatched", "skipped"]),
+    sourceIds: z.array(BoundedIdSchema),
+    droppedSourceIds: z.array(BoundedIdSchema),
+    skipReasons: z.array(AuditValidationErrorSchema),
+  })
+  .refine(
+    (p) =>
+      (p.status === "skipped") === p.skipReasons.length > 0 &&
+      (p.origin === "primary") === (p.parentPartId === null),
+    { message: "skipReasons must match status, and parentPartId must match origin" },
+  );
 
 /** The acknowledgment (spec 5.2 step 3): the correlation id and the plan it acknowledged. */
 export const SubmitQueryResponseSchema = z.strictObject({
@@ -100,7 +117,8 @@ function partBase<S extends z.ZodType>(sources: S) {
     queryType: BoundedIdSchema,
     typeValues: TypeValuesSchema,
     plateOnly: z.boolean(),
-    skippedReason: BoundedIdSchema.nullable(),
+    /** Why the part was skipped: keys and params only, [] for a part that ran (#576). */
+    skipReasons: z.array(AuditValidationErrorSchema),
     droppedSourceIds: z.array(BoundedIdSchema),
     purged: z.boolean(),
     sources: z.array(sources).max(MAX_SOURCES_PER_SUBMIT),

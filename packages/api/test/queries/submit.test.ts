@@ -180,10 +180,13 @@ describe("POST /api/v1/queries transaction T1 (spec 5.2 step 4, FR-040, FR-041, 
     expect(ack.parts).toEqual([
       {
         partId: 0,
+        parentPartId: null,
+        origin: "primary",
         queryType: "VEH",
         status: "dispatched",
         sourceIds: ["stateSource"],
         droppedSourceIds: ["nationalSource"],
+        skipReasons: [],
       },
     ]);
   });
@@ -324,14 +327,30 @@ describe("POST /api/v1/queries transaction T1 (spec 5.2 step 4, FR-040, FR-041, 
     const { body: ack } = await accepted(
       await post(body({ queryType: "PER", values: { last: LAST }, mode: "normal" })),
     );
+    // #576: part 0 is the primary; part 1 is labelled alsoRun and says why it was skipped
+    expect(ack.parts[0]).toMatchObject({
+      partId: 0,
+      parentPartId: null,
+      origin: "primary",
+      status: "dispatched",
+      skipReasons: [],
+    });
     expect(ack.parts[1]).toEqual({
       partId: 1,
+      parentPartId: 0,
+      origin: "alsoRun",
       queryType: "WNT",
       status: "skipped",
       sourceIds: [],
       droppedSourceIds: [],
+      skipReasons: [{ key: "validation.required", params: { field: "dob" } }],
     });
     const rows = await rowsFor(t, ack.correlationId);
+    // the 202's reasons are the planner's, as stored and audited
+    expect(rows.parts[1]?.skippedReason).toEqual(ack.parts[1]?.skipReasons);
+    expect(rows.audit.find((a) => a.type === "partSkipped")?.details).toMatchObject({
+      reasons: ack.parts[1]?.skipReasons,
+    });
     expect(rows.parts[1]).toMatchObject({
       valuesCiphertext: null,
       valuesIv: null,
@@ -375,10 +394,13 @@ describe("POST /api/v1/queries transaction T1 (spec 5.2 step 4, FR-040, FR-041, 
     );
     expect(ack.parts[1]).toEqual({
       partId: 1,
+      parentPartId: 0,
+      origin: "alsoRun",
       queryType: "VEH",
       status: "dispatched",
       sourceIds: ["stateSource"],
       droppedSourceIds: ["nationalSource"],
+      skipReasons: [],
     });
     const rows = await rowsFor(t, ack.correlationId);
     expect(rows.parts.map((p) => [p.partId, p.plateOnly, p.selectedSourceIds])).toEqual([
@@ -422,8 +444,8 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
     expect(await tableCounts(t)).toEqual(before);
   });
 
-  it("a skipped part replays byte for byte", async () => {
-    const { post, body } = await setup({
+  it("a skipped part replays byte for byte, origin and skip reasons included (#576)", async () => {
+    const { t, post, body } = await setup({
       site: (c) => {
         const dob = c.queryTypes.find((q) => q.code === "WNT")?.fields.find((f) => f.key === "dob");
         if (!dob) throw new Error("WNT dob missing");
@@ -433,7 +455,15 @@ describe("POST /api/v1/queries idempotency (spec 5.2 step 1)", () => {
     const key = crypto.randomUUID();
     const per = body({ queryType: "PER", values: { last: LAST }, mode: "normal" });
     const live = await accepted(await post(per, { key }));
-    expect((await accepted(await post(per, { key }))).text).toBe(live.text);
+    expect(live.body.parts.map((p) => [p.origin, p.parentPartId, p.skipReasons])).toEqual([
+      ["primary", null, []],
+      ["alsoRun", 0, [{ key: "validation.required", params: { field: "dob" } }]],
+    ]);
+    const replay = await accepted(await post(per, { key }));
+    expect(replay.body).toEqual(live.body);
+    expect(replay.text).toBe(live.text);
+    // spec 5.9: reasons are keys and params; no log line carries a submitted value
+    for (const line of t.logLines) expect(line).not.toContain(LAST);
   });
 
   it("two concurrent posts with one key both get the same 202 and one set of rows", async () => {

@@ -11,10 +11,13 @@ const ACK = {
   parts: [
     {
       partId: 1,
+      parentPartId: null,
+      origin: "primary" as const,
       queryType: "VEH",
       status: "dispatched" as const,
       sourceIds: ["stateSource", "nationalSource"],
       droppedSourceIds: [],
+      skipReasons: [],
     },
   ],
 };

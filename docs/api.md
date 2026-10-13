@@ -150,18 +150,36 @@ Answer `202 Accepted`, once the request is recorded:
   "parts": [
     {
       "partId": 0,
-      "queryType": "VEH",
+      "parentPartId": null,
+      "origin": "primary",
+      "queryType": "PER",
       "status": "dispatched",
       "sourceIds": ["stateSource", "nationalSource"],
-      "droppedSourceIds": []
+      "droppedSourceIds": [],
+      "skipReasons": []
+    },
+    {
+      "partId": 1,
+      "parentPartId": 0,
+      "origin": "alsoRun",
+      "queryType": "WNT",
+      "status": "skipped",
+      "sourceIds": [],
+      "droppedSourceIds": [],
+      "skipReasons": [{ "key": "validation.required", "params": { "field": "dob" } }]
     }
   ]
 }
 ```
 
 `acknowledgedAt` is epoch milliseconds. There is one part per planned query: the query itself is
-part 0 and each nested "also run" query follows (at most 4). A nested part can have the status
-`skipped`.
+part 0 (`origin: "primary"`, `parentPartId: null`) and each nested "also run" query follows
+(`origin: "alsoRun"`, `parentPartId: 0`; at most 4). A nested part can have the status `skipped`,
+and then `skipReasons` says why: one or more validation error keys with optional `field`,
+`labelKey` or `position` params, never a submitted value. A dispatched part has `skipReasons: []`.
+Two rules are enforced by the server's schema but are not visible in `openapi.json` (a Zod
+`.refine`): a part is `skipped` exactly when `skipReasons` is non-empty, and `parentPartId` is
+`null` exactly for the primary. A replayed Idempotency-Key returns the same body.
 
 **Dispatch.** The 202 is the acknowledgment (FR-064); the request, its parts, one `pending` row per
 source and the audit row are recorded first, then each source is queried in the background (the

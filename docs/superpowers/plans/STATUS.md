@@ -21,7 +21,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | M1 | P3 flow | done · [plan](2026-09-29-track-a-p3.md), UI-first re-plan (ADR-0011, ADR-0012); waves AC0 to AC3 and the M1 exit notes (`docs/releases/m1.md`) · [issues][m1-p3-a] | done · [plan](2026-09-29-track-b-p3.md), UI-first re-plan (ADR-0012); waves B1 to B8, design system and cloud pass (#344 to #446); wave B6 parked to M2 P0.5 · [issues][m1-p3-b] | n/a | n/a | done · M1 exit (v1 demo, ADR-0012): #517, `m1` promoted 10-04-26 (manual m1 smoke held until the next host visit, #237) · [all][m1-p3] |
 | M2 | P0 contracts | n/a | n/a | n/a | active (P0-W3 after the demo; P0-W1 #559 and P0-W2 #562 merged) · [plan](2026-10-05-m2-p0-contracts.md), run in the B lane · [issues][m2-p0] | active · demo-path gate passed 10-05-26 (#528: verify on main, 8.4 log, oasdiff additive); full gate after P0-W3 · [all][m2-p0] |
 | M2 | P0.5 dispatch (ADR-0012) | done · [plan](2026-10-05-m2-track-a-p0-5.md); AW1 #563 to AW6 #581 and the release note #582 merged · [issues][m2-p05-a] | done · [plan](2026-10-05-m2-track-b-p0-5.md); BW0 #566 to BW3 #579 merged · [issues][m2-p05-b] | n/a | n/a | done · A4 clean no-record; smoke 1 to 5 ok on the host 10-07-26; `:release` promoted at 3e85c2b (#583, no milestone tag; fe47c0f is the release note merge) · [all][m2-p05] |
-| M2 | P1 feed | planned (next) · [plan](2026-10-07-m2-track-a-p1.md): #576 contract, shared mock matcher, GET queries, replay · [issues][m2-p1-a] | planned (next) · [plan](2026-10-07-m2-track-b-p1.md): result cards, builder card and keyword editors, Try a match, replay cursor · [issues][m2-p1-b] | n/a | planned · in B plan (mapper, `assessResult`, highlighter) · [issues][m2-p1-c] | planned · A6; replay test; A7 and A8; result-card and builder e2e; smoke 1 to 5; promote (no milestone tag); demo is a decision point (demo sets in the plans); P2 and P3 follow without a pause · [all][m2-p1] |
+| M2 | P1 feed | active · [plan](2026-10-07-m2-track-a-p1.md): #576 contract, shared mock matcher, GET queries, replay · [issues][m2-p1-a] | planned (next) · [plan](2026-10-07-m2-track-b-p1.md): result cards, builder card and keyword editors, Try a match, replay cursor · [issues][m2-p1-b] | n/a | planned · in B plan (mapper, `assessResult`, highlighter) · [issues][m2-p1-c] | planned · A6; replay test; A7 and A8; result-card and builder e2e; smoke 1 to 5; promote (no milestone tag); demo is a decision point (demo sets in the plans); P2 and P3 follow without a pause · [all][m2-p1] |
 | M2 | P2 audit | planned (from P1: `ackReceipt` metric, 202 `Server-Timing`) · `<date>-m2-track-a-p2.md` · [issues][m2-p2-a] | planned · `<date>-m2-track-b-p2.md` · [issues][m2-p2-b] | n/a | planned · in A plan · [issues][m2-p2-c] | planned · A7 to A9 · [all][m2-p2] |
 | M2 | P3 hardening | planned · `<date>-m2-track-a-p3.md` · [issues][m2-p3-a] | planned · `<date>-m2-track-b-p3.md` · [issues][m2-p3-b] | n/a | n/a | planned · M2 exit · [all][m2-p3] |
 | M3 | P0 contracts | n/a | n/a | n/a | planned · `<date>-m3-p0-contracts.md` · [issues][m3-p0] | planned · Contracts frozen; flags off · [all][m3-p0] |
@@ -38,7 +38,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
-| Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | idle (M2 P1 AW1 next, plan 2026-10-07-m2-track-a-p1.md) | 10-13-26 |
+| Windows 11 | A (`C:\git\queryModule-a`) | M2 P1 feed | running (AW1: Tasks 1 and 2, #576 and #565; "M2 Track A P1 Wave 1") | 10-13-26 |
 | Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B | idle (no local B session; BW2 and BW3 ran in the cloud and merged, cloud credits spent) | 10-07-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
@@ -52,13 +52,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: none open; M2 P0.5 Track A closed (Tasks 1 to 18, #529 to #545)
-- Branch / PR: none; AW1 #563 to AW6 #581 and release note #582 merged; `:release` = 3e85c2b (#583)
-- Last green: `pnpm verify` at e6c7a83 (release note) on Windows; main ci 37491206376 green incl publish
-- Next step: M2 P1 AW1 (plan docs/superpowers/plans/2026-10-07-m2-track-a-p1.md); open follow-ups #574 (AW4 and AW5 minors, critical follow-up PR, fast path where it fits), #572, #576, #558
+- Issue: #576 (contract half), #565 (matcher half)
+- Branch / PR: `feat/m2-a-p1-wave-1` (AW1), PR #611
+- Last green: main 022618d
+- Next step: AW1 Task 2 inline, Task 1 `sdd-task`, critical `wave-review`; then AW2 (Tasks 3, 4) on a fresh go
 - Blocked by: none
-- Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-05-m2-track-a-p0-5\handover.md` (rulings and lessons)
-- Notes: developer target 10-04-26: mock responses working, then a demo pause at the M2 P1 gate.
+- Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-07-m2-track-a-p1\` (from AW1)
+- Notes: manager "M2 Manager 3"; Track B BW0 waits on the AW1 merge; open follow-ups #574, #572, #558.
 
 ### Track B
 
