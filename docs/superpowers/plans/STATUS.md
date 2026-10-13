@@ -38,7 +38,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
-| Windows 11 | A (`C:\git\queryModule-a`) | M2 P1 feed | running (AW1: Tasks 1 and 2, #576 and #565; "M2 Track A P1 Wave 1") | 10-13-26 |
+| Windows 11 | A (`C:\git\queryModule-a`) | M2 P1 feed | running (AW1 #611 merged; AW2: Tasks 3 and 4, #561; "M2 Track A P1 Wave 1") | 10-13-26 |
 | Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B | idle (no local B session; BW2 and BW3 ran in the cloud and merged, cloud credits spent) | 10-07-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
@@ -52,10 +52,10 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: #576 (contract half), #565 (matcher half)
-- Branch / PR: `feat/m2-a-p1-wave-1` (AW1), PR #611
-- Last green: main 022618d
-- Next step: AW1 Task 2 inline, Task 1 `sdd-task`, critical `wave-review`; then AW2 (Tasks 3, 4) on a fresh go
+- Issue: #561 (read routes, Tasks 3 and 4)
+- Branch / PR: `feat/m2-a-p1-wave-2` (AW2), PR not yet open; AW1 #611 merged
+- Last green: main 21338f8 (#611)
+- Next step: AW2 review minor C-M1 inline, Tasks 3 and 4 `sdd-wave`, critical `wave-review`; then AW3 on a fresh go
 - Blocked by: none
 - Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-07-m2-track-a-p1\` (from AW1)
 - Notes: manager "M2 Manager 3"; Track B BW0 waits on the AW1 merge; open follow-ups #574, #572, #558.
