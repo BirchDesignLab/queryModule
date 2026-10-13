@@ -171,6 +171,105 @@ describe("FR-043 per-source status in the requests store (spec 6.6, 6.7)", () =>
     expect(row.parts[0]?.sources[0]?.status).toBe("pending");
   });
 
+  it("#576 events that match no part of the 202 leave no summary behind", () => {
+    const store = createRequestsStore();
+    const seen = vi.fn();
+    store.getState().onStatusSummary(seen);
+    const id = store.getState().begin({ queryType: "VEH", summary: "x" });
+    store.getState().applyEvent(event(1, "elsewhere", "returned"));
+    store.getState().applyEvent(event(2, "state", "returned", { partId: 9 }));
+    store.getState().settle(id, { kind: "acknowledged", response: RESPONSE, queryType: "VEH" });
+    vi.advanceTimersByTime(5000);
+    expect(seen).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("#576 held events are capped per request: the first 16 distinct pairs are kept", () => {
+    const store = createRequestsStore();
+    const id = store.getState().begin({ queryType: "VEH", summary: "x" });
+    for (let i = 0; i < 16; i += 1) store.getState().applyEvent(event(i, `junk${i}`, "returned"));
+    store.getState().applyEvent(event(99, "state", "returned"));
+    // A repeat of a held pair costs nothing against the cap.
+    store.getState().applyEvent(event(100, "junk0", "returned"));
+    store.getState().settle(id, { kind: "acknowledged", response: RESPONSE, queryType: "VEH" });
+    const row = store.getState().items[0];
+    if (row?.status !== "acknowledged") throw new Error("not acknowledged");
+    expect(row.parts[0]?.sources[0]?.status).toBe("pending");
+  });
+
+  it("#576 held events are capped in total: the oldest request's events go first", () => {
+    const store = createRequestsStore();
+    const id = store.getState().begin({ queryType: "VEH", summary: "x" });
+    store.getState().applyEvent(event(0, "state", "returned"));
+    for (let i = 1; i < 16; i += 1) store.getState().applyEvent(event(i, `junk${i}`, "returned"));
+    for (let r = 0; r < 14; r += 1) {
+      for (let i = 0; i < 16; i += 1) {
+        store.getState().applyEvent(
+          event(i, `junk${i}`, "returned", {
+            correlationId: `0198a1b2-0000-7e5f-8a9b-${String(r).padStart(12, "0")}`,
+          }),
+        );
+      }
+    }
+    store.getState().settle(id, { kind: "acknowledged", response: RESPONSE, queryType: "VEH" });
+    const row = store.getState().items[0];
+    if (row?.status !== "acknowledged") throw new Error("not acknowledged");
+    expect(row.parts[0]?.sources[0]?.status).toBe("pending");
+  });
+
+  it("#576 a row that leaves the list inside the window drops its summary, and its timer", () => {
+    const { store, summaries } = setup();
+    store.getState().applyEvent(event(1, "state", "returned"));
+    expect(vi.getTimerCount()).toBe(1);
+    // 100 newer rows push it off the end of the list (the 100-row cap).
+    for (let i = 0; i < 100; i += 1) store.getState().begin({ queryType: "VEH", summary: "x" });
+    expect(store.getState().items.some((item) => item.status === "acknowledged")).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(5000);
+    expect(summaries).toEqual([]);
+  });
+
+  it("#576 a retry row removed as a replayed ack drops nothing it should keep", () => {
+    const { store, summaries } = setup();
+    store.getState().applyEvent(event(1, "state", "returned"));
+    const retry = store.getState().begin({ queryType: "VEH", summary: "VEH.ZZ-0001" });
+    store
+      .getState()
+      .settle(
+        retry,
+        { kind: "acknowledged", response: RESPONSE, queryType: "VEH" },
+        { once: true },
+      );
+    vi.advanceTimersByTime(1500);
+    expect(summaries).toHaveLength(1);
+  });
+
+  it("#576 the store takes its timers from the injected seam, not globalThis", () => {
+    const globalSet = vi.spyOn(globalThis, "setTimeout");
+    const fired: (() => void)[] = [];
+    const timers = {
+      setTimeout: vi.fn((fn: () => void) => {
+        fired.push(fn);
+        return 42;
+      }),
+      clearTimeout: vi.fn(),
+    };
+    const store = createRequestsStore({ timers });
+    const seen = vi.fn();
+    store.getState().onStatusSummary(seen);
+    const id = store.getState().begin({ queryType: "VEH", summary: "x" });
+    store.getState().settle(id, { kind: "acknowledged", response: RESPONSE, queryType: "VEH" });
+    store.getState().applyEvent(event(1, "state", "returned"));
+    expect(timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 1500);
+    expect(globalSet).not.toHaveBeenCalled();
+    fired[0]?.();
+    expect(seen).toHaveBeenCalledTimes(1);
+    store.getState().applyEvent(event(2, "national", "returned"));
+    store.getState().reset();
+    expect(timers.clearTimeout).toHaveBeenCalledWith(42);
+    globalSet.mockRestore();
+  });
+
   it("reset clears the rows, held events and pending announcements", () => {
     const { store, summaries } = setup();
     store.getState().applyEvent(event(1, "state", "returned"));

@@ -30,7 +30,8 @@ export function statusAnnouncementText(
       ? []
       : [t("sourceStatus.detail", { count, status: t(`sourceStatus.status.${status}`) })];
   }).join(", ");
-  const text = t("sourceStatus.summary", {
+  // With no counts by status (every source was dropped) the sentence ends at the totals.
+  const text = t(details === "" ? "sourceStatus.summaryBare" : "sourceStatus.summary", {
     queryType: typeLabel(announcement.queryType),
     reference: announcement.correlationId.slice(0, 8),
     done: summary.done,

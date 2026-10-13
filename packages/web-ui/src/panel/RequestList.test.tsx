@@ -31,6 +31,7 @@ const SENDING: RequestRowView = {
   status: "sending",
   typeLabel: "Person",
   summary: "PER.TESTERSON.AVERY",
+  name: "Person TESTERSON AVERY",
   notes: [],
 };
 const ACKED: RequestRowView = {
@@ -38,6 +39,7 @@ const ACKED: RequestRowView = {
   status: "acknowledged",
   typeLabel: "Vehicle",
   summary: "VEH.ZZ-0001.TX",
+  name: "Vehicle ZZ-0001",
   reference: "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
   acknowledgedAt: new Date(2026, 8, 29, 13, 4, 5).getTime(),
   notes: ["State source: pending"],
@@ -47,6 +49,7 @@ const FAILED: RequestRowView = {
   status: "failed",
   typeLabel: "Vehicle",
   summary: "VEH.ZZ-0002.TX",
+  name: "Vehicle ZZ-0002",
   failureText: "The server did not answer.",
   notes: [],
 };
@@ -97,7 +100,7 @@ describe("spec 6.7 requests list (B3)", () => {
     const onCopy = vi.fn();
     render(<RequestList {...base} rows={[ACKED]} onCopy={onCopy} />);
     const button = screen.getByRole("button", {
-      name: "Copy reference 0198a1b2 for VEH.ZZ-0001.TX",
+      name: "Copy reference 0198a1b2 for Vehicle ZZ-0001",
     });
     await userEvent.click(button);
     expect(onCopy).toHaveBeenCalledWith(ACKED.reference);
@@ -122,7 +125,16 @@ describe("spec 6.7 requests list (B3)", () => {
     rerender(
       <RequestList
         {...base}
-        rows={[{ ...ACKED, id: "r2", typeLabel: "Person", summary: "PER.TESTERSON.AVERY" }, ACKED]}
+        rows={[
+          {
+            ...ACKED,
+            id: "r2",
+            typeLabel: "Person",
+            summary: "PER.TESTERSON.AVERY",
+            name: "Person TESTERSON AVERY",
+          },
+          ACKED,
+        ]}
       />,
     );
     expect(screen.getAllByRole("listitem")[0]).toBe(before);
@@ -175,18 +187,33 @@ describe("failed-row retry (the list only shows the button; the owner sends)", (
     const user = userEvent.setup();
     const onRetry = vi.fn();
     render(<RequestList {...base} rows={[RETRYABLE]} onRetry={onRetry} />);
-    const button = screen.getByRole("button", { name: "Retry VEH.ZZ-0002.TX" });
+    const button = screen.getByRole("button", { name: "Retry Vehicle ZZ-0002" });
     // The visible text is inside the accessible name (WCAG 2.5.3).
     expect(button).toHaveTextContent("Retry");
     await user.click(button);
     expect(onRetry).toHaveBeenCalledWith("r0");
   });
 
-  it("names the type when the command is empty", () => {
-    render(
-      <RequestList {...base} rows={[{ ...RETRYABLE, summary: "" }]} onRetry={() => undefined} />,
-    );
-    expect(screen.getByRole("button", { name: "Retry Vehicle" })).toBeInTheDocument();
+  it("#576 the fieldset, Copy and Retry names come from the row's name, never its command", () => {
+    const rows: RequestRowView[] = [
+      {
+        ...ACKED,
+        summary: "SECRETCMD",
+        name: "Vehicle 0198a1b2",
+        parts: [{ key: "p", lines: [] }],
+      },
+      { ...RETRYABLE, summary: "SECRETCMD", name: "Vehicle ZZ-0002" },
+    ];
+    render(<RequestList {...base} rows={rows} onRetry={() => undefined} />);
+    expect(screen.getByRole("button", { name: "Retry Vehicle ZZ-0002" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Copy reference 0198a1b2 for Vehicle 0198a1b2" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Source status for Vehicle 0198a1b2" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /SECRETCMD/ })).toBeNull();
+    expect(screen.queryByRole("group", { name: /SECRETCMD/ })).toBeNull();
   });
 
   it("no button on a row that is not retryable, sending, acknowledged, or when there is no handler", () => {
@@ -265,7 +292,7 @@ describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
 
   it("lists each source with its status in words, under a list named for the command", () => {
     render(<RequestList {...base} rows={[WITH_PARTS]} />);
-    const sources = screen.getByRole("group", { name: "Source status for VEH.ZZ-0001.TX" });
+    const sources = screen.getByRole("group", { name: "Source status for Vehicle ZZ-0001" });
     expect(sources).toHaveTextContent("State source: pending");
     expect(sources).toHaveTextContent("National source: returned");
     expect(sources).toHaveTextContent("State source: timed out");
@@ -280,7 +307,7 @@ describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
 
   it("no status is colour alone: every line is text, and every icon is aria-hidden", () => {
     render(<RequestList {...base} rows={[WITH_PARTS]} />);
-    const sources = screen.getByRole("group", { name: "Source status for VEH.ZZ-0001.TX" });
+    const sources = screen.getByRole("group", { name: "Source status for Vehicle ZZ-0001" });
     const icons = sources.querySelectorAll(".qm-source__icon");
     expect(icons.length).toBe(4);
     for (const icon of icons) expect(icon).toHaveAttribute("aria-hidden", "true");

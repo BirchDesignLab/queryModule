@@ -43,6 +43,27 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
       ),
     ).toBe("VEH 01923abc: 1 of 1 source done. 1 returned. 1 not run.");
   });
+  it("#576 with no status counts it says nothing dangling after the totals", () => {
+    const text = statusAnnouncementText(
+      { ...base, summary: { done: 0, total: 0, byStatus: {}, notRun: 2 } },
+      t,
+      label,
+    );
+    expect(text).toBe("VEH 01923abc: 0 of 0 sources done. 2 not run.");
+  });
+  it("#576 carries counts and the short reference only, never a typed value", () => {
+    const text = statusAnnouncementText(
+      {
+        ...base,
+        summary: { done: 1, total: 2, byStatus: { returned: 1, pending: 1 }, notRun: 0 },
+        values: { plate: "ZZ-0001" },
+      } as never,
+      t,
+      label,
+    );
+    expect(text).not.toContain("ZZ-0001");
+    expect(text).toBe("VEH 01923abc: 1 of 2 sources done. 1 returned, 1 pending.");
+  });
   it("one source reads singular", () => {
     expect(
       statusAnnouncementText(

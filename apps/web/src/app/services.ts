@@ -88,16 +88,18 @@ export function createServices(options: ServicesOptions): Services {
   const preferences = createPreferencesStore();
   const drafts = createDraftStore();
   const submit = createSubmitController({ api, queryClient, online: options.platform.online });
-  const requests = createRequestsStore();
+  // One timer seam for the feed and the requests store (the store's coalescing windows).
+  const timers = {
+    setTimeout: (fn: () => void, ms: number) => globalThis.setTimeout(fn, ms),
+    clearTimeout: (id: unknown) => globalThis.clearTimeout(id as number),
+  };
+  const requests = createRequestsStore({ timers });
   const configRefresh = createConfigRefresh({ api, queryClient, platform: options.platform });
   const createSocket = options.createSocket ?? createBrowserSocket;
   const feed = createFeedSocket({
     createSocket,
     url: heartbeatUrl(location),
-    timers: {
-      setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
-      clearTimeout: (id) => globalThis.clearTimeout(id as number),
-    },
+    timers,
     random: Math.random,
   });
   // Status events land in the requests store, which holds the ones that outrun their 202 (spec 6.7).

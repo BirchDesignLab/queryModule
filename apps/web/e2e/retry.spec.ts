@@ -38,7 +38,7 @@ test.describe("dispatcher retry (1366x768)", () => {
     await plate.fill("ZZ-0001");
     await plate.press("Enter");
     const region = page.getByRole("region", { name: "Requests this shift" });
-    const retry = region.getByRole("button", { name: /^Retry VEH\.ZZ-0001/ });
+    const retry = region.getByRole("button", { name: /^Retry Vehicle ZZ-0001/ });
     await expect(retry).toBeVisible();
     await expect(region.getByText("The server was restarting.")).toBeVisible();
     const box = await retry.boundingBox();
@@ -76,7 +76,7 @@ test.describe("officer retry (1024x768)", () => {
     await plate.fill("ZZ-0001");
     await plate.press("Enter");
     const region = page.getByRole("region", { name: "Last request" });
-    const retry = region.getByRole("button", { name: /^Retry VEH\.ZZ-0001/ });
+    const retry = region.getByRole("button", { name: /^Retry Vehicle ZZ-0001/ });
     await expect(retry).toBeVisible();
     const box = await retry.boundingBox();
     expect(Math.round(box?.height ?? 0), "officer target").toBeGreaterThanOrEqual(48);

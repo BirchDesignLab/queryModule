@@ -38,7 +38,7 @@ test("ZZ-0001: both sources return, in the list, and one coalesced polite summar
   await runPlate(page, "ZZ-0001");
   const row = list.getByRole("listitem").first();
   await expect(row).toContainText("Acknowledged");
-  await expect(row.getByRole("group", { name: /Source status for VEH\.ZZ-0001/ })).toBeVisible();
+  await expect(row.getByRole("group", { name: /Source status for Vehicle ZZ-0001/ })).toBeVisible();
   await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
   await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
   // The summary speaks counts and words only: never the plate, never a payload.
