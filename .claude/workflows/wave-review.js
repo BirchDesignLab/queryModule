@@ -507,7 +507,16 @@ function rulingsText() {
 // confirmed exists. agentSha is what a reviewer, fixer or progress checker reported: compared and
 // logged on a difference, never used. rev is A.head for the review (the reviewer resolves
 // reviewedSha with git rev-parse <head>) and HEAD after the fix pass. Returns { head, differs } (differs: agentSha named another commit) or { problem }.
-const SHA40 = /^[0-9a-f]{40}$/
+// A git-confirmed sha, tolerating a wrapped answer (#626): revParse must hold exactly one 40-hex
+// value (bare, quoted, in JSON text or in prose; none or several are rejected; a longer hex run is
+// not a 40-hex match), and catFile must contain "EXISTS <that sha>". Only that sha is ever used.
+const SHA40_IN = /(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])/g
+function confirmedSha(revParse, catFile) {
+  const found = String(revParse || '').match(SHA40_IN) || []
+  if (found.length !== 1) return null
+  const sha = found[0]
+  return new RegExp(`(?<![A-Za-z])EXISTS ${sha}(?![0-9a-f])`).test(String(catFile || '')) ? sha : null
+}
 const VERIFY_HEAD = {
   type: 'object',
   properties: {
@@ -516,10 +525,7 @@ const VERIFY_HEAD = {
   },
   required: ['revParse', 'catFile'],
 }
-const gitSha = (v) => {
-  const head = String((v && v.revParse) || '').trim()
-  return SHA40.test(head) && String((v && v.catFile) || '').trim() === `EXISTS ${head}` ? head : null
-}
+const gitSha = (v) => confirmedSha(v && v.revParse, v && v.catFile)
 async function verifyHead(agentSha, label, rev) {
   const prompt = [
     `Read-only git check in ${REPO}. Run these two commands in Git Bash and return the raw stdout of each, copied exactly, with no interpretation. Change nothing.`,

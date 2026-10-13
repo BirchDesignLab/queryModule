@@ -228,6 +228,64 @@ const IMPL_HEAD = "cafe1234".repeat(5);
 const gitAt = (h) => ({
   "verify-head-impl": { revParse: `${hex40(h)}\n`, catFile: `EXISTS ${hex40(h)}\n` },
 });
+// #626: the verifyHead role sometimes wraps git's stdout (quotes, JSON text, prose). The scripts take
+// the single 40-hex value in revParse and require catFile to contain "EXISTS <that sha>".
+const WRAPPED_SHA = "5ca1ab1e".repeat(5);
+const wrappedAnswers = (S) => [
+  [
+    "bare",
+    {
+      revParse: `${S}
+`,
+      catFile: `EXISTS ${S}
+`,
+    },
+  ],
+  ["quoted", { revParse: `"${S}"`, catFile: `"EXISTS ${S}"` }],
+  [
+    "JSON-wrapped",
+    {
+      revParse: JSON.stringify({
+        stdout: `${S}
+`,
+      }),
+      catFile: JSON.stringify({
+        stdout: `EXISTS ${S}
+`,
+        exitCode: 0,
+      }),
+    },
+  ],
+  ["prose", { revParse: `Output: ${S}.`, catFile: `The check printed EXISTS ${S}` }],
+];
+const A40 = "a".repeat(40);
+const B40 = "b".repeat(40);
+const ambiguousAnswers = [
+  [
+    "two different shas in revParse",
+    {
+      revParse: `${A40}
+${B40}
+`,
+      catFile: `EXISTS ${A40}
+`,
+    },
+  ],
+  [
+    "a sha and a second one in JSON",
+    {
+      revParse: JSON.stringify({ stdout: A40, previous: B40 }),
+      catFile: `EXISTS ${A40}`,
+    },
+  ],
+  [
+    "a 64-hex value is not a sha here",
+    { revParse: "c".repeat(64), catFile: `EXISTS ${"c".repeat(40)}` },
+  ],
+  ["catFile without EXISTS", { revParse: A40, catFile: A40 }],
+  ["catFile EXISTS for another sha", { revParse: `{"stdout":"${A40}"}`, catFile: `EXISTS ${B40}` }],
+  ["catFile that names the sha as a prefix only", { revParse: A40, catFile: `EXISTS ${A40}0` }],
+];
 function sddResponder(over = {}) {
   const ctx = { lastHead: BASE.base };
   const base = sddBase(over, ctx);
@@ -400,6 +458,22 @@ await test("sdd: bad-sha: a cat-file answer for a different sha than revParse st
   assert.ok(!r.labels.includes("combined-review"));
   // the second command prints the sha it checked, and the prompt asks for it
   assert.ok(r.find("verify-head-impl").prompt.includes('echo "EXISTS $sha"'));
+});
+
+await test("sdd: wrapped-sha: a bare, quoted, JSON-wrapped or prose answer with one confirmed sha is accepted (#626)", async () => {
+  for (const [name, answer] of wrappedAnswers(WRAPPED_SHA)) {
+    const r = await run(sdd, BASE, sddResponder({ "verify-head*": answer }));
+    assert.equal(r.res.status, "complete", `${name}: ${r.res.problem ?? r.logs.join(" | ")}`);
+    assert.equal(r.res.head, WRAPPED_SHA, name);
+  }
+});
+
+await test("sdd: wrapped-sha: an ambiguous or unconfirmed answer still stops at precondition:verifyHead (#626)", async () => {
+  for (const [name, answer] of ambiguousAnswers) {
+    const r = await run(sdd, BASE, sddResponder({ "verify-head*": answer }));
+    assert.equal(r.res.stopPoint, "precondition:verifyHead", name);
+    assert.ok(!r.labels.includes("combined-review"), name);
+  }
 });
 
 await test("sdd: bad-sha: an implemented.head that git does not report stops at precondition, not a silent swap (critic M3)", async () => {
@@ -1225,6 +1299,41 @@ await test("wr: bad-sha: a cat-file answer for a different sha than revParse sto
   assert.equal(r.res.stopped, "precondition");
   assert.equal(r.res.stopPoint, "precondition:verifyHead");
   assert.ok(r.find("verify-head-review").prompt.includes('echo "EXISTS $sha"'));
+});
+
+await test("wr: wrapped-sha: a bare, quoted, JSON-wrapped or prose answer with one confirmed sha is accepted (#626)", async () => {
+  for (const [name, answer] of wrappedAnswers(WRAPPED_SHA)) {
+    const r = await run(
+      wr,
+      WBASE,
+      wrResponder({
+        reviewer: {
+          ...reviewWith([]),
+          verdict: "approve",
+          reviewedSha: WRAPPED_SHA,
+          artifactWritten: true,
+        },
+        "verify-head-review": answer,
+      }),
+    );
+    assert.equal(r.res.verdict, "approve", `${name}: ${r.res.problem ?? r.logs.join(" | ")}`);
+    assert.equal(r.res.reviewedSha, WRAPPED_SHA, name);
+    assert.equal(r.res.artifactWritten, true, name);
+  }
+});
+
+await test("wr: wrapped-sha: an ambiguous or unconfirmed answer still stops at precondition:verifyHead (#626)", async () => {
+  for (const [name, answer] of ambiguousAnswers) {
+    const r = await run(
+      wr,
+      WBASE,
+      wrResponder({
+        reviewer: reviewWith([WF("I1", "important")]),
+        "verify-head-review": answer,
+      }),
+    );
+    assert.equal(r.res.stopPoint, "precondition:verifyHead", name);
+  }
 });
 
 // K2: a reviewer that reports a reviewedSha different from git wrote an artifact that records the
@@ -3120,6 +3229,37 @@ await test("sdd-wave: bad-sha: a cat-file answer for a different sha than revPar
   assert.equal(r.res.status, "stopped");
   assert.equal(r.res.stop.stopPoint, "precondition:verifyHead");
   assert.ok(r.find("verify-head-t17").prompt.includes('echo "EXISTS $sha"'));
+});
+
+await test("sdd-wave: wrapped-sha: a bare, quoted, JSON-wrapped or prose answer with one confirmed sha is accepted (#626)", async () => {
+  for (const [name, answer] of wrappedAnswers(WRAPPED_SHA)) {
+    const inner = waveResponder();
+    const r = await run(
+      wave,
+      WAVE,
+      (label, prompt, calls) =>
+        label === "verify-head-t17" ? answer : inner(label, prompt, calls),
+      sdd,
+    );
+    assert.equal(r.res.status, "complete", `${name}: ${r.logs.join(" | ")}`);
+    assert.equal(r.childArgs[1].args.base, WRAPPED_SHA, name);
+  }
+});
+
+await test("sdd-wave: wrapped-sha: an ambiguous or unconfirmed answer still stops the wave (#626)", async () => {
+  for (const [name, answer] of ambiguousAnswers) {
+    const inner = waveResponder();
+    const r = await run(
+      wave,
+      WAVE,
+      (label, prompt, calls) =>
+        label === "verify-head-t17" ? answer : inner(label, prompt, calls),
+      sdd,
+    );
+    assert.equal(r.res.status, "stopped", name);
+    assert.equal(r.res.stop.stopPoint, "precondition:verifyHead", name);
+    assert.equal(r.childArgs.length, 1, `${name}: Task 18 must not start`);
+  }
 });
 
 await test("sdd-wave: stops at the first task that does not complete; answers[task] resumes, earlier args unchanged", async () => {

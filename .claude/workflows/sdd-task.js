@@ -785,11 +785,17 @@ function build(status, extra) {
 // The only source of a head sha in this script. One Haiku agent reads git; the script accepts only
 // a 40-hex value the agent confirmed exists. agentHead is what an earlier agent reported: compared
 // and logged on a difference, never used. An invalid answer stops the run (precondition:verifyHead).
-const SHA40 = /^[0-9a-f]{40}$/
-const gitSha = (v) => {
-  const head = String((v && v.revParse) || '').trim()
-  return SHA40.test(head) && String((v && v.catFile) || '').trim() === `EXISTS ${head}` ? head : null
+// A git-confirmed sha, tolerating a wrapped answer (#626): revParse must hold exactly one 40-hex
+// value (bare, quoted, in JSON text or in prose; none or several are rejected; a longer hex run is
+// not a 40-hex match), and catFile must contain "EXISTS <that sha>". Only that sha is ever used.
+const SHA40_IN = /(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])/g
+function confirmedSha(revParse, catFile) {
+  const found = String(revParse || '').match(SHA40_IN) || []
+  if (found.length !== 1) return null
+  const sha = found[0]
+  return new RegExp(`(?<![A-Za-z])EXISTS ${sha}(?![0-9a-f])`).test(String(catFile || '')) ? sha : null
 }
+const gitSha = (v) => confirmedSha(v && v.revParse, v && v.catFile)
 // exact: agentHead was named by the controller (implemented.head); a difference stops the run
 // instead of reviewing a range the controller did not name (critic M3 on #222).
 async function verifyHead(agentHead, label, exact = false) {
