@@ -1,19 +1,12 @@
 import type { Assessment, AssessmentMatch, AssessResult } from "../contracts/assess";
 import { SEVERITY_RANK } from "../contracts/assess";
 import { findHits } from "./highlight";
+import { childPath } from "./path";
 
 /**
  * assessResult (spec 4.5; FR-060): scans every string leaf of the raw payload, independent of
  * mapping, view and highlight flags. Matches carry the keyword, severity and path, never leaf text.
  */
-
-const PLAIN_KEY = /^[^.[\]"\\]+$/u;
-
-function childPath(parent: string, key: string | number): string {
-  if (typeof key === "number") return `${parent}[${key}]`;
-  if (PLAIN_KEY.test(key)) return parent === "" ? key : `${parent}.${key}`;
-  return `${parent}[${JSON.stringify(key)}]`;
-}
 
 function walk(value: unknown, path: string, visit: (text: string, path: string) => void): void {
   if (typeof value === "string") {
