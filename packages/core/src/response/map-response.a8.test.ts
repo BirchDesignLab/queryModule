@@ -363,4 +363,23 @@ describe("mapResponse [A8]", () => {
     const assignable: MapResponse = mapResponse;
     expectTypeOf(assignable).toBeFunction();
   });
+  it("[A8] limitation (C1): on a past-century field a two-digit year literal in when pivots on a fixed epoch clock, so authors write four digits", () => {
+    const raw = minimalSiteConfigInput();
+    const vehicle = raw.queryTypes[0];
+    if (vehicle === undefined) throw new Error("fixture has no query type");
+    vehicle.fields.push({ key: "year", labelKey: "field.year", dataType: "year", century: "past" });
+    const mapping = (value: number): Mapping => ({
+      ...VEH_SUMMARY,
+      when: { field: "year", op: "gte", value },
+    });
+    const ctx: MapContext = { ...CTX, partValues: { ...CTX.partValues, year: 2001 } };
+    const pick = (value: number) => {
+      raw.responseMappings = [mapping(value)];
+      return mapResponse(SiteConfigSchema.parse(raw), ctx, STATE_PAYLOAD).mappingIndex;
+    };
+    // Four digits are exact: 2026 does not select a 2001 part.
+    expect(pick(2026)).toBeNull();
+    // Two digits resolve against 1970 (no clock in core): 26 means 1926 here, not 2026.
+    expect(pick(26)).toBe(0);
+  });
 });

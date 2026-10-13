@@ -27,7 +27,12 @@ export type MapResponseConfig = Pick<SiteConfig, "responseMappings" | "queryType
   Partial<Pick<SiteConfig, "defaults" | "picklists" | "locales">>;
 
 const DEFAULT_LOCALE = "en-US";
-/** Conditions read no clock; a fixed instant keeps two-digit-year literals deterministic. */
+/**
+ * Core has no clock and MapContext carries none, so `when` literals and `$default` canonicalise at
+ * a fixed instant. Known limitation (review C1, pending ruling): on a century "past" field a
+ * two-digit year literal pivots on 1970 (26 means 1926, not 2026 as the form engine reads it), so
+ * response mappings should write four-digit years.
+ */
 const NO_CLOCK = 0;
 
 const SCORE_WHEN = 4;
