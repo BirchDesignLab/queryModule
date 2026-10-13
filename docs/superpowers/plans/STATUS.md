@@ -38,7 +38,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
-| Windows 11 | A (`C:\git\queryModule-a`) | M2 P1 feed | running (AW1 #611, AW2 #618 merged; AW3: Tasks 5 to 7, #590 to #592, #614, #617; "M2 Track A P1 Wave 1") | 10-13-26 |
+| Windows 11 | A (`C:\git\queryModule-a`) | M2 P1 feed | paused (handover mid AW3 at 01fd5e9: C-m1 to C-m3 and #614 done; next Task 7 inline) | 10-13-26 |
 | Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B | idle (no local B session; BW2 and BW3 ran in the cloud and merged, cloud credits spent) | 10-07-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
@@ -54,11 +54,11 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 - Issue: #590, #591, #592 (replay, P1 gate test, smoke step 4); #614, #617 (CI gate chores)
 - Branch / PR: `feat/m2-a-p1-wave-3` (AW3), PR not yet open; AW1 #611 and AW2 #618 merged
-- Last green: main 794a8cd (#618)
-- Next step: AW3 inline (AW2 review minors C-m1 to C-m3, #614, Task 7), then Tasks 5, 6 and #617 `sdd-wave`, wave critic, `wave-review` (critical and gate slices); then AW4
+- Last green: `pnpm verify` at 01fd5e9 on Windows (VITEST_MAX_WORKERS=3); main 794a8cd (#618)
+- Next step: AW3 Task 7 (#592) inline, then Tasks 5, 6 and #617 `sdd-wave`, wave critic, `wave-review` (critical and gate slices); then AW4 after Track B BW3
 - Blocked by: none
-- Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-07-m2-track-a-p1\` (from AW1)
-- Notes: manager "M2 Manager 3"; Track B BW0 waits on the AW1 merge; open follow-ups #574, #572, #558.
+- Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-07-m2-track-a-p1\handover.md` (state, next steps, rulings, lessons); branch not yet pushed
+- Notes: manager "M2 Manager 3" (its push approvals count as the developer's for Track A); open follow-ups #574, #572, #558, #610.
 
 ### Track B
 
