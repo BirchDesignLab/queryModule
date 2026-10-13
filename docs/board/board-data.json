@@ -1624,11 +1624,7 @@
     },
     {
       "number": 610,
-      "labels": [
-        "web",
-        "p3",
-        "follow-up"
-      ],
+      "labels": ["web", "p3", "follow-up"],
       "milestone": "M2 Results and audit",
       "parent": 46,
       "track": "Web (B)",
@@ -1641,11 +1637,7 @@
     },
     {
       "number": 614,
-      "labels": [
-        "platform",
-        "p1",
-        "follow-up"
-      ],
+      "labels": ["platform", "p1", "follow-up"],
       "milestone": "M2 Results and audit",
       "parent": 44,
       "track": "Platform (A)",
@@ -1658,10 +1650,7 @@
     },
     {
       "number": 615,
-      "labels": [
-        "documentation",
-        "p1"
-      ],
+      "labels": ["documentation", "p1"],
       "milestone": "M2 Results and audit",
       "parent": 44,
       "track": "Platform (A)",
