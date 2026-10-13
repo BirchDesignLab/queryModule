@@ -1568,7 +1568,7 @@
       "priority": "Medium",
       "reqIds": "none",
       "title": "M2 P0 route contracts: carry-forwards for M2 P1 and P2 handlers",
-      "body": "From M2 P0-W2 Task 7 (#526), ledger of the B lane, 10-05-26. The five new routes are contract-only (`CONTRACT_ONLY` in `packages/api/test/security/route-matrix.test.ts`). Whoever plans and mounts them (M2 P1 queries, M2 P2 audit) takes these:\n\n- [ ] The task that mounts `GET /api/v1/queries` (and each other contract-only route) removes it from `CONTRACT_ONLY` and adds user and admin cases to the route matrix.\n- [ ] Q2: `z.coerce` turns empty `from=` / `limit=` into `0`; the handler must reject it, or the contract tightens (contract change, master plan 8).\n- [ ] Q4: the new admin routes (`/admin/audit`, `/admin/audit/export`, `/admin/queries/:correlationId`) have no feature key, while the route matrix requires `admin(Config|Users)` on `/admin/` operations; pick the key (likely a new `adminAudit`) before mounting.\n- [ ] NDJSON export has no OpenAPI body schema (`AuditExportLineSchema` is exported for the handler); document or add it when the handler lands.\n- [ ] List page cap 100 is an implementer choice (spec 5.1 silent); confirm or change in M2 P1 planning.\n\nRefs #511, #526."
+      "body": "From M2 P0-W2 Task 7 (#526), ledger of the B lane, 10-05-26. The five new routes are contract-only (`CONTRACT_ONLY` in `packages/api/test/security/route-matrix.test.ts`). Whoever plans and mounts them (M2 P1 queries, M2 P2 audit) takes these:\r\n\r\n- [ ] The task that mounts `GET /api/v1/queries` (and each other contract-only route) removes it from `CONTRACT_ONLY` and adds user and admin cases to the route matrix. (`getQuery` and `listQueries` done in #618; `getAdminQuery` and the audit routes remain, M2 P2)\r\n- [x] Q2: `z.coerce` turns empty `from=` / `limit=` into `0`; the handler must reject it, or the contract tightens (contract change, master plan 8). (handler rejects, #618)\r\n- [ ] Q4: the new admin routes (`/admin/audit`, `/admin/audit/export`, `/admin/queries/:correlationId`) have no feature key, while the route matrix requires `admin(Config|Users)` on `/admin/` operations; pick the key (likely a new `adminAudit`) before mounting.\r\n- [ ] NDJSON export has no OpenAPI body schema (`AuditExportLineSchema` is exported for the handler); document or add it when the handler lands.\r\n- [x] List page cap 100 is an implementer choice (spec 5.1 silent); confirm or change in M2 P1 planning. (confirmed: default 25, cap 100, #618)\r\n\r\nRefs #511, #526.\r\n"
     },
     {
       "number": 565,
@@ -1660,6 +1660,84 @@
       "reqIds": "none",
       "title": "docs: rebuild the management brief and refresh all documentation at the M2 P1 demo point",
       "body": "When M2 P1 reaches a demo-able `main` (demo sets in the P1 plans), before the demo:\n\n1. **Rebuild the management brief** (last edition: \"Status as released September 30, 2026, Milestone 1 of 4, final phase\"). Bring it to M2 P1: results inside each request, result cards and the cards builder, Try a match, replay, keyword editor; updated counts (merged changes, work items, ADRs, build hours).\n2. **Refresh all documentation** against what ships: README, `docs/api.md`, user and implementer guides, ops/runbooks, release notes, STATUS, design docs, ADR index, spec cross-references.\n\n**Branding (developer 10-13-26), applies to every Birch Design Lab document:**\n- Header: logo mark + \"BIRCH DESIGN LAB\" wordmark on the left only. No domain on the right.\n- Footer: \"birchdesignlab.com\" on the left (no \"Birch Design Lab\" name before it); page number on the right.\n- Keep both simple.\n\n**Tier:** ordinary (docs). Timing: at the P1 demo point, after AW4's docs and release note, or folded into them.\n"
+    },
+    {
+      "number": 617,
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 44,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "ci: board-only fast path (docs/board changes run Biome + board schema test only)",
+      "body": "A PR that changes only `docs/board/**` (board data for new follow-ups) runs the full CI: checks, test, web, image. The docs-only fast path in `scripts/ci/changed-paths.mjs` deliberately excludes `docs/board/` because `board-data.json` is data with its own schema test (#96 G-M1), so a board-only change is treated as a code change. Seen on #616: a 3-entry board update waited on the whole pipeline (and a Biome format miss).\n\n**Fix:** a board-only path. `changed-paths.mjs` gains a `board_only` output (true when every changed file is under `docs/board/`). When set, CI runs only what judges board data: Biome over the changed files and `scripts/ops/board-data.test.ts` (plus the `changed-paths` tests if touched); `test`, `web`, `mobile` and `image` skip, and the `ci` aggregate passes on that subset. Mixed PRs (board data plus anything else) keep the full pipeline. Keep the docs-only path as it is.\n\n**Tier:** gate (`.github/**`, `scripts/ci/**`). Ride AW3's gate slice (M2 P1 Track A), which already has a gate review.\n\n**Acceptance:** a board-only PR goes green in a few minutes with the schema test and Biome run; a board-plus-code PR runs everything; `changed-paths.test.ts` covers board-only, mixed and docs-only cases.\n\nFound in: #616 (10-13-26).\n"
+    },
+    {
+      "number": 620,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "AW3 review minors: smoke readDetail failure tests, replay 24 h edge test, bad event row on reconnect",
+      "body": "Minors from the AW3 wave-review (`docs/reviews/feat-m2-a-p1-wave-3.md`, run wf_ea34119b-b63, 10-13-26). None blocked the approval.\r\n\r\n- [ ] **G-G-m1 (gate, test-only):** `scripts/ops/smoke-feed.ts` `readDetail` failure branches are untested: fetch error, response not JSON, no source returned. Add cases to `scripts/ops/smoke.test.ts`. Rides the next gate-tier PR.\r\n- [ ] **C-m1 (ordinary, test-only):** the replay 24 h edge row (an event exactly at the cutoff) is untested in `packages/api/test/ws/replay.test.ts`.\r\n- [ ] **C-m2 (M3):** a bad stored `event_log` row closes the socket with 1011 on every reconnect, and the log line carries no `seq`. Today's writers cannot produce such a row; revisit with the M3 per-type mapper (`resultHidden`): skip-and-log with the `seq`, or a bounded close.\r\n\r\n- [ ] **From the fix/m2-a-p1-minors review (fast, test-only):** M1 the `notJson` smoke test lacks a `not.toMatch(/4 ok/)` guard; M2 the backup reset test matches any error name. Tighten both.\r\n\r\nRefs #590, #591, #592.\r\n\r\n"
+    },
+    {
+      "number": 622,
+      "labels": ["p0", "contract", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 43,
+      "track": "Core",
+      "phase": "P0",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Contract minors: getQuery/listQueries status live, malformed correlationId 400 vs 404",
+      "body": "Contract minors from the M2 P1 Track A reviews (AW2, 10-13-26). Contracts are frozen outside a contracts wave, so these ride M2 P0-W3 (before M2 P2) or the next contract touch.\n\n- [ ] `packages/core/src/contracts/routes.ts` still marks `getQuery` and `listQueries` `status: \"planned\"`, though both are mounted and tested since #618. `route-matrix.test.ts` carries a `MOUNTED_PLANNED` workaround. Flip both to live, drop the workaround, check the oasdiff effect.\n- [ ] The contract lists 400 for a malformed `correlationId` on `GET /api/v1/queries/{correlationId}`, but the route answers 404 by the access policy (no oracle on id shape). Decide: drop 400 from the contract (likely) or change the route; keep `docs/api.md` in step.\n\nRefs #561, #618.\n"
+    },
+    {
+      "number": 623,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "M",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "M2 P1 Track A review minors (AW1 to AW3): gen:check client drift, read mapper, tests, traceability",
+      "body": "Review minors from M2 P1 Track A (AW1 to AW3, 10-13-26) that no PR or issue tracks yet. None blocked a review. Tiers per item; split by tier when picked up.\r\n\r\n**Tooling (gate)**\r\n- [ ] AW1 T1 Q2: `pnpm gen:check` does not cover `packages/client/src/api/generated/*`, so client type drift from `openapi.json` goes unnoticed. Add the client generator to the drift check.\r\n\r\n**Read routes (critical, `packages/api/src/queries/read.ts`)**\r\n- [ ] AW2 T4 Q1: the list's part mapping (partId to droppedSourceIds, skipReasons parse, selection-order sort, `purged` rule) is a near copy of `readQuery`; the two `purged` rules can drift. Share one mapper.\r\n- [ ] AW2 T4 Q3: `query_request_user_submitted_idx` is `(user_id, submitted_at)`; the `part_id = 0` filter and the `correlation_id` tie-break are not in the index, so ties may add a sort step. Fine at prototype scale; revisit with real volumes.\r\n- [ ] AW2 T4 Q4: per-item `parts.filter` / `results.filter` / `keys.some` are O(n*m) over at most 100 items; a Map by correlationId is cleaner.\r\n\r\n**Tests (ordinary)**\r\n- [ ] AW3 T6 C1: the P1 gate test (`test/dispatch/replay-mid-dispatch.test.ts`) alone does not catch a missing owner filter (B's seqs sit at or below A's cursor); the `ws-events.test.ts` owner row does. Make the gate test catch it too (cursor below B's seqs).\r\n- [ ] AW3 T6 Q1/Q2: `open`, `rowsOf` and setup helpers are duplicated across `replay-mid-dispatch.test.ts`, `ws-events.test.ts` and `test/ws/replay.test.ts`; fixed 20 ms and 50 ms sleeps after the barrier add wall time. Share a helper; drop the sleeps.\r\n\r\n**Docs and traceability (ordinary; can ride AW4)**\r\n- [ ] AW3 T6 S1: owner-only replay rows are tagged SEC-014, but SEC-014 is the correlation identifier requirement. Retag with the right requirement ID (or spec section) in `ws-events.test.ts` and `replay-mid-dispatch.test.ts`.\r\n- [ ] AW3 T6 S2: spec 10.4 names `packages/api/test/feed/replay.test.ts`; the gate test lives at `packages/api/test/dispatch/replay-mid-dispatch.test.ts` (accepted by the AW3 wave-review). Update spec 10.4.\r\n- [ ] AW1 T1 Q3: the Track A P1 plan's Step 1.2 names `pnpm gen`, which does not exist (`pnpm contracts:gen` plus client `gen:api`). Fix the wording.\r\n\r\n- [ ] Follow-on to the SEC-014 retag (fix/m2-a-p1-minors-2 retagged tests to spec 5.3): source comments still cite SEC-014 for owner-only rows in `packages/api/src/dispatch/event-log.ts`, `packages/api/src/ws/server.ts`, `packages/api/src/queries/policy.ts` and `read.ts` (critical and gate files: retag when those files are next touched); the master plan P1 row still names `packages/api/test/feed/replay.test.ts` (ordinary, AW4).\r\n\r\n- [ ] From the fix/m2-a-p1-minors-2 review (fast, ordinary-sized, gate file): M1 `scripts/ci/check-generated.test.ts:69-70` stub stdout template literal spans a raw newline instead of `\r\n` (cosmetic); M2 the \"flags a stale generated client file\" test duplicates the generic drift test (the real guard is the GENERATED_FILES membership test): drop or sharpen it.\r\n\r\nRelated: #620 (AW3 wave-review minors), contract minors issue (M2 P0-W3).\r\n\r\n\r\n"
+    },
+    {
+      "number": 626,
+      "labels": ["platform", "p1", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 44,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "sdd-task verifyHead: accept a wrapped but valid sha (one 40-hex match + EXISTS) instead of stopping the wave",
+      "body": "`verifyHead` in `.claude/workflows/sdd-task.js` (#222) accepts only a bare 40-hex `revParse` and an exact `EXISTS <sha>` `catFile`. On 10-13-26 (Track B BW2, run wf_b6cc4809-12d) the Haiku role returned a valid, existing sha but wrapped (JSON text instead of the bare stdout), the strict check rejected it, and the whole `sdd-wave` stopped at `precondition:verifyHead` before Task 5. Recovery cost a session handover and a manual relaunch.\n\n**Fix:** keep the guarantee (the script only uses a sha that git confirmed exists) but parse leniently: take the single 40-hex match from `revParse` (reject zero or several), and require `catFile` to contain `EXISTS <that sha>`. Add tests for bare, quoted, JSON-wrapped and ambiguous answers. Same parse in any other workflow that reads a sha from an agent (`wave-review.js`, `sdd-wave.js`).\n\n**Tier:** ordinary (`.claude/workflows/**`). Own PR, CI only.\n\nFound in: Track B BW2 handover (10-13-26).\n"
+    },
+    {
+      "number": 627,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "ci: run the sdd workflow harness (scripts/sdd/workflow-harness.mjs) in CI",
+      "body": "`scripts/sdd/workflow-harness.mjs` (156 scenarios over `.claude/workflows/sdd-task.js`, `sdd-wave.js` and `wave-review.js`) runs only by hand (README). Neither `pnpm verify` nor CI runs it, so a change to a workflow script can merge with failing scenarios. Seen on #626 (10-13-26): the new verifyHead parse scenarios are not exercised by CI.\n\n**Fix:** run the harness in CI when `.claude/workflows/**` or `scripts/sdd/**` change (or always, if it is fast): a step in an existing job or a small path-scoped job; optionally a `pnpm` script so `pnpm verify` can include it.\n\n**Tier:** gate (`.github/**`); ride the next gate-tier PR.\n\n**Acceptance:** a PR that breaks a harness scenario fails CI.\n"
     }
   ]
 }
