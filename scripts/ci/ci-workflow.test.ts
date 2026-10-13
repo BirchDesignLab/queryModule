@@ -540,3 +540,28 @@ describe("ci.yml board-only fast path (#617)", () => {
     expect(jobNeeds(jobs.ci)).toContain("board");
   });
 });
+
+describe("ci.yml workflow harness (#627)", () => {
+  const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+
+  it("the root package.json has a sdd:harness script and `verify` runs it", () => {
+    expect(pkg.scripts["sdd:harness"]).toBe("node scripts/sdd/workflow-harness.mjs");
+    expect(pkg.scripts.verify).toContain("pnpm sdd:harness");
+  });
+
+  it("the `test` job runs the harness on every run it makes, so a broken scenario fails ci", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: the parsed workflow has no local type
+    const steps = jobs.test.steps as any[];
+    const step = steps.find((st) => typeof st.run === "string" && st.run.includes("sdd:harness"));
+    expect(step).toBeDefined();
+    expect(step.if).toBeUndefined();
+    expect(step["continue-on-error"]).toBeUndefined();
+  });
+
+  it("adds no job: the aggregate's needs, and the docs-only and board-only skips, are unchanged", () => {
+    expect(jobs.test.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
+    expect(Object.keys(jobs)).not.toContain("harness");
+  });
+});
