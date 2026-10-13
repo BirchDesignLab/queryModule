@@ -262,13 +262,62 @@ describe("FR-043 fetch result payloads when sources settle (spec 6.7)", () => {
     expect(payloadsOf(entry())).toEqual([{ a: 1 }, undefined]);
   });
 
-  it("a network failure stops retrying once nothing is pending", async () => {
-    const calls = serve(() => HttpResponse.error());
+  it("a failed fetch retries when the only source is returned and has no payload", async () => {
+    let n = 0;
+    const calls = serve(() => {
+      n += 1;
+      return n === 1
+        ? HttpResponse.error()
+        : HttpResponse.json(detailOf([source("state", "returned", { a: 1 })]));
+    });
+    const { apply, entry, store } = setup();
+    store.getState().applyEvent(event(1, "national", "failed"));
+    apply(event(2, "state", "returned"));
+    await pass(500);
+    expect(calls).toHaveLength(1);
+    await pass(5000);
+    expect(calls).toHaveLength(2);
+    expect(entry().parts[0]?.sources[0]?.result?.payload).toEqual({ a: 1 });
+  });
+
+  it("a network failure stops retrying once every returned source has its payload", async () => {
+    let n = 0;
+    const calls = serve(() => {
+      n += 1;
+      return n === 1
+        ? HttpResponse.json(detailOf([source("state", "returned", { a: 1 })]))
+        : HttpResponse.error();
+    });
     const { apply, store } = setup();
     store.getState().applyEvent(event(1, "national", "failed"));
     apply(event(2, "state", "returned"));
-    await pass(300_000);
+    await pass(500);
     expect(calls).toHaveLength(1);
+    apply(event(3, "state", "returned"));
+    await pass(500);
+    expect(calls).toHaveLength(2);
+    await pass(300_000);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("C2 a retry settled once keeps the user's row over a placeholder for the same request", async () => {
+    serve(() =>
+      HttpResponse.json(
+        detailOf([source("state", "returned", { a: 1 }), source("national", "pending")]),
+      ),
+    );
+    const { store, apply } = setup({ acknowledged: false });
+    apply(event(1, "state", "returned"));
+    await pass(2000);
+    const id = store.getState().begin({ queryType: "VEH", summary: "VEH.ZZ-0001" });
+    store
+      .getState()
+      .settle(id, { kind: "acknowledged", response: ACK, queryType: "VEH" }, { once: true });
+    const rows = store.getState().items;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(id);
+    expect(rows[0]?.summary).toBe("VEH.ZZ-0001");
+    expect(rows[0]?.status === "acknowledged" && rows[0].placeholder).toBeFalsy();
   });
 
   it("events that outran the 202 fetch once the request is acknowledged", async () => {

@@ -40,7 +40,7 @@ interface Slot {
  * correlation ID, one trailing. The fetch is marked `X-Background: 1` so it does not count as user
  * activity (Q3). Payloads are regulated client data: they go to the store and nowhere else, and
  * nothing here logs, stores or builds a URL from them. A 404 drops quietly; a network failure
- * retries on the feed's backoff while a source is still pending.
+ * retries on the feed's backoff while a source is pending or a returned one lacks its payload.
  */
 export function createResultFetcher(options: ResultFetcherOptions): ResultFetcher {
   const { api, timers, store } = options;
@@ -60,13 +60,20 @@ export function createResultFetcher(options: ResultFetcherOptions): ResultFetche
     return slot;
   };
 
-  const hasPending = (correlationId: string): boolean => {
+  /** A source is pending, or a returned source has no payload yet (spec 6.7: the fetch is owed). */
+  const needsFetch = (correlationId: string): boolean => {
     const entry = store
       .getState()
       .items.find((item) => item.status === "acknowledged" && item.correlationId === correlationId);
     // Not listed yet: the placeholder is still to be built, so the fetch is still wanted.
     if (entry?.status !== "acknowledged") return true;
-    return entry.parts.some((part) => part.sources.some((source) => source.status === "pending"));
+    return entry.parts.some((part) =>
+      part.sources.some(
+        (source) =>
+          source.status === "pending" ||
+          (source.status === "returned" && source.result === undefined),
+      ),
+    );
   };
 
   const run = async (correlationId: string): Promise<void> => {
@@ -94,7 +101,7 @@ export function createResultFetcher(options: ResultFetcherOptions): ResultFetche
       failed = true;
     }
     slot.controller = null;
-    if (failed && hasPending(correlationId)) {
+    if (failed && needsFetch(correlationId)) {
       const ceiling = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** slot.attempts);
       slot.attempts += 1;
       slot.retry = timers.setTimeout(

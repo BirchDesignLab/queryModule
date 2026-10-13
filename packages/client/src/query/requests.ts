@@ -386,6 +386,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
               (item) =>
                 item.id !== id &&
                 item.status === "acknowledged" &&
+                item.placeholder !== true &&
                 item.correlationId === outcome.response.correlationId,
             );
             if (listed !== undefined) {
