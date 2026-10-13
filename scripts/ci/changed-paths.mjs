@@ -5,6 +5,8 @@ import { isMainModule } from "./is-main-module.mjs";
  * Docs-only fast path (master plan 11). Files under docs/testing/ are gate inputs
  * (check-story-tags reads docs/testing/stories.json, spec 9.3 step 6), and docs/board/ is data
  * with its own schema test (#96 G-M1), so neither ever counts as docs.
+ * The saved workflow scripts and their harness (.claude/workflows/, scripts/sdd/) are tested by
+ * `pnpm sdd:harness`, which also asserts their README, so a Markdown file there is not docs (#627).
  * @param {string[]} files
  */
 export function isDocsOnly(files) {
@@ -14,6 +16,8 @@ export function isDocsOnly(files) {
       (f) =>
         !f.startsWith("docs/testing/") &&
         !f.startsWith("docs/board/") &&
+        !f.startsWith(".claude/workflows/") &&
+        !f.startsWith("scripts/sdd/") &&
         (f.startsWith("docs/") || f.endsWith(".md")),
     )
   );
