@@ -126,6 +126,66 @@ Designed 10-05-26 (#547, CFG-2; spec 5.4). Mockup tab "Admin: mock responses"; e
 - **Announcements** (one polite region, no values): scenario added, moved ("Scenario 2 moved to position 1"), removed ("... 1 scenario left"); error count when it changes on leaving a field ("2 errors in mock responses"); "Fixed. n errors left". Focus never drops to the page: after a removal it goes to the next scenario's Edit, the next row, or the Add button.
 - **Payload visibility**: payload content shows only inside the admin console (admins and implementers), never in announcements, logs or analytics.
 
+### Result cards and the cards builder (Track B, M2 P1; v5 approved 10-13-26)
+
+Designed 10-13-26 (BW1 Task 1, #596; FR-060, UX-010, UX-011, UX-015, UX-016; spec 4.5, 6.2, 6.6, 6.7; design note `docs/design/2026-10-07-result-card-config.md`). Mockup tabs "v5 draft: Result cards" and "v5 draft: Builder cards" (approved by the developer 10-13-26 with the rulings below); every v4 tab is unchanged. Each frame carries its keyboard model, announcements and rules under it.
+
+**Request entry.** A `<section>` named by its heading: query type code, type name and the primary typed field (plate for VEH, name for PER; the short correlation ID when that field is empty), never payload content (ruling 12). Other typed values show beside the heading in mono. The header carries the request's highest severity badge (`assessResult` over every returned source). Meta row: ack time (MM-DD-YY HH:mm:ss), full correlation ID, Copy ID (hidden text names the type and primary typed field, ruling 12), and the status summary in words ("1 of 1 sources done. 1 failed, 1 not run."; #587 counts dispatched sources only).
+
+**Parts.** Part 0 lists its sources directly. A nested part is its own `<section>` headed "Wanted check, also run from Person". A skipped nested part shows a Not run badge and its reason as a sentence from the `skipReasons` message keys.
+
+**Source states.**
+
+- `returned`: a card (below). No record is a card too: its NO RECORD status carries the info mark and badge.
+- `pending`, `timedOut` ("no answer in 10 s"), `failed` ("the source reported an error"), not run ("not run (plate only)", #587) and `interrupted`: one status line each, icon (`aria-hidden`) plus "Source: status" in text plus a muted reason. Never a card, never colour alone.
+
+**Card.** `<section aria-labelledby>` headed "State system: returned" (h4 in part 0, h5 in a nested part), the response time in mono, and the severity badge at the end of the header row. A 4 px start edge in the severity colour repeats the badge; it never replaces it.
+
+- Summary: the mapping's `summary` and `both` elements as one `<dl>` grid (`<dt>` condensed uppercase label, `<dd>` mono value), 140 px minimum columns at dispatcher density.
+- Toggle (UX-015): a ghost button directly under the summary, "Show detail" plus "n more items", `aria-expanded` and `aria-controls`; hidden text adds the source, type and primary typed field. The detail region (detail-only elements and detail tables) opens below the toggle, so the toggle and everything above it stay put. Focus stays on the toggle. Summary is the default view for every persona; open state lives in memory per card.
+- Table (UX-016): `<div role="region" tabindex="0" aria-labelledby>` around a `<table>` with `<caption>` (label plus hidden row count) and `<th scope="col">`; it scrolls in its own box and the page never scrolls sideways.
+- Keyword hit: `<mark>` in the severity style's token colours, the style's icon (`aria-hidden`), the word, the visible marker (`!!`, `!`, `i`; `aria-hidden`) and a visually hidden "(critical)". Elements with `highlight: false` (the plate) render plain; the badge still scans them.
+- Severity badge: icon (`aria-hidden`), text ("Critical"), marker (`aria-hidden`), severity colours.
+- Generic dump (no candidate mapping): a note under the header ("No card is set up for this result, so every field shows under its path."), then every leaf in payload order with its path as the `<dt>` in mono, keyword marks on, no toggle.
+
+**Officer (1024x768).** Same renderer with the `.touch` class: summary in two columns, values 20 px mono, labels, meta, status lines and reasons 16 px in body colour (no muted text), Copy ID and Show detail 48 px, table text 16 px. Detail is one tap behind the toggle (spec 6.3).
+
+**Announcements (spec 6.6).** Polite, coalesced per correlation ID within 1500 ms: "VEH ZZ-0001: 2 of 2 sources done. 2 returned, critical: STOLEN." A critical result goes to the assertive region at once: "VEH ZZ-0001: critical: STOLEN, State system." Announcements carry the query type, the primary typed field (the short correlation ID when it is empty), counts, status words, severity and configured keyword text; never payload content (ruling 12). Incoming events, fetches and re-maps never move focus or re-create the focused element (stable keys: correlation ID, part, source).
+
+**Builder: Result cards group.** A collapsible top-level group between Query types and Site (#586 pattern). Per query type: its cards in config order, numbered, each named by its narrowing ("All results", "National system", "Mobile unit", "when State is not TX") with the card key in mono; then "Add Vehicle card". Last child: "Keywords and severity". Error and warning marks as elsewhere (`aria-hidden` mark, hidden ", 1 warning").
+
+**Card editor.** Ruled sections with the label column:
+
+- Head: "Vehicle: All results", card key, position ("1 of 2 Vehicle cards"), Move card up and down, Remove card.
+- Applies to: Source (Any source or one), Shown to (Everyone or one persona), and Always or "Only when a rule matches" with the `ConditionEditor` sentence ("Use when State is not TX"). Equal keys show `config.duplicateMapping` under the rule with "Open <other card>"; Review and publish is blocked.
+- Which card wins: a table over fixed contexts (each source; Dispatch and Mobile unit; State TX and OK when a card of the type has a rule) with the winning card, its score and why ("source +2", "earlier in the list", "only card that fits"). The rows this card wins carry a "This card" tag. Same rule as `mapResponse` (rule +4, source +2, persona +1, ties to config order).
+- Rows: one bordered item per element, as the mock editor's scenarios: heading is the row label, a one-line summary (path in mono, kind, view, "keywords not marked"), Edit or Close, Move up, Move down, Remove (36 px, named with the label). Body: Kind (Value or Table radios), Path (text input with a datalist) plus pick buttons for the paths found in the draft's mock payloads (list paths only for a table), Label shown to users (required, E1), Show in (Summary, Detail, Both segmented control), Format (As sent, Upper case, Phone number, Date MM-DD-YY, Template), Mark keywords (checkbox with the hint that the badge still scans everything). Table rows swap Format for a Columns table (path relative to one entry, label, format, mark, remove; Add column).
+- A path found in no mock payload is a warning at the row ("A real source may still send it; until then the card leaves this row out."), not an error.
+- Advanced settings: card key (read-only once published), JSON pointer, label key prefix `mapping.<cardId>.*`.
+
+**Card preview (right pane).** "Card preview" with Dispatcher or Officer. Result from (source), then "Pick a scenario" (default, from the draft's mock list) or "Type values" (matched through `matchMockScenario`). A line shows the outcome badge and which entry matched. The body renders the production card (one renderer, ADR-0011 decision 4) with the toggle working; a behaviour scenario renders the status line. Under it: which card was used and whether it is this card. Payloads come only from the draft's mock; typed values stay in the pane.
+
+**Keywords and severity editor.** Keywords as a table: Keyword (mono, upper case), Severity, Except phrases (chips with 28 px remove buttons; type and press Enter to add), Remove; Add keyword. `config.exceptWithoutKeyword` shows under the phrase. Severity styles per level: a live badge and mark sample, Text colour and Background token pickers, Marker, Bold, Icon, and contrast ratios for Night, Day and Red shift. Below 4.5:1 in any theme is an error on Background (blocks publish); 4.5 to 7:1 is shown as "(under 7:1)" without blocking (ruling 7). The shipped severity styles are at least 7:1 in every theme. Audible cue stays off in M2 P1. Right pane: "Keyword preview" with an editable sample line (pane state only), its severity, and a sample Vehicle card.
+
+**Review lines.** Two lists in the publish dialog, "Result cards" and "Keywords and severity", one plain sentence per change: "Vehicle, card veh-summary: row Make (vehicle.make) added, summary", "Vehicle, card veh-national added: National system, 2 rows", "Keyword TESTMAKE added, warning", "Info style: background is now color.surface.raised". Configuration only; never payload content or typed values. The dialog says open cards are redrawn with the new settings (Q2).
+
+**Try a match (refines v4).** Source and Query type are selects (default: the selected response's source and type), then the type's fields, the outcome badge, which entry matched, the wait, and the answer as "Result card" (production renderer, draft cards) or "Payload" (read-only JSON). Announces the outcome kind once typing pauses, never values. Values live in component state only.
+
+**Developer rulings (10-13-26, mockup v5 approved).**
+
+1. The Show detail toggle sits directly under the summary; detail opens below it (UX-015).
+2. Summary is the default view for every persona; open state lives in memory per card.
+3. Keyword marks: the visible marker and icon are `aria-hidden`; a visually hidden "(critical)" names the severity (UX-010, UX-011). The markers (`!!`, `!`, `i`) stay for now; removing them later needs a non-colour mark style and a spec 4.5 and 6.6 amendment.
+4. A skipped part's reason is one sentence per `skipReasons` key with the field label as a param (`field.required`: "Wanted check not run: needs Last name."; `plan.noPlateOnlySource`; `plan.nestedNoSources`).
+5. No size or depth cap on the generic dump in M2 P1.
+6. Card preview: "Pick a scenario" by default, "Type values" second.
+7. Contrast: below 4.5:1 blocks publish, 4.5 to 7:1 shows a hint. Info severity rises to at least 7:1 (Day and Night background `#1a4fa3`, 7.80; Red shift `#d09050`, 7.66) and Red shift critical to `#ff7070` (7.67); BW2 Task 6.
+8. A 4 px start edge in the severity colour reinforces the badge.
+9. No Retry button in M2 P1 (spec 5.7 work).
+10. Richer default cards for all five query types (summary and detail rows), plus one synthetic DL record mock scenario, config only (BW3 Task 9).
+11. Results keyboard joins M2 P1 (BW2 Task 7b): ArrowUp and ArrowDown select, Enter toggles detail (spec 6.4). Delete from view stays in M3.
+12. Announcements and the fieldset, Copy and Retry accessible names carry the query type and the primary typed field (the short correlation ID when it is empty), never payload content. This replaces the 10-08-26 Q4 ruling; spec 6.6's example already uses the plate.
+
 ## Revision 2 (design critic, 09-29-26)
 
 One Opus 5.5 medium critic read the mockup and this document (25 findings: 1 blocker, 12 important, 12 minor; fixtures clean). Changes, which also bind the implementation tasks:
