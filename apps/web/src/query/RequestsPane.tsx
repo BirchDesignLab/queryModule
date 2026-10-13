@@ -81,21 +81,32 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
           ...(part.status === "skipped"
             ? { skippedText: t("sourceStatus.skipped", { queryType: typeLabel(part.queryType) }) }
             : {}),
-          lines: part.sources.map(
-            (source): SourceLineView => ({
-              key: `${key}:${source.sourceId}`,
-              tone:
-                source.status === "pending"
-                  ? "pending"
-                  : source.status === "returned"
-                    ? "ok"
-                    : "problem",
-              text: t("sourceStatus.line", {
-                source: sourceLabel(source.sourceId),
-                status: t(`sourceStatus.status.${source.status}`),
+          lines: [
+            ...part.sources.map(
+              (source): SourceLineView => ({
+                key: `${key}:${source.sourceId}`,
+                tone:
+                  source.status === "pending"
+                    ? "pending"
+                    : source.status === "returned"
+                      ? "ok"
+                      : "problem",
+                text: t("sourceStatus.line", {
+                  source: sourceLabel(source.sourceId),
+                  status: t(`sourceStatus.status.${source.status}`),
+                }),
               }),
-            }),
-          ),
+            ),
+            // Sources the planner dropped before dispatch (plate-only mode, spec 4.6 step 3): the
+            // user must be able to tell "not queried" from "missing" (#587). Their own lines, in words.
+            ...(part.status === "skipped" ? [] : part.droppedSourceIds).map(
+              (sourceId): SourceLineView => ({
+                key: `${key}:${sourceId}:notRun`,
+                tone: "notRun",
+                text: t("sourceStatus.notRun", { source: sourceLabel(sourceId) }),
+              }),
+            ),
+          ],
         };
       }),
     };

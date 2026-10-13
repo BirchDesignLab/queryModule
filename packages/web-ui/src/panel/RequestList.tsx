@@ -4,8 +4,8 @@ import { type JSX, useId, useLayoutEffect, useRef } from "react";
 export interface SourceLineView {
   /** Stable across updates (correlation ID, part, source), so a line is never rebuilt. */
   key: string;
-  /** Picks the icon and its weight; never the only carrier of the status. */
-  tone: "pending" | "ok" | "problem";
+  /** Picks the icon and its weight; never the only carrier of the status. `notRun`: dropped before dispatch. */
+  tone: "pending" | "ok" | "problem" | "notRun";
   /** Already in words, for example "State source: timed out". */
   text: string;
 }
@@ -82,7 +82,7 @@ export function formatAckTime(epochMs: number): string {
 }
 
 /** Decorative: the line's text says the status (aria-hidden at the use site). */
-const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!" } as const;
+const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!", notRun: "–" } as const;
 
 const BADGE_CLASS = {
   sending: "qm-badge qm-badge--status",

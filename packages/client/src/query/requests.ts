@@ -52,6 +52,8 @@ export interface StatusSummary {
   total: number;
   /** Only the statuses present. */
   byStatus: Partial<Record<SourceStatus, number>>;
+  /** Sources a dispatched part dropped before dispatch (plate-only mode); not part of `total` (#587). */
+  notRun: number;
 }
 
 /** What the coalesced announcement is built from: ids and counts, never values (spec 6.6). */
@@ -112,21 +114,24 @@ const COALESCE_MS = 1500;
 /** Events that outran their 202 are held for this many requests; older ones are dropped. */
 const MAX_HELD_REQUESTS = 50;
 
-/** Counts of a request's sources by status, over every dispatched part. */
+/** Counts of a request's sources by status, over every dispatched part, and how many were not run. */
 export function statusSummary(
   entry: Extract<RequestEntry, { status: "acknowledged" }>,
 ): StatusSummary {
   const byStatus: Partial<Record<SourceStatus, number>> = {};
   let done = 0;
   let total = 0;
+  let notRun = 0;
   for (const part of entry.parts) {
+    // A skipped part ran nothing; its own line says so, so its sources are not also counted.
+    if (part.status === "dispatched") notRun += part.droppedSourceIds.length;
     for (const source of part.sources) {
       total += 1;
       if (source.status !== "pending") done += 1;
       byStatus[source.status] = (byStatus[source.status] ?? 0) + 1;
     }
   }
-  return { done, total, byStatus };
+  return { done, total, byStatus, notRun };
 }
 
 const withSources = (parts: SubmitQueryResponse["parts"]): RequestPart[] =>

@@ -129,6 +129,8 @@
   "sourceStatus.line": "{source}: {status}",
   "sourceStatus.alsoRun": "Also run: {queryType}",
   "sourceStatus.skipped": "{queryType} was not run.",
+  "sourceStatus.notRun": "{source}: not run (plate only)",
+  "sourceStatus.notRunCount": "{count} not run.",
   "sourceStatus.status.pending": "pending",
   "sourceStatus.status.returned": "returned",
   "sourceStatus.status.failed": "failed",

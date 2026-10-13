@@ -11,7 +11,7 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
   it("says counts and the short reference", () => {
     expect(
       statusAnnouncementText(
-        { ...base, summary: { done: 2, total: 2, byStatus: { returned: 2 } } },
+        { ...base, summary: { done: 2, total: 2, byStatus: { returned: 2 }, notRun: 0 } },
         t,
         label,
       ),
@@ -22,17 +22,31 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
       statusAnnouncementText(
         {
           ...base,
-          summary: { done: 2, total: 3, byStatus: { pending: 1, timedOut: 1, returned: 1 } },
+          summary: {
+            done: 2,
+            total: 3,
+            byStatus: { pending: 1, timedOut: 1, returned: 1 },
+            notRun: 0,
+          },
         },
         t,
         label,
       ),
     ).toBe("VEH 01923abc: 2 of 3 sources done. 1 returned, 1 timed out, 1 pending.");
   });
+  it("#587 says how many sources were not run, after the status counts", () => {
+    expect(
+      statusAnnouncementText(
+        { ...base, summary: { done: 1, total: 1, byStatus: { returned: 1 }, notRun: 1 } },
+        t,
+        label,
+      ),
+    ).toBe("VEH 01923abc: 1 of 1 source done. 1 returned. 1 not run.");
+  });
   it("one source reads singular", () => {
     expect(
       statusAnnouncementText(
-        { ...base, summary: { done: 1, total: 1, byStatus: { failed: 1 } } },
+        { ...base, summary: { done: 1, total: 1, byStatus: { failed: 1 }, notRun: 0 } },
         t,
         label,
       ),

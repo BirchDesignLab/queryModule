@@ -15,7 +15,7 @@ const ORDER = [
 
 /**
  * The one polite sentence for a coalesced status change (spec 6.6): the query type, the short
- * reference, how many sources are done, and the counts by status. Counts and words only: never a
+ * reference, how many sources are done, the counts by status and how many were not run. Counts and words only: never a
  * field value, a source id or a payload.
  */
 export function statusAnnouncementText(
@@ -30,11 +30,15 @@ export function statusAnnouncementText(
       ? []
       : [t("sourceStatus.detail", { count, status: t(`sourceStatus.status.${status}`) })];
   }).join(", ");
-  return t("sourceStatus.summary", {
+  const text = t("sourceStatus.summary", {
     queryType: typeLabel(announcement.queryType),
     reference: announcement.correlationId.slice(0, 8),
     done: summary.done,
     count: summary.total,
     details,
   });
+  // Sources dropped before dispatch (plate-only mode) are not in the counts above: say how many.
+  return summary.notRun > 0
+    ? `${text} ${t("sourceStatus.notRunCount", { count: summary.notRun })}`
+    : text;
 }

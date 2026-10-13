@@ -83,7 +83,34 @@ describe("FR-043 per-source status in the requests store (spec 6.6, 6.7)", () =>
       { sourceId: "national", status: "pending" },
     ]);
     expect(entry().parts[1]).toMatchObject({ status: "skipped", sources: [] });
-    expect(statusSummary(entry())).toEqual({ done: 0, total: 2, byStatus: { pending: 2 } });
+    expect(statusSummary(entry())).toEqual({
+      done: 0,
+      total: 2,
+      byStatus: { pending: 2 },
+      notRun: 0,
+    });
+  });
+
+  it("#587 the summary counts dispatched sources only and the dropped ones as not run", () => {
+    const store = createRequestsStore();
+    const id = store.getState().begin({ queryType: "VEH", summary: "VEH.ZZ-0001" });
+    store.getState().settle(id, {
+      kind: "acknowledged",
+      queryType: "VEH",
+      response: {
+        ...RESPONSE,
+        parts: [{ ...RESPONSE.parts[0], sourceIds: ["state"], droppedSourceIds: ["national"] }],
+      } as SubmitQueryResponse,
+    });
+    const entry = store.getState().items[0];
+    if (entry?.status !== "acknowledged") throw new Error("not acknowledged");
+    expect(statusSummary(entry)).toEqual({
+      done: 0,
+      total: 1,
+      byStatus: { pending: 1 },
+      notRun: 1,
+    });
+    expect(entry.parts[0]?.droppedSourceIds).toEqual(["national"]);
   });
 
   it("an event moves one source in place and the other rows are untouched", () => {

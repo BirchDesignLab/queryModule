@@ -325,6 +325,25 @@ describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
     expect(screen.getByLabelText("Plate")).toHaveValue("ABC");
   });
 
+  it("#587 a source that was not run is its own line in words, with an aria-hidden icon", () => {
+    const row: RequestRowView = {
+      ...WITH_PARTS,
+      parts: [
+        {
+          key: "c1:1",
+          lines: [
+            { key: "c1:1:state", tone: "pending", text: "State system: pending" },
+            { key: "c1:1:national", tone: "notRun", text: "National system: not run (plate only)" },
+          ],
+        },
+      ],
+    };
+    render(<RequestList {...base} rows={[row]} />);
+    const line = screen.getByText("National system: not run (plate only)").closest(".qm-source");
+    expect(line).toHaveClass("qm-source--notRun");
+    expect(line?.querySelector(".qm-source__icon")).toHaveAttribute("aria-hidden", "true");
+  });
+
   it("the status block is not a live region (the announcer speaks)", () => {
     render(<RequestList {...base} rows={[WITH_PARTS]} />);
     const section = screen.getByRole("region", { name: "Requests this shift" });

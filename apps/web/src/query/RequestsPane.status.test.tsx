@@ -120,6 +120,30 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     expect(within(sourceList()).getAllByText("National system: pending")).toHaveLength(2);
   });
 
+  it("#587 a plate-only request shows the dropped source as its own line, in words", () => {
+    setup({
+      ...ACK,
+      parts: [
+        { ...ACK.parts[0], sourceIds: ["stateSource"], droppedSourceIds: ["nationalSource"] },
+      ],
+    } as SubmitQueryResponse);
+    const list = sourceList();
+    expect(within(list).getByText("State system: pending")).toBeInTheDocument();
+    expect(within(list).getByText("National system: not run (plate only)")).toBeInTheDocument();
+  });
+
+  it("#587 a dropped source with no configured label shows its raw id", () => {
+    setup({
+      ...ACK,
+      parts: [
+        { ...ACK.parts[0], sourceIds: ["stateSource"], droppedSourceIds: ["unlabelledSource"] },
+      ],
+    } as SubmitQueryResponse);
+    expect(
+      within(sourceList()).getByText("unlabelledSource: not run (plate only)"),
+    ).toBeInTheDocument();
+  });
+
   it("sign-out empties the list", () => {
     const { services } = setup();
     act(() => services.reset.resetAll());
