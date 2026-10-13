@@ -1064,6 +1064,34 @@ main[tabindex="-1"]:focus {
   text-transform: uppercase;
 }
 
+/* A group's disclosure: the heading's own button, at the tree's row height and density. */
+.qm-tree__group-toggle {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  width: 100%;
+  min-height: var(--qm-space-8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--qm-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.qm-tree__group-toggle:hover {
+  background: var(--qm-color-surface-raised);
+}
+
+.qm-tree__group-toggle[aria-disabled="true"] {
+  cursor: default;
+}
+
 .qm-tree__empty p {
   margin: 0 0 var(--qm-space-2);
   color: var(--qm-color-text-muted);

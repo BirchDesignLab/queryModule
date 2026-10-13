@@ -9,7 +9,7 @@ export interface FlatItem {
   pointer: string;
   /** Text for first-character type-ahead. */
   label: string;
-  /** aria-level: 1 for a query type or site item, 2 for its section, and so on. */
+  /** aria-level: 0 for a group's header, 1 for a query type or site item, 2 for its section, and so on. */
   level: number;
   /** The row's parent (null at the top level). */
   parent: string | null;
@@ -17,7 +17,7 @@ export interface FlatItem {
   hasChildren: boolean;
   /** Its children are showing. */
   expanded: boolean;
-  /** The user can close it: a query type, outside a search (a search opens every match). */
+  /** The user can close it: a group header or a query type, outside a search (a search opens every match). */
   collapsible: boolean;
   /** Which of the tree's groups (query types, site items) the row is in. */
   group: number;
@@ -63,9 +63,9 @@ export function treeAction(items: readonly FlatItem[], current: string, key: str
         return { kind: "collapse", pointer: current };
       return focus(items.find((x) => x.pointer === item.parent));
     case "Home":
-      return focus(items.find((x) => x.group === item.group));
+      return focus(items.find((x) => x.group === item.group && x.level > 0));
     case "End":
-      return focus(items.findLast((x) => x.group === item.group));
+      return focus(items.findLast((x) => x.group === item.group && x.level > 0));
     case "Enter":
     case " ":
       return { kind: "select", pointer: current };
@@ -84,7 +84,7 @@ export function typeAhead(
   const start = items.findIndex((x) => x.pointer === current);
   for (let n = 1; n <= items.length; n++) {
     const x = items[(start + n) % items.length];
-    if (x?.label.toLowerCase().startsWith(c)) return x.pointer;
+    if (x !== undefined && x.level > 0 && x.label.toLowerCase().startsWith(c)) return x.pointer;
   }
   return null;
 }

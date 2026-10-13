@@ -63,7 +63,7 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     const announce = vi.spyOn(services.announcer, "announce");
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const region = screen.getByRole("region", { name: "Requests this shift" });
-    const retry = await within(region).findByRole("button", { name: /^Retry VEH\.ZZ-0001/ });
+    const retry = await within(region).findByRole("button", { name: /^Retry Vehicle ZZ-0001/ });
     expect(retry).toHaveTextContent("Retry");
     answers.failing = false;
     // The draft changes after the failure; the retry still sends what the row kept.
@@ -229,7 +229,7 @@ describe("retry on the officer's last request (spec 6.3)", () => {
     );
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const region = await screen.findByRole("region", { name: "Last request" });
-    const retry = await within(region).findByRole("button", { name: /^Retry VEH\.ZZ-0001/ });
+    const retry = await within(region).findByRole("button", { name: /^Retry Vehicle ZZ-0001/ });
     answers.failing = false;
     await user.click(retry);
     await waitFor(() => expect(region).toHaveTextContent("Acknowledged"));

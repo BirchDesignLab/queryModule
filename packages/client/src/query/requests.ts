@@ -1,6 +1,6 @@
 import type { SourceStatus } from "@querymodule/core/contracts";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { SourceStatusEvent } from "../feed/feed-socket.js";
+import type { SourceStatusEvent, Timers } from "../feed/feed-socket.js";
 import type { SubmitOutcome, SubmitQueryResponse, SubmitRequest } from "./submit.js";
 
 /** Why a request did not reach an acknowledgment: the submit outcome's kind, translated at render. */
@@ -17,6 +17,8 @@ export type SubmittedQuery = Omit<SubmitRequest, "configHash">;
 interface RequestBase {
   /** A local key, never reused, so a row keeps its identity from Sending to its final state. */
   id: string;
+  /** Epoch milliseconds the row began; tells two un-acknowledged rows apart by name (ruling 12). */
+  sentAt: number;
   queryType: string;
   /** The command the request was built as; shown in mono. Memory only, cleared with the session. */
   summary: string;
@@ -52,6 +54,8 @@ export interface StatusSummary {
   total: number;
   /** Only the statuses present. */
   byStatus: Partial<Record<SourceStatus, number>>;
+  /** Sources a dispatched part dropped before dispatch (plate-only mode); not part of `total` (#587). */
+  notRun: number;
 }
 
 /** What the coalesced announcement is built from: ids and counts, never values (spec 6.6). */
@@ -111,22 +115,32 @@ export type RequestsStore = StoreApi<RequestsState>;
 const COALESCE_MS = 1500;
 /** Events that outran their 202 are held for this many requests; older ones are dropped. */
 const MAX_HELD_REQUESTS = 50;
+/**
+ * Held events per request: one per (part, source) pair, and a request has a handful of parts with
+ * a few sources each. Past this a request is not one the 202 will describe; the rest are dropped.
+ */
+const MAX_HELD_PER_REQUEST = 16;
+/** Held events in total, so 50 requests at the per-request cap cannot all sit in memory; oldest request first out. */
+const MAX_HELD_EVENTS = 200;
 
-/** Counts of a request's sources by status, over every dispatched part. */
+/** Counts of a request's sources by status, over every dispatched part, and how many were not run. */
 export function statusSummary(
   entry: Extract<RequestEntry, { status: "acknowledged" }>,
 ): StatusSummary {
   const byStatus: Partial<Record<SourceStatus, number>> = {};
   let done = 0;
   let total = 0;
+  let notRun = 0;
   for (const part of entry.parts) {
+    // A skipped part ran nothing; its own line says so, so its sources are not also counted.
+    if (part.status === "dispatched") notRun += part.droppedSourceIds.length;
     for (const source of part.sources) {
       total += 1;
       if (source.status !== "pending") done += 1;
       byStatus[source.status] = (byStatus[source.status] ?? 0) + 1;
     }
   }
-  return { done, total, byStatus };
+  return { done, total, byStatus, notRun };
 }
 
 const withSources = (parts: SubmitQueryResponse["parts"]): RequestPart[] =>
@@ -167,7 +181,11 @@ const MAX_ROWS = 100;
  * them on sign-out, a 401 and a user change. Nothing here is written to any storage. A request
  * settles even if the panel that sent it has unmounted, because the list outlives the panel.
  */
-export function createRequestsStore(): RequestsStore {
+export function createRequestsStore(options: { timers?: Timers } = {}): RequestsStore {
+  const timers: Timers = options.timers ?? {
+    setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+    clearTimeout: (id) => globalThis.clearTimeout(id as number),
+  };
   // Never reset: a stale outcome after a reset can then never match a row begun later.
   let counter = 0;
   const handlers = new Set<(announcement: StatusAnnouncement) => void>();
@@ -175,15 +193,33 @@ export function createRequestsStore(): RequestsStore {
   const windows = new Map<string, unknown>();
   const held = new Map<string, SourceStatusEvent[]>();
   const clearWindows = (): void => {
-    for (const timer of windows.values()) globalThis.clearTimeout(timer as number);
+    for (const timer of windows.values()) timers.clearTimeout(timer);
     windows.clear();
   };
+  const heldCount = (): number => {
+    let count = 0;
+    for (const list of held.values()) count += list.length;
+    return count;
+  };
   return createStore<RequestsState>((set, get) => {
+    // A row that leaves the list inside its window (the 100-row cap, a replayed ack removing a retry
+    // row) drops its summary on purpose: the request is no longer shown, so there is nothing to say
+    // about it. The timer goes with it, so nothing fires for a row that is gone.
+    const dropGoneWindows = (): void => {
+      for (const [correlationId, timer] of windows) {
+        const listed = get().items.some(
+          (item) => item.status === "acknowledged" && item.correlationId === correlationId,
+        );
+        if (listed) continue;
+        timers.clearTimeout(timer);
+        windows.delete(correlationId);
+      }
+    };
     const announceLater = (correlationId: string): void => {
       if (windows.has(correlationId)) return;
       windows.set(
         correlationId,
-        globalThis.setTimeout(() => {
+        timers.setTimeout(() => {
           windows.delete(correlationId);
           const entry = get().items.find(
             (item) => item.status === "acknowledged" && item.correlationId === correlationId,
@@ -219,6 +255,7 @@ export function createRequestsStore(): RequestsStore {
           items: [
             {
               id,
+              sentAt: Date.now(),
               queryType,
               summary,
               ...kept,
@@ -228,6 +265,7 @@ export function createRequestsStore(): RequestsStore {
             ...s.items,
           ].slice(0, MAX_ROWS),
         }));
+        dropGoneWindows();
         return id;
       },
       settle(id, outcome, options) {
@@ -253,6 +291,7 @@ export function createRequestsStore(): RequestsStore {
               if (item.id !== id) return item;
               const base = {
                 id: item.id,
+                sentAt: item.sentAt,
                 queryType: item.queryType,
                 summary: item.summary,
                 ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
@@ -267,8 +306,14 @@ export function createRequestsStore(): RequestsStore {
                 // Events that outran this 202 (spec 6.7) land now, once.
                 const early = held.get(outcome.response.correlationId) ?? [];
                 held.delete(outcome.response.correlationId);
-                for (const event of early) filled = applyToParts(filled, event) ?? filled;
-                if (early.length > 0) pendingAnnouncement = outcome.response.correlationId;
+                // Only an event that moved a source is worth a summary: events for pairs this 202
+                // does not have change nothing and must not announce "0 of N done".
+                for (const event of early) {
+                  const applied = applyToParts(filled, event);
+                  if (applied === null) continue;
+                  filled = applied;
+                  pendingAnnouncement = outcome.response.correlationId;
+                }
               }
               return outcome.kind === "acknowledged"
                 ? {
@@ -282,6 +327,7 @@ export function createRequestsStore(): RequestsStore {
             }),
           };
         });
+        dropGoneWindows();
         if (pendingAnnouncement !== undefined) announceLater(pendingAnnouncement);
         return shownBy;
       },
@@ -290,13 +336,21 @@ export function createRequestsStore(): RequestsStore {
           (item) => item.status === "acknowledged" && item.correlationId === event.correlationId,
         );
         if (entry?.status !== "acknowledged") {
-          // Not acknowledged yet (the event outran the 202): hold it, for a bounded number of requests.
+          // A pending event changes nothing (applyToParts ignores it), and held it would block a
+          // later terminal one for the same pair.
+          if (event.status === "pending") return;
+          // Not acknowledged yet (the event outran the 202): hold it, bounded in requests, in events
+          // per request and in events overall. A pair already held keeps its first event: a terminal
+          // status is written once, so a repeat could never change anything.
           const list = held.get(event.correlationId) ?? [];
-          list.push(event);
+          const repeat = list.some(
+            (h) => h.partId === event.partId && h.sourceId === event.sourceId,
+          );
+          if (!repeat && list.length < MAX_HELD_PER_REQUEST) list.push(event);
           held.delete(event.correlationId);
           held.set(event.correlationId, list);
           for (const key of held.keys()) {
-            if (held.size <= MAX_HELD_REQUESTS) break;
+            if (held.size <= MAX_HELD_REQUESTS && heldCount() <= MAX_HELD_EVENTS) break;
             held.delete(key);
           }
           return;

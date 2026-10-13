@@ -200,7 +200,7 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     const announce = vi.spyOn(services.announcer, "announce");
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     await user.click(
-      await screen.findByRole("button", { name: /^Copy reference \S+ for VEH\.ZZ-0001/ }),
+      await screen.findByRole("button", { name: /^Copy reference \S+ for Vehicle ZZ-0001/ }),
     );
     expect(await navigator.clipboard.readText()).toBe(ACK_202.correlationId);
     await waitFor(() => expect(polite()).toHaveTextContent("Reference copied."));
@@ -263,7 +263,7 @@ describe("B3 officer last request (spec 6.3)", () => {
     await waitFor(() => expect(submitRecorder.calls.length).toBeGreaterThanOrEqual(2));
     await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(1));
     expect(
-      within(region).getByRole("button", { name: /^Copy reference \S+ for VEH\.ZZ-0001/ }),
+      within(region).getByRole("button", { name: /^Copy reference \S+ for Vehicle ZZ-0001/ }),
     ).toBeVisible();
     // One row only: the officer's pane has no count.
     expect(region).not.toHaveTextContent(/\d+ requests?\b/);

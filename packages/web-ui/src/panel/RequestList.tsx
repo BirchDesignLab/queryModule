@@ -4,8 +4,8 @@ import { type JSX, useId, useLayoutEffect, useRef } from "react";
 export interface SourceLineView {
   /** Stable across updates (correlation ID, part, source), so a line is never rebuilt. */
   key: string;
-  /** Picks the icon and its weight; never the only carrier of the status. */
-  tone: "pending" | "ok" | "problem";
+  /** Picks the icon and its weight; never the only carrier of the status. `notRun`: dropped before dispatch. */
+  tone: "pending" | "ok" | "problem" | "notRun";
   /** Already in words, for example "State source: timed out". */
   text: string;
 }
@@ -25,8 +25,13 @@ export interface RequestRowView {
   id: string;
   status: "sending" | "acknowledged" | "failed";
   typeLabel: string;
-  /** The command the request was built as; set in mono. */
+  /** The command the request was built as; set in mono. Display only: never in an accessible name. */
   summary: string;
+  /**
+   * The accessible name for the row's fieldset, Copy and Retry: the query type and the primary
+   * typed field, or the short correlation ID (ruling 12). Already in words.
+   */
+  name: string;
   /** The full correlation ID; only an acknowledged row has one. */
   reference?: string;
   /** Epoch milliseconds. */
@@ -82,7 +87,7 @@ export function formatAckTime(epochMs: number): string {
 }
 
 /** Decorative: the line's text says the status (aria-hidden at the use site). */
-const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!" } as const;
+const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!", notRun: "–" } as const;
 
 const BADGE_CLASS = {
   sending: "qm-badge qm-badge--status",
@@ -158,10 +163,10 @@ export function RequestList({
                         type="button"
                         className="qm-button qm-button--ghost"
                         // The first eight characters of a UUIDv7 are a timestamp, so two rows can
-                        // share them: the command tells the copy buttons apart too.
+                        // share them: the type and primary field tell the copy buttons apart too.
                         aria-label={t("requests.copyReferenceOf", {
                           reference: shortReference(row.reference),
-                          summary: row.summary === "" ? row.typeLabel : row.summary,
+                          summary: row.name,
                         })}
                         onClick={() => onCopy(row.reference as string)}
                       >
@@ -176,10 +181,8 @@ export function RequestList({
                     <button
                       type="button"
                       className="qm-button qm-button--secondary"
-                      // The command tells the buttons of two failed rows apart.
-                      aria-label={t("requests.retryOf", {
-                        summary: row.summary === "" ? row.typeLabel : row.summary,
-                      })}
+                      // The name (type and primary field) tells the buttons of failed rows apart.
+                      aria-label={t("requests.retryOf", { summary: row.name })}
                       onClick={(event) => {
                         retryFocus.current =
                           document.activeElement === event.currentTarget
@@ -204,9 +207,7 @@ export function RequestList({
                 // assistive technology reads the list's count as requests), and each line is text.
                 <fieldset
                   className="qm-request__parts"
-                  aria-label={t("sourceStatus.heading", {
-                    summary: row.summary === "" ? row.typeLabel : row.summary,
-                  })}
+                  aria-label={t("sourceStatus.heading", { summary: row.name })}
                 >
                   {row.parts.map((part) => (
                     <div key={part.key} className="qm-request__part">

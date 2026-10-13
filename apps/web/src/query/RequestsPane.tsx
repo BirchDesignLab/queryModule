@@ -10,6 +10,7 @@ import { memo, useEffect, useRef } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
+import { requestAccessibleName } from "./request-name.js";
 
 export interface RequestsPaneProps {
   config: ClientSiteConfig;
@@ -41,13 +42,19 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
     labelKey === undefined ? fallback : t(labelKey);
   const typeLabel = (code: string): string =>
     labelOf(config.queryTypes.find((q) => q.code === code)?.labelKey, code);
-  const sourceLabel = (id: string): string =>
-    labelOf(config.sources.find((s) => s.id === id)?.labelKey, id);
+  // The configured label; the raw id only as a last resort, for a source the config does not list.
+  const sourceLabel = (id: string): string => {
+    const labelKey = config.sources.find((s) => s.id === id)?.labelKey;
+    return labelKey === undefined ? t("sourceStatus.unlistedSource", { source: id }) : t(labelKey);
+  };
   const rowOf = (entry: RequestEntry): RequestRowView => {
     const base = {
       id: entry.id,
       typeLabel: typeLabel(entry.queryType),
       summary: entry.summary,
+      name: requestAccessibleName(entry, typeLabel(entry.queryType), (time) =>
+        t("requests.nameSent", { typeLabel: typeLabel(entry.queryType), time }),
+      ),
     };
     if (entry.status === "sending") return { ...base, status: "sending", notes: [] };
     if (entry.status === "failed") {
@@ -67,12 +74,13 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
       notes: [],
       // The 202 starts every dispatched pair at pending and the feed moves it (FR-043): a line is
       // keyed by request, part and source, so an event updates it in place and never remounts the
-      // row. The first part is the primary query; any other is an alsoRun part (spec 6.2). A
-      // skipped part names only that it was not run: the 202 carries no reason.
-      parts: entry.parts.map((part, index): RequestPartView => {
+      // row. The primary query is the part with no parent; any other is an alsoRun part (spec 6.2),
+      // wherever it sits in the list and whatever its partId. A skipped part names only that it
+      // was not run: the reason arrives with Task 7.
+      parts: entry.parts.map((part): RequestPartView => {
         const key = `${entry.correlationId}:${part.partId}`;
         const label =
-          index === 0
+          part.parentPartId === null
             ? {}
             : { label: t("sourceStatus.alsoRun", { queryType: typeLabel(part.queryType) }) };
         return {
@@ -81,21 +89,32 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
           ...(part.status === "skipped"
             ? { skippedText: t("sourceStatus.skipped", { queryType: typeLabel(part.queryType) }) }
             : {}),
-          lines: part.sources.map(
-            (source): SourceLineView => ({
-              key: `${key}:${source.sourceId}`,
-              tone:
-                source.status === "pending"
-                  ? "pending"
-                  : source.status === "returned"
-                    ? "ok"
-                    : "problem",
-              text: t("sourceStatus.line", {
-                source: sourceLabel(source.sourceId),
-                status: t(`sourceStatus.status.${source.status}`),
+          lines: [
+            ...part.sources.map(
+              (source): SourceLineView => ({
+                key: `${key}:${source.sourceId}`,
+                tone:
+                  source.status === "pending"
+                    ? "pending"
+                    : source.status === "returned"
+                      ? "ok"
+                      : "problem",
+                text: t("sourceStatus.line", {
+                  source: sourceLabel(source.sourceId),
+                  status: t(`sourceStatus.status.${source.status}`),
+                }),
               }),
-            }),
-          ),
+            ),
+            // Sources the planner dropped before dispatch (plate-only mode, spec 4.6 step 3): the
+            // user must be able to tell "not queried" from "missing" (#587). Their own lines, in words.
+            ...(part.status === "skipped" ? [] : part.droppedSourceIds).map(
+              (sourceId): SourceLineView => ({
+                key: `${key}:${sourceId}:notRun`,
+                tone: "notRun",
+                text: t("sourceStatus.notRun", { source: sourceLabel(sourceId) }),
+              }),
+            ),
+          ],
         };
       }),
     };

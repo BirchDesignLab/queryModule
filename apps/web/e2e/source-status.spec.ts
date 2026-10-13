@@ -38,7 +38,7 @@ test("ZZ-0001: both sources return, in the list, and one coalesced polite summar
   await runPlate(page, "ZZ-0001");
   const row = list.getByRole("listitem").first();
   await expect(row).toContainText("Acknowledged");
-  await expect(row.getByRole("group", { name: /Source status for VEH\.ZZ-0001/ })).toBeVisible();
+  await expect(row.getByRole("group", { name: /Source status for Vehicle ZZ-0001/ })).toBeVisible();
   await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
   await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
   // The summary speaks counts and words only: never the plate, never a payload.
@@ -103,5 +103,24 @@ test("typing into Plate while statuses arrive keeps focus and value (spec 6.6)",
   // The status block is not a live region: only the shared announcer speaks.
   expect(await list.locator("[aria-live], [role=status], [role=alert]").count()).toBe(0);
   await expect(page.getByTestId("announcer-polite")).toContainText("sources done");
+  await expectNoSeriousAxeViolations(page);
+});
+
+test("[#587] a plate-only VEH shows the National system as not run, in words", async ({ page }) => {
+  const list = await openList(page);
+  // A plate alone runs plate-only: the planner drops the national source (spec 4.6 step 3).
+  const field = page.getByLabel("Plate", { exact: true });
+  await field.fill("ZZ-0001");
+  await field.press("Enter");
+  const row = list.getByRole("listitem").first();
+  await expect(row).toContainText("Acknowledged");
+  await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(page, NATIONAL, "not run (plate only)")).toBeVisible();
+  // The summary counts the dispatched source only and says what was not run; never the plate.
+  const polite = page.getByTestId("announcer-polite");
+  await expect(polite).toContainText("1 of 1 source done. 1 returned. 1 not run.", {
+    timeout: 5000,
+  });
+  await expect(polite).not.toContainText("ZZ-0001");
   await expectNoSeriousAxeViolations(page);
 });

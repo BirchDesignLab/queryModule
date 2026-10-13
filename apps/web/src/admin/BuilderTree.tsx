@@ -1,6 +1,7 @@
 import { VisuallyHidden } from "@querymodule/web-ui";
 import {
   type FocusEvent,
+  Fragment,
   type KeyboardEvent,
   memo,
   useCallback,
@@ -241,22 +242,45 @@ function filterNodes(nodes: TreeNode[], q: string, text: LabelText): TreeNode[] 
   return out;
 }
 
+/** A top-level group of the tree: its header is a disclosure, its rows are one tree. */
+interface TreeGroup {
+  id: string;
+  title: string;
+  nodes: TreeNode[];
+  /** Rows at the top of this group can close too (query types). */
+  typed: boolean;
+  /** The group's rows are on screen. */
+  open: boolean;
+}
+
+const GROUP_PREFIX = "group:";
+/** The pointer of a group's header in the keyboard's list of rows. No JSON pointer starts so. */
+const groupPointer = (id: string) => `${GROUP_PREFIX}${id}`;
+const isGroupPointer = (pointer: string) => pointer.startsWith(GROUP_PREFIX);
+
 /**
- * The rows on screen, in reading order, as the keyboard sees them. A row's children are on screen
- * when it is a section or field's parent that is not collapsible, or an open query type.
+ * The rows on screen, in reading order, as the keyboard sees them: each group's header, then, when
+ * the group is open, its rows. A row's children are on screen when it is a section or field's
+ * parent that is not collapsible, or an open query type.
  */
 function flattenVisible(
-  groups: readonly TreeNode[][],
+  groups: readonly TreeGroup[],
   expanded: ReadonlySet<string>,
   searching: boolean,
   text: LabelText,
 ) {
   const out: FlatItem[] = [];
-  const walk = (list: TreeNode[], level: number, parent: string | null, group: number) => {
+  const walk = (
+    list: TreeNode[],
+    level: number,
+    parent: string | null,
+    group: number,
+    typed: boolean,
+  ) => {
     for (const n of list) {
-      const collapsible = level === 1 && group === 0 && !searching && n.children.length > 0;
-      const open =
-        n.children.length > 0 && (!(level === 1 && group === 0) || expanded.has(n.pointer));
+      const topTyped = level === 1 && typed;
+      const collapsible = topTyped && !searching && n.children.length > 0;
+      const open = n.children.length > 0 && (!topTyped || expanded.has(n.pointer));
       out.push({
         pointer: n.pointer,
         label: text(n),
@@ -267,11 +291,22 @@ function flattenVisible(
         collapsible,
         group,
       });
-      if (open) walk(n.children, level + 1, n.pointer, group);
+      if (open) walk(n.children, level + 1, n.pointer, group, typed);
     }
   };
   groups.forEach((g, i) => {
-    walk(g, 1, null, i);
+    const pointer = groupPointer(g.id);
+    out.push({
+      pointer,
+      label: g.title,
+      level: 0,
+      parent: null,
+      hasChildren: true,
+      expanded: g.open,
+      collapsible: !searching,
+      group: i,
+    });
+    if (g.open) walk(g.nodes, 1, pointer, i, g.typed);
   });
   return out;
 }
@@ -349,10 +384,63 @@ export function BuilderTree({
     [],
   );
 
+  // Which top-level groups the admin has closed: kept for the session, in memory only (#586). A
+  // search shows every match, so it holds every group open. A fourth group is one more entry.
+  const [closedGroups, setClosedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const groups: TreeGroup[] = [
+    { id: "types", title: t("admin.tree.types"), nodes: shownTypes, typed: true },
+    { id: "site", title: t("admin.tree.site"), nodes: shownSite, typed: false },
+    { id: "mock", title: t("admin.tree.mock"), nodes: shownMock, typed: false },
+  ]
+    .filter((g) => g.nodes.length > 0)
+    .map((g) => ({ ...g, open: q !== "" || !closedGroups.has(g.id) }));
+  const allGroups: [string, TreeNode[]][] = [
+    ["types", types],
+    ["site", site],
+    ["mock", mockRows],
+  ];
+  // A selection can be deeper than any row (a control inside a field), so a row holds it when its
+  // pointer is the selection or a prefix of it.
+  const holds = (list: TreeNode[], pointer: string): boolean =>
+    list.some(
+      (n) =>
+        n.pointer === pointer || pointer.startsWith(`${n.pointer}/`) || holds(n.children, pointer),
+    );
+  const selectedGroup =
+    selected === null ? null : (allGroups.find(([, list]) => holds(list, selected))?.[0] ?? null);
+  // A selection inside a closed group opens it first, so focus never lands on a hidden row.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection in a closed group reopens it
+  useEffect(() => {
+    if (selectedGroup === null) return;
+    setClosedGroups((c) => {
+      if (!c.has(selectedGroup)) return c;
+      const next = new Set(c);
+      next.delete(selectedGroup);
+      return next;
+    });
+  }, [selectedGroup, selected]);
+  const onToggleGroup = useCallback(
+    (id: string, open: boolean) =>
+      setClosedGroups((c) => {
+        const next = new Set(c);
+        if (open) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [],
+  );
+  const toggleAny = useCallback(
+    (pointer: string, open: boolean) =>
+      isGroupPointer(pointer)
+        ? onToggleGroup(pointer.slice(GROUP_PREFIX.length), open)
+        : onToggle(pointer, open),
+    [onToggle, onToggleGroup],
+  );
+
   // Keyboard: one Tab stop for both trees, so Tab comes back to the selected row (APG single-select
   // tree); when a search hides it, the row last focused, else the first. The rows on screen are
   // what the keys walk.
-  const flat = flattenVisible([shownTypes, shownSite, shownMock], expanded, q !== "", text);
+  const flat = flattenVisible(groups, expanded, q !== "", text);
   const flatRef = useRef(flat);
   flatRef.current = flat;
   const [active, setActive] = useState<string | null>(null);
@@ -362,9 +450,7 @@ export function BuilderTree({
   // repaired: never moved otherwise.
   const focused = useRef<string | null>(null);
   const focus = useCallback((pointer: string) => {
-    navRef.current
-      ?.querySelector<HTMLElement>(`[role="treeitem"][data-pointer="${CSS.escape(pointer)}"]`)
-      ?.focus();
+    navRef.current?.querySelector<HTMLElement>(`[data-pointer="${CSS.escape(pointer)}"]`)?.focus();
   }, []);
   const onItemFocus = useCallback((pointer: string) => {
     focused.current = pointer;
@@ -390,13 +476,15 @@ export function BuilderTree({
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const action = treeAction(items, pointer, e.key);
       if (action.kind === "none") return;
+      // Enter and Space on a group header are the button's own click: leave them to it.
+      if (action.kind === "select" && isGroupPointer(action.pointer)) return;
       e.preventDefault();
       if (action.kind === "focus") focus(action.pointer);
-      else if (action.kind === "expand") onToggle(action.pointer, true);
-      else if (action.kind === "collapse") onToggle(action.pointer, false);
+      else if (action.kind === "expand") toggleAny(action.pointer, true);
+      else if (action.kind === "collapse") toggleAny(action.pointer, false);
       else onSelect(action.pointer);
     },
-    [focus, onSelect, onToggle],
+    [focus, onSelect, toggleAny],
   );
   const previous = useRef<readonly FlatItem[]>(flat);
   useLayoutEffect(() => {
@@ -408,9 +496,13 @@ export function BuilderTree({
     if (el !== null && el !== document.body) return;
     // Focus was on a row that is gone: its nearest ancestor still there, else the row that took its
     // place in its own tree, else the one before it (the last row went), never the top of the tree.
-    let next: string | null = before.find((x) => x.pointer === at)?.parent ?? null;
-    while (next !== null && !has(next))
-      next = before.find((x) => x.pointer === next)?.parent ?? null;
+    // A group's header is not an ancestor to fall back to: the row before it is nearer.
+    const parentOf = (p: string) => {
+      const parent = before.find((x) => x.pointer === p)?.parent ?? null;
+      return parent !== null && isGroupPointer(parent) ? null : parent;
+    };
+    let next: string | null = parentOf(at);
+    while (next !== null && !has(next)) next = parentOf(next);
     const index = Math.max(
       before.findIndex((x) => x.pointer === at),
       0,
@@ -458,66 +550,52 @@ export function BuilderTree({
           </button>
         </div>
       ) : (
-        <>
-          {shownTypes.length > 0 && (
-            <>
-              <p className="qm-tree__group" id={`${uid}-types`}>
-                {t("admin.tree.types")}
+        groups.map((g) => {
+          const gid = `${uid}-${g.id}`;
+          const pointer = groupPointer(g.id);
+          return (
+            <Fragment key={g.id}>
+              <p className="qm-tree__group" id={gid}>
+                <button
+                  type="button"
+                  className="qm-tree__group-toggle"
+                  data-pointer={pointer}
+                  tabIndex={pointer === tabStop ? 0 : -1}
+                  aria-expanded={g.open}
+                  aria-controls={g.open ? `${gid}-tree` : undefined}
+                  aria-disabled={q !== "" ? true : undefined}
+                  onFocus={() => onItemFocus(pointer)}
+                  onBlur={onItemBlur}
+                  onKeyDown={(e) => onItemKeyDown(e, pointer)}
+                  onClick={() => {
+                    if (q === "") onToggleGroup(g.id, !g.open);
+                  }}
+                >
+                  <span className="qm-tree__toggle" aria-hidden="true" data-open={g.open} />
+                  {g.title}
+                </button>
               </p>
-              <TreeRows
-                uid={uid}
-                nodes={shownTypes}
-                selected={selected}
-                tabStop={tabStop}
-                onSelect={onSelect}
-                onItemFocus={onItemFocus}
-                onItemKeyDown={onItemKeyDown}
-                onItemBlur={onItemBlur}
-                labelledBy={`${uid}-types`}
-                expanded={expanded}
-                collapsible={q === ""}
-                onToggle={onToggle}
-              />
-            </>
-          )}
-          {shownSite.length > 0 && (
-            <>
-              <p className="qm-tree__group" id={`${uid}-site`}>
-                {t("admin.tree.site")}
-              </p>
-              <TreeRows
-                uid={uid}
-                nodes={shownSite}
-                selected={selected}
-                tabStop={tabStop}
-                onSelect={onSelect}
-                onItemFocus={onItemFocus}
-                onItemKeyDown={onItemKeyDown}
-                onItemBlur={onItemBlur}
-                labelledBy={`${uid}-site`}
-              />
-              <p className="qm-tree__note">{t("admin.config.serverOnly")}</p>
-            </>
-          )}
-          {shownMock.length > 0 && (
-            <>
-              <p className="qm-tree__group" id={`${uid}-mock`}>
-                {t("admin.tree.mock")}
-              </p>
-              <TreeRows
-                uid={uid}
-                nodes={shownMock}
-                selected={selected}
-                tabStop={tabStop}
-                onSelect={onSelect}
-                onItemFocus={onItemFocus}
-                onItemKeyDown={onItemKeyDown}
-                onItemBlur={onItemBlur}
-                labelledBy={`${uid}-mock`}
-              />
-            </>
-          )}
-        </>
+              {g.open && (
+                <TreeRows
+                  uid={uid}
+                  nodes={g.nodes}
+                  selected={selected}
+                  tabStop={tabStop}
+                  onSelect={onSelect}
+                  onItemFocus={onItemFocus}
+                  onItemKeyDown={onItemKeyDown}
+                  onItemBlur={onItemBlur}
+                  labelledBy={gid}
+                  listId={`${gid}-tree`}
+                  {...(g.typed ? { expanded, collapsible: q === "", onToggle } : {})}
+                />
+              )}
+              {g.open && g.id === "site" && (
+                <p className="qm-tree__note">{t("admin.config.serverOnly")}</p>
+              )}
+            </Fragment>
+          );
+        })
       )}
     </nav>
   );
@@ -534,6 +612,8 @@ interface TreeRowsProps {
   onItemBlur(e: FocusEvent<HTMLElement>): void;
   onItemKeyDown(e: KeyboardEvent<HTMLElement>, pointer: string): void;
   labelledBy?: string;
+  /** The id of the top-level list, for its group header's aria-controls. */
+  listId?: string;
   /** Top-level rows that can close (query types): the open ones, whether they can, and the toggle. */
   expanded?: ReadonlySet<string>;
   collapsible?: boolean;
@@ -560,6 +640,7 @@ const TreeRows = memo(
     onItemBlur,
     onItemKeyDown,
     labelledBy,
+    listId,
     expanded,
     collapsible = false,
     onToggle,
@@ -569,7 +650,11 @@ const TreeRows = memo(
     const renderNodes = (list: TreeNode[], level: number, by?: string, gid?: string) => {
       const top = level === 1 && expanded !== undefined;
       return (
-        <ul role={level === 1 ? "tree" : "group"} id={gid} aria-labelledby={by}>
+        <ul
+          role={level === 1 ? "tree" : "group"}
+          id={level === 1 ? listId : gid}
+          aria-labelledby={by}
+        >
           {list.map((n) => {
             const id = treeId(uid, n.pointer);
             const open = n.children.length > 0 && (!top || expanded.has(n.pointer));
@@ -633,6 +718,7 @@ const TreeRows = memo(
     a.onItemBlur === b.onItemBlur &&
     a.onItemKeyDown === b.onItemKeyDown &&
     a.labelledBy === b.labelledBy &&
+    a.listId === b.listId &&
     a.onToggle === b.onToggle &&
     [...(a.expanded ?? [])].join() === [...(b.expanded ?? [])].join() &&
     JSON.stringify(a.nodes) === JSON.stringify(b.nodes),

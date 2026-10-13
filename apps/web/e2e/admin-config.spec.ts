@@ -516,3 +516,29 @@ test("[#362] a long change list publishes: the review dialog stays accessible; t
     ),
   ).toBeGreaterThan(0);
 });
+
+test("[#586] the builder's groups close and reopen by keyboard, and stay accessible", async ({
+  page,
+}) => {
+  await openBuilder(page);
+  const tree = page.getByRole("navigation", { name: "Configuration items" });
+  const site = tree.getByRole("button", { name: "Site" });
+  const sources = tree.getByRole("treeitem", { name: /^Sources/ });
+  await expect(site).toHaveAttribute("aria-expanded", "true");
+  await expect(sources).toBeVisible();
+  await site.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(site).toHaveAttribute("aria-expanded", "false");
+  await expect(sources).toHaveCount(0);
+  await expect(site).toBeFocused();
+  await expectNoSeriousAxeViolations(page);
+  await page.keyboard.press("ArrowRight");
+  await expect(site).toHaveAttribute("aria-expanded", "true");
+  await expect(sources).toBeVisible();
+  // Right on an open group steps in to its first row; Left on that row steps back out to the group.
+  await page.keyboard.press("ArrowRight");
+  await expect(tree.getByRole("treeitem").and(page.locator(":focus"))).toHaveCount(1);
+  await page.keyboard.press("ArrowLeft");
+  await expect(site).toBeFocused();
+  await expectNoSeriousAxeViolations(page);
+});
