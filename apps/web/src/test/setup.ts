@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { resetMswState, server } from "./msw-server.js";
 
@@ -21,6 +21,8 @@ function installMatchMedia(): void {
 }
 
 installMatchMedia();
+// findBy* and waitFor default to 1 s, which full-suite load on Windows overruns (#610).
+configure({ asyncUtilTimeout: 5000 });
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => {
   cleanup();
