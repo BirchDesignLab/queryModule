@@ -110,6 +110,23 @@ export function createServices(options: ServicesOptions): Services {
     requests.getState().applyEvent(event);
     results.handleEvent(event);
   });
+  // Replay by cursor is the feed's own (spec 4.7); what it cannot replay, or what was missed while the
+  // socket was down, is refetched here (spec 6.8): a `resync` reloads the list, and every reconnect
+  // and every backoff step while down refetches the entries that still have a pending source.
+  feed.onResync(() => {
+    void results.loadList();
+  });
+  feed.onReconnect(() => results.refetchPending());
+  feed.onRetry(() => results.refetchPending());
+  // Sign-in (Q1) loads the list: the last requests of the user's other sessions and devices. A session
+  // still owing a password change loads nothing until it is changed (D-A26); a reset empties it all.
+  const listable = (state: ReturnType<AuthStore["getState"]>): boolean =>
+    state.status === "signedIn" && !state.passwordChangeRequired;
+  authStore.subscribe((state, previous) => {
+    if (!listable(state)) return;
+    if (listable(previous) && previous.user?.id === state.user?.id) return;
+    void results.loadList();
+  });
   registerQueryCacheReset(reset, queryClient);
   reset.register(() => feed.close());
   reset.register(() => configRefresh.stop());

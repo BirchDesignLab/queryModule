@@ -306,20 +306,6 @@ describe("FR-065 feed socket: reconnect (spec 6.8)", () => {
     expect(t.sockets).toHaveLength(4);
   });
 
-  it("each reconnect says hello with a null cursor and restarts the mark at the new welcome", () => {
-    const t = setup();
-    t.feed.open();
-    const first = t.connect(0);
-    first.receive(sourceStatus(10));
-    first.serverClose();
-    vi.advanceTimersByTime(1000);
-    const second = t.connect(12);
-    expect(second.sentMessages()[0]).toEqual({ v: 1, type: "hello", lastSeq: null });
-    second.receive(sourceStatus(11));
-    second.receive(sourceStatus(13));
-    expect(t.events.map((e) => e.seq)).toEqual([10, 13]);
-  });
-
   it("close code 4001 does not reconnect", () => {
     const t = setup();
     t.feed.open();
@@ -439,5 +425,255 @@ describe("SEC-006 feed socket: close() leaves nothing behind (spec 6.7)", () => 
     t.feed.close();
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
     for (const spy of spies) spy.mockRestore();
+  });
+});
+
+describe("FR-065 feed socket: replay cursor (spec 4.7, 5.3, ADR-0013)", () => {
+  const hiddenEvent = (seq: number) => ({
+    v: 1,
+    type: "resultHidden",
+    seq,
+    at: 1,
+    correlationId: CORRELATION_ID,
+    resultIds: [RESULT_ID],
+  });
+
+  it("a reconnect says hello with the mark: lastSeq 7 after events up to 7", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect(0);
+    for (let seq = 1; seq <= 7; seq += 1) first.receive(sourceStatus(seq));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.sockets.at(-1) as FakeSocket;
+    second.open();
+    expect(second.sentMessages()[0]).toEqual({ v: 1, type: "hello", lastSeq: 7 });
+  });
+
+  it("a hidden event moves the mark too, so the next hello carries it", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect(0);
+    first.receive(hiddenEvent(4));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.sockets.at(-1) as FakeSocket;
+    second.open();
+    expect(second.sentMessages()[0]?.lastSeq).toBe(4);
+  });
+
+  it("the first open of a session says lastSeq null; a drop before any welcome still says null", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.sockets[0] as FakeSocket;
+    first.open();
+    expect(first.sentMessages()[0]).toEqual({ v: 1, type: "hello", lastSeq: null });
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.sockets.at(-1) as FakeSocket;
+    second.open();
+    expect(second.sentMessages()[0]?.lastSeq).toBeNull();
+  });
+
+  it("a reconnect welcome ahead of the mark does not skip the replayed events", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect(0);
+    for (let seq = 1; seq <= 7; seq += 1) first.receive(sourceStatus(seq));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.connect(9);
+    second.receive(sourceStatus(8));
+    second.receive(sourceStatus(9));
+    expect(t.events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("a reconnect ignores replayed events at or below the mark", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect(0);
+    for (let seq = 1; seq <= 7; seq += 1) first.receive(sourceStatus(seq));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.connect(9);
+    second.receive(sourceStatus(6));
+    second.receive(sourceStatus(7));
+    second.receive(sourceStatus(8));
+    expect(t.events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it("a reconnect welcome never lowers the mark", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect(0);
+    first.receive(sourceStatus(7));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.connect(3);
+    second.serverClose();
+    vi.advanceTimersByTime(2000);
+    const third = t.sockets.at(-1) as FakeSocket;
+    third.open();
+    expect(third.sentMessages()[0]?.lastSeq).toBe(7);
+  });
+
+  it("resync sets the mark to its latestSeq: a reset database delivers 4, and the next hello says 4", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect(0);
+    for (let seq = 1; seq <= 9; seq += 1) first.receive(sourceStatus(seq));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.connect(3);
+    second.receive({ v: 1, type: "resync", reason: "unknownCursor", latestSeq: 3 });
+    second.receive(sourceStatus(4));
+    expect(t.events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 4]);
+    second.serverClose();
+    vi.advanceTimersByTime(2000);
+    const third = t.sockets.at(-1) as FakeSocket;
+    third.open();
+    expect(third.sentMessages()[0]?.lastSeq).toBe(4);
+  });
+
+  it("resync with no event after it makes the next hello say its latestSeq", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect(0);
+    first.receive(sourceStatus(9));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.connect(3);
+    second.receive({ v: 1, type: "resync", reason: "unknownCursor", latestSeq: 3 });
+    second.serverClose();
+    vi.advanceTimersByTime(2000);
+    const third = t.sockets.at(-1) as FakeSocket;
+    third.open();
+    expect(third.sentMessages()[0]?.lastSeq).toBe(3);
+  });
+
+  it("onResync hands the handler the reason and stops after unsubscribe", () => {
+    const t = setup();
+    const seen: unknown[] = [];
+    const off = t.feed.onResync((r) => seen.push(r));
+    t.feed.open();
+    const socket = t.connect(5);
+    socket.receive({ v: 1, type: "resync", reason: "tooOld", latestSeq: 5, extra: "x" });
+    expect(seen).toMatchObject([{ reason: "tooOld", latestSeq: 5 }]);
+    expect(seen[0]).not.toHaveProperty("extra");
+    off();
+    socket.receive({ v: 1, type: "resync", reason: "tooMany", latestSeq: 5 });
+    expect(seen).toHaveLength(1);
+  });
+
+  it("a malformed resync is dropped and counted, and moves nothing", () => {
+    const t = setup();
+    const seen: unknown[] = [];
+    t.feed.onResync((r) => seen.push(r));
+    t.feed.open();
+    const socket = t.connect(5);
+    socket.receive({ v: 1, type: "resync", reason: "someDay", latestSeq: 0 });
+    expect(seen).toHaveLength(0);
+    expect(t.onInvalid).toHaveBeenCalledExactlyOnceWith("resync");
+    socket.receive(sourceStatus(6));
+    expect(t.events.map((e) => e.seq)).toEqual([6]);
+  });
+
+  it("logout resets the mark: after close() the next session says lastSeq null", () => {
+    const t = setup();
+    t.feed.open();
+    t.connect(0).receive(sourceStatus(8));
+    t.feed.close();
+    t.feed.open();
+    const second = t.sockets.at(-1) as FakeSocket;
+    second.open();
+    expect(second.sentMessages()[0]).toEqual({ v: 1, type: "hello", lastSeq: null });
+  });
+
+  it("a 4001 close resets the mark too", () => {
+    const t = setup();
+    t.feed.open();
+    t.connect(0).receive(sourceStatus(8));
+    t.sockets[0]?.serverClose(4001);
+    t.feed.open();
+    const second = t.sockets.at(-1) as FakeSocket;
+    second.open();
+    expect(second.sentMessages()[0]?.lastSeq).toBeNull();
+  });
+});
+
+describe("FR-065 feed socket: reconnect hooks (spec 6.8)", () => {
+  it("onReconnect fires on a welcome after the first, not on the first", () => {
+    const t = setup();
+    const calls = vi.fn();
+    t.feed.onReconnect(calls);
+    t.feed.open();
+    const first = t.connect(0);
+    expect(calls).not.toHaveBeenCalled();
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    t.connect(0);
+    expect(calls).toHaveBeenCalledTimes(1);
+  });
+
+  it("onReconnect does not fire for the first welcome of the next session", () => {
+    const t = setup();
+    const calls = vi.fn();
+    t.feed.onReconnect(calls);
+    t.feed.open();
+    t.connect(0);
+    t.feed.close();
+    t.feed.open();
+    t.connect(0);
+    expect(calls).not.toHaveBeenCalled();
+  });
+
+  it("onReconnect fires before a replayed event or a resync is handled", () => {
+    const t = setup();
+    const order: string[] = [];
+    t.feed.onReconnect(() => order.push("reconnect"));
+    t.feed.onResync(() => order.push("resync"));
+    t.feed.onSourceStatus((e) => order.push(`event:${e.seq}`));
+    t.feed.open();
+    const first = t.connect(0);
+    first.receive(sourceStatus(1));
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    const second = t.connect(3);
+    second.receive(sourceStatus(2));
+    second.receive(sourceStatus(3));
+    second.receive({ v: 1, type: "resync", reason: "tooMany", latestSeq: 3 });
+    expect(order).toEqual(["event:1", "reconnect", "event:2", "event:3", "resync"]);
+  });
+
+  it("onRetry fires at each backoff step while the socket is down, before the reconnect", () => {
+    const t = setup(() => 0.5);
+    const order: string[] = [];
+    t.feed.onRetry(() => order.push(`retry:${t.sockets.length}`));
+    t.feed.open();
+    t.connect(0);
+    (t.sockets.at(-1) as FakeSocket).serverClose();
+    expect(order).toEqual([]);
+    vi.advanceTimersByTime(500);
+    expect(order).toEqual(["retry:1"]);
+    (t.sockets.at(-1) as FakeSocket).serverClose();
+    vi.advanceTimersByTime(1000);
+    expect(order).toEqual(["retry:1", "retry:2"]);
+  });
+
+  it("onRetry stops after unsubscribe and after close()", () => {
+    const t = setup();
+    const calls = vi.fn();
+    const off = t.feed.onRetry(calls);
+    t.feed.open();
+    t.connect(0).serverClose();
+    off();
+    vi.advanceTimersByTime(1000);
+    expect(calls).not.toHaveBeenCalled();
+    const again = vi.fn();
+    t.feed.onRetry(again);
+    (t.sockets.at(-1) as FakeSocket).serverClose();
+    t.feed.close();
+    vi.advanceTimersByTime(60_000);
+    expect(again).not.toHaveBeenCalled();
   });
 });

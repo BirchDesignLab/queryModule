@@ -212,6 +212,8 @@ export const server = setupServer(
     });
     return HttpResponse.json(ACK_202, { status: 202 });
   }),
+  // The sign-in list load (spec 6.8): an empty list unless a test overrides it.
+  http.get(`${API}/api/v1/queries`, () => HttpResponse.json({ requests: [], nextCursor: null })),
   http.get(`${API}/api/v1/queries/:correlationId`, () => HttpResponse.json(detail202())),
   http.get(`${API}/api/v1/me/preferences`, () => HttpResponse.json(PREFERENCES)),
   http.put(`${API}/api/v1/me/preferences`, async ({ request }) =>

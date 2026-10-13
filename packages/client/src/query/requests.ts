@@ -7,6 +7,9 @@ import type { SubmitOutcome, SubmitQueryResponse, SubmitRequest } from "./submit
 /** One request with its parts, per-source status and payloads (GET /api/v1/queries/:correlationId). */
 export type QueryDetail = components["schemas"]["getQuery200"];
 
+/** One request of `GET /api/v1/queries`: the detail shape, with no payloads (spec 5.1). */
+export type QueryListEntry = components["schemas"]["listQueries200"]["requests"][number];
+
 /** Why a request did not reach an acknowledgment: the submit outcome's kind, translated at render. */
 export type RequestFailure = Exclude<SubmitOutcome["kind"], "acknowledged">;
 
@@ -130,6 +133,14 @@ export interface RequestsState {
    * skip reasons. A correlation ID this list does not hold becomes a placeholder row.
    */
   applyDetail(detail: QueryDetail): void;
+  /**
+   * Folds the list `GET /api/v1/queries` answered into the rows (spec 6.7, 6.8): a request this list
+   * holds moves forward only (a pending source takes the list's status; announced, since it settled
+   * while nothing was listening); one it does not hold becomes a placeholder row, placed by time among
+   * the rows and never announced (it is history). Rows already shown keep their id and place. The list
+   * carries no payloads: they come from the detail fetch.
+   */
+  applyList(requests: readonly QueryListEntry[]): void;
   /** One call per correlation ID per 1500 ms window that changed something; returns the unsubscribe. */
   onStatusSummary(handler: (announcement: StatusAnnouncement) => void): () => void;
   /**
@@ -355,6 +366,25 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
         windows.delete(correlationId);
       }
     };
+    /** A row for a request this list did not send, built from its detail alone (spec 6.7). */
+    const placeholderRow = (
+      detail: QueryDetail,
+    ): Extract<RequestEntry, { status: "acknowledged" }> | undefined => {
+      const primary = detail.parts.find((part) => part.parentPartId === null) ?? detail.parts[0];
+      if (primary === undefined) return undefined;
+      counter += 1;
+      return {
+        id: `r${counter}`,
+        sentAt: detail.submittedAt,
+        queryType: primary.queryType,
+        summary: "",
+        placeholder: true,
+        status: "acknowledged",
+        correlationId: detail.correlationId,
+        acknowledgedAt: detail.submittedAt,
+        parts: placeholderParts(detail),
+      };
+    };
     const announceLater = (correlationId: string): void => {
       if (windows.has(correlationId)) return;
       windows.set(
@@ -526,21 +556,8 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
           (item) => item.status === "acknowledged" && item.correlationId === detail.correlationId,
         );
         if (entry?.status !== "acknowledged") {
-          const primary =
-            detail.parts.find((part) => part.parentPartId === null) ?? detail.parts[0];
-          if (primary === undefined) return;
-          counter += 1;
-          const row: RequestEntry = {
-            id: `r${counter}`,
-            sentAt: detail.submittedAt,
-            queryType: primary.queryType,
-            summary: "",
-            placeholder: true,
-            status: "acknowledged",
-            correlationId: detail.correlationId,
-            acknowledgedAt: detail.submittedAt,
-            parts: placeholderParts(detail),
-          };
+          const row = placeholderRow(detail);
+          if (row === undefined) return;
           set((s) => ({ items: [row, ...s.items].slice(0, MAX_ROWS) }));
           dropGoneWindows();
           if (statusSummary(row).done > 0) announceLater(detail.correlationId);
@@ -564,6 +581,38 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
         for (const arrival of landed) {
           for (const handler of resultHandlers) handler(arrival);
         }
+      },
+      applyList(requests) {
+        const moved: string[] = [];
+        set((s) => {
+          let items = s.items;
+          let changed = false;
+          for (const request of requests) {
+            const found = items.find(
+              (item) =>
+                item.status === "acknowledged" && item.correlationId === request.correlationId,
+            );
+            if (found?.status === "acknowledged") {
+              const merged = mergeDetail(found.parts, request);
+              if (merged === null) continue;
+              items = items.map(
+                (item): RequestEntry => (item === found ? { ...found, parts: merged.parts } : item),
+              );
+              changed = true;
+              if (merged.moved) moved.push(request.correlationId);
+              continue;
+            }
+            const row = placeholderRow(request);
+            if (row === undefined) continue;
+            // By time: above the first row that began earlier. The rows already shown stay as they are.
+            const at = items.findIndex((item) => item.sentAt < row.sentAt);
+            items = at === -1 ? [...items, row] : [...items.slice(0, at), row, ...items.slice(at)];
+            changed = true;
+          }
+          return changed ? { items: items.slice(0, MAX_ROWS) } : s;
+        });
+        dropGoneWindows();
+        for (const correlationId of moved) announceLater(correlationId);
       },
       onStatusSummary(handler) {
         handlers.add(handler);

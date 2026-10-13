@@ -103,9 +103,16 @@ const event = (
     status,
   }) as SourceStatusEvent;
 
-function setup(opts: { acknowledged?: boolean } = {}) {
+function setup(
+  opts: { acknowledged?: boolean; fetch?: (request: Request) => Promise<Response> } = {},
+) {
   const platform = createFakePlatform();
-  const api = createApiClient({ baseUrl: BASE, platform, onUnauthenticated: () => undefined });
+  const api = createApiClient({
+    baseUrl: BASE,
+    platform,
+    onUnauthenticated: () => undefined,
+    ...(opts.fetch === undefined ? {} : { fetch: opts.fetch }),
+  });
   const timers = {
     setTimeout: (fn: () => void, ms: number) => globalThis.setTimeout(fn, ms),
     clearTimeout: (id: unknown) => globalThis.clearTimeout(id as number),
@@ -397,5 +404,357 @@ describe("spec 6.7 payloads are memory only and cleared on reset", () => {
     apply(event(1, "state", "returned"));
     await pass(2000);
     expect(setItem).not.toHaveBeenCalled();
+  });
+});
+
+const idOf = (n: number): string => `01923abc-c3d4-7e5f-8a9b-${n.toString().padStart(12, "0")}`;
+/** A request other than the canned one, as the list and the detail answer it (mock data only). */
+const requestOf = (n: number, sources: DetailSource[]): Detail => ({
+  ...detailOf(sources),
+  correlationId: idOf(n),
+  submittedAt: 1_780_000_000_000 + n * 1000,
+});
+const eventFor = (n: number, seq: number, sourceId: string): SourceStatusEvent => ({
+  ...event(seq, sourceId, "returned"),
+  correlationId: idOf(n),
+});
+
+/** Serves the list and records each call's URL and headers. */
+function serveList(responder: () => Response | Promise<Response>) {
+  const calls: { url: URL; headers: Headers }[] = [];
+  server.use(
+    http.get(`${BASE}/api/v1/queries`, ({ request }) => {
+      calls.push({ url: new URL(request.url), headers: request.headers });
+      return responder();
+    }),
+  );
+  return calls;
+}
+const listOf = (requests: Detail[]) => HttpResponse.json({ requests, nextCursor: null });
+
+describe("FR-065 list load (spec 6.7, 6.8)", () => {
+  it("GET /queries?limit=50 as a background call, merged into the store as rows", async () => {
+    const calls = serveList(() =>
+      listOf([
+        requestOf(2, [source("state", "pending"), source("national", "pending")]),
+        requestOf(1, [source("state", "pending"), source("national", "pending")]),
+      ]),
+    );
+    const { fetcher, store } = setup({ acknowledged: false });
+    await fetcher.loadList();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url.searchParams.get("limit")).toBe("50");
+    expect(calls[0]?.headers.get("x-background")).toBe("1");
+    const rows = store.getState().items;
+    expect(rows.map((r) => r.status === "acknowledged" && r.correlationId)).toEqual([
+      idOf(2),
+      idOf(1),
+    ]);
+  });
+
+  it("shows no more than 50 of an over-long answer", async () => {
+    serveList(() =>
+      listOf(
+        Array.from({ length: 60 }, (_, i) =>
+          requestOf(100 - i, [source("state", "pending"), source("national", "pending")]),
+        ),
+      ),
+    );
+    const { fetcher, store } = setup({ acknowledged: false });
+    await fetcher.loadList();
+    expect(store.getState().items).toHaveLength(50);
+  });
+
+  it("a second load does not duplicate rows", async () => {
+    serveList(() => listOf([requestOf(1, [source("state", "pending")])]));
+    const { fetcher, store } = setup({ acknowledged: false });
+    await fetcher.loadList();
+    await fetcher.loadList();
+    expect(store.getState().items).toHaveLength(1);
+  });
+
+  it("calls made while one is in flight share it, with one trailing call", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const calls = serveList(async () => {
+      await gate;
+      return listOf([]);
+    });
+    const { fetcher } = setup({ acknowledged: false });
+    const first = fetcher.loadList();
+    const second = fetcher.loadList();
+    const third = fetcher.loadList();
+    await pass(10);
+    expect(calls).toHaveLength(1);
+    release();
+    await Promise.all([first, second, third]);
+    await pass(10);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("fetches the payload of a returned source the list shows, and nothing for pending ones", async () => {
+    serveList(() =>
+      listOf([
+        requestOf(2, [source("state", "returned"), source("national", "pending")]),
+        requestOf(1, [source("state", "pending"), source("national", "pending")]),
+      ]),
+    );
+    const detailCalls: string[] = [];
+    server.use(
+      http.get(`${BASE}/api/v1/queries/:id`, ({ params }) => {
+        detailCalls.push(String(params.id));
+        return HttpResponse.json(
+          requestOf(2, [source("state", "returned", { a: 1 }), source("national", "pending")]),
+        );
+      }),
+    );
+    const { fetcher, store } = setup({ acknowledged: false });
+    await fetcher.loadList();
+    await pass(2000);
+    expect(detailCalls).toEqual([idOf(2)]);
+    expect(payloadsOf(store.getState().items[0])).toEqual([{ a: 1 }, undefined]);
+  });
+
+  it("a source the list shows returned is fetched even when the request was fetched before", async () => {
+    const calls = serve(() =>
+      HttpResponse.json(
+        detailOf([source("state", "returned", { a: 1 }), source("national", "pending")]),
+      ),
+    );
+    const { fetcher, apply, store } = setup();
+    apply(event(1, "state", "returned"));
+    await pass(2000);
+    expect(calls).toHaveLength(1);
+    serveList(() =>
+      listOf([detailOf([source("state", "returned"), source("national", "returned")])]),
+    );
+    await fetcher.loadList();
+    await pass(2000);
+    expect(calls).toHaveLength(2);
+    expect(store.getState().items).toHaveLength(1);
+  });
+
+  it("a network failure retries on the feed backoff and then merges", async () => {
+    let n = 0;
+    const calls = serveList(() => {
+      n += 1;
+      return n === 1 ? HttpResponse.error() : listOf([requestOf(1, [source("state", "pending")])]);
+    });
+    const { fetcher, store } = setup({ acknowledged: false });
+    await fetcher.loadList();
+    expect(calls).toHaveLength(1);
+    expect(store.getState().items).toHaveLength(0);
+    await pass(500);
+    expect(calls).toHaveLength(1);
+    await pass(600);
+    expect(calls).toHaveLength(2);
+    expect(store.getState().items).toHaveLength(1);
+  });
+
+  it("a 403 answer drops the load quietly", async () => {
+    const calls = serveList(() =>
+      HttpResponse.json({ error: { code: "forbidden" } }, { status: 403 }),
+    );
+    const { fetcher } = setup({ acknowledged: false });
+    await fetcher.loadList();
+    await pass(300_000);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("reset cancels a pending retry of the load", async () => {
+    const calls = serveList(() => HttpResponse.error());
+    const { fetcher, store } = setup({ acknowledged: false });
+    await fetcher.loadList();
+    expect(calls).toHaveLength(1);
+    fetcher.reset();
+    await pass(300_000);
+    expect(calls).toHaveLength(1);
+    expect(store.getState().items).toHaveLength(0);
+  });
+
+  it("reset drops the answer of a load that was still in flight", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    serveList(async () => {
+      await gate;
+      return listOf([requestOf(1, [source("state", "pending")])]);
+    });
+    const { fetcher, store } = setup({ acknowledged: false });
+    const load = fetcher.loadList();
+    await pass(10);
+    fetcher.reset();
+    release();
+    await load;
+    await pass(10);
+    expect(store.getState().items).toHaveLength(0);
+  });
+});
+
+describe("FR-065 at most 4 detail fetches in flight, entries in view first (spec 6.8)", () => {
+  /**
+   * Holds every detail fetch until the test lets it go; `started` lists the ids in the order the
+   * requests were made. The list still goes through MSW. A fetch that is aborted ends quietly.
+   */
+  function gated() {
+    const started: string[] = [];
+    const gates = new Map<string, () => void>();
+    let inFlight = 0;
+    let peak = 0;
+    const fetchImpl = async (request: Request): Promise<Response> => {
+      const id = /\/api\/v1\/queries\/([^/?]+)$/.exec(new URL(request.url).pathname)?.[1];
+      if (id === undefined) return globalThis.fetch(request);
+      started.push(id);
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise<void>((resolve, reject) => {
+        gates.set(id, resolve);
+        request.signal.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+      inFlight -= 1;
+      const n = Number(id.slice(-12));
+      return HttpResponse.json(requestOf(n, [source("state", "returned", { n })]));
+    };
+    return {
+      fetch: fetchImpl,
+      started,
+      peak: () => peak,
+      release: async (id: string) => {
+        gates.get(id)?.();
+        await pass(10);
+      },
+    };
+  }
+
+  const listSix = () =>
+    serveList(() =>
+      listOf([6, 5, 4, 3, 2, 1].map((n) => requestOf(n, [source("state", "returned")]))),
+    );
+
+  it("starts four, and the next one when one finishes", async () => {
+    listSix();
+    const g = gated();
+    const { fetcher } = setup({ acknowledged: false, fetch: g.fetch });
+    await fetcher.loadList();
+    await pass(2000);
+    // The four requests arrive together, in no fixed order.
+    expect([...g.started].sort()).toEqual([idOf(3), idOf(4), idOf(5), idOf(6)]);
+    await g.release(idOf(6));
+    expect(g.started).toHaveLength(5);
+    await g.release(idOf(5));
+    expect(g.started).toHaveLength(6);
+    for (const n of [4, 3, 2, 1]) await g.release(idOf(n));
+    expect(g.peak()).toBe(4);
+  });
+
+  it("the queue takes the entry nearest the top of the list first, whatever order they queued in", async () => {
+    listSix();
+    const g = gated();
+    const { fetcher, apply } = setup({ acknowledged: false, fetch: g.fetch });
+    await fetcher.loadList();
+    await pass(2000);
+    expect(g.started).toHaveLength(4);
+    // Row 1 (bottom) is queued again before row 2; row 2 is nearer the top and goes first.
+    apply(eventFor(1, 1, "state"));
+    apply(eventFor(2, 2, "state"));
+    await pass(2000);
+    await g.release(idOf(6));
+    expect(g.started.slice(4)).toEqual([idOf(2)]);
+    await g.release(idOf(5));
+    expect(g.started.slice(4)).toEqual([idOf(2), idOf(1)]);
+  });
+
+  it("reset empties the queue and the slots", async () => {
+    listSix();
+    const g = gated();
+    const { fetcher } = setup({ acknowledged: false, fetch: g.fetch });
+    await fetcher.loadList();
+    await pass(2000);
+    expect(g.started).toHaveLength(4);
+    fetcher.reset();
+    for (const n of [6, 5, 4, 3]) await g.release(idOf(n));
+    await pass(300_000);
+    expect(g.started).toHaveLength(4);
+  });
+});
+
+describe("FR-065 refetch after a reconnect (spec 6.8)", () => {
+  it("fetches every entry with a pending source and no others", async () => {
+    const fetched: string[] = [];
+    server.use(
+      http.get(`${BASE}/api/v1/queries/:id`, ({ params }) => {
+        fetched.push(String(params.id));
+        return HttpResponse.json(requestOf(Number(String(params.id).slice(-12)), []));
+      }),
+    );
+    const { fetcher, store } = setup({ acknowledged: false });
+    store
+      .getState()
+      .applyList([
+        requestOf(3, [source("state", "pending"), source("national", "pending")]),
+        requestOf(2, [source("state", "failed"), source("national", "timedOut")]),
+        requestOf(1, [source("state", "pending")]),
+      ]);
+    fetcher.refetchPending();
+    await pass(2000);
+    expect(fetched.sort()).toEqual([idOf(1), idOf(3)]);
+  });
+
+  it("also fetches a returned source that has no payload yet", async () => {
+    const fetched: string[] = [];
+    server.use(
+      http.get(`${BASE}/api/v1/queries/:id`, ({ params }) => {
+        fetched.push(String(params.id));
+        return HttpResponse.error();
+      }),
+    );
+    const { fetcher, store } = setup({ acknowledged: false });
+    store.getState().applyList([requestOf(1, [source("state", "returned")])]);
+    fetcher.reset();
+    fetched.length = 0;
+    fetcher.refetchPending();
+    await pass(500);
+    expect(fetched).toEqual([idOf(1)]);
+  });
+
+  it("fetches nothing when every returned source has its payload", async () => {
+    const calls = serve(() => HttpResponse.json(detailOf([source("state", "returned", { a: 1 })])));
+    const { fetcher, apply, store } = setup();
+    store.getState().applyEvent(event(1, "national", "failed"));
+    apply(event(2, "state", "returned"));
+    await pass(2000);
+    expect(calls).toHaveLength(1);
+    fetcher.refetchPending();
+    await pass(2000);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("an entry whose fetch is already waiting to retry is not fetched twice", async () => {
+    const calls = serve(() => HttpResponse.error());
+    const { fetcher, apply } = setup();
+    apply(event(1, "state", "returned"));
+    await pass(500);
+    expect(calls).toHaveLength(1);
+    fetcher.refetchPending();
+    await pass(500);
+    expect(calls).toHaveLength(1);
+    await pass(600);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("reset after a refetch was scheduled cancels it", async () => {
+    const calls = serve(() =>
+      HttpResponse.json(detailOf([source("state", "pending"), source("national", "pending")])),
+    );
+    const { fetcher } = setup();
+    fetcher.refetchPending();
+    fetcher.reset();
+    await pass(300_000);
+    expect(calls).toHaveLength(0);
   });
 });

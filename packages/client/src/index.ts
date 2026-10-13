@@ -75,6 +75,7 @@ export {
 export { createQueryClient, registerQueryCacheReset } from "./query/query-client.js";
 export type {
   QueryDetail,
+  QueryListEntry,
   RequestEntry,
   RequestFailure,
   RequestPart,
