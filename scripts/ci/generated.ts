@@ -3,7 +3,14 @@ export const GENERATED_FILES = [
   "packages/core/contracts/ws-events.schema.json",
   "packages/config/schema/site-config.schema.json",
   "packages/tokens/generated/tokens.css",
+  "packages/client/src/api/generated/openapi-types.ts",
 ];
+
+/**
+ * The root scripts gen:check runs before comparing, in order: the client types are derived from
+ * the openapi.json that contracts:gen writes, so client:gen comes after it (#623 AW1 Q2).
+ */
+export const GENERATOR_SCRIPTS = ["contracts:gen", "tokens:gen", "client:gen"];
 export type GitResult = { status: number | null; stdout: string };
 export type DriftResult =
   | { ok: true }

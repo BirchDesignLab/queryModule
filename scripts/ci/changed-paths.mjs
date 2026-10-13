@@ -19,6 +19,20 @@ export function isDocsOnly(files) {
   );
 }
 
+/** The only file a board-only change may touch (#617). */
+export const BOARD_DATA_FILE = "docs/board/board-data.json";
+
+/**
+ * Board-only fast path (#617). A change that touches nothing but the board data file needs only
+ * the checks that judge it (Biome and scripts/ops/board-data.test.ts), not the whole pipeline.
+ * Exactly docs/board/board-data.json: any other file, under docs/board/ or not, keeps the full
+ * pipeline, so code added beside the data never skips typecheck and tests (AW3 #617 C1).
+ * @param {string[]} files
+ */
+export function isBoardOnly(files) {
+  return files.length > 0 && files.every((f) => f === BOARD_DATA_FILE);
+}
+
 /** @param {string[]} args */
 function gitOut(args) {
   return execFileSync("git", args, { encoding: "utf8" });
@@ -56,7 +70,7 @@ const ROOT_FILES = [
  * Per-area outputs for the path-scoped CI jobs (ADR-0008). Pure function of
  * the changed file list.
  * @param {string[]} files
- * @returns {{ docs_only: boolean, web: boolean, mobile: boolean }}
+ * @returns {{ docs_only: boolean, board_only: boolean, web: boolean, mobile: boolean }}
  */
 export function areas(files) {
   const touchesRoot = files.some((f) => ROOT_FILES.includes(f));
@@ -64,15 +78,16 @@ export function areas(files) {
     touchesRoot || files.some((f) => f.startsWith("apps/web/") || f.startsWith("packages/"));
   const mobile =
     touchesRoot || files.some((f) => f.startsWith("apps/mobile/") || f.startsWith("packages/"));
-  return { docs_only: isDocsOnly(files), web, mobile };
+  return { docs_only: isDocsOnly(files), board_only: isBoardOnly(files), web, mobile };
 }
 
-/** Fail-closed default: every job runs, docs_only stays false so nothing is skipped. */
-const ALL_TRUE = { docs_only: false, web: true, mobile: true };
+/** Fail-closed default: every job runs, docs_only and board_only stay false so nothing is skipped. */
+const ALL_TRUE = { docs_only: false, board_only: false, web: true, mobile: true };
 
 /** @param {(line: string) => void} write */
 function printAreas(write, a) {
   write(`docs_only=${a.docs_only}`);
+  write(`board_only=${a.board_only}`);
   write(`web=${a.web}`);
   write(`mobile=${a.mobile}`);
 }

@@ -28,6 +28,7 @@ let submitBody: string | undefined;
 let submitStatus = 202;
 let partStatus = "dispatched";
 let omitParts = false;
+let detailMode: "payload" | "noPayload" | "error" | "reset" | "notJson" | "noReturned" = "payload";
 const stubHash = "a".repeat(64);
 const stubCorrelationId = "01900000-0000-7000-8000-000000000001";
 let dir: string;
@@ -37,6 +38,7 @@ beforeEach(async () => {
   submitStatus = 202;
   partStatus = "dispatched";
   omitParts = false;
+  detailMode = "payload";
   wsMode = "all";
   events = [];
   dir = mkdtempSync(join(tmpdir(), "qm-smoke-"));
@@ -88,6 +90,39 @@ beforeEach(async () => {
         );
         if (submitStatus === 202) setTimeout(settle, 50);
         return;
+      }
+      // Task 7 (#592): step 4 reads the detail over HTTP after the settle wait
+      if (req.url === `/api/v1/queries/${stubCorrelationId}` && req.method === "GET") {
+        if (req.headers.cookie !== "qm_session=abc123") return res.writeHead(401).end();
+        events.push("detail");
+        if (detailMode === "error") return res.writeHead(500).end();
+        if (detailMode === "reset") return void req.socket.destroy();
+        if (detailMode === "notJson") {
+          res.writeHead(200, { "content-type": "text/html" });
+          return void res.end("<html>ZZ-HTML</html>");
+        }
+        const source = (sourceId: string, s: string, payload?: unknown) => ({
+          sourceId,
+          status: s,
+          purged: false,
+          ...(payload === undefined ? {} : { payload }),
+        });
+        return json({
+          correlationId: stubCorrelationId,
+          parts: [
+            {
+              partId: 0,
+              sources: [
+                source(
+                  "stateSource",
+                  detailMode === "noReturned" ? "failed" : "returned",
+                  detailMode === "payload" ? { plate: "ZZ-PAYLOAD" } : undefined,
+                ),
+                source("nationalSource", "failed"),
+              ],
+            },
+          ],
+        });
       }
       res.writeHead(404).end();
     });
@@ -337,12 +372,12 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     wsMode = "pong";
     const r = await smoke(base, ["--soak", "1s"]);
     expect(r.code).toBe(0);
-    const at = ["1 ok", "2 ok", "3 ok", "4 ok: 2 sources settled", "5 ok"].map((t) =>
+    const at = ["1 ok", "2 ok", "3 ok", "4 ok: 2 sources settled, 1 returned", "5 ok"].map((t) =>
       r.out.indexOf(t),
     );
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(events.slice(0, 2)).toEqual(["hello", "submit"]);
+    expect(events.slice(0, 3)).toEqual(["hello", "submit", "detail"]);
   });
 
   it("step 4 fails within the bound when one source never settles, with the exact text", async () => {
@@ -384,8 +419,61 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
   it("step 4 skips a non-JSON frame without echoing it (AW5 T14 Q5)", async () => {
     wsMode = "garbage";
     const r = await smoke(base);
-    expect(r.out).toContain("4 ok: 2 sources settled");
+    expect(r.out).toContain("4 ok: 2 sources settled, 1 returned");
     expect(r.out).not.toContain("ZZ-9999");
+  });
+
+  it("step 4 reads the detail over HTTP and never prints the payload (Task 7, #592)", async () => {
+    const r = await smoke(base);
+    expect(r.out).toContain("4 ok: 2 sources settled, 1 returned");
+    expect(events).toContain("detail");
+    expect(r.out).not.toContain("ZZ-PAYLOAD");
+  });
+
+  it("step 4 fails when a returned source has no payload in the detail (Task 7, #592)", async () => {
+    detailMode = "noPayload";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: 1 of 1 returned sources have no payload");
+    expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails with the status when the detail read is not 200 (Task 7, #592)", async () => {
+    detailMode = "error";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: detail read answered HTTP 500");
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails with the error class when the detail read cannot connect (#620 G-G-m1)", async () => {
+    detailMode = "reset";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    // Node 24 rejects a reset connection with TypeError ("fetch failed")
+    expect(r.out).toContain("4 FAILED: detail read failed (TypeError)");
+    expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails when the detail body is not JSON, without echoing it (#620 G-G-m1)", async () => {
+    detailMode = "notJson";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: detail read was not JSON");
+    expect(r.out).not.toContain("ZZ-HTML");
+    expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
+  });
+
+  it("step 4 fails when the detail has no returned source (#620 G-G-m1)", async () => {
+    detailMode = "noReturned";
+    const r = await smoke(base);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("4 FAILED: no returned source in the detail read");
+    expect(r.out).not.toMatch(/4 ok/);
+    expect(r.out).not.toMatch(/5 ok/);
   });
 
   it("step 4 reports k of n when the feed closes before every source settles (AW5 T14 Q4)", async () => {
