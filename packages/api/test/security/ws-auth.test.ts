@@ -119,6 +119,12 @@ describe("WebSocket upgrade and heartbeat (spec 5.3, 10.3)", () => {
     const a = await open(s.wsUrl, { origin: ORIGIN, cookie });
     const b = await open(s.wsUrl, { origin: ORIGIN, cookie: other });
     const bUser = (await t.auditRows("loginSucceeded")).at(-1)?.actorUserId ?? "";
+    // live events are held until hello is answered (spec 5.3 replay), so both say hello first
+    for (const x of [a, b]) {
+      const welcome = nextMsg(x);
+      x.send(JSON.stringify(hello));
+      expect(await welcome).toMatchObject({ type: "welcome", latestSeq: 0 });
+    }
     const got: unknown[] = [];
     a.on("message", (m) => got.push(JSON.parse(String(m))));
     const ev = {

@@ -5,12 +5,13 @@ import {
   WS_CLOSE_CODES,
   WS_PROTOCOL_VERSION,
   WsClientMessageSchema,
+  type WsEvent,
 } from "@querymodule/core/contracts";
 import { WebSocket, WebSocketServer } from "ws";
 import { BACKGROUND_HEADER } from "../auth/identity";
 import { trustedClientIp } from "../auth/rate-limit";
 import type { AppDeps } from "../deps";
-import { latestSeq } from "../dispatch/event-log";
+import { eventsSince, latestSeq } from "../dispatch/event-log";
 import { DEV_ORIGINS } from "../env";
 import type { Principal } from "../seams";
 
@@ -24,7 +25,8 @@ export const WS_IDLE_MS = 60_000;
 export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
 /**
  * Server-local close codes, RFC 6455 or local, outside the contract (WS_CLOSE_CODES): any close
- * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: welcome.latestSeq failed.
+ * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: the welcome.latestSeq or
+ * replay read failed.
  */
 export const WS_LOCAL_CLOSE = {
   idle: 4000,
@@ -118,12 +120,21 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
         });
       },
     );
-    const offSub = d.eventBus.subscribe(p.userId, send);
-    ws.on("message", async (raw) => {
-      const m = WsClientMessageSchema.safeParse(parse(String(raw)));
-      if (!m.success) return ws.close(WS_LOCAL_CLOSE.badMessage, "bad message");
-      if (m.data.type === "hello") {
-        // The owner's newest event_log seq (spec 5.3); replay from hello.lastSeq is M2 P1.
+    // Live events are held from connect until hello is answered, so none goes ahead of welcome
+    // and the replay (spec 5.3). After it, only seqs above the replay floor are sent: the last
+    // replayed seq, else lastSeq, else latestSeq (null, empty or resync). That drops a row both
+    // replayed and published (committed during the replay read), never a newer one.
+    let held: WsEvent[] | null = [];
+    let floor = 0;
+    const offSub = d.eventBus.subscribe(p.userId, (e) => {
+      if (held) held.push(e);
+      else if (e.seq > floor) send(e);
+    });
+    let helloSeen = false;
+    async function answerHello(lastSeq: number | null): Promise<void> {
+      const v = WS_PROTOCOL_VERSION;
+      if (lastSeq === null) {
+        // A fresh client: welcome with the owner's newest event_log seq, no replay.
         let seq: number;
         try {
           seq = await latestSeq(d.db, p.userId);
@@ -133,7 +144,42 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
           });
           return ws.close(WS_LOCAL_CLOSE.internal, "internal error");
         }
-        return send({ v: WS_PROTOCOL_VERSION, type: "welcome", latestSeq: seq });
+        floor = seq;
+        send({ v, type: "welcome", latestSeq: seq });
+      } else {
+        // Owner rows only (SEC-014): the socket's session user, never a client-named one.
+        let r: Awaited<ReturnType<typeof eventsSince>>;
+        try {
+          r = await eventsSince(d.db, p.userId, lastSeq, d.clock.now());
+        } catch (err: unknown) {
+          d.logger.error("ws replay read failed", {
+            errorName: err instanceof Error ? err.name : typeof err,
+          });
+          return ws.close(WS_LOCAL_CLOSE.internal, "internal error");
+        }
+        send({ v, type: "welcome", latestSeq: r.latestSeq });
+        if (r.kind === "resync") {
+          floor = r.latestSeq;
+          send({ v, type: "resync", reason: r.reason, latestSeq: r.latestSeq });
+        } else {
+          floor = r.events.at(-1)?.seq ?? lastSeq;
+          for (const e of r.events) send(e);
+        }
+      }
+      const due = held ?? [];
+      held = null;
+      for (const e of due) if (e.seq > floor) send(e);
+    }
+    ws.on("message", async (raw) => {
+      const m = WsClientMessageSchema.safeParse(parse(String(raw)));
+      if (!m.success) return ws.close(WS_LOCAL_CLOSE.badMessage, "bad message");
+      if (m.data.type === "hello") {
+        if (helloSeen) {
+          d.logger.info("ws duplicate hello ignored", { sessionId: p.sessionId });
+          return;
+        }
+        helloSeen = true;
+        return answerHello(m.data.lastSeq);
       }
       if (m.data.type === "ping") {
         let live: boolean;
