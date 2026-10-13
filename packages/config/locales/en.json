@@ -111,6 +111,7 @@
   "requests.status.acknowledged": "Acknowledged",
   "requests.status.failed": "Failed",
   "requests.sentAt": "Sent {time}",
+  "requests.nameSent": "{typeLabel}, sent {time}",
   "requests.copyReferenceOf": "Copy reference {reference} for {summary}",
   "requests.sourcePending": "{source}: pending",
   "requests.failure.invalid": "The values were not accepted. Check the form.",

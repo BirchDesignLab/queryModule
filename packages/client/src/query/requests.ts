@@ -17,6 +17,8 @@ export type SubmittedQuery = Omit<SubmitRequest, "configHash">;
 interface RequestBase {
   /** A local key, never reused, so a row keeps its identity from Sending to its final state. */
   id: string;
+  /** Epoch milliseconds the row began; tells two un-acknowledged rows apart by name (ruling 12). */
+  sentAt: number;
   queryType: string;
   /** The command the request was built as; shown in mono. Memory only, cleared with the session. */
   summary: string;
@@ -253,6 +255,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
           items: [
             {
               id,
+              sentAt: Date.now(),
               queryType,
               summary,
               ...kept,
@@ -288,6 +291,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
               if (item.id !== id) return item;
               const base = {
                 id: item.id,
+                sentAt: item.sentAt,
                 queryType: item.queryType,
                 summary: item.summary,
                 ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
@@ -332,6 +336,9 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
           (item) => item.status === "acknowledged" && item.correlationId === event.correlationId,
         );
         if (entry?.status !== "acknowledged") {
+          // A pending event changes nothing (applyToParts ignores it), and held it would block a
+          // later terminal one for the same pair.
+          if (event.status === "pending") return;
           // Not acknowledged yet (the event outran the 202): hold it, bounded in requests, in events
           // per request and in events overall. A pair already held keeps its first event: a terminal
           // status is written once, so a repeat could never change anything.

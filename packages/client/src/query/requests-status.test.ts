@@ -197,6 +197,17 @@ describe("FR-043 per-source status in the requests store (spec 6.6, 6.7)", () =>
     expect(row.parts[0]?.sources[0]?.status).toBe("pending");
   });
 
+  it("#576 a held pending event is never kept, so it cannot block a later terminal one", () => {
+    const store = createRequestsStore();
+    const id = store.getState().begin({ queryType: "VEH", summary: "x" });
+    store.getState().applyEvent(event(1, "state", "pending"));
+    store.getState().applyEvent(event(2, "state", "returned"));
+    store.getState().settle(id, { kind: "acknowledged", response: RESPONSE, queryType: "VEH" });
+    const row = store.getState().items[0];
+    if (row?.status !== "acknowledged") throw new Error("not acknowledged");
+    expect(row.parts[0]?.sources[0]?.status).toBe("returned");
+  });
+
   it("#576 held events are capped in total: the oldest request's events go first", () => {
     const store = createRequestsStore();
     const id = store.getState().begin({ queryType: "VEH", summary: "x" });
@@ -215,6 +226,21 @@ describe("FR-043 per-source status in the requests store (spec 6.6, 6.7)", () =>
     const row = store.getState().items[0];
     if (row?.status !== "acknowledged") throw new Error("not acknowledged");
     expect(row.parts[0]?.sources[0]?.status).toBe("pending");
+    // The newest request's held events survive: its own 202 applies one of them.
+    const newest = `0198a1b2-0000-7e5f-8a9b-${String(13).padStart(12, "0")}`;
+    const newestId = store.getState().begin({ queryType: "VEH", summary: "y" });
+    store.getState().settle(newestId, {
+      kind: "acknowledged",
+      queryType: "VEH",
+      response: {
+        ...RESPONSE,
+        correlationId: newest,
+        parts: [{ ...RESPONSE.parts[0], sourceIds: ["junk0"] } as (typeof RESPONSE.parts)[number]],
+      },
+    });
+    const newestRow = store.getState().items[0];
+    if (newestRow?.status !== "acknowledged") throw new Error("not acknowledged");
+    expect(newestRow.parts[0]?.sources[0]?.status).toBe("returned");
   });
 
   it("#576 a row that leaves the list inside the window drops its summary, and its timer", () => {

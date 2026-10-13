@@ -120,3 +120,11 @@ describe("B4 officer tiles: cleanup (#416 critic)", () => {
     expect(hint).not.toMatch(/color:|font-size:/);
   });
 });
+
+describe("UX-004 #587 not-run source lines in the touch layout", () => {
+  it("a not-run line takes the body size and the body text colour, not the muted one", () => {
+    const rule = rulesFor(".qm-layout--mobile-unit .qm-source--notRun");
+    expect(rule).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+    expect(rule).toMatch(/color:\s*var\(--qm-color-text-body\)/);
+  });
+});

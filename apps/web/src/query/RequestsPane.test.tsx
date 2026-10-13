@@ -102,3 +102,45 @@ describe("RequestsPane: an acknowledged retry (M1 exit C1, SUBMIT-1 follow-on)",
     expect(posts).toBe(1);
   });
 });
+
+// Rows without a primary typed field (WNT, DL, PRO, VEH by VIN) were all named by the type alone, so
+// two failed rows read the same to a screen reader. Un-acknowledged ones add the send time; never a
+// payload (ruling 12).
+describe("RequestsPane: accessible names of unsent rows without a typed field", () => {
+  it("two failed Warrant rows have distinct Retry names (the send time)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const services = testServices();
+      services.authStore.getState().setSignedIn(TEST_USER);
+      const submitted = {
+        queryType: "WNT",
+        values: { last: "ZZ-Test" },
+        sourceIds: [],
+        mode: "normal" as const,
+      };
+      vi.setSystemTime(new Date(2026, 9, 13, 13, 4, 5));
+      const first = services.requests
+        .getState()
+        .begin({ queryType: "WNT", summary: "WNT", submitted });
+      vi.setSystemTime(new Date(2026, 9, 13, 13, 6, 9));
+      const second = services.requests
+        .getState()
+        .begin({ queryType: "WNT", summary: "WNT", submitted });
+      services.requests.getState().settle(first, { kind: "unavailable" });
+      services.requests.getState().settle(second, { kind: "unavailable" });
+      renderRoutes(
+        [{ path: "/", element: <RequestsPane config={CLIENT_CONFIG} variant="list" /> }],
+        { services },
+      );
+      const names = (await screen.findAllByRole("button", { name: /^Retry/ })).map((b) =>
+        b.getAttribute("aria-label"),
+      );
+      expect(names).toHaveLength(2);
+      expect(new Set(names).size).toBe(2);
+      expect(names.join("|")).toMatch(/sent .*13:04:05/);
+      expect(names.join("|")).not.toContain("ZZ-Test");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -52,7 +52,9 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
       id: entry.id,
       typeLabel: typeLabel(entry.queryType),
       summary: entry.summary,
-      name: requestAccessibleName(entry, typeLabel(entry.queryType)),
+      name: requestAccessibleName(entry, typeLabel(entry.queryType), (time) =>
+        t("requests.nameSent", { typeLabel: typeLabel(entry.queryType), time }),
+      ),
     };
     if (entry.status === "sending") return { ...base, status: "sending", notes: [] };
     if (entry.status === "failed") {
