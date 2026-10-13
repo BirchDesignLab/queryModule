@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequestsStore, type QueryDetail } from "./requests.js";
 import type { SubmitQueryResponse } from "./submit.js";
 
@@ -110,5 +110,32 @@ describe("FR-060 spec 6.6 the store says when a payload arrives (ids only)", () 
       .applyDetail(detail([{ sourceId: "state", status: "returned", payload: { a: "b" } }]));
     // Only the handler setup() registered is left.
     expect(seen).toHaveLength(1);
+  });
+});
+
+describe("spec 6.6 a payload that lands after the summary window earns its own summary", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("a payload fetched after the status, past 1500 ms, yields a second summary", () => {
+    const { store } = setup();
+    const summaries: number[] = [];
+    store.getState().onStatusSummary((s) => summaries.push(s.summary.done));
+    store.getState().applyDetail(
+      detail([
+        { sourceId: "state", status: "returned", payload: { status: "STOLEN" } },
+        { sourceId: "national", status: "returned" },
+      ]),
+    );
+    vi.advanceTimersByTime(1500);
+    expect(summaries).toEqual([2]);
+    store.getState().applyDetail(
+      detail([
+        { sourceId: "state", status: "returned", payload: { status: "STOLEN" } },
+        { sourceId: "national", status: "returned", payload: { status: "EXPIRED" } },
+      ]),
+    );
+    vi.advanceTimersByTime(1500);
+    expect(summaries).toEqual([2, 2]);
   });
 });

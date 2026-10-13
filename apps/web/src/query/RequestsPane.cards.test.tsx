@@ -270,9 +270,18 @@ describe("FR-064 a nested part is labelled from its origin and shows its own car
     expect(screen.getByText("Wanted check, also run from Person")).toBeVisible();
     const table = screen.getByRole("table");
     expect(within(table).getByText("FAILURE TO APPEAR")).toBeVisible();
-    // A nested card heads at level 5, the primary part's at level 4.
+    // The outline: the list at 2, the primary card at 4, the nested part's own heading at 4 (its
+    // section), and the nested card under it at 5 (design: a nested part is its own section).
     expect(screen.getAllByRole("heading", { level: 5 })).toHaveLength(1);
-    expect(screen.getAllByRole("heading", { level: 4 })).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { level: 4 })).toHaveLength(2);
+    const nested = screen.getByRole("region", { name: "Wanted check, also run from Person" });
+    expect(
+      within(nested).getByRole("heading", {
+        level: 4,
+        name: "Wanted check, also run from Person",
+      }),
+    ).toBeVisible();
+    expect(within(nested).getAllByRole("heading", { level: 5 })).toHaveLength(1);
     expect(row().querySelector(".qm-request__severity")).toHaveTextContent("Critical");
   });
 });
@@ -295,7 +304,7 @@ describe("#576 the skip reason of a part that was not run (design ruling 4)", ()
     expect(screen.getByText("Wanted check not run: needs Last name.")).toBeVisible();
   });
 
-  it("a plan reason is its own sentence, and several join", () => {
+  it("a plan reason is its own sentence, and several make one sentence each", () => {
     setup(
       skipped([
         { key: "validation.required", params: { field: "dob" } },
@@ -306,7 +315,7 @@ describe("#576 the skip reason of a part that was not run (design ruling 4)", ()
     );
     expect(
       screen.getByText(
-        "Wanted check not run: needs Date of birth; The linked query has no sources to run.",
+        "Wanted check not run: needs Date of birth. The linked query has no sources to run.",
       ),
     ).toBeVisible();
   });

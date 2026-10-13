@@ -557,8 +557,11 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
               item.id === entry.id ? { ...entry, parts: merged.parts } : item,
           ),
         }));
-        if (merged.moved) announceLater(detail.correlationId);
-        for (const arrival of arrivals(detail.correlationId, entry.parts, merged.parts)) {
+        const landed = arrivals(detail.correlationId, entry.parts, merged.parts);
+        // A payload that lands after the window closed (a slow fetch) still earns a summary, so its
+        // severity keyword is spoken politely (spec 6.6). An open window already covers it.
+        if (merged.moved || landed.length > 0) announceLater(detail.correlationId);
+        for (const arrival of landed) {
           for (const handler of resultHandlers) handler(arrival);
         }
       },

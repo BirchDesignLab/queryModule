@@ -711,7 +711,9 @@ h1 {
 }
 
 .qm-request__part-label {
+  margin: 0;
   color: var(--qm-color-text-muted);
+  font-size: inherit;
   font-weight: 600;
 }
 

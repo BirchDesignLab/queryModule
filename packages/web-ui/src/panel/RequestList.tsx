@@ -223,39 +223,49 @@ export function RequestList({
                   className="qm-request__parts"
                   aria-label={t("sourceStatus.heading", { summary: row.name })}
                 >
-                  {row.parts.map((part) => (
-                    <div key={part.key} className="qm-request__part">
-                      {part.label === undefined ? null : (
-                        <span className="qm-request__part-label">{part.label}</span>
-                      )}
-                      {part.skippedText === undefined ? null : (
-                        <span className="qm-source qm-source--skipped">
-                          <span aria-hidden="true" className="qm-source__icon">
-                            –
+                  {row.parts.map((part) => {
+                    const partHeadingId = `${headingId}-${row.id}-${part.key}`;
+                    const Part = part.label === undefined ? "div" : "section";
+                    return (
+                      <Part
+                        key={part.key}
+                        className="qm-request__part"
+                        {...(part.label === undefined ? {} : { "aria-labelledby": partHeadingId })}
+                      >
+                        {part.label === undefined ? null : (
+                          <h4 id={partHeadingId} className="qm-request__part-label">
+                            {part.label}
+                          </h4>
+                        )}
+                        {part.skippedText === undefined ? null : (
+                          <span className="qm-source qm-source--skipped">
+                            <span aria-hidden="true" className="qm-source__icon">
+                              –
+                            </span>
+                            <span>{part.skippedText}</span>
                           </span>
-                          <span>{part.skippedText}</span>
-                        </span>
-                      )}
-                      {part.lines.length === 0 ? null : (
-                        <div className="qm-request__sources">
-                          {part.lines.map((line) =>
-                            line.card === undefined ? (
-                              <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
-                                <span aria-hidden="true" className="qm-source__icon">
-                                  {SOURCE_ICON[line.tone]}
-                                </span>
-                                <span>{line.text}</span>
-                              </div>
-                            ) : (
-                              <div key={line.key} className="qm-request__card">
-                                {line.card}
-                              </div>
-                            ),
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        )}
+                        {part.lines.length === 0 ? null : (
+                          <div className="qm-request__sources">
+                            {part.lines.map((line) =>
+                              line.card === undefined ? (
+                                <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
+                                  <span aria-hidden="true" className="qm-source__icon">
+                                    {SOURCE_ICON[line.tone]}
+                                  </span>
+                                  <span>{line.text}</span>
+                                </div>
+                              ) : (
+                                <div key={line.key} className="qm-request__card">
+                                  {line.card}
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        )}
+                      </Part>
+                    );
+                  })}
                 </fieldset>
               )}
             </li>

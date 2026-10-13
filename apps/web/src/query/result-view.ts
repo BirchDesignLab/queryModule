@@ -98,5 +98,9 @@ export function skipReasonText(
     // The messages end in a full stop; the sentence supplies its own.
     return text.replace(/\.$/, "");
   });
-  return t("sourceStatus.skippedWhy", { queryType: typeLabel, reasons: reasons.join("; ") });
+  // One sentence per reason (design ruling 4): the first completes the "not run: ..." sentence, each
+  // other reason stands as a sentence of its own.
+  const [first = "", ...rest] = reasons;
+  const lead = t("sourceStatus.skippedWhy", { queryType: typeLabel, reasons: first });
+  return [lead, ...rest.map((reason) => `${reason}.`)].join(" ");
 }
