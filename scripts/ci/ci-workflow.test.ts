@@ -7,6 +7,9 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { derivePassword } from "../../packages/api/src/seed/password";
 
+/** The oasdiff step's bash array expansion, spelled without a template placeholder. */
+const FAIL_ON_ARGS = ['"$', '{fail_on[@]}"'].join("");
+
 // ADR-0008: one aggregate `ci` check, path-scoped jobs. This test parses the
 // real ci.yml so a structural regression fails here instead of only in CI.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -82,11 +85,42 @@ describe("ci.yml structure (ADR-0008)", () => {
       "openapi-rename-map.ts base-openapi.json head-openapi.json head-openapi.renamed.json",
     );
     const diff = run.indexOf(
-      "breaking /work/base-openapi.json /work/head-openapi.renamed.json --fail-on ERR",
+      `breaking /work/base-openapi.json /work/head-openapi.renamed.json ${FAIL_ON_ARGS}`,
     );
     expect(rename).toBeGreaterThan(run.indexOf("openapi-base.ts"));
     expect(diff).toBeGreaterThan(rename);
-    expect(step.if).toContain("api-breaking");
+    const checkout = steps.find(
+      (s) => typeof s.uses === "string" && s.uses.startsWith("actions/checkout"),
+    );
+    expect(checkout.with["fetch-depth"]).toBe(0);
+  });
+
+  it("the oasdiff step runs on every pull request; api-breaking reports without failing (#614)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow steps
+    const steps: any[] = jobs.test.steps;
+    const step = steps.find((s) => s.name === "oasdiff breaking");
+    const run: string = step.run;
+    // never skipped for the label: the PRs that change the contract get a tool-confirmed diff
+    expect(step.if).toBe("github.event_name == 'pull_request'");
+    expect(step.env.API_BREAKING).toBe(
+      ["$", "{{ contains(github.event.pull_request.labels.*.name, 'api-breaking') }}"].join(""),
+    );
+    // without the label the diff fails on ERR; with it the same diff runs with no --fail-on
+    expect(run).toMatch(/if \[ "\$API_BREAKING" = "true" \]; then\s+fail_on=\(\)/);
+    expect(run).toContain("fail_on=(--fail-on ERR)");
+    expect(run).toContain(
+      `breaking /work/base-openapi.json /work/head-openapi.renamed.json ${FAIL_ON_ARGS}`,
+    );
+    // the list reaches the job log and the step summary, then the diff's own exit code is kept
+    expect(run).toContain('>> "$GITHUB_STEP_SUMMARY"');
+    expect(run).toMatch(/exit "\$diff_rc"\s*$/);
+    // one pinned image (v1.32.1), never a tag
+    expect(run.match(/tufin\/oasdiff@sha256:[0-9a-f]{64}/g)).toHaveLength(1);
+  });
+
+  it("the oasdiff step keeps the checkout depth the merge base needs", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: parsed workflow steps
+    const steps: any[] = jobs.test.steps;
     const checkout = steps.find(
       (s) => typeof s.uses === "string" && s.uses.startsWith("actions/checkout"),
     );
