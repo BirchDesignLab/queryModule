@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findDrift, GENERATED_FILES, type GitResult } from "./generated";
+import { findDrift, GENERATED_FILES, GENERATOR_SCRIPTS, type GitResult } from "./generated";
 
 const stub =
   (by: Record<string, GitResult>) =>
@@ -48,5 +48,29 @@ describe("findDrift", () => {
     });
     expect(seen).toHaveLength(2);
     for (const args of seen) expect(args.slice(-GENERATED_FILES.length)).toEqual(GENERATED_FILES);
+  });
+});
+
+describe("what gen:check covers (#623 AW1 Q2)", () => {
+  it("watches the generated client types, so drift from openapi.json is caught", () => {
+    expect(GENERATED_FILES).toContain("packages/client/src/api/generated/openapi-types.ts");
+  });
+
+  it("regenerates the client types after the contracts, which they are derived from", () => {
+    expect(GENERATOR_SCRIPTS).toEqual(["contracts:gen", "tokens:gen", "client:gen"]);
+  });
+
+  it("flags a stale generated client file as drift", () => {
+    const stale = "packages/client/src/api/generated/openapi-types.ts";
+    const r = findDrift(
+      stub({
+        diff: {
+          status: 0,
+          stdout: `${stale}
+`,
+        },
+      }),
+    );
+    expect(r).toEqual({ ok: false, reason: "drift", files: [stale] });
   });
 });
