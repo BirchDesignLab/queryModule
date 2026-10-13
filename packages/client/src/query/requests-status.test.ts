@@ -12,12 +12,24 @@ const RESPONSE: SubmitQueryResponse = {
   parts: [
     {
       partId: 1,
+      parentPartId: null,
+      origin: "primary",
       queryType: "VEH",
       status: "dispatched",
       sourceIds: ["state", "national"],
       droppedSourceIds: [],
+      skipReasons: [],
     },
-    { partId: 2, queryType: "WNT", status: "skipped", sourceIds: [], droppedSourceIds: [] },
+    {
+      partId: 2,
+      parentPartId: 0,
+      origin: "alsoRun",
+      queryType: "WNT",
+      status: "skipped",
+      sourceIds: [],
+      droppedSourceIds: [],
+      skipReasons: [{ key: "validation.required", params: { field: "dob" } }],
+    },
   ],
 };
 

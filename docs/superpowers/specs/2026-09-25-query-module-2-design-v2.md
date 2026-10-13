@@ -606,6 +606,23 @@ ApiError {
 
 Every API error, including auth, delegation and config errors, uses this shape. Params never contain submitted field values, credentials or payload text. A repeated `Idempotency-Key` is not an error: it returns the original 202 (5.2).
 
+**Submit acknowledgment part.** Each entry of the 202's `parts[]` (5.2 step 4):
+
+```
+SubmitQueryPart {
+  partId: 0..4,
+  parentPartId: 0 | null,          // null for the primary, 0 for a nested part
+  origin: "primary" | "alsoRun",
+  queryType: string,
+  status: "dispatched" | "skipped",
+  sourceIds: string[],
+  droppedSourceIds: string[],
+  skipReasons: AuditValidationError[]  // [] when dispatched; at least one when skipped
+}
+```
+
+`skipReasons` uses the same strict keys-and-params shape as the `partSkipped` audit row's `reasons` (`{ key, params?: { field?, labelKey?, position? } }`), so a reason can never carry a value (5.9). The schema refines that a part is `skipped` exactly when it has reasons and is the primary exactly when `parentPartId` is null; the refinement is not visible in OpenAPI. The read routes' part (5.1) carries the same `skipReasons` list (#576).
+
 **Source status.**
 
 ```
@@ -764,7 +781,7 @@ Steps for `POST /api/v1/queries`:
    - insert one `pending` `source_result` per dispatched (part, source) with `credential_user_id`, `delegation_id`, `adapter_kind`;
    - through `AuditService.record`, audit rows per 4.7 in this order: `submitted` per part, `partSkipped` per skipped part, `sourceDispatched` per (part, source) (written here, at plan commit, not at the adapter call), then `acknowledged` carrying `acknowledged_at`.
 
-   `acknowledged_at` is taken inside T1 as epoch ms. Any audit write failure rolls back T1 and returns 500 `internal` (fail closed). Only after commit does the server return 202 `{ correlationId, acknowledgedAt, parts: [{ partId, queryType, status: "dispatched"|"skipped", sourceIds, droppedSourceIds }] }` with a `Server-Timing` header. NFR-004 split: server target 200 ms from request receipt to 202; end-to-end measured from the client's ack-receipt message over the WebSocket (5.3), recorded as a metric log line, not an audit row.
+   `acknowledged_at` is taken inside T1 as epoch ms. Any audit write failure rolls back T1 and returns 500 `internal` (fail closed). Only after commit does the server return 202 `{ correlationId, acknowledgedAt, parts: [{ partId, parentPartId, origin, queryType, status: "dispatched"|"skipped", sourceIds, droppedSourceIds, skipReasons }] }` with a `Server-Timing` header. Each part says whether it is the primary (`origin: "primary"`, `parentPartId: null`) or an `alsoRun` part (`parentPartId: 0`), and a skipped part carries the planner's `skipReasons` (validation error keys and params only, never a field value; the shape is 4.7). A replay (step 1) rebuilds the same body from the part rows, `skipReasons` from `skipped_reason` (#576). NFR-004 split: server target 200 ms from request receipt to 202; end-to-end measured from the client's ack-receipt message over the WebSocket (5.3), recorded as a metric log line, not an audit row.
 5. **Dispatch (in-process, after commit).** The dispatcher owns all deadlines. Sources within a part run in parallel; parts run in parallel. Concurrency caps: per source default 4, global default 32; excess jobs wait in memory. Each deadline is `acknowledged_at + timeoutMs`, so queue wait counts against it. Per job: no credential when required -> outcome `credentialsMissing` without calling the adapter; decryption failure -> `credentialsInvalidated` audit and outcome `credentialsMissing`; otherwise `Promise.race(adapter.query(...), deadline)`, then abort the signal on deadline. A settlement after the deadline is logged (no payload) and never changes status. No automatic retries; "retry this source" is a new submit for that source (5.7).
 6. **Transaction T2 (one per outcome).** Update the `source_result` row `WHERE result_id = ? AND status = 'pending'` (write-once), set `returned` (payload encrypted under the `payload` DEK), `failed`, `timedOut` (sets `timed_out_at`), `credentialsMissing` or `credentialsRejected`, and `received_at`; write `sourceResponded` (source, status, latency from the monotonic clock, credential owner, delegation id, `adapter_kind`); on a credentialed call update `state_credential.last_status` and `last_verified_at`; append a `sourceStatus` row to `event_log`. If the update matches no row, nothing else is written. After commit, `EventBus.publish` pushes the event (5.3). If T2 fails, the dispatcher logs it and the process exits non-zero (fail closed); the row stays `pending` and the startup sweep marks it `interrupted`, so nothing is lost.
 7. **Client.** The 202 alone drives the ack toast. `sourceStatus` events tell the client which result to fetch through `GET /api/v1/queries/:correlationId` (6.7).

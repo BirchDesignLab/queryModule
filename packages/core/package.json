@@ -10,6 +10,7 @@
     "./rules": "./src/rules/index.ts",
     "./terminal": "./src/terminal/index.ts",
     "./planner": "./src/planner/index.ts",
+    "./mock": "./src/mock/index.ts",
     "./response": "./src/response/index.ts"
   },
   "scripts": {
