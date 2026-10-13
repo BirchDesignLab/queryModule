@@ -1,10 +1,14 @@
 import {
   AuditValidationErrorSchema,
   BoundedIdSchema,
+  EpochMsSchema,
   type QueryDetail,
   QueryDetailSchema,
+  type QueryListResponse,
+  QueryListResponseSchema,
+  Uuid7Schema,
 } from "@querymodule/core/contracts";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { queryRequest, requestKey, sourceResult } from "../db/schema";
 import type { AppDeps } from "../deps";
@@ -147,4 +151,145 @@ function openPayload(dek: Buffer, resultId: string, s: Sealed): unknown {
   } finally {
     pt.fill(0);
   }
+}
+
+/** The list's default page size (spec 5.1); the contract caps limit at 100 (#561). */
+export const QUERY_LIST_DEFAULT_LIMIT = 25;
+
+/** The decoded list cursor: the last item of the previous page (spec 5.1). */
+const ListCursorSchema = z.strictObject({ submittedAt: EpochMsSchema, correlationId: Uuid7Schema });
+type ListCursor = z.infer<typeof ListCursorSchema>;
+
+const encodeCursor = (c: ListCursor): string =>
+  Buffer.from(JSON.stringify(c), "utf8").toString("base64url");
+
+/**
+ * The opaque cursor back to its position, or null when it is not one this route issued (the
+ * route answers 400 validationFailed, never 500). It only names a position: the list always
+ * filters by the caller, so another user's cursor only shifts where the caller's page starts.
+ */
+export function decodeListCursor(cursor: string): ListCursor | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(cursor)) return null;
+  try {
+    const parsed = ListCursorSchema.safeParse(
+      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
+    );
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The caller's requests, newest first by (submitted_at, correlation_id) over
+ * query_request_user_submitted_idx, cursor paged (spec 5.1, 6.7; FR-043, FR-065; #561, #589).
+ * Every row read is filtered by the caller's user_id, so only the owner's requests are listed.
+ * Parts in plan order with per-source status and typeValues; no values and no payloads, so no
+ * sealed column is read and no DEK is unwrapped. purged follows the detail read: a part or result
+ * that holds sealed data whose request_key scope is gone. No hidden-result filter until
+ * result_visibility lands (M3 P2). Writes nothing: the owner's read is not audited (spec 5.2).
+ */
+export async function listQueries(
+  d: AppDeps,
+  principal: Principal,
+  page: { cursor?: ListCursor; limit?: number },
+): Promise<QueryListResponse> {
+  const limit = page.limit ?? QUERY_LIST_DEFAULT_LIMIT;
+  const mine = eq(queryRequest.userId, principal.userId);
+  const after = page.cursor
+    ? or(
+        lt(queryRequest.submittedAt, page.cursor.submittedAt),
+        and(
+          eq(queryRequest.submittedAt, page.cursor.submittedAt),
+          lt(queryRequest.correlationId, page.cursor.correlationId),
+        ),
+      )
+    : undefined;
+  const heads = await d.db
+    .select({ correlationId: queryRequest.correlationId, submittedAt: queryRequest.submittedAt })
+    .from(queryRequest)
+    .where(and(mine, eq(queryRequest.partId, 0), after))
+    .orderBy(desc(queryRequest.submittedAt), desc(queryRequest.correlationId))
+    .limit(limit + 1);
+  const pageHeads = heads.slice(0, limit);
+  const last = pageHeads.at(-1);
+  const nextCursor = heads.length > limit && last ? encodeCursor(last) : null;
+  const ids = pageHeads.map((h) => h.correlationId);
+  if (ids.length === 0) return QueryListResponseSchema.parse({ requests: [], nextCursor });
+  const parts = await d.db
+    .select({
+      correlationId: queryRequest.correlationId,
+      partId: queryRequest.partId,
+      parentPartId: queryRequest.parentPartId,
+      origin: queryRequest.origin,
+      queryType: queryRequest.queryType,
+      typeValues: queryRequest.typeValues,
+      plateOnly: queryRequest.plateOnly,
+      selectedSourceIds: queryRequest.selectedSourceIds,
+      droppedSourceIds: queryRequest.droppedSourceIds,
+      skippedReason: queryRequest.skippedReason,
+      configHash: queryRequest.configHash,
+      submittedAt: queryRequest.submittedAt,
+      sealed: sql<number>`${queryRequest.valuesCiphertext} IS NOT NULL`,
+    })
+    .from(queryRequest)
+    .where(and(mine, inArray(queryRequest.correlationId, ids)))
+    .orderBy(asc(queryRequest.partId));
+  const results = await d.db
+    .select({
+      resultId: sourceResult.resultId,
+      correlationId: sourceResult.correlationId,
+      partId: sourceResult.partId,
+      sourceId: sourceResult.sourceId,
+      status: sourceResult.status,
+      adapterKind: sourceResult.adapterKind,
+      errorCode: sourceResult.errorCode,
+      createdAt: sourceResult.createdAt,
+      receivedAt: sourceResult.receivedAt,
+      timedOutAt: sourceResult.timedOutAt,
+      sealed: sql<number>`${sourceResult.payloadCiphertext} IS NOT NULL`,
+    })
+    .from(sourceResult)
+    .where(
+      and(eq(sourceResult.userId, principal.userId), inArray(sourceResult.correlationId, ids)),
+    );
+  const keys = await d.db
+    .select({ correlationId: requestKey.correlationId, scope: requestKey.scope })
+    .from(requestKey)
+    .where(inArray(requestKey.correlationId, ids));
+  const hasKey = (correlationId: string, scope: RequestKeyScope) =>
+    keys.some((k) => k.correlationId === correlationId && k.scope === scope);
+  return QueryListResponseSchema.parse({
+    nextCursor,
+    requests: pageHeads.map((h) => {
+      const own = parts.filter((p) => p.correlationId === h.correlationId);
+      const head = own.find((p) => p.partId === 0);
+      return {
+        correlationId: h.correlationId,
+        submittedAt: h.submittedAt,
+        configHash: head?.configHash,
+        parts: own.map((p) => {
+          const selected = SourceIdsSchema.parse(p.selectedSourceIds);
+          return {
+            partId: p.partId,
+            parentPartId: p.parentPartId,
+            origin: p.origin,
+            queryType: p.queryType,
+            typeValues: p.typeValues,
+            plateOnly: p.plateOnly === 1,
+            skipReasons: p.skippedReason === null ? [] : SkipReasonsSchema.parse(p.skippedReason),
+            droppedSourceIds: SourceIdsSchema.parse(p.droppedSourceIds),
+            purged: p.sealed === 1 && !hasKey(h.correlationId, "values"),
+            sources: results
+              .filter((r) => r.correlationId === h.correlationId && r.partId === p.partId)
+              .sort((a, b) => selected.indexOf(a.sourceId) - selected.indexOf(b.sourceId))
+              .map(({ correlationId: _c, partId: _p, sealed, ...r }) => ({
+                ...r,
+                purged: sealed === 1 && !hasKey(h.correlationId, "payload"),
+              })),
+          };
+        }),
+      };
+    }),
+  });
 }

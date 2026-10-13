@@ -1,4 +1,4 @@
-import type { Role } from "@querymodule/core/contracts";
+import { ListQueriesQuerySchema, type Role } from "@querymodule/core/contracts";
 import type { Hono } from "hono";
 import type { AppDeps } from "../deps";
 import type { DispatchJob } from "../dispatch/dispatcher";
@@ -11,7 +11,7 @@ import { type Acknowledged, acknowledge } from "./acknowledge";
 import { admitSubmit, replayResponse } from "./admission";
 import { sanitizeSubmitError } from "./errors";
 import { type PreparedSubmit, prepareSubmit } from "./prepare";
-import { readQuery } from "./read";
+import { decodeListCursor, listQueries, readQuery } from "./read";
 
 export { SubmitTransactionError, sanitizeSubmitError } from "./errors";
 
@@ -174,6 +174,29 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       d.fatal(e);
     }
     return c.json(ack.body, 202);
+  });
+
+  /**
+   * GET /api/v1/queries (spec 5.1, 6.7; #561, #589): the caller's requests, newest first, cursor
+   * paged; every session role lists its own (sessionOwn). A malformed limit or cursor, an empty
+   * one included, or an unknown parameter is 400 validationFailed, never 500. A read failure
+   * answers 500 internal and logs the error class only. The list writes no audit row.
+   */
+  app.get("/api/v1/queries", requireSession(d.identity), async (c) => {
+    const q = ListQueriesQuerySchema.safeParse(c.req.query());
+    if (!q.success) return apiError(c, "validationFailed");
+    const cursor = q.data.cursor === undefined ? undefined : decodeListCursor(q.data.cursor);
+    if (cursor === null) return apiError(c, "validationFailed");
+    try {
+      const body = await listQueries(d, c.get("principal"), {
+        ...(cursor ? { cursor } : {}),
+        ...(q.data.limit === undefined ? {} : { limit: q.data.limit }),
+      });
+      return c.json(body, 200);
+    } catch (e) {
+      d.logger.error("query list failed", { error: { name: errorFields(e).name } });
+      return apiError(c, "internal");
+    }
   });
 
   /**

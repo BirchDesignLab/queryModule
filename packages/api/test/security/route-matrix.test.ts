@@ -43,7 +43,6 @@ const openapi = JSON.parse(
  * asserts each answers 404. A route leaves this list when its handler mounts and gets a CALLS row.
  */
 const CONTRACT_ONLY: ReadonlyMap<string, string> = new Map([
-  ["listQueries", "GET /api/v1/queries"],
   ["listAdminAudit", "GET /api/v1/admin/audit"],
   ["exportAdminAudit", "GET /api/v1/admin/audit/export"],
   ["getAdminQuery", "GET /api/v1/admin/queries/{correlationId}"],
@@ -73,7 +72,7 @@ type Expected = { status: number; code?: ApiErrorCode } | "ok";
  * Planned in the frozen contract but mounted in M2 P1 (#561): the contract's status flips when
  * the contracts next change; until then the matrix calls them like any live route.
  */
-const MOUNTED_PLANNED = new Set(["getQuery"]);
+const MOUNTED_PLANNED = new Set(["getQuery", "listQueries"]);
 
 /** Session-access routes the config-only implementer may call (checker ruling 09-29-26). */
 const IMPLEMENTER_SESSION_ROUTES = new Set(["getConfig"]);
@@ -168,6 +167,7 @@ const CALLS: Record<string, Call> = {
   revokeAdminSession: { params: { sessionId: "targetSession" }, ok: 204 },
   disableAdminUser: { params: { id: "target" }, ok: 200 },
   getQuery: { params: { correlationId: "ownQuery" }, ok: 200 },
+  listQueries: { ok: 200 },
 };
 
 /**
@@ -340,7 +340,6 @@ describe("spec 10.3 route by caller matrix (D-A30, admin routes from openapi.jso
     for (const key of CONTRACT_ONLY.values()) {
       const [method, template] = key.split(" ") as [string, string];
       const path = template.replace("{correlationId}", cid);
-      // /api/v1/queries also carries the live POST; only the GET is unmounted.
       const r = await a.call("admin", method, path);
       expect(r.status, key).toBe(404);
     }
