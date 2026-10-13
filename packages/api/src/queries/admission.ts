@@ -1,4 +1,5 @@
 import {
+  AuditValidationErrorSchema,
   BoundedIdSchema,
   IdempotencyKeySchema,
   parseAuditDetails,
@@ -34,6 +35,8 @@ export type Admission =
   | { kind: "reject"; response: Response };
 
 const SourceIdsSchema = z.array(BoundedIdSchema);
+/** skipped_reason holds the planner's skipReasons; a stored list is never empty (spec 4.6 step 5). */
+const SkipReasonsSchema = z.array(AuditValidationErrorSchema).min(1);
 
 /**
  * Submit admission (spec 5.2 step 1), after requireSession, the X-Requested-With check and the
@@ -116,6 +119,8 @@ async function readReplay(
   const parts = await db
     .select({
       partId: queryRequest.partId,
+      parentPartId: queryRequest.parentPartId,
+      origin: queryRequest.origin,
       queryType: queryRequest.queryType,
       selectedSourceIds: queryRequest.selectedSourceIds,
       droppedSourceIds: queryRequest.droppedSourceIds,
@@ -139,13 +144,16 @@ async function readReplay(
     acknowledgedAt,
     parts: parts.map((p) => {
       const droppedSourceIds = SourceIdsSchema.parse(p.droppedSourceIds);
+      // key order matches acknowledge's body, so a replay is byte for byte the live 202
+      const head = { partId: p.partId, parentPartId: p.parentPartId, origin: p.origin };
       if (p.skippedReason !== null) {
         return {
-          partId: p.partId,
+          ...head,
           queryType: p.queryType,
           status: "skipped",
           sourceIds: [],
           droppedSourceIds,
+          skipReasons: SkipReasonsSchema.parse(p.skippedReason),
         };
       }
       // plan order: the part's selection order, not source_result insert order
@@ -155,11 +163,12 @@ async function readReplay(
         .map((r) => r.sourceId)
         .sort((a, b) => selected.indexOf(a) - selected.indexOf(b));
       return {
-        partId: p.partId,
+        ...head,
         queryType: p.queryType,
         status: "dispatched",
         sourceIds,
         droppedSourceIds,
+        skipReasons: [],
       };
     }),
   });

@@ -778,11 +778,22 @@ export interface components {
             acknowledgedAt: number;
             parts: {
                 partId: number;
+                parentPartId: 0 | null;
+                /** @enum {string} */
+                origin: "primary" | "alsoRun";
                 queryType: string;
                 /** @enum {string} */
                 status: "dispatched" | "skipped";
                 sourceIds: string[];
                 droppedSourceIds: string[];
+                skipReasons: {
+                    key: string;
+                    params?: {
+                        field?: string;
+                        labelKey?: string;
+                        position?: number;
+                    };
+                }[];
             }[];
         };
         submitQueryBody: {
@@ -1070,7 +1081,14 @@ export interface components {
                         [key: string]: string;
                     };
                     plateOnly: boolean;
-                    skippedReason: string | null;
+                    skipReasons: {
+                        key: string;
+                        params?: {
+                            field?: string;
+                            labelKey?: string;
+                            position?: number;
+                        };
+                    }[];
                     droppedSourceIds: string[];
                     purged: boolean;
                     sources: {
@@ -1103,7 +1121,14 @@ export interface components {
                     [key: string]: string;
                 };
                 plateOnly: boolean;
-                skippedReason: string | null;
+                skipReasons: {
+                    key: string;
+                    params?: {
+                        field?: string;
+                        labelKey?: string;
+                        position?: number;
+                    };
+                }[];
                 droppedSourceIds: string[];
                 purged: boolean;
                 sources: {
@@ -1161,7 +1186,14 @@ export interface components {
                     [key: string]: string;
                 };
                 plateOnly: boolean;
-                skippedReason: string | null;
+                skipReasons: {
+                    key: string;
+                    params?: {
+                        field?: string;
+                        labelKey?: string;
+                        position?: number;
+                    };
+                }[];
                 droppedSourceIds: string[];
                 purged: boolean;
                 sources: {

@@ -8,10 +8,13 @@ const RESPONSE: SubmitQueryResponse = {
   parts: [
     {
       partId: 1,
+      parentPartId: null,
+      origin: "primary",
       queryType: "VEH",
       status: "dispatched",
       sourceIds: ["state"],
       droppedSourceIds: [],
+      skipReasons: [],
     },
   ],
 };

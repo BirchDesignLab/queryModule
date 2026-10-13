@@ -12,10 +12,13 @@ const ACK: SubmitQueryResponse = {
   parts: [
     {
       partId: 1,
+      parentPartId: null,
+      origin: "primary",
       queryType: "VEH",
       status: "dispatched",
       sourceIds: ["stateSource", "nationalSource"],
       droppedSourceIds: [],
+      skipReasons: [],
     },
   ],
 };
@@ -92,12 +95,24 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
         ...ACK.parts,
         {
           partId: 2,
+          parentPartId: 0,
+          origin: "alsoRun",
           queryType: "WNT",
           status: "dispatched",
           sourceIds: ["nationalSource"],
           droppedSourceIds: [],
+          skipReasons: [],
         },
-        { partId: 3, queryType: "PRO", status: "skipped", sourceIds: [], droppedSourceIds: [] },
+        {
+          partId: 3,
+          parentPartId: 0,
+          origin: "alsoRun",
+          queryType: "PRO",
+          status: "skipped",
+          sourceIds: [],
+          droppedSourceIds: [],
+          skipReasons: [{ key: "validation.required", params: { field: "dob" } }],
+        },
       ],
     });
     expect(screen.getByText("Also run: Wanted check")).toBeInTheDocument();

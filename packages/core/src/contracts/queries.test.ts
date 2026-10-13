@@ -41,25 +41,61 @@ describe("FR-064 submit request (spec 5.1, 5.2)", () => {
   });
 });
 
-describe("FR-040 submit response", () => {
-  it("parts carry dispatched and skipped status", () => {
-    const r = {
-      correlationId: "01890a5d-ac96-774b-bcce-b302099a8057",
-      acknowledgedAt: 1_790_000_000_000,
-      parts: [
-        {
-          partId: 0,
-          queryType: "PER",
-          status: "dispatched",
-          sourceIds: ["stateSource"],
-          droppedSourceIds: [],
-        },
-        { partId: 1, queryType: "WNT", status: "skipped", sourceIds: [], droppedSourceIds: [] },
-      ],
-    };
+describe("FR-040 FR-041 submit response (spec 4.6 steps 4 and 5, 5.2 step 4)", () => {
+  const primary = {
+    partId: 0,
+    parentPartId: null,
+    origin: "primary",
+    queryType: "PER",
+    status: "dispatched",
+    sourceIds: ["stateSource"],
+    droppedSourceIds: [],
+    skipReasons: [],
+  };
+  const skipped = {
+    partId: 1,
+    parentPartId: 0,
+    origin: "alsoRun",
+    queryType: "WNT",
+    status: "skipped",
+    sourceIds: [],
+    droppedSourceIds: [],
+    skipReasons: [{ key: "validation.required", params: { field: "dob" } }],
+  };
+  const r = {
+    correlationId: "01890a5d-ac96-774b-bcce-b302099a8057",
+    acknowledgedAt: 1_790_000_000_000,
+    parts: [primary, skipped],
+  };
+  const parse = (...parts: unknown[]) =>
+    SubmitQueryResponseSchema.safeParse({ ...r, parts }).success;
+
+  it("parts carry origin, parentPartId, dispatched and skipped status and skip reasons", () => {
     expect(SubmitQueryResponseSchema.safeParse(r).success).toBe(true);
-    expect(SubmitQueryResponseSchema.safeParse({ ...r, parts: [] }).success).toBe(false);
+    expect(parse()).toBe(false);
   });
+  it("a dispatched alsoRun part with skipReasons [] parses", () =>
+    expect(parse(primary, { ...skipped, status: "dispatched", skipReasons: [] })).toBe(true));
+  it.each([
+    ["a skipped part with no reasons", [primary, { ...skipped, skipReasons: [] }]],
+    ["a dispatched part with reasons", [{ ...primary, skipReasons: skipped.skipReasons }]],
+    ["a primary with parentPartId 0", [{ ...primary, parentPartId: 0 }]],
+    ["an alsoRun part with parentPartId null", [primary, { ...skipped, parentPartId: null }]],
+    ["a primary labelled alsoRun", [{ ...primary, origin: "alsoRun" }]],
+    ["a part without skipReasons", [{ ...primary, skipReasons: undefined }]],
+    ["a part without origin", [{ ...primary, origin: undefined }]],
+    [
+      "a skip reason carrying a value-shaped param (strict params)",
+      [
+        primary,
+        { ...skipped, skipReasons: [{ key: "validation.required", params: { value: "ZZ-0001" } }] },
+      ],
+    ],
+    [
+      "a skip reason with free text in place of a key",
+      [primary, { ...skipped, skipReasons: [{ key: "dob is required for ZZ-0001" }] }],
+    ],
+  ])("rejects %s", (_n, parts) => expect(parse(...parts)).toBe(false));
 });
 
 describe("BR-007 submitQuery route definition", () => {
@@ -98,7 +134,7 @@ const part = {
   queryType: "VEH",
   typeValues: { state: "TX" },
   plateOnly: false,
-  skippedReason: null,
+  skipReasons: [],
   droppedSourceIds: [],
   purged: false,
   values: { plate: "ZZ-0001" },
@@ -130,6 +166,21 @@ describe("FR-062 GET /queries shapes (spec 5.1, 5.5)", () => {
       parse({ ...item, parts: [{ ...listPart, values: part.values, sources: [listResult] }] }),
     ).toBe(false);
     expect(parse({ ...item, parts: [{ ...listPart, sources: [returned] }] })).toBe(false);
+  });
+  it("a read part carries skipReasons as keys and params, never skippedReason (#576)", () => {
+    const skippedPart = {
+      ...part,
+      partId: 1,
+      parentPartId: 0,
+      origin: "alsoRun",
+      skipReasons: [{ key: "validation.required", params: { field: "dob" } }],
+      sources: [],
+    };
+    expect(QueryDetailSchema.safeParse({ ...detail, parts: [part, skippedPart] }).success).toBe(
+      true,
+    );
+    const legacy = { ...part, skippedReason: null };
+    expect(QueryDetailSchema.safeParse({ ...detail, parts: [legacy] }).success).toBe(false);
   });
   it("rejects an unknown source status and unknown keys", () => {
     const bad = { ...part, sources: [{ ...returned, status: "weird" }] };

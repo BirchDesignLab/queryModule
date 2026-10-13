@@ -123,10 +123,13 @@ export const ACK_202 = {
   parts: [
     {
       partId: 1,
+      parentPartId: null,
+      origin: "primary",
       queryType: "VEH",
       status: "dispatched",
       sourceIds: ["stateSource", "nationalSource"],
       droppedSourceIds: [],
+      skipReasons: [],
     },
   ],
 };

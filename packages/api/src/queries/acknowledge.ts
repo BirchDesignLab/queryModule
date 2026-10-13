@@ -155,10 +155,14 @@ export async function acknowledge(
           acknowledgedAt,
           parts: plan.parts.map((part) => ({
             partId: part.partId,
+            parentPartId: part.parentPartId,
+            origin: part.origin,
             queryType: part.queryType,
             status: part.status === "planned" ? "dispatched" : "skipped",
             sourceIds: part.sourceIds,
             droppedSourceIds: part.droppedSourceIds,
+            // #576: the planner's reasons, keys and params only (spec 5.9)
+            skipReasons: part.skipReasons ?? [],
           })),
         }),
         acknowledgedAt,
