@@ -354,6 +354,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # full history: board-data.test.ts R4 equivalence reads the file at an older commit
+          fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7

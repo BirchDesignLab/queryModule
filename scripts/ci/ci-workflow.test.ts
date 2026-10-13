@@ -514,6 +514,13 @@ describe("ci.yml board-only fast path (#617)", () => {
     expect(runs.some((r) => r.includes("scripts/ops/board-data.test.ts"))).toBe(true);
   });
 
+  it("`board` checks out full history without persisted credentials: the R4 equivalence test runs `git show <old sha>:docs/board/board-data.json` (#617)", () => {
+    const steps = jobs.board.steps as Array<{ uses?: string; with?: Record<string, unknown> }>;
+    const checkout = steps.find((st) => st.uses?.startsWith("actions/checkout@"));
+    expect(checkout?.with?.["fetch-depth"]).toBe(0);
+    expect(checkout?.with?.["persist-credentials"]).toBe(false);
+  });
+
   it("the aggregate `ci` job needs `board`, so a failing board check fails ci", () => {
     expect(jobNeeds(jobs.ci)).toContain("board");
   });
