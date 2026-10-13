@@ -305,6 +305,54 @@ describe("FR-007 shortcut provider binds the engine to the DOM (spec 6.4)", () =
   });
 });
 
+describe("IC1 bare Enter on a native activatable control inside results activates it (spec 6.4, UX-015)", () => {
+  function Row({ onRetry, onToggle }: { onRetry: () => void; onToggle: () => void }) {
+    return (
+      <div data-shortcut-context="results">
+        <Action action="toggleDetail" handler={onToggle} />
+        <div role="option" aria-selected="false" aria-label="row" tabIndex={0}>
+          <button type="button" onClick={onRetry}>
+            Retry
+          </button>
+          <a href="#x">open the source page</a>
+        </div>
+      </div>
+    );
+  }
+
+  it("Enter on a focused Retry button retries and does not toggle detail", async () => {
+    const onRetry = vi.fn();
+    const onToggle = vi.fn();
+    const user = setup(<Row onRetry={onRetry} onToggle={onToggle} />);
+    screen.getByRole("button", { name: "Retry" }).focus();
+    await user.keyboard("{Enter}");
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it("the provider does not preventDefault a bare Enter on a button or link", () => {
+    setup(<Row onRetry={vi.fn()} onToggle={vi.fn()} />);
+    for (const el of [screen.getByRole("button", { name: "Retry" }), screen.getByRole("link")]) {
+      const event = new KeyboardEvent("keydown", {
+        code: "Enter",
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      });
+      el.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+  });
+
+  it("Enter on the row itself toggles detail", async () => {
+    const onToggle = vi.fn();
+    const user = setup(<Row onRetry={vi.fn()} onToggle={onToggle} />);
+    screen.getByRole("option", { name: "row" }).focus();
+    await user.keyboard("{Enter}");
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("FR-006 a key pressed as soon as the UI is on screen is not lost (#382 flake root cause)", () => {
   it("handlers and the listener are live when the committed DOM first appears, before passive effects run", async () => {
     // Outside act(), as during Testing Library's waitFor: React commits the DOM in one task and runs

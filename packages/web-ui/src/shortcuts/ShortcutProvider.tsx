@@ -35,6 +35,16 @@ function inTextInput(target: Element): boolean {
   return editable !== null && editable.getAttribute("contenteditable") !== "false";
 }
 
+const ACTIVATABLE = 'button, a[href], input, select, textarea, [role="button"]';
+
+/** Bare Enter on (or inside) a native activatable control must activate it, not run a binding (spec 6.4 keeps Enter native in controls). */
+function enterActivatesControl(event: KeyboardEvent, target: Element): boolean {
+  if (event.key !== "Enter" || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+    return false;
+  }
+  return target.closest(ACTIVATABLE) !== null;
+}
+
 /** Regions the focus is inside, innermost first (nearest ancestor wins ties). Global bindings are
  *  ranked last by the engine, so "global" is never added here (#319). */
 function contextsOf(target: Element): ShortcutContext[] {
@@ -84,6 +94,7 @@ export function ShortcutProvider({
   useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target instanceof Element ? event.target : document.body;
+      if (enterActivatesControl(event, target)) return;
       const result = engine.handle(
         strokeOf(event),
         { inTextInput: inTextInput(target), contexts: contextsOf(target) },
