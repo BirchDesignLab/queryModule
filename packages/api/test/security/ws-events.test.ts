@@ -45,7 +45,7 @@ async function setup() {
     random: () => 0,
   });
   const aId = await t.createUser("a@example.test", PW);
-  await t.createUser("b@example.test", PW);
+  const bId = await t.createUser("b@example.test", PW);
   const cookieA = await t.cookieFor("a@example.test", PW);
   const cookieA2 = await t.cookieFor("a@example.test", PW);
   const cookieB = await t.cookieFor("b@example.test", PW);
@@ -87,7 +87,7 @@ async function setup() {
       return WsServerMessageSchema.parse(got[got.length - 1]);
     });
   };
-  return { t, time, aId, cookieA, cookieA2, cookieB, submit, sock, statuses, hello };
+  return { t, time, aId, bId, cookieA, cookieA2, cookieB, submit, sock, statuses, hello };
 }
 
 describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
@@ -252,5 +252,69 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     expect(c.statuses(a.got)).toEqual([]);
     await vi.waitFor(() => expect(c.t.fatals).toHaveLength(1));
     a.ws.close();
+  });
+  /** A owns seq 1 and 2, B owns seq 1 to 4, all from real dispatches (seq is per user). */
+  async function dispatchedForBoth() {
+    const c = await setup();
+    const a = await c.submit(c.cookieA, "ZZ-0001");
+    const b1 = await c.submit(c.cookieB, "ZZ-0001");
+    const b2 = await c.submit(c.cookieB, "ZZ-0001");
+    await c.time.run(1_000);
+    await vi.waitFor(() => expect(c.t.deps.dispatcher.inFlight()).toBe(0));
+    const rowsOf = (userId: string) =>
+      c.t.deps.db
+        .select()
+        .from(eventLog)
+        .where(eq(eventLog.userId, userId))
+        .orderBy(asc(eventLog.seq));
+    return { c, a, b: [b1, b2], rowsOf };
+  }
+  const idsOf = (got: unknown[], statuses: (g: unknown[]) => unknown[]) =>
+    statuses(got).map((m) => (m as { correlationId: string }).correlationId);
+
+  it("replay after a real dispatch sends each user only their own event_log rows (SEC-014)", async () => {
+    const { c, a, b, rowsOf } = await dispatchedForBoth();
+    const rowsA = await rowsOf(c.aId);
+    const rowsB = await rowsOf(c.bId);
+    expect(rowsA.map((r) => r.seq)).toEqual([1, 2]);
+    expect(rowsB.map((r) => r.seq)).toEqual([1, 2, 3, 4]);
+    const sa = await c.sock(c.cookieA);
+    await c.hello(sa.ws, sa.got, 0);
+    const sb = await c.sock(c.cookieB);
+    await c.hello(sb.ws, sb.got, 2);
+    await vi.waitFor(() => expect(c.statuses(sa.got)).toHaveLength(2));
+    await vi.waitFor(() => expect(c.statuses(sb.got)).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sa.got[0]).toMatchObject({ type: "welcome", latestSeq: 2 });
+    expect(sb.got[0]).toMatchObject({ type: "welcome", latestSeq: 4 });
+    const pick = (r: (typeof rowsA)[number]) => ({
+      seq: r.seq,
+      correlationId: r.correlationId,
+      resultId: r.resultId,
+      sourceId: r.sourceId,
+      status: r.status,
+    });
+    expect(c.statuses(sa.got)).toMatchObject(rowsA.map(pick));
+    expect(c.statuses(sb.got)).toMatchObject(rowsB.slice(2).map(pick));
+    expect(new Set(idsOf(sa.got, c.statuses))).toEqual(new Set([a.correlationId]));
+    const bIds = idsOf(sb.got, c.statuses);
+    expect(bIds).not.toContain(a.correlationId);
+    for (const id of bIds) expect(b.map((x) => x.correlationId)).toContain(id);
+    for (const x of [sa.ws, sb.ws]) x.close();
+  });
+
+  it("a lastSeq inside another user's seq range gets resync unknownCursor, never their rows (SEC-014)", async () => {
+    const { c } = await dispatchedForBoth();
+    const sa = await c.sock(c.cookieA);
+    // seq 3 exists for B only; A's newest is 2
+    await c.hello(sa.ws, sa.got, 3);
+    await vi.waitFor(() => expect(sa.got).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sa.got).toMatchObject([
+      { type: "welcome", latestSeq: 2 },
+      { type: "resync", reason: "unknownCursor", latestSeq: 2 },
+    ]);
+    expect(c.statuses(sa.got)).toEqual([]);
+    sa.ws.close();
   });
 });
