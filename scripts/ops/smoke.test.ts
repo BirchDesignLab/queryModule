@@ -451,7 +451,8 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     detailMode = "reset";
     const r = await smoke(base);
     expect(r.code).not.toBe(0);
-    expect(r.out).toMatch(/4 FAILED: detail read failed \(\w+\)/);
+    // Node 24 rejects a reset connection with TypeError ("fetch failed")
+    expect(r.out).toContain("4 FAILED: detail read failed (TypeError)");
     expect(r.out).not.toMatch(/4 ok/);
     expect(r.out).not.toMatch(/5 ok/);
   });
@@ -462,6 +463,7 @@ describe("smoke.sh (spec 8.7)", { timeout: 30_000 }, () => {
     expect(r.code).not.toBe(0);
     expect(r.out).toContain("4 FAILED: detail read was not JSON");
     expect(r.out).not.toContain("ZZ-HTML");
+    expect(r.out).not.toMatch(/4 ok/);
     expect(r.out).not.toMatch(/5 ok/);
   });
 
