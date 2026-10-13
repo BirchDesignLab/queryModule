@@ -81,6 +81,7 @@ describe("FR-060 result card semantics (spec 6.2)", () => {
     render(<Card mapped={GENERIC} assessment={CLEAR} />);
     expect(screen.getByText(/No card is set up for this result/)).toBeInTheDocument();
     expect(screen.getByText("/vehicle/make").tagName).toBe("DT");
+    expect(screen.getByText("/vehicle/make").closest("dl")).toHaveClass("qm-result-list--paths");
     expect(screen.getByText("TESTMAKE").closest("mark")).not.toBeNull();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });

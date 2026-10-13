@@ -10,6 +10,8 @@ export interface MappedElementsProps {
   keywords: readonly KeywordStyle[];
   styles: SeverityStyles;
   t: ResultT;
+  /** Labels are JSON pointers (generic dump): mono, case kept. */
+  paths?: boolean;
 }
 
 const labelOf = (label: { key: string } | { text: string }, t: ResultT): string =>
@@ -21,13 +23,14 @@ export function MappedElements({
   keywords,
   styles,
   t,
+  paths = false,
 }: MappedElementsProps): JSX.Element {
   const scalars = elements.flatMap((e, i) => (e.kind === "scalar" ? [{ e, i }] : []));
   const tables = elements.flatMap((e, i) => (e.kind === "table" ? [{ e, i }] : []));
   return (
     <>
       {scalars.length === 0 ? null : (
-        <dl className="qm-result-list">
+        <dl className={paths ? "qm-result-list qm-result-list--paths" : "qm-result-list"}>
           {scalars.map(({ e, i }) => (
             <div key={i} className="qm-result-list__item">
               <dt>{labelOf(e.label, t)}</dt>

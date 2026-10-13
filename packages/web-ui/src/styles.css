@@ -1303,6 +1303,12 @@ h1 {
   text-transform: uppercase;
 }
 
+.qm-result-list--paths dt {
+  font-family: var(--qm-type-family-data);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .qm-result-list dd {
   margin: 0;
   font-family: var(--qm-type-family-data);

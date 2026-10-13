@@ -76,7 +76,13 @@ export function ResultCard({
         <SeverityBadge severity={severity} styles={styles} t={t} />
       </div>
       {generic ? <p className="qm-card__note">{t("result.noMapping")}</p> : null}
-      <MappedElements elements={summary} keywords={keywords} styles={styles} t={t} />
+      <MappedElements
+        elements={summary}
+        keywords={keywords}
+        styles={styles}
+        t={t}
+        paths={generic}
+      />
       {detail.length === 0 ? null : (
         <>
           <ViewToggle
