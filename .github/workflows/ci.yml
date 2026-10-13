@@ -342,7 +342,7 @@ jobs:
         if: always()
         run: bash scripts/ci/boot-smoke.sh down querymodule:ci
 
-  # #617: board-only fast path. A change under docs/board/ and nothing else skips the heavy
+  # #617: board-only fast path. A change to docs/board/board-data.json and nothing else skips the heavy
   # jobs and runs only what judges board data: Biome and the board-data schema test. A mixed
   # change, or a failed path detection (board_only=false), keeps the full pipeline.
   board:

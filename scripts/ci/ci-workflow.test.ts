@@ -210,7 +210,7 @@ type WorkflowStep = {
 };
 
 describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-003)", () => {
-  it("`image` job is gated on docs-only like the other gated jobs and waits for `checks` (#231 G-M1)", () => {
+  it("`image` job is gated on docs-only and board-only like the other gated jobs and waits for `checks` (#231 G-M1, #617)", () => {
     expect(jobs.image).toBeDefined();
     // checks holds the pre-install lockfile guard; image installs, so it runs only after it.
     expect(jobNeeds(jobs.image)).toEqual(["changes", "checks"]);
@@ -257,7 +257,7 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
   });
 
   it("a push to main always builds the image, so every main sha gets a sha- image (#230)", async () => {
-    // image skips only on docs_only, and changed-paths fails closed to docs_only=false on any
+    // image skips only on docs_only or board_only, and changed-paths fails closed to both false on any
     // push (a docs-only merge to main still builds, smoke-tests and publishes its image).
     expect(jobs.image.if).toBe(NOT_DOCS_OR_BOARD_ONLY);
     expect(jobs.checks.if).toBe(NOT_DOCS_OR_BOARD_ONLY);

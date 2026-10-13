@@ -22,10 +22,16 @@ describe("docs-only fast path (master plan 11)", () => {
 });
 
 describe("board-only fast path (#617)", () => {
-  it("is true only when every changed file is under docs/board/", () => {
+  it("is true only when the change is exactly docs/board/board-data.json", () => {
     expect(isBoardOnly(["docs/board/board-data.json"])).toBe(true);
-    expect(isBoardOnly(["docs/board/board-data.json", "docs/board/notes.md"])).toBe(true);
     expect(isBoardOnly([])).toBe(false);
+  });
+
+  it("is false for any other file under docs/board/, so code there runs the full pipeline (AW3 #617 C1)", () => {
+    expect(isBoardOnly(["docs/board/sync.ts"])).toBe(false);
+    expect(isBoardOnly(["docs/board/board-data.json", "docs/board/apply.mjs"])).toBe(false);
+    expect(isBoardOnly(["docs/board/board-data.json", "docs/board/notes.md"])).toBe(false);
+    expect(isBoardOnly(["docs/board/nested/board-data.json"])).toBe(false);
   });
 
   it("is false for a mixed change: board data plus docs, code or CI config", () => {
