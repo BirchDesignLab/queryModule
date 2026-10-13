@@ -117,6 +117,9 @@ export function createServices(options: ServicesOptions): Services {
     void results.loadList();
   });
   feed.onReconnect(() => results.refetchPending());
+  // The first welcome replays nothing, and the list snapshot may predate it (the feed opens after the
+  // config loads): a source that settled in between is refetched here (FR-065).
+  feed.onFirstWelcome(() => results.refetchPending());
   feed.onRetry(() => results.refetchPending());
   // Sign-in (Q1) loads the list: the last requests of the user's other sessions and devices. A session
   // still owing a password change loads nothing until it is changed (D-A26); a reset empties it all.

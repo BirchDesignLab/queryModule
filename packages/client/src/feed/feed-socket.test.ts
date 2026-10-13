@@ -615,6 +615,23 @@ describe("FR-065 feed socket: reconnect hooks (spec 6.8)", () => {
     expect(calls).toHaveBeenCalledTimes(1);
   });
 
+  it("onFirstWelcome fires on the session's first welcome only, again after close and open", () => {
+    const t = setup();
+    const calls = vi.fn();
+    t.feed.onFirstWelcome(calls);
+    t.feed.open();
+    const first = t.connect(0);
+    expect(calls).toHaveBeenCalledTimes(1);
+    first.serverClose();
+    vi.advanceTimersByTime(1000);
+    t.connect(0);
+    expect(calls).toHaveBeenCalledTimes(1);
+    t.feed.close();
+    t.feed.open();
+    t.connect(0);
+    expect(calls).toHaveBeenCalledTimes(2);
+  });
+
   it("onReconnect does not fire for the first welcome of the next session", () => {
     const t = setup();
     const calls = vi.fn();

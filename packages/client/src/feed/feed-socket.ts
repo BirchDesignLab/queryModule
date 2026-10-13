@@ -38,6 +38,11 @@ export interface FeedSocket {
   onResync(handler: (event: ResyncEvent) => void): () => void;
   /** A welcome after the session's first: the socket was down and is back (spec 6.8). */
   onReconnect(handler: () => void): () => void;
+  /**
+   * The session's first welcome: nothing is replayed (hello carried a null cursor), so what settled
+   * between a list snapshot and now is refetched by the caller (FR-065).
+   */
+  onFirstWelcome(handler: () => void): () => void;
   /** Each backoff step while the socket is down, before the reconnect is attempted (spec 6.8). */
   onRetry(handler: () => void): () => void;
   state(): FeedState;
@@ -70,6 +75,7 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
   const handlers = new Set<(event: SourceStatusEvent) => void>();
   const resyncHandlers = new Set<(event: ResyncEvent) => void>();
   const reconnectHandlers = new Set<() => void>();
+  const firstWelcomeHandlers = new Set<() => void>();
   const retryHandlers = new Set<() => void>();
   let state: FeedState = "closed";
   let socket: SocketLike | null = null;
@@ -187,7 +193,8 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
         welcomed = true;
         missed = 0;
         state = "open";
-        if (reconnected) for (const handler of [...reconnectHandlers]) handler();
+        const handlersToRun = reconnected ? reconnectHandlers : firstWelcomeHandlers;
+        for (const handler of [...handlersToRun]) handler();
         return;
       }
       case "pong":
@@ -267,6 +274,12 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
       reconnectHandlers.add(handler);
       return () => {
         reconnectHandlers.delete(handler);
+      };
+    },
+    onFirstWelcome(handler) {
+      firstWelcomeHandlers.add(handler);
+      return () => {
+        firstWelcomeHandlers.delete(handler);
       };
     },
     onRetry(handler) {

@@ -337,6 +337,20 @@ describe("FR-065 replay cursor, resync and the list load in the composition root
     t.services.reset.resetAll();
   });
 
+  it("the session's first welcome refetches entries the list snapshot left pending (FR-065)", async () => {
+    const t = feedServices();
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    t.services.requests.getState().applyList([request(2, ["pending"])]);
+    const fetched = recordDetails();
+    t.services.feed.open();
+    const first = t.sockets[0] as FakeSocket;
+    first.onopen?.();
+    await pass(1000);
+    expect(new Set(fetched)).toEqual(new Set([idOf(2)]));
+    t.services.reset.resetAll();
+  });
+
   it("while the socket is down a pending entry is refetched at each backoff step", async () => {
     const t = feedServices();
     await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
