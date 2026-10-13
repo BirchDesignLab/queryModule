@@ -161,6 +161,10 @@ jobs:
       - name: Story tags
         run: pnpm tsx scripts/ci/check-story-tags.ts
 
+      # #627: the saved workflow scripts' mock harness (156+ scenarios, under a second).
+      - name: Workflow harness
+        run: pnpm sdd:harness
+
       # Step 7: contract diff
       - name: Generated files match
         run: pnpm gen:check

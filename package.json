@@ -14,6 +14,7 @@
     "tokens:gen": "pnpm --filter @querymodule/tokens --fail-if-no-match gen",
     "client:gen": "pnpm --filter @querymodule/client --fail-if-no-match gen:api",
     "gen:check": "tsx scripts/ci/check-generated.ts",
+    "sdd:harness": "node scripts/sdd/workflow-harness.mjs",
     "config:validate": "tsx scripts/ci/config-validate.ts",
     "config:migrate": "tsx scripts/ci/config-migrate.ts",
     "dev": "node scripts/dev/dev.ts",
@@ -21,7 +22,7 @@
     "dev:web": "pnpm --filter @querymodule/web dev",
     "e2e": "node scripts/dev/e2e.ts",
     "image:smoke": "bash scripts/ci/boot-smoke.sh all querymodule:local --build",
-    "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm config:validate && pnpm gen:check"
+    "verify": "pnpm lint && pnpm typecheck && pnpm coverage && pnpm config:validate && pnpm gen:check && pnpm sdd:harness"
   },
   "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
   "devDependencies": {
