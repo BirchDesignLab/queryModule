@@ -38,11 +38,11 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
-| Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | idle (P0.5 done and promoted 10-07-26; M2 P1 planning next) | 10-07-26 |
+| Windows 11 | A (`C:\git\queryModule-a`) | M2 P0.5 dispatch | idle (M2 P1 AW1 next, plan 2026-10-07-m2-track-a-p1.md) | 10-13-26 |
 | Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B | idle (no local B session; BW2 and BW3 ran in the cloud and merged, cloud credits spent) | 10-07-26 |
-| Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | idle (start brief from "M2 planning 1") | 10-05-26 |
+| Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
-| Windows 11 | Planning (`C:\git\queryModule-plan`, "M2 P1 planning") | M2 P1 plans | active (plans PR) | 10-07-26 |
+| Windows 11 | Planning (`C:\git\queryModule-plan`, "M2 P1 planning") | M2 P1 plans | done (#588 merged; issues #589 to #606) | 10-13-26 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -55,7 +55,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Issue: none open; M2 P0.5 Track A closed (Tasks 1 to 18, #529 to #545)
 - Branch / PR: none; AW1 #563 to AW6 #581 and release note #582 merged; `:release` = 3e85c2b (#583)
 - Last green: `pnpm verify` at e6c7a83 (release note) on Windows; main ci 37491206376 green incl publish
-- Next step: M2 P1 planning (developer starts it); open follow-ups #574 (AW4 and AW5 minors, critical follow-up PR, fast path where it fits), #572, #576, #558
+- Next step: M2 P1 AW1 (plan docs/superpowers/plans/2026-10-07-m2-track-a-p1.md); open follow-ups #574 (AW4 and AW5 minors, critical follow-up PR, fast path where it fits), #572, #576, #558
 - Blocked by: none
 - Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-05-m2-track-a-p0-5\handover.md` (rulings and lessons)
 - Notes: developer target 10-04-26: mock responses working, then a demo pause at the M2 P1 gate.
