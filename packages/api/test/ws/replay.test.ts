@@ -20,7 +20,7 @@ import { createTestApp, startTestServer, type TestApp } from "../helpers/test-ap
 const replayHook = vi.hoisted(() => ({
   fail: false,
   before: null as null | (() => Promise<void>),
-  after: null as null | (() => void),
+  after: null as null | (() => void | Promise<void>),
 }));
 vi.mock("../../src/dispatch/event-log", async (importOriginal) => {
   const m = await importOriginal<typeof import("../../src/dispatch/event-log")>();
@@ -30,7 +30,8 @@ vi.mock("../../src/dispatch/event-log", async (importOriginal) => {
       if (replayHook.fail) throw new Error("db down");
       if (replayHook.before) await replayHook.before();
       const r = await m.eventsSince(...a);
-      replayHook.after?.();
+      // awaited, so a publish the hook makes lands while the server still holds live events
+      await replayHook.after?.();
       return r;
     },
   };
@@ -303,12 +304,16 @@ describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
     const c = await setup();
     await append(c.t, c.aId, 3, c.clock.now());
     const a = await c.sock(c.cookieA);
-    // after the read, before the answer: seq 4 is above the replay, so it follows it once
-    replayHook.after = () => {
-      void c.live(c.aId);
+    // after the read, before the answer: seq 4 commits and publishes while the server still holds
+    // live events, so only the held flush can deliver it, once, after the replay (NFR-003)
+    replayHook.after = async () => {
+      await c.live(c.aId);
     };
     c.hello(a.ws, 1);
     await vi.waitFor(() => expect(c.shape(a.got)).toEqual(["welcome:3", 2, 3, 4]));
+    await c.barrier(a.ws, a.got);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(c.shape(a.got)).toEqual(["welcome:3", 2, 3, 4]);
     a.ws.close();
   });
 
