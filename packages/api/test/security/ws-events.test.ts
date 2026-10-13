@@ -1,13 +1,10 @@
-import { SubmitQueryResponseSchema, WsServerMessageSchema } from "@querymodule/core/contracts";
-import { asc, eq } from "drizzle-orm";
+import { WsServerMessageSchema } from "@querymodule/core/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
-import { eventLog } from "../../src/db/schema";
+import type WebSocket from "ws";
 import { WS_LOCAL_CLOSE } from "../../src/ws/server";
-import { manualTime } from "../helpers/manual-time";
-import { createTestApp, startTestServer } from "../helpers/test-app";
+import { barrier, closeServers, rowsOf, setupDispatchApp } from "../helpers/ws-replay";
 
-// Spec 5.3, 12.7 M2 row "no cross-user events" (FR-065, SEC-014): sourceStatus events reach
+// Spec 5.3, 12.7 M2 row "no cross-user events" (FR-065): sourceStatus events reach
 // only the owner's sockets, in event_log order, and welcome.latestSeq reads event_log.
 // A latestSeq read failure, switched per test (AW4 critic 3).
 const failSeq = vi.hoisted(() => ({ on: false }));
@@ -19,64 +16,13 @@ vi.mock("../../src/dispatch/event-log", async (importOriginal) => {
       failSeq.on ? Promise.reject(new Error("db down")) : m.latestSeq(...a),
   };
 });
-const PW = "correct-horse-battery-1";
-const ORIGIN = "http://localhost:3000";
-const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
   failSeq.on = false;
-  for (const c of closers.splice(0)) await c();
+  await closeServers();
 });
 
-const open = (url: string, headers: Record<string, string>) =>
-  new Promise<{ ws: WebSocket; got: unknown[] }>((res, rej) => {
-    const ws = new WebSocket(url, { headers });
-    const got: unknown[] = [];
-    ws.on("message", (m) => got.push(JSON.parse(String(m))));
-    ws.once("open", () => res({ ws, got }));
-    ws.once("error", rej);
-  });
-
 async function setup() {
-  const time = manualTime();
-  const t = await createTestApp({
-    clock: time.clock,
-    timers: time.timers,
-    monotonic: time.monotonic,
-    random: () => 0,
-  });
-  const aId = await t.createUser("a@example.test", PW);
-  const bId = await t.createUser("b@example.test", PW);
-  const cookieA = await t.cookieFor("a@example.test", PW);
-  const cookieA2 = await t.cookieFor("a@example.test", PW);
-  const cookieB = await t.cookieFor("b@example.test", PW);
-  const s = await startTestServer(t);
-  closers.push(s.close);
-  const { configHash } = t.deps.config.current();
-  async function submit(
-    cookie: string,
-    plate: string,
-    sourceIds = ["stateSource", "nationalSource"],
-  ) {
-    const r = await t.request("/api/v1/queries", {
-      method: "POST",
-      headers: {
-        cookie,
-        "content-type": "application/json",
-        "x-requested-with": "querymodule",
-        "idempotency-key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        queryType: "VEH",
-        values: { plate, state: "TX" },
-        sourceIds,
-        mode: "normal",
-        configHash,
-      }),
-    });
-    expect(r.status).toBe(202);
-    return SubmitQueryResponseSchema.parse(await r.json());
-  }
-  const sock = (cookie: string) => open(s.wsUrl, { origin: ORIGIN, cookie });
+  const base = await setupDispatchApp();
   const statuses = (got: unknown[]) =>
     got.filter((m) => (m as { type?: string }).type === "sourceStatus");
   const hello = (ws: WebSocket, got: unknown[], lastSeq: number | null = null) => {
@@ -87,10 +33,10 @@ async function setup() {
       return WsServerMessageSchema.parse(got[got.length - 1]);
     });
   };
-  return { t, time, aId, bId, cookieA, cookieA2, cookieB, submit, sock, statuses, hello };
+  return { ...base, statuses, hello };
 }
 
-describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
+describe("WebSocket event delivery (spec 5.3, FR-065)", () => {
   it("delivers sourceStatus only to the owner's sockets, matching event_log", async () => {
     const c = await setup();
     const a = await c.sock(c.cookieA);
@@ -102,11 +48,7 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     await c.time.run(200);
     await vi.waitFor(() => expect(c.statuses(a.got)).toHaveLength(2));
     await vi.waitFor(() => expect(c.statuses(a2.got)).toHaveLength(2));
-    const rows = await c.t.deps.db
-      .select()
-      .from(eventLog)
-      .where(eq(eventLog.userId, c.aId))
-      .orderBy(asc(eventLog.seq));
+    const rows = await rowsOf(c.t, c.aId);
     expect(rows).toHaveLength(2);
     for (const got of [a.got, a2.got]) {
       expect(c.statuses(got)).toMatchObject(
@@ -217,7 +159,7 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     release();
     await welcome;
     const w = a.got.find((m) => (m as { type?: string }).type === "welcome");
-    const rows = await c.t.deps.db.select().from(eventLog).where(eq(eventLog.userId, c.aId));
+    const rows = await rowsOf(c.t, c.aId);
     return { c, a, w, rows };
   }
 
@@ -228,8 +170,10 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     await vi.waitFor(() => expect(c.statuses(a.got)).toHaveLength(1));
     expect(c.statuses(a.got)).toMatchObject([{ seq: 1 }]);
     // welcome first, then the row exactly once (replayed or live, never both)
-    await new Promise((r) => setTimeout(r, 50));
-    expect(a.got.map((m) => (m as { type?: string }).type)).toEqual(["welcome", "sourceStatus"]);
+    await barrier(a.ws, a.got);
+    expect(
+      a.got.map((m) => (m as { type?: string }).type).filter((type) => type !== "pong"),
+    ).toEqual(["welcome", "sourceStatus"]);
     expect(c.t.fatals).toEqual([]);
     a.ws.close();
   });
@@ -239,7 +183,7 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     expect(w).toMatchObject({ type: "welcome", latestSeq: 1 });
     expect(rows).toHaveLength(1);
     await vi.waitFor(() => expect(c.t.deps.dispatcher.inFlight()).toBe(0));
-    await new Promise((r) => setTimeout(r, 50));
+    await barrier(a.ws, a.got);
     expect(c.statuses(a.got)).toEqual([]);
     expect(c.t.fatals).toEqual([]);
     a.ws.close();
@@ -261,18 +205,13 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     const b2 = await c.submit(c.cookieB, "ZZ-0001");
     await c.time.run(1_000);
     await vi.waitFor(() => expect(c.t.deps.dispatcher.inFlight()).toBe(0));
-    const rowsOf = (userId: string) =>
-      c.t.deps.db
-        .select()
-        .from(eventLog)
-        .where(eq(eventLog.userId, userId))
-        .orderBy(asc(eventLog.seq));
-    return { c, a, b: [b1, b2], rowsOf };
+    const ownRows = (userId: string) => rowsOf(c.t, userId);
+    return { c, a, b: [b1, b2], rowsOf: ownRows };
   }
   const idsOf = (got: unknown[], statuses: (g: unknown[]) => unknown[]) =>
     statuses(got).map((m) => (m as { correlationId: string }).correlationId);
 
-  it("replay after a real dispatch sends each user only their own event_log rows (SEC-014)", async () => {
+  it("replay after a real dispatch sends each user only their own event_log rows (spec 5.3)", async () => {
     const { c, a, b, rowsOf } = await dispatchedForBoth();
     const rowsA = await rowsOf(c.aId);
     const rowsB = await rowsOf(c.bId);
@@ -284,7 +223,8 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     await c.hello(sb.ws, sb.got, 2);
     await vi.waitFor(() => expect(c.statuses(sa.got)).toHaveLength(2));
     await vi.waitFor(() => expect(c.statuses(sb.got)).toHaveLength(2));
-    await new Promise((r) => setTimeout(r, 50));
+    await barrier(sa.ws, sa.got);
+    await barrier(sb.ws, sb.got);
     expect(sa.got[0]).toMatchObject({ type: "welcome", latestSeq: 2 });
     expect(sb.got[0]).toMatchObject({ type: "welcome", latestSeq: 4 });
     const pick = (r: (typeof rowsA)[number]) => ({
@@ -303,14 +243,14 @@ describe("WebSocket event delivery (spec 5.3, FR-065, SEC-014)", () => {
     for (const x of [sa.ws, sb.ws]) x.close();
   });
 
-  it("a lastSeq inside another user's seq range gets resync unknownCursor, never their rows (SEC-014)", async () => {
+  it("a lastSeq inside another user's seq range gets resync unknownCursor, never their rows (spec 5.3)", async () => {
     const { c } = await dispatchedForBoth();
     const sa = await c.sock(c.cookieA);
     // seq 3 exists for B only; A's newest is 2
     await c.hello(sa.ws, sa.got, 3);
     await vi.waitFor(() => expect(sa.got).toHaveLength(2));
-    await new Promise((r) => setTimeout(r, 50));
-    expect(sa.got).toMatchObject([
+    await barrier(sa.ws, sa.got);
+    expect(sa.got.filter((m) => m.type !== "pong")).toMatchObject([
       { type: "welcome", latestSeq: 2 },
       { type: "resync", reason: "unknownCursor", latestSeq: 2 },
     ]);

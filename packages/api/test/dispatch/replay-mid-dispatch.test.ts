@@ -1,96 +1,41 @@
-import {
-  QueryDetailSchema,
-  SubmitQueryResponseSchema,
-  WsServerMessageSchema,
-} from "@querymodule/core/contracts";
-import { asc, eq } from "drizzle-orm";
+import { QueryDetailSchema } from "@querymodule/core/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
-import { eventLog } from "../../src/db/schema";
-import { manualTime } from "../helpers/manual-time";
-import { createTestApp, startTestServer } from "../helpers/test-app";
+import type WebSocket from "ws";
+import {
+  barrier,
+  closeServers,
+  rowsOf,
+  sendHello,
+  setupDispatchApp,
+  type WsMsg,
+} from "../helpers/ws-replay";
 
 /*
- * P1 gate, spec 10.4 and 12.3 "socket-close-mid-dispatch" (FR-065, NFR-003, SEC-014; #591): the
+ * P1 gate, spec 10.4 and 12.3 "socket-close-mid-dispatch" (FR-065, NFR-003; #591): the
  * socket closes after the 202 and before the outcomes, the client reconnects with
  * hello { lastSeq: <last seen> }, every missed outcome arrives exactly once by replay in seq order,
- * and GET /api/v1/queries/:correlationId agrees with the replayed statuses. Mock data only: TIMEOUT
- * (nationalSource never answers) and ZZ-0001 are the shipped mock's scenario values (spec 5.4, 10.8).
+ * and GET /api/v1/queries/:correlationId agrees with the replayed statuses. Another user's rows
+ * never reach the replay (spec 5.3): B's seqs sit above A's cursor, so a missing owner filter
+ * fails this test on its own. Mock data only: TIMEOUT (nationalSource never answers) and ZZ-0001
+ * are the shipped mock's scenario values (spec 5.4, 10.8).
  */
-const PW = "correct-horse-battery-1";
-const ORIGIN = "http://localhost:3000";
-const closers: (() => Promise<void>)[] = [];
-afterEach(async () => {
-  for (const c of closers.splice(0)) await c();
-});
+afterEach(closeServers);
 
-type Status = {
+type Status = WsMsg & {
   type: "sourceStatus";
   seq: number;
   correlationId: string;
   sourceId: string;
   status: string;
 };
-type Msg = { type: string; latestSeq?: number; nonce?: string } | Status;
-const isStatus = (m: Msg): m is Status => m.type === "sourceStatus";
-
-const open = (url: string, headers: Record<string, string>) =>
-  new Promise<{ ws: WebSocket; got: Msg[]; raw: string[] }>((res, rej) => {
-    const ws = new WebSocket(url, { headers });
-    const got: Msg[] = [];
-    const raw: string[] = [];
-    ws.on("message", (m) => {
-      raw.push(String(m));
-      got.push(WsServerMessageSchema.parse(JSON.parse(String(m))) as Msg);
-    });
-    ws.once("open", () => res({ ws, got, raw }));
-    ws.once("error", rej);
-  });
+type Msg = WsMsg & { latestSeq?: number; nonce?: string };
+const isStatus = (m: Msg | Status): m is Status => m.type === "sourceStatus";
 
 async function setup() {
-  const time = manualTime();
-  const t = await createTestApp({
-    clock: time.clock,
-    timers: time.timers,
-    monotonic: time.monotonic,
-    random: () => 0,
-  });
-  const aId = await t.createUser("a@example.test", PW);
-  await t.createUser("b@example.test", PW);
-  const cookieA = await t.cookieFor("a@example.test", PW);
-  const cookieB = await t.cookieFor("b@example.test", PW);
-  const s = await startTestServer(t);
-  closers.push(s.close);
-  const { configHash } = t.deps.config.current();
-  async function submit(cookie: string, plate: string) {
-    const r = await t.request("/api/v1/queries", {
-      method: "POST",
-      headers: {
-        cookie,
-        "content-type": "application/json",
-        "x-requested-with": "querymodule",
-        "idempotency-key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        queryType: "VEH",
-        values: { plate, state: "TX" },
-        sourceIds: ["stateSource", "nationalSource"],
-        mode: "normal",
-        configHash,
-      }),
-    });
-    expect(r.status).toBe(202);
-    return SubmitQueryResponseSchema.parse(await r.json());
-  }
-  const sock = (cookie: string) => open(s.wsUrl, { origin: ORIGIN, cookie });
-  const hello = (ws: WebSocket, lastSeq: number | null) =>
-    ws.send(JSON.stringify({ v: 1, type: "hello", lastSeq }));
-  /** A ping answered after the replay: everything the hello sends is in (test/ws/replay.test.ts). */
-  const barrier = async (ws: WebSocket, got: Msg[]) => {
-    const nonce = crypto.randomUUID();
-    ws.send(JSON.stringify({ v: 1, type: "ping", nonce }));
-    await vi.waitFor(() => expect(got.some((m) => "nonce" in m && m.nonce === nonce)).toBe(true));
-  };
+  const base = await setupDispatchApp();
+  const { t, time, aId, bId, cookieA, cookieB, submit } = base;
+  const sock = (cookie: string) => base.sock<Msg | Status>(cookie);
+  const hello = sendHello;
   const close = (ws: WebSocket) =>
     new Promise<void>((r) => {
       ws.once("close", () => r());
@@ -101,8 +46,6 @@ async function setup() {
     await time.run(20_000);
     await vi.waitFor(() => expect(t.deps.dispatcher.inFlight()).toBe(0));
   }
-  const rowsOf = (userId: string) =>
-    t.deps.db.select().from(eventLog).where(eq(eventLog.userId, userId)).orderBy(asc(eventLog.seq));
   async function read(correlationId: string) {
     const r = await t.request(`/api/v1/queries/${correlationId}`, { headers: { cookie: cookieA } });
     expect(r.status).toBe(200);
@@ -120,6 +63,7 @@ async function setup() {
     t,
     time,
     aId,
+    bId,
     cookieA,
     cookieB,
     submit,
@@ -128,7 +72,7 @@ async function setup() {
     barrier,
     close,
     settleAll,
-    rowsOf,
+    rowsOf: (userId: string) => rowsOf(t, userId),
     httpStatuses,
     replayed,
   };
@@ -152,18 +96,19 @@ describe("socket closed mid-dispatch, replay on reconnect (spec 10.4, 12.3 P1 ga
     // no outcome yet: manual time has not moved since the 202s
     expect(await c.rowsOf(c.aId)).toHaveLength(2);
     await c.close(first.ws);
-    // another user's dispatch runs while A is away (SEC-014: never in A's replay)
-    const other = await c.submit(c.cookieB, "ZZ-0001");
+    // another user's dispatches run while A is away (spec 5.3: never in A's replay); seq is per
+    // user, so B's seqs 3 and 4 sit above A's cursor and only the owner filter keeps them out
+    const others = [await c.submit(c.cookieB, "ZZ-0001"), await c.submit(c.cookieB, "ZZ-0001")];
     await c.settleAll();
     const rows = await c.rowsOf(c.aId);
     expect(rows.map((r) => r.seq)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect((await c.rowsOf(c.bId)).map((r) => r.seq)).toEqual([1, 2, 3, 4]);
     expect(first.got.filter(isStatus)).toHaveLength(2);
 
     const again = await c.sock(c.cookieA);
     c.hello(again.ws, lastSeen);
     await vi.waitFor(() => expect(again.got.filter(isStatus)).toHaveLength(4));
     await c.barrier(again.ws, again.got);
-    await new Promise((r) => setTimeout(r, 20));
     const events = again.got.filter(isStatus);
     // welcome first, then seq 3 to 6 once each, in seq order
     expect(again.got[0]).toMatchObject({ type: "welcome", latestSeq: 6 });
@@ -179,7 +124,8 @@ describe("socket closed mid-dispatch, replay on reconnect (spec 10.4, 12.3 P1 ga
         status: r.status,
       })),
     );
-    expect(events.map((m) => m.correlationId)).not.toContain(other.correlationId);
+    for (const other of others)
+      expect(events.map((m) => m.correlationId)).not.toContain(other.correlationId);
     // the HTTP read agrees with the replay, source by source
     for (const ack of [slow, fast]) {
       expect(c.replayed(events, ack.correlationId).sort()).toEqual(
@@ -216,7 +162,6 @@ describe("socket closed mid-dispatch, replay on reconnect (spec 10.4, 12.3 P1 ga
     c.hello(again.ws, 1);
     await vi.waitFor(() => expect(again.got.filter(isStatus)).toHaveLength(1));
     await c.barrier(again.ws, again.got);
-    await new Promise((r) => setTimeout(r, 20));
     expect(again.got[0]).toMatchObject({ type: "welcome", latestSeq: 2 });
     const events = again.got.filter(isStatus);
     expect(events).toMatchObject([

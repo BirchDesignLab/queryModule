@@ -1,6 +1,4 @@
-import { WS_PROTOCOL_VERSION, WsServerMessageSchema } from "@querymodule/core/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import { withTransaction } from "../../src/db/tx";
 import {
   appendEvent,
@@ -13,8 +11,9 @@ import { uuidv7 } from "../../src/ids";
 import { WS_LOCAL_CLOSE } from "../../src/ws/server";
 import { createTestClock } from "../helpers/fixture";
 import { createTestApp, startTestServer, type TestApp } from "../helpers/test-app";
+import { barrier, ORIGIN, openSocket, PW, sendHello } from "../helpers/ws-replay";
 
-// Spec 5.3 replay (FR-043, FR-065, NFR-003, SEC-014; spec 4.7, 6.8; ADR-0013): hello { lastSeq }
+// Spec 5.3 replay (FR-043, FR-065, NFR-003; spec 4.7, 6.8; ADR-0013): hello { lastSeq }
 // gets welcome, then the owner's missed event_log rows in seq order or one resync, then live events.
 // Each test switches the replay read per test: a forced failure, or a hook that runs before it.
 const replayHook = vi.hoisted(() => ({
@@ -36,8 +35,6 @@ vi.mock("../../src/dispatch/event-log", async (importOriginal) => {
     },
   };
 });
-const PW = "correct-horse-battery-1";
-const ORIGIN = "http://localhost:3000";
 const DAY = EVENT_LOG_RETENTION_MS;
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -47,15 +44,13 @@ afterEach(async () => {
   for (const c of closers.splice(0)) await c();
 });
 
-type Msg = { type?: string; seq?: number; reason?: string; latestSeq?: number };
-const open = (url: string, headers: Record<string, string>) =>
-  new Promise<{ ws: WebSocket; got: Msg[] }>((res, rej) => {
-    const ws = new WebSocket(url, { headers });
-    const got: Msg[] = [];
-    ws.on("message", (m) => got.push(WsServerMessageSchema.parse(JSON.parse(String(m)))));
-    ws.once("open", () => res({ ws, got }));
-    ws.once("error", rej);
-  });
+type Msg = {
+  type: string;
+  seq?: number;
+  reason?: string;
+  latestSeq?: number;
+  correlationId?: string;
+};
 
 /** One appended row per call, in the caller's transaction, as the dispatcher writes them. */
 async function append(t: TestApp, userId: string, n: number, at: number) {
@@ -88,25 +83,14 @@ async function setup() {
   const cookieB = await t.cookieFor("b@example.test", PW);
   const s = await startTestServer(t);
   closers.push(s.close);
-  const sock = (cookie: string) => open(s.wsUrl, { origin: ORIGIN, cookie });
+  const sock = (cookie: string) => openSocket<Msg>(s.wsUrl, { origin: ORIGIN, cookie });
   /** Appends one row and publishes it after the commit, as the outcome writer does. */
   const live = async (userId: string) => {
     const [e] = await append(t, userId, 1, clock.now());
     t.deps.eventBus.publish(userId, e as SourceStatusEvent);
     return e as SourceStatusEvent;
   };
-  const hello = (ws: WebSocket, lastSeq: number | null) =>
-    ws.send(JSON.stringify({ v: WS_PROTOCOL_VERSION, type: "hello", lastSeq }));
-  /** A ping is answered after the hello's replay read, so everything the hello sends is in. */
-  const barrier = async (ws: WebSocket, got: Msg[]) => {
-    const nonce = crypto.randomUUID();
-    ws.send(JSON.stringify({ v: WS_PROTOCOL_VERSION, type: "ping", nonce }));
-    await vi.waitFor(() =>
-      expect(got.some((m) => m.type === "pong" && (m as { nonce?: string }).nonce === nonce)).toBe(
-        true,
-      ),
-    );
-  };
+  const hello = sendHello;
   const shape = (got: Msg[]) =>
     got
       .filter((m) => m.type !== "pong")
@@ -120,7 +104,7 @@ async function setup() {
   return { t, clock, aId, bId, cookieA, cookieB, sock, live, hello, barrier, shape };
 }
 
-describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
+describe("replay by lastSeq (spec 5.3, FR-043, FR-065)", () => {
   it("lastSeq 2 of 5 gets welcome, seq 3, 4, 5 in order, then a live 6", async () => {
     const c = await setup();
     const rows = await append(c.t, c.aId, 5, c.clock.now());
@@ -217,7 +201,7 @@ describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
     for (const x of [edge.ws, cursor.ws, past.ws]) x.close();
   });
 
-  it("replays only the socket user's own rows; B's events never reach A (SEC-014)", async () => {
+  it("replays only the socket user's own rows; B's events never reach A (spec 5.3)", async () => {
     const c = await setup();
     await append(c.t, c.bId, 4, c.clock.now());
     await append(c.t, c.aId, 2, c.clock.now());
@@ -264,7 +248,8 @@ describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
       };
       c.hello(a.ws, 1);
       await c.barrier(a.ws, a.got);
-      await new Promise((r) => setTimeout(r, 20));
+      // the "after" publish fires on a timer inside the read hook; a second round trip follows it
+      await c.barrier(a.ws, a.got);
       expect(c.shape(a.got)).toEqual(["welcome:4", 2, 3, 4]);
       await c.live(c.aId);
       await vi.waitFor(() => expect(c.shape(a.got)).toEqual(["welcome:4", 2, 3, 4, 5]));
@@ -336,7 +321,6 @@ describe("replay by lastSeq (spec 5.3, FR-043, FR-065, SEC-014)", () => {
     c.hello(a.ws, 1);
     await vi.waitFor(() => expect(c.shape(a.got)).toEqual(["welcome:3", 2, 3, 4]));
     await c.barrier(a.ws, a.got);
-    await new Promise((r) => setTimeout(r, 20));
     expect(c.shape(a.got)).toEqual(["welcome:3", 2, 3, 4]);
     a.ws.close();
   });
