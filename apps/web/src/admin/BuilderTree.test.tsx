@@ -3,7 +3,14 @@ import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import { findSetting } from "../test/builder-tree.js";
 import { escapeRegExp } from "../test/escape-regexp.js";
-import { API, server, TEST_USER } from "../test/msw-server.js";
+import {
+  API,
+  adminConfigBody,
+  CLIENT_CONFIG,
+  RAW_MOCK,
+  server,
+  TEST_USER,
+} from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
@@ -337,14 +344,20 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     expect(next).toHaveFocus();
     await t.user.keyboard("{ArrowUp}");
     expect(vehicle).toHaveFocus();
+    // Up from the first row reaches the group's header, the top of the list.
     await t.user.keyboard("{ArrowUp}");
-    expect(vehicle).toHaveFocus();
+    expect(within(tree()).getByRole("button", { name: "Query types" })).toHaveFocus();
+    await t.user.keyboard("{ArrowUp}");
+    expect(within(tree()).getByRole("button", { name: "Query types" })).toHaveFocus();
     // From the last query type, Down goes on to the first site item.
     const types = within(tree()).getByRole("tree", { name: "Query types" });
     const lastType = [...types.querySelectorAll<HTMLElement>('[role="treeitem"]')].at(
       -1,
     ) as HTMLElement;
     act(() => lastType.focus());
+    await t.user.keyboard("{ArrowDown}");
+    // The Site group's header sits between the two trees; Down again enters the tree.
+    expect(within(tree()).getByRole("button", { name: "Site" })).toHaveFocus();
     await t.user.keyboard("{ArrowDown}");
     const site = within(tree()).getByRole("tree", { name: "Site" });
     expect(site.querySelector('[role="treeitem"]')).toHaveFocus();
@@ -372,14 +385,16 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     expect(item(/^Vehicle VEH/)).toHaveAttribute("aria-selected", "true");
   });
 
-  it("Left on a section goes to its type; Left on a top-level leaf does nothing", async () => {
+  it("Left on a section goes to its type; Left on a top-level leaf goes to its group", async () => {
     const t = await openBuilder();
     focusItem(/^More details/);
     await t.user.keyboard("{ArrowLeft}");
     expect(item(/^Vehicle VEH/)).toHaveFocus();
     const sources = focusItem(/^Sources/);
-    await t.user.keyboard("{ArrowLeft}{ArrowRight}");
+    await t.user.keyboard("{ArrowRight}");
     expect(sources).toHaveFocus();
+    await t.user.keyboard("{ArrowLeft}");
+    expect(within(tree()).getByRole("button", { name: "Site" })).toHaveFocus();
   });
 
   it("Home and End go to the first and last row of the tree they are in", async () => {
@@ -509,5 +524,101 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     const vehicle = focusItem(/^Vehicle VEH/);
     await t.user.keyboard("{ArrowLeft}");
     expect(vehicle).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
+describe("collapsible groups (#586)", () => {
+  /** The builder with a mock file, so all three top-level groups show. */
+  async function openWithMock() {
+    const user = { ...TEST_USER, role: "implementer" };
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user }),
+      ),
+      http.get(`${API}/api/v1/config`, () => HttpResponse.json(CLIENT_CONFIG)),
+      http.get(`${API}/api/v1/admin/config`, () =>
+        HttpResponse.json(adminConfigBody({ mock: RAW_MOCK })),
+      ),
+    );
+    const t = renderRoot({ path: "/admin/config" });
+    await screen.findByRole("tab", { name: "Form" });
+    return t;
+  }
+  const header = (name: string) => within(tree()).getByRole("button", { name });
+  const focusHeader = (name: string) => {
+    const el = header(name);
+    act(() => el.focus());
+    return el;
+  };
+
+  it("every top-level group has a disclosure with aria-expanded, open at first", async () => {
+    await openWithMock();
+    for (const name of ["Query types", "Site", "Mock responses"])
+      expect(header(name)).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("Left and Right on the Site and Mock responses groups close and open them", async () => {
+    const t = await openWithMock();
+    for (const [name, child] of [
+      ["Site", /^Sources/],
+      ["Mock responses", /^Coverage/],
+    ] as const) {
+      const h = focusHeader(name);
+      await t.user.keyboard("{ArrowLeft}");
+      expect(h).toHaveAttribute("aria-expanded", "false");
+      expect(h).toHaveFocus();
+      expect(within(tree()).queryByRole("treeitem", { name: child })).toBeNull();
+      await t.user.keyboard("{ArrowRight}");
+      expect(h).toHaveAttribute("aria-expanded", "true");
+      expect(item(child)).toBeInTheDocument();
+      // Right on an open group steps to its first row; Left on that row goes back to the group.
+      await t.user.keyboard("{ArrowRight}");
+      expect(
+        within(tree())
+          .getAllByRole("treeitem")
+          .find((x) => x === document.activeElement),
+      ).toBeDefined();
+      await t.user.keyboard("{ArrowLeft}");
+      expect(h).toHaveFocus();
+    }
+  });
+
+  it("Left on a top-level row goes to its group; the click and Enter toggle too", async () => {
+    const t = await openWithMock();
+    act(() => item(/^Sources/).focus());
+    await t.user.keyboard("{ArrowLeft}");
+    expect(header("Site")).toHaveFocus();
+    await t.user.keyboard("{Enter}");
+    expect(header("Site")).toHaveAttribute("aria-expanded", "false");
+    await t.user.click(header("Site"));
+    expect(header("Site")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("a collapsed group opens for an issue pointer, so the row is on screen", async () => {
+    const t = await openWithMock();
+    focusHeader("Site");
+    await t.user.keyboard("{ArrowLeft}");
+    expect(within(tree()).queryByRole("treeitem", { name: /^Terminal commands/ })).toBeNull();
+    const store = configDraftStore(t.services);
+    const doc = store.getState().doc as { commands: { code: string }[] };
+    const i = doc.commands.findIndex((c) => c.code === "VEH");
+    act(() => store.getState().setPath(["commands", i, "code"], "V.EH"));
+    await t.user.click(
+      await screen.findByRole("button", {
+        name: /^1 error, \d+ warnings?\. Go to the first issue\.$/,
+      }),
+    );
+    await waitFor(() => expect(header("Site")).toHaveAttribute("aria-expanded", "true"));
+    // The issue is inside the commands item: its row is on screen again, not hidden in the group.
+    expect(item(/^Terminal commands/)).toBeVisible();
+  });
+
+  it("collapsed state is not in the config document or in storage", async () => {
+    const t = await openWithMock();
+    const before = JSON.stringify(configDraftStore(t.services).getState().doc);
+    focusHeader("Query types");
+    await t.user.keyboard("{ArrowLeft}");
+    expect(JSON.stringify(configDraftStore(t.services).getState().doc)).toBe(before);
+    expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 });
