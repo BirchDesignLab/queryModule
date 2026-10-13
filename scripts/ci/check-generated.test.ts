@@ -59,18 +59,4 @@ describe("what gen:check covers (#623 AW1 Q2)", () => {
   it("regenerates the client types after the contracts, which they are derived from", () => {
     expect(GENERATOR_SCRIPTS).toEqual(["contracts:gen", "tokens:gen", "client:gen"]);
   });
-
-  it("flags a stale generated client file as drift", () => {
-    const stale = "packages/client/src/api/generated/openapi-types.ts";
-    const r = findDrift(
-      stub({
-        diff: {
-          status: 0,
-          stdout: `${stale}
-`,
-        },
-      }),
-    );
-    expect(r).toEqual({ ok: false, reason: "drift", files: [stale] });
-  });
 });

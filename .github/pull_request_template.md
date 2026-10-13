@@ -30,6 +30,6 @@ With an artifact, no gate or critical file this PR changes is changed again afte
 ## Test plan
 
 - [ ] Failing test first, then green (TDD); the failing test: <!-- name it -->
-- [ ] `pnpm verify` (lint, typecheck, coverage, config:validate, gen:check)
+- [ ] `pnpm verify` (lint, typecheck, coverage, config:validate, gen:check, sdd:harness)
 - [ ] `pnpm audit --prod`
 - [ ] Mock data only; no real person, vehicle or property records

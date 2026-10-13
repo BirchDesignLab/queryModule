@@ -75,7 +75,7 @@ pnpm 12 notes:
 | `lint` | `biome ci --error-on-warnings .` | Now |
 | `test` | `vitest run` | Now |
 | `coverage` | `vitest run --coverage` | Now |
-| `verify` | lint, typecheck, coverage, `config:validate`, `gen:check` | Now, but stops at `config:validate` until Task 18 lands that script's target |
+| `verify` | lint, typecheck, coverage, `config:validate`, `gen:check`, `sdd:harness` | Now, but stops at `config:validate` until Task 18 lands that script's target |
 | `contracts:gen`, `gen:check` | generate and check derived contract files | Task 17 |
 | `config:validate`, `config:migrate` | validate and migrate `SiteConfig` files | Task 18 |
 | `tokens:gen` | regenerate design tokens | Task 23 |
