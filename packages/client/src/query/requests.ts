@@ -1,7 +1,11 @@
 import type { SourceStatus } from "@querymodule/core/contracts";
 import { createStore, type StoreApi } from "zustand/vanilla";
+import type { components } from "../api/generated/openapi-types.js";
 import type { SourceStatusEvent, Timers } from "../feed/feed-socket.js";
 import type { SubmitOutcome, SubmitQueryResponse, SubmitRequest } from "./submit.js";
+
+/** One request with its parts, per-source status and payloads (GET /api/v1/queries/:correlationId). */
+export type QueryDetail = components["schemas"]["getQuery200"];
 
 /** Why a request did not reach an acknowledgment: the submit outcome's kind, translated at render. */
 export type RequestFailure = Exclude<SubmitOutcome["kind"], "acknowledged">;
@@ -34,12 +38,21 @@ interface RequestBase {
    * for is now listed as acknowledged, so it cannot be retried again.
    */
   superseded?: true;
+  /**
+   * Set on a row built from a fetched detail for a request this list never sent (an event for an
+   * unknown correlation ID, spec 6.7). Its own 202, if one is still coming, replaces it.
+   */
+  placeholder?: true;
 }
 
-/** One source a part went to and where it stands; status only, never a value or a payload. */
+/**
+ * One source a part went to and where it stands. `result` is the source's payload once fetched:
+ * regulated client data (spec 6.7), memory only, gone with the row on a reset.
+ */
 export interface RequestSource {
   sourceId: string;
   status: SourceStatus;
+  result?: { payload: Record<string, unknown> };
 }
 
 /** A part of the 202 with its sources: every dispatched pair starts pending, a skipped part has none. */
@@ -104,6 +117,12 @@ export interface RequestsState {
    * through `onStatusSummary`, coalesced per correlation ID (spec 6.6).
    */
   applyEvent(event: SourceStatusEvent): void;
+  /**
+   * Applies a fetched detail (spec 6.7): a pending source moves to the detail's status (never
+   * backwards), each returned source gains its payload, parts take the detail's origin, parent and
+   * skip reasons. A correlation ID this list does not hold becomes a placeholder row.
+   */
+  applyDetail(detail: QueryDetail): void;
   /** One call per correlation ID per 1500 ms window that changed something; returns the unsubscribe. */
   onStatusSummary(handler: (announcement: StatusAnnouncement) => void): () => void;
   reset(): void;
@@ -171,6 +190,94 @@ function applyToParts(
     };
   });
   return changed ? next : null;
+}
+
+/** Folds a fetched detail into the parts: forward status moves, payloads, origin, parent and reasons. */
+function mergeDetail(
+  parts: readonly RequestPart[],
+  detail: QueryDetail,
+): { parts: RequestPart[]; moved: boolean } | null {
+  let changed = false;
+  let moved = false;
+  const next = parts.map((part) => {
+    const fetched = detail.parts.find((p) => p.partId === part.partId);
+    if (fetched === undefined) return part;
+    const sources = part.sources.map((local) => {
+      const remote = fetched.sources.find((r) => r.sourceId === local.sourceId);
+      if (remote === undefined) return local;
+      let status = local.status;
+      if (local.status === "pending" && remote.status !== "pending") {
+        status = remote.status;
+        moved = true;
+        changed = true;
+      }
+      if (local.result === undefined && remote.payload !== undefined && status === "returned") {
+        changed = true;
+        return { ...local, status, result: { payload: remote.payload } };
+      }
+      return status === local.status ? local : { ...local, status };
+    });
+    const same =
+      part.origin === fetched.origin &&
+      part.parentPartId === fetched.parentPartId &&
+      JSON.stringify(part.skipReasons) === JSON.stringify(fetched.skipReasons);
+    if (!same) changed = true;
+    return same
+      ? { ...part, sources }
+      : {
+          ...part,
+          origin: fetched.origin,
+          parentPartId: fetched.parentPartId,
+          skipReasons: fetched.skipReasons,
+          sources,
+        };
+  });
+  return changed ? { parts: next, moved } : null;
+}
+
+/** A row for a request this list did not send, built from its detail alone. */
+function placeholderParts(detail: QueryDetail): RequestPart[] {
+  return detail.parts.map((part) => ({
+    partId: part.partId,
+    parentPartId: part.parentPartId,
+    origin: part.origin,
+    queryType: part.queryType,
+    status: part.sources.length > 0 ? ("dispatched" as const) : ("skipped" as const),
+    sourceIds: part.sources.map((source) => source.sourceId),
+    droppedSourceIds: part.droppedSourceIds,
+    skipReasons: part.skipReasons,
+    sources: part.sources.map((source) => ({
+      sourceId: source.sourceId,
+      status: source.status,
+      ...(source.status === "returned" && source.payload !== undefined
+        ? { result: { payload: source.payload } }
+        : {}),
+    })),
+  }));
+}
+
+/** Carries what a placeholder learned (settled statuses, payloads) onto the parts of the real 202. */
+function overlay(
+  parts: readonly RequestPart[],
+  from: readonly RequestPart[],
+): { parts: RequestPart[]; moved: boolean } {
+  let moved = false;
+  const next = parts.map((part) => {
+    const known = from.find((p) => p.partId === part.partId);
+    if (known === undefined) return part;
+    return {
+      ...part,
+      sources: part.sources.map((local) => {
+        const other = known.sources.find((s) => s.sourceId === local.sourceId);
+        if (other === undefined) return local;
+        const status = local.status === "pending" ? other.status : local.status;
+        if (status !== local.status) moved = true;
+        const result = local.result ?? (status === "returned" ? other.result : undefined);
+        return { ...local, status, ...(result === undefined ? {} : { result }) };
+      }),
+    };
+  });
+  return { parts: next, moved };
 }
 
 /** A shift's list stays useful at a glance; older rows fall off rather than grow without bound. */
@@ -286,45 +393,61 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
               return { items: s.items.filter((item) => item.id !== id) };
             }
           }
-          return {
-            items: s.items.map((item): RequestEntry => {
-              if (item.id !== id) return item;
-              const base = {
-                id: item.id,
-                sentAt: item.sentAt,
-                queryType: item.queryType,
-                summary: item.summary,
-                ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
-                ...(item.idempotencyKey === undefined
-                  ? {}
-                  : { idempotencyKey: item.idempotencyKey }),
-                ...(item.superseded === undefined ? {} : { superseded: item.superseded }),
-              };
-              let filled: readonly RequestPart[] = [];
-              if (outcome.kind === "acknowledged") {
-                filled = withSources(outcome.response.parts);
-                // Events that outran this 202 (spec 6.7) land now, once.
-                const early = held.get(outcome.response.correlationId) ?? [];
-                held.delete(outcome.response.correlationId);
-                // Only an event that moved a source is worth a summary: events for pairs this 202
-                // does not have change nothing and must not announce "0 of N done".
-                for (const event of early) {
-                  const applied = applyToParts(filled, event);
-                  if (applied === null) continue;
-                  filled = applied;
-                  pendingAnnouncement = outcome.response.correlationId;
-                }
+          const placeholder =
+            outcome.kind === "acknowledged"
+              ? s.items.find(
+                  (item) =>
+                    item.id !== id &&
+                    item.status === "acknowledged" &&
+                    item.placeholder === true &&
+                    item.correlationId === outcome.response.correlationId,
+                )
+              : undefined;
+          const mapped = s.items.map((item): RequestEntry => {
+            if (item.id !== id) return item;
+            const base = {
+              id: item.id,
+              sentAt: item.sentAt,
+              queryType: item.queryType,
+              summary: item.summary,
+              ...(item.submitted === undefined ? {} : { submitted: item.submitted }),
+              ...(item.idempotencyKey === undefined ? {} : { idempotencyKey: item.idempotencyKey }),
+              ...(item.superseded === undefined ? {} : { superseded: item.superseded }),
+            };
+            let filled: readonly RequestPart[] = [];
+            if (outcome.kind === "acknowledged") {
+              filled = withSources(outcome.response.parts);
+              // Events that outran this 202 (spec 6.7) land now, once.
+              const early = held.get(outcome.response.correlationId) ?? [];
+              held.delete(outcome.response.correlationId);
+              // Only an event that moved a source is worth a summary: events for pairs this 202
+              // does not have change nothing and must not announce "0 of N done".
+              for (const event of early) {
+                const applied = applyToParts(filled, event);
+                if (applied === null) continue;
+                filled = applied;
+                pendingAnnouncement = outcome.response.correlationId;
               }
-              return outcome.kind === "acknowledged"
-                ? {
-                    ...base,
-                    status: "acknowledged",
-                    correlationId: outcome.response.correlationId,
-                    acknowledgedAt: outcome.response.acknowledgedAt,
-                    parts: filled,
-                  }
-                : { ...base, status: "failed", failure: outcome.kind };
-            }),
+              // A placeholder the detail fetch built for this request (spec 6.7) hands over what it learned.
+              if (placeholder?.status === "acknowledged") {
+                const merged = overlay(filled, placeholder.parts);
+                filled = merged.parts;
+                if (merged.moved) pendingAnnouncement = outcome.response.correlationId;
+              }
+            }
+            return outcome.kind === "acknowledged"
+              ? {
+                  ...base,
+                  status: "acknowledged",
+                  correlationId: outcome.response.correlationId,
+                  acknowledgedAt: outcome.response.acknowledgedAt,
+                  parts: filled,
+                }
+              : { ...base, status: "failed", failure: outcome.kind };
+          });
+          return {
+            items:
+              placeholder === undefined ? mapped : mapped.filter((item) => item !== placeholder),
           };
         });
         dropGoneWindows();
@@ -363,6 +486,41 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
           ),
         }));
         announceLater(event.correlationId);
+      },
+      applyDetail(detail) {
+        const entry = get().items.find(
+          (item) => item.status === "acknowledged" && item.correlationId === detail.correlationId,
+        );
+        if (entry?.status !== "acknowledged") {
+          const primary =
+            detail.parts.find((part) => part.parentPartId === null) ?? detail.parts[0];
+          if (primary === undefined) return;
+          counter += 1;
+          const row: RequestEntry = {
+            id: `r${counter}`,
+            sentAt: detail.submittedAt,
+            queryType: primary.queryType,
+            summary: "",
+            placeholder: true,
+            status: "acknowledged",
+            correlationId: detail.correlationId,
+            acknowledgedAt: detail.submittedAt,
+            parts: placeholderParts(detail),
+          };
+          set((s) => ({ items: [row, ...s.items].slice(0, MAX_ROWS) }));
+          dropGoneWindows();
+          if (statusSummary(row).done > 0) announceLater(detail.correlationId);
+          return;
+        }
+        const merged = mergeDetail(entry.parts, detail);
+        if (merged === null) return;
+        set((s) => ({
+          items: s.items.map(
+            (item): RequestEntry =>
+              item.id === entry.id ? { ...entry, parts: merged.parts } : item,
+          ),
+        }));
+        if (merged.moved) announceLater(detail.correlationId);
       },
       onStatusSummary(handler) {
         handlers.add(handler);

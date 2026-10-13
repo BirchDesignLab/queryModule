@@ -16,6 +16,7 @@ import {
   createQueryClient,
   createRequestsStore,
   createResetController,
+  createResultFetcher,
   createSessionController,
   createSubmitController,
   type DraftStore,
@@ -102,8 +103,13 @@ export function createServices(options: ServicesOptions): Services {
     timers,
     random: Math.random,
   });
+  // Fetches each request's payloads when its sources settle (spec 6.7); memory only, reset below.
+  const results = createResultFetcher({ api, timers, store: requests });
   // Status events land in the requests store, which holds the ones that outrun their 202 (spec 6.7).
-  feed.onSourceStatus((event) => requests.getState().applyEvent(event));
+  feed.onSourceStatus((event) => {
+    requests.getState().applyEvent(event);
+    results.handleEvent(event);
+  });
   registerQueryCacheReset(reset, queryClient);
   reset.register(() => feed.close());
   reset.register(() => configRefresh.stop());
@@ -112,6 +118,7 @@ export function createServices(options: ServicesOptions): Services {
   reset.register(() => preferences.getState().reset());
   reset.register(() => drafts.getState().reset());
   reset.register(() => submit.getState().reset());
+  reset.register(() => results.reset());
   reset.register(() => requests.getState().reset());
   return {
     platform: options.platform,

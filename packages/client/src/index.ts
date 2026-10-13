@@ -74,6 +74,7 @@ export {
 } from "./preferences/preferences-store.js";
 export { createQueryClient, registerQueryCacheReset } from "./query/query-client.js";
 export type {
+  QueryDetail,
   RequestEntry,
   RequestFailure,
   RequestPart,
@@ -85,6 +86,8 @@ export type {
   SubmittedQuery,
 } from "./query/requests.js";
 export { createRequestsStore, statusSummary } from "./query/requests.js";
+export type { ResultFetcher, ResultFetcherOptions } from "./query/results.js";
+export { createResultFetcher } from "./query/results.js";
 export type { RetryResult } from "./query/retry.js";
 export { isRetryable, retryRequest } from "./query/retry.js";
 export type {

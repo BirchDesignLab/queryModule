@@ -1,7 +1,8 @@
 import { act, screen, waitFor } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { ACK_CORRELATION_ID, FeedDriver } from "../test/feed-driver.js";
-import { TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
+import { API, detail202, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 import { testServices } from "../test/render-routes.js";
 
@@ -37,6 +38,37 @@ describe("FR-065 the feed's events reach the requests store (spec 6.7)", () => {
     if (row?.status !== "acknowledged") throw new Error("not acknowledged");
     expect(row.parts[0]?.sources.map((s) => s.status)).toEqual(["returned", "pending"]);
     services.feed.close();
+  });
+});
+
+describe("spec 6.7 the feed's events fetch the result payloads", () => {
+  it("a returned event fills the source's payload, which sign-out clears", async () => {
+    server.use(
+      http.get(`${API}/api/v1/queries/:id`, () =>
+        HttpResponse.json(
+          detail202([
+            { sourceId: "stateSource", status: "returned", payload: { make: "ZZ-MAKE" } },
+            { sourceId: "nationalSource", status: "pending" },
+          ]),
+        ),
+      ),
+    );
+    const driver = new FeedDriver();
+    const services = testServices({ createSocket: driver.createSocket });
+    const id = services.requests.getState().begin({ queryType: "VEH", summary: "VEH.ZZ-0001" });
+    services.requests
+      .getState()
+      .settle(id, { kind: "acknowledged", response: ACK, queryType: "VEH" });
+    services.feed.open();
+    await waitFor(() => expect(services.feed.state()).toBe("open"));
+    driver.status("stateSource", "returned");
+    const payload = () => {
+      const row = services.requests.getState().items[0];
+      return row?.status === "acknowledged" ? row.parts[0]?.sources[0]?.result?.payload : undefined;
+    };
+    await waitFor(() => expect(payload()).toEqual({ make: "ZZ-MAKE" }));
+    services.reset.resetAll();
+    expect(services.requests.getState().items).toEqual([]);
   });
 });
 

@@ -134,6 +134,48 @@ export const ACK_202 = {
   ],
 };
 
+/**
+ * GET /api/v1/queries/:correlationId for the canned 202: every source still pending, so the
+ * result fetch a status event starts changes nothing unless a test overrides it (mock data only).
+ */
+export function detail202(
+  sources: {
+    sourceId: string;
+    status: string;
+    payload?: Record<string, unknown>;
+  }[] = ACK_202.parts[0].sourceIds.map((sourceId) => ({ sourceId, status: "pending" })),
+) {
+  const [part] = ACK_202.parts;
+  return {
+    correlationId: ACK_202.correlationId,
+    submittedAt: ACK_202.acknowledgedAt,
+    configHash: "h1",
+    parts: [
+      {
+        partId: part.partId,
+        parentPartId: part.parentPartId,
+        origin: part.origin,
+        queryType: part.queryType,
+        typeValues: {},
+        plateOnly: false,
+        skipReasons: [],
+        droppedSourceIds: [],
+        purged: false,
+        sources: sources.map((source) => ({
+          resultId: `res-${source.sourceId}`,
+          adapterKind: "mock",
+          errorCode: null,
+          createdAt: ACK_202.acknowledgedAt,
+          receivedAt: source.status === "pending" ? null : ACK_202.acknowledgedAt,
+          timedOutAt: null,
+          purged: false,
+          ...source,
+        })),
+      },
+    ],
+  };
+}
+
 export function resetMswState(): void {
   signedIn = false;
   submitRecorder.calls = [];
@@ -170,6 +212,7 @@ export const server = setupServer(
     });
     return HttpResponse.json(ACK_202, { status: 202 });
   }),
+  http.get(`${API}/api/v1/queries/:correlationId`, () => HttpResponse.json(detail202())),
   http.get(`${API}/api/v1/me/preferences`, () => HttpResponse.json(PREFERENCES)),
   http.put(`${API}/api/v1/me/preferences`, async ({ request }) =>
     HttpResponse.json(await request.json()),
