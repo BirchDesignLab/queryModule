@@ -60,3 +60,26 @@ describe("mockChangeEntries: which response a line opens", () => {
     expect(text).not.toContain("ZZ-0001");
   });
 });
+
+describe("#572 (#577) an added response's line says its default and scenario count", () => {
+  const tp = ((key: string, params?: Record<string, unknown>) =>
+    `${key}${params === undefined ? "" : JSON.stringify(params)}`) as Translator["t"];
+  it("a no-record scaffold reads no record, 0 scenarios", () => {
+    const added = { queryType: "PRO", default: { status: "NO RECORD" }, scenarios: [] };
+    const live = [response({ kind: "A" }, "ZZ-0001")];
+    const entries = mockChangeEntries(file(live), file([...live, added]), names, tp);
+    expect(entries.map((e) => e.text)).toEqual([
+      'admin.diff.mock.responseAddedNoRecordMany{"count":0}',
+    ]);
+  });
+
+  it("a record default with one scenario reads record, 1 scenario", () => {
+    const added = response(undefined, "ZZ-0001");
+    const withRecord = { ...added, default: { status: "RECORD FOUND" } };
+    const live = [response({ kind: "A" }, "ZZ-0001")];
+    const entries = mockChangeEntries(file(live), file([...live, withRecord]), names, tp);
+    expect(entries.map((e) => e.text)).toEqual([
+      'admin.diff.mock.responseAddedRecordOne{"count":1}',
+    ]);
+  });
+});

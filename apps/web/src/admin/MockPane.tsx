@@ -1,21 +1,10 @@
-import { useId } from "react";
-import { useT } from "../app/i18n-context.js";
+import type { JsonObject } from "./draft.js";
+import { TryMatchPane } from "./TryMatchPane.js";
 
 /**
- * The right pane on a mock item (Q3, developer 10-05-26: "Try a match" is after the demo, #565): a
- * static note in place of the live preview. No matcher runs here and nothing is sent.
+ * The right pane on a mock item: Try a match (#565), which replaced the static note BW2 shipped
+ * (Q3, developer 10-05-26). It reads the draft's mock and sends nothing.
  */
-export function MockPane() {
-  const t = useT();
-  const headingId = useId();
-  return (
-    <section className="qm-admin__preview qm-preview" aria-labelledby={headingId}>
-      <div className="qm-preview__head">
-        <h3 id={headingId}>{t("admin.mock.pane.title")}</h3>
-      </div>
-      <div className="qm-preview__body">
-        <p className="qm-preview__state">{t("admin.mock.pane.note")}</p>
-      </div>
-    </section>
-  );
+export function MockPane({ doc, selected }: { doc: JsonObject; selected: string | null }) {
+  return <TryMatchPane doc={doc} selected={selected} />;
 }

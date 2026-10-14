@@ -13,6 +13,7 @@ import {
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
+import { flowRowId, focusWhenRendered } from "./MockFlows.js";
 import { parseMock } from "./mock-model.js";
 
 beforeAll(preloadAdminRoutes);
@@ -169,6 +170,84 @@ describe("a new query type on a mock site", () => {
     expect(status).toMatch(/Mock response added: State system, BOAT\. Default: no record\./);
   });
 
+  it("#572 the announcement carries no value even when the mock holds one for the type", async () => {
+    const t = await openBuilder();
+    await addType(t, "BOAT", ["stateSource", "nationalSource"]);
+    act(() => {
+      const m = structuredClone(draftMock(t));
+      m.sources.nationalSource?.responses.push({
+        queryType: "BOAT",
+        default: { status: "NO RECORD" },
+        scenarios: [{ when: { plate: "ZZ-0123" }, respond: { status: "STOLEN" } }],
+      });
+      store(t).setMock(m as unknown as Record<string, unknown>);
+    });
+    await t.user.click(
+      within(await mockGroup()).getByRole("button", { name: /Add mock response for State system/ }),
+    );
+    const status = [...document.querySelectorAll('[role="status"]')]
+      .map((el) => el.textContent ?? "")
+      .join(" ");
+    expect(status).toMatch(/Mock response added: State system, BOAT/);
+    expect(status).not.toContain("ZZ-0123");
+    expect(status).not.toContain("STOLEN");
+  });
+
+  it("#572 Add all announces the count, keeps focus in the section and undoes in one step", async () => {
+    const t = await openBuilder();
+    await addType(t, "BOAT", ["stateSource", "nationalSource"]);
+    await t.user.click(
+      within(await mockGroup()).getByRole("button", { name: /Add a no-record response for each/ }),
+    );
+    await waitFor(() =>
+      expect(
+        [...document.querySelectorAll('[role="status"]')].map((e) => e.textContent).join(" "),
+      ).toMatch(/2/),
+    );
+    expect(
+      within(await mockGroup()).getAllByRole("button", { name: /Open mock response/ })[0],
+    ).toHaveFocus();
+    await t.user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(draftMock(t).sources.stateSource?.responses.some((r) => r.queryType === "BOAT")).toBe(
+      false,
+    );
+    expect(draftMock(t).sources.nationalSource?.responses.some((r) => r.queryType === "BOAT")).toBe(
+      false,
+    );
+  });
+
+  it("#572 uses the raw code, as the server does: a code with a space is no code yet", async () => {
+    const t = await openBuilder();
+    await addType(t, "BOAT ", ["stateSource"]);
+    const group = within(await mockGroup());
+    expect(group.getByText(/code and at least one source/i)).toBeInTheDocument();
+    expect(group.queryByRole("button", { name: /Add/ })).not.toBeInTheDocument();
+  });
+
+  it("#572 a Missing row names its source once", async () => {
+    const t = await openBuilder();
+    await addType(t, "BOAT", ["stateSource"]);
+    const group = await mockGroup();
+    const missing = group.querySelector(".qm-mock__missing");
+    expect(missing?.textContent ?? "").not.toContain("State system");
+  });
+
+  it("#572 counts the gap in the issue badge while the half-made type does not parse yet", async () => {
+    const t = await openBuilder();
+    await addType(t, "BOAT", ["stateSource"]);
+    await screen.findByRole("button", { name: /\d+ errors?/ });
+    const errors = () =>
+      Number(
+        /(\d+) error/.exec(document.querySelector(".qm-builder__issues")?.textContent ?? "")?.[1],
+      );
+    await waitFor(() => expect(errors()).toBeGreaterThan(0));
+    const before = errors();
+    await t.user.click(
+      within(await mockGroup()).getByRole("button", { name: /Add mock response for State system/ }),
+    );
+    await waitFor(() => expect(errors()).toBe(before - 1), { timeout: 4000 });
+  });
+
   it("says what is needed while the type has no code or no source yet, and offers no button", async () => {
     const t = await openBuilder();
     await t.user.click(await screen.findByRole("button", { name: "Add query type" }));
@@ -270,5 +349,32 @@ describe("a new source on a mock site", () => {
     const t = await openBuilder();
     await selectBuilderItem(t.user, "sources");
     expect(screen.queryByRole("group", { name: "Mock responses to add" })).toBeNull();
+  });
+});
+
+describe("#572 flow helpers", () => {
+  it("row ids are distinct for parts that join to the same text", () => {
+    expect(flowRowId("a b", "c")).not.toBe(flowRowId("a_b", "c"));
+    expect(flowRowId("a", "b-c")).not.toBe(flowRowId("a-b", "c"));
+    expect(flowRowId("a b", "c")).toMatch(/^[\w-]+$/);
+  });
+
+  it("a newer focus request cancels the one still waiting", async () => {
+    focusWhenRendered("first", "x");
+    focusWhenRendered("second", "x");
+    const make = (owner: string) => {
+      const b = document.createElement("button");
+      b.dataset.owner = owner;
+      b.dataset.role = "x";
+      document.body.append(b);
+      return b;
+    };
+    const first = make("first");
+    const second = make("second");
+    await waitFor(() => expect(second).toHaveFocus());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(first).not.toHaveFocus();
+    first.remove();
+    second.remove();
   });
 });

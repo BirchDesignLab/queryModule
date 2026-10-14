@@ -1,6 +1,7 @@
 import type { Diagnostic } from "@querymodule/core/config";
 import type { MockFile } from "@querymodule/core/contracts";
 import type { DraftChecks } from "./checks.js";
+import { asObjects, str } from "./controls.js";
 import { buildSiteConfig, type JsonObject, toPointer } from "./draft.js";
 import { type DraftIssue, groupByControl } from "./issues.js";
 import { mockPointer } from "./mock-edit.js";
@@ -9,7 +10,8 @@ import { mockDiagnostics, parseMock } from "./mock-model.js";
 /**
  * The mock's diagnostics as builder issues (Task 3b, #550, CFG-2): `mockDiagnostics` (the server's
  * checks and pointers) plus the editor's own rules (Q4, developer 10-05-26: a scenario needs at
- * least one trigger field with a value). A coverage gap is shown at the Coverage item, one per
+ * least one trigger field with a value; a blank beside a filled one is fine, #572), and a warning on
+ * a response whose query type the site no longer has (#572: a renamed type code orphans it). A coverage gap is shown at the Coverage item, one per
  * source and query type, whether the browser or the server found it. No value is ever carried.
  */
 
@@ -30,17 +32,37 @@ export function mockEditorIssues(mock: MockFile): DraftIssue[] {
             key: "admin.mock.triggerMissing",
             params: {},
           });
+        // No trigger has a value: blocked, and each blank one says so. A blank beside a filled one
+        // never matches (it is left out of the values), so it warns without blocking.
+        const filled = fields.some(([, value]) => !empty(value));
         for (const [field, value] of fields)
           if (empty(value))
             out.push({
-              level: "error",
+              level: filled ? "warning" : "error",
               pointer: `${at}/when/${field.replaceAll("~", "~0").replaceAll("/", "~1")}`,
-              key: "admin.mock.triggerValueEmpty",
+              key: filled ? "admin.mock.triggerValueBlank" : "admin.mock.triggerValueEmpty",
               params: {},
             });
       });
     });
   }
+  return out;
+}
+
+/** A response whose query type no type of the site has: it can never answer (#572, from #577). */
+function orphanedIssues(doc: JsonObject, mock: MockFile): DraftIssue[] {
+  const codes = new Set(asObjects(doc.queryTypes).map((q) => str(q.code)));
+  const out: DraftIssue[] = [];
+  for (const [sourceId, source] of Object.entries(mock.sources))
+    source.responses.forEach((r, ri) => {
+      if (!codes.has(r.queryType))
+        out.push({
+          level: "warning",
+          pointer: toPointer(["mock", "sources", sourceId, "responses", ri]),
+          key: "admin.mock.orphaned",
+          params: { queryType: r.queryType },
+        });
+    });
   return out;
 }
 
@@ -70,6 +92,37 @@ function fromDiagnostic(d: Diagnostic): DraftIssue {
     : { level: d.level, pointer: d.path, key: d.key, params: d.params };
 }
 
+/**
+ * Coverage gaps read from the raw draft, for while the site does not parse and the core check cannot
+ * run (#572): the type panel shows the gap, so the issue count has it too. Same rule and keys as
+ * checkMockCoverage; a source without a kind counts as mock, as buildSiteConfig reads it.
+ */
+function rawCoverageIssues(doc: JsonObject, mock: MockFile): DraftIssue[] {
+  const out: DraftIssue[] = [];
+  for (const s of asObjects(doc.sources)) {
+    const id = str(s.id);
+    if (id === "" || (typeof s.kind === "string" && s.kind !== "" && s.kind !== "mock")) continue;
+    const spec = mock.sources[id];
+    if (spec === undefined) {
+      out.push(atCoverage({ key: "config.missingMock", level: "error", params: { sourceId: id } }));
+      continue;
+    }
+    for (const q of asObjects(doc.queryTypes)) {
+      const code = str(q.code);
+      if (code === "" || !asObjects(q.sources).some((x) => str(x.sourceId) === id)) continue;
+      if (!spec.responses.some((r) => r.queryType === code))
+        out.push(
+          atCoverage({
+            key: "config.missingMockResponse",
+            level: "error",
+            params: { sourceId: id, queryType: code },
+          }),
+        );
+    }
+  }
+  return out;
+}
+
 /** The mock's own issues for this draft: coverage and fixture findings, and the editor's rules. */
 export function mockIssuesOf(doc: JsonObject, rawMock: JsonObject | null): DraftIssue[] {
   if (rawMock === null) return [];
@@ -77,8 +130,11 @@ export function mockIssuesOf(doc: JsonObject, rawMock: JsonObject | null): Draft
   if (!parsed.ok) return [];
   const built = buildSiteConfig(doc);
   return [
-    ...(built.ok ? mockDiagnostics(built.config, parsed.mock).map(fromDiagnostic) : []),
+    ...(built.ok
+      ? mockDiagnostics(built.config, parsed.mock).map(fromDiagnostic)
+      : rawCoverageIssues(doc, parsed.mock)),
     ...mockEditorIssues(parsed.mock),
+    ...orphanedIssues(doc, parsed.mock),
   ];
 }
 

@@ -1,6 +1,7 @@
 import type { JsonObject } from "./draft.js";
 import { hasPointer, parentPointer } from "./issues.js";
 import { mockPointer } from "./mock-edit.js";
+import { cardsFallback, objectsOf } from "./selection.js";
 
 /**
  * A selection that no longer exists after a draft change (a raw edit, a removed item) moves to
@@ -18,9 +19,23 @@ export function existingPointer(
     if (mock === null) return null;
     // The coverage item has no node in the mock: its pointers (a gap's own, from an issue) stay.
     if (pointer.startsWith(mockPointer.coverage) || hasPointer({ mock }, pointer)) return pointer;
+    // A source's "Add mock response" row stays while its source does.
+    const source = mockPointer.sourceOf(pointer);
+    if (
+      source !== null &&
+      pointer === mockPointer.addResponse(source) &&
+      hasPointer({ mock }, mockPointer.source(source))
+    )
+      return pointer;
     for (let p = parentPointer(pointer); p !== null && p !== "/mock"; p = parentPointer(p))
       if (hasPointer({ mock }, p)) return p;
     return mockPointer.coverage;
+  }
+  const card = /^\/responseMappings(?:\/([0-9]+))?(?:\/|$)/.exec(pointer);
+  if (card !== null) {
+    const index = card[1] === undefined ? null : Number(card[1]);
+    const count = objectsOf(doc.responseMappings).length;
+    if (index === null || index >= count) return cardsFallback(doc, index);
   }
   if (pointer.startsWith("#") || hasPointer(doc, pointer)) return pointer;
   const types = Array.isArray(doc.queryTypes) ? doc.queryTypes.length : 0;

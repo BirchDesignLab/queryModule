@@ -151,6 +151,12 @@ describe("buildChangeGroups", () => {
     expect(targetOf("", l)).toBeNull();
   });
 
+  it("sends a removed card's line to a type's cards row, not the bare list (round 1, C2)", () => {
+    const l = { ...live(), responseMappings: [] };
+    expect(targetOf("/responseMappings/0", l)).toBe("#cards/VEH");
+    expect(targetOf("/responseMappings", l)).toBe("#cards/VEH");
+  });
+
   it("reads a reordered list as an order change, and quick access by the types' names", () => {
     const reordered = entries(
       groupsFor((d) => {

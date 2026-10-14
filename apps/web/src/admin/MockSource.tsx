@@ -1,4 +1,4 @@
-import { useContext, useId, useState } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { Sect } from "./controls.js";
@@ -22,8 +22,15 @@ export function MockSource({ sourceId }: { sourceId: string }) {
   const t = useT();
   const env = useMockEnv();
   const { announcer } = useServices();
-  const select = useContext(SelectionContext).select;
+  const { select, pointer } = useContext(SelectionContext);
   const uid = useId();
+  // The tree's "Add mock response" row shows this source with its add form in view (#572); focus
+  // stays where the person is.
+  const addRef = useRef<HTMLDivElement>(null);
+  const atAdd = pointer === mockPointer.addResponse(sourceId);
+  useEffect(() => {
+    if (atAdd) addRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [atAdd]);
   const source = env.mock.sources[sourceId];
   const [text, setText] = useState<[string, string] | null>(null);
   const [adding, setAdding] = useState<{ type: string; code: string }>({ type: "", code: "" });
@@ -34,15 +41,16 @@ export function MockSource({ sourceId }: { sourceId: string }) {
   ];
   const pair = [wait(shown[0]), wait(shown[1])] as const;
   const bad = pair[0] === null || pair[1] === null || pair[0] > pair[1];
-  // Which field the message is about: a wait that is not a count, else the shortest when it is the longer.
-  const invalid = [
-    pair[0] === null || (pair[1] !== null && pair[0] > pair[1]),
-    pair[1] === null,
-  ] as const;
-  // The wait is written when the person leaves the field: a half-typed value ("150" on the way to
-  // "1500") never reaches the draft, and an invalid pair never does at all.
-  const commit = () => {
+  // Which fields the message is about: a wait that is not a count, and both when they are out of
+  // order, since either one can fix it (#572).
+  const disordered = pair[0] !== null && pair[1] !== null && pair[0] > pair[1];
+  const invalid = [pair[0] === null || disordered, pair[1] === null || disordered] as const;
+  // The wait is written when the person leaves the pair: a half-typed value ("150" on the way to
+  // "1500") never reaches the draft, and an invalid pair never does at all. Moving from one wait to
+  // the other is still mid-edit, so it neither writes nor announces (#572).
+  const commit = (next?: EventTarget | null) => {
     if (text === null) return;
+    if (next instanceof HTMLElement && next.dataset.latency === sourceId) return;
     if (bad) {
       announcer.announce(t("admin.mock.latency.announce"));
       return;
@@ -84,13 +92,14 @@ export function MockSource({ sourceId }: { sourceId: string }) {
                 aria-describedby={bad ? `${uid}-lat-e` : undefined}
                 data-owner={mockPointer.source(sourceId)}
                 data-role={n === 0 ? "latency" : undefined}
+                data-latency={sourceId}
                 onChange={(e) =>
                   setText(n === 0 ? [e.target.value, shown[1]] : [shown[0], e.target.value])
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commit();
                 }}
-                onBlur={commit}
+                onBlur={(e) => commit(e.relatedTarget)}
               />{" "}
               <span>{t("admin.mock.ms")}</span>
             </div>
@@ -141,7 +150,7 @@ export function MockSource({ sourceId }: { sourceId: string }) {
         )}
       </Sect>
       <Sect title={t("admin.mock.addResponse.label")} hint={t("admin.mock.addResponse.hint")}>
-        <div className="qm-mock__two">
+        <div className="qm-mock__two" ref={addRef}>
           <div>
             <label htmlFor={`${uid}-nr-qt`}>{t("admin.mock.queryType.label")}</label>{" "}
             <select

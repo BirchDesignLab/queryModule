@@ -8,6 +8,7 @@ import {
   validateSiteConfig,
 } from "@querymodule/core/config";
 import type { ConfigDocument } from "@querymodule/core/contracts";
+import { tokensContrast } from "@querymodule/tokens";
 
 /**
  * The config builder's draft (Task 31, BR-001, FR-060). It is memory only: never localStorage,
@@ -72,8 +73,9 @@ export const toPointer = (path: readonly PropertyKey[]): string =>
   path.map((s) => `/${String(s).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
 
 /**
- * Rebuilds a SiteConfig from the client view: server-only parts take schema defaults and
- * sources get kind "mock". Section paths match the real config, so pointers carry over.
+ * Rebuilds a SiteConfig from the client view: server-only parts take schema defaults and a source
+ * keeps the server's kind when the draft carries one, else gets "mock" (#572). Section paths match
+ * the real config, so pointers carry over.
  */
 export function buildSiteConfig(doc: JsonObject): BuildResult {
   const sources = Array.isArray(doc.sources) ? doc.sources : [];
@@ -87,7 +89,13 @@ export function buildSiteConfig(doc: JsonObject): BuildResult {
       ...delegation,
       purposes: purposes.map((p) => ({ ...(p as JsonObject), delegatorRoles: ["admin"] })),
     },
-    sources: sources.map((s) => ({ ...(s as JsonObject), kind: "mock" })),
+    sources: sources.map((s) => {
+      const kind = (s as JsonObject).kind;
+      return {
+        ...(s as JsonObject),
+        kind: typeof kind === "string" && kind !== "" ? kind : "mock",
+      };
+    }),
   };
   const parsed = SiteConfigSchema.safeParse(candidate);
   if (parsed.success) return { ok: true, config: parsed.data };
@@ -128,7 +136,9 @@ export function validateDraft(
   for (const locale of built.config.locales) {
     locales[locale] = { ...(perLocale[locale] ?? bundle), ...overlay[locale] };
   }
-  const result = validateSiteConfig(built.config, locales as LocaleBundles);
+  const result = validateSiteConfig(built.config, locales as LocaleBundles, {
+    contrast: tokensContrast,
+  });
   return { ok: true, errors: result.errors, warnings: result.warnings };
 }
 
@@ -188,7 +198,8 @@ export interface StartOptions {
 }
 
 export interface SetPathOptions {
-  coalesce?: boolean;
+  /** true: consecutive edits of the path are one step; a string names one control under it. */
+  coalesce?: boolean | string;
 }
 
 export interface ConfigDraftState {
@@ -326,7 +337,12 @@ export function createConfigDraftStore(): ConfigDraftStore {
     },
     setPath(path, value, options) {
       if (state.doc === null || Object.is(valueAt(state.doc, path), value)) return;
-      record(options?.coalesce === true ? `path:${path.join("\u0000")}` : null);
+      const c = options?.coalesce;
+      record(
+        c === undefined || c === false
+          ? null
+          : `path:${path.join("\u0000")}${typeof c === "string" ? `\u0000${c}` : ""}`,
+      );
       publish({ doc: setAtPath(state.doc, path, value) });
     },
     setDoc(doc) {

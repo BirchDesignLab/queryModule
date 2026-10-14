@@ -53,6 +53,8 @@ async function selectRow(user: UserEvent, name: RegExp, nth = 0) {
   await user.click(row);
   return row;
 }
+/** The editor panel: the Try a match pane beside it has controls of the same names. */
+const editor = () => within(screen.getByRole("tabpanel"));
 const scenarioCard = (n: number) => screen.getByRole("group", { name: `Scenario ${n}` });
 const polite = () => document.querySelector('[aria-live="polite"][role="status"], [role="status"]');
 
@@ -77,7 +79,9 @@ describe("the tree and the coverage grid", () => {
     // A mock row never starts like a query type's row ("Vehicle VEH"): lookups by that name stay unique.
     const mock = within(await mockTree()).getAllByRole("treeitem");
     for (const row of mock)
-      expect(row.textContent).toMatch(/^(Coverage|Mock source: |Mock response: )/);
+      expect(row.textContent).toMatch(
+        /^(Coverage|Mock source: |Mock response: |Add mock response: )/,
+      );
   });
 
   it("the Coverage item is a table of query types by mock source, with Not asked cells explained", async () => {
@@ -132,6 +136,8 @@ describe("a source", () => {
     await t.user.type(shortest, "10");
     // Leaving the field commits it: a half-typed value never reaches the draft.
     expect(draftMock(t).sources.stateSource?.latencyMs).toEqual([50, 400]);
+    // Leaving the pair commits it; moving to the other wait does not (#572).
+    await t.user.tab();
     await t.user.tab();
     expect(draftMock(t).sources.stateSource?.latencyMs).toEqual([10, 400]);
   });
@@ -154,8 +160,8 @@ describe("a source", () => {
   it("Add mock response adds a second response for a type with a type field, and refuses a duplicate", async () => {
     const t = await openBuilder();
     await selectRow(t.user, /^Mock source: National system/);
-    await t.user.selectOptions(await screen.findByLabelText("Query type"), "PRO");
-    await t.user.selectOptions(screen.getByLabelText("Property type"), "FIREARM");
+    await t.user.selectOptions(await editor().findByLabelText("Query type"), "PRO");
+    await t.user.selectOptions(editor().getByLabelText("Property type"), "FIREARM");
     await t.user.click(screen.getByRole("button", { name: "Add mock response" }));
     const responses = draftMock(t).sources.nationalSource?.responses ?? [];
     expect(responses.at(-1)).toMatchObject({
@@ -164,8 +170,8 @@ describe("a source", () => {
     });
     // The same one again: the button says why it cannot, and offers the existing response.
     await selectRow(t.user, /^Mock source: National system/);
-    await t.user.selectOptions(await screen.findByLabelText("Query type"), "PRO");
-    await t.user.selectOptions(screen.getByLabelText("Property type"), "FIREARM");
+    await t.user.selectOptions(await editor().findByLabelText("Query type"), "PRO");
+    await t.user.selectOptions(editor().getByLabelText("Property type"), "FIREARM");
     const add = screen.getByRole("button", { name: "Add mock response" });
     expect(add).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(/already has this response/)).toBeInTheDocument();
@@ -177,7 +183,7 @@ describe("a response", () => {
   it("shows the query type read-only, the default and the scenarios in order", async () => {
     const t = await openBuilder();
     await selectRow(t.user, /^Mock response: Vehicle, National system VEH/); // National system
-    const type = await screen.findByLabelText("Query type");
+    const type = await editor().findByLabelText("Query type");
     expect(type).toHaveAttribute("readonly");
     expect(type).toHaveValue("Vehicle (VEH)");
     expect(screen.getByRole("radio", { name: /No record/ })).toBeChecked();
@@ -310,14 +316,14 @@ describe("a response", () => {
   it("the type field of a response with one can be set, and the query type cannot", async () => {
     const t = await openBuilder();
     await selectRow(t.user, /^Mock response: Property, State system PRO/); // State system
-    const select = await screen.findByLabelText("Property type");
+    const select = await editor().findByLabelText("Property type");
     await t.user.selectOptions(select, "FIREARM");
     expect(
       draftMock(t).sources.stateSource?.responses.find((r) => r.queryType === "PRO")?.types,
     ).toEqual({
       propertyType: "FIREARM",
     });
-    expect(screen.getByLabelText("Query type")).toHaveAttribute("readonly");
+    expect(editor().getByLabelText("Query type")).toHaveAttribute("readonly");
   });
 });
 
@@ -417,11 +423,10 @@ describe("focus and counts (critic round 1)", () => {
 });
 
 describe("the right pane on mock items", () => {
-  it("is a static Select a response note: no preview, no matcher", async () => {
+  it("is the Try a match pane (#565): no persona switch, nothing sent", async () => {
     const t = await openBuilder();
     await selectRow(t.user, /^Coverage/);
-    expect(await screen.findByText("Select a response to edit its answers.")).toBeInTheDocument();
-    expect(screen.queryByText("Try a match")).not.toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Try a match" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "As officer" })).not.toBeInTheDocument();
   });
 });

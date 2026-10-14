@@ -13,6 +13,7 @@ import { useServices } from "../app/services-context.js";
 import { BuilderTree } from "./BuilderTree.js";
 import { existingPointer } from "./builder-helpers.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
+import { CardPreview } from "./CardPreview.js";
 import { ChangesView } from "./ChangesView.js";
 import { ChecksContext, useDraftChecks, withServerIssues } from "./checks.js";
 import type { JsonObject } from "./draft.js";
@@ -29,10 +30,13 @@ import { usePublishFlow } from "./PublishFlow.js";
 import { type RawState, RawTab } from "./RawTab.js";
 import {
   defaultPointer,
+  editorItem,
   isRootIssue,
   issueWords,
+  keywordsPreviewPointer,
   type Selection,
   SelectionContext,
+  topItem,
 } from "./selection.js";
 import { TABS, type TabId, tabAfterKey } from "./tabs.js";
 import { useUndoKeys } from "./undo-keys.js";
@@ -90,12 +94,16 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
   const [selection, setSelection] = useState<Selection>({ pointer: null, seq: 0 });
   const onSelect = useCallback((pointer: string, focus?: string) => {
     setTab("form");
-    setSelection((s) => ({ pointer, seq: s.seq + 1, ...(focus === undefined ? {} : { focus }) }));
+    setSelection((s) => ({
+      pointer: editorItem(pointer),
+      seq: s.seq + 1,
+      ...(focus === undefined ? {} : { focus }),
+    }));
   }, []);
   // An entry of the Changes view: open its item and focus it (the click is the user's action).
   const onOpen = useCallback((pointer: string) => {
     setTab("form");
-    setSelection((s) => ({ pointer, seq: s.seq + 1, focusNode: true }));
+    setSelection((s) => ({ pointer: editorItem(pointer), seq: s.seq + 1, focusNode: true }));
   }, []);
   // Errors outrank warnings: the button goes to the first error, else the first warning.
   const firstIssue = checks.issues.find((i) => i.level === "error") ?? checks.issues[0];
@@ -348,7 +356,22 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
               )}
             </div>
             {shown.pointer !== null && mockPointer.is(shown.pointer) ? (
-              <MockPane />
+              <MockPane doc={doc} selected={shown.pointer} />
+            ) : shown.pointer !== null &&
+              (topItem(shown.pointer) === "responseMappings" ||
+                topItem(shown.pointer) === "keywords") ? (
+              checks.doc !== null && (
+                <CardPreview
+                  doc={checks.doc}
+                  labels={checks.labels}
+                  // The keywords have no card of their own: a card of the first type shows them.
+                  selected={
+                    topItem(shown.pointer) === "keywords"
+                      ? keywordsPreviewPointer(checks.doc)
+                      : shown.pointer
+                  }
+                />
+              )
             ) : (
               checks.doc !== null && (
                 <BuilderPreview
