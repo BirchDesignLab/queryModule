@@ -688,7 +688,8 @@ test("[#605] undoing an added scenario while a control inside it has focus moves
   await openBuilder(page);
   const row = await selectRow(page, /^Mock response: Vehicle, State system/);
   await page.getByRole("button", { name: "Add scenario" }).press("Enter");
-  const added = page.getByRole("group", { name: "Scenario 4" });
+  // State VEH has four scenarios (three from M1 and the demo pack's calm hit): the added one is the fifth.
+  const added = page.getByRole("group", { name: "Scenario 5" });
   await expect(added).toBeVisible();
   const trigger = added.getByLabel("Trigger field 1", { exact: true });
   await trigger.focus();

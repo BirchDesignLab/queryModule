@@ -104,6 +104,8 @@ describe("DEMO_STORIES", () => {
         "per-hit",
       ]),
     );
+    // The submit rate limiter allows 30 per user per minute (docs/api.md): one run stays well under it.
+    expect(DEMO_STORIES.length).toBeLessThan(30);
     for (const s of DEMO_STORIES) {
       // A wanted check is national only; everything else asks both sources.
       expect(s.sourceIds).toEqual(

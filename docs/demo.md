@@ -42,14 +42,16 @@ below do.
 | 5 | Driver's license ZZDLTEST | `DL.ZZDLTEST` | State card `VALID`, the license number in the summary; National system `NO RECORD` |
 | 6 | Person record | `PER.EXAMPLESON.SAMPLE.01011901` | State card `RECORD FOUND` for EXAMPLESON, SAMPLE; National system `NO RECORD`; the "Wanted check, also run" card reads `NO WANTS OR WARRANTS`. `PER.TESTERSON.SAMPLE.01011901` is the no-record person |
 | 7 | Partial result | `VEH.FAIL1..26` | State system `failed` (a status line, no card); National system `NO RECORD` |
-| 8 | Slow source, then timeout | `VEH.TIMEOUT..26` | State card at once; "National system: pending" for about 10 seconds (the source deadline), then "timed out". The other source never waits for it |
+| 8 | Slow source, then timeout | `VEH.TIMEOUT..26` | State card at once; "National system: pending" for about 10 seconds (the source deadline), then "timed out". The other source never waits for it. This is the wait story: the mock has no slow-but-returns scenario (that needs per-source-scenario latency in the mock contract), so the timeout is how the wait is shown |
 | 9 | Config changed: Edit as new query | click path below | A "Failed" row, "The site configuration changed. Check the form and submit again.", and "Edit as new query" instead of Retry |
 
 Stolen property is `PRO.ZZSTOLEN1.ELECTRONICS` (`STOLEN` on both sources) and a missing person is
 `WNT.MISSING`; both are in "Example queries" below.
 
 **Story 9, config changed (#477).** The open form follows a newer configuration within 15 seconds, so
-the publish and the submit have to fall inside that window.
+the publish and the submit have to fall inside that window. **The publish changes the live site
+configuration** for everyone on that site, so do it on a rehearsal site or put it back afterwards
+(step 5).
 
 1. Window A: sign in as `dispatcher@example.test`, choose the form, type plate `ZZ-0001` and leave
    the cursor in the field.
@@ -63,8 +65,9 @@ the publish and the submit have to fall inside that window.
    Press it: the plate comes back into the form, focus lands on it, and nothing is sent. If the
    publish had removed a field the form had a value for, a note under the form names what was not
    loaded.
-5. History, Roll back restores the old configuration (the demo is back to a calm story 2). The old
-   row stays in the list.
+5. Put the live configuration back: History, pick the version that was live before your publish and
+   Roll back. That publishes the earlier version again as a new version (the history only grows), so
+   the demo is back to a calm story 2. The failed row stays in the list.
 
 ## Seed once
 
@@ -73,6 +76,18 @@ the publish and the submit have to fall inside that window.
 `POST /api/v1/queries`, so every row is a real, audited request. It never deletes, never resets and
 never touches the database directly: it only signs in, reads the config, reads the list and submits.
 There is no reset: run it once against the demo database, then leave it.
+
+**Which database it targets.** The one behind the base URL you pass as the argument, and nothing
+else: the script has no database connection of its own. For the live demo that is
+`https://querymodule.birchdesignlab.com`. To rehearse, start a local production build on a throwaway
+data directory, the way `scripts/dev/smoke-local.ts` does: `pnpm --filter @querymodule/web build` and
+`pnpm --filter @querymodule/api build`, then `node packages/api/dist/main.js` with `NODE_ENV=production`,
+`PORT=3100`, `PUBLIC_ORIGIN=http://localhost:3100`, `DATA_DIR=<a new empty folder>`,
+`SECRETS_DIR=.dev/secrets` (created by the first `pnpm dev` or `pnpm e2e`), `ALLOW_MOCK_SOURCES=true`, `SITE_CONFIG=packages/config/sites/default.json`,
+`MIGRATIONS_DIR=packages/api/drizzle` and `WEB_DIST=apps/web/dist`. Run
+`node packages/api/dist/ops/seed.js` once with the same variables for the demo users, run the seed
+script with `http://localhost:3100`, and delete the folder when done. The sign-in sends the base URL as
+its `Origin`, so it must be the address the server was started with as `PUBLIC_ORIGIN`.
 
 ```
 DEMO_DISPATCHER_PASSWORD=<the dispatcher password> node scripts/dev/demo-seed.ts https://querymodule.birchdesignlab.com
@@ -89,6 +104,8 @@ repository checkout.
   is still pending. The requests are recorded either way.
 - If it stops part-way (a rejected submit, a lost connection), the rows already recorded stay, and a
   second run refuses. Run the missing commands by hand from the table above.
+- It submits 9 queries, well under the limit of 30 submits per user per minute (a rerun that gets
+  past the guard would not hit it either).
 - It ends with the critical `STOLEN` vehicle on top, because the list is newest first.
 
 ## Demo runbook

@@ -19,10 +19,11 @@ async function runTyped(page: Page, command: string): Promise<void> {
   await page.keyboard.press("Enter");
 }
 
-test("[demo] VEH.ZZ-0010 is a calm vehicle hit: REGISTERED on both sources, nothing critical", async ({
+test("[demo] VEH.ZZ-0010..26 is a calm vehicle hit: REGISTERED on both sources, nothing critical", async ({
   page,
 }) => {
-  await runTyped(page, "VEH.ZZ-0010");
+  // A plate on its own asks only the State system; the year makes it a full query.
+  await runTyped(page, "VEH.ZZ-0010..26");
   for (const name of ["State system: returned", "National system: returned"]) {
     const card = page.getByRole("region", { name });
     await expect(card).toBeVisible({ timeout: 8000 });
@@ -45,7 +46,8 @@ test("[demo] PER.EXAMPLESON.SAMPLE.01011901 finds a person at the state source a
   await expect(state).toContainText("RECORD FOUND");
   await expect(state).toContainText("EXAMPLESON");
   await expect(state).not.toHaveClass(/qm-card--critical/);
-  const national = page.getByRole("region", { name: "National system: returned" });
+  // The also-run wanted check has a National card of the same name; the person's is the first.
+  const national = page.getByRole("region", { name: "National system: returned" }).first();
   await expect(national).toBeVisible({ timeout: 8000 });
   await expect(national).toContainText("NO RECORD");
 });
