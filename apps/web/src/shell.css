@@ -944,7 +944,7 @@ main[tabindex="-1"]:focus {
   gap: var(--qm-space-2);
   width: 100%;
   min-height: var(--qm-space-8);
-  padding: 0 var(--qm-space-2);
+  padding: var(--qm-space-1) var(--qm-space-2);
   border-radius: var(--qm-radius-sm);
   background: transparent;
   color: var(--qm-color-text-body);
@@ -968,9 +968,17 @@ main[tabindex="-1"]:focus {
 .qm-tree__name {
   display: flex;
   flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--qm-space-2);
+  gap: 0 var(--qm-space-2);
   min-inline-size: 0;
+}
+
+/* A label keeps its own line before it wraps: the key drops under it when both do not fit, so
+   "1. All results" and "Training delegation" never break word by word beside their key (G37). */
+.qm-tree__label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 .qm-tree__key {
@@ -1808,6 +1816,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-wins__table :where(th, td) {
   min-inline-size: 0;
   padding-inline: var(--qm-space-2);
+  font-size: var(--qm-type-size-sm);
   overflow-wrap: anywhere;
 }
 
@@ -1815,20 +1824,25 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: normal;
 }
 
+.qm-wins__table .qm-tag {
+  white-space: nowrap;
+}
+
+/* The Why column carries the longest text (the score and its reason), so it gets the most. */
 .qm-wins__table th:nth-child(1) {
-  inline-size: 23%;
+  inline-size: 20%;
 }
 
 .qm-wins__table th:nth-child(2) {
-  inline-size: 25%;
+  inline-size: 19%;
 }
 
 .qm-wins__table th:nth-child(3) {
-  inline-size: 27%;
+  inline-size: 29%;
 }
 
 .qm-wins__table th:nth-child(4) {
-  inline-size: 25%;
+  inline-size: 32%;
 }
 
 /* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
@@ -1977,8 +1991,24 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-mock__scenario-tools {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: calc(var(--qm-space-1) / 2);
   margin-inline-start: auto;
+}
+
+/* A card row's buttons start at the left edge on a line of their own, so every row's Edit lines up. */
+.qm-mock__scenario-tools--row {
+  flex-basis: 100%;
+  margin-inline-start: 0;
+}
+
+/* A card row's Move and Remove buttons sit in the same line as its Edit button, all one height:
+   the button group has no margin of its own and does not stretch Edit (G37). */
+.qm-mock__scenario-tools > .qm-admin__item-buttons {
+  align-items: center;
+  gap: calc(var(--qm-space-1) / 2);
+  margin-block: 0;
 }
 
 .qm-mock__scenario-body {

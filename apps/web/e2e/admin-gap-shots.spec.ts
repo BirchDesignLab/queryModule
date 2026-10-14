@@ -1,10 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
+import { restoreShippedConfig, saveGapDraft } from "./admin-draft.js";
 import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
-// Admin and builder screenshots for the M2 demo dry-run gaps (W2: G15 to G20, G22, G37 to G39).
+// Admin and builder screenshots for the M2 demo dry-run gaps (W2: G3, G15 to G20, G22, G37 to G39).
 // Not a test of behavior: skipped unless GAP_SHOTS_DIR is set. It signs in as the seeded admin,
 // saves one draft through the API (a warning keyword TESTMAKE and Make moved to the summary),
 // publishes it, rolls back, and photographs each screen at the two demo sizes. The last step puts
@@ -22,65 +23,12 @@ test.describe.configure({ mode: "serial", timeout: 180_000 });
 test.skip(DIR === undefined || DIR === "", "set GAP_SHOTS_DIR to take the screenshots");
 test.use({ emptyQueryList: true, colorScheme: "light", reducedMotion: "reduce" });
 
-interface Versions {
-  versions: { version: number; status: string }[];
-}
-
-test.afterAll(async ({ browser }) => {
-  const context = await browser.newContext();
-  try {
-    const page = await context.newPage();
-    await signIn(page, ADMIN);
-    const origin = new URL(page.url()).origin;
-    const headers = { "X-Requested-With": "querymodule", Origin: origin };
-    const list = await context.request.get(`${origin}/api/v1/admin/config/versions`);
-    const { versions } = (await list.json()) as Versions;
-    const first = Math.min(...versions.map((v) => v.version));
-    const live = versions.find((v) => v.status === "published");
-    if (live !== undefined && live.version !== first)
-      await context.request.post(`${origin}/api/v1/admin/config/versions/${first}/rollback`, {
-        headers,
-      });
-    const now = (await (await context.request.get(`${origin}/api/v1/admin/config`)).json()) as {
-      live: { version: number; document: unknown };
-    };
-    await context.request.put(`${origin}/api/v1/admin/config/draft`, {
-      headers,
-      data: { baseVersion: now.live.version, document: now.live.document },
-    });
-  } finally {
-    await context.close();
-  }
-});
+test.afterAll(({ browser }) => restoreShippedConfig(browser));
 
 async function save(target: Page | Locator, name: string, size: number): Promise<void> {
   const dir = DIR ?? "";
   mkdirSync(dir, { recursive: true });
   await target.screenshot({ path: join(dir, `${name}-${size}.png`) });
-}
-
-/** Saves the draft the shots need, through the API: TESTMAKE as a warning keyword, Make on the summary. */
-async function saveDraft(page: Page): Promise<void> {
-  const origin = new URL(page.url()).origin;
-  const headers = { "X-Requested-With": "querymodule", Origin: origin };
-  const body = (await (await page.request.get(`${origin}/api/v1/admin/config`)).json()) as {
-    live: { version: number; document: { siteConfig: Record<string, unknown> } };
-  };
-  const document = structuredClone(body.live.document);
-  const site = document.siteConfig as {
-    keywords: unknown[];
-    responseMappings: { id: string; elements: { path: string; view: string }[] }[];
-  };
-  site.keywords.push({ keyword: "TESTMAKE", severity: "warning" });
-  const make = site.responseMappings
-    .find((m) => m.id === "veh-summary")
-    ?.elements.find((e) => e.path === "vehicle.make");
-  if (make !== undefined) make.view = "summary";
-  const put = await page.request.put(`${origin}/api/v1/admin/config/draft`, {
-    headers,
-    data: { baseVersion: body.live.version, document },
-  });
-  expect(put.ok(), `draft saved: ${put.status()}`).toBe(true);
 }
 
 const tree = (page: Page) => page.getByRole("navigation", { name: "Configuration items" });
@@ -92,12 +40,25 @@ async function selectRow(page: Page, name: RegExp): Promise<void> {
   await expect(item).toHaveAttribute("aria-selected", "true");
 }
 
+/** Opens the Vehicle query type's first card: its row, expanded, then the card. */
+async function openFirstCard(page: Page): Promise<void> {
+  const first = tree(page).getByRole("treeitem", { name: /^1\. All results/ });
+  if ((await first.count()) === 0) {
+    await selectRow(page, /^Vehicle cards/);
+    if ((await first.count()) === 0)
+      await tree(page)
+        .getByRole("treeitem", { name: /^Vehicle cards/ })
+        .press("ArrowRight");
+  }
+  await selectRow(page, /^1\. All results/);
+}
+
 for (const size of SIZES) {
   test(`admin shots at ${size.width}x${size.height}`, async ({ page }) => {
     await page.setViewportSize(size);
     await signIn(page, ADMIN);
     // A draft from an earlier size is the live version's again before this one starts.
-    await saveDraft(page);
+    await saveGapDraft(page);
     await page.goto("/admin/config");
     const status = page.getByTestId("draft-status");
     await expect(status).toContainText("Draft, based on version");
@@ -118,14 +79,7 @@ for (const size of SIZES) {
     await page.getByRole("tab", { name: "Form" }).click();
 
     // G38, G22: the card preview wording, scenario copy and Try a match.
-    await selectRow(page, /^Vehicle cards/);
-    const card = tree(page).getByRole("treeitem", { name: /^1\. All results/ });
-    if ((await card.count()) === 0) {
-      await tree(page)
-        .getByRole("treeitem", { name: /^Vehicle cards/ })
-        .press("ArrowRight");
-    }
-    await selectRow(page, /^1\. All results/);
+    await openFirstCard(page);
     await save(page, "g22-card-preview", w);
     await selectRow(page, /^Mock response: Vehicle, State system/);
     await save(page, "g38-mock-scenarios", w);
@@ -160,5 +114,49 @@ for (const size of SIZES) {
     await page.getByRole("link", { name: "Users and roles" }).click();
     await expect(page.getByRole("heading", { name: "Users and roles", level: 2 })).toBeVisible();
     await save(page, "g39-users", w);
+  });
+}
+
+for (const size of SIZES) {
+  test(`builder layout shots at ${size.width}x${size.height}`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await signIn(page, ADMIN);
+    await saveGapDraft(page);
+    await page.goto("/admin/config");
+    await expect(page.getByTestId("draft-status")).toContainText("Draft, based on version");
+    const w = size.width;
+    const editor = page.getByTestId("form-tab");
+
+    // G37: the tree (labels one line, keys beside or under), the card editor's rows and the table.
+    await tree(page).evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await openFirstCard(page);
+    await save(page, "g37-tree-and-card", w);
+    await page.getByRole("heading", { level: 4, name: "Rows" }).scrollIntoViewIfNeeded();
+    await save(page, "g37-card-rows", w);
+    await page.getByRole("heading", { level: 4, name: "Which card wins" }).scrollIntoViewIfNeeded();
+    await save(page, "g37-which-card-wins", w);
+
+    // G3, G17: Keywords and severity: Add keyword with no word; the style selects.
+    await selectRow(page, /^Keywords and severity/);
+    await page.getByRole("button", { name: "Add keyword" }).click();
+    await page.getByRole("button", { name: "Add keyword" }).scrollIntoViewIfNeeded();
+    await save(page, "g3-add-keyword-empty", w);
+    await page.getByRole("heading", { level: 4, name: "Severity styles" }).scrollIntoViewIfNeeded();
+    await save(page, "g17-severity-styles", w);
+
+    // G19: the mock editor's scenario list.
+    await selectRow(page, /^Mock response: Vehicle, State system/);
+    await page
+      .getByRole("heading", { level: 4, name: /^Scenarios \(\d+\)$/ })
+      .scrollIntoViewIfNeeded();
+    await save(page, "g19-scenarios", w);
+
+    // G22: the card preview opens on the first scenario that answers with a record.
+    await openFirstCard(page);
+    await expect(page.getByRole("combobox", { name: "Scenario" })).toHaveValue("0:0");
+    await expect(editor).toBeVisible();
+    await save(page, "g22-preview-opens-on-record", w);
   });
 }

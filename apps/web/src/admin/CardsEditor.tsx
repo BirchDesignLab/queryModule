@@ -788,7 +788,7 @@ function CardRow({
             {marked ? "" : `, ${t("admin.cards.notMarked")}`}
             {words === "" ? "" : `, ${words}`}
           </p>
-          <div className="qm-mock__scenario-tools">
+          <div className="qm-mock__scenario-tools qm-mock__scenario-tools--row">
             <button
               type="button"
               className="qm-button"

@@ -62,6 +62,18 @@ describe("the card preview", () => {
     expect(within(pane()).getByText(/the card you are editing/)).toBeInTheDocument();
   });
 
+  // Demo dry run G22: the preview opened on "Default answer" (NO RECORD), so a new Make row did not
+  // show until Scenario 1 was picked. It now opens on the first scenario that answers with a record.
+  it("opens on the first scenario that answers with a record, not on the default answer", async () => {
+    await openVehicleCard();
+    expect(await within(pane()).findByText("Scenario 1 matches")).toBeInTheDocument();
+    expect(within(pane()).getByRole("combobox", { name: "Scenario" })).toHaveValue("0:0");
+    expect(
+      await within(pane()).findByRole("region", { name: "State system: returned" }),
+    ).toBeInTheDocument();
+    expect(within(pane()).getAllByText("STOLEN").length).toBeGreaterThan(0);
+  });
+
   it("typed plate ZZ-0001 picks the STOLEN scenario, ABC123 the no-record one", async () => {
     const t = await openVehicleCard();
     await screen.findByRole("region", { name: "Card preview" });
@@ -272,8 +284,9 @@ describe("the card preview: the Values segmented control and the outcome row", (
   });
 
   it("the default answer says no scenario matches", async () => {
-    await openVehicleCard();
+    const t = await openVehicleCard();
     await screen.findByRole("region", { name: "Card preview" });
+    await t.user.selectOptions(within(pane()).getByRole("combobox", { name: "Scenario" }), "0:d");
     expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent(
       "No scenario matches, so the default answers",
     );
