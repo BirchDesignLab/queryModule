@@ -1176,9 +1176,14 @@ h1 {
   color: inherit;
 }
 
-/* Officer: the run action is 64 px and takes the row beside Clear; nothing muted (spec 6.3). */
-.qm-layout--mobile-unit .qm-action-bar > button[type="submit"] {
-  flex: 1 1 12rem;
+/* Officer: Run query and Clear are the same size (64 px tall, one font size) and split the bar's
+   width between them, half each, on their own row; they differ by style only. The status line (and
+   the field description) take their own full-width line below. Nothing muted (spec 6.3, developer
+   ruling 10-14-26). */
+.qm-layout--mobile-unit .qm-action-bar > button {
+  flex: 1 1 0;
+  /* Where one label wraps (a 320 px reflow), the pair still shares one height. */
+  align-self: stretch;
   min-height: calc(var(--qm-control-height-touch) + var(--qm-space-2));
   font-size: var(--qm-type-size-xl);
 }
@@ -1189,8 +1194,14 @@ h1 {
 }
 
 .qm-layout--mobile-unit .qm-action-bar__status {
+  flex-basis: 100%;
   color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);
+}
+
+/* An empty status would still cost a row gap under the buttons. */
+.qm-layout--mobile-unit .qm-action-bar__status:empty {
+  display: none;
 }
 
 /* Officer: the form is one card at touch density (design target). Its sections lose their own

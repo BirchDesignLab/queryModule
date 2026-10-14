@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { seededUser, signIn } from "./helpers.js";
+import { expectEvenActionBar, seededUser, signIn } from "./helpers.js";
 
 // The v1 demo personas (spec 6.1, 6.3 subset, UX-001, UX-012, BR-002). The layout comes from the
 // signed-in user's persona: the officer has a stored mobileUnit override (seed, Track A Task 36);
@@ -127,6 +127,8 @@ test.describe("personas at 1024x768 (spec 6.1, 6.3 subset)", () => {
     expect(layout.formTop).toBeGreaterThan(layout.bottom);
     const run = await page.locator("main button[type=submit]").boundingBox();
     expect(Math.round(run?.height ?? 0)).toBe(64);
+    // Developer ruling 10-14-26: Run query and Clear split the bar between them, same size.
+    await expectEvenActionBar(page, 48);
     // Guard against a vacuous pass: header controls, quick access, form fields and Submit.
     expect(await page.locator(INTERACTIVE).count()).toBeGreaterThan(8);
     expect(await undersizedTargets(page, MIN_TARGET)).toEqual([]);

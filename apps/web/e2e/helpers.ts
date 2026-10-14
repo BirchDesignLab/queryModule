@@ -229,3 +229,72 @@ export async function liveResponse(route: Route): Promise<APIResponse> {
 export function shortReference(correlationId: string): string {
   return correlationId.slice(-8);
 }
+
+/**
+ * The officer's action bar (developer ruling 10-14-26): Run query and Clear are the same size and
+ * split the bar's content width between them on one row, with the status line on its own line
+ * below. Numbers, not a picture: heights and widths agree (within 1 px of layout rounding), the two
+ * plus the bar's gap fill the content width (within 2 px), nothing clips or leaves the viewport,
+ * and both stay at `minTarget` or more.
+ */
+export async function expectEvenActionBar(page: Page, minTarget: number): Promise<void> {
+  const bar = await page.evaluate(() => {
+    const el = document.querySelector("main .qm-action-bar");
+    if (el === null) return null;
+    const style = getComputedStyle(el);
+    const content =
+      el.getBoundingClientRect().width -
+      Number.parseFloat(style.paddingLeft) -
+      Number.parseFloat(style.paddingRight) -
+      Number.parseFloat(style.borderLeftWidth) -
+      Number.parseFloat(style.borderRightWidth);
+    const measure = (b: Element | null) => {
+      if (b === null) return null;
+      const box = b.getBoundingClientRect();
+      return {
+        top: Math.round(box.top),
+        left: box.left,
+        right: box.right,
+        width: box.width,
+        height: box.height,
+        fontSize: getComputedStyle(b).fontSize,
+        clipped: b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1,
+      };
+    };
+    const buttons = [...el.querySelectorAll(":scope > button")];
+    const status = el.querySelector(".qm-action-bar__status");
+    return {
+      content,
+      gap: Number.parseFloat(style.columnGap),
+      viewport: innerWidth,
+      run: measure(buttons.find((b) => b.getAttribute("type") === "submit") ?? null),
+      clear: measure(buttons.find((b) => b.getAttribute("type") !== "submit") ?? null),
+      statusTop: status === null ? null : Math.round(status.getBoundingClientRect().top),
+      statusVisible: status !== null && getComputedStyle(status).display !== "none",
+    };
+  });
+  expect(bar, "the action bar is on the page").not.toBeNull();
+  const { run, clear } = bar ?? {};
+  expect(run, "Run query is in the action bar").toBeTruthy();
+  expect(clear, "Clear is in the action bar").toBeTruthy();
+  if (!run || !clear || bar === null) return;
+  expect(clear.top, "Clear and Run share a row").toBe(run.top);
+  expect(Math.abs(clear.height - run.height), "Clear is as tall as Run").toBeLessThanOrEqual(1);
+  expect(Math.abs(clear.width - run.width), "Clear is as wide as Run").toBeLessThanOrEqual(1);
+  expect(clear.fontSize, "Clear has Run's font size").toBe(run.fontSize);
+  expect(
+    Math.abs(run.width + clear.width + bar.gap - bar.content),
+    "Run and Clear together span the bar's content width",
+  ).toBeLessThanOrEqual(2);
+  expect(Math.round(run.height), "Run height").toBeGreaterThanOrEqual(minTarget);
+  expect(Math.round(clear.height), "Clear height").toBeGreaterThanOrEqual(minTarget);
+  expect(run.clipped || clear.clipped, "a button's text is clipped").toBe(false);
+  expect(Math.min(run.left, clear.left), "left edge on the page").toBeGreaterThanOrEqual(0);
+  expect(Math.max(run.right, clear.right), "right edge on the page").toBeLessThanOrEqual(
+    bar.viewport + 1,
+  );
+  if (bar.statusVisible && bar.statusTop !== null)
+    expect(bar.statusTop, "the status line is on its own line, below the buttons").toBeGreaterThan(
+      run.top,
+    );
+}
