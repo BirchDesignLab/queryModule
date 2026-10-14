@@ -2077,6 +2077,22 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border-radius: var(--qm-radius-control);
 }
 
+.qm-kw__ratios {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-kw__live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .qm-kw__sample {
   padding: var(--qm-space-3);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);

@@ -24,6 +24,26 @@ test("[Q1] a request sent earlier is listed after a fresh sign-in, quietly", asy
     });
   }
 
+  // The e2e database is shared and this user's earlier scenarios may still have a source in
+  // flight: a source that settles after the reload is a live result and is announced. Wait until
+  // no request of the list has a pending source, so only history is left to load.
+  await expect
+    .poll(
+      async () => {
+        const reply = await page.request.get("/api/v1/queries?limit=50", {
+          headers: { "X-Background": "1" },
+        });
+        const body = (await reply.json()) as {
+          requests: { parts: { sources: { status: string }[] }[] }[];
+        };
+        return body.requests.some((r) =>
+          r.parts.some((part) => part.sources.some((src) => src.status === "pending")),
+        );
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(false);
+
   // A new page load restores the session; the list comes from the server, not from memory.
   await page.reload();
   await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();

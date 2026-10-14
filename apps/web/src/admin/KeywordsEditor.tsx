@@ -1,6 +1,6 @@
 import type { KeywordStyle } from "@querymodule/core/config";
-import { COLOR_TOKENS } from "@querymodule/tokens";
-import { Highlighted, VisuallyHidden } from "@querymodule/web-ui";
+import { COLOR_TOKENS, tokensContrast } from "@querymodule/tokens";
+import { Highlighted, SeverityBadge, VisuallyHidden } from "@querymodule/web-ui";
 import { useContext, useId, useState } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -352,6 +352,8 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
             key={s}
             severity={s}
             idPrefix={idPrefix}
+            styles={styles}
+            tokens={tokenOverrides(doc)}
             style={
               (typeof rawStyles[s] === "object" && rawStyles[s] !== null ? rawStyles[s] : {}) as Obj
             }
@@ -521,6 +523,45 @@ function KeywordRow({
   );
 }
 
+const MODES = [
+  { mode: "night", label: "theme.night" },
+  { mode: "day", label: "theme.day" },
+  { mode: "redShift", label: "theme.redShift" },
+] as const;
+type Mode = (typeof MODES)[number]["mode"];
+type TokenOverrides = Partial<Record<"all" | Mode, Record<string, string>>>;
+/** UX-011 floor the shipped styles keep (developer ruling 7); core still errors only below 4.5:1. */
+const CONTRAST_FLOOR = 7;
+
+/** The draft's `theme.tokens` overrides per mode, strings only. */
+function tokenOverrides(doc: JsonObject): TokenOverrides {
+  const theme = doc.theme as Obj | undefined;
+  const raw = (typeof theme === "object" && theme !== null ? theme.tokens : undefined) as
+    | Record<string, unknown>
+    | undefined;
+  const out: TokenOverrides = {};
+  if (typeof raw !== "object" || raw === null) return out;
+  for (const k of ["all", "night", "day", "redShift"] as const) {
+    const v = raw[k];
+    if (typeof v !== "object" || v === null) continue;
+    out[k] = Object.fromEntries(
+      Object.entries(v).filter((e): e is [string, string] => typeof e[1] === "string"),
+    );
+  }
+  return out;
+}
+
+/** Ratio of the style's text over its background in one theme, floored to two decimals; null if unknown. */
+function ratioIn(style: Obj, mode: Mode, tokens: TokenOverrides): string | null {
+  if (typeof style.color !== "string" || typeof style.background !== "string") return null;
+  const overrides = { ...tokens.all, ...tokens[mode] };
+  const fg = tokensContrast.value(style.color, mode, overrides);
+  const bg = tokensContrast.value(style.background, mode, overrides);
+  if (fg === undefined || bg === undefined) return null;
+  const r = tokensContrast.ratio(fg, bg);
+  return (Math.floor(r * 100) / 100).toFixed(2);
+}
+
 /**
  * One severity's look: text and background from the theme's color tokens, bold, icon and marker.
  * The contrast diagnostic of the pair sits at the style itself (`/keywordSeverityStyles/<severity>`),
@@ -530,12 +571,18 @@ function StyleFieldset({
   severity,
   idPrefix,
   style,
+  styles,
+  tokens,
 }: {
   severity: Sev;
   idPrefix: string;
   style: Obj;
+  styles: Styles | null;
+  tokens: TokenOverrides;
 }) {
   const t = useT();
+  const translator = useTranslator();
+  const label = t(`severity.${severity}`);
   const path = ["keywordSeverityStyles", severity] as const;
   const { describedBy, messages } = useItemIssues(idPrefix, path, [
     "color",
@@ -589,6 +636,34 @@ function StyleFieldset({
         label={t("admin.keywords.style.marker")}
         value={style.marker}
       />
+      <ul className="qm-kw__ratios" aria-label={t("admin.keywords.style.contrast")}>
+        {MODES.map(({ mode, label: key }) => {
+          const ratio = ratioIn(style, mode, tokens);
+          if (ratio === null) return null;
+          const under = Number(ratio) < CONTRAST_FLOOR;
+          return (
+            <li key={mode}>
+              {t("admin.keywords.style.ratio", { theme: t(key), ratio })}
+              {under ? ` ${t("admin.keywords.style.under")}` : ""}
+            </li>
+          );
+        })}
+      </ul>
+      {styles !== null && (
+        <fieldset className="qm-kw__live">
+          <legend>
+            <VisuallyHidden>{t("admin.keywords.style.live")}</VisuallyHidden>
+          </legend>
+          <SeverityBadge severity={severity} styles={styles} t={translator.t} />{" "}
+          <Highlighted
+            text={label}
+            keywords={[{ keyword: label, severity }]}
+            highlight
+            styles={styles}
+            t={translator.t}
+          />
+        </fieldset>
+      )}
       {messages}
     </fieldset>
   );

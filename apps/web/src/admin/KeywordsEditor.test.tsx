@@ -231,6 +231,32 @@ describe("the keywords editor", () => {
     await waitFor(() => expect(again.contains(document.activeElement)).toBe(true));
   });
 
+  it("shows the contrast ratio per theme as text, the under 7:1 hint, and a live sample per level (UX-011, ruling 7)", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    const critical = within(editor()).getByRole("group", { name: "Critical style" });
+    const ratios = within(critical).getByRole("list", { name: "Contrast by theme" });
+    const items = within(ratios).getAllByRole("listitem");
+    expect(items.map((i) => i.textContent)).toEqual([
+      expect.stringMatching(/^Night \d+\.\d{2}:1/),
+      expect.stringMatching(/^Day \d+\.\d{2}:1/),
+      expect.stringMatching(/^Red shift \d+\.\d{2}:1/),
+    ]);
+    // The live sample is the production mark and badge for the level, in words as well as colour.
+    const live = within(critical).getByRole("group", { name: "Live sample" });
+    expect(live.querySelector("mark")).not.toBeNull();
+    expect(live.querySelector(".qm-badge--critical")).not.toBeNull();
+    // Same text and background: 1:1 in every theme, each flagged, still no block.
+    const warning = within(editor()).getByRole("group", { name: "Warning style" });
+    const bg = doc(t).keywordSeverityStyles.warning?.background as string;
+    await t.user.selectOptions(within(warning).getByRole("combobox", { name: "Text color" }), bg);
+    const low = within(within(warning).getByRole("list", { name: "Contrast by theme" }));
+    for (const item of low.getAllByRole("listitem")) {
+      expect(item.textContent).toMatch(/1\.00:1 \(under 7:1\)$/);
+    }
+    expect(doc(t).keywordSeverityStyles.warning?.color).toBe(bg);
+  });
+
   it("styles edit the colors, bold, icon and marker of a severity", async () => {
     const t = await openBuilder();
     await openKeywords(t);
