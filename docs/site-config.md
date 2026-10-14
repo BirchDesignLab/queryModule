@@ -216,7 +216,7 @@ Conditions are structured JSON: no expression strings, nothing is evaluated as c
 - A value is a string, number or boolean, or `{ "$default": fieldKey }`, which means that field's
   configured default. "State is not the site default" is
   `{ "field": "state", "op": "neq", "value": { "$default": "state" } }`.
-- Values are canonicalised for the field before comparing, so `"ok"` on a picklist field is
+- Values are canonicalized for the field before comparing, so `"ok"` on a picklist field is
   `"OK"`. Picklist comparison is therefore case-insensitive.
 - A blank field is `empty`. `eq`, `in` and the ordering operators are false on it; `neq` and
   `notIn` are true.
@@ -304,17 +304,17 @@ is an error.
 
 `keywordSeverityStyles` has one entry per severity: `color`, `background` (theme token names),
 `bold`, `icon`, `marker` and `audibleCue` (default `false`). The marker and icon are always shown
-next to highlighted text, so severity never relies on colour alone. Colour pairs below 4.5:1
+next to highlighted text, so severity never relies on color alone. Color pairs below 4.5:1
 contrast in any theme mode are an error.
 
 Keywords drive two things (M2 P1, spec 4.5):
 
 - **Highlighting.** In a mapped value or table cell whose element has `highlight: true`, each
-  keyword hit is marked with its severity style: the style's colours, its icon, the word itself, the
+  keyword hit is marked with its severity style: the style's colors, its icon, the word itself, the
   visible marker (`!!` for critical, `!` for warning, `i` for info) and a visually hidden
   "(critical)". Matching is case-insensitive and whole-word (Unicode letters and digits bound a
   word), longest keyword first, and a hit inside an `except` phrase does not count. Text is
-  NFC-normalised before matching.
+  NFC-normalized before matching.
 - **The severity badge.** `assessResult` scans every string leaf of the raw payload, independent of
   the card, the `view` and the `highlight` flags, so a `STOLEN` buried in a detail-only row, or in
   an element with `highlight: false`, still raises the badge on the card, the request entry and the
@@ -322,9 +322,9 @@ Keywords drive two things (M2 P1, spec 4.5):
 
 The shipped default site's keywords are `STOLEN`, `WANTED` and `MISSING` (critical; `NOT STOLEN`,
 `RECOVERED STOLEN` and `NOT WANTED` do not count), `EXPIRED` (warning), and `NO RECORD` and
-`RECOVERED` (info). Validation rejects a style whose colour pair is below 4.5:1 in any theme mode,
+`RECOVERED` (info). Validation rejects a style whose color pair is below 4.5:1 in any theme mode,
 and the shipped styles are at least 7:1 in every mode (the info style and the red-shift critical
-colour were raised for that in M2 P1). `audibleCue` stays `false` in M2 P1.
+color were raised for that in M2 P1). `audibleCue` stays `false` in M2 P1.
 
 ## Response mappings and result cards
 
@@ -350,7 +350,7 @@ unconditional card for that query type is shown.
 
 | Kind | Settings |
 |---|---|
-| `value` | `path`, `labelKey`, `view`, optional `format`, `highlight` (default `true`). One labelled value. |
+| `value` | `path`, `labelKey`, `view`, optional `format`, `highlight` (default `true`). One labeled value. |
 | `table` | `path` (an array of records), `labelKey`, `view`, `highlight` (default `true`), `columns` (at least one: `path` relative to one record, `labelKey`, optional `format`, optional `highlight`). One row per record. |
 
 `view` is `summary` (shown on the card), `detail` (shown after the card's "Show detail" toggle) or
@@ -382,7 +382,7 @@ an ISO date shows as `MM-DD-YY`. An unknown format is an error.
 the page never scrolls sideways. A cell holds the scalars found at the column's path in that record.
 
 **The generic dump.** With no qualifying mapping, the card shows every string, number and boolean
-leaf in payload order, each labelled by its path, with keyword marks on and no toggle, under the
+leaf in payload order, each labeled by its path, with keyword marks on and no toggle, under the
 note "No card is set up for this result, so every field shows under its path." There is no size or
 depth cap in M2 P1.
 
@@ -403,13 +403,13 @@ identifying values in the summary, the rest in the detail:
 | `per-summary` | status, last and first name, remarks | date of birth, address |
 | `pro-summary` | status, serial, description, remarks | property type |
 | `wnt-summary` | status, last and first name, remarks | date of birth and a warrants table (offense, issued) |
-| `dl-summary` | status, licence number, remarks | last and first name, date of birth, state |
+| `dl-summary` | status, license number, remarks | last and first name, date of birth, state |
 
 Identifiers such as the plate, VIN, serial, names and dates have `highlight: false`, so they render
 plain, and the severity badge still scans them. A site that deletes a card gets the generic dump
 for that type.
 
-**The driver's licence record.** The default mock holds one synthetic licence record: licence number
+**The driver's license record.** The default mock holds one synthetic license record: license number
 `ZZDLTEST` on the state source (Texas, `status: "VALID"`); every other `DL` query answers
 `NO RECORD`. The fixture policy treats `licenseNumber` as an `other` leaf (see "Fixture policy").
 
@@ -467,7 +467,7 @@ account, wins.
 
 A site can build on a shipped one with `extends`. The overlay is merged over the base: arrays of
 entities merge by `id`, `code` or `key`, and an entry with `"$remove": true` deletes an inherited
-entry. `packages/config/sites/example-ok.json` extends `default` and changes behaviour with config
+entry. `packages/config/sites/example-ok.json` extends `default` and changes behavior with config
 only:
 
 | Change in `example-ok` | Effect |
@@ -532,7 +532,7 @@ Scenarios shipped in the default site (the mock files are the full list):
 | `PRO` serial `ZZSTOLEN1` | both sources (default site only) | `STOLEN` |
 | `WNT` last `WANTED` | national source | `WANTED` |
 | `WNT` last `MISSING` | national source (default site only) | `MISSING PERSON` |
-| `DL` licence number `ZZDLTEST` | state source | `VALID` (one synthetic record) |
+| `DL` license number `ZZDLTEST` | state source | `VALID` (one synthetic record) |
 | anything else | any mock source | the type's `default`, usually `NO RECORD` |
 
 A submit now dispatches to the mock sources (ADR-0012). The mock adapter
@@ -567,7 +567,7 @@ Mock payloads are free-form, so the fixture policy (spec 5.4, 10.8;
 walks every `respond` and `default` payload (never `when`, which holds trigger inputs) and reports
 each violation by JSON pointer and key (`fixture.realPlate`, `fixture.validVin`,
 `fixture.plausibleDob`, `fixture.nonSyntheticName`, `fixture.nonExampleAddress`,
-`fixture.freeTextDigits`, `fixture.unknownKey`). Keys are normalised before lookup: lower-cased,
+`fixture.freeTextDigits`, `fixture.unknownKey`). Keys are normalized before lookup: lower-cased,
 `_` and `-` removed. Any key not listed is `fixture.unknownKey`.
 
 `FIXTURE_LEAF_KEYS`, by kind:
@@ -700,12 +700,12 @@ The right pane, **Card preview**, renders the production result card (the same c
 as the dispatcher's request entry) with the draft's cards, keywords and styles. Pick a mock source,
 then either pick a scenario of the draft's mock or type values: typed values go through the same
 matcher the mock adapter uses (`matchMockScenario`, spec 5.4), and the pane says which scenario or
-default answered and whether this card was the one used. A behaviour scenario (timeout, error,
+default answered and whether this card was the one used. A behavior scenario (timeout, error,
 credentials rejected) previews the status line, not a card. Typed values stay in the pane.
 
 **Keywords and severity** (the last child of the Result cards group). Keywords are a table: keyword,
 severity and exception phrases (add and remove), with Add keyword. The three severity styles each
-have text and background colour token pickers, bold, icon and marker, a live sample and the contrast
+have text and background color token pickers, bold, icon and marker, a live sample and the contrast
 ratio per theme mode: below 4.5:1 is an error that blocks publish, 4.5 to 7:1 shows "(under 7:1)" and
 does not block. The right pane shows a sample line to try a keyword or an exception.
 

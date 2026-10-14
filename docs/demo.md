@@ -96,7 +96,7 @@ Everything here is synthetic.
 | `PER.WANTED.SAMPLE.01011901` | The Person card plus an also-run "Wanted check" card, critical on `WANTED`. |
 | `WNT.MISSING` | `MISSING PERSON`, critical. |
 | `PRO.ZZSTOLEN1.ELECTRONICS` | Both sources return `STOLEN PROPERTY`, critical. |
-| `DL.ZZDLTEST` | State system card, `VALID`, the licence number in the summary, name, date of birth and state in the detail. National system: no record. |
+| `DL.ZZDLTEST` | State system card, `VALID`, the license number in the summary, name, date of birth and state in the detail. National system: no record. |
 | `VEH.FAIL1` and `VEH.TIMEOUT` | A status line with the reason in words for the failed or timed-out source, never a card; the other source's card shows. |
 
 **Generic dump.** A result with no card shows every field under its path, with the note "No card is
@@ -131,7 +131,7 @@ builder.
 
 ### Site variations (example-ok)
 
-example-ok extends the default site and changes behaviour through config only (spec 7 overlay):
+example-ok extends the default site and changes behavior through config only (spec 7 overlay):
 
 | Variation | How to see it |
 |---|---|
