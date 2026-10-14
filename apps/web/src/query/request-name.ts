@@ -1,5 +1,5 @@
 import type { RequestEntry } from "@querymodule/client";
-import { formatAckTime } from "@querymodule/web-ui";
+import { formatAckTime, shortReference } from "@querymodule/web-ui";
 
 /** The typed field that names a request, per query type (ruling 12, 10-13-26). Others use the short ID. */
 const PRIMARY_FIELDS: Readonly<Record<string, readonly string[]>> = {
@@ -34,6 +34,6 @@ export function requestAccessibleName(
   const typed = primaryTypedText(entry);
   if (typed !== "") return `${typeLabel} ${typed}`;
   return entry.status === "acknowledged"
-    ? `${typeLabel} ${entry.correlationId.slice(0, 8)}`
+    ? `${typeLabel} ${shortReference(entry.correlationId)}`
     : sentText(formatAckTime(entry.sentAt));
 }

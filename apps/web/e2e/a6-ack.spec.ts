@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { seededUser, signIn } from "./helpers.js";
+import { seededUser, shortReference, signIn } from "./helpers.js";
 
 // A6 (FR-043, FR-064, FR-065; spec 6.2, 10.2): a submit is acknowledged with its correlation ID and
 // ack time, the entry carries both, the ID is copyable, and a polite announcement says when the
@@ -56,7 +56,7 @@ test("[A6] submit is acknowledged with its correlation ID and ack time, and resu
   const reply = await posted;
   expect(reply.status()).toBe(202);
   const { correlationId } = (await reply.json()) as { correlationId: string };
-  const short = correlationId.slice(0, 8);
+  const short = shortReference(correlationId);
 
   // The acknowledgment, spoken once and politely: type, ack time, short reference.
   const polite = page.getByTestId("announcer-polite");

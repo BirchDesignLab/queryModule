@@ -8,7 +8,13 @@ import {
 import { type PERSONA_LAYOUTS, resolveShortcuts } from "@querymodule/core/config";
 import { assessResult } from "@querymodule/core/response";
 import type { ThemeSelection } from "@querymodule/tokens";
-import { ShortcutProvider, ThemeModeSeg, usePersona, useThemeMode } from "@querymodule/web-ui";
+import {
+  ShortcutProvider,
+  shortReference,
+  ThemeModeSeg,
+  usePersona,
+  useThemeMode,
+} from "@querymodule/web-ui";
 import {
   createContext,
   type RefObject,
@@ -307,7 +313,7 @@ export function AppShell() {
       const typed = primaryTypedText(entry);
       announcer.announce(
         criticalAnnouncementText(t, {
-          name: `${typeLabel(entry.queryType)} ${typed === "" ? entry.correlationId.slice(0, 8) : typed}`,
+          name: `${typeLabel(entry.queryType)} ${typed === "" ? shortReference(entry.correlationId) : typed}`,
           keyword: critical.keyword,
           source:
             sourceKey === undefined

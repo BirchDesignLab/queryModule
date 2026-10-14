@@ -1,3 +1,4 @@
+import { shortReference } from "@querymodule/web-ui";
 import { act, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
@@ -96,7 +97,7 @@ describe("FR-044 AppShell announces one coalesced summary (spec 6.6)", () => {
       timeout: 4000,
     });
     // Ruling 12 (10-13-26): this row kept no values, so the short ID names it.
-    expect(polite.textContent).toContain("0198a1b2");
+    expect(polite.textContent).toContain(shortReference(ACK_CORRELATION_ID));
     expect(polite.textContent).not.toContain("ZZ-0001");
   });
 });

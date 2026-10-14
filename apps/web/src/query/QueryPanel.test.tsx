@@ -1,4 +1,5 @@
 import { ClientSiteConfigSchema } from "@querymodule/core/config";
+import { shortReference } from "@querymodule/web-ui";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { delay, HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
@@ -444,7 +445,11 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const plate = screen.getByLabelText("Plate");
     await user.type(plate, "ZZ-0001{Enter}");
     await waitFor(() =>
-      expect(polite()).toHaveTextContent(/Vehicle query sent at .* Reference 0198a1b2\./),
+      expect(polite()).toHaveTextContent(
+        new RegExp(
+          String.raw`Vehicle query sent at .* Reference ${shortReference(ACK_202.correlationId)}\.`,
+        ),
+      ),
     );
     expect(submitRecorder.calls).toHaveLength(1);
     expect(submitRecorder.calls[0]?.body).toMatchObject({
@@ -454,7 +459,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
       sourceIds: ["stateSource", "nationalSource"],
     });
     const ack = screen.getByRole("region", { name: "Requests this shift" });
-    expect(ack).toHaveTextContent(ACK_202.correlationId.slice(0, 8));
+    expect(ack).toHaveTextContent(shortReference(ACK_202.correlationId));
     expect(ack).toHaveTextContent(/\d\d-\d\d-\d\d \d\d:\d\d:\d\d/);
     expect(plate).toHaveValue("ZZ-0001");
     expect(plate).toHaveFocus();

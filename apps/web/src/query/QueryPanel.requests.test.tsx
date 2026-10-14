@@ -1,3 +1,4 @@
+import { shortReference } from "@querymodule/web-ui";
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
@@ -31,7 +32,7 @@ async function openPanel(persona: string | null = null) {
 }
 
 const polite = () => screen.getByTestId("announcer-polite");
-const SHORT = ACK_202.correlationId.slice(0, 8);
+const SHORT = shortReference(ACK_202.correlationId);
 
 /** A POST that answers when the returned function is called. */
 function held(status: number, body: unknown): () => void {

@@ -1,5 +1,6 @@
 import type { StatusAnnouncement } from "@querymodule/client";
 import type { Severity } from "@querymodule/core/contracts";
+import { shortReference } from "@querymodule/web-ui";
 
 type T = (key: string, params?: Record<string, string | number | boolean>) => string;
 
@@ -61,7 +62,7 @@ export function statusAnnouncementText(
     // The summary template's {reference} slot: the typed field names the request, else its short ID.
     reference:
       extras.typed === undefined || extras.typed === ""
-        ? announcement.correlationId.slice(0, 8)
+        ? shortReference(announcement.correlationId)
         : extras.typed,
     done: summary.done,
     count: summary.total,

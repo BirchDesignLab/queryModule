@@ -220,3 +220,12 @@ export async function liveResponse(route: Route): Promise<APIResponse> {
     throw new Error(`live ${route.request().url()} answered ${response.status()}`);
   return response;
 }
+
+/**
+ * The short reference of a correlation ID as the app shows it: the last eight characters, the random
+ * part of a UUIDv7 (SEC-014). Mirrors `shortReference` in `@querymodule/web-ui`; the e2e project cannot
+ * import that package, whose barrel holds .tsx files and this project sets no `jsx`.
+ */
+export function shortReference(correlationId: string): string {
+  return correlationId.slice(-8);
+}

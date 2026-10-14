@@ -69,9 +69,14 @@ export interface RequestListProps {
 
 const pad = (n: number): string => String(n).padStart(2, "0");
 
-/** The first eight characters of a correlation ID: what the announcement says, and easy to read out. */
+/**
+ * The last eight characters of a correlation ID: what the announcement says, and easy to read out.
+ * A UUIDv7 starts with a millisecond timestamp, so its first eight hex digits repeat for every request
+ * within about 65 seconds (SEC-014); the tail is the random part and tells requests apart. An ID that is
+ * not UUID-shaped (a placeholder, a test ID) is shown whole when short, else by its last eight characters.
+ */
 export function shortReference(reference: string): string {
-  return reference.slice(0, 8);
+  return reference.slice(-8);
 }
 
 let ackFormat: Intl.DateTimeFormat | undefined;
