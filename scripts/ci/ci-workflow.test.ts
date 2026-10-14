@@ -41,6 +41,21 @@ describe("ci.yml structure (ADR-0008)", () => {
     expect(jobNeeds(ci).sort()).toEqual(expected);
   });
 
+  it("has exactly the known jobs, so a new job must be added here and to the `ci` aggregate (#627)", () => {
+    expect([...jobIds].sort()).toEqual([
+      "board",
+      "changes",
+      "checks",
+      "ci",
+      "image",
+      "mobile",
+      "publish",
+      "sensitive-review",
+      "test",
+      "web",
+    ]);
+  });
+
   it("every job sets timeout-minutes", () => {
     for (const id of jobIds) {
       expect(jobs[id]["timeout-minutes"], `job ${id} is missing timeout-minutes`).toBeTypeOf(

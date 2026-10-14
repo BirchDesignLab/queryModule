@@ -15,6 +15,16 @@ describe("docs-only fast path (master plan 11)", () => {
     expect(isDocsOnly(["docs/testing/stories.json", "docs/a.md"])).toBe(false);
   });
 
+  it("treats the workflow scripts and their harness as non-docs, Markdown included (#627)", () => {
+    // the harness asserts .claude/workflows/README.md, so a README-only change must still run it
+    expect(isDocsOnly([".claude/workflows/README.md"])).toBe(false);
+    expect(isDocsOnly([".claude/workflows/sdd-task.js"])).toBe(false);
+    expect(isDocsOnly(["scripts/sdd/NOTES.md"])).toBe(false);
+    expect(isDocsOnly(["scripts/sdd/workflow-harness.mjs", "docs/a.md"])).toBe(false);
+    expect(areas([".claude/workflows/README.md"]).docs_only).toBe(false);
+    expect(isDocsOnly(["docs/a.md", "README.md"])).toBe(true);
+  });
+
   it("treats docs/board/ as non-docs, so board data runs its schema test (#96 G-M1)", () => {
     expect(isDocsOnly(["docs/board/board-data.json"])).toBe(false);
     expect(isDocsOnly(["docs/board/board-data.json", "docs/a.md"])).toBe(false);

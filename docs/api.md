@@ -48,6 +48,9 @@ Access levels:
 
 "X-Requested-With" is `yes` when the header is required. "M1" is the status in this milestone:
 `live` means the handler is merged and answers as listed; `planned` means the contract is merged and no handler is mounted yet, so the route answers 404 until P1/P2.
+Two rows read `planned` although their handlers are mounted since M2 P1: `GET /queries` and
+`GET /queries/{correlationId}` answer as described under "Reading queries" below. The status cell
+follows the `status` field of the route contract (`routes.ts`), which a later contract change flips.
 
 | Method | Path | Access | X-Requested-With | M1 | Responses |
 |---|---|---|---|---|---|
@@ -85,8 +88,8 @@ What each route does:
 | `GET /meta` | `apiVersion`, `coreVersion`, `configSchemaVersion`, `configHash` and `minClientVersion` (null when unset). The client refuses to run below `minClientVersion`. |
 | `GET /locales/{locale}` | A locale bundle of UI strings. `400 validationFailed` for a malformed locale, `404 notFound` for a well-formed locale the site does not list. |
 | `GET /config` | The `ClientSiteConfig` allowlist. Never carries `Source.server`, `auth`, `retention`, `extends` or mock data. |
-| `GET /queries` | Planned. The caller's own requests, newest first, cursor and limit (at most 100); parts nested with per-source status; hidden results excluded. |
-| `GET /queries/{correlationId}` | Planned. One request with parts, per-source status and payloads for `returned` results; hidden results excluded; a shredded part or result answers `purged: true` with no values or payload. |
+| `GET /queries` | The caller's own requests, newest first, `cursor` and `limit` (default 25, at most 100); parts nested with per-source status and no values or payloads. See "Reading queries". |
+| `GET /queries/{correlationId}` | One of the caller's requests with its submitted values and, for each `returned` source, its payload; anyone else's request, or an unknown id, is `404 notFound`; a shredded part or result answers `purged: true` with no values or payload. See "Reading queries". |
 | `GET /admin/audit` | Planned, admin. Filters `user` (actor or credential owner), `correlationId`, `type`; `from` and `to` required, at most 31 days apart; `cursor`; `limit` at most 200. Rows go through a tolerant read schema so rows written before later fields still parse. |
 | `GET /admin/audit/export` | Planned, admin. The same filters as NDJSON, one audit row per line. |
 | `GET /admin/queries/{correlationId}` | Planned, admin. A request with payloads; `includeHidden=true` adds hidden results. |
@@ -205,6 +208,82 @@ Other answers:
 | 429 | `rateLimited` | More than 30 submits per user per minute. `Retry-After` carries the seconds. |
 | 500 | `internal` | Nothing was acknowledged. |
 | 503 | `unavailable` | The server is draining (SIGTERM) or failed fatally; nothing was recorded. An idempotent replay still gets its stored 202. |
+
+### Reading queries
+
+Two routes read back what `POST /queries` recorded. Both need a session, send no
+`X-Requested-With`, write no audit row, and see the caller's own requests only. Spec 5.1, 5.2.
+
+**List.** `GET /api/v1/queries?limit=<1..100>&cursor=<opaque>`. Both parameters are optional;
+`limit` defaults to 25 and is at most 100. Requests come newest first (submit time, then
+correlation id). The answer is `200`:
+
+```json
+{
+  "requests": [
+    {
+      "correlationId": "<UUIDv7>",
+      "submittedAt": 1790000000000,
+      "configHash": "<64 hex characters>",
+      "parts": [
+        {
+          "partId": 0,
+          "parentPartId": null,
+          "origin": "primary",
+          "queryType": "VEH",
+          "typeValues": {},
+          "plateOnly": false,
+          "skipReasons": [],
+          "droppedSourceIds": [],
+          "purged": false,
+          "sources": [
+            {
+              "resultId": "<UUIDv7>",
+              "sourceId": "stateSource",
+              "status": "returned",
+              "adapterKind": "mock",
+              "errorCode": null,
+              "createdAt": 1790000000000,
+              "receivedAt": 1790000000400,
+              "timedOutAt": null,
+              "purged": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nextCursor": "<opaque string, or null on the last page>"
+}
+```
+
+- Parts come in plan order and a part's sources in the order the 202 listed them.
+- A list item carries no submitted values and no payload; read one request to get them.
+- `nextCursor` is opaque: pass it back unchanged as `cursor` for the next page. It only names a
+  position in the caller's own list; it never widens what the caller may see.
+- An unknown query parameter, a `limit` outside 1 to 100 or not a whole number, an empty `cursor`
+  or a `cursor` this route did not issue is `400 validationFailed`.
+- A read failure is `500 internal`; the log carries the error class only.
+- Results a user deleted from view are excluded once delete-from-view exists (M3 P2); until then
+  nothing is hidden.
+
+**One request.** `GET /api/v1/queries/{correlationId}`, with the correlation id from the 202. The
+answer is `200` with the same shape as one list item plus, in every part, `values` (the submitted
+field values, decrypted for this response only) and, in every source whose `status` is `returned`,
+`payload` (the source's answer, an object).
+
+- The access policy lets the owner through and nobody else. Another user's request, an admin's
+  view of it, an unknown id and a malformed id all answer the same `404 notFound`, never `403`,
+  so a probe learns nothing. (`openapi.json` also lists `400` for a malformed id; the handler
+  answers `404` for it.) The admin read is a separate, planned route.
+- A request whose encryption scope was shredded (the lost-key procedure) answers `purged: true` on
+  the part or result that held sealed data, with no `values` on the part and no `payload` on the
+  result. The rest of the request still reads.
+- A decrypt or parse failure is `500 internal`; the log carries the error class and the
+  correlation id, never a value or a payload.
+- The body carries submitted values and source payloads, which exist nowhere else in the
+  clear: the response is `Cache-Control: no-store` like every `/api/*` answer, and nothing is
+  logged from it.
 
 ### Admin config
 
