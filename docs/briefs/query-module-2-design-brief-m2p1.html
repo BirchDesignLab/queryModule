@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Query Module 2.0 design brief</title>
+    <meta
+      name="description"
+      content="Design brief for Query Module 2.0 at M2 P1: the problem, the roles, the principles, the key flows and the decisions behind them."
+    />
+    <style>
+      /* Fonts: self-hosted IBM Plex from the web app (Latin-1 subset: no arrows, dashes or curly quotes in copy). */
+      @font-face {
+        font-family: "IBM Plex Sans";
+        font-weight: 400;
+        src: url("../../apps/web/src/fonts/IBMPlexSans-Regular-Latin1.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Sans";
+        font-weight: 400;
+        font-style: italic;
+        src: url("../../apps/web/src/fonts/IBMPlexSans-Italic-Latin1.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Sans";
+        font-weight: 500;
+        src: url("../../apps/web/src/fonts/IBMPlexSans-Medium-Latin1.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Sans";
+        font-weight: 600;
+        src: url("../../apps/web/src/fonts/IBMPlexSans-SemiBold-Latin1.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Sans Condensed";
+        font-weight: 600;
+        src: url("../../apps/web/src/fonts/IBMPlexSansCondensed-SemiBold-Latin1.woff2")
+          format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Mono";
+        font-weight: 400;
+        src: url("../../apps/web/src/fonts/IBMPlexMono-Regular-Latin1.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "IBM Plex Mono";
+        font-weight: 500;
+        src: url("../../apps/web/src/fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2");
+      }
+
+      /* Colors are the product's day tokens (packages/tokens), so the brief looks like the product. */
+      :root {
+        --paper: #ffffff;
+        --sunken: #eceff3;
+        --raised: #f7f9fb;
+        --ink: #121820;
+        --muted: #4d5968;
+        --rule: #dde2e8;
+        --edge: #7a8494;
+        --accent: #0b4a9e;
+        --accent-subtle: #e1ebfa;
+        --ok: #0f6b44;
+        --crit-bg: #a00000;
+        --crit-fg: #ffffff;
+        --warn-bg: #ffd24d;
+        --warn-fg: #1a1a1a;
+        --info-bg: #1a4fa3;
+        --info-fg: #ffffff;
+        --birch-green: #2f6644;
+        --f-body: "IBM Plex Sans", system-ui, sans-serif;
+        --f-head: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+        --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        color: var(--ink);
+        background: var(--sunken);
+        font: 10pt/1.5 var(--f-body);
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body {
+        margin: 0;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--f-head);
+        font-weight: 600;
+        line-height: 1.15;
+        margin: 0;
+        text-wrap: balance;
+      }
+      h1 {
+        font-size: 30pt;
+        letter-spacing: 0.005em;
+      }
+      h2 {
+        font-size: 17pt;
+      }
+      h3 {
+        font-family: var(--f-body);
+        font-size: 10.5pt;
+        font-weight: 600;
+      }
+      p {
+        margin: 0;
+      }
+      p + p {
+        margin-top: 6pt;
+      }
+      code,
+      .mono {
+        font-family: var(--f-mono);
+        font-size: 0.92em;
+      }
+      ul {
+        margin: 0;
+        padding-left: 1.1em;
+      }
+      li + li {
+        margin-top: 2pt;
+      }
+
+      /* Screen: a centered stack of paper sheets. Print: one sheet per .page, margins from @page. */
+      main {
+        max-width: 8.5in;
+        margin: 0 auto;
+      }
+      .page {
+        background: var(--paper);
+        padding: 0.6in 0.75in;
+        margin: 0 0 12pt;
+        display: grid;
+        gap: 14pt;
+        align-content: start;
+      }
+      @page {
+        size: Letter;
+        margin: 0.95in 0 0.8in;
+      }
+      @media print {
+        html {
+          background: var(--paper);
+        }
+        .page {
+          margin: 0;
+          padding: 0 0.75in;
+          break-after: page;
+          min-height: 0;
+        }
+        .page:last-child {
+          break-after: auto;
+        }
+      }
+
+      .eyebrow {
+        font: 500 8pt/1 var(--f-mono);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .tag {
+        font: 500 8pt/1 var(--f-mono);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      .lede {
+        font-size: 12pt;
+        line-height: 1.45;
+        max-width: 60ch;
+      }
+      .masthead {
+        display: grid;
+        gap: 8pt;
+        padding-bottom: 12pt;
+        border-bottom: 2pt solid var(--accent);
+      }
+      section.block {
+        display: grid;
+        gap: 8pt;
+      }
+      section.block > h2 {
+        display: grid;
+        gap: 4pt;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10pt;
+      }
+      .cols.two {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .card {
+        border: 1pt solid var(--rule);
+        border-radius: 4pt;
+        background: var(--raised);
+        padding: 9pt 10pt;
+        display: grid;
+        gap: 5pt;
+        align-content: start;
+        break-inside: avoid;
+      }
+      .card .meta {
+        font: 500 7.5pt/1.3 var(--f-mono);
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6pt 14pt;
+        counter-reset: p;
+      }
+      .principles > div {
+        display: grid;
+        gap: 2pt;
+        padding-left: 22pt;
+        position: relative;
+        break-inside: avoid;
+      }
+      .principles > div::before {
+        counter-increment: p;
+        content: counter(p);
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 15pt;
+        height: 15pt;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font: 600 8pt/15pt var(--f-mono);
+        text-align: center;
+      }
+      .principles span {
+        color: var(--muted);
+        font-size: 8.5pt;
+        line-height: 1.4;
+      }
+      figure {
+        margin: 0;
+        display: grid;
+        gap: 4pt;
+        break-inside: avoid;
+      }
+      figcaption {
+        font-size: 8pt;
+        color: var(--muted);
+      }
+      figure.shot img {
+        width: 100%;
+        height: auto;
+        display: block;
+        border: 1pt solid var(--rule);
+        border-radius: 3pt;
+        background: var(--sunken);
+      }
+      figure svg {
+        width: 100%;
+        height: auto;
+        display: block;
+        border: 1pt solid var(--rule);
+        border-radius: 3pt;
+        background: var(--sunken);
+      }
+      #fig-query-frame svg {
+        width: 90%;
+        margin: 0 auto;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10pt;
+        align-items: start;
+      }
+      .flow {
+        display: grid;
+        gap: 8pt;
+      }
+      .note {
+        font-size: 8.5pt;
+        color: var(--muted);
+        border-top: 1pt solid var(--rule);
+        padding-top: 6pt;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8pt;
+        line-height: 1.3;
+      }
+      th {
+        text-align: left;
+        font: 600 7.5pt/1.2 var(--f-mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1.5pt solid var(--edge);
+        padding: 3pt 5pt 4pt 0;
+      }
+      td {
+        vertical-align: top;
+        border-bottom: 1pt solid var(--rule);
+        padding: 3pt 6pt 3pt 0;
+      }
+      tr {
+        break-inside: avoid;
+      }
+      td.n {
+        font-family: var(--f-mono);
+        color: var(--muted);
+        width: 18pt;
+      }
+      td.src {
+        color: var(--muted);
+        width: 26%;
+      }
+      .sev {
+        display: inline-block;
+        font: 600 8pt/1 var(--f-body);
+        padding: 2pt 5pt;
+        border-radius: 2pt;
+      }
+      .sev.crit {
+        background: var(--crit-bg);
+        color: var(--crit-fg);
+      }
+      .sev.warn {
+        background: var(--warn-bg);
+        color: var(--warn-fg);
+      }
+      .sev.info {
+        background: var(--info-bg);
+        color: var(--info-fg);
+      }
+      .statusline {
+        border-top: 1pt solid var(--rule);
+        padding-top: 6pt;
+        font-size: 8pt;
+        color: var(--muted);
+      }
+      svg text {
+        font-family: var(--f-body);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <!-- Page 1: the problem and the roles -->
+      <article class="page" id="p-problem">
+        <header class="masthead">
+          <p class="eyebrow">Design brief &middot; Milestone 2, phase 1 &middot; Oct 14, 2026</p>
+          <h1>Query Module 2.0</h1>
+          <p class="lede">
+            A Query Module for the CAD suite where dispatchers and officers query state and national
+            systems from one fast, accessible screen, read the answers where they ask, and where an
+            implementer reshapes the screen without a code release.
+          </p>
+        </header>
+
+        <section class="block" id="problem">
+          <h2><span class="tag">The problem</span>Answers under time pressure, on every site's own terms</h2>
+          <p>
+            A dispatcher or officer asks a state or national system about a plate, a person, a
+            driver's license or a piece of property, and has seconds to read the answer back
+            over the radio. The first release did that, but the verdict on it was blunt: it works,
+            and it reads as a developer tool. Every site also wants different fields, rules,
+            commands and result layouts, and a code release per site is not workable.
+          </p>
+          <p>
+            The target is an operations console: dense, calm, dark-first, one clear accent, nothing
+            decorative. The design holds to four goals. The answer is readable at a glance. A serious result is hard to miss. The screens are built to work by keyboard. And the people who run a site can change what the screen shows, see what dispatchers will see, and publish it.
+          </p>
+        </section>
+
+        <section class="block" id="roles">
+          <h2><span class="tag">Three roles</span>Who the screens are for</h2>
+          <div class="cols">
+            <div class="card">
+              <h3>Dispatcher</h3>
+              <p class="meta">DESK &middot; 36 PX CONTROLS</p>
+              <ul>
+                <li>Two panes: the query panel and Requests this shift</li>
+                <li>Quick access to the five common queries, Alt+1 to Alt+5</li>
+                <li>Form or one-line terminal command, one shared draft</li>
+                <li>Results read in place, in the request that asked</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Officer</h3>
+              <p class="meta">VEHICLE LAPTOP &middot; 1024 x 768</p>
+              <ul>
+                <li>One card at touch density, targets of 48 px or more</li>
+                <li>Large query tiles and a 64 px Run query</li>
+                <li>Night and red-shift themes one tap away</li>
+                <li>No muted text for anything that must be read; detail is one tap behind the summary</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Implementer and administrator</h3>
+              <p class="meta">BUILDER &middot; NO JSON NEEDED</p>
+              <ul>
+                <li>Shapes fields, rules, commands, result cards and keywords in plain language</li>
+                <li>Previews on the dispatcher's own screen, then publishes and can roll back</li>
+                <li>The implementer edits site configuration only</li>
+                <li>The administrator does the same and also manages users, roles and sessions</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </article>
+
+      <!-- Page 2: principles -->
+      <article class="page" id="p-principles">
+        <section class="block" id="principles">
+          <h2><span class="tag">Design principles</span>Eight rules every screen is held to</h2>
+          <div class="principles">
+            <div>
+              <h3>Configuration, not code</h3>
+              <span>Fields, rules, commands, result cards and keywords are site configuration. A change is published, not released.</span>
+            </div>
+            <div>
+              <h3>The preview is the live form</h3>
+              <span>The builder previews with the same renderer dispatchers use. What the implementer sees is what goes live.</span>
+            </div>
+            <div>
+              <h3>Accessible by design</h3>
+              <span>Built for keyboard and screen reader use from the start, with a visible focus ring and body text at 7:1 contrast or better in every theme. Browser tests drive the main dispatcher and officer flows by keyboard, run an automated accessibility scan on the main screens, and check the query screen at 200% zoom and 320 px wide.</span>
+            </div>
+            <div>
+              <h3>Night and red shift</h3>
+              <span>Day, night and a red-shift mode that protects night vision. Each has its own focus ring and contrast proof.</span>
+            </div>
+            <div>
+              <h3>Severity is never color alone</h3>
+              <span>A serious result carries an icon, the word, a visible marker, a hidden spoken severity and a 4 px edge, as well as its color.</span>
+            </div>
+            <div>
+              <h3>Read-back text in monospace</h3>
+              <span>Plates, VINs, serial numbers, commands and reference IDs are set in a monospace face so they can be read back character by character.</span>
+            </div>
+            <div>
+              <h3>One draft for form and terminal</h3>
+              <span>A command echo under the form shows the terminal command being built. Switching modes keeps what was typed.</span>
+            </div>
+            <div>
+              <h3>Focus is never lost</h3>
+              <span>Incoming results, status changes and published config are built not to move focus or rebuild the control the user is on.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="block" id="direction">
+          <h2><span class="tag">Direction</span>An operations console</h2>
+          <p>
+            Four surface steps carry the hierarchy, so panels need few borders. One accent marks what
+            is selected or actionable. Severity colors are reserved for responses and badges. The
+            signature element is the command echo: under every query form a monospace strip shows the
+            terminal command the form is building, live as the user types, with an Edit as command
+            action. It teaches the terminal syntax and makes the form and the terminal one thing.
+          </p>
+          <figure id="fig-query-frame">
+            <svg viewBox="0 0 640 214" role="img" aria-labelledby="fq-t fq-d">
+              <title id="fq-t">The query panel</title>
+              <desc id="fq-d">
+                Quick access buttons, a form with plate and state fields, the command echo
+                VEH.ZZ-0001.TX, source chips and the Run query button.
+              </desc>
+              <rect x="10" y="10" width="620" height="194" rx="6" fill="#fff" stroke="#7a8494" />
+              <g font-size="10">
+                <rect x="24" y="22" width="86" height="26" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
+                <text x="34" y="39" fill="#0b4a9e" font-family="IBM Plex Mono" font-weight="500">VEH</text>
+                <text x="64" y="39" fill="#4d5968">Vehicle</text>
+                <rect x="118" y="22" width="76" height="26" rx="4" fill="#fff" stroke="#7a8494" />
+                <text x="128" y="39" fill="#121820" font-family="IBM Plex Mono">PER</text>
+                <text x="158" y="39" fill="#4d5968">Person</text>
+                <rect x="202" y="22" width="76" height="26" rx="4" fill="#fff" stroke="#7a8494" />
+                <text x="212" y="39" fill="#121820" font-family="IBM Plex Mono">PRO</text>
+                <text x="242" y="39" fill="#4d5968">Property</text>
+                <rect x="286" y="22" width="70" height="26" rx="4" fill="#fff" stroke="#7a8494" />
+                <text x="296" y="39" fill="#121820" font-family="IBM Plex Mono">WNT</text>
+                <text x="324" y="39" fill="#4d5968">Wanted</text>
+                <rect x="364" y="22" width="60" height="26" rx="4" fill="#fff" stroke="#7a8494" />
+                <text x="374" y="39" fill="#121820" font-family="IBM Plex Mono">DL</text>
+                <text x="392" y="39" fill="#4d5968">License</text>
+                <text x="470" y="39" fill="#4d5968" font-size="9">Form  |  Terminal</text>
+                <text x="24" y="70" fill="#4d5968" font-size="8" letter-spacing="1">PLATE</text>
+                <rect x="24" y="76" width="150" height="28" rx="3" fill="#fff" stroke="#7a8494" />
+                <text x="34" y="95" fill="#121820" font-family="IBM Plex Mono" font-size="12">ZZ-0001</text>
+                <text x="190" y="70" fill="#4d5968" font-size="8" letter-spacing="1">STATE</text>
+                <rect x="190" y="76" width="110" height="28" rx="3" fill="#fff" stroke="#7a8494" />
+                <text x="200" y="95" fill="#121820" font-size="11">Texas (TX)</text>
+                <text x="316" y="70" fill="#4d5968" font-size="8" letter-spacing="1">VIN</text>
+                <rect x="316" y="76" width="200" height="28" rx="3" fill="#fff" stroke="#7a8494" />
+                <rect x="24" y="116" width="492" height="24" rx="3" fill="#eceff3" />
+                <text x="34" y="132" fill="#4d5968" font-size="8" letter-spacing="1">COMMAND</text>
+                <text x="94" y="132" fill="#121820" font-family="IBM Plex Mono" font-size="11" font-weight="500">VEH.ZZ-0001.TX</text>
+                <text x="440" y="132" fill="#0b4a9e" font-size="9">Edit as command</text>
+                <rect x="24" y="152" width="108" height="22" rx="11" fill="#e1ebfa" />
+                <text x="36" y="167" fill="#0b4a9e" font-size="9">State system</text>
+                <rect x="140" y="152" width="124" height="22" rx="11" fill="#e1ebfa" />
+                <text x="152" y="167" fill="#0b4a9e" font-size="9">National system</text>
+                <rect x="522" y="146" width="96" height="40" rx="4" fill="#0b4a9e" />
+                <text x="534" y="170" fill="#fff" font-size="11" font-weight="600">Run query</text>
+              </g>
+            </svg>
+            <figcaption>
+              The dispatcher's query panel: quick access, the fields, the command echo, the
+              sources and one primary action. Redrawn from the design; the live screen is on the
+              next pages.
+            </figcaption>
+          </figure>
+        </section>
+      </article>
+
+      <!-- Page 3: key flows, query and acknowledgment -->
+      <article class="page" id="p-flow-query">
+        <section class="block" id="flow-query">
+          <h2><span class="tag">Key flow 1</span>Ask, acknowledge, watch each source answer</h2>
+          <p>
+            Run query records the request and answers at once with an acknowledgment: a row in
+            Requests this shift with the send time and a short reference. Under it, one line per
+            source reads pending, then settles on its own as that source answers. A slow or failed
+            source never holds up another. The text carries the status; an icon is never the only
+            signal, and a screen reader hears one summary after each change.
+          </p>
+          <figure class="shot" id="shot-query-panel">
+            <img
+              src="shots/query-panel.png"
+              alt="The dispatcher query panel with the Vehicle form and the command echo"
+            />
+            <figcaption>The query panel as built: Vehicle form with the command echo and sources.</figcaption>
+          </figure>
+          <figure class="shot" id="shot-requests-status">
+            <img
+              src="shots/requests-status.png"
+              alt="Requests this shift with an acknowledged request and live per-source status"
+            />
+            <figcaption>An acknowledged request with each source settling on its own.</figcaption>
+          </figure>
+        </section>
+      </article>
+
+      <!-- Page 4: result cards -->
+      <article class="page" id="p-flow-cards">
+        <section class="block" id="flow-cards">
+          <h2><span class="tag">Key flow 2</span>Results where they were asked: the result card</h2>
+          <p>
+            Each source that returns draws a card inside the request. The card is a view over the
+            answer, configured by the site. The summary comes first and is short; Show detail opens
+            the rest below it without moving the toggle. A serious word in the answer is marked, and
+            a badge on the card, on the request and in the announcement carries the highest
+            severity, even when the word sits in a row nobody opened.
+          </p>
+          <div class="pair">
+            <figure class="shot" id="shot-card-critical">
+              <img
+                src="shots/card-critical.png"
+                alt="A Vehicle result card with a critical STOLEN badge and mark"
+              />
+              <figcaption>A critical result: badge, mark on the word, 4 px edge, plate left plain.</figcaption>
+            </figure>
+            <figure class="shot" id="shot-card-detail-table">
+              <img
+                src="shots/card-detail-table.png"
+                alt="A Wanted result card with detail open showing a warrants table"
+              />
+              <figcaption>Detail open: a warrants table in its own scroll box.</figcaption>
+            </figure>
+          </div>
+          <figure id="fig-card-anatomy">
+            <svg viewBox="0 0 640 238" role="img" aria-labelledby="fa-t fa-d">
+              <title id="fa-t">Anatomy of a result card</title>
+              <desc id="fa-d">
+                A card headed State system: returned with a Critical badge. Its summary shows status
+                STOLEN with a marker and a plate. A Show detail toggle sits under the summary.
+                Callouts name each part.
+              </desc>
+              <rect x="10" y="10" width="620" height="218" rx="6" fill="#fff" stroke="#dde2e8" />
+              <rect x="40" y="26" width="360" height="190" rx="4" fill="#f7f9fb" stroke="#7a8494" />
+              <rect x="40" y="26" width="4" height="190" fill="#a00000" />
+              <text x="56" y="48" font-size="11" font-weight="600" fill="#121820">State system: returned</text>
+              <text x="236" y="48" font-size="9" font-family="IBM Plex Mono" fill="#4d5968">412 ms</text>
+              <rect x="300" y="34" width="90" height="20" rx="3" fill="#a00000" />
+              <text x="308" y="48" font-size="9" font-weight="600" fill="#fff">!! Critical</text>
+              <text x="56" y="74" font-size="7.5" fill="#4d5968" letter-spacing="1">STATUS</text>
+              <rect x="56" y="80" width="118" height="20" rx="2" fill="#a00000" />
+              <text x="62" y="94" font-size="10" font-weight="600" fill="#fff" font-family="IBM Plex Mono">!! STOLEN</text>
+              <text x="210" y="74" font-size="7.5" fill="#4d5968" letter-spacing="1">PLATE</text>
+              <text x="210" y="94" font-size="11" fill="#121820" font-family="IBM Plex Mono">ZZ-0001</text>
+              <text x="56" y="122" font-size="7.5" fill="#4d5968" letter-spacing="1">REMARKS</text>
+              <text x="56" y="140" font-size="10" fill="#121820" font-family="IBM Plex Mono">STOLEN VEHICLE</text>
+              <rect x="56" y="154" width="150" height="24" rx="3" fill="#fff" stroke="#7a8494" />
+              <text x="66" y="170" font-size="9.5" fill="#0b4a9e">Show detail  |  7 more items</text>
+              <line x1="56" y1="190" x2="384" y2="190" stroke="#dde2e8" />
+              <text x="56" y="206" font-size="8" fill="#4d5968">Detail opens here, below the toggle</text>
+              <g font-size="9" fill="#121820">
+                <line x1="392" y1="44" x2="430" y2="44" stroke="#7a8494" />
+                <text x="436" y="47">Heading: source and status, in words</text>
+                <line x1="176" y1="90" x2="430" y2="90" stroke="#7a8494" stroke-dasharray="2 2" />
+                <text x="436" y="93">Keyword mark: color, icon, word, marker</text>
+                <line x1="270" y1="90" x2="430" y2="112" stroke="#7a8494" stroke-dasharray="2 2" />
+                <text x="436" y="115">Plate left plain; the badge still scans it</text>
+                <line x1="208" y1="166" x2="430" y2="166" stroke="#7a8494" />
+                <text x="436" y="169">Toggle under the summary (UX-015)</text>
+                <line x1="44" y1="200" x2="430" y2="200" stroke="#7a8494" stroke-dasharray="2 2" />
+                <text x="436" y="203">4 px edge repeats the badge, never replaces it</text>
+              </g>
+            </svg>
+            <figcaption>Anatomy of a card. Redrawn from the design; every severity cue has a non-color twin.</figcaption>
+          </figure>
+          <p class="note">
+            When no card is set up for a result, the card says so and shows every field under its path
+            in the answer, so nothing is hidden. A source that is pending, timed out, failed or not
+            run is one status line with its reason in words, never a card. A nested query that was
+            skipped says why in a sentence.
+          </p>
+        </section>
+      </article>
+
+      <!-- Page 5: officer and replay -->
+      <article class="page" id="p-flow-officer-replay">
+        <section class="block" id="flow-officer">
+          <h2><span class="tag">Key flow 3</span>The same card on the vehicle laptop</h2>
+          <p>
+            The officer layout uses the same renderer at touch density. Summary values are 20 px monospace, labels are 16 px in the body color, touch targets are 48 px or more, and detail stays one tap behind the summary.
+          </p>
+          <figure class="shot" id="shot-officer-card">
+            <img src="shots/officer-card.png" alt="The officer layout showing a returned result card at 1024 by 768" />
+            <figcaption>Officer layout at 1024 x 768.</figcaption>
+          </figure>
+        </section>
+
+        <section class="block" id="flow-replay">
+          <h2><span class="tag">Key flow 4</span>Nothing is lost when the connection is</h2>
+          <p>
+            Live status travels over a socket. Every event is also written to a per-user log, and the
+            client remembers the last event it applied. After a drop or a reload it says where it was
+            and the server replays what it missed. If it was away too long, the server says so and the
+            client reloads the request list instead.
+          </p>
+          <figure id="fig-replay">
+            <svg viewBox="0 0 640 170" role="img" aria-labelledby="fr-t fr-d">
+              <title id="fr-t">Replay after a reconnect</title>
+              <desc id="fr-d">
+                A timeline: events 41 and 42 arrive live; the socket drops; events 43 and 44 are
+                logged; on reconnect the client sends hello with last sequence 42 and the server
+                replays 43 and 44. If the gap is too old or too large it answers resync and the client
+                reloads the list.
+              </desc>
+              <rect x="10" y="10" width="620" height="150" rx="6" fill="#fff" stroke="#dde2e8" />
+              <line x1="40" y1="60" x2="600" y2="60" stroke="#7a8494" stroke-width="2" />
+              <g font-size="9" fill="#121820" text-anchor="middle">
+                <circle cx="80" cy="60" r="9" fill="#0f6b44" />
+                <text x="80" y="92">event 41</text>
+                <circle cx="160" cy="60" r="9" fill="#0f6b44" />
+                <text x="160" y="92">event 42</text>
+                <rect x="200" y="46" width="130" height="28" rx="4" fill="#ffd24d" />
+                <text x="265" y="64" fill="#1a1a1a">socket down</text>
+                <circle cx="230" cy="110" r="9" fill="#fff" stroke="#7a8494" stroke-width="2" />
+                <text x="230" y="134">43 logged</text>
+                <circle cx="300" cy="110" r="9" fill="#fff" stroke="#7a8494" stroke-width="2" />
+                <text x="300" y="134">44 logged</text>
+                <rect x="360" y="46" width="110" height="28" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
+                <text x="415" y="64" fill="#0b4a9e" font-family="IBM Plex Mono">hello lastSeq 42</text>
+                <circle cx="520" cy="60" r="9" fill="#0f6b44" />
+                <text x="520" y="92">43 replayed</text>
+                <circle cx="580" cy="60" r="9" fill="#0f6b44" />
+                <text x="580" y="92">44 replayed</text>
+                <text x="470" y="144" fill="#4d5968">too old or too many: resync, then reload the list</text>
+              </g>
+            </svg>
+            <figcaption>Replay by last sequence. At most 500 events from the last 24 hours; otherwise resync.</figcaption>
+          </figure>
+        </section>
+      </article>
+
+      <!-- Page 6: builder -->
+      <article class="page" id="p-flow-builder">
+        <section class="block" id="flow-builder">
+          <h2><span class="tag">Key flow 5</span>The builder: cards, keywords and Try a match</h2>
+          <p>
+            Implementers shape the result cards in the same builder that shapes the query forms: a
+            tree on the left, an editor in the middle and a live preview on the right, with undo,
+            Review and publish, history and roll back. A published change reaches open dispatcher screens within 15 seconds and redraws the cards already on screen, keeping what the user was typing.
+          </p>
+          <figure id="fig-builder-frame">
+            <svg viewBox="0 0 640 186" role="img" aria-labelledby="fb-t fb-d">
+              <title id="fb-t">The builder layout</title>
+              <desc id="fb-d">
+                Three panes. Left: a tree with Query types, Result cards and Site. Middle: the card
+                editor with Applies to, Which card wins and Rows. Right: the card preview.
+              </desc>
+              <rect x="10" y="10" width="620" height="166" rx="6" fill="#fff" stroke="#7a8494" />
+              <rect x="10" y="10" width="620" height="26" rx="6" fill="#eceff3" />
+              <text x="22" y="27" font-size="9.5" font-weight="600" fill="#121820">Site configuration</text>
+              <text x="300" y="27" font-size="8.5" fill="#4d5968">Draft, based on version 7  |  2 unpublished changes</text>
+              <rect x="520" y="16" width="102" height="16" rx="3" fill="#0b4a9e" />
+              <text x="528" y="28" font-size="8.5" fill="#fff" font-weight="600">Review and publish</text>
+              <g font-size="9" fill="#121820">
+                <line x1="150" y1="36" x2="150" y2="176" stroke="#dde2e8" />
+                <line x1="440" y1="36" x2="440" y2="176" stroke="#dde2e8" />
+                <text x="22" y="56" font-weight="600">Query types</text>
+                <text x="22" y="76" font-weight="600" fill="#0b4a9e">Result cards</text>
+                <text x="32" y="92">Vehicle cards</text>
+                <text x="32" y="108">Person cards</text>
+                <text x="32" y="124">Keywords and severity</text>
+                <text x="22" y="144" font-weight="600">Site</text>
+                <text x="162" y="56" font-weight="600">Vehicle: All results</text>
+                <text x="162" y="76" fill="#4d5968">Applies to: any source, everyone, always</text>
+                <text x="162" y="96" font-weight="600">Which card wins</text>
+                <rect x="162" y="102" width="266" height="26" rx="2" fill="#f7f9fb" stroke="#dde2e8" />
+                <text x="170" y="118" fill="#4d5968">State system: veh-summary (only card that fits)</text>
+                <text x="162" y="148" font-weight="600">Rows</text>
+                <text x="162" y="164" fill="#4d5968">Status  |  Plate  |  Remarks  |  Make  ...</text>
+                <text x="452" y="56" font-weight="600">Card preview</text>
+                <rect x="452" y="64" width="166" height="100" rx="3" fill="#f7f9fb" stroke="#7a8494" />
+                <rect x="452" y="64" width="3" height="100" fill="#a00000" />
+                <text x="462" y="82" font-size="8.5" font-weight="600">State system: returned</text>
+                <rect x="462" y="90" width="64" height="14" rx="2" fill="#a00000" />
+                <text x="468" y="100" font-size="8" fill="#fff" font-weight="600">!! STOLEN</text>
+                <text x="462" y="124" font-size="8" fill="#4d5968">Same card dispatchers see</text>
+              </g>
+            </svg>
+            <figcaption>The builder with the card editor open. Redrawn from the design.</figcaption>
+          </figure>
+          <div class="pair">
+            <figure class="shot" id="shot-builder-cards">
+              <img
+                src="shots/builder-cards.png"
+                alt="The builder with the Vehicle card editor, Which card wins table and card preview"
+              />
+              <figcaption>Card editor, Which card wins and the card preview.</figcaption>
+            </figure>
+            <figure class="shot" id="shot-builder-keywords">
+              <img
+                src="shots/builder-keywords.png"
+                alt="The Keywords and severity editor with contrast ratios per theme"
+              />
+              <figcaption>Keywords and severity, with contrast per theme.</figcaption>
+            </figure>
+          </div>
+          <figure class="shot" id="shot-try-a-match">
+            <img
+              src="shots/try-a-match.png"
+              alt="Try a match: typed values matched to a mock scenario with the payload shown"
+            />
+            <figcaption>Try a match: type values, see which mock scenario answers. Nothing is sent or saved.</figcaption>
+          </figure>
+        </section>
+      </article>
+
+      <!-- Page 7: decisions -->
+      <article class="page" id="p-decisions">
+        <section class="block" id="decisions">
+          <h2><span class="tag">Design decisions</span>What was decided, and why</h2>
+          <p>
+            Each row is a decision the developer approved or a rule the product is held to. The
+            visual system and the result-card design note are the sources; they carry the full text.
+          </p>
+          <table aria-describedby="decisions-note">
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Decision</th>
+                <th scope="col">Why</th>
+                <th scope="col">Source</th>
+              </tr>
+            </thead>
+            <tbody id="decision-rows"></tbody>
+          </table>
+          <p class="note" id="decisions-note">
+            Sources: <code>docs/design/2026-09-29-visual-system.md</code> (rulings 09-29-26 and
+            10-05-26, and the result-card section with the rulings approved 10-13-26),
+            <code>docs/design/2026-10-07-result-card-config.md</code>, ADR-0009, ADR-0010, ADR-0011,
+            ADR-0013 and the requirements (FR-, UX-, SEC- IDs).
+          </p>
+        </section>
+      </article>
+
+      <!-- Page 8: next and status -->
+      <article class="page" id="p-next">
+        <section class="block" id="next">
+          <h2><span class="tag">What comes next</span>The same screens, with more behind them</h2>
+          <div class="cols">
+            <div class="card">
+              <h3>M2 phase 2: audit</h3>
+              <ul>
+                <li>Admin audit viewer and export</li>
+                <li>Receipt metric and response timing</li>
+                <li>Mapping paths checked against the mock answers on publish</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>M3: workflow and compliance</h3>
+              <ul>
+                <li>Credentials and delegation for training officers</li>
+                <li>Multi-source and nested queries, and delete from view</li>
+                <li>Multi-factor sign-in</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>M4: mobile and host</h3>
+              <ul>
+                <li>Mobile layouts and the CAD mobile app</li>
+                <li>Host integration</li>
+                <li>Real state and national connections come later, after the security controls are signed off</li>
+              </ul>
+            </div>
+          </div>
+          <p class="note">
+            Prototype scope: the Query Module runs on mock data with canned responses. It never
+            connects to real state or national systems and holds no real person, vehicle or property
+            records. Every value shown in this brief is synthetic.
+          </p>
+        </section>
+
+        <p class="statusline" id="status-line"></p>
+      </article>
+    </main>
+
+    <!-- The decision table as data, so a web version can reuse it. -->
+    <script type="application/json" id="decisions-data">
+      [
+        {
+          "decision": "A dark-first operations console with one accent and nothing decorative.",
+          "why": "The first release read as a developer tool; an operator needs calm and density.",
+          "source": "Visual system: Why, Direction"
+        },
+        {
+          "decision": "A command echo under every query form.",
+          "why": "It teaches the terminal syntax and makes the form and the terminal one draft.",
+          "source": "Visual system: Direction; FR-050 to FR-055"
+        },
+        {
+          "decision": "The night focus ring is amber; the red-shift ring is pale amber.",
+          "why": "A red ring beside the red invalid edge would blur the two; amber stays visible on near-black.",
+          "source": "Ruling 09-29-26 (1); E1"
+        },
+        {
+          "decision": "IBM Plex (Sans, Condensed, Mono), self-hosted.",
+          "why": "One family with a monospace face for read-back text, served by the product itself.",
+          "source": "Ruling 09-29-26 (2)"
+        },
+        {
+          "decision": "36 px dispatcher controls; officer targets of 48 px or more and a 64 px Run query.",
+          "why": "Density for the desk, reach and certainty for a vehicle laptop.",
+          "source": "Ruling 09-29-26 (3); spec 6.3"
+        },
+        {
+          "decision": "The mockup is the target; each capability ships in its own phase.",
+          "why": "A control that cannot work yet is disabled with a visible reason instead of being hidden.",
+          "source": "Ruling 09-29-26 (4); spec 6.2"
+        },
+        {
+          "decision": "Summary first; Show detail sits directly under the summary and opens below it.",
+          "why": "The first read stays short, and the toggle and everything above it never move.",
+          "source": "Mockup v5 rulings 1 and 2; UX-015"
+        },
+        {
+          "decision": "Severity is never color alone: icon, word, visible marker, spoken severity and a 4 px edge.",
+          "why": "Color fails for some users and some displays; every cue has a twin.",
+          "source": "Mockup v5 rulings 3 and 8; UX-010, UX-011"
+        },
+        {
+          "decision": "The severity badge scans the whole answer, not just the rows on the card.",
+          "why": "A serious word in a detail-only row must still raise the badge and the announcement.",
+          "source": "Spec 4.5; FR-060"
+        },
+        {
+          "decision": "Below 4.5:1 contrast blocks publish; 4.5 to 7:1 shows a hint; shipped styles are 7:1 or better.",
+          "why": "An implementer cannot publish a style that fails the floor, and is nudged toward the better one.",
+          "source": "Mockup v5 ruling 7"
+        },
+        {
+          "decision": "A skipped nested query says why, in a sentence that names the missing field.",
+          "why": "A silent gap looks like a clean result.",
+          "source": "Mockup v5 ruling 4"
+        },
+        {
+          "decision": "Announcements carry the query type, the typed field, counts, status and severity, never answer content.",
+          "why": "Spoken and logged text must not leak what the answer said.",
+          "source": "Mockup v5 ruling 12; spec 5.9, 6.6"
+        },
+        {
+          "decision": "The preview in the builder is the production card, fed by the draft.",
+          "why": "What an implementer approves is exactly what dispatchers will see.",
+          "source": "ADR-0011 (4)"
+        },
+        {
+          "decision": "A result with no card shows every field under its path, with no size cap.",
+          "why": "Nothing is hidden by a missing configuration.",
+          "source": "Mockup v5 ruling 5; spec 4.5"
+        },
+        {
+          "decision": "No Retry button in this phase.",
+          "why": "Retry behavior belongs with the spec 5.7 work, so this phase leaves it out.",
+          "source": "Mockup v5 ruling 9; spec 5.7"
+        },
+        {
+          "decision": "Mock data only, with a fixture policy that checks every mock payload against an allowlist of synthetic patterns.",
+          "why": "The prototype must never hold or imitate real person, vehicle or property records.",
+          "source": "Spec 5.4, 10.8"
+        }
+      ]
+    </script>
+    <!-- Counts for the status line, filled at render time. -->
+    <script type="application/json" id="status-data">
+      {
+        "asOf": "Oct 14, 2026",
+        "milestone": "M2 P1",
+        "mergedChanges": 0,
+        "workItems": 0,
+        "adrs": 13,
+        "tests": 0,
+        "e2eScenarios": 0
+      }
+    </script>
+    <script>
+      (() => {
+        const rows = JSON.parse(document.getElementById("decisions-data").textContent);
+        const body = document.getElementById("decision-rows");
+        rows.forEach((r, i) => {
+          const tr = document.createElement("tr");
+          const cells = [
+            ["n", String(i + 1)],
+            ["", r.decision],
+            ["", r.why],
+            ["src", r.source],
+          ];
+          for (const [cls, text] of cells) {
+            const td = document.createElement("td");
+            if (cls) td.className = cls;
+            td.textContent = text;
+            tr.appendChild(td);
+          }
+          body.appendChild(tr);
+        });
+        const s = JSON.parse(document.getElementById("status-data").textContent);
+        const fmt = (n) => n.toLocaleString("en-US");
+        document.getElementById("status-line").textContent =
+          `Status at ${s.milestone} (${s.asOf}): ${fmt(s.mergedChanges)} merged changes, ` +
+          `${fmt(s.workItems)} work items, ${s.adrs} architecture decisions, ` +
+          `${fmt(s.tests)} automated tests and ${fmt(s.e2eScenarios)} browser scenarios.`;
+      })();
+    </script>
+  </body>
+</html>

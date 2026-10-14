@@ -1,7 +1,7 @@
 # Site configuration reference
 
 How a site changes what the Query Module does, without a code change or a rebuild (BR-001, BR-005,
-NFR-001). This page covers M1 plus the M2 P0.5 dispatch and mock adapter, and was checked against the code on 10-05-26. Where a thing does not exist yet, the page says which phase brings it and does not
+NFR-001). This page covers M1, the M2 P0.5 dispatch and mock adapter and the M2 P1 result cards, and was checked against the code on 10-14-26. Where a thing does not exist yet, the page says which phase brings it and does not
 describe it.
 
 Mock data only. The prototype uses a mock data source with canned responses and never connects to
@@ -216,7 +216,7 @@ Conditions are structured JSON: no expression strings, nothing is evaluated as c
 - A value is a string, number or boolean, or `{ "$default": fieldKey }`, which means that field's
   configured default. "State is not the site default" is
   `{ "field": "state", "op": "neq", "value": { "$default": "state" } }`.
-- Values are canonicalised for the field before comparing, so `"ok"` on a picklist field is
+- Values are canonicalized for the field before comparing, so `"ok"` on a picklist field is
   `"OK"`. Picklist comparison is therefore case-insensitive.
 - A blank field is `empty`. `eq`, `in` and the ordering operators are false on it; `neq` and
   `notIn` are true.
@@ -304,28 +304,122 @@ is an error.
 
 `keywordSeverityStyles` has one entry per severity: `color`, `background` (theme token names),
 `bold`, `icon`, `marker` and `audibleCue` (default `false`). The marker and icon are always shown
-next to highlighted text, so severity never relies on colour alone. Colour pairs below 4.5:1
+next to highlighted text, so severity never relies on color alone. Color pairs below 4.5:1
 contrast in any theme mode are an error.
 
-In M1 these are validated and shipped; keyword highlighting of source answers starts when results
-arrive (M2).
+Keywords drive two things (M2 P1, spec 4.5):
 
-## Response mappings
+- **Highlighting.** In a mapped value or table cell whose element has `highlight: true`, each
+  keyword hit is marked with its severity style: the style's colors, its icon, the word itself, the
+  visible marker (`!!` for critical, `!` for warning, `i` for info) and a visually hidden
+  "(critical)". Matching is case-insensitive and whole-word (Unicode letters and digits bound a
+  word), longest keyword first, and a hit inside an `except` phrase does not count. Text is
+  NFC-normalized before matching.
+- **The severity badge.** `assessResult` scans every string leaf of the raw payload, independent of
+  the card, the `view` and the `highlight` flags, so a `STOLEN` buried in a detail-only row, or in
+  an element with `highlight: false`, still raises the badge on the card, the request entry and the
+  announcement. The highest severity wins (`critical`, then `warning`, then `info`).
 
-A mapping says what to show from a source answer:
-`{ id, queryType, sourceId?, persona?, when?, elements }`. Each element is a `value` (a `path`, a
-`labelKey`, a `view` of `summary`, `detail` or `both`, an optional `format` and `highlight`) or a
-`table` (a `path` and `columns`). The formats are `text`, `upper`, `phone`, `date` (with a
-`pattern`) and `template` (with a `template`); an unknown format is an error. Two mappings with the
-same query type, source, persona and `when` presence are an error.
+The shipped default site's keywords are `STOLEN`, `WANTED` and `MISSING` (critical; `NOT STOLEN`,
+`RECOVERED STOLEN` and `NOT WANTED` do not count), `EXPIRED` (warning), and `NO RECORD` and
+`RECOVERED` (info). Validation rejects a style whose color pair is below 4.5:1 in any theme mode,
+and the shipped styles are at least 7:1 in every mode (the info style and the red-shift critical
+color were raised for that in M2 P1). `audibleCue` stays `false` in M2 P1.
+
+## Response mappings and result cards
+
+A mapping is a result card (spec 4.1, 4.5; FR-060, UX-015, UX-016). It says what to show from one
+source's answer: `{ id, queryType, sourceId?, persona?, when?, elements }`. When a source returns,
+the browser reads the payload from `GET /api/v1/queries/{correlationId}` (see [api.md](api.md)),
+holds it in memory only, picks a mapping and renders it as a card inside the request. Cards are
+views over the stored payload, so a published change re-maps cards already on screen at the next
+config refresh (15 seconds or window focus), without a reload.
+
+**Which card is used.** A mapping qualifies when its `queryType` is the part's, its `sourceId` (if
+set) is the source's, its `persona` (if set) is the user's persona, and its `when` (if set) holds.
+The best score wins: `when` +4, `sourceId` +2, `persona` +1; equal scores go to the earlier mapping
+in config order. Two mappings with the same query type, source, persona and `when` are the error
+`config.duplicateMapping`. With no qualifying mapping the card is the generic dump (below).
 
 A mapping's `when` is checked per part, against that part's own values only, never another part's.
 For an also-run part those are the values the server planned for it (read from the request detail),
 so until the detail arrives, or when the part was purged, its `when` does not match and the
 unconditional card for that query type is shown.
 
-In M1 mappings are validated against the mock payloads and warn on a path that finds nothing. They
-are applied to real answers from M2.
+**Elements.** Each element is one of:
+
+| Kind | Settings |
+|---|---|
+| `value` | `path`, `labelKey`, `view`, optional `format`, `highlight` (default `true`). One labeled value. |
+| `table` | `path` (an array of records), `labelKey`, `view`, `highlight` (default `true`), `columns` (at least one: `path` relative to one record, `labelKey`, optional `format`, optional `highlight`). One row per record. |
+
+`view` is `summary` (shown on the card), `detail` (shown after the card's "Show detail" toggle) or
+`both`. Summary is the default view for every persona, and the open state is kept in memory per
+card. A card with no detail-only element has no toggle.
+
+**Path language.** A path reads the source payload (an object):
+
+| Form | Reads |
+|---|---|
+| `status`, `subject.last` | dot segments: own keys only |
+| `warrants[0].offense` | `[n]`: one array index |
+| `warrants[*].offense` | `[*]`: every element of the array, in payload order |
+| `["key.with.dots"]` | a bracket-quoted key (JSON string syntax), for a key that holds `.`, `[`, `]` or `"` |
+
+Resolution never throws. A path that is malformed or finds nothing yields no value and the element
+is left out of the card (a diagnostic is kept; the development build lists it under the card). A
+`value` joins the scalars it finds with ", " (one array level is flattened). A `table` path that
+finds anything but a non-empty array of records is left out. Only strings, numbers and booleans
+render; an object or array at a `value` path is left out too.
+
+**Formats.** `text` (as sent), `upper` (locale upper case), `phone` (10 digits, or 11 starting with
+1, as `(555) 010-0000`; anything else unchanged), `date` (an ISO `YYYY-MM-DD` value written as
+`pattern` with the tokens `YYYY`, `YY`, `MM`, `DD`; other values unchanged) and `template` (`{value}`
+replaced by the value). With no format, numbers show without digit grouping (a year reads 1901) and
+an ISO date shows as `MM-DD-YY`. An unknown format is an error.
+
+**Tables.** A table is a real `<table>` with a caption and column headers, in its own scroll box so
+the page never scrolls sideways. A cell holds the scalars found at the column's path in that record.
+
+**The generic dump.** With no qualifying mapping, the card shows every string, number and boolean
+leaf in payload order, each labeled by its path, with keyword marks on and no toggle, under the
+note "No card is set up for this result, so every field shows under its path." There is no size or
+depth cap in M2 P1.
+
+**Request entry and status lines.** Cards sit inside the request entry in "Requests this shift", one
+card per `returned` source (an h4 in the primary part, an h5 in an also-run part). A `pending`,
+`timedOut`, `failed`, `interrupted` or not-run source is one status line with its reason in words,
+never a card. A skipped also-run part shows "Not run" and one sentence per `skipReasons` key. The
+request header carries the highest severity over its returned sources. Announcements (spec 6.6) name
+the query type, the primary typed field (the short correlation ID when it is empty), counts, status
+words, severity and the configured keyword; never payload content.
+
+**Shipped cards (default site).** One card per query type, each with `status` in both views and the
+identifying values in the summary, the rest in the detail:
+
+| Card | Summary | Detail |
+|---|---|---|
+| `veh-summary` | status, plate, remarks | state, make, model, year, VIN, owner name and address |
+| `per-summary` | status, last and first name, remarks | date of birth, address |
+| `pro-summary` | status, serial, description, remarks | property type |
+| `wnt-summary` | status, last and first name, remarks | date of birth and a warrants table (offense, issued) |
+| `dl-summary` | status, license number, remarks | last and first name, date of birth, state |
+
+Identifiers such as the plate, VIN, serial, names and dates have `highlight: false`, so they render
+plain, and the severity badge still scans them. A site that deletes a card gets the generic dump
+for that type.
+
+**The driver's license record.** The default mock holds one synthetic license record: license number
+`ZZDLTEST` on the state source (Texas, `status: "VALID"`); every other `DL` query answers
+`NO RECORD`. The fixture policy treats `licenseNumber` as an `other` leaf (see "Fixture policy").
+
+**Checks.** `config:validate` and the builder check a mapping's query type, source, persona and
+`when` references, its label keys in every listed locale and `config.duplicateMapping`. Resolving
+mapping `path` values against the mock payloads in `config:validate` is M2 P2.
+
+The builder edits all of this without JSON: see "Result cards, keywords and Try a match" under the
+admin builder below. Design: the [design note](design/2026-10-07-result-card-config.md) and "Result
+cards and the cards builder" in the [visual system](design/2026-09-29-visual-system.md).
 
 ## Personas
 
@@ -373,7 +467,7 @@ account, wins.
 
 A site can build on a shipped one with `extends`. The overlay is merged over the base: arrays of
 entities merge by `id`, `code` or `key`, and an entry with `"$remove": true` deletes an inherited
-entry. `packages/config/sites/example-ok.json` extends `default` and changes behaviour with config
+entry. `packages/config/sites/example-ok.json` extends `default` and changes behavior with config
 only:
 
 | Change in `example-ok` | Effect |
@@ -438,6 +532,7 @@ Scenarios shipped in the default site (the mock files are the full list):
 | `PRO` serial `ZZSTOLEN1` | both sources (default site only) | `STOLEN` |
 | `WNT` last `WANTED` | national source | `WANTED` |
 | `WNT` last `MISSING` | national source (default site only) | `MISSING PERSON` |
+| `DL` license number `ZZDLTEST` | state source | `VALID` (one synthetic record) |
 | anything else | any mock source | the type's `default`, usually `NO RECORD` |
 
 A submit now dispatches to the mock sources (ADR-0012). The mock adapter
@@ -472,7 +567,7 @@ Mock payloads are free-form, so the fixture policy (spec 5.4, 10.8;
 walks every `respond` and `default` payload (never `when`, which holds trigger inputs) and reports
 each violation by JSON pointer and key (`fixture.realPlate`, `fixture.validVin`,
 `fixture.plausibleDob`, `fixture.nonSyntheticName`, `fixture.nonExampleAddress`,
-`fixture.freeTextDigits`, `fixture.unknownKey`). Keys are normalised before lookup: lower-cased,
+`fixture.freeTextDigits`, `fixture.unknownKey`). Keys are normalized before lookup: lower-cased,
 `_` and `-` removed. Any key not listed is `fixture.unknownKey`.
 
 `FIXTURE_LEAF_KEYS`, by kind:
@@ -575,11 +670,62 @@ built (the `adminAudit` feature, M2).
 The store holds one document per version: the `siteConfig`, the label overlay, and, only where
 `ALLOW_MOCK_SOURCES=true`, the mock file. Routes for all of this are in [api.md](api.md).
 
+### Result cards, keywords and Try a match
+
+Three parts of the builder edit the response config (M2 P1). They share the builder's draft, undo,
+Changes tab, Review and publish, history and roll back, and add no schema, route or migration.
+
+**Result cards** (a tree group between Query types and Site). Each query type lists its cards in
+config order, numbered and named by what narrows them ("All results", a source or persona name, or
+"when a rule matches"), with "Add card". The card editor has:
+
+- **Applies to:** Source (any, or one of the query type's sources), Shown to (everyone, or one
+  persona) and "Use this card" (always, or only when a rule matches, using the same sentence rule
+  editor as field rules). A card whose source, persona and rule equal another's shows
+  `config.duplicateMapping` with "Open <other card>", and Review and publish stays blocked.
+- **Which card wins:** a table over each source and persona (and the rule values the cards test)
+  naming the winning card and why ("rule +4", "source +2", "persona +1", "earlier in the list", "only
+  card that fits"); the rows this card wins are tagged. It uses the same scoring as the dispatcher's
+  mapper.
+- **Rows:** one item per element with Edit, Move up, Move down and Remove. A row has Kind (value or
+  table), Path (free text, with the paths found in the draft's mock answers as pick buttons), the
+  label shown to users (stored as a message key under `mapping.<cardId>.` with its text in the
+  label overlay), Show in (summary, detail or both), Format (as sent, upper case, phone number, date
+  MM-DD-YY, template) and Mark keywords. A table row has Columns (path relative to one record, label,
+  format, mark keywords). A path found in no mock answer is a warning, not an error: a real source
+  may still send it, and until then the card leaves the row out.
+- **Advanced settings:** the card key (fixed once published) and the label key prefix.
+
+The right pane, **Card preview**, renders the production result card (the same component and mapper
+as the dispatcher's request entry) with the draft's cards, keywords and styles. Pick a mock source,
+then either pick a scenario of the draft's mock or type values: typed values go through the same
+matcher the mock adapter uses (`matchMockScenario`, spec 5.4), and the pane says which scenario or
+default answered and whether this card was the one used. A behavior scenario (timeout, error,
+credentials rejected) previews the status line, not a card. Typed values stay in the pane.
+
+**Keywords and severity** (the last child of the Result cards group). Keywords are a table: keyword,
+severity and exception phrases (add and remove), with Add keyword. The three severity styles each
+have text and background color token pickers, bold, icon and marker, a live sample and the contrast
+ratio per theme mode: below 4.5:1 is an error that blocks publish, 4.5 to 7:1 shows "(under 7:1)" and
+does not block. The right pane shows a sample line to try a keyword or an exception.
+
+**Try a match** (the mock editor's right pane). Pick a source and a query type, type the query's
+field values, and the pane shows which scenario matches or that the default answers, which response
+of the source answered, the result and the payload as read-only JSON. Same matching as the adapter; nothing is
+sent and the typed values are never saved.
+
+**Review and publish** lists the changes in plain sentences, one per change, in two lists named
+"Result cards" and "Keywords and severity" (card ids, row labels and paths, keyword text and severity;
+never payload content or typed values). A publish reaches open dispatcher tabs at the next config
+refresh, and cards already on screen are redrawn with the new settings; a label added in the builder
+reaches a tab already open only after it reloads, because a refresh does not refetch the locale
+bundle.
+
 ## Not yet built
 
 | Topic | Where it lands |
 |---|---|
-| Result highlighting and response mappings applied to real answers | M2 |
+| Mapping paths resolved against mock payloads in `config:validate` | M2 P2 |
 | Credentials, delegation, delete from view (`credentials`, `delegation`, `resultHide`) | M3 |
 | Audit viewer (`adminAudit`) | M2 |
 | `pnpm config:validate --diff <tag>` | M2 P2 |
