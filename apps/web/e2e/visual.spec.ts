@@ -1297,6 +1297,41 @@ test.describe("parity: dispatcher and sign-in surfaces, type and states (1440x90
         await captureCrop(page, cell, `parity-shown-${mode}`);
         await page.getByLabel(/Plate type/).focus();
         await expect(tag).toHaveCount(0);
+
+        // #479: Plate color is revealed too, inside More details. The rule opened that disclosure; once
+        // the user closes it, its toggle says "1 field shown" in a static tag (no colour alone, no
+        // flash), without growing past the 36 px dense control or overflowing it.
+        const more = page.getByRole("button", { name: /More details/ });
+        await expect(more).toHaveAttribute("aria-expanded", "true");
+        await more.click();
+        await expect(more).toHaveAttribute("aria-expanded", "false");
+        const cue = more.locator(".qm-disclosure-toggle__cue");
+        await expect(cue).toHaveText(/1 field shown/i);
+        const cueLook = await cue.evaluate((el) => {
+          const s = getComputedStyle(el);
+          const toggle = el.closest("button") as HTMLElement;
+          const t = toggle.getBoundingClientRect();
+          const c = el.getBoundingClientRect();
+          return {
+            color: s.color,
+            edge: s.borderTopColor,
+            animation: s.animationName,
+            toggleAnimation: getComputedStyle(toggle).animationName,
+            toggleHeight: t.height,
+            inside:
+              c.left >= t.left && c.right <= t.right && c.top >= t.top && c.bottom <= t.bottom,
+          };
+        });
+        expect(cueLook.color).toBe(rgb(mode, "color.accent"));
+        expect(cueLook.edge).toBe(rgb(mode, "color.accent"));
+        expect(cueLook.animation).toBe("none");
+        expect(cueLook.toggleAnimation).toBe("none");
+        const dense = Number.parseFloat(tokenValue("control.height.dense", mode));
+        expect(cueLook.toggleHeight).toBeGreaterThanOrEqual(dense - 0.5);
+        expect(cueLook.toggleHeight).toBeLessThanOrEqual(dense + 0.5);
+        expect(cueLook.inside).toBe(true);
+        await more.click();
+        await expect(more.locator(".qm-disclosure-toggle__cue")).toHaveCount(0);
         await state.selectOption("TX");
       });
     });
