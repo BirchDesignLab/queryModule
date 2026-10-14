@@ -1807,16 +1807,20 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
 }
 
+.qm-wins__table thead th {
+  overflow-wrap: normal;
+}
+
 .qm-wins__table th:nth-child(1) {
-  inline-size: 24%;
+  inline-size: 23%;
 }
 
 .qm-wins__table th:nth-child(2) {
-  inline-size: 20%;
+  inline-size: 25%;
 }
 
 .qm-wins__table th:nth-child(3) {
-  inline-size: 30%;
+  inline-size: 27%;
 }
 
 .qm-wins__table th:nth-child(4) {
@@ -2162,4 +2166,37 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-control);
   overflow-wrap: anywhere;
+}
+
+/* A table needs the whole width: the title and hint sit above it, not beside it. */
+.qm-sect--wide > .qm-sect__label,
+.qm-sect--wide > .qm-sect__body {
+  flex-basis: 100%;
+}
+
+/* The builder previews (Card preview, Try a match; visual check, BW3): the fields in two columns
+   where the pane allows, each label above its control, the control the column's width, and
+   everything else (the answer choice, the card, the notes) across the pane, as the mockup frames. */
+.qm-preview--builder .qm-preview__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3), 1fr));
+  align-content: start;
+  gap: var(--qm-space-2) var(--qm-space-3);
+}
+
+.qm-preview--builder .qm-preview__body > * {
+  grid-column: 1 / -1;
+}
+
+.qm-preview--builder .qm-preview__body > div:has(> label:first-child) {
+  display: flex;
+  flex-direction: column;
+  grid-column: auto;
+  gap: calc(var(--qm-space-1) / 2);
+  min-inline-size: 0;
+}
+
+.qm-preview--builder .qm-preview__body > div:has(> label:first-child) > .qm-field__input {
+  box-sizing: border-box;
+  inline-size: 100%;
 }

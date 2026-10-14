@@ -624,7 +624,7 @@ function WinsTable({
     return t("admin.cards.wins.score", { score: w.score, why: parts.join(", ") });
   };
   return (
-    <Sect title={t("admin.cards.wins.title")} hint={t("admin.cards.wins.hint")}>
+    <Sect wide title={t("admin.cards.wins.title")} hint={t("admin.cards.wins.hint")}>
       <div className="qm-wins">
         <table className="qm-mock__table qm-wins__table" aria-label={t("admin.cards.wins.title")}>
           <thead>

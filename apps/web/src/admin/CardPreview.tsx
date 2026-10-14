@@ -175,7 +175,10 @@ export function CardPreview({
           );
 
   return (
-    <section className="qm-admin__preview qm-preview" aria-labelledby={headingId}>
+    <section
+      className="qm-admin__preview qm-preview qm-preview--builder"
+      aria-labelledby={headingId}
+    >
       <div className="qm-preview__head">
         <h3 id={headingId}>{t("admin.cards.preview.title")}</h3>
         <fieldset className="qm-seg">

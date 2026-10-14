@@ -162,7 +162,10 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
   const typeCodes =
     type?.typeField === null || type?.typeField === undefined ? null : type.typeField;
   return (
-    <section className="qm-admin__preview qm-preview" aria-labelledby={`${uid}-h`}>
+    <section
+      className="qm-admin__preview qm-preview qm-preview--builder"
+      aria-labelledby={`${uid}-h`}
+    >
       <div className="qm-preview__head">
         <h3 id={`${uid}-h`}>{t("admin.mock.try.title")}</h3>
       </div>
