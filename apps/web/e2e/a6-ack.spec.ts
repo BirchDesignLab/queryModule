@@ -38,6 +38,23 @@ test("[A6] submit is acknowledged with its correlation ID and ack time, and resu
     new RegExp(`Vehicle query sent at ${ACK_TIME}\\. Reference ${short}\\.`),
   );
 
+  // The toast: type and plate, ack time, the reference; polite, no payload, dismissible by keyboard.
+  const toast = page.getByTestId("ack-toast");
+  await expect(toast).toHaveAttribute("role", "status");
+  await expect(toast).toContainText("Vehicle ZZ-0001 acknowledged");
+  await expect(toast).toContainText(new RegExp(`Sent ${ACK_TIME}`));
+  await expect(toast.locator("code", { hasText: short })).toBeVisible();
+  await expect(toast).not.toContainText("TESTMAKE");
+  const toastCopy = toast.getByRole("button", {
+    name: `Copy acknowledgment reference ${short} for Vehicle ZZ-0001`,
+  });
+  await toastCopy.focus();
+  await page.keyboard.press("Enter");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(correlationId);
+  await toast.getByRole("button", { name: "Dismiss acknowledgment for Vehicle ZZ-0001" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(toast).toBeHidden();
+
   // The entry carries the ack time (MM-DD-YY HH:mm:ss) and the correlation ID.
   const list = page.getByRole("region", { name: "Requests this shift" });
   const row = list.getByRole("listitem").first();

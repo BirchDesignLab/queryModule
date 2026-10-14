@@ -20,6 +20,7 @@ import {
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
+import { AckToast } from "../query/AckToast.js";
 import { criticalAnnouncementText, statusAnnouncementText } from "../query/announce-status.js";
 import { primaryTypedText } from "../query/request-name.js";
 import { assessEntry, highestSeverity } from "../query/result-view.js";
@@ -343,6 +344,7 @@ export function AppShell() {
           <SkipLink />
           <AppHeader />
           <Outlet />
+          <AckToast />
         </ShortcutSheetProvider>
       </OnLoadEntry.Provider>
     </ShortcutProvider>
