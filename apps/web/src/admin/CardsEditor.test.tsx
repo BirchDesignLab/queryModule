@@ -393,3 +393,84 @@ describe("Review lines", () => {
     expect(within(group).getByText(/Row Make test \(vehicle\.make\)/)).toBeInTheDocument();
   });
 });
+
+// Mockup gaps (#642, FR-060, UX-016; mockup v5 "Applies to"): the label sits above the controls,
+// Source and Shown to share a two-column row, and Always / Only when a rule matches are two
+// side-by-side choice cards (title and one-line hint, the whole card is the radio's label).
+describe("the card editor: Applies to", () => {
+  it("puts the title above the controls, not in a side column", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const section = within(editor())
+      .getByRole("heading", { level: 4, name: "Applies to" })
+      .closest(".qm-sect");
+    expect(section?.classList.contains("qm-sect--wide")).toBe(true);
+    expect(section).toHaveTextContent(
+      "Leave all three open for a card that fits every Vehicle result.",
+    );
+  });
+
+  it("Source and Shown to share one two-column row", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const source = within(editor()).getByRole("combobox", { name: "Source" });
+    const shown = within(editor()).getByRole("combobox", { name: "Shown to" });
+    const row = source.parentElement?.parentElement;
+    expect(row).toBe(shown.parentElement?.parentElement);
+    expect(row?.classList.contains("qm-pair")).toBe(true);
+  });
+
+  it("the two rule choices are cards: title, hint, radio dot, the whole card the label", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const group = within(editor()).getByRole("group", { name: "Use this card" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios).toHaveLength(2);
+    const [always, rule] = radios as [HTMLInputElement, HTMLInputElement];
+    expect(always).toBeChecked();
+    for (const r of radios) {
+      const card = r.closest("label");
+      expect(card?.classList.contains("qm-choice")).toBe(true);
+    }
+    expect(always.closest("label")).toHaveTextContent("Always");
+    expect(always.closest("label")).toHaveTextContent("Any query values.");
+    expect(rule.closest("label")).toHaveTextContent("Only when a rule matches");
+    expect(rule.closest("label")).toHaveTextContent(
+      "Checked against the values the request was sent with.",
+    );
+    // The two cards sit side by side in one grid.
+    expect(always.closest("label")?.parentElement).toBe(rule.closest("label")?.parentElement);
+    expect(always.closest("label")?.parentElement?.classList.contains("qm-choices")).toBe(true);
+    // Clicking the card's text selects it.
+    await t.user.click(
+      within(group).getByText("Checked against the values the request was sent with."),
+    );
+    expect(rule).toBeChecked();
+    expect(always).not.toBeChecked();
+  });
+});
+
+// Mockup gaps (#642, item 4): the Columns table is compact so it fits the pane: the Mark header
+// reads "Mark" (its full name stays for assistive tech) and a column's Remove is a 36 px "x" button
+// whose accessible name still says Remove column and names the column.
+describe("the card editor: the Columns table", () => {
+  it("has a short Mark header and an x Remove button with the full accessible name", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add row" }));
+    await within(editor()).findByRole("combobox", { name: "Path" });
+    await t.user.click(within(editor()).getByRole("radio", { name: "Table" }));
+    const table = await within(editor()).findByRole("table", { name: "Columns" });
+    const mark = within(table).getByRole("columnheader", { name: "Mark keywords" });
+    expect(mark.querySelector("[aria-hidden='true']")?.textContent).toBe("Mark");
+    await t.user.click(within(editor()).getByRole("button", { name: "Add column" }));
+    const remove = within(table).getAllByRole("button", { name: /^Remove column/ });
+    expect(remove.length).toBeGreaterThan(1);
+    for (const b of remove) expect(b.querySelector("[aria-hidden='true']")?.textContent).toBe("×");
+    // Removing the first column leaves focus on Add column, never the page.
+    const first = remove[0];
+    if (first === undefined) throw new Error("no remove button");
+    await t.user.click(first);
+    expect(within(editor()).getByRole("button", { name: "Add column" })).toHaveFocus();
+  });
+});

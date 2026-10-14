@@ -120,12 +120,37 @@ for (const width of WIDTHS) {
 test("[#642] shots of the card preview as Officer at 1024", async ({ page }) => {
   await openBuilder(page, 1024);
   await selectCard(page, /^Vehicle cards/, /^1\. All results veh-summary/);
+  // The mock's first scenario is a record with detail rows, so the card has a Show detail toggle.
+  await preview(page).getByLabel("Scenario", { exact: true }).selectOption({ index: 1 });
   await preview(page).getByRole("button", { name: "Officer" }).click();
   await expect(preview(page).getByRole("button", { name: "Officer" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   await expect(preview(page).getByRole("region", { name: "State system: returned" })).toBeVisible();
-  await show(preview(page).getByRole("region", { name: "State system: returned" }));
-  await shot(page, "officer", 1024);
+  // The preview from its head (the persona toggle) to the card's Show detail toggle. At 1024x768 the
+  // preview scrolls inside a pane shorter than itself, and the page top would cut it, so for this one
+  // frame the pane and the preview are let grow to their content and the preview is shot by itself.
+  const detail = preview(page).getByRole("button", { name: / detail/ });
+  await show(detail);
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>(
+      ".qm-builder__panes, .qm-admin__preview",
+    )) {
+      el.style.overflow = "visible";
+      el.style.height = "auto";
+      el.style.maxHeight = "none";
+    }
+  });
+  const pane = await preview(page).boundingBox();
+  const head = await preview(page).getByRole("button", { name: "Officer" }).boundingBox();
+  const toggle = await detail.boundingBox();
+  expect(head?.y, "the persona toggle is in the pane").toBeGreaterThanOrEqual(pane?.y ?? 0);
+  expect(
+    (toggle?.y ?? 9999) + (toggle?.height ?? 0),
+    "Show detail is in the pane",
+  ).toBeLessThanOrEqual((pane?.y ?? 0) + (pane?.height ?? 0));
+  const dir = SHOTS_DIR ?? "";
+  mkdirSync(dir, { recursive: true });
+  await preview(page).screenshot({ path: join(dir, "app-officer-1024.png") });
 });

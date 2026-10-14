@@ -2200,3 +2200,182 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   box-sizing: border-box;
   inline-size: 100%;
 }
+
+/* Mockup gaps (issue 642, item 1): Applies to. Source and Shown to share a row that stacks when the
+   pane is narrow; the two rule choices are side-by-side cards whose whole face is the radio's
+   label. The checked card shows the accent edge and fill and the radio dot (never color alone);
+   the ring sits on the card when its radio has keyboard focus. */
+.qm-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3), 1fr));
+  gap: var(--qm-space-3);
+  margin-block-end: var(--qm-space-3);
+}
+
+.qm-pair > div {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--qm-space-1) / 2);
+  min-inline-size: 0;
+}
+
+.qm-pair select {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.qm-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.qm-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--qm-space-2);
+  min-block-size: var(--qm-control-height-dense);
+  padding: var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  cursor: pointer;
+}
+
+.qm-choice:has(input:checked) {
+  border-color: var(--qm-color-accent);
+  background: var(--qm-color-accent-subtle);
+}
+
+.qm-choice:has(input:focus-visible) {
+  outline: var(--qm-focus-ring-width) solid var(--qm-focus-ring);
+  outline-offset: var(--qm-focus-ring-offset);
+}
+
+.qm-choice input {
+  flex: none;
+  margin: calc(var(--qm-space-1) / 2) 0 0;
+}
+
+.qm-choice input:focus-visible {
+  outline: none;
+}
+
+.qm-choice b {
+  display: block;
+  font-weight: 500;
+}
+
+.qm-choice span span {
+  display: block;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* Item 2: the outcome as one row, badge then which entry answered, the wait under it as a hint. */
+.qm-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+}
+
+.qm-outcome__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2);
+}
+
+.qm-outcome__hint,
+.qm-preview__hint {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* Item 3: the Values segmented control, beside Result from. Its segments are radios (one on, one
+   Tab stop), 36 px, and wrap their text so both fit the column. */
+.qm-preview--builder .qm-preview__body > .qm-preview__field {
+  grid-column: auto;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.qm-seg--values {
+  display: flex;
+  box-sizing: border-box;
+  inline-size: 100%;
+}
+
+.qm-seg--values .qm-seg__option {
+  flex: 1 1 0;
+  justify-content: center;
+  min-block-size: var(--qm-control-height-dense);
+  min-inline-size: 0;
+  text-align: center;
+}
+
+/* Item 4: the Columns table fits the editor pane at 1366 and 1024. A fixed layout with the controls
+   filling their cells and wrapping headings: nothing scrolls sideways; table semantics are kept. */
+.qm-columns__table {
+  table-layout: fixed;
+}
+
+.qm-columns__table :where(th, td) {
+  padding-inline: var(--qm-space-1);
+  overflow-wrap: anywhere;
+}
+
+/* Beats .qm-mock__table td's minimum width, which would keep the table wider than the pane. */
+.qm-columns__table td {
+  min-inline-size: 0;
+}
+
+.qm-columns__table thead th {
+  overflow-wrap: normal;
+}
+
+.qm-columns__table :where(input[type="text"], select) {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.qm-columns__table :where(input[type="text"], select) {
+  padding-inline: var(--qm-space-2);
+}
+
+.qm-columns__table th:nth-child(1) {
+  inline-size: 24%;
+}
+
+.qm-columns__table th:nth-child(2) {
+  inline-size: 24%;
+}
+
+.qm-columns__table th:nth-child(3) {
+  inline-size: 24%;
+}
+
+.qm-columns__table th:nth-child(4) {
+  inline-size: 11%;
+}
+
+.qm-columns__table th:nth-child(5) {
+  inline-size: 16%;
+}
+
+.qm-columns__table :where(th, td):nth-child(n + 4) {
+  padding-inline: calc(var(--qm-space-1) / 2);
+}
+
+.qm-columns__remove {
+  min-inline-size: var(--qm-control-height-dense);
+  padding-inline: 0;
+}

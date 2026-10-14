@@ -66,10 +66,10 @@ describe("the card preview", () => {
     const t = await openVehicleCard();
     await screen.findByRole("region", { name: "Card preview" });
     await typeValues(t, "ZZ-0001");
-    expect(await within(pane()).findByText("Matched scenario 1")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Scenario 1 of Vehicle")).toBeInTheDocument();
     expect(within(pane()).getAllByText("STOLEN").length).toBeGreaterThan(0);
     await typeValues(t, "ABC123");
-    expect(await within(pane()).findByText("Matched scenario 2")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Scenario 2 of Vehicle")).toBeInTheDocument();
     expect(within(pane()).getByText("NO RECORD")).toBeInTheDocument();
     // Typed values never reach the draft.
     expect(JSON.stringify(configDraftStore(t.services).getState().doc)).not.toContain("ABC123");
@@ -192,5 +192,86 @@ describe("the card preview: typed responses", () => {
       await t.user.selectOptions(scenario, o.value);
       expect(await within(pane()).findByText(/\(pro-firearm\)/)).toBeInTheDocument();
     }
+  });
+});
+
+// Mockup gaps (#642, FR-060, UX-015): "Values" is a segmented control beside "Result from", one
+// row; the outcome is one badge row (badge, then which entry matched), as the mockup's outcome head.
+describe("the card preview: the Values segmented control and the outcome row", () => {
+  it("Values is a group of two radios beside Result from, Pick a scenario on", async () => {
+    await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const group = within(pane()).getByRole("group", { name: "Values" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.closest("label")?.textContent)).toEqual([
+      "Pick a scenario",
+      "Type values",
+    ]);
+    expect(radios[0]).toBeChecked();
+    expect(radios[1]).not.toBeChecked();
+    // The same row as Result from: one parent holds both fields.
+    const source = within(pane()).getByLabelText("Result from");
+    expect(source.parentElement?.parentElement).toBe(group.parentElement);
+  });
+
+  it("arrow keys move and select, Home and End jump, focus follows, and only the on option is a Tab stop", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const group = within(pane()).getByRole("group", { name: "Values" });
+    const [pick, type] = within(group).getAllByRole("radio") as [HTMLElement, HTMLElement];
+    pick.focus();
+    await t.user.keyboard("{ArrowRight}");
+    expect(type).toBeChecked();
+    expect(type).toHaveFocus();
+    expect(within(pane()).getByRole("textbox", { name: "Plate" })).toBeInTheDocument();
+    await t.user.keyboard("{ArrowDown}");
+    expect(pick).toBeChecked();
+    expect(pick).toHaveFocus();
+    await t.user.keyboard("{End}");
+    expect(type).toBeChecked();
+    await t.user.keyboard("{Home}");
+    expect(pick).toBeChecked();
+    await t.user.keyboard("{ArrowLeft}");
+    expect(type).toBeChecked();
+    expect(type).toHaveFocus();
+    await t.user.keyboard("{ArrowUp}");
+    expect(pick).toBeChecked();
+    // Tab leaves the group.
+    await t.user.tab();
+    expect(group.contains(document.activeElement)).toBe(false);
+  });
+
+  it("clicking an option keeps focus on it", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const type = within(pane()).getByRole("radio", { name: "Type values" });
+    await t.user.click(type);
+    expect(type).toBeChecked();
+    expect(type).toHaveFocus();
+  });
+
+  it("the outcome is one row: the badge with the result words, then which entry matched", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    await typeValues(t, "ZZ-0001");
+    const head = await within(pane()).findByTestId("outcome-head");
+    expect(head).toHaveTextContent("Returns a record");
+    expect(head).toHaveTextContent("Scenario 1 of Vehicle");
+    expect(head.querySelector(".qm-badge")).toHaveTextContent("Returns a record");
+    await typeValues(t, "ABC123");
+    expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent("No record");
+    await typeValues(t, "FAIL1");
+    const failed = await within(pane()).findByTestId("outcome-head");
+    expect(failed).toHaveTextContent("Source error");
+    expect(failed.querySelector(".qm-badge")).toHaveTextContent("Source error");
+    expect(within(pane()).queryByText(/^Matched scenario/)).toBeNull();
+  });
+
+  it("the default answer says Default of the query type", async () => {
+    await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent(
+      "Default of Vehicle",
+    );
   });
 });

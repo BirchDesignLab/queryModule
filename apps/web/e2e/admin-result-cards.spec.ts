@@ -309,8 +309,9 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   const plate = pane.getByLabel("Plate", { exact: true });
   await plate.focus();
   await page.keyboard.type("ZZ-0001");
-  await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
-  await expect(pane.getByText("Result: Returns a record")).toBeVisible();
+  const outcome = pane.getByTestId("outcome-head");
+  await expect(outcome).toContainText("Scenario 1 of Vehicle");
+  await expect(outcome.locator(".qm-badge")).toHaveText("Returns a record");
   // The answer opens as the production Result card; the Payload view is one key press away.
   await expect(pane.getByRole("region", { name: "State system: returned" })).toBeVisible();
   const showCard = pane.getByRole("button", { name: "Result card" });
@@ -321,9 +322,10 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   // Typed values stay in the pane: they are in no link, and a plate with no scenario takes the default.
   expect(page.url()).not.toContain("ZZ-0001");
   await plate.fill("ZZ-0099");
-  await expect(pane.getByText("No scenario matches: the default answers.")).toBeVisible();
+  await expect(outcome).toContainText("Default of Vehicle");
+  await expect(outcome.locator(".qm-badge")).toHaveText("No record");
   await plate.fill("ZZ-0001");
-  await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
+  await expect(pane.getByTestId("outcome-head")).toContainText("Scenario 1 of Vehicle");
 
   // Desktop controls are 36 px or more.
   expect(
@@ -344,7 +346,7 @@ test("[#605] Try a match controls and its answer toggle are 36 px at 1024x768", 
   const plate = pane.getByLabel("Plate", { exact: true });
   await plate.focus();
   await page.keyboard.type("ZZ-0001");
-  await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
+  await expect(pane.getByTestId("outcome-head")).toContainText("Scenario 1 of Vehicle");
   expect(
     await tooShort(36, {
       source: pane.getByLabel("Source", { exact: true }),
@@ -464,6 +466,140 @@ for (const width of [1366, 1024] as const) {
     for (const text of fit.whyText) expect(text).toMatch(/^score \d+, /);
   });
 }
+
+// Mockup gaps (#642, items 1, 4): Applies to is a label above two rows (Source and Shown to side by
+// side; the two rule choices as side-by-side cards), and a table row's Columns table fits the editor
+// pane at 1366 and 1024: neither its container, the editor's tab panel nor the page scrolls sideways.
+for (const width of [1366, 1024] as const) {
+  test(`[#642] Applies to is laid out as the mockup and the Columns table fits its pane at ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 768 });
+    await openBuilder(page);
+    await selectVehicleCard(page);
+    const form = editor(page);
+    const top = async (l: Locator) => Math.round((await l.boundingBox())?.y ?? -1);
+    const left = async (l: Locator) => Math.round((await l.boundingBox())?.x ?? -1);
+    const source = form.getByRole("combobox", { name: "Source", exact: true });
+    const shown = form.getByRole("combobox", { name: "Shown to", exact: true });
+    await expect(source).toBeVisible();
+    expect(await top(source), "Source and Shown to share a row").toBe(await top(shown));
+    expect(await left(shown)).toBeGreaterThan(await left(source));
+    const always = form.locator("label.qm-choice").filter({ hasText: "Always" });
+    const rule = form.locator("label.qm-choice").filter({ hasText: "Only when a rule matches" });
+    await expect(always).toBeVisible();
+    expect(await top(always), "the choice cards sit side by side").toBe(await top(rule));
+    expect(await left(rule)).toBeGreaterThan(await left(always));
+    // The title is above the controls, not in a side column.
+    const title = form.getByRole("heading", { level: 4, name: "Applies to" });
+    expect(await top(title)).toBeLessThan(await top(source));
+    expect(await left(title)).toBeLessThanOrEqual((await left(source)) + 1);
+    // Controls are 36 px, the cards at least that.
+    expect(await tooShort(36, { source, shown, "always card": always, "rule card": rule })).toEqual(
+      [],
+    );
+    // The radios take the arrow keys, and focus follows the selection.
+    const alwaysRadio = always.locator("input");
+    const ruleRadio = rule.locator("input");
+    await expect(alwaysRadio).toBeChecked();
+    await alwaysRadio.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(ruleRadio).toBeChecked();
+    await expect(ruleRadio).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(alwaysRadio).toBeChecked();
+    await expectNoSeriousAxeViolations(page);
+
+    // The Warrants table row of the Wanted check card: Columns fits with nothing scrolling.
+    await selectRow(page, /^Wanted check cards/);
+    const wanted = tree(page).getByRole("treeitem", { name: /^1\. All results wnt-summary/ });
+    if ((await wanted.count()) === 0) {
+      await tree(page)
+        .getByRole("treeitem", { name: /^Wanted check cards/ })
+        .first()
+        .press("ArrowRight");
+    }
+    await selectRow(page, /^1\. All results wnt-summary/);
+    await form.getByRole("button", { name: /^Edit\s?Warrants/ }).press("Enter");
+    const columns = form.getByRole("table", { name: "Columns" });
+    await columns.scrollIntoViewIfNeeded();
+    await expect(columns).toBeVisible();
+    const fit = await columns.evaluate((table) => {
+      const pane = table.closest('[role="tabpanel"]');
+      if (!(pane instanceof HTMLElement)) throw new Error("the editor has no tab panel");
+      const holder = table.parentElement as HTMLElement;
+      const box = pane.getBoundingClientRect();
+      const root = document.documentElement;
+      const controls = [...table.querySelectorAll<HTMLElement>("input, select, button")];
+      return {
+        tableOverflow: holder.scrollWidth - holder.clientWidth,
+        paneOverflow: pane.scrollWidth - pane.clientWidth,
+        pageOverflow: root.scrollWidth - root.clientWidth,
+        controls: controls.length,
+        outside: controls.filter((c) => c.getBoundingClientRect().right > box.right + 0.5).length,
+      };
+    });
+    expect(fit.tableOverflow, "the Columns container scrolls sideways").toBeLessThanOrEqual(0);
+    expect(fit.paneOverflow, "the editor tab panel scrolls sideways").toBeLessThanOrEqual(0);
+    expect(fit.pageOverflow, "page horizontal overflow").toBeLessThanOrEqual(0);
+    expect(fit.controls).toBeGreaterThan(0);
+    expect(fit.outside, "Columns controls past the pane edge").toBe(0);
+    await expectNoSeriousAxeViolations(page);
+  });
+}
+
+// Mockup gaps (#642, items 2, 3, 5): the preview's Values control is a 36 px segmented control beside
+// Result from and its outcome is one badge row; Try a match carries "Nothing is sent" in its head and
+// the mock editor's Query type is not clipped at 1366.
+test("[#642] Values is a 36 px segmented control, the outcome is one badge row, Try a match says Nothing is sent, and the mock's Query type is not clipped", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openBuilder(page);
+  await selectVehicleCard(page);
+  const pane = preview(page);
+  const values = pane.getByRole("group", { name: "Values" });
+  const pick = values.getByRole("radio", { name: "Pick a scenario" });
+  const type = values.getByRole("radio", { name: "Type values" });
+  await expect(pick).toBeChecked();
+  const face = (r: Locator) => r.locator("xpath=ancestor::label");
+  expect(await tooShort(36, { "pick a scenario": face(pick), "type values": face(type) })).toEqual(
+    [],
+  );
+  // Beside Result from: the same row.
+  const source = pane.getByLabel("Result from", { exact: true });
+  const rowOf = async (l: Locator) => Math.round((await l.boundingBox())?.y ?? -1);
+  expect(Math.abs((await rowOf(face(pick))) - (await rowOf(source)))).toBeLessThan(24);
+  // Arrow keys move and select, focus follows; Home and End jump.
+  await pick.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(type).toBeChecked();
+  await expect(type).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(pick).toBeChecked();
+  await expect(pick).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(type).toBeChecked();
+  await page.keyboard.press("Home");
+  await expect(pick).toBeChecked();
+  // The outcome: a badge with the words, then which entry matched, never the badge colour alone.
+  const head = pane.getByTestId("outcome-head");
+  await expect(head.locator(".qm-badge")).toHaveText(/\S/);
+  await expect(head).toContainText(/(Scenario \d+|Default) of Vehicle/);
+  await expectNoSeriousAxeViolations(page);
+
+  await selectRow(page, /^Mock response: Vehicle, State system/);
+  const tryPane = page.getByRole("region", { name: "Try a match" });
+  await expect(tryPane.getByText("Nothing is sent")).toBeVisible();
+  // The fixed Query type of the response shows its whole text, not "Vehicle (".
+  const queryType = editor(page).getByLabel("Query type", { exact: true });
+  await expect(queryType).toHaveValue("Vehicle (VEH)");
+  const clipped = await queryType.evaluate(
+    (el) => (el as HTMLInputElement).scrollWidth - el.clientWidth,
+  );
+  expect(clipped, "the Query type text is clipped").toBeLessThanOrEqual(0);
+  await expectNoSeriousAxeViolations(page);
+});
 
 test("[#605] removing a keyword, a row or a card by keyboard leaves focus on a sensible control, never the page", async ({
   page,

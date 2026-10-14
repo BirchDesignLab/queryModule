@@ -386,51 +386,65 @@ function CardEditor({
           </button>
         </div>
       </div>
-      <Sect title={t("admin.cards.appliesTo")}>
-        <SelectControl
-          idPrefix={idPrefix}
-          path={[...path, "sourceId"]}
-          label={t("admin.cards.source")}
-          value={card.sourceId}
-          options={asObjects(type.sources).map((s) => str(s.sourceId))}
-          blank={t("admin.cards.anySource")}
-          optionLabel={(s) =>
-            labelText(asObjects(doc.sources).find((x) => str(x.id) === s)?.labelKey) || s
-          }
-        />
-        <SelectControl
-          idPrefix={idPrefix}
-          path={[...path, "persona"]}
-          label={t("admin.cards.persona")}
-          value={card.persona}
-          options={asObjects(doc.personas).map((p) => str(p.key))}
-          blank={t("admin.cards.everyone")}
-          optionLabel={(p) =>
-            labelText(asObjects(doc.personas).find((x) => str(x.key) === p)?.labelKey) || p
-          }
-        />
+      <Sect
+        title={t("admin.cards.appliesTo")}
+        hint={t("admin.cards.appliesToHint", { type: typeName })}
+        wide
+      >
+        <div className="qm-pair">
+          <SelectControl
+            idPrefix={idPrefix}
+            path={[...path, "sourceId"]}
+            label={t("admin.cards.source")}
+            value={card.sourceId}
+            options={asObjects(type.sources).map((s) => str(s.sourceId))}
+            blank={t("admin.cards.anySource")}
+            optionLabel={(s) =>
+              labelText(asObjects(doc.sources).find((x) => str(x.id) === s)?.labelKey) || s
+            }
+          />
+          <SelectControl
+            idPrefix={idPrefix}
+            path={[...path, "persona"]}
+            label={t("admin.cards.persona")}
+            value={card.persona}
+            options={asObjects(doc.personas).map((p) => str(p.key))}
+            blank={t("admin.cards.everyone")}
+            optionLabel={(p) =>
+              labelText(asObjects(doc.personas).find((x) => str(x.key) === p)?.labelKey) || p
+            }
+          />
+        </div>
         <fieldset
-          className="qm-mock__radios"
+          className="qm-choices"
           aria-describedby={own.length > 0 ? `${idPrefix}-card-${index}-issues` : undefined}
         >
-          <legend>{t("admin.cards.when")}</legend>
-          <label className="qm-mock__radio">
+          <legend>
+            <VisuallyHidden>{t("admin.cards.when")}</VisuallyHidden>
+          </legend>
+          <label className="qm-choice">
             <input
               type="radio"
               name={ruleName}
               checked={!ruleOn}
               onChange={() => setPath([...path, "when"], undefined)}
-            />{" "}
-            {t("admin.cards.always")}
+            />
+            <span>
+              <b>{t("admin.cards.always")}</b>
+              <span>{t("admin.cards.alwaysHint")}</span>
+            </span>
           </label>
-          <label className="qm-mock__radio">
+          <label className="qm-choice">
             <input
               type="radio"
               name={ruleName}
               checked={ruleOn}
               onChange={() => setPath([...path, "when"], { field: firstField, op: "notEmpty" })}
-            />{" "}
-            {t("admin.cards.onlyWhen")}
+            />
+            <span>
+              <b>{t("admin.cards.onlyWhen")}</b>
+              <span>{t("admin.cards.onlyWhenHint")}</span>
+            </span>
           </label>
         </fieldset>
         {ruleOn && (
@@ -457,7 +471,7 @@ function CardEditor({
         )}
       </Sect>
       <WinsTable doc={doc} index={index} numbered={numbered} />
-      <Sect title={t("admin.cards.rows")}>
+      <Sect title={t("admin.cards.rows")} wide>
         <IssueMessages
           id={`${idPrefix}-card-${index}-rows-issues`}
           issues={rowsOwn.length > 0 ? rowsOwn : undefined}
@@ -1027,14 +1041,17 @@ function Columns({
     onChange({ ...el, columns }, coalesce);
   return (
     <div className="qm-mock__table-wrap">
-      <table className="qm-mock__table">
+      <table className="qm-mock__table qm-columns__table">
         <caption>{t("admin.cards.columns")}</caption>
         <thead>
           <tr>
             <th scope="col">{t("admin.cards.path")}</th>
             <th scope="col">{t("admin.cards.label")}</th>
             <th scope="col">{t("admin.cards.formatLabel")}</th>
-            <th scope="col">{t("admin.cards.mark")}</th>
+            <th scope="col">
+              <span aria-hidden="true">{t("admin.cards.column.markShort")}</span>
+              <VisuallyHidden>{t("admin.cards.mark")}</VisuallyHidden>
+            </th>
             <th scope="col">
               <VisuallyHidden>{t("admin.cards.column.remove")}</VisuallyHidden>
             </th>
@@ -1115,15 +1132,17 @@ function Columns({
                   {el.columns.length > 1 && (
                     <button
                       type="button"
-                      className="qm-button"
+                      className="qm-button qm-columns__remove"
                       onClick={() => {
                         setColumns(el.columns.filter((_, j) => j !== i));
                         // The button goes with its column: focus moves to Add column, never body.
                         addRef.current?.focus();
                       }}
                     >
-                      {t("admin.cards.column.remove")}
-                      <VisuallyHidden> {name}</VisuallyHidden>
+                      <span aria-hidden="true">{"×"}</span>
+                      <VisuallyHidden>
+                        {t("admin.cards.column.remove")} {name}
+                      </VisuallyHidden>
                     </button>
                   )}
                 </td>

@@ -5,10 +5,17 @@ import { VisuallyHidden } from "@querymodule/web-ui";
 import { useId, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
-import { BEHAVIOR_STATUS, BehaviorLine, RenderedCard, useRenderedCard } from "./CardAnswer.js";
+import {
+  BEHAVIOR_STATUS,
+  BehaviorLine,
+  OutcomeRow,
+  RESULT_KEY,
+  RenderedCard,
+  useRenderedCard,
+} from "./CardAnswer.js";
 import { useLabelText } from "./controls.js";
 import type { JsonObject } from "./draft.js";
-import { type MockResult, mockPointer, resultOf } from "./mock-edit.js";
+import { mockPointer, resultOf } from "./mock-edit.js";
 import { parseMock } from "./mock-model.js";
 import { mockSiteOf } from "./mock-site.js";
 import { previewConfig, useOverlayTranslator } from "./Preview.js";
@@ -25,14 +32,6 @@ import { useDebouncedValue } from "./use-debounced.js";
  * typing pauses. It follows the draft as it changes. Typed values live in this pane's state only:
  * never the draft, storage, logs, URLs or announcements (spec 6.7).
  */
-
-const RESULT_KEY: Record<MockResult, string> = {
-  record: "record",
-  norecord: "noRecord",
-  error: "error",
-  timeout: "timeout",
-  creds: "creds",
-};
 
 /** How long typing must pause before the outcome is announced. */
 const ANNOUNCE_DELAY_MS = 600;
@@ -127,8 +126,9 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
   // nothing for a timeout: the mock never answers it, the source's timeout ends the wait (FR-044).
   const latency = sourceId === undefined ? undefined : mock?.sources[sourceId]?.latencyMs;
   const timesOut = answer?.outcome.kind === "behavior" && answer.outcome.behavior === "timeout";
-  const wait =
-    latency === undefined || latency[1] <= 0 || timesOut
+  const wait = timesOut
+    ? t("admin.mock.try.neverAnswers")
+    : latency === undefined || latency[1] <= 0
       ? null
       : latency[0] === latency[1]
         ? t("admin.mock.try.waitOne", { ms: latency[1] })
@@ -170,6 +170,7 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
     >
       <div className="qm-preview__head">
         <h3 id={`${uid}-h`}>{t("admin.mock.try.title")}</h3>
+        <span className="qm-preview__hint">{t("admin.mock.try.nothingSent")}</span>
       </div>
       <div className="qm-preview__body">
         {sourceId === undefined ? (
@@ -262,23 +263,18 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
                 {sameType > 1 && (
                   <p>{t("admin.mock.try.response", { n: answer.responseIndex + 1 })}</p>
                 )}
-                <p>
-                  {scenario === undefined || answer.scenarioIndex === null
-                    ? t("admin.mock.try.default")
-                    : t("admin.mock.try.matched", {
-                        n: answer.scenarioIndex + 1,
-                        when: Object.entries(scenario.when)
-                          .map(([field, value]) =>
-                            t("admin.mock.summary.when", {
-                              field: fieldName(field),
-                              value: String(value),
-                            }),
-                          )
-                          .join(t("admin.mock.summary.and")),
-                      })}
-                </p>
-                <p>{t("admin.mock.try.result", { result: resultWord })}</p>
-                {wait !== null && <p>{wait}</p>}
+                <OutcomeRow
+                  result={resultOf(result)}
+                  which={
+                    scenario === undefined || answer.scenarioIndex === null
+                      ? t("admin.mock.try.entryDefault", { type: typeName(response.queryType) })
+                      : t("admin.mock.try.entryScenario", {
+                          n: answer.scenarioIndex + 1,
+                          type: typeName(response.queryType),
+                        })
+                  }
+                  hint={wait}
+                />
                 <fieldset className="qm-seg qm-try__toggle">
                   <legend>
                     <VisuallyHidden>{t("admin.mock.try.showAs")}</VisuallyHidden>

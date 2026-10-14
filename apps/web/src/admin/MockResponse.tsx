@@ -433,6 +433,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
         </p>
       )}
       <Sect
+        wide
         title={t("admin.mock.matches.title")}
         hint={t(typeCode === null ? "admin.mock.matches.noType" : "admin.mock.matches.hint", {
           type: env.typeName(response.queryType),
