@@ -935,5 +935,13 @@
   "result.keywordSeverity": "({severity})",
   "result.noMapping": "No card is set up for this result, so every field shows under its path.",
   "result.toggleContext": "for {source}, {name}",
-  "result.diagnostics": "Mapping notes (development)"
+  "result.diagnostics": "Mapping notes (development)",
+  "mapping.remarks": "Remarks",
+  "mapping.ownerLast": "Owner last name",
+  "mapping.ownerFirst": "Owner first name",
+  "mapping.ownerAddress": "Owner address",
+  "mapping.address": "Address",
+  "mapping.warrants": "Warrants",
+  "mapping.offense": "Offense",
+  "mapping.issued": "Issued"
 }
