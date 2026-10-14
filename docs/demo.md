@@ -33,7 +33,7 @@ The config behind it is in [docs/site-config.md](site-config.md) and the routes 
    random time in the source's `latencyMs` range): "returned" is the calm tone, anything else
    (failed, timed out, interrupted, credentials missing or rejected) reads as a problem. The text
    carries the status, never the icon alone, and a screen reader hears a summary such as "Vehicle
-   <first 8 characters of the reference>: 1 of 2 sources done. ..." after each change. The lines come over the WebSocket feed, so they
+   <last 8 characters of the reference>: 1 of 2 sources done. ..." after each change. The lines come over the WebSocket feed, so they
    update without a refresh.
 5. Choose "Terminal mode", type `VEH.ZZ-0001` and press Enter: the same query, typed. `XYZ.1` shows
    "Unrecognized command XYZ." and sends nothing.
@@ -116,14 +116,16 @@ builder.
 
 1. **Move a row to the summary.** Result cards, Vehicle, "All results" card: edit the Make row
    (`vehicle.make`) and set Show in to "Summary". The card preview (State source, the scenario for
-   plate `ZZ-0001`) shows Make on the card at once, as dispatchers will see it.
+   plate `ZZ-0001`) shows Make on the card at once, as dispatchers will see it; the Dispatcher and
+   Officer buttons above the preview switch the layout.
 2. **Add a keyword.** Keywords and severity: Add keyword `TESTMAKE`, severity Warning. The sample
    line marks it; the contrast under each severity style shows per theme.
 3. **Which card wins.** Add a second Vehicle card with Source "National system": the table now shows
-   it winning for the national source (source +2) and the first card for the rest.
+   it winning for the national source ("score 2, source +2") and the first card for the rest.
 4. **Try a match.** Mock responses, State source, Vehicle: type plate `ZZ-0001`; the pane says
-   scenario 1 matches and shows the payload. Type `ABC123`: the pane says which scenario answers. A
-   plate that matches nothing says the default answers.
+   "Scenario 1 matches" and shows the result card as dispatchers would see it. The Payload button
+   switches to the payload as read-only JSON and Result card switches back. Type `ABC123`: the pane
+   says which scenario answers. A plate that matches nothing says the default answers.
 5. **Review and publish.** The dialog lists the row, the keyword and the new card in plain
    sentences, never payload content. Publish, then submit `VEH.ZZ-0001` in a dispatcher tab that was
    already open: Make is in the summary with a warning mark on `TESTMAKE`, and cards already on
