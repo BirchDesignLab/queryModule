@@ -50,12 +50,23 @@ export function AckToast() {
     });
   }, [requests]);
 
+  // Spec 6.6: the timer stops while the pointer is over the toast or focus is inside it, and a
+  // full 10 s runs again once both have left.
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const paused = hovered || focused;
   const key = toast?.correlationId;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
-    if (key === undefined) return;
+    if (key === undefined || paused) return;
     timer.current = setTimeout(() => setToast(null), ACK_TOAST_MS);
     return () => clearTimeout(timer.current);
+  }, [key, paused]);
+  useEffect(() => {
+    if (key === undefined) {
+      setHovered(false);
+      setFocused(false);
+    }
   }, [key]);
 
   if (toast === null) return null;
@@ -64,7 +75,17 @@ export function AckToast() {
   const reference = shortReference(toast.correlationId);
   const name = toast.typed === "" ? `${typeLabel} ${reference}` : `${typeLabel} ${toast.typed}`;
   return (
-    <div className="qm-toast" role="status" data-testid="ack-toast">
+    <div
+      className="qm-toast"
+      role="status"
+      data-testid="ack-toast"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
+    >
       <strong className="qm-toast__title">{t("toast.ack.title", { name })}</strong>
       <span>{t("requests.sentAt", { time: formatAckTime(toast.acknowledgedAt) })}</span>
       <span>

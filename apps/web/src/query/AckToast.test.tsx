@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACK_CORRELATION_ID } from "../test/feed-driver.js";
 import { CLIENT_CONFIG, TEST_USER } from "../test/msw-server.js";
@@ -84,6 +84,45 @@ describe("A6 the ack toast", () => {
     expect(screen.getByTestId("ack-toast")).toBeTruthy();
     act(() => {
       vi.advanceTimersByTime(200);
+    });
+    expect(screen.queryByTestId("ack-toast")).toBeNull();
+  });
+
+  it("pauses while the pointer is over it, then runs a full 10 s again (spec 6.6)", () => {
+    vi.useFakeTimers();
+    const { send, ack } = setup();
+    ack(send({ plate: "ZZ-0001" }));
+    const toast = screen.getByTestId("ack-toast");
+    fireEvent.pointerEnter(toast);
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(screen.getByTestId("ack-toast")).toBeTruthy();
+    fireEvent.pointerLeave(toast);
+    act(() => {
+      vi.advanceTimersByTime(9_900);
+    });
+    expect(screen.getByTestId("ack-toast")).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(screen.queryByTestId("ack-toast")).toBeNull();
+  });
+
+  it("pauses while focus is inside it and resumes when focus leaves (spec 6.6)", () => {
+    vi.useFakeTimers();
+    const { send, ack } = setup();
+    ack(send({ plate: "ZZ-0001" }));
+    const copy = screen.getAllByRole("button")[0];
+    if (copy === undefined) throw new Error("no toast button");
+    act(() => copy.focus());
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(screen.getByTestId("ack-toast")).toBeTruthy();
+    act(() => copy.blur());
+    act(() => {
+      vi.advanceTimersByTime(10_100);
     });
     expect(screen.queryByTestId("ack-toast")).toBeNull();
   });
