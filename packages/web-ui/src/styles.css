@@ -1090,6 +1090,12 @@ h1 {
   content: "\2212";
 }
 
+/* #479: the cue on a closed toggle that holds a revealed field is the Shown tag's style in the
+   toggle's flow: static text with a border, so it needs no colour to read and no motion to skip. */
+.qm-disclosure-toggle__cue {
+  margin-inline-start: 0;
+}
+
 .qm-disclosure-toggle:hover {
   color: var(--qm-color-text-body);
 }

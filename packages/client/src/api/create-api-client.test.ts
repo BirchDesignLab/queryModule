@@ -109,6 +109,24 @@ describe("D-A26 passwordChangeRequired (SEC-005)", () => {
     expect(t.onPasswordChangeRequired).toHaveBeenCalledTimes(1);
     expect(error).toMatchObject({ error: { code: "passwordChangeRequired" } });
   });
+  it("#66 reads the code through unknown fields, and ignores an unknown code", async () => {
+    const extra = make(async () =>
+      Response.json(
+        {
+          futureTop: 1,
+          error: { code: "passwordChangeRequired", requestId: "r1", futureField: [1], params: {} },
+        },
+        { status: 403 },
+      ),
+    );
+    await extra.api.GET("/api/v1/meta");
+    const unknown = make(async () =>
+      Response.json({ error: { code: "someFutureCode", requestId: "r1" } }, { status: 403 }),
+    );
+    await unknown.api.GET("/api/v1/meta");
+    expect(extra.onPasswordChangeRequired).toHaveBeenCalledTimes(1);
+    expect(unknown.onPasswordChangeRequired).not.toHaveBeenCalled();
+  });
   it("ignores any other 403, a non-JSON 403 and a 200", async () => {
     const forbidden = make(async () =>
       Response.json({ error: { code: "forbidden", requestId: "r1" } }, { status: 403 }),
