@@ -156,6 +156,11 @@ function keySegment(cardId: string): string {
   return (joined === "" ? "card" : joined).slice(0, LABEL_SEGMENT_MAX);
 }
 
+/** The label key prefix of a card's rows as Advanced settings shows it: "mapping.vehSummary.*". */
+export function labelKeyPrefix(cardId: string): string {
+  return `mapping.${keySegment(cardId)}.*`;
+}
+
 /**
  * A label key for a new row under `mapping.<card>.`, a valid MessageKey that is not in `taken`
  * (the keys the site and its overlay already have). The card's id loses its dashes: a key

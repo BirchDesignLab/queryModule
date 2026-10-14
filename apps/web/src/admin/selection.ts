@@ -19,12 +19,26 @@ export interface Selection {
   select?(pointer: string): void;
 }
 
+/**
+ * A query type's row in the Result cards group (Task 10, #603): the builder's own item, not a
+ * pointer into the draft, so it starts with "#" like LABELS_ITEM. It belongs to responseMappings.
+ */
+export const CARDS_TYPE_PREFIX = "#cards/";
+export const cardsTypePointer = (code: string): string =>
+  `${CARDS_TYPE_PREFIX}${encodeURIComponent(code)}`;
+/** The query type code of a Result cards type row, else null. */
+export const cardsTypeOf = (pointer: string): string | null =>
+  pointer.startsWith(CARDS_TYPE_PREFIX)
+    ? decodeURIComponent(pointer.slice(CARDS_TYPE_PREFIX.length))
+    : null;
+
 /** Top-level keys that are not settings a user edits: kept out of the tree and the form. */
 export const HIDDEN_KEYS: ReadonlySet<string> = new Set(["schemaVersion"]);
 
 /** The top-level item a pointer belongs to: a config key, or LABELS_ITEM. */
 export function topItem(pointer: string): string {
   if (pointer === LABELS_ITEM) return LABELS_ITEM;
+  if (pointer.startsWith(CARDS_TYPE_PREFIX)) return "responseMappings";
   const first = pointer.split("/")[1] ?? "";
   return first.replaceAll("~1", "/").replaceAll("~0", "~");
 }

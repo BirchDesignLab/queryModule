@@ -13,6 +13,7 @@ import { useServices } from "../app/services-context.js";
 import { BuilderTree } from "./BuilderTree.js";
 import { existingPointer } from "./builder-helpers.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
+import { CardPreview } from "./CardPreview.js";
 import { ChangesView } from "./ChangesView.js";
 import { ChecksContext, useDraftChecks, withServerIssues } from "./checks.js";
 import type { JsonObject } from "./draft.js";
@@ -33,6 +34,7 @@ import {
   issueWords,
   type Selection,
   SelectionContext,
+  topItem,
 } from "./selection.js";
 import { TABS, type TabId, tabAfterKey } from "./tabs.js";
 import { useUndoKeys } from "./undo-keys.js";
@@ -349,6 +351,10 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
             </div>
             {shown.pointer !== null && mockPointer.is(shown.pointer) ? (
               <MockPane />
+            ) : shown.pointer !== null && topItem(shown.pointer) === "responseMappings" ? (
+              checks.doc !== null && (
+                <CardPreview doc={checks.doc} labels={checks.labels} selected={shown.pointer} />
+              )
             ) : (
               checks.doc !== null && (
                 <BuilderPreview

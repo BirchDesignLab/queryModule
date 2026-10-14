@@ -23,7 +23,9 @@ export function previewConfig(doc: JsonObject): ClientSiteConfig | null {
 }
 
 /** The app's strings with the draft's label overlay for the same locale on top. */
-function useOverlayTranslator(labels: Readonly<Record<string, Readonly<Record<string, string>>>>) {
+export function useOverlayTranslator(
+  labels: Readonly<Record<string, Readonly<Record<string, string>>>>,
+) {
   const base = useTranslator();
   const overlay = labels[base.locale];
   return useMemo<Translator>(() => {

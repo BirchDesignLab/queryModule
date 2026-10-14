@@ -16,14 +16,22 @@ import {
 } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
-import { configDraftStore, useDraft } from "./builder-store.js";
+import { cardsSiteOf, configDraftStore, useDraft } from "./builder-store.js";
+import { useCardName } from "./CardsEditor.js";
+import { cardsByType } from "./cards-model.js";
 import { ChecksContext } from "./checks.js";
 import { asObjects, str, useLabelText } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
 import { useItemName } from "./FormTab.js";
 import { mockPointer } from "./mock-edit.js";
 import { parseMock } from "./mock-model.js";
-import { HIDDEN_KEYS, isRootIssue, issueWords, LABELS_ITEM } from "./selection.js";
+import {
+  cardsTypePointer,
+  HIDDEN_KEYS,
+  isRootIssue,
+  issueWords,
+  LABELS_ITEM,
+} from "./selection.js";
 import { type FlatItem, isTypeAheadKey, treeAction, typeAhead } from "./tree-nav.js";
 
 /**
@@ -54,10 +62,11 @@ interface TreeNode {
 function useTreeNodes(
   doc: JsonObject,
   mock: JsonObject | null,
-): { types: TreeNode[]; site: TreeNode[]; mock: TreeNode[] } {
+): { types: TreeNode[]; cards: TreeNode[]; site: TreeNode[]; mock: TreeNode[] } {
   const name = useItemName();
   const t = useT();
   const labelText = useLabelText();
+  const cardName = useCardName(doc);
   const { issues } = useContext(ChecksContext);
   return useMemo(() => {
     // Issues at or under a pointer. A section's fields live under /fields, not under the section,
@@ -131,9 +140,31 @@ function useTreeNodes(
             });
       return node(toPointer(["queryTypes", i]), code, code, children, false, str(type.labelKey));
     });
+    // Result cards (Task 10, #603): per query type its cards in config order, numbered and named
+    // by their narrowing with the card key in mono, then Keywords and severity.
+    const typeLabels = new Map(
+      asObjects(doc.queryTypes).map((q) => [str(q.code), str(q.labelKey)]),
+    );
+    const cards = [...cardsByType(cardsSiteOf(doc)).entries()].map(([code, entries]) =>
+      node(
+        cardsTypePointer(code),
+        t("admin.cards.typeRow", { type: labelText(typeLabels.get(code)) || code }),
+        // No code in mono: the Query types row already ends in it, and a lookup by code is that row.
+        "",
+        entries.map(({ index, mapping }, k) =>
+          node(
+            toPointer(["responseMappings", index]),
+            t("admin.cards.cardRow", { n: k + 1, name: cardName(mapping) }),
+            str(mapping.id),
+          ),
+        ),
+        true,
+      ),
+    );
+    if ("keywords" in doc) cards.push(node("/keywords", t("admin.cards.keywordsRow"), "keywords"));
     // Every top-level key by its plain name, the key in mono beside it (design lead 09-29-26).
     const site = Object.keys(doc)
-      .filter((k) => k !== "queryTypes" && !HIDDEN_KEYS.has(k))
+      .filter((k) => !CARD_KEYS.has(k) && !HIDDEN_KEYS.has(k))
       .map((k) => node(toPointer([k]), name(k), k));
     site.push(node(LABELS_ITEM, name(LABELS_ITEM), ""));
     // Mock responses (CFG-2): coverage first, then each mock source with its responses.
@@ -179,9 +210,12 @@ function useTreeNodes(
         );
       }
     }
-    return { types, site, mock: mockNodes };
-  }, [doc, mock, issues, name, t, labelText]);
+    return { types, cards, site, mock: mockNodes };
+  }, [doc, mock, issues, name, t, labelText, cardName]);
 }
+
+/** Top-level keys the Site group leaves to other groups (query types, Result cards). */
+const CARD_KEYS: ReadonlySet<string> = new Set(["queryTypes", "responseMappings", "keywords"]);
 
 /** A row's text as the editor shows it: the draft's text, else the shipped one, else the key. */
 type LabelText = (node: { label: string; labelKey?: string }) => string;
@@ -340,7 +374,7 @@ export function BuilderTree({
 }) {
   const t = useT();
   const uid = useId();
-  const { types, site, mock: mockRows } = useTreeNodes(doc, mock);
+  const { types, cards, site, mock: mockRows } = useTreeNodes(doc, mock);
   const text = useLabelResolver();
   // Whole-config issues have no row of their own: one line lists them, so the rows add up to the
   // toolbar total (critic I1).
@@ -354,14 +388,26 @@ export function BuilderTree({
   const q = query.trim().toLowerCase();
   // Without a search these are the nodes themselves, so the memoized rows see the same arrays.
   const shownTypes = useMemo(() => filterNodes(types, q, text), [types, q, text]);
+  const shownCards = useMemo(() => filterNodes(cards, q, text), [cards, q, text]);
   const shownSite = useMemo(() => filterNodes(site, q, text), [site, q, text]);
   const shownMock = useMemo(() => filterNodes(mockRows, q, text), [mockRows, q, text]);
   // Only the selected type is expanded unless the user toggles one; a search shows every match.
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  // A selection can be deeper than any row (a control inside a field), so a row holds it when its
+  // pointer is the selection or a prefix of it.
+  const holds = (list: TreeNode[], pointer: string): boolean =>
+    list.some(
+      (n) =>
+        n.pointer === pointer || pointer.startsWith(`${n.pointer}/`) || holds(n.children, pointer),
+    );
+  // The top row of a typed group (a query type, a type's cards) that holds the selection.
   const selectedType =
-    selected === null ? null : (/^\/queryTypes\/[0-9]+/.exec(selected)?.[0] ?? null);
+    selected === null
+      ? null
+      : ([...types, ...cards].find((n) => n.children.length > 0 && holds([n], selected))?.pointer ??
+        null);
   const expanded = new Set(
-    shownTypes
+    [...shownTypes, ...shownCards]
       .map((n) => n.pointer)
       .filter((p) => q !== "" || (toggled.get(p) ?? p === selectedType)),
   );
@@ -389,6 +435,7 @@ export function BuilderTree({
   const [closedGroups, setClosedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const groups: TreeGroup[] = [
     { id: "types", title: t("admin.tree.types"), nodes: shownTypes, typed: true },
+    { id: "cards", title: t("admin.tree.cards"), nodes: shownCards, typed: true },
     { id: "site", title: t("admin.tree.site"), nodes: shownSite, typed: false },
     { id: "mock", title: t("admin.tree.mock"), nodes: shownMock, typed: false },
   ]
@@ -396,16 +443,10 @@ export function BuilderTree({
     .map((g) => ({ ...g, open: q !== "" || !closedGroups.has(g.id) }));
   const allGroups: [string, TreeNode[]][] = [
     ["types", types],
+    ["cards", cards],
     ["site", site],
     ["mock", mockRows],
   ];
-  // A selection can be deeper than any row (a control inside a field), so a row holds it when its
-  // pointer is the selection or a prefix of it.
-  const holds = (list: TreeNode[], pointer: string): boolean =>
-    list.some(
-      (n) =>
-        n.pointer === pointer || pointer.startsWith(`${n.pointer}/`) || holds(n.children, pointer),
-    );
   const selectedGroup =
     selected === null ? null : (allGroups.find(([, list]) => holds(list, selected))?.[0] ?? null);
   // A selection inside a closed group opens it first, so focus never lands on a hidden row.
@@ -535,7 +576,10 @@ export function BuilderTree({
           <VisuallyHidden>, {issueWords(t, rootErrors, rootWarnings)}</VisuallyHidden>
         </p>
       )}
-      {shownTypes.length === 0 && shownSite.length === 0 && shownMock.length === 0 ? (
+      {shownTypes.length === 0 &&
+      shownCards.length === 0 &&
+      shownSite.length === 0 &&
+      shownMock.length === 0 ? (
         <div className="qm-tree__empty">
           <p>{t("admin.tree.noMatches", { text: query.trim() })}</p>
           <button

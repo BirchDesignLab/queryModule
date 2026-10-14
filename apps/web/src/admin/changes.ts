@@ -121,6 +121,12 @@ export function targetOf(pointer: string, doc: Obj): string | null {
   if (top === undefined) return null;
   // A setting the draft no longer has (deleted in the raw view), or one the builder hides, has no
   // item to open: the builder's own default is the nearest place.
+  // A result card opens itself (Task 10, #603), when the draft still has it.
+  if (top === "responseMappings" && parts[1] !== undefined && /^[0-9]+$/.test(parts[1])) {
+    const cards = doc.responseMappings;
+    if (Array.isArray(cards) && Number(parts[1]) < cards.length)
+      return `/responseMappings/${parts[1]}`;
+  }
   if (top !== "queryTypes")
     return top in doc && !HIDDEN_KEYS.has(top) ? `/${top}` : defaultPointer(doc);
   const index = parts[1];
@@ -362,6 +368,78 @@ export function buildChangeGroups(
             inner.length > 0,
           ),
         );
+      }
+      continue;
+    }
+
+    if (top === "responseMappings" && p.length >= 2) {
+      // Result cards (Task 10, #603): one section per card, "Vehicle, card veh-summary", and one
+      // plain line per row ("Row Make (vehicle.make)"). Configuration only, never payload content.
+      const ref = p[1] as DiffSegment;
+      const card = (isObj(after(2)) ? after(2) : before(2)) as Obj | undefined;
+      const cardId = typeof ref === "object" ? ref.is : str(card?.id);
+      const code = str(card?.queryType);
+      const type = objsOf(draft.queryTypes)
+        .concat(objsOf(live.queryTypes))
+        .find((x) => x.code === code);
+      const typeName = (type === undefined ? "" : deps.labelText(type.labelKey)) || code;
+      const g = group("cards", t("admin.cards.review.title"), "responseMappings");
+      const sect = section(
+        g,
+        `card:${cardId === "" ? `new:${segText(ref)}` : cardId}`,
+        t("admin.cards.review.card", {
+          type: typeName,
+          id: cardId === "" ? t("admin.diff.unnamedShort") : cardId,
+        }),
+        cardId,
+      );
+      const inner = p.slice(2);
+      const rowRef = inner[0] === "elements" ? inner[1] : undefined;
+      if (inner.length === 0) {
+        const rows = objsOf(card?.elements).length;
+        sect.entries.push({
+          ...entry(t("admin.cards.review.cardItem"), cardId, false),
+          ...(kind === "added" || kind === "removed"
+            ? {
+                [kind === "added" ? "after" : "before"]: {
+                  text: t("admin.cards.review.rows", { count: rows }),
+                },
+              }
+            : {}),
+        });
+      } else if (rowRef === undefined || inner.length < 2) {
+        sect.entries.push(
+          entry(
+            kind === "moved" ? t("admin.diff.order") : plain(inner),
+            [cardId, ...inner.map(segText)].join(" "),
+            kind !== "moved",
+          ),
+        );
+      } else {
+        const row = (isObj(after(4)) ? after(4) : before(4)) as Obj | undefined;
+        const label = deps.labelText(row?.labelKey);
+        const rowName = t("admin.cards.review.row", {
+          label: label !== "" ? label : str(row?.path),
+          path: str(row?.path),
+        });
+        const rest = inner.slice(2);
+        const view = str(row?.view);
+        const viewText =
+          view === "summary" || view === "detail" || view === "both"
+            ? { text: t(`admin.cards.view.${view}`) }
+            : undefined;
+        sect.entries.push({
+          ...entry(
+            rest.length === 0 ? rowName : `${rowName} › ${plain(rest)}`,
+            [cardId, ...inner.map(segText)].join(" "),
+            rest.length > 0,
+          ),
+          ...(rest.length === 0 &&
+          viewText !== undefined &&
+          (kind === "added" || kind === "removed")
+            ? { [kind === "added" ? "after" : "before"]: viewText }
+            : {}),
+        });
       }
       continue;
     }
