@@ -71,7 +71,11 @@ function setup(
 function renderForm(state: FormState, over: { showErrors?: boolean } = {}) {
   const view = (
     next: FormState,
-    o: { showErrors?: boolean; values?: Record<string, DraftValue> },
+    o: {
+      showErrors?: boolean;
+      values?: Record<string, DraftValue>;
+      revealed?: ReadonlySet<string>;
+    },
   ) => (
     <QueryForm
       formState={next}
@@ -82,13 +86,18 @@ function renderForm(state: FormState, over: { showErrors?: boolean } = {}) {
       onSubmitAttempt={() => undefined}
       t={t}
       idPrefix="qf"
+      revealed={o.revealed}
     />
   );
   const r = render(view(state, over));
   return {
     rerender: (
       next: FormState,
-      o: { showErrors?: boolean; values?: Record<string, DraftValue> } = {},
+      o: {
+        showErrors?: boolean;
+        values?: Record<string, DraftValue>;
+        revealed?: ReadonlySet<string>;
+      } = {},
     ) => r.rerender(view(next, o)),
   };
 }
@@ -384,6 +393,37 @@ describe("design B2 form grid and the More details disclosure", () => {
     const toggle = screen.getByRole("button", { name: "More details" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByLabelText(/Plate color/)).toBeVisible();
+  });
+
+  // #479: a rule revealed a field inside More details and the user closed the disclosure: the closed
+  // toggle says so in words (never colour alone), and the cue is static (no motion to reduce).
+  it("a closed disclosure that holds a field a rule revealed says so on its toggle", async () => {
+    const state = form("VEH", { state: "OK" });
+    const { rerender } = renderForm(form("VEH"));
+    const toggle = () => screen.getByRole("button", { name: /^More details/ });
+    // The rule reveals Plate color: the disclosure opens for it, the user closes it again.
+    rerender(state, { revealed: new Set(["plateColor"]) });
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(within(toggle()).queryByText(/shown/i)).toBeNull();
+    await userEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    expect(within(toggle()).getByText("1 field shown")).toBeInTheDocument();
+    expect(toggle()).toHaveAccessibleName(/^More details\s+1 field shown$/);
+    // Opening it removes the cue (the field is in view); so does focusing or editing the field
+    // (the panel then drops the key from `revealed`).
+    await userEvent.click(toggle());
+    expect(within(toggle()).queryByText(/shown/i)).toBeNull();
+    await userEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    rerender(state, { revealed: new Set() });
+    expect(within(toggle()).queryByText(/shown/i)).toBeNull();
+  });
+
+  it("a revealed field in the first section puts no cue on the More details toggle", () => {
+    const state = form("VEH", { state: "OK" });
+    renderForm(state, {}).rerender(state, { revealed: new Set(["plateType"]) });
+    const toggle = screen.getByRole("button", { name: /^More details/ });
+    expect(within(toggle).queryByText(/shown/i)).toBeNull();
   });
 
   it("a blocked submit opens a disclosure that holds an error", () => {

@@ -33,6 +33,8 @@
   "queryType.WNT": "Wanted check",
   "section.base": "Details",
   "section.expanded": "More details",
+  "section.shown.one": "{count} field shown",
+  "section.shown.other": "{count} fields shown",
   "field.plate": "Plate",
   "field.state": "State",
   "field.year": "Year",

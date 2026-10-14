@@ -343,6 +343,53 @@ describe("separators do not hide a digit run in an `other` leaf (#636)", () => {
   });
 });
 
+describe("every non-alphanumeric character is a separator (#638)", () => {
+  const rejected = (key: string, value: unknown) =>
+    expect(check({ [key]: value }), `${key}: ${String(value)}`).toEqual([
+      { pointer: `${RESPOND}/${key}`, key: "fixture.freeTextDigits" },
+    ]);
+
+  it.each([
+    "123,456,789",
+    "123_456_789",
+    "12:34:56",
+    "123–456—789",
+    "123‐456−789",
+    "12(34)56",
+    "12#34#56",
+    "12 34",
+    "１２３４",
+  ])("rejects %s in an other leaf and in a status", (value) => {
+    rejected("serial", value);
+    rejected("licenseNumber", value);
+    rejected("status", value);
+  });
+
+  it("rejects a social-security-shaped status (123-45-6789)", () => {
+    rejected("status", "123-45-6789");
+  });
+
+  it("keeps short digit groups in a status once separators are removed", () => {
+    expect(check({ status: "WANTED 12 TIMES" })).toEqual([]);
+    expect(check({ status: "ZZ-12,AB-34" })).toEqual([]);
+    expect(check({ status: "1-2-3" })).toEqual([]);
+  });
+});
+
+describe("exponent-form numbers are rejected (#638)", () => {
+  it.each([1e21, 1.5e300, 1e-7])("rejects %s in an other leaf and in a status", (value) => {
+    for (const key of ["serial", "licenseNumber", "status"]) {
+      expect(check({ [key]: value }), `${key}: ${String(value)}`).toEqual([
+        { pointer: `${RESPOND}/${key}`, key: "fixture.freeTextDigits" },
+      ]);
+    }
+  });
+
+  it("still allows small plain numbers", () => {
+    expect(check({ serial: 123, status: 7, licenseNumber: 0.5 })).toEqual([]);
+  });
+});
+
 describe("a driver's licence record (#602, design ruling 10)", () => {
   const dl = (licenseNumber: unknown) => ({
     status: "VALID",

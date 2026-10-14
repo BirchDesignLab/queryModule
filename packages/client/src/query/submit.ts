@@ -100,11 +100,20 @@ function isSubmitResponse(value: unknown): value is SubmitQueryResponse {
   );
 }
 
-/** The errors[] of a 400 ApiError, or undefined when the body has another shape. */
+/**
+ * The errors[] of a 400 ApiError, or undefined when the body has another shape. Tolerant receipt
+ * (ADR-0013, #66): unknown fields anywhere are ignored, an entry that is not an object with a
+ * string `key` is skipped, and a list with entries of which none is readable is not an invalid
+ * form (the UI has nothing to show), so it reads as failed.
+ */
 function validationErrorsOf(body: unknown): ValidationError[] | undefined {
   if (!isRecord(body) || !isRecord(body.error)) return undefined;
   const errors = body.error.errors;
-  return Array.isArray(errors) ? (errors as ValidationError[]) : undefined;
+  if (!Array.isArray(errors)) return undefined;
+  const readable = errors.filter(
+    (entry): entry is ValidationError => isRecord(entry) && typeof entry.key === "string",
+  );
+  return readable.length === 0 && errors.length > 0 ? undefined : readable;
 }
 
 /** Deterministic text of a body (sorted value keys), used only to compare two bodies. */

@@ -11,6 +11,10 @@ CAD Mobile Unit and the CAD Mobile app. Full spec:
 connects to real state or national systems and never holds real CJIS data.
 Do not add fixtures that look like real person, vehicle or property records.
 
+## Language
+
+American English in everything we write: docs, UI copy (`packages/config/locales/en.json`), comments, commit messages, issues and PRs (color, behavior, license, gray, organize, canceled). Existing British spellings are fixed as files are touched, not in a sweep. Code identifiers, config keys and label keys keep their current spelling until a change renames them on purpose.
+
 # Subagents and workflows: set model and effort on every dispatch
 
 Every subagent dispatch (the Agent tool, Workflow `agent()` calls, the

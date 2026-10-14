@@ -1685,7 +1685,7 @@
       "priority": "Low",
       "reqIds": "none",
       "title": "AW3 review minors: smoke readDetail failure tests, replay 24 h edge test, bad event row on reconnect",
-      "body": "Minors from the AW3 wave-review (`docs/reviews/feat-m2-a-p1-wave-3.md`, run wf_ea34119b-b63, 10-13-26). None blocked the approval.\r\n\r\n- [ ] **G-G-m1 (gate, test-only):** `scripts/ops/smoke-feed.ts` `readDetail` failure branches are untested: fetch error, response not JSON, no source returned. Add cases to `scripts/ops/smoke.test.ts`. Rides the next gate-tier PR.\r\n- [ ] **C-m1 (ordinary, test-only):** the replay 24 h edge row (an event exactly at the cutoff) is untested in `packages/api/test/ws/replay.test.ts`.\r\n- [ ] **C-m2 (M3):** a bad stored `event_log` row closes the socket with 1011 on every reconnect, and the log line carries no `seq`. Today's writers cannot produce such a row; revisit with the M3 per-type mapper (`resultHidden`): skip-and-log with the `seq`, or a bounded close.\r\n\r\n- [ ] **From the fix/m2-a-p1-minors review (fast, test-only):** M1 the `notJson` smoke test lacks a `not.toMatch(/4 ok/)` guard; M2 the backup reset test matches any error name. Tighten both.\r\n\r\nRefs #590, #591, #592.\r\n\r\n"
+      "body": "Minors from the AW3 wave-review (`docs/reviews/feat-m2-a-p1-wave-3.md`, run wf_ea34119b-b63, 10-13-26). None blocked the approval.\n\n- [x] **G-G-m1 (gate, test-only):** `scripts/ops/smoke-feed.ts` `readDetail` failure branches are untested: fetch error, response not JSON, no source returned. Add cases to `scripts/ops/smoke.test.ts`. Rides the next gate-tier PR.\n- [ ] **C-m1 (ordinary, test-only):** the replay 24 h edge row (an event exactly at the cutoff) is untested in `packages/api/test/ws/replay.test.ts`.\n- [ ] **C-m2 (M3):** a bad stored `event_log` row closes the socket with 1011 on every reconnect, and the log line carries no `seq`. Today's writers cannot produce such a row; revisit with the M3 per-type mapper (`resultHidden`): skip-and-log with the `seq`, or a bounded close.\n\n- [ ] **From the fix/m2-a-p1-minors review (fast, test-only):** M1 the `notJson` smoke test lacks a `not.toMatch(/4 ok/)` guard (done, #624); M2 the backup reset test matches any error name. Tighten both.\n\nRefs #590, #591, #592.\n\n\n"
     },
     {
       "number": 622,
@@ -1777,6 +1777,97 @@
       "reqIds": "none",
       "title": "fixture-policy: remaining digit-run gaps (all non-alphanumeric separators, status kind, exponent form)",
       "body": "Leftovers from the #636 fix review (`fix/fixture-policy-separators`, 10-13-26). #636 made the `other` kind ignore `-`, `.`, `/` and whitespace when counting digit runs. Still open in `packages/core/src/config/fixture-policy.ts`:\n\n- [ ] Other separators: `,`, `_`, `:` and Unicode dashes still split a run, so `123,456,789` or `123_456_789` pass `other`. Suggested: treat every non-alphanumeric character as a separator (`/[^A-Za-z0-9]/g`).\n- [ ] The `status` kind has the same separator gap (`123-45-6789` passes as a status).\n- [ ] Numbers of 1e21 and above stringify in exponent form and slip the run check (not realistic; pin or reject non-integer forms).\n\nMock data must never look like real person, vehicle or property records (CLAUDE.md, spec 5.4, 10.8). Gate tier; ride the next gate PR. RED-first cases for each; the shipped mock must still pass.\n\nRefs #636.\n"
+    },
+    {
+      "number": 642,
+      "labels": ["web", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "BW3 follow-ups: cards, keywords and Try a match minors (critic M1-M4, task minors, wins table, e2e)",
+      "body": "Findings from M2 P1 Track B wave BW3 (PR #641, head 18e7ae5, 10-14-26) that the sdd-task rounds and the wave critic left open. None blocked the wave. All ordinary tier (`apps/web`, `packages/config`, e2e). Source list: `bw3-followups.md` in the B lane's sdd folder (IDs below are its Tn-k / critic IDs).\n\n**Wave critic minors**\n- [ ] **CRITIC-M1** `apps/web/src/admin/CardPreview.tsx:163-172`: with no card selected (type row, Keywords and severity) `cardIndex` is null, so the preview reads \"Card used: All results (veh-summary). Another card.\" Use a neutral string when `cardIndex === null` (FR-060).\n- [ ] **CRITIC-M2** `CardsEditor.tsx:237-314`, `KeywordsEditor.tsx:116,151,265`: the open-row set and `gen` follow remove/move but not Ctrl+Z; after undo the wrong row is open and half-typed except text sits at the old index (spec 6.2). Reset on a doc change from outside the editor, or on undo/redo count change.\n- [ ] **CRITIC-M3** `TryMatchPane.tsx:165-203`: missing design items from \"Try a match (refines v4)\": Result card / Payload toggle (reuse CardPreview), latency wait line, polite debounced announcement of the outcome kind, never values (FR-043, FR-044, spec 5.4).\n- [ ] **CRITIC-M4** `CardsEditor.tsx:633-676`: Which card wins has no score (rule +4, source +2, persona +1); add a Score column or put the sum in Why.\n\n**Cards editor (Task 10)**\n- [ ] T10-C3 `CardPreview.tsx:124-131`: pick mode passes empty `partValues` to `mapResponse`, so a rule-narrowed card never wins and the preview can misreport the card used.\n- [ ] T10-Q2 `CardsEditor.tsx:58-80`: `useCardName` rebuilds sources/personas each render; callback never stable, so `useTreeNodes` rebuilds every node every render.\n- [ ] T10-Q3 `CardPreview.tsx:279-290`: behaviour status line copies RequestList markup (hard-coded `!` icon and tone); share the production component.\n- [ ] T10-Q5 `CardsEditor.tsx` is 818 lines with four components; split.\n- [ ] T10-Q6 `packages/config/locales/en.json`: `admin.cards.name.rule` is lowercase (\"1. when a rule matches\"); position reads \"1 of 1 Vehicle cards\".\n- [ ] T10-Q7 `CardPreview.tsx:133-135`: typed values keep keys from other query types across card switches and reach `evaluateForm`.\n- [ ] T10-20: a card key turns read-only when the live config has the same id, so a new card whose id is typed to match a live id flips to read-only mid-edit.\n- [ ] T10-2: design items not built: Template format (offered only when a row already has one) and per-column Format.\n- [ ] T10-3: type rows read \"<Type> cards\" without the code in mono (tests match on a code at the row end; adjust them with the change).\n- [ ] T10-Q4 `GenericForm.test.tsx:120-130`: test I1 keeps its name but now only asserts a label exists; the named behaviour (path setting keeps its own id and name) is untested.\n- [ ] T13-1 `CardPreview.tsx`: the \"Result from\" and scenario selects lack `qm-field__input` and are 19 px tall at desktop (others 36 px+). One-line class fix plus a height assert.\n\n**Which card wins table**\n- [ ] 672 px wide in a 369 px (1366) / 485 px (1024) pane; the whole editor tabpanel scrolls sideways, has no tabindex, and keyboard scrolling is unverified (T10-18 dropped the focusable wrapper for biome a11y; T13-Q3 proves reach only with programmatic `scrollLeft`). Fit the table (stack or fewer columns at narrow widths) or make the region keyboard-scrollable within lint rules. Developer to judge against mockup v5.\n\n**Keywords and severity editor (Task 11)**\n- [ ] T11-M1 `BuilderTree.tsx:223-228`: issues at the bare `/keywordSeverityStyles` pointer show at no control in KeywordsEditor (its only route needs `keywords` in the doc).\n- [ ] T11-M2 `KeywordsEditor.tsx:908`: a keyword with an invalid severity shows as Info, so choosing Info fires no change.\n- [ ] T11-M3 `KeywordsEditor.test.tsx:508-527`: except suppression asserted on the sample line only, not in the card preview the brief names.\n- [ ] T11-M4 `KeywordsEditor.tsx:806,921`: removing a keyword bumps `gen`, remounting every row and discarding half-typed new-exception text in other rows.\n- [ ] T11-M5 `KeywordsEditor.tsx` already 589 lines; split.\n- [ ] T11-4: Review lists keyword changes under the generic Keywords group and style changes under Keyword styles; group them like the editor.\n- [ ] T11-5: the preview beside the keywords always shows the first card's type; no per-keyword preview target.\n- [ ] T11-14: CardsEditor still passes boolean `coalesce` to `applyCardsEdit` (cross-row coalescing per path); align with the keywords fix.\n\n**Try a match and mock editor (Task 12)**\n- [ ] T12-C2 `TryMatchPane.tsx:55`: once Source or Query type is touched, the pane ignores later tree selection; opening another response leaves it on the old source and type.\n- [ ] T12-C3 `TryMatchPane.tsx:49`: offers every source with mock data, including sources whose site kind is not mock (the server never answers those from the mock).\n- [ ] T12-C4 `TryMatchPane.tsx:150`: type-role picklist fields are free text; admin must type raw codes (FIREARM). Use the picklist.\n- [ ] T12-Q2 `TryMatchPane.tsx:197`: `qm-try__answer` and `qm-try__payload` have no CSS; long payload lines rely on implicit pane scroll.\n- [ ] T12-14: the blank-trigger warning reuses `qm-mock__error`, so it looks like an error; give it warning styling.\n- [ ] T12-2: while the site config does not parse, the type panel shows a coverage gap (badge now matches); decide whether the panel should hide it.\n- [ ] T12-Q3 `MockFlows.test.tsx:205`: `toMatch(/2/)` accepts any \"2\" in any live region; assert the exact message.\n- [ ] T12-Q4 `MockMinors.test.tsx:144`: gaps: box 9 \"scrolled into view, focus unchanged\"; box 6 two-issue row; DraftText on trigger values; `addPayloadChild` no-op for the value kind.\n\n**e2e (Task 13, `apps/web/e2e/admin-result-cards.spec.ts`)**\n- [ ] T13-Q1 :188 `label.fill` is not keyboard input in a keyboard-only scenario.\n- [ ] T13-Q2 :98 `locator.focus()` replaces Tab throughout; tab order and reach are not exercised.\n- [ ] T13-Q4 :480 \"Scenario 4\" hard-codes three shipped scenarios; a mock-data change gives an opaque timeout.\n- [ ] T13-Q5 :286-287 rollback check asserts one `vehicle.make` element only.\n- [ ] T9-4: the a8 e2e depends on the shipped `default.json` card rows (3 summary items, \"8 more items\" on the state VEH card); derive from config or note it beside the rows.\n\n**Platform gaps (track here, file separately if picked up)**\n- [ ] Config refresh does not refetch the locale bundle (`bootstrap.ts`), so labels added in the builder reach open tabs only after a reload.\n- [ ] Visual comparison of the cards builder, keywords pane and Try a match against mockup v5 / v4 at 1366 and 1024 (CV1-CV3): developer, at merge of #641 or the M2 demo pass.\n\nRefs #602, #603, #604, #605, #565, #572, #641.\n"
+    },
+    {
+      "number": 643,
+      "labels": ["web", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Request short reference uses the UUIDv7 timestamp prefix, identical for requests within ~65 s",
+      "body": "`shortReference` in `packages/web-ui/src/panel/RequestList.tsx:73` is `reference.slice(0, 8)` of a UUIDv7 correlation id. The first 8 hex characters of a UUIDv7 are the high bits of the millisecond timestamp, so every request made within about 65 seconds gets the same short reference (BW3 full e2e: 755 log lines share `01a139c3`).\n\n**Effect:** the Copy action, the screen reader announcement and placeholder rows name requests ambiguously. In a busy shift a dispatcher cannot tell two recent requests apart by their short reference.\n\n**Fix:** take the short form from the random part (for example the last 8 hex characters), keep the full id where it is shown in full, and update tests and e2e that match the old prefix. Check `apps/web` for other `slice(0, 8)` uses of the correlation id.\n\n**Tier:** ordinary (`packages/web-ui`, `apps/web`). Own PR, CI only.\n\nFound in: M2 P1 Track B BW3 (PR #641, 10-14-26). Refs SEC-014 (correlation identifier).\n"
+    },
+    {
+      "number": 644,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "M",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Share server logic the web builder copies: tokensContrast in config/load.ts, planner typeValuesOf; axe in web unit suite",
+      "body": "Duplicated logic that BW3 (PR #641, 10-14-26) had to copy into ordinary-tier web files because the source lives in critical- or gate-tier files. Each copy can drift from the server.\n\n**Critical**\n- [ ] `packages/api/src/config/load.ts` has its own `tokensContrast` copy without the hex-only guard on theme overrides. Switch it to the `@querymodule/tokens` `tokensContrast` export (added in BW3 with the guard), so server and builder compute contrast the same way (T11-2, T11-13, T11-16). Critical tier (`packages/api/src/config/**`).\n- [ ] `typeValuesOf` (`packages/core/src/planner/plan.ts:64-70`) is copied line for line into `apps/web/src/admin/CardPreview.tsx:136-139` and `apps/web/src/admin/TryMatchPane.tsx:77` (T10-Q1, T12-Q1). Export it from the planner (critical, `packages/core/src/planner/**`) and import it in both web files. The BW3 critic checked parity today.\n\n**Gate**\n- [ ] axe in the web unit suite: `axe-core` is only an e2e dependency, so the builder's unit tests cannot run axe (T10-1, T11-1). Adding it to `apps/web/package.json` is gate tier. Optional; e2e axe covers the builder today.\n\nSplit by tier when picked up: one critical PR (Opus high review) for the first two, the axe item rides the next gate PR.\n"
+    },
+    {
+      "number": 645,
+      "labels": ["web", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Flakes seen in BW3: hardening officer 800x600 focus, a2-conditional-fields, history-load, QueryForm, TreeLabels, db-client",
+      "body": "Intermittent failures seen during M2 P1 Track B BW3 (PR #641, 10-14-26), with `VITEST_MAX_WORKERS=3` and Git Bash first on PATH. Each passed on rerun or alone; none blocked the wave. Track them so a pattern shows. Related: #610 (admin findBy timeouts).\n\n- [ ] **e2e `hardening.spec.ts` ~207, officer 800x600:** \"focus hidden after a request\", about 1 in 16 full runs; cause unknown, not reproduced alone. Highest value: it is a focus-visibility check.\n- [ ] **e2e `hardening.spec.ts:173`, officer at 200% zoom (640x400):** CI image job on #648 (run 38577945695, 10-14-26) failed twice in a row (incl. retry): \"panel with a long command: targets below the persona's minimum\", `button.qm-view-toggle 223x48 < 56`. main passed the same spec at adee3a4 and #648 only touches fixture-policy, so it is intermittent. Same officer describe block as the focus box above; may be a real officer touch-target bug at zoom.\n- [ ] **e2e `a2-conditional-fields`:** failed once as test 6 in a full run, before any admin spec; passes alone.\n- [ ] **e2e history-load Q1:** a live result of another scenario in the shared e2e DB raced the reload. BW3 made the spec wait for no pending sources before reload (green since). Close this box if it stays green.\n- [ ] **web-ui `QueryForm.test`:** failed once under full-suite load.\n- [ ] **web `TreeLabels` render count:** failed once earlier in the wave.\n- [ ] **db-client worker crash:** once earlier in the wave.\n\nFor each: record date, run and head when it recurs; fix when it recurs twice or a cause is found.\n\n**Tier:** ordinary (tests). Own PR or ride a Track B PR.\n\n\n"
+    },
+    {
+      "number": 647,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "fixture-policy: non-Latin decimal digits (Arabic-Indic, Devanagari) slip the digit-run and freeText checks",
+      "body": "Minor from the #638 fix review (`fix/m2-gate-minors`, artifact `docs/reviews/fix-m2-gate-minors.md`, 10-14-26).\n\n`packages/core/src/config/fixture-policy.ts:154`: NFKC folds full-width digits but not other Unicode decimal digits (Arabic-Indic U+0660-0669, Devanagari U+0966-096F, and so on). The run check treats them as non-alphanumeric separators and strips them, so a `status` or `serial` made of nine such digits passes. The freeText check (`/\\d/` at :181) has the same ASCII-only gap.\n\n**Fix:** use Unicode classes (`\\p{Nd}` for digits, `\\p{L}` for letters) with the `u` flag in the run and freeText checks; RED-first cases for Arabic-Indic and Devanagari digit runs; the shipped mock still passes.\n\nNot realistic for the mock, but the policy is the guard that keeps fixtures from looking like real records (CLAUDE.md, spec 5.4, 10.8).\n\n**Tier:** gate (`fixture-policy.ts`). Ride the next gate-tier PR.\n\nRefs #638.\n"
+    },
+    {
+      "number": 650,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "WS parser drops a known message type with an unknown enum value (a lost resync means no refetch)",
+      "body": "Found in the M2 demo minors PR (`fix/m2-demo-minors`, #66 work, 10-14-26).\n\nThe WS message parser tolerates unknown message types and unknown fields (ADR-0013, tested), but it **drops a known message type that carries an unknown enum value**: the tests assert that a message with `status: \"notAStatus\"` is dropped. When a later milestone adds a value to an existing enum (for example a new `resync.reason` or `sourceStatus.status`), an older client silently discards the whole message. A dropped `resync` means the client never refetches, so the request list goes stale with no sign.\n\n**Decision needed:** keep dropping (and require that enum additions bump the protocol), or accept the message with the unknown value mapped to a safe fallback (for `resync`: refetch anyway; for a status: show a neutral \"unknown\" state). Record it as an ADR-0013 amendment.\n\n**Tier:** critical (`packages/core/src/contracts/ws.ts`, `ws-events.schema.json`); contracts are frozen outside a contract wave, so this rides M2 P0-W3 with #622 or the next contract touch. Opus high review.\n\nRefs #66, #622.\n"
+    },
+    {
+      "number": 651,
+      "labels": ["web", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Demo minors follow-ups: officer cue color check, e2e repeat rate limit, ::before in accessible names",
+      "body": "Follow-ups from the M2 demo minors PR (`fix/m2-demo-minors`, 10-14-26). Ordinary tier (tests, web-ui).\n\n- [ ] **Officer cue color not covered:** the #479 \"fields shown\" cue on a closed More details toggle has a numeric color/contrast check for the dispatcher layout only (`visual.spec.ts`); add the officer layout (`qm-layout--mobile-unit`) in all three themes.\n- [ ] **e2e rate limit on repeats:** repeating officer e2e more than about 30 times a minute trips the 30/min submit rate limit (429). Document it in the e2e README or give `--repeat-each` runs a limiter reset, so flake hunts do not mistake 429s for flakes.\n- [ ] **Accessible names include CSS `::before` text:** Playwright reads \"+ More details\" for the toggle. Note in the e2e conventions: never anchor role names with `^More details`; match on the stable part.\n\nRefs #479, #645.\n"
     }
   ]
 }

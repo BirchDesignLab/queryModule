@@ -273,6 +273,10 @@ export function QueryForm({
         const { section, fields } = entry;
         const open = index === 0 || disclosures.isOpen(entry);
         const regionId = `${disclosureId}-${section.key}`;
+        // #479: a closed disclosure that holds fields a rule revealed says so on its toggle, in words
+        // (a static tag, never colour alone and no motion). Opening it, or focusing or editing the
+        // field (the panel then drops it from `revealed`), clears the cue.
+        const cue = open ? 0 : fields.filter((f) => revealed?.has(f.key) === true).length;
         return (
           <fieldset
             key={section.key}
@@ -294,6 +298,14 @@ export function QueryForm({
                   onClick={() => disclosures.toggle(entry, !open)}
                 >
                   {t(section.labelKey)}
+                  {cue === 0 ? null : (
+                    <>
+                      {" "}
+                      <span className="qm-tag qm-tag--shown qm-disclosure-toggle__cue">
+                        {t("section.shown", { count: cue })}
+                      </span>
+                    </>
+                  )}
                 </button>
               )}
             </legend>

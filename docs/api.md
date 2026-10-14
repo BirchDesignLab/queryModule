@@ -408,7 +408,7 @@ internal, 4000 idle) and all mean the same thing: reconnect with backoff and sen
 | `welcome` | server to client, `{ latestSeq }` | live. `latestSeq` is the owner's newest `event_log` seq (0 when none), read live at each `hello`, in the same read as the replay. |
 | `ping` | client to server, `{ nonce }` (1 to 64 characters) | live. |
 | `pong` | server to client, `{ nonce, serverTime }` | live. |
-| `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The metric is recorded from M2 P1. |
+| `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The metric (and a `Server-Timing` header on the 202) arrives in M2 P2. |
 | `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | live. Published after each source outcome commits, to the owner's sockets only (never another user's). Each also lands in `event_log` and is replayable by `lastSeq`. |
 | `resultHidden` | server to client, `{ seq, at, correlationId, resultIds }` | planned (contract since M2 P0). Sent after a delete from view so the owner's other devices drop the results; replayable (M3 P2). |
 | `resync` | server to client, `{ reason: "tooOld" or "tooMany" or "unknownCursor", latestSeq }` | live. Replay refused: the client refetches over HTTP and sets its mark to `latestSeq`. |
@@ -436,7 +436,11 @@ tolerantly, the server stays strict. An unknown `type` is dropped and unknown ke
 are stripped, so a new message type or optional field needs no minimum client version bump.
 
 The web app uses the socket for the heartbeat shown on the Status page and for the live per-source
-status under each acknowledged request (see [demo.md](demo.md)).
+status under each acknowledged request (see [demo.md](demo.md)). It keeps the highest `seq` it has
+applied as its `lastSeq` (the `welcome.latestSeq` when it has none), loads `GET /queries` when the
+page opens or after a `resync`, and reads `GET /queries/{correlationId}` when a source settles to
+`returned`, to draw that source's result card (see "Response mappings and result cards" in
+[site-config.md](site-config.md)). Payloads are held in memory only.
 
 **Startup and shutdown.** At start, before any socket exists, a sweep marks every source result
 still `pending` as `interrupted` (one `interrupted` audit row, whose details carry reason `processRestart`, and one plain
