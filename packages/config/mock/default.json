@@ -53,8 +53,8 @@
           "scenarios": [
             {
               "respond": {
-                "description": "SAMPLE ARTICLE",
-                "propertyType": "ARTICLE",
+                "description": "SAMPLE ELECTRONICS",
+                "propertyType": "ELECTRONICS",
                 "remarks": "STOLEN PROPERTY",
                 "serial": "ZZSTOLEN1",
                 "status": "STOLEN"
@@ -216,8 +216,8 @@
           "scenarios": [
             {
               "respond": {
-                "description": "SAMPLE ARTICLE",
-                "propertyType": "ARTICLE",
+                "description": "SAMPLE ELECTRONICS",
+                "propertyType": "ELECTRONICS",
                 "remarks": "STOLEN PROPERTY",
                 "serial": "ZZSTOLEN1",
                 "status": "STOLEN"

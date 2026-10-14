@@ -102,19 +102,23 @@ export function personRecord(o: { n: number }): SourcePayload {
   };
 }
 
-/** A stolen property response; the serial is a trigger-style token, not a real serial number. */
+/**
+ * A stolen property response; the serial is a trigger-style token, not a real serial number. The
+ * record is an electronics item (the demo story is PRO ZZSTOLEN1 ELECTRONICS), so its type and
+ * description say so.
+ */
 export function propertyRecord(o: { serial: string }): SourcePayload {
   return {
     status: "STOLEN",
     serial: o.serial,
-    propertyType: "ARTICLE",
-    description: "SAMPLE ARTICLE",
+    propertyType: "ELECTRONICS",
+    description: "SAMPLE ELECTRONICS",
     remarks: "STOLEN PROPERTY",
   };
 }
 
 /**
- * A driver's licence response (#602): the licence number is a trigger-style token with no run of 4
+ * A driver's license response (#602): the license number is a trigger-style token with no run of 4
  * or more digits (ZZDLTEST), the person is synthetic (person(n)), the state is the placeholder TX.
  */
 export function licenseRecord(o: { licenseNumber: string; n: number }): SourcePayload {

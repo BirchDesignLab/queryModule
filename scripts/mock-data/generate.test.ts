@@ -21,7 +21,7 @@ const DEFAULT_ROWS: Row[] = [
   ["nationalSource", "PRO", '{"serial":"ZZSTOLEN1"}', "STOLEN"],
   ["nationalSource", "WNT", '{"last":"WANTED"}', "WANTED"],
   ["nationalSource", "WNT", '{"last":"MISSING"}', "MISSING PERSON"],
-  // #602: the one synthetic licence record, so the DL card can show data (design ruling 10).
+  // #602: the one synthetic license record, so the DL card can show data (design ruling 10).
   ["stateSource", "DL", '{"licenseNumber":"ZZDLTEST"}', "VALID"],
   // Demo scenario pack: a calm (non-critical) vehicle hit on both sources and a person hit.
   ["stateSource", "VEH", '{"plate":"ZZ-0010"}', "REGISTERED"],
@@ -54,11 +54,11 @@ function rowsOf(file: MockFile): Row[] {
 }
 const sortRows = (rows: Row[]) => [...rows].sort((a, b) => a.join("|").localeCompare(b.join("|")));
 
-describe("the generated default mock answers the one synthetic licence query (#602)", () => {
+describe("the generated default mock answers the one synthetic license query (#602)", () => {
   const mock = MockFileSchema.parse(JSON.parse(generate("default")));
   const req = (values: Record<string, unknown>) => ({ queryType: "DL", values, typeValues: {} });
 
-  it("ZZDLTEST on stateSource DL returns the synthetic licence record", () => {
+  it("ZZDLTEST on stateSource DL returns the synthetic license record", () => {
     const m = matchMockScenario(
       mock,
       "stateSource",
@@ -77,7 +77,7 @@ describe("the generated default mock answers the one synthetic licence query (#6
     });
   });
 
-  it("any other licence number, and nationalSource, stay NO RECORD", () => {
+  it("any other license number, and nationalSource, stay NO RECORD", () => {
     const other = matchMockScenario(mock, "stateSource", req({ licenseNumber: "X" }));
     expect(other).toMatchObject({
       scenarioIndex: null,
@@ -131,6 +131,25 @@ describe("the default mock answers the demo scenario pack hits with non-critical
       req("PER", { last: "TESTERSON", first: "SAMPLE" }),
     );
     expect(old?.scenarioIndex).toBeNull();
+  });
+});
+
+describe("the default mock answers ZZSTOLEN1 as an electronics item (G34)", () => {
+  const mock = MockFileSchema.parse(JSON.parse(generate("default")));
+  const req = { queryType: "PRO", values: { serial: "ZZSTOLEN1" }, typeValues: {} };
+
+  it.each(["stateSource", "nationalSource"])("%s describes stolen electronics", (source) => {
+    const m = matchMockScenario(mock, source, req);
+    expect(m?.outcome).toMatchObject({
+      kind: "respond",
+      payload: {
+        status: "STOLEN",
+        serial: "ZZSTOLEN1",
+        propertyType: "ELECTRONICS",
+        description: "SAMPLE ELECTRONICS",
+        remarks: "STOLEN PROPERTY",
+      },
+    });
   });
 });
 
