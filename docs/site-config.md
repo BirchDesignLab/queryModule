@@ -582,7 +582,7 @@ each violation by JSON pointer and key (`fixture.realPlate`, `fixture.validVin`,
 | `status` | `status` | a scalar with no run of 4 or more digits, counted across separators as for `other`; an exponent-form number (`1e21`) is rejected |
 | `freeText` | `remarks`, `note`, `caution`, `description`, `offense` | text with no digits at all |
 | `container` | `vehicle`, `owner`, `owners`, `subject`, `warrant`, `warrants` | an object or array, checked in turn |
-| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency`, `licensenumber` | a scalar with no run of 4 or more digits, counted across separators, where every non-alphanumeric character is one (so `123-45-678` and `123,456,789` are rejected); an exponent-form number (`1e21`) is rejected; `year` may be 1901 to 1999 |
+| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency`, `licensenumber` | a scalar with no run of 4 or more digits, counted across separators, where every character that is not a letter or a decimal digit is one, and a digit is a digit of any script (so `123-45-678` and `123,456,789` are rejected); an exponent-form number (`1e21`) is rejected; `year` may be 1901 to 1999 |
 
 `SYNTHETIC_NAMES` is `TESTERSON`, `SAMPLEWORTH`, `EXAMPLESON`, `SAMPLE`, `TEST`, `TESTER` and
 `EXAMPLE` (compared upper-cased).
