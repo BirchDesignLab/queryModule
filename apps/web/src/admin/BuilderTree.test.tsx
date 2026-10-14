@@ -55,7 +55,9 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
       expect(item(new RegExp(`^${escapeRegExp(name)}`))).toBeInTheDocument();
     // Every site item has a plain name with its key in mono; schemaVersion is not a setting.
     expect(item(/^Terminal settings terminal$/)).toBeInTheDocument();
-    expect(item(/^Keyword styles keywordSeverityStyles$/)).toBeInTheDocument();
+    // The keyword styles are edited with the keywords, under Result cards (Task 11).
+    expect(within(tree()).queryByRole("treeitem", { name: /keywordSeverityStyles/ })).toBeNull();
+    expect(item(/^Keywords and severity keywords$/)).toBeInTheDocument();
     expect(within(tree()).queryByRole("treeitem", { name: /schemaVersion/ })).toBeNull();
     expect(within(tree()).getByText(/^Server settings: available after/)).toBeInTheDocument();
   });

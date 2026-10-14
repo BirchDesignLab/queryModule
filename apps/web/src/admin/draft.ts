@@ -8,6 +8,7 @@ import {
   validateSiteConfig,
 } from "@querymodule/core/config";
 import type { ConfigDocument } from "@querymodule/core/contracts";
+import { tokensContrast } from "./contrast-context.js";
 
 /**
  * The config builder's draft (Task 31, BR-001, FR-060). It is memory only: never localStorage,
@@ -128,7 +129,9 @@ export function validateDraft(
   for (const locale of built.config.locales) {
     locales[locale] = { ...(perLocale[locale] ?? bundle), ...overlay[locale] };
   }
-  const result = validateSiteConfig(built.config, locales as LocaleBundles);
+  const result = validateSiteConfig(built.config, locales as LocaleBundles, {
+    contrast: tokensContrast,
+  });
   return { ok: true, errors: result.errors, warnings: result.warnings };
 }
 

@@ -161,7 +161,16 @@ function useTreeNodes(
         true,
       ),
     );
-    if ("keywords" in doc) cards.push(node("/keywords", t("admin.cards.keywordsRow"), "keywords"));
+    if ("keywords" in doc) {
+      // The row also counts the issues of the severity styles it edits (contrast, Task 11).
+      const row = node("/keywords", t("admin.cards.keywordsRow"), "keywords");
+      const styles = under("/keywordSeverityStyles");
+      cards.push({
+        ...row,
+        errors: row.errors + styles.errors,
+        warnings: row.warnings + styles.warnings,
+      });
+    }
     // Every top-level key by its plain name, the key in mono beside it (design lead 09-29-26).
     const site = Object.keys(doc)
       .filter((k) => !CARD_KEYS.has(k) && !HIDDEN_KEYS.has(k))
@@ -214,8 +223,16 @@ function useTreeNodes(
   }, [doc, mock, issues, name, t, labelText, cardName]);
 }
 
-/** Top-level keys the Site group leaves to other groups (query types, Result cards). */
-const CARD_KEYS: ReadonlySet<string> = new Set(["queryTypes", "responseMappings", "keywords"]);
+/**
+ * Top-level keys the Site group leaves to other groups (query types, Result cards). The keyword
+ * styles are edited with the keywords (Task 11, #604), so they have no row of their own.
+ */
+const CARD_KEYS: ReadonlySet<string> = new Set([
+  "queryTypes",
+  "responseMappings",
+  "keywords",
+  "keywordSeverityStyles",
+]);
 
 /** A row's text as the editor shows it: the draft's text, else the shipped one, else the key. */
 type LabelText = (node: { label: string; labelKey?: string }) => string;

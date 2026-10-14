@@ -2044,3 +2044,42 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   flex-direction: row;
   align-items: center;
 }
+
+/* Keywords and severity editor (Task 11). */
+.qm-kw__phrases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  margin: 0 0 var(--qm-space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.qm-kw__phrase-add,
+.qm-kw__add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--qm-space-2);
+}
+
+.qm-kw__add {
+  margin-block-start: var(--qm-space-3);
+}
+
+.qm-kw__style {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  margin: 0 0 var(--qm-space-3);
+  padding: var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-kw__sample {
+  padding: var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  overflow-wrap: anywhere;
+}

@@ -32,6 +32,16 @@ export const cardsTypeOf = (pointer: string): string | null =>
     ? decodeURIComponent(pointer.slice(CARDS_TYPE_PREFIX.length))
     : null;
 
+/**
+ * The item that edits a pointer. The keyword styles are edited with the keywords (Task 11, #604),
+ * so a pointer into them selects the keywords item; the pointer itself still names the control
+ * (an issue's pointer travels as the selection's focus).
+ */
+export const editorItem = (pointer: string): string =>
+  pointer === "/keywordSeverityStyles" || pointer.startsWith("/keywordSeverityStyles/")
+    ? "/keywords"
+    : pointer;
+
 export const objectsOf = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v)
     ? v.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null)
@@ -50,6 +60,15 @@ export function cardsFallback(
   const near = cards[Math.min(index ?? 0, cards.length - 1)];
   const code =
     typeof near?.queryType === "string" ? near.queryType : objectsOf(doc.queryTypes)[0]?.code;
+  return typeof code === "string" ? cardsTypePointer(code) : null;
+}
+
+/**
+ * The query type whose card the preview shows while the keywords are edited: the type of the first
+ * card, else the first query type. Null when the draft has neither.
+ */
+export function keywordsPreviewPointer(doc: Readonly<Record<string, unknown>>): string | null {
+  const code = objectsOf(doc.responseMappings)[0]?.queryType ?? objectsOf(doc.queryTypes)[0]?.code;
   return typeof code === "string" ? cardsTypePointer(code) : null;
 }
 
