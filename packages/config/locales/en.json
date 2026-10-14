@@ -992,6 +992,7 @@
   "admin.mock.addTrigger": "Add trigger field",
   "admin.mock.removeTrigger": "Remove trigger field {n}",
   "admin.mock.triggerValueEmpty": "Enter the value that triggers this scenario.",
+  "admin.mock.triggerValueBlank": "This blank value never matches; remove it or fill it in.",
   "admin.mock.triggerMissing": "Add a trigger field with a value: a scenario needs one.",
   "admin.mock.result.label": "Result",
   "admin.mock.result.record": "Returns a record",

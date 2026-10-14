@@ -60,6 +60,30 @@ describe("mockEditorIssues (rules of the editor, Q4: a scenario needs a trigger 
     ]);
   });
 
+  it("warns, without blocking, on a blank trigger beside a filled one (it never matches)", () => {
+    const m = addScenario(mock, "stateSource", 0, {
+      when: { plate: "ZZ-0007", state: "", note: " " },
+      behavior: "error",
+    });
+    const n = mock.sources.stateSource?.responses[0]?.scenarios.length ?? 0;
+    const at = `/mock/sources/stateSource/responses/0/scenarios/${n}/when`;
+    expect(mockEditorIssues(m)).toEqual([
+      { level: "warning", pointer: `${at}/state`, key: "admin.mock.triggerValueBlank", params: {} },
+      { level: "warning", pointer: `${at}/note`, key: "admin.mock.triggerValueBlank", params: {} },
+    ]);
+  });
+
+  it("keeps the error on each blank trigger when no trigger has a value", () => {
+    const m = addScenario(mock, "stateSource", 0, {
+      when: { plate: "", state: "" },
+      behavior: "error",
+    });
+    expect(mockEditorIssues(m).map((i) => [i.level, i.key])).toEqual([
+      ["error", "admin.mock.triggerValueEmpty"],
+      ["error", "admin.mock.triggerValueEmpty"],
+    ]);
+  });
+
   it("a trigger value that is a number or a boolean is not empty", () => {
     const m = addScenario(mock, "stateSource", 0, {
       when: { year: 0, flag: false },
@@ -161,12 +185,12 @@ describe("withMockIssues", () => {
 });
 
 describe("#572 Q4 as ruled: only a scenario with no non-empty trigger value is blocked", () => {
-  it("a blank value beside a filled one is no error", () => {
+  it("a blank value beside a filled one is no error (a warning: it never matches)", () => {
     const m = addScenario(mock, "stateSource", 0, {
       when: { plate: "ZZ-0007", state: "" },
       behavior: "error",
     });
-    expect(mockEditorIssues(m)).toEqual([]);
+    expect(mockEditorIssues(m).map((i) => i.level)).toEqual(["warning"]);
   });
 
   it("every value blank flags each blank field", () => {

@@ -2,7 +2,7 @@ import type { MockFile, MockScenario } from "@querymodule/core/contracts";
 import { VisuallyHidden } from "@querymodule/web-ui";
 import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
-import { ChecksContext } from "./checks.js";
+import { ChecksContext, IssueMessages } from "./checks.js";
 import { Sect } from "./controls.js";
 import { DraftText, MockPayload } from "./MockPayload.js";
 import { requestMockFocus, useMockEnv } from "./mock-context.js";
@@ -217,7 +217,9 @@ function Scenario({
               <span className="qm-sect__hint">{t("admin.mock.triggers.hint")}</span>
               {triggers.map(([field, value], w) => {
                 const pointer = `${base}/when/${field.replaceAll("~", "~0").replaceAll("/", "~1")}`;
-                const empty = (checks.byPointer.get(pointer) ?? []).length > 0;
+                const found = checks.byPointer.get(pointer) ?? [];
+                const empty = found.some((i) => i.level === "error");
+                const blank = found.find((i) => i.level === "warning");
                 const options = fieldKeys.includes(field) ? fieldKeys : [...fieldKeys, field];
                 return (
                   // biome-ignore lint/suspicious/noArrayIndexKey: a trigger is its position; the field is editable
@@ -255,7 +257,7 @@ function Scenario({
                       autoComplete="off"
                       spellCheck={false}
                       aria-invalid={empty || undefined}
-                      aria-describedby={empty ? `${uid}-w${w}-e` : undefined}
+                      aria-describedby={empty || blank !== undefined ? `${uid}-w${w}-e` : undefined}
                       onText={(text, as) =>
                         write(
                           { ...scenario, when: setTriggerValue(scenario.when, field, text, as) },
@@ -276,6 +278,12 @@ function Scenario({
                     >
                       <span aria-hidden="true">×</span>
                     </button>
+                    {blank !== undefined && !empty && (
+                      <p className="qm-mock__error" id={`${uid}-w${w}-e`}>
+                        <span aria-hidden="true">⚠</span>
+                        <span data-issue-pointer={pointer}>{t(blank.key, blank.params)}</span>
+                      </p>
+                    )}
                     {empty && (
                       <p className="qm-mock__error" id={`${uid}-w${w}-e`}>
                         <span aria-hidden="true">⚠</span>
@@ -334,6 +342,7 @@ interface MockResponseActions {
 export function MockResponse({ sourceId, index }: { sourceId: string; index: number }) {
   const t = useT();
   const env = useMockEnv();
+  const checks = useContext(ChecksContext);
   const source = env.mock.sources[sourceId];
   const response = source?.responses[index];
   // Which scenarios are open, by position; a move or a remove carries the state along.
@@ -404,6 +413,9 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
     },
   };
   const scenarioPrefix = `${base}/scenarios`;
+  const orphaned = checks.issues.filter(
+    (i) => i.pointer === base && i.key === "admin.mock.orphaned",
+  );
   return (
     <>
       <p className="qm-mock__lead">
@@ -414,6 +426,11 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
           max: source.latencyMs[1],
         })}
       </p>
+      {orphaned.length > 0 && (
+        <p className="qm-mock__lead">
+          <IssueMessages id={`${base}-orphaned`} issues={orphaned} />
+        </p>
+      )}
       <Sect
         title={t("admin.mock.matches.title")}
         hint={t(typeCode === null ? "admin.mock.matches.noType" : "admin.mock.matches.hint", {

@@ -32,14 +32,15 @@ export function mockEditorIssues(mock: MockFile): DraftIssue[] {
             key: "admin.mock.triggerMissing",
             params: {},
           });
-        // Blocked only when no trigger has a value: then each blank one says so.
-        if (fields.some(([, value]) => !empty(value))) return;
+        // No trigger has a value: blocked, and each blank one says so. A blank beside a filled one
+        // never matches (it is left out of the values), so it warns without blocking.
+        const filled = fields.some(([, value]) => !empty(value));
         for (const [field, value] of fields)
           if (empty(value))
             out.push({
-              level: "error",
+              level: filled ? "warning" : "error",
               pointer: `${at}/when/${field.replaceAll("~", "~0").replaceAll("/", "~1")}`,
-              key: "admin.mock.triggerValueEmpty",
+              key: filled ? "admin.mock.triggerValueBlank" : "admin.mock.triggerValueEmpty",
               params: {},
             });
       });

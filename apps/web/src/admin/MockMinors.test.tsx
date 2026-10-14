@@ -194,3 +194,37 @@ describe("Add all at the Coverage item", () => {
     expect(draftMock(t).sources.stateSource?.responses).toHaveLength(1);
   });
 });
+
+describe("orphaned response and blank triggers", () => {
+  it("a response whose query type the site no longer has shows the warning at the response", async () => {
+    const t = await openBuilder();
+    editMock(t, (m) => {
+      const sources = m.sources as Record<string, { responses: { queryType: string }[] }>;
+      const first = sources.stateSource?.responses[0];
+      if (first !== undefined) first.queryType = "ZZOLD";
+    });
+    await selectRow(t.user, /^Mock response: ZZOLD/);
+    const warning = await screen.findByText(/No query type has the code ZZOLD/);
+    expect(warning.closest("[data-issue-pointer]")).toHaveAttribute(
+      "data-issue-pointer",
+      "/mock/sources/stateSource/responses/0",
+    );
+  });
+
+  it("a blank trigger beside a filled one shows the warning and is not marked invalid", async () => {
+    const t = await openBuilder();
+    await selectRow(t.user, /^Mock response: Vehicle, State system VEH/);
+    await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
+    await t.user.click(within(scenarioCard(1)).getByRole("button", { name: "Add trigger field" }));
+    const card = within(scenarioCard(1));
+    const blank = card
+      .getAllByLabelText(/^Value for /)
+      .find((el) => (el as HTMLInputElement).value === "") as HTMLInputElement;
+    expect(blank).toBeDefined();
+    expect(card.getByText(/This blank value never matches/)).toBeInTheDocument();
+    expect(blank).not.toHaveAttribute("aria-invalid", "true");
+    expect(
+      card.queryByText("Enter the value that triggers this scenario."),
+    ).not.toBeInTheDocument();
+  });
+});
