@@ -24,9 +24,10 @@ export interface FixtureDiagnostic {
  * Keys are normalised before lookup: lower-cased, "_" and "-" removed.
  * `container` keys must hold an object or array (recursed); a scalar there is a violation.
  * `other` holds descriptive vehicle, property, warrant and licence leaf keys; its strings and numbers may
- * not carry a run of 4 or more digits, counted across separators (every non-alphanumeric character
- * is one; a `year` of 1901 to 1999 is the one exception). `status` follows the same run rule. A number
- * in exponent form (1e21) is rejected in both kinds.
+ * not carry a run of 4 or more digits, counted across separators (every character that is not a letter
+ * or a decimal digit is one, and a digit is a digit of any script; a `year` of 1901 to 1999 is the one
+ * exception). `status` follows the same run rule. A number in exponent form (1e21) is rejected in both
+ * kinds.
  */
 export const FIXTURE_LEAF_KEYS: {
   plate: readonly string[];
@@ -144,14 +145,15 @@ function is1901Date(s: string): boolean {
 }
 
 /**
- * True when a string or number leaf carries a run of 4 or more digits. Every non-alphanumeric character
- * is a separator, so 123,456,789 and 123-45-6789 count as one run (#636, #638). The value is NFKC-folded
- * first so full-width digits count. A number that stringifies in exponent form is treated as a violation.
+ * True when a string or number leaf carries a run of 4 or more digits. Every character that is neither a
+ * letter nor a decimal digit is a separator, so 123,456,789 and 123-45-6789 count as one run (#636,
+ * #638). A decimal digit is any Unicode Nd digit (Arabic-Indic, Devanagari, full-width: #647); the value
+ * is NFKC-folded first so superscripts and the like count too. A number that stringifies in exponent form is treated as a violation.
  */
 function hasDigitRun(value: unknown): boolean {
   const text = String(value);
   if (typeof value === "number" && /e/i.test(text)) return true;
-  return /\d{4,}/.test(text.normalize("NFKC").replace(/[^A-Za-z0-9]/g, ""));
+  return /\p{Nd}{4,}/u.test(text.normalize("NFKC").replace(/[^\p{L}\p{Nd}]/gu, ""));
 }
 
 function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unknown): Violation {
@@ -178,7 +180,9 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
         ? null
         : "fixture.nonExampleAddress";
     case "freeText":
-      return typeof value === "string" && !/\d/.test(value) ? null : "fixture.freeTextDigits";
+      return typeof value === "string" && !/\p{Nd}/u.test(value.normalize("NFKC"))
+        ? null
+        : "fixture.freeTextDigits";
     case "container":
       return "fixture.unknownKey";
     case "status":
