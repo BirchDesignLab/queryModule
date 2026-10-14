@@ -300,6 +300,49 @@ describe("status and other keys", () => {
   });
 });
 
+describe("separators do not hide a digit run in an `other` leaf (#636)", () => {
+  const rejected = (key: string, value: unknown) =>
+    expect(check({ [key]: value }), `${key}: ${String(value)}`).toEqual([
+      { pointer: `${RESPOND}/${key}`, key: "fixture.freeTextDigits" },
+    ]);
+
+  it.each([
+    "123-45-678",
+    "1234 5678",
+    "12 34",
+    "123.45.678",
+    "12/34/5678",
+    "1-2-3-4",
+    "12 - 34",
+    "AB 1234",
+  ])("rejects %s as a serial and as a licenseNumber", (value) => {
+    rejected("serial", value);
+    rejected("licenseNumber", value);
+  });
+
+  it("still rejects an unbroken run, and a number value, as before", () => {
+    rejected("serial", "ZZ1234");
+    rejected("serial", 12345);
+  });
+
+  it.each([
+    "ZZDLTEST",
+    "ZZDL-TEST-007",
+    "ZZSTOLEN1",
+    "AB-12-CD-34",
+    "A1 B2 C3 D4",
+    "ZZ 12 TEST 34",
+    "1-2-3",
+  ])("keeps %s: digits that stay under four in a row once separators are removed", (value) => {
+    expect(check({ serial: value, licenseNumber: value })).toEqual([]);
+  });
+
+  it("leaves the other kinds' rules alone (a year, a state, a make)", () => {
+    expect(check({ year: "1901", state: "TX", make: "TESTMAKE" })).toEqual([]);
+    expect(check({ year: 2020 })).toHaveLength(1);
+  });
+});
+
 describe("a driver's licence record (#602, design ruling 10)", () => {
   const dl = (licenseNumber: unknown) => ({
     status: "VALID",
