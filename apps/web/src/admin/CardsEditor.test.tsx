@@ -390,7 +390,7 @@ describe("Review lines", () => {
     const heading = await screen.findByRole("heading", { level: 4, name: /^Result cards/ });
     const group = heading.closest("section") as HTMLElement;
     expect(within(group).getByText(/^Vehicle card: All results$/)).toBeInTheDocument();
-    expect(within(group).getByText(/^Make test was added to the /)).toBeInTheDocument();
+    expect(within(group).getByText(/^Make test added to the /)).toBeInTheDocument();
   });
 });
 

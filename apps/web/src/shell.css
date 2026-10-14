@@ -1703,6 +1703,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   vertical-align: middle;
 }
 
+.qm-users__table time {
+  white-space: nowrap;
+}
+
 .qm-users__table thead th {
   color: var(--qm-color-text-muted);
   font-family: var(--qm-type-family-label);
