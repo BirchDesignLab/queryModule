@@ -34,7 +34,16 @@ export const site = (b: typeof Builders): MockFile => {
               { when: { serial: "ZZSTOLEN1" }, respond: b.propertyRecord({ serial: "ZZSTOLEN1" }) },
             ],
           },
-          { queryType: "DL", default: none, scenarios: [] },
+          {
+            queryType: "DL",
+            default: none,
+            scenarios: [
+              {
+                when: { licenseNumber: "ZZDLTEST" },
+                respond: b.licenseRecord({ licenseNumber: "ZZDLTEST", n: 1 }),
+              },
+            ],
+          },
         ],
       },
       nationalSource: {

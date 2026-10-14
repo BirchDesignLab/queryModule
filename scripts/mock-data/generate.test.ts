@@ -20,9 +20,11 @@ const DEFAULT_ROWS: Row[] = [
   ["nationalSource", "PRO", '{"serial":"ZZSTOLEN1"}', "STOLEN"],
   ["nationalSource", "WNT", '{"last":"WANTED"}', "WANTED"],
   ["nationalSource", "WNT", '{"last":"MISSING"}', "MISSING PERSON"],
+  // #602: the one synthetic licence record, so the DL card can show data (design ruling 10).
+  ["stateSource", "DL", '{"licenseNumber":"ZZDLTEST"}', "VALID"],
 ];
 const EXAMPLE_OK_ROWS: Row[] = DEFAULT_ROWS.filter(
-  ([, q, when]) => q !== "PRO" && !when.includes("MISSING"),
+  ([, q, when]) => q !== "PRO" && q !== "DL" && !when.includes("MISSING"),
 );
 const STATE_TYPES = ["VEH", "PER", "PRO", "DL"];
 const NATIONAL_TYPES = ["VEH", "PER", "PRO", "WNT", "DL"];

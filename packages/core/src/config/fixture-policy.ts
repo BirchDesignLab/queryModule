@@ -57,7 +57,17 @@ export const FIXTURE_LEAF_KEYS: {
   status: ["status"],
   freeText: ["remarks", "note", "caution", "description", "offense"],
   container: ["vehicle", "owner", "owners", "subject", "warrant", "warrants"],
-  other: ["make", "model", "year", "type", "state", "serial", "propertytype", "agency"],
+  other: [
+    "make",
+    "model",
+    "year",
+    "type",
+    "state",
+    "serial",
+    "propertytype",
+    "agency",
+    "licensenumber",
+  ],
 };
 
 export const SYNTHETIC_NAMES: ReadonlySet<string> = new Set([
