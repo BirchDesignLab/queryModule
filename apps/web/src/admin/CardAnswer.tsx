@@ -4,6 +4,8 @@ import type { SourcePayload } from "@querymodule/core/contracts";
 import { assessResult, mapResponse } from "@querymodule/core/response";
 import { ResultCard } from "@querymodule/web-ui";
 import { useMemo } from "react";
+import { useT } from "../app/i18n-context.js";
+import type { MockResult } from "./mock-edit.js";
 
 /**
  * The one way the builder draws an answer as a user sees it (ADR-0011 decision 4; BW3 polish,
@@ -109,6 +111,53 @@ export function BehaviorLine({
           status: translator.t(`sourceStatus.status.${status}`),
         })}
       </span>
+    </div>
+  );
+}
+
+/** The outcome words' message key for each of the five results (admin.mock.result.*). */
+export const RESULT_KEY: Record<MockResult, string> = {
+  record: "record",
+  norecord: "noRecord",
+  error: "error",
+  timeout: "timeout",
+  creds: "creds",
+};
+
+/** The production badge style of each result (the mockup's OUTB): the words always show too. */
+const RESULT_BADGE: Record<MockResult, string> = {
+  record: "info",
+  norecord: "ok",
+  error: "critical",
+  timeout: "warning",
+  creds: "critical",
+};
+
+/**
+ * The outcome as one row (mockup v5 `.outcome-head`): the badge with the outcome words, then which
+ * entry of the mock answered, and under it the optional hint (the wait). The words carry the
+ * outcome, so the badge colour never does alone. No value or payload content is drawn here.
+ */
+export function OutcomeRow({
+  result,
+  which,
+  hint,
+}: {
+  result: MockResult;
+  which: string;
+  /** The wait, or that a timeout never answers. */
+  hint?: string | null;
+}) {
+  const t = useT();
+  return (
+    <div className="qm-outcome">
+      <div className="qm-outcome__head" data-testid="outcome-head">
+        <span className={`qm-badge qm-badge--${RESULT_BADGE[result]}`}>
+          {t(`admin.mock.result.${RESULT_KEY[result]}`)}
+        </span>
+        <span>{which}</span>
+      </div>
+      {hint !== undefined && hint !== null && <p className="qm-outcome__hint">{hint}</p>}
     </div>
   );
 }

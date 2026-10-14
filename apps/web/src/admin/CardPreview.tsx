@@ -2,19 +2,21 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { MockFile, SourcePayload } from "@querymodule/core/contracts";
 import { matchMockScenario } from "@querymodule/core/mock";
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { useId, useMemo, useState } from "react";
+import { type KeyboardEvent, useId, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
   BEHAVIOR_STATUS,
   BehaviorLine,
+  OutcomeRow,
   type Persona,
   RenderedCard,
   useRenderedCard,
 } from "./CardAnswer.js";
 import { cardIndexOf, useCardName } from "./CardsEditor.js";
-import { asObjects, str } from "./controls.js";
+import { asObjects, str, useLabelText } from "./controls.js";
 import type { JsonObject } from "./draft.js";
+import { type MockResult, resultOf } from "./mock-edit.js";
 import { parseMock } from "./mock-model.js";
 import { previewConfig, useOverlayTranslator } from "./Preview.js";
 import { formMatchOf, triggerInput } from "./preview-match.js";
@@ -31,15 +33,76 @@ import { cardsTypeOf } from "./selection.js";
 
 type Answer =
   | { kind: "none" }
-  | { kind: "respond"; payload: SourcePayload; matched: string; values: Record<string, unknown> }
+  | {
+      kind: "respond";
+      payload: SourcePayload;
+      matched: string;
+      result: MockResult;
+      values: Record<string, unknown>;
+    }
   | {
       kind: "behavior";
       status: (typeof BEHAVIOR_STATUS)[keyof typeof BEHAVIOR_STATUS];
       matched: string;
+      result: MockResult;
     };
 
 /** The values of an answer with none: a stable object, so the rendered card is not rebuilt for nothing. */
 const NO_VALUES: Record<string, unknown> = {};
+
+const MODES = ["pick", "type"] as const;
+type Mode = (typeof MODES)[number];
+
+/**
+ * The Values segmented control (mockup v5): two native radios in one segmented track, the label
+ * drawing each segment (the pattern of the web-ui SegField). The browser gives one Tab stop, and
+ * Left, Right, Up and Down move and select; Home and End jump to the first and last here. Focus
+ * follows the selection and never moves otherwise.
+ */
+function ValuesSeg({
+  label,
+  name,
+  mode,
+  onChange,
+  names,
+}: {
+  label: string;
+  name: string;
+  mode: Mode;
+  onChange(mode: Mode): void;
+  names: Readonly<Record<Mode, string>>;
+}) {
+  const refs = useRef<Partial<Record<Mode, HTMLInputElement | null>>>({});
+  const jump = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    const next = (e.key === "Home" ? MODES[0] : MODES[MODES.length - 1]) ?? mode;
+    onChange(next);
+    refs.current[next]?.focus();
+  };
+  return (
+    <fieldset className="qm-preview__field">
+      <legend>{label}</legend>
+      <div className="qm-seg qm-seg--options qm-seg--values">
+        {MODES.map((m) => (
+          <label key={m} className="qm-seg__option">
+            <input
+              ref={(el) => {
+                refs.current[m] = el;
+              }}
+              type="radio"
+              name={name}
+              checked={mode === m}
+              onChange={() => onChange(m)}
+              onKeyDown={jump}
+            />
+            <span>{names[m]}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
 
 export function CardPreview({
   doc,
@@ -57,6 +120,7 @@ export function CardPreview({
   const translator = useOverlayTranslator(labels);
   const { mock: rawMock } = useDraft();
   const cardName = useCardName(doc);
+  const labelText = useLabelText();
   const mock = useMemo<MockFile | null>(() => {
     const parsed = rawMock === null ? null : parseMock(rawMock);
     return parsed?.ok === true ? parsed.mock : null;
@@ -75,7 +139,7 @@ export function CardPreview({
       : typeof card?.sourceId === "string" && typeSources.includes(card.sourceId)
         ? card.sourceId
         : (typeSources[0] ?? "");
-  const [mode, setMode] = useState<"pick" | "type">("pick");
+  const [mode, setMode] = useState<Mode>("pick");
   const [scenario, setScenario] = useState<string | null>(null);
   const [typed, setTyped] = useState<Readonly<Record<string, string>>>({});
   const [view, setView] = useState<"summary" | "detail">("summary");
@@ -115,10 +179,11 @@ export function CardPreview({
 
   const answer = useMemo<Answer>(() => {
     if (mock === null || config === null || code === "") return { kind: "none" };
+    const typeText = labelText(type?.labelKey) || code;
     const matchedText = (si: number | null) =>
       si === null
-        ? t("admin.cards.preview.matchedDefault")
-        : t("admin.cards.preview.matched", { n: si + 1 });
+        ? t("admin.mock.try.entryDefault", { type: typeText })
+        : t("admin.mock.try.entryScenario", { n: si + 1, type: typeText });
     if (mode === "pick") {
       const [riText, siText] = picked.split(":");
       const entry = mock.sources[sourceId]?.responses[Number(riText)];
@@ -126,7 +191,12 @@ export function CardPreview({
       const si = siText === "d" || siText === undefined ? null : Number(siText);
       const s = si === null ? undefined : entry.scenarios[si];
       if (s?.behavior !== undefined)
-        return { kind: "behavior", status: BEHAVIOR_STATUS[s.behavior], matched: matchedText(si) };
+        return {
+          kind: "behavior",
+          status: BEHAVIOR_STATUS[s.behavior],
+          matched: matchedText(si),
+          result: resultOf(s),
+        };
       // The values the plan would hand part 0 for a query that reaches this entry: the response's
       // type values (a typed response answers only a query carrying them) and the scenario's own
       // trigger values, through the form engine, so a rule-narrowed card wins here as it would for
@@ -141,6 +211,7 @@ export function CardPreview({
         kind: "respond",
         payload: s?.respond ?? entry.default,
         matched: matchedText(si),
+        result: resultOf(s ?? entry.default),
         values,
       };
     }
@@ -148,10 +219,16 @@ export function CardPreview({
     const match = matchMockScenario(mock, sourceId, { queryType: code, typeValues, values });
     if (match === null) return { kind: "none" };
     const matched = matchedText(match.scenarioIndex);
+    const answered = mock.sources[sourceId]?.responses[match.responseIndex];
+    if (answered === undefined) return { kind: "none" };
+    const result = resultOf(
+      (match.scenarioIndex === null ? undefined : answered.scenarios[match.scenarioIndex]) ??
+        answered.default,
+    );
     return match.outcome.kind === "behavior"
-      ? { kind: "behavior", status: BEHAVIOR_STATUS[match.outcome.behavior], matched }
-      : { kind: "respond", payload: match.outcome.payload, matched, values };
-  }, [mock, config, code, mode, picked, sourceId, typed, t]);
+      ? { kind: "behavior", status: BEHAVIOR_STATUS[match.outcome.behavior], matched, result }
+      : { kind: "respond", payload: match.outcome.payload, matched, result, values };
+  }, [mock, config, code, type, labelText, mode, picked, sourceId, typed, t]);
 
   const rendered = useRenderedCard(config, {
     code,
@@ -223,20 +300,13 @@ export function CardPreview({
                 ))}
               </select>
             </div>
-            <fieldset className="qm-mock__radios">
-              <legend>{t("admin.cards.preview.answer")}</legend>
-              {(["pick", "type"] as const).map((m) => (
-                <label key={m} className="qm-mock__radio">
-                  <input
-                    type="radio"
-                    name={`${uid}-mode`}
-                    checked={mode === m}
-                    onChange={() => setMode(m)}
-                  />{" "}
-                  {t(m === "pick" ? "admin.cards.preview.pick" : "admin.cards.preview.type")}
-                </label>
-              ))}
-            </fieldset>
+            <ValuesSeg
+              label={t("admin.cards.preview.values")}
+              name={`${uid}-mode`}
+              mode={mode}
+              onChange={setMode}
+              names={{ pick: t("admin.cards.preview.pick"), type: t("admin.cards.preview.type") }}
+            />
             {mode === "pick" ? (
               <div>
                 <label htmlFor={`${uid}-scenario`}>{t("admin.cards.preview.scenario")}</label>{" "}
@@ -281,7 +351,7 @@ export function CardPreview({
               <p className="qm-preview__state">{t("admin.cards.preview.noAnswer")}</p>
             ) : (
               <>
-                <p>{answer.matched}</p>
+                <OutcomeRow result={answer.result} which={answer.matched} />
                 <div
                   className={
                     persona === "officer"
