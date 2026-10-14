@@ -77,6 +77,12 @@ describe("request entries match mockup v5 (G1, G12, G25, G36)", () => {
   });
 });
 
+describe("G27 the info mark stays a lower-case i", () => {
+  it("the badge marker is exempt from the badge's uppercase", () => {
+    expect(decls(".qm-badge__marker")).toMatch(/text-transform:\s*none/);
+  });
+});
+
 describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)", () => {
   it("dispatch density: inputs and selects are the 36 px dense height", () => {
     expect(decls(".qm-field__input")).toMatch(/min-height:\s*var\(--qm-control-height-dense\)/);

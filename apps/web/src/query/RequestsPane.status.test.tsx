@@ -93,6 +93,17 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     services.feed.close();
   });
 
+  it("G5: a failed, timed out or interrupted line says why, in words", () => {
+    const { driver, services } = setup();
+    services.feed.open();
+    act(() => driver.status("stateSource", "failed"));
+    act(() => driver.status("nationalSource", "timedOut"));
+    const list = sourceList();
+    expect(within(list).getByText("the source reported an error")).toBeInTheDocument();
+    expect(within(list).getByText("no answer in 10 s")).toBeInTheDocument();
+    services.feed.close();
+  });
+
   it("a focused control inside the row keeps focus when an event arrives", async () => {
     const { driver, services, user } = setup();
     services.feed.open();

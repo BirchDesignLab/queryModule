@@ -7,13 +7,14 @@ import {
   SeverityBadge,
   type SourceLineView,
 } from "@querymodule/web-ui";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useResolvedPersona } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
 import { requestAccessibleName } from "./request-name.js";
-import { assessEntry, highestSeverity, skipReasonText } from "./result-view.js";
+import { assessEntry, highestSeverity, skipReasonText, sourceWhy } from "./result-view.js";
+import { rowSummary } from "./row-summary.js";
 import { SourceCard } from "./SourceCard.js";
 
 export interface RequestsPaneProps {
@@ -51,6 +52,13 @@ export const RequestsPane = memo(function RequestsPane({
     };
   }, []);
   const items = useStore(requests, (s) => s.items);
+  // A Retry pressed while a request is in flight or the connection is down sends nothing; the row
+  // says so beside the button until the gate lifts, so the press is never silent (G10).
+  const [heldRows, setHeldRows] = useState<ReadonlyMap<string, string>>(new Map());
+  const submitStatus = useStore(submit, (s) => s.status);
+  useEffect(() => {
+    if (submitStatus === "idle") setHeldRows((held) => (held.size === 0 ? held : new Map()));
+  }, [submitStatus]);
   const shown = variant === "last" ? items.slice(0, 1) : items;
   const labelOf = (labelKey: string | undefined, fallback: string): string =>
     labelKey === undefined ? fallback : t(labelKey);
@@ -65,7 +73,16 @@ export const RequestsPane = memo(function RequestsPane({
     const base = {
       id: entry.id,
       typeLabel: typeLabel(entry.queryType),
-      summary: entry.summary,
+      // A row listed after a reload has no command: rebuilt from its primary part's values (G7).
+      summary: rowSummary(
+        config,
+        entry.queryType,
+        entry.summary,
+        entry.status === "acknowledged"
+          ? entry.parts.find((part) => part.parentPartId === null)?.values
+          : undefined,
+        Date.now(),
+      ),
       name: requestAccessibleName(entry, typeLabel(entry.queryType), (time) =>
         t("requests.nameSent", { typeLabel: typeLabel(entry.queryType), time }),
       ),
@@ -80,7 +97,7 @@ export const RequestsPane = memo(function RequestsPane({
         // recover what was typed, when the row kept it (#477).
         editable: entry.failure === "configChanged" && entry.submitted !== undefined,
         failureText: t(`requests.failure.${entry.failure}`),
-        notes: [],
+        notes: heldRows.has(entry.id) ? [heldRows.get(entry.id) as string] : [],
       };
     }
     const highest = highestSeverity(assessEntry(entry, config.keywords));
@@ -132,6 +149,8 @@ export const RequestsPane = memo(function RequestsPane({
               // A source that returned owes its payload (spec 6.7): until the card arrives the line
               // says so, instead of "returned" with nothing under it (G6).
               const loading = source.status === "returned" && payload === undefined;
+              // A source that did not return says why, in words (G5).
+              const whyText = sourceWhy(source.status, config, source.sourceId, t);
               return {
                 key: `${key}:${source.sourceId}`,
                 tone:
@@ -140,6 +159,7 @@ export const RequestsPane = memo(function RequestsPane({
                     : source.status === "returned"
                       ? "ok"
                       : "problem",
+                ...(whyText === undefined ? {} : { why: whyText }),
                 text: loading
                   ? t("sourceStatus.loadingResult", { source: sourceLabel(source.sourceId) })
                   : t("sourceStatus.line", {
@@ -208,9 +228,11 @@ export const RequestsPane = memo(function RequestsPane({
             requests.getState().items.some((item) => item.id === id);
           if (result.kind === "gated") {
             if (!stillListed(rowId)) return;
-            announcer.announce(
-              t(result.status === "submitting" ? "form.submitting" : "form.noConnection"),
+            const held = t(
+              result.status === "submitting" ? "form.submitting" : "form.noConnection",
             );
+            announcer.announce(held);
+            setHeldRows((rows) => new Map(rows).set(rowId, held));
           }
           // A 409 makes the controller refetch the config (every cached copy, observed or not), and
           // the panel announces that change itself: a second sentence here would cut it off in the

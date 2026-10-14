@@ -110,3 +110,50 @@ test("officer 1024x768: run query, last request in view, card headings", async (
     await save(page, `officer-1024-${name}-results`);
   }
 });
+
+// PR2: failed reason (G5), command kept after a reload (G7), 4-digit birth year (G26), info mark (G27),
+// mid-sentence "not run" reason (G33).
+for (const [email, width, height, who] of [
+  ["dispatcher@example.test", 1366, 768, "dispatcher"],
+  ["dispatcher@example.test", 1024, 768, "dispatcher"],
+  ["officer@example.test", 1024, 768, "officer"],
+] as const) {
+  test(`${who} ${width}x${height}: failed reason, birth date, info mark, reload`, async ({
+    page,
+  }) => {
+    await startAs(page, email, width, height);
+    const tag = `${who}-${width}`;
+    await runCommand(page, "VEH.FAIL1..26");
+    await expect(requests(page)).toContainText("the source reported an error", { timeout: 15_000 });
+    await save(page, `pr2-${tag}-01-failed-reason`);
+
+    await runCommand(page, "VEH.ABC123..26");
+    await expect(
+      requests(page).getByRole("region", { name: "State system: returned" }).first(),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+    await save(page, `pr2-${tag}-02-info-badge`);
+
+    await runCommand(page, "WNT.WANTED");
+    const national = requests(page).getByRole("region", { name: "National system: returned" });
+    await expect(national.first()).toBeVisible({ timeout: 15_000 });
+    const toggle = national.first().getByRole("button", { name: / detail/ });
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    await expect(national.first()).toContainText("01-01-1901");
+    await save(page, `pr2-${tag}-03-birth-date`);
+
+    await runCommand(page, "DL.ZZDLTEST");
+    await save(page, `pr2-${tag}-04-also-run-not-run`);
+
+    // The fixture answers the list empty; the reload must see the real one (G7).
+    await page.route(
+      (url) => url.pathname === "/api/v1/queries",
+      (route) => route.continue(),
+    );
+    await page.reload();
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+    await expect(requests(page)).toContainText("DL.ZZDLTEST", { timeout: 15_000 });
+    await save(page, `pr2-${tag}-05-after-reload`);
+  });
+}

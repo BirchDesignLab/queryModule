@@ -75,6 +75,32 @@ export function highestSeverity(assessed: readonly SourceAssessment[]): HighestS
   return best;
 }
 
+/** A field label inside a sentence: "Last name" reads "last name"; an acronym ("VIN") keeps its case (G33). */
+export function midSentence(label: string): string {
+  const [first = "", second = ""] = label;
+  return first !== "" && first === first.toUpperCase() && second === second.toLowerCase()
+    ? `${first.toLowerCase()}${label.slice(1)}`
+    : label;
+}
+
+/** The reason a source did not return, in words; undefined for pending and returned (G5). */
+export function sourceWhy(
+  status: string,
+  config: ClientSiteConfig,
+  sourceId: string,
+  t: (key: string, params?: Record<string, string | number | boolean>) => string,
+): string | undefined {
+  if (status === "timedOut") {
+    const ms = config.sources.find((s) => s.id === sourceId)?.timeoutMs;
+    return ms === undefined
+      ? t("sourceStatus.why.timedOutNoLimit")
+      : t("sourceStatus.why.timedOut", { seconds: Math.round(ms / 1000) });
+  }
+  if (["failed", "interrupted", "credentialsMissing", "credentialsRejected"].includes(status))
+    return t(`sourceStatus.why.${status}`);
+  return undefined;
+}
+
 type T = (key: string, params?: Record<string, string | number | boolean>) => string;
 
 /**
@@ -101,7 +127,7 @@ export function skipReasonText(
     const label = labelKey !== undefined ? t(labelKey) : (field ?? "");
     const text =
       reason.key === "validation.required"
-        ? t("sourceStatus.reasonNeeds", { field: label })
+        ? t("sourceStatus.reasonNeeds", { field: midSentence(label) })
         : t(reason.key, { label, field: field ?? "" });
     // The messages end in a full stop; the sentence supplies its own.
     return text.replace(/\.$/, "");
