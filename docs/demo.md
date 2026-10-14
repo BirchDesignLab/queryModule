@@ -244,7 +244,7 @@ builder.
 1. **Move a row to the summary.** Result cards, Vehicle, "All results" card: edit the Make row
    (`vehicle.make`) and set Show in to "Summary". The card preview opens on "Default answer" (the
    `NO RECORD` card), which has no make: in the Scenario list pick "Scenario 1" (the plate `ZZ-0001`
-   record). The preview then says "Returns a record", "Scenario 1 of Vehicle" and shows the card
+   record). The preview then says "Returns a record", "Scenario 1 matches" and shows the card
    with Make in the summary, as dispatchers will see it. The Dispatcher and Officer buttons above the
    preview switch the layout.
 2. **Add a keyword.** Keywords and severity: Add keyword `TESTMAKE`, severity Warning. The sample
@@ -252,14 +252,16 @@ builder.
 3. **Which card wins.** Add a second Vehicle card with Source "National system": the table now shows
    it winning for the national source ("score 2, source +2") and the first card for the rest.
 4. **Try a match.** Mock responses, State source, Vehicle: type plate `ZZ-0001`; the pane says
-   "Returns a record" and "Scenario 1 of Vehicle" and shows the result card as dispatchers would see
+   "Returns a record" and "Scenario 1 matches" and shows the result card as dispatchers would see
    it. The Payload button switches to the payload as read-only JSON and Result card switches back.
-   Type `ABC123`: it says "NO RECORD" and "Scenario 2 of Vehicle". A plate that matches nothing (for
-   example `NOPE`) says "Default of Vehicle": the default answers.
-5. **Review and publish.** The dialog lists the row, the keyword and the new card in plain
-   sentences, never payload content. Publish, then submit `VEH.ZZ-0001` in a dispatcher tab that was
-   already open: Make is in the summary with a warning mark on `TESTMAKE`, and cards already on
-   screen redraw at the next config refresh. History, Roll back restores the old card.
+   Type `ABC123`: it says "NO RECORD" and "Scenario 2 matches". A plate that matches nothing (for
+   example `NOPE`) says "No scenario matches, so the default answers".
+5. **Review and publish.** The dialog lists the changes as plain sentences, never payload
+   content: "Make moves to the summary.", "Keyword TESTMAKE added with warning severity." and
+   "Vehicle card added, with its rows." under the new card; the setting keys sit in a small line
+   under each. Publish, then submit `VEH.ZZ-0001` in a dispatcher tab that was already open: Make
+   is in the summary with a warning mark on `TESTMAKE`, and cards already on screen redraw at the
+   next config refresh. History, Roll back restores the old card.
 
 ### Site variations (example-ok)
 
