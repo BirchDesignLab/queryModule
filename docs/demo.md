@@ -116,6 +116,22 @@ change), implementer and the Status page, with what each step shows and what M1 
 The config behind it is in [docs/site-config.md](site-config.md) and the routes are in
 [docs/api.md](api.md).
 
+## Dry run
+
+`scripts/demo/dry-run.ts` rehearses this runbook before a live demo: it builds, serves the production
+build with mock sources and demo users on `E2E_PORT` (default 3000), and walks the runbook by keyboard
+only (Tab, arrows, Enter and the app's own shortcuts) as the dispatcher and the admin at 1366x768 and
+1024x768, the officer at 1024x768 and the implementer at 1366x768. It writes screenshots, `report.json` and
+`report.md` (steps that cannot be done by keyboard, waits over 2 s, console errors, failed requests) to
+`DRY_RUN_OUT` (default `.superpowers/sdd/2026-10-14-demo-dry-run`, not committed):
+
+```bash
+E2E_PORT=3200 node scripts/demo/dry-run.ts
+```
+
+`DRY_RUN_SKIP_BUILD=1` reuses the last build, `DRY_RUN_ONLY=officer-1024` limits the walks and
+`DRY_RUN_STEPS=<regex>` limits the steps. Keep other lanes off the same port.
+
 ## Submit, live source status and terminal
 
 1. Sign in as `dispatcher@example.test`.
