@@ -1823,6 +1823,22 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   inline-size: 26%;
 }
 
+/* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
+   pane instead of scrolling it sideways (T12-7). */
+.qm-try__toggle {
+  align-self: flex-start;
+}
+
+.qm-seg.qm-try__toggle > button {
+  min-height: var(--qm-control-height-dense);
+}
+
+.qm-try__payload {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .qm-mock__na {
   color: var(--qm-color-text-muted);
   font-style: italic;

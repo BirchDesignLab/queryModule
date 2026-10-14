@@ -333,7 +333,10 @@ describe("a new source on a mock site", () => {
     );
     await t.user.click(within(await panel()).getByRole("button", { name: /Open mock source/ }));
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /countySource/ })).toHaveFocus(),
+      // The editor's own heading (Try a match can show a card headed by the same source).
+      expect(
+        within(screen.getByTestId("form-tab")).getByRole("heading", { name: /countySource/ }),
+      ).toHaveFocus(),
     );
   });
 

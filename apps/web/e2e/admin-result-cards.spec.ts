@@ -311,7 +311,13 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   await page.keyboard.type("ZZ-0001");
   await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
   await expect(pane.getByText("Result: Returns a record")).toBeVisible();
+  // The answer opens as the production Result card; the Payload view is one key press away.
+  await expect(pane.getByRole("region", { name: "State system: returned" })).toBeVisible();
+  const showCard = pane.getByRole("button", { name: "Result card" });
+  const showPayload = pane.getByRole("button", { name: "Payload" });
+  await showPayload.press("Enter");
   await expect(pane.getByTestId("try-payload")).toContainText('"status": "STOLEN"');
+  await expect(pane.getByText("Answers after 50 to 400 ms.")).toBeVisible();
   // Typed values stay in the pane: they are in no link, and a plate with no scenario takes the default.
   expect(page.url()).not.toContain("ZZ-0001");
   await plate.fill("ZZ-0099");
@@ -320,7 +326,9 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
 
   // Desktop controls are 36 px or more.
-  expect(await tooShort(36, { source, type, plate })).toEqual([]);
+  expect(
+    await tooShort(36, { source, type, plate, "show card": showCard, "show payload": showPayload }),
+  ).toEqual([]);
   await expectNoSeriousAxeViolations(page);
 });
 

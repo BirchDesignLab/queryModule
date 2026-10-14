@@ -1,11 +1,17 @@
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { MockFile, SourcePayload } from "@querymodule/core/contracts";
 import { matchMockScenario } from "@querymodule/core/mock";
-import { assessResult, mapResponse } from "@querymodule/core/response";
-import { ResultCard, VisuallyHidden } from "@querymodule/web-ui";
+import { VisuallyHidden } from "@querymodule/web-ui";
 import { useId, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
+import {
+  BEHAVIOR_STATUS,
+  BehaviorLine,
+  type Persona,
+  RenderedCard,
+  useRenderedCard,
+} from "./CardAnswer.js";
 import { cardIndexOf, useCardName } from "./CardsEditor.js";
 import { asObjects, str } from "./controls.js";
 import type { JsonObject } from "./draft.js";
@@ -23,18 +29,17 @@ import { cardsTypeOf } from "./selection.js";
  * status line. Typed values live in this pane's state only: never the draft, storage, logs or URLs.
  */
 
-type Persona = "dispatcher" | "officer";
-const PERSONA_KEY: Record<Persona, string> = { dispatcher: "dispatch", officer: "mobileUnit" };
-const BEHAVIOR_STATUS = {
-  timeout: "timedOut",
-  error: "failed",
-  credentialsRejected: "credentialsRejected",
-} as const;
-
 type Answer =
   | { kind: "none" }
   | { kind: "respond"; payload: SourcePayload; matched: string; values: Record<string, unknown> }
-  | { kind: "behavior"; status: string; matched: string };
+  | {
+      kind: "behavior";
+      status: (typeof BEHAVIOR_STATUS)[keyof typeof BEHAVIOR_STATUS];
+      matched: string;
+    };
+
+/** The values of an answer with none: a stable object, so the rendered card is not rebuilt for nothing. */
+const NO_VALUES: Record<string, unknown> = {};
 
 export function CardPreview({
   doc,
@@ -142,17 +147,13 @@ export function CardPreview({
       : { kind: "respond", payload: match.outcome.payload, matched, values };
   }, [mock, config, code, mode, picked, sourceId, typed, t]);
 
-  const rendered = useMemo(() => {
-    if (answer.kind !== "respond" || config === null) return null;
-    const now = Date.now();
-    const mapped = mapResponse(
-      config,
-      { queryType: code, partValues: answer.values, sourceId, persona: PERSONA_KEY[persona] },
-      answer.payload,
-      now,
-    );
-    return { mapped, assessment: assessResult(answer.payload, config.keywords) };
-  }, [answer, config, code, sourceId, persona]);
+  const rendered = useRenderedCard(config, {
+    code,
+    sourceId,
+    persona,
+    payload: answer.kind === "respond" ? answer.payload : null,
+    values: answer.kind === "respond" ? answer.values : NO_VALUES,
+  });
 
   const used = rendered?.mapped.mappingIndex;
   const usedText =
@@ -280,28 +281,19 @@ export function CardPreview({
                   }
                 >
                   {answer.kind === "behavior" ? (
-                    <div className="qm-source qm-source--problem">
-                      <span aria-hidden="true" className="qm-source__icon">
-                        !
-                      </span>
-                      <span>
-                        {translator.t("sourceStatus.line", {
-                          source: sourceName(sourceId),
-                          status: translator.t(`sourceStatus.status.${answer.status}`),
-                        })}
-                      </span>
-                    </div>
+                    <BehaviorLine
+                      source={sourceName(sourceId)}
+                      status={answer.status}
+                      translator={translator}
+                    />
                   ) : rendered === null ? null : (
-                    <ResultCard
+                    <RenderedCard
+                      rendered={rendered}
+                      config={config}
                       heading={sourceName(sourceId)}
-                      status={translator.t("sourceStatus.status.returned")}
-                      assessment={rendered.assessment}
-                      mapped={rendered.mapped}
-                      keywords={config.keywords}
-                      styles={config.keywordSeverityStyles}
+                      translator={translator}
                       view={view}
                       onToggleView={setView}
-                      t={translator.t}
                     />
                   )}
                 </div>

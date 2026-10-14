@@ -17,7 +17,8 @@ export interface MockSiteType {
 }
 
 export interface MockSite {
-  sources: { id: string; labelKey: string }[];
+  /** The source's adapter: only "mock" sources are answered from the mock file. */
+  sources: { id: string; labelKey: string; kind: string }[];
   queryTypes: MockSiteType[];
 }
 
@@ -29,7 +30,13 @@ export function mockSiteOf(doc: JsonObject): MockSite {
     ]),
   );
   return {
-    sources: asObjects(doc.sources).map((s) => ({ id: str(s.id), labelKey: str(s.labelKey) })),
+    sources: asObjects(doc.sources).map((s) => ({
+      id: str(s.id),
+      labelKey: str(s.labelKey),
+      // The draft carries a kind only when the server's did not default it: none means mock, as
+      // buildSiteConfig reads it (#572).
+      kind: str(s.kind) || "mock",
+    })),
     queryTypes: asObjects(doc.queryTypes).map((q) => {
       const fields = asObjects(q.fields);
       const type = fields.find((f) => f.role === "type");
