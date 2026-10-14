@@ -144,6 +144,7 @@ for (const size of SIZES) {
     await page.getByRole("button", { name: "Add keyword" }).scrollIntoViewIfNeeded();
     await save(page, "g3-add-keyword-empty", w);
     await page.getByRole("heading", { level: 4, name: "Severity styles" }).scrollIntoViewIfNeeded();
+    await page.getByRole("combobox", { name: "Background color" }).first().scrollIntoViewIfNeeded();
     await save(page, "g17-severity-styles", w);
 
     // G19: the mock editor's scenario list.
@@ -157,6 +158,7 @@ for (const size of SIZES) {
     await openFirstCard(page);
     await expect(page.getByRole("combobox", { name: "Scenario" })).toHaveValue("0:0");
     await expect(editor).toBeVisible();
+    await page.getByRole("region", { name: "Card preview" }).scrollIntoViewIfNeeded();
     await save(page, "g22-preview-opens-on-record", w);
   });
 }

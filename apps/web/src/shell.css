@@ -1997,18 +1997,39 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin-inline-start: auto;
 }
 
-/* A card row's buttons start at the left edge on a line of their own, so every row's Edit lines up. */
+/* A card row's Edit, Move up, Move down and Remove row sit in four fixed columns on a line of their
+   own: a first row with no Move up leaves its slot empty, so every button lines up row to row (G37). */
 .qm-mock__scenario-tools--row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   flex-basis: 100%;
   margin-inline-start: 0;
 }
 
-/* A card row's Move and Remove buttons sit in the same line as its Edit button, all one height:
-   the button group has no margin of its own and does not stretch Edit (G37). */
-.qm-mock__scenario-tools > .qm-admin__item-buttons {
-  align-items: center;
-  gap: calc(var(--qm-space-1) / 2);
-  margin-block: 0;
+.qm-mock__scenario-tools--row > .qm-admin__item-buttons {
+  display: contents;
+}
+
+.qm-mock__scenario-tools--row [data-role] {
+  min-inline-size: 0;
+  padding-inline: var(--qm-space-1);
+  white-space: nowrap;
+}
+
+.qm-mock__scenario-tools--row [data-role="toggle"] {
+  grid-column: 1;
+}
+
+.qm-mock__scenario-tools--row [data-role="up"] {
+  grid-column: 2;
+}
+
+.qm-mock__scenario-tools--row [data-role="down"] {
+  grid-column: 3;
+}
+
+.qm-mock__scenario-tools--row [data-role="remove"] {
+  grid-column: 4;
 }
 
 .qm-mock__scenario-body {

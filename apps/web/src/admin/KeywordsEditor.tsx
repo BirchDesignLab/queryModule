@@ -368,7 +368,7 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
           </button>
         </div>
       </Sect>
-      <Sect title={t("admin.keywords.styles.title")} hint={t("admin.keywords.styles.hint")}>
+      <Sect wide title={t("admin.keywords.styles.title")} hint={t("admin.keywords.styles.hint")}>
         {SEVERITIES.map((s) => (
           <StyleFieldset
             key={s}
@@ -608,7 +608,7 @@ function StyleFieldset({
   const path = ["keywordSeverityStyles", severity] as const;
   // A token's plain name ("Critical background"); a token with none lists by its key.
   const colorName = (token: string): string => {
-    const key = `admin.keywords.color.${token.replace(/^color\./, "")}`;
+    const key = `admin.keywords.color.${token.replace(/^color\./, "").replaceAll(".", "-")}`;
     return translator.has(key) ? t(key) : token;
   };
   const { describedBy, messages } = useItemIssues(idPrefix, path, [

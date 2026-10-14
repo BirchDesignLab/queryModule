@@ -71,6 +71,7 @@ for (const size of SIZES) {
       const count = await tools.count();
       expect(count).toBeGreaterThan(2);
       const lefts: number[] = [];
+      const removeLefts: number[] = [];
       for (let i = 0; i < count; i++) {
         const buttons = tools.nth(i).getByRole("button");
         const boxes = await buttons.evaluateAll((els) =>
@@ -80,12 +81,25 @@ for (const size of SIZES) {
           }),
         );
         lefts.push(Math.round(boxes[0]?.left ?? 0));
+        removeLefts.push(
+          Math.round(
+            await tools
+              .nth(i)
+              .getByRole("button", { name: /^Remove row/ })
+              .evaluate((el) => el.getBoundingClientRect().left),
+          ),
+        );
         const heights = boxes.map((b) => Math.round(b.height));
         expect(new Set(heights).size, `row ${i} button heights ${heights}`).toBe(1);
         const tops = boxes.map((b) => Math.round(b.top));
         // One line, or two when the pane is narrow: never staggered by more than a button.
         expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual((heights[0] ?? 0) + 8);
       }
+      // Remove row too: a first row with no Move up keeps its slot, so the columns line up.
+      expect(
+        Math.max(...removeLefts) - Math.min(...removeLefts),
+        `Remove row left edges ${removeLefts}`,
+      ).toBeLessThanOrEqual(1);
       // Every row's first button (Edit) starts at the same left edge.
       expect(
         Math.max(...lefts) - Math.min(...lefts),
@@ -111,6 +125,28 @@ for (const size of SIZES) {
           await lines(cells.nth(i)),
           `cell ${i}: ${await cells.nth(i).innerText()}`,
         ).toBeLessThanOrEqual(3);
+      }
+    });
+
+    test("[G17] the style color selects show their whole plain name", async ({ page }) => {
+      await selectRow(page, /^Keywords and severity/);
+      for (const name of ["Text color", "Background color"]) {
+        const select = page.getByRole("combobox", { name }).first();
+        await select.scrollIntoViewIfNeeded();
+        const clipped = await select.evaluate((el) => {
+          const box = el as HTMLSelectElement;
+          const text = box.selectedOptions[0]?.textContent ?? "";
+          const probe = document.createElement("span");
+          const style = getComputedStyle(box);
+          probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${style.font}`;
+          probe.textContent = text;
+          document.body.append(probe);
+          const need = probe.getBoundingClientRect().width;
+          probe.remove();
+          // Room for the text: the select's width less its padding, border and arrow (about 30 px).
+          return need > box.getBoundingClientRect().width - 30;
+        });
+        expect(clipped, `${name} select clips its text`).toBe(false);
       }
     });
 
