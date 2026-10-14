@@ -127,10 +127,16 @@ export function CardPreview({
       const s = si === null ? undefined : entry.scenarios[si];
       if (s?.behavior !== undefined)
         return { kind: "behavior", status: BEHAVIOR_STATUS[s.behavior], matched: matchedText(si) };
-      // The values the plan would hand part 0 for a query that triggers this scenario: its own
-      // trigger values through the form engine (none for the default), so a rule-narrowed card
-      // wins here as it would for that query.
-      const { values } = formMatchOf(config, code, triggerInput(s?.when ?? {}), Date.now());
+      // The values the plan would hand part 0 for a query that reaches this entry: the response's
+      // type values (a typed response answers only a query carrying them) and the scenario's own
+      // trigger values, through the form engine, so a rule-narrowed card wins here as it would for
+      // that query.
+      const { values } = formMatchOf(
+        config,
+        code,
+        triggerInput({ ...(entry.types ?? {}), ...(s?.when ?? {}) }),
+        Date.now(),
+      );
       return {
         kind: "respond",
         payload: s?.respond ?? entry.default,

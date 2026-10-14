@@ -332,6 +332,30 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   await expectNoSeriousAxeViolations(page);
 });
 
+// BW3 polish round 1 (CV2): the dispatcher's Try a match answer toggle is a 36 px control at 1024x768 too.
+test("[#605] Try a match controls and its answer toggle are 36 px at 1024x768", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openBuilder(page);
+  await selectRow(page, /^Mock response: Vehicle, State system/);
+  const pane = page.getByRole("region", { name: "Try a match" });
+  await expect(pane).toBeVisible();
+  const plate = pane.getByLabel("Plate", { exact: true });
+  await plate.focus();
+  await page.keyboard.type("ZZ-0001");
+  await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
+  expect(
+    await tooShort(36, {
+      source: pane.getByLabel("Source", { exact: true }),
+      type: pane.getByLabel("Query type", { exact: true }),
+      plate,
+      "show card": pane.getByRole("button", { name: "Result card" }),
+      "show payload": pane.getByRole("button", { name: "Payload" }),
+    }),
+  ).toEqual([]);
+});
+
 test("[#605] the cards editor with its preview, the Which card wins table and the keywords pane pass axe; controls are 36 px; the officer preview's Show detail is 48 px", async ({
   page,
 }) => {
@@ -479,6 +503,47 @@ test("[#605] removing a keyword, a row or a card by keyboard leaves focus on a s
   await form.getByRole("button", { name: /^Remove card/ }).press("Enter");
   await expect(form.getByRole("heading", { level: 3, name: /^Vehicle cards/ })).toBeFocused();
   expect(await onBody()).toBe(false);
+});
+
+// BW3 polish round 1 (CV1): the keyed rows are moved by React, not remounted, so a keyboard move keeps
+// focus on the moved row's own arrow button, never the page.
+test("[#642] moving a card row up and down by keyboard keeps focus on that row's arrow button", async ({
+  page,
+}) => {
+  await openBuilder(page);
+  const form = editor(page);
+  await selectVehicleCard(page);
+  const rows = form.locator('[data-role="toggle"]');
+  const count = await rows.count();
+  await form.getByRole("button", { name: "Add row" }).press("Enter");
+  await expect(rows).toHaveCount(count + 1);
+  const active = () =>
+    page.evaluate(() => {
+      const el = document.activeElement;
+      return {
+        body: el === document.body,
+        owner: el?.getAttribute("data-owner") ?? "",
+        role: el?.getAttribute("data-role") ?? "",
+        name: el?.textContent ?? "",
+      };
+    });
+
+  // Up: the new last row moves one place up; focus stays on its Move up button at the new index.
+  await form.getByRole("button", { name: /^Move up New row/ }).press("Enter");
+  let now = await active();
+  expect(now.body).toBe(false);
+  expect(now.role).toBe("up");
+  expect(now.owner.endsWith(`-card-row-${count - 1}`)).toBe(true);
+  expect(now.name).toContain("New row");
+
+  // Down: the same row moves back; focus stays on its own arrow button at the last index (the last
+  // row has no Move down, so the Move up button holds it).
+  await form.getByRole("button", { name: /^Move down New row/ }).press("Enter");
+  now = await active();
+  expect(now.body).toBe(false);
+  expect(now.owner.endsWith(`-card-row-${count}`)).toBe(true);
+  expect(now.name).toContain("New row");
+  expect(["up", "down"]).toContain(now.role);
 });
 
 test("[#605] undoing an added scenario while a control inside it has focus moves focus to the selected tree row", async ({

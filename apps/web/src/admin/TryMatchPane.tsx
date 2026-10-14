@@ -123,10 +123,12 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
           .length ?? 0);
   const result = scenario ?? response?.default;
 
-  // The wait: the source's latency range, one value when both ends agree, nothing without one.
+  // The wait: the source's latency range, one value when both ends agree, nothing without one, and
+  // nothing for a timeout: the mock never answers it, the source's timeout ends the wait (FR-044).
   const latency = sourceId === undefined ? undefined : mock?.sources[sourceId]?.latencyMs;
+  const timesOut = answer?.outcome.kind === "behavior" && answer.outcome.behavior === "timeout";
   const wait =
-    latency === undefined || latency[1] <= 0
+    latency === undefined || latency[1] <= 0 || timesOut
       ? null
       : latency[0] === latency[1]
         ? t("admin.mock.try.waitOne", { ms: latency[1] })

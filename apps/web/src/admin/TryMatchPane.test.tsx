@@ -176,6 +176,22 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     await waitFor(() => expect(within(pane()).queryByText(/^Answers after/)).toBeNull());
   });
 
+  it("a timeout behaviour names no wait: the source never answers (FR-044)", async () => {
+    const t = await openBuilder();
+    const mock = draftMock(t);
+    const scenarios = (mock.sources.stateSource?.responses ?? []).flatMap(
+      (r) => r.scenarios as Record<string, unknown>[],
+    );
+    const failing = scenarios.find((s) => s.behavior !== undefined);
+    if (failing === undefined) throw new Error("no behaviour scenario in the fixture");
+    failing.behavior = "timeout";
+    setMock(t, mock);
+    await tryVehicle(t, "FAIL1");
+    const p = within(pane());
+    expect(await p.findByText("State system: timed out")).toBeInTheDocument();
+    expect(p.queryByText(/^Answers after/)).toBeNull();
+  });
+
   it("announces the outcome kind once typing pauses, never a typed value or the payload", async () => {
     const t = await openBuilder();
     const p = within(await screen.findByRole("region", { name: "Try a match" }));
