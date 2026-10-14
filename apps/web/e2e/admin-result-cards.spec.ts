@@ -392,10 +392,12 @@ test("[#605] the cards editor with its preview, the Which card wins table and th
   await expectNoSeriousAxeViolations(page);
 });
 
-// The table is wider than the editor pane at these widths (the pane is 369 px at 1366): the pane
-// scrolls sideways and the page does not. The last column must be reachable by scrolling the pane.
+// BW3 polish (#642, item 5): the Which card wins table fits the editor pane at 1366 and 1024: neither
+// the table's container, the editor's tab panel nor the page scrolls sideways, and every Why cell
+// (the last column, with the score) is fully inside the pane. Nothing is left to scroll, so there is
+// no hidden column for a keyboard user to miss.
 for (const width of [1366, 1024] as const) {
-  test(`[#605] the Which card wins table stays reachable in its pane and the page does not scroll sideways at ${width}`, async ({
+  test(`[#642] the Which card wins table fits its pane with nothing scrolling sideways at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 768 });
@@ -406,20 +408,28 @@ for (const width of [1366, 1024] as const) {
     const fit = await wins.evaluate((table) => {
       const pane = table.closest('[role="tabpanel"]');
       if (!(pane instanceof HTMLElement)) throw new Error("the editor has no tab panel");
-      pane.scrollLeft = pane.scrollWidth;
-      const last = table.querySelector("thead th:last-child")?.getBoundingClientRect();
+      const holder = table.parentElement as HTMLElement;
       const box = pane.getBoundingClientRect();
       const root = document.documentElement;
+      const cells = [...table.querySelectorAll<HTMLElement>("tbody td:last-child")];
       return {
-        lastRight: Math.round(last?.right ?? Number.POSITIVE_INFINITY),
-        paneRight: Math.round(box.right),
+        tableOverflow: holder.scrollWidth - holder.clientWidth,
+        paneOverflow: pane.scrollWidth - pane.clientWidth,
         pageOverflow: root.scrollWidth - root.clientWidth,
+        cells: cells.length,
+        cutOff: cells.filter((c) => {
+          const r = c.getBoundingClientRect();
+          return r.right > box.right + 0.5 || c.scrollWidth > c.clientWidth;
+        }).length,
+        whyText: cells.map((c) => c.innerText.trim()),
       };
     });
-    expect(fit.lastRight, "the Why column after scrolling the pane").toBeLessThanOrEqual(
-      fit.paneRight,
-    );
+    expect(fit.tableOverflow, "the table container scrolls sideways").toBeLessThanOrEqual(0);
+    expect(fit.paneOverflow, "the editor tab panel scrolls sideways").toBeLessThanOrEqual(0);
     expect(fit.pageOverflow, "page horizontal overflow").toBeLessThanOrEqual(0);
+    expect(fit.cells).toBeGreaterThan(0);
+    expect(fit.cutOff, "Why cells cut off by the pane").toBe(0);
+    for (const text of fit.whyText) expect(text).toMatch(/^score \d+, /);
   });
 }
 

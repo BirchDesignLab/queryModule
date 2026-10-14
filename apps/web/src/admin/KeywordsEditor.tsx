@@ -27,6 +27,7 @@ import {
 import type { JsonObject } from "./draft.js";
 import { EditorSection } from "./GenericForm.js";
 import type { DraftIssue } from "./issues.js";
+import { useRowIds } from "./row-ids.js";
 
 /**
  * The keywords and severity editor (Task 11, #604; FR-060, UX-010, UX-011; spec 4.1, 4.5, 6.5).
@@ -113,7 +114,9 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
   const focus = useFocusRequest();
   const checks = useContext(ChecksContext);
   const keywords = asObjects(doc.keywords);
-  const [gen, setGen] = useState(0);
+  // Each keyword row keeps its own half-typed text with the keyword through a removal, an undo and
+  // a redo (CRITIC-M2): rows are keyed by a stable identity, not by position.
+  const { ids } = useRowIds(keywords);
   const [newText, setNewText] = useState("");
   const [newSeverity, setNewSeverity] = useState<Sev>("warning");
   const [sampleText, setSampleText] = useState<string | null>(null);
@@ -148,7 +151,6 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
   };
   const remove = (i: number) => {
     edit((site) => removeKeyword(site, i));
-    setGen((g) => g + 1);
     // Focus goes to the keyword that took its place, else the one before it, else the new keyword box.
     const next = i < keywords.length - 1 ? i : i - 1;
     focus(...(next >= 0 ? [[rowOwner(next), "keyword"] as const] : []), [addOwner, "text"]);
@@ -261,8 +263,7 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
                     style.keyword === "" ? t("admin.keywords.unnamed", { n }) : style.keyword;
                   return (
                     <KeywordRow
-                      // biome-ignore lint/suspicious/noArrayIndexKey: keywords have no identity; gen remounts on remove
-                      key={`${gen}-${i}`}
+                      key={ids[i]}
                       n={n}
                       owner={rowOwner(i)}
                       style={style}

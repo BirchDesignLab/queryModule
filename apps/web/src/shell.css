@@ -1790,6 +1790,39 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   min-inline-size: calc(var(--qm-space-12) * 3);
 }
 
+/* Which card wins (BW3 polish, item 5): four short columns that fit the editor pane at 1366 and
+   1024 with nothing to scroll sideways. A fixed layout and wrapping text keep the Why column,
+   which carries the score, fully in view; the table keeps its table semantics. */
+.qm-wins {
+  min-inline-size: 0;
+}
+
+.qm-wins__table {
+  table-layout: fixed;
+}
+
+.qm-wins__table :where(th, td) {
+  min-inline-size: 0;
+  padding-inline: var(--qm-space-2);
+  overflow-wrap: anywhere;
+}
+
+.qm-wins__table th:nth-child(1) {
+  inline-size: 24%;
+}
+
+.qm-wins__table th:nth-child(2) {
+  inline-size: 20%;
+}
+
+.qm-wins__table th:nth-child(3) {
+  inline-size: 30%;
+}
+
+.qm-wins__table th:nth-child(4) {
+  inline-size: 26%;
+}
+
 .qm-mock__na {
   color: var(--qm-color-text-muted);
   font-style: italic;

@@ -327,3 +327,45 @@ describe("Review", () => {
     expect(within(group).getAllByText(/TESTMAKE/).length).toBeGreaterThan(0);
   });
 });
+
+// BW3 polish (#642, CRITIC-M2 and T11-11; spec 6.2 builder undo): half-typed text in a keyword
+// row's New exception box belongs to that keyword: it survives another keyword's removal and the
+// undo of it, and the box a user is typing in is never rebuilt.
+describe("a keyword row's half-typed exception follows its keyword (CRITIC-M2)", () => {
+  const undo = (t: Opened) => act(() => void configDraftStore(t.services).getState().undo());
+
+  it("keeps the text through a removal of an earlier keyword and through its undo", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    // EXPIRED is keyword 3.
+    const box = within(editor()).getByRole("textbox", { name: "New exception for keyword 3" });
+    await t.user.type(box, "HALF");
+    await t.user.click(within(editor()).getByRole("button", { name: /^Remove keyword.*STOLEN/ }));
+    // EXPIRED is now keyword 2 and its box, the same element, still holds the text.
+    const moved = within(editor()).getByRole("textbox", { name: "New exception for keyword 2" });
+    expect(moved).toHaveValue("HALF");
+    undo(t);
+    await within(editor()).findByRole("textbox", { name: "New exception for keyword 6" });
+    expect(
+      within(editor()).getByRole("textbox", { name: "New exception for keyword 3" }),
+    ).toHaveValue("HALF");
+    for (const n of [1, 2, 4, 5, 6])
+      expect(
+        within(editor()).getByRole("textbox", { name: `New exception for keyword ${n}` }),
+      ).toHaveValue("");
+  });
+
+  it("the focused New exception box is the same element after an undo", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    await t.user.click(within(editor()).getByRole("button", { name: /^Remove keyword.*STOLEN/ }));
+    const box = within(editor()).getByRole("textbox", { name: "New exception for keyword 2" });
+    await t.user.type(box, "HALF");
+    expect(box).toHaveFocus();
+    undo(t);
+    await within(editor()).findByRole("textbox", { name: "New exception for keyword 6" });
+    expect(box.isConnected).toBe(true);
+    expect(box).toHaveFocus();
+    expect(box).toHaveValue("HALF");
+  });
+});
