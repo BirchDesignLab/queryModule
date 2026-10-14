@@ -24,8 +24,9 @@ export interface FixtureDiagnostic {
  * Keys are normalised before lookup: lower-cased, "_" and "-" removed.
  * `container` keys must hold an object or array (recursed); a scalar there is a violation.
  * `other` holds descriptive vehicle, property, warrant and licence leaf keys; its strings and numbers may
- * not carry a run of 4 or more digits, counted across the separators - . / and whitespace (a
- * `year` of 1901 to 1999 is the one exception).
+ * not carry a run of 4 or more digits, counted across separators (every non-alphanumeric character
+ * is one; a `year` of 1901 to 1999 is the one exception). `status` follows the same run rule. A number
+ * in exponent form (1e21) is rejected in both kinds.
  */
 export const FIXTURE_LEAF_KEYS: {
   plate: readonly string[];
@@ -142,8 +143,16 @@ function is1901Date(s: string): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= (DAYS_1901[month - 1] ?? 0);
 }
 
-/** What may sit between digits without breaking a run for the `other` kind: - . / and whitespace. */
-const DIGIT_SEPARATORS = /[-./\s]/g;
+/**
+ * True when a string or number leaf carries a run of 4 or more digits. Every non-alphanumeric character
+ * is a separator, so 123,456,789 and 123-45-6789 count as one run (#636, #638). The value is NFKC-folded
+ * first so full-width digits count. A number that stringifies in exponent form is treated as a violation.
+ */
+function hasDigitRun(value: unknown): boolean {
+  const text = String(value);
+  if (typeof value === "number" && /e/i.test(text)) return true;
+  return /\d{4,}/.test(text.normalize("NFKC").replace(/[^A-Za-z0-9]/g, ""));
+}
 
 function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unknown): Violation {
   switch (kind) {
@@ -174,7 +183,7 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
       return "fixture.unknownKey";
     case "status":
       if (typeof value === "object" && value !== null) return "fixture.unknownKey";
-      return /\d{4,}/.test(String(value)) ? "fixture.freeTextDigits" : null;
+      return hasDigitRun(value) ? "fixture.freeTextDigits" : null;
     case "other": {
       if (typeof value === "object" && value !== null) return "fixture.unknownKey";
       if (nk === "year" && (typeof value === "string" || typeof value === "number")) {
@@ -183,8 +192,7 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
           : "fixture.freeTextDigits";
       }
       // Separators do not hide a number: 123-45-678 and 12 34 count as one run (#636).
-      return (typeof value === "string" || typeof value === "number") &&
-        /\d{4,}/.test(String(value).replace(DIGIT_SEPARATORS, ""))
+      return (typeof value === "string" || typeof value === "number") && hasDigitRun(value)
         ? "fixture.freeTextDigits"
         : null;
     }
