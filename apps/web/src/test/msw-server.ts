@@ -32,10 +32,29 @@ export const CLIENT_CONFIG = toClientSiteConfig(
 /** The raw default site file: what an empty config store seeds as version 1 (ADR-0011 item 1). */
 export const RAW_SITE: Record<string, unknown> = JSON.parse(readFileSync(defaultSitePath, "utf8"));
 
-/** The default site's mock file (synthetic canned responses only; spec 5.4). */
-export const RAW_MOCK: Record<string, unknown> = JSON.parse(
-  readFileSync(join(dirname(defaultSitePath), "../mock/default.json"), "utf8"),
-);
+/** The scenario triggers the demo scenario pack added (docs/demo.md "Demo stories"). */
+const DEMO_PACK_TRIGGERS = [{ plate: "ZZ-0010" }, { first: "SAMPLE", last: "EXAMPLESON" }];
+
+/**
+ * The default site's mock file (synthetic canned responses only; spec 5.4), without the demo
+ * scenario pack. The builder tests count, move and remove the M1 scenarios by position, and the pack
+ * is demo data they do not exercise.
+ */
+export const RAW_MOCK: Record<string, unknown> = (() => {
+  const mock = JSON.parse(
+    readFileSync(join(dirname(defaultSitePath), "../mock/default.json"), "utf8"),
+  ) as {
+    sources: Record<string, { responses: { scenarios: { when: Record<string, unknown> }[] }[] }>;
+  };
+  for (const source of Object.values(mock.sources)) {
+    for (const response of source.responses) {
+      response.scenarios = response.scenarios.filter(
+        (s) => !DEMO_PACK_TRIGGERS.some((t) => JSON.stringify(t) === JSON.stringify(s.when)),
+      );
+    }
+  }
+  return mock;
+})();
 
 const FIXTURE_ID = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 /** Later versions are later in time, as on a real site. */

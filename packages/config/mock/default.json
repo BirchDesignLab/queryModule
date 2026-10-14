@@ -25,6 +25,16 @@
               "when": {
                 "plate": "TIMEOUT"
               }
+            },
+            {
+              "respond": {
+                "plate": "ZZ-0010",
+                "remarks": "REGISTRATION CURRENT",
+                "status": "REGISTERED"
+              },
+              "when": {
+                "plate": "ZZ-0010"
+              }
             }
           ]
         },
@@ -149,6 +159,28 @@
               "when": {
                 "plate": "FAIL1"
               }
+            },
+            {
+              "respond": {
+                "owner": {
+                  "address": "2 Example Ave",
+                  "first": "TEST",
+                  "last": "SAMPLEWORTH"
+                },
+                "plate": "ZZ-0010",
+                "remarks": "REGISTRATION CURRENT",
+                "state": "TX",
+                "status": "REGISTERED",
+                "vehicle": {
+                  "make": "TESTMAKE",
+                  "model": "SAMPLEMODEL",
+                  "vin": "ZZZZZZZZZZZZZZZZ1",
+                  "year": 1901
+                }
+              },
+              "when": {
+                "plate": "ZZ-0010"
+              }
             }
           ]
         },
@@ -157,7 +189,24 @@
             "status": "NO RECORD"
           },
           "queryType": "PER",
-          "scenarios": []
+          "scenarios": [
+            {
+              "respond": {
+                "address": "3 Example Ave",
+                "remarks": "NO ALERTS",
+                "status": "RECORD FOUND",
+                "subject": {
+                  "dob": "1901-01-03",
+                  "first": "SAMPLE",
+                  "last": "EXAMPLESON"
+                }
+              },
+              "when": {
+                "first": "SAMPLE",
+                "last": "EXAMPLESON"
+              }
+            }
+          ]
         },
         {
           "default": {
