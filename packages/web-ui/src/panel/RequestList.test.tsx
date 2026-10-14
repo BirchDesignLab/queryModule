@@ -22,6 +22,8 @@ const LABELS: Record<string, string> = {
   "submit.copyReference": "Copy reference",
   "requests.retry": "Retry",
   "requests.retryOf": "Retry {summary}",
+  "requests.editAsNew": "Edit as new query",
+  "requests.editAsNewOf": "Edit as new query: {summary}",
   "sourceStatus.heading": "Source status for {summary}",
 };
 const t = (key: string, params?: Readonly<Record<string, string | number | boolean>>) =>
@@ -639,5 +641,44 @@ describe("UX-015 results keyboard (spec 6.4, 6.6)", () => {
   it("a row is named by the request", () => {
     setup(ROWS);
     expect(item("Vehicle A")).toBeInTheDocument();
+  });
+});
+
+describe("edit as new query on a row that cannot be retried (#477)", () => {
+  const EDITABLE: RequestRowView = { ...FAILED, editable: true };
+
+  it("an editable failed row has the action, named by the row, and calls onEditAsNew with the row", async () => {
+    const user = userEvent.setup();
+    const onEditAsNew = vi.fn();
+    render(<RequestList {...base} rows={[EDITABLE]} onEditAsNew={onEditAsNew} />);
+    const button = screen.getByRole("button", { name: "Edit as new query: Vehicle ZZ-0002" });
+    expect(button).toHaveTextContent("Edit as new query");
+    await user.click(button);
+    expect(onEditAsNew).toHaveBeenCalledWith("r0");
+  });
+
+  it("it is reachable by keyboard and Enter activates it", async () => {
+    const user = userEvent.setup();
+    const onEditAsNew = vi.fn();
+    render(<RequestList {...base} rows={[EDITABLE]} onEditAsNew={onEditAsNew} />);
+    await user.tab(); // the row
+    await user.tab(); // its action
+    expect(screen.getByRole("button", { name: /^Edit as new query/ })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onEditAsNew).toHaveBeenCalledWith("r0");
+  });
+
+  it("no action on a row that is not editable, sending, acknowledged, or when there is no handler", () => {
+    const { rerender } = render(
+      <RequestList {...base} rows={[FAILED, SENDING, ACKED]} onEditAsNew={() => undefined} />,
+    );
+    expect(screen.queryByRole("button", { name: /Edit as new query/ })).toBeNull();
+    rerender(<RequestList {...base} rows={[EDITABLE]} />);
+    expect(screen.queryByRole("button", { name: /Edit as new query/ })).toBeNull();
+  });
+
+  it("does not move focus by itself", () => {
+    render(<RequestList {...base} rows={[EDITABLE]} onEditAsNew={() => undefined} />);
+    expect(document.body).toHaveFocus();
   });
 });

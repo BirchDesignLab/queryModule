@@ -52,6 +52,11 @@ export interface RequestRowView {
   parts?: readonly RequestPartView[];
   /** A failed row the owner can send again; shows a Retry button when the list has onRetry. */
   retryable?: boolean;
+  /**
+   * A failed row whose values cannot succeed again as they are (the site configuration changed, #434)
+   * but were kept: shows "Edit as new query" when the list has onEditAsNew. Never set with `retryable`.
+   */
+  editable?: boolean;
 }
 
 export interface RequestListProps {
@@ -64,6 +69,11 @@ export interface RequestListProps {
   onCopy(reference: string): void;
   /** Sends a retryable failed row's values again as a new request; the owner adds the new row. */
   onRetry?(rowId: string): void;
+  /**
+   * Loads an editable failed row's kept values into the form as a new query; the owner does it and
+   * moves focus, because the user pressed the action. The row itself stays as history.
+   */
+  onEditAsNew?(rowId: string): void;
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
 }
 
@@ -120,6 +130,7 @@ export function RequestList({
   emptyText,
   onCopy,
   onRetry,
+  onEditAsNew,
   t,
 }: RequestListProps): JSX.Element {
   const headingId = useId();
@@ -276,6 +287,17 @@ export function RequestList({
                       }}
                     >
                       {t("requests.retry")}
+                    </button>
+                  ) : null}
+                  {row.status === "failed" && row.editable === true && onEditAsNew !== undefined ? (
+                    <button
+                      type="button"
+                      className="qm-button qm-button--secondary"
+                      // Same name as the row, so the actions of two failed rows differ.
+                      aria-label={t("requests.editAsNewOf", { summary: row.name })}
+                      onClick={() => onEditAsNew(row.id)}
+                    >
+                      {t("requests.editAsNew")}
                     </button>
                   ) : null}
                   {row.notes.map((note, index) => (

@@ -20,6 +20,11 @@ export interface RequestsPaneProps {
   config: ClientSiteConfig;
   /** "list": every request this session (dispatcher). "last": only the latest (officer, spec 6.3). */
   variant: "list" | "last";
+  /**
+   * Loads a config-changed row's kept values into the form (#477). The panel owns the form, its note
+   * and its focus; this pane only offers the action on the rows that can use it. Absent, no row does.
+   */
+  onEditAsNew?: (rowId: string) => void;
 }
 
 /**
@@ -30,7 +35,11 @@ export interface RequestsPaneProps {
  * Memoised: the panel beside it re-renders on every keystroke, and this list (a row per request,
  * up to 100) reads its own store, so a keystroke has no reason to render it.
  */
-export const RequestsPane = memo(function RequestsPane({ config, variant }: RequestsPaneProps) {
+export const RequestsPane = memo(function RequestsPane({
+  config,
+  variant,
+  onEditAsNew,
+}: RequestsPaneProps) {
   const t = useT();
   const persona = useResolvedPersona();
   const { announcer, requests, submit } = useServices();
@@ -67,6 +76,9 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
         ...base,
         status: "failed",
         retryable: isRetryable(entry),
+        // A 409 row offers no Retry (#434: the same values cannot succeed), so it offers a way to
+        // recover what was typed, when the row kept it (#477).
+        editable: entry.failure === "configChanged" && entry.submitted !== undefined,
         failureText: t(`requests.failure.${entry.failure}`),
         notes: [],
       };
@@ -175,6 +187,7 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
           : undefined
       }
       emptyText={t(variant === "last" ? "requests.emptyLast" : "requests.empty")}
+      onEditAsNew={onEditAsNew}
       onRetry={(rowId) => {
         // The failed row keeps its place; the values it kept go as a new request under the panel's
         // current config hash, and the new row joins the list.
