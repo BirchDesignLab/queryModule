@@ -436,6 +436,65 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     }
   });
 
+  // #66, ADR-0013: a later server adds ApiError fields, codes and error entries additively. The
+  // receipt reads what it knows and ignores the rest; it never fails on an addition.
+  it("#66 a 400 with unknown top-level, error and entry fields still gives the entries it knows", async () => {
+    const known = { key: "validation.required", params: { field: "plate" } };
+    const body = {
+      futureTop: 1,
+      error: {
+        code: "someFutureCode",
+        requestId: "r",
+        futureField: { nested: true },
+        errors: [{ ...known, futureEntryField: "x" }],
+      },
+    };
+    serveQueries(() => HttpResponse.json(body, { status: 400 }));
+    const { controller } = setup();
+    const out = await controller.getState().submit(REQ);
+    expect(out).toEqual({
+      kind: "invalid",
+      errors: [expect.objectContaining(known)],
+    });
+  });
+
+  it("#66 a 400 entry that is not an object with a string key is skipped, not passed to the UI", async () => {
+    const known = { key: "validation.required", params: { field: "plate" } };
+    const body = err("validationFailed", { errors: ["oops", null, 7, { params: {} }, known] });
+    serveQueries(() => HttpResponse.json(body, { status: 400 }));
+    const { controller } = setup();
+    expect(await controller.getState().submit(REQ)).toEqual({ kind: "invalid", errors: [known] });
+  });
+
+  it("#66 a 400 whose entries are all unreadable is failed", async () => {
+    serveQueries(() =>
+      HttpResponse.json(err("validationFailed", { errors: ["oops", null] }), { status: 400 }),
+    );
+    const { controller } = setup();
+    expect(await controller.getState().submit(REQ)).toEqual({ kind: "failed" });
+  });
+
+  it("#66 other statuses read by status, whatever code and extra fields the body carries", async () => {
+    const cases: [number, string, object][] = [
+      [403, "someFutureForbiddenCode", { futureField: 1 }],
+      [409, "someFutureConflictCode", { params: { currentConfigHash: "h2", futureParam: 1 } }],
+      [503, "someFutureUnavailableCode", { futureField: [1, 2] }],
+      [418, "someFutureTeapotCode", { futureField: "x" }],
+    ];
+    const expected = [
+      { kind: "forbidden" },
+      { kind: "configChanged" },
+      { kind: "unavailable" },
+      { kind: "failed" },
+    ];
+    for (const [i, [status, code, extra]] of cases.entries()) {
+      serveQueries(() => HttpResponse.json(err(code, extra), { status }));
+      const { controller } = setup();
+      expect(await controller.getState().submit(REQ)).toEqual(expected[i]);
+      server.resetHandlers();
+    }
+  });
+
   it("#382 W5 reset on an offline platform stays gated and keeps polling health", async () => {
     const platform = createFakePlatform();
     let health = 0;
