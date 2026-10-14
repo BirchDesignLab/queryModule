@@ -25,6 +25,9 @@ async function failFirstQuery(page: Page): Promise<Sent[]> {
   return sent;
 }
 
+// The e2e database is shared, and sign-in loads history: these scenarios start from an empty list.
+test.use({ emptyQueryList: true });
+
 test.describe("dispatcher retry (1366x768)", () => {
   test.use({ viewport: { width: 1366, height: 768 } });
 

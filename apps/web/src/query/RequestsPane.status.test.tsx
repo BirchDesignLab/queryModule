@@ -122,8 +122,8 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
         },
       ],
     });
-    expect(screen.getByText("Also run: Wanted check")).toBeInTheDocument();
-    expect(screen.getByText(/was not run\./)).toBeInTheDocument();
+    expect(screen.getByText("Wanted check, also run from Vehicle")).toBeInTheDocument();
+    expect(screen.getByText("Property not run: needs dob.")).toBeInTheDocument();
     expect(within(sourceList()).getAllByText("National system: pending")).toHaveLength(2);
   });
 
@@ -231,8 +231,8 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
         { ...ACK.parts[0], partId: 5 },
       ],
     } as SubmitQueryResponse);
-    expect(screen.getAllByText(/^Also run: /)).toHaveLength(1);
-    expect(screen.getByText("Also run: Wanted check")).toBeInTheDocument();
+    expect(screen.getAllByText(/, also run from /)).toHaveLength(1);
+    expect(screen.getByText("Wanted check, also run from Vehicle")).toBeInTheDocument();
   });
 
   it("#587 a dropped source with no configured label shows its id as a last resort", () => {

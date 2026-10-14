@@ -16,6 +16,7 @@ import {
   createQueryClient,
   createRequestsStore,
   createResetController,
+  createResultFetcher,
   createSessionController,
   createSubmitController,
   type DraftStore,
@@ -102,8 +103,33 @@ export function createServices(options: ServicesOptions): Services {
     timers,
     random: Math.random,
   });
+  // Fetches each request's payloads when its sources settle (spec 6.7); memory only, reset below.
+  const results = createResultFetcher({ api, timers, store: requests });
   // Status events land in the requests store, which holds the ones that outrun their 202 (spec 6.7).
-  feed.onSourceStatus((event) => requests.getState().applyEvent(event));
+  feed.onSourceStatus((event) => {
+    requests.getState().applyEvent(event);
+    results.handleEvent(event);
+  });
+  // Replay by cursor is the feed's own (spec 4.7); what it cannot replay, or what was missed while the
+  // socket was down, is refetched here (spec 6.8): a `resync` reloads the list, and every reconnect
+  // and every backoff step while down refetches the entries that still have a pending source.
+  feed.onResync(() => {
+    void results.loadList();
+  });
+  feed.onReconnect(() => results.refetchPending());
+  // The first welcome replays nothing, and the list snapshot may predate it (the feed opens after the
+  // config loads): a source that settled in between is refetched here (FR-065).
+  feed.onFirstWelcome(() => results.refetchPending());
+  feed.onRetry(() => results.refetchPending());
+  // Sign-in (Q1) loads the list: the last requests of the user's other sessions and devices. A session
+  // still owing a password change loads nothing until it is changed (D-A26); a reset empties it all.
+  const listable = (state: ReturnType<AuthStore["getState"]>): boolean =>
+    state.status === "signedIn" && !state.passwordChangeRequired;
+  authStore.subscribe((state, previous) => {
+    if (!listable(state)) return;
+    if (listable(previous) && previous.user?.id === state.user?.id) return;
+    void results.loadList();
+  });
   registerQueryCacheReset(reset, queryClient);
   reset.register(() => feed.close());
   reset.register(() => configRefresh.stop());
@@ -112,6 +138,7 @@ export function createServices(options: ServicesOptions): Services {
   reset.register(() => preferences.getState().reset());
   reset.register(() => drafts.getState().reset());
   reset.register(() => submit.getState().reset());
+  reset.register(() => results.reset());
   reset.register(() => requests.getState().reset());
   return {
     platform: options.platform,

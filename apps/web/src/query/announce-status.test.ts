@@ -1,7 +1,7 @@
 import { createTranslator } from "@querymodule/client";
 import { describe, expect, it } from "vitest";
 import { EN_BUNDLE } from "../test/en-bundle.js";
-import { statusAnnouncementText } from "./announce-status.js";
+import { criticalAnnouncementText, statusAnnouncementText } from "./announce-status.js";
 
 const { t } = createTranslator("en", EN_BUNDLE);
 const label = (code: string) => code;
@@ -51,18 +51,44 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
     );
     expect(text).toBe("VEH 01923abc: 0 of 0 sources done. 2 not run.");
   });
-  it("#576 carries counts and the short reference only, never a typed value", () => {
+  it("ruling 12 names the request by its primary typed field, never a payload value", () => {
     const text = statusAnnouncementText(
-      {
-        ...base,
-        summary: { done: 1, total: 2, byStatus: { returned: 1, pending: 1 }, notRun: 0 },
-        values: { plate: "ZZ-0001" },
-      } as never,
+      { ...base, summary: { done: 1, total: 2, byStatus: { returned: 1, pending: 1 }, notRun: 0 } },
       t,
       label,
+      { typed: "ZZ-0001" },
     );
-    expect(text).not.toContain("ZZ-0001");
-    expect(text).toBe("VEH 01923abc: 1 of 2 sources done. 1 returned, 1 pending.");
+    expect(text).toBe("VEH ZZ-0001: 1 of 2 sources done. 1 returned, 1 pending.");
+    expect(text).not.toContain("01923abc");
+  });
+  it("ruling 12 adds the highest severity and its configured keyword", () => {
+    expect(
+      statusAnnouncementText(
+        { ...base, summary: { done: 2, total: 2, byStatus: { returned: 2 }, notRun: 0 } },
+        t,
+        label,
+        { typed: "ZZ-0001", highest: { severity: "critical", keyword: "STOLEN" } },
+      ),
+    ).toBe("VEH ZZ-0001: 2 of 2 sources done. 2 returned, critical: STOLEN.");
+  });
+  it("severity alone still reads as a sentence when no counts by status exist", () => {
+    expect(
+      statusAnnouncementText(
+        { ...base, summary: { done: 0, total: 0, byStatus: {}, notRun: 0 } },
+        t,
+        label,
+        { highest: { severity: "warning", keyword: "EXPIRED" } },
+      ),
+    ).toBe("VEH 01923abc: 0 of 0 sources done. warning: EXPIRED.");
+  });
+  it("a critical result is one assertive sentence naming the request, keyword and source", () => {
+    expect(
+      criticalAnnouncementText(t, {
+        name: "Vehicle ZZ-0001",
+        keyword: "STOLEN",
+        source: "State system",
+      }),
+    ).toBe("Vehicle ZZ-0001: critical: STOLEN, State system.");
   });
   it("one source reads singular", () => {
     expect(

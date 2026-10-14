@@ -41,6 +41,19 @@ export { SubmitButton } from "./panel/SubmitButton.js";
 export type { TypeFieldBarProps } from "./panel/TypeFieldBar.js";
 export { TypeFieldBar } from "./panel/TypeFieldBar.js";
 export { usePersona } from "./persona/usePersona.js";
+export type { HighlightedProps } from "./results/Highlighted.js";
+export { Highlighted } from "./results/Highlighted.js";
+export type { MappedElementsProps } from "./results/MappedElements.js";
+export { MappedElements } from "./results/MappedElements.js";
+export type { ResultCardProps } from "./results/ResultCard.js";
+export { ResultCard } from "./results/ResultCard.js";
+export type { ResultTableProps } from "./results/ResultTable.js";
+export { ResultTable } from "./results/ResultTable.js";
+export type { SeverityBadgeProps } from "./results/SeverityBadge.js";
+export { SeverityBadge } from "./results/SeverityBadge.js";
+export type { ResultT, SeverityStyles, SeverityStyleView } from "./results/severity.js";
+export type { ViewToggleProps } from "./results/ViewToggle.js";
+export { ViewToggle } from "./results/ViewToggle.js";
 export type { EngineResult, KeyContext, ShortcutEngine, StrokeInput } from "./shortcuts/engine.js";
 export {
   CHORD_TIMEOUT_MS,

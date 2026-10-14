@@ -10,6 +10,9 @@ import { parseServerMessage } from "./parse-server-message.js";
 /** A per-source status change pushed by the server (`sourceStatus`, spec 4.7). */
 export type SourceStatusEvent = Extract<WsServerMessage, { type: "sourceStatus" }>;
 
+/** Replay was refused (spec 4.7, ADR-0013): the client refetches over HTTP; the mark is already set. */
+export type ResyncEvent = Extract<WsServerMessage, { type: "resync" }>;
+
 /** The injected timer seam, as `createConfigRefresh` takes it; tests drive it with fake timers. */
 export interface Timers {
   setTimeout(fn: () => void, ms: number): unknown;
@@ -23,11 +26,25 @@ export interface Timers {
 export type FeedState = "closed" | "connecting" | "open" | "stale";
 
 export interface FeedSocket {
-  /** Idempotent. Sends `hello { lastSeq: null }`; replay by cursor is M2 P1. */
+  /**
+   * Idempotent. Sends `hello { lastSeq: null }` on the session's first open and `hello { lastSeq }`
+   * with the high-water mark on every reconnect (spec 4.7).
+   */
   open(): void;
   /** On logout, 401 or a change of user (spec 6.7). Cancels every timer and drops the socket. */
   close(): void;
   onSourceStatus(handler: (event: SourceStatusEvent) => void): () => void;
+  /** The server refused replay (`resync`): refetch over HTTP. The mark is already at `latestSeq`. */
+  onResync(handler: (event: ResyncEvent) => void): () => void;
+  /** A welcome after the session's first: the socket was down and is back (spec 6.8). */
+  onReconnect(handler: () => void): () => void;
+  /**
+   * The session's first welcome: nothing is replayed (hello carried a null cursor), so what settled
+   * between a list snapshot and now is refetched by the caller (FR-065).
+   */
+  onFirstWelcome(handler: () => void): () => void;
+  /** Each backoff step while the socket is down, before the reconnect is attempted (spec 6.8). */
+  onRetry(handler: () => void): () => void;
   state(): FeedState;
 }
 
@@ -56,14 +73,22 @@ const NORMAL_CLOSURE = 1000;
 export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
   const { createSocket, url, timers, random, onInvalid } = options;
   const handlers = new Set<(event: SourceStatusEvent) => void>();
+  const resyncHandlers = new Set<(event: ResyncEvent) => void>();
+  const reconnectHandlers = new Set<() => void>();
+  const firstWelcomeHandlers = new Set<() => void>();
+  const retryHandlers = new Set<() => void>();
   let state: FeedState = "closed";
   let socket: SocketLike | null = null;
   let heartbeatTimer: unknown = null;
   let retryTimer: unknown = null;
   /** Consecutive losses since the last open and first pong; the backoff exponent. */
   let losses = 0;
-  /** Highest seq seen; events at or below it are ignored (spec 4.7). */
-  let highWater = 0;
+  /**
+   * Highest seq seen; events at or below it are ignored and the next hello asks for what follows
+   * it (spec 4.7). Null until the session's first welcome and again after it ends: the first open
+   * replays nothing. Memory only.
+   */
+  let highWater: number | null = null;
   // Per connection:
   let welcomed = false;
   let missed = 0;
@@ -102,7 +127,9 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
     retryTimer = timers.setTimeout(
       () => {
         retryTimer = null;
-        connect();
+        for (const handler of [...retryHandlers]) handler();
+        // A handler may have closed the feed (a reset); only a still-stale feed reconnects.
+        if (state === "stale") connect();
       },
       Math.floor(random() * ceiling),
     );
@@ -113,7 +140,7 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
     detach();
     state = "closed";
     losses = 0;
-    highWater = 0;
+    highWater = null;
   };
 
   const send = (message: object): boolean => {
@@ -157,12 +184,19 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
     const message = parseServerMessage(data, onInvalid);
     if (message === null) return;
     switch (message.type) {
-      case "welcome":
-        highWater = message.latestSeq;
+      case "welcome": {
+        // Only the session's first welcome sets the mark. On a reconnect the replay that follows
+        // carries everything above it, even below latestSeq, so the mark is never lowered or
+        // overwritten here (spec 4.7).
+        const reconnected = highWater !== null;
+        if (highWater === null) highWater = message.latestSeq;
         welcomed = true;
         missed = 0;
         state = "open";
+        const handlersToRun = reconnected ? reconnectHandlers : firstWelcomeHandlers;
+        for (const handler of [...handlersToRun]) handler();
         return;
+      }
       case "pong":
         if (!outstanding.has(message.nonce)) return;
         outstanding.clear();
@@ -173,15 +207,18 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
         }
         return;
       case "sourceStatus":
-        if (message.seq <= highWater) return;
+        if (message.seq <= (highWater ?? 0)) return;
         highWater = message.seq;
         for (const handler of [...handlers]) handler(message);
         return;
       case "resultHidden":
-        highWater = Math.max(highWater, message.seq);
+        highWater = Math.max(highWater ?? 0, message.seq);
         return;
       case "resync":
-        // Replay and resync are M2 P1; until then the feed neither asks for nor acts on them.
+        // Replay refused (reset database, too old, too many): events after this one are live, so the
+        // mark moves to the server's latest, even below the old one; the list refetch fills the gap.
+        highWater = message.latestSeq;
+        for (const handler of [...resyncHandlers]) handler(message);
         return;
     }
   }
@@ -201,7 +238,7 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
     }
     socket = next;
     next.onopen = () => {
-      send({ type: "hello", lastSeq: null });
+      send({ type: "hello", lastSeq: highWater });
     };
     next.onmessage = (event) => receive(event.data);
     next.onclose = (event) => {
@@ -225,6 +262,30 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
       handlers.add(handler);
       return () => {
         handlers.delete(handler);
+      };
+    },
+    onResync(handler) {
+      resyncHandlers.add(handler);
+      return () => {
+        resyncHandlers.delete(handler);
+      };
+    },
+    onReconnect(handler) {
+      reconnectHandlers.add(handler);
+      return () => {
+        reconnectHandlers.delete(handler);
+      };
+    },
+    onFirstWelcome(handler) {
+      firstWelcomeHandlers.add(handler);
+      return () => {
+        firstWelcomeHandlers.delete(handler);
+      };
+    },
+    onRetry(handler) {
+      retryHandlers.add(handler);
+      return () => {
+        retryHandlers.delete(handler);
       };
     },
     state: () => state,

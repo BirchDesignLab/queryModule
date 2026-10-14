@@ -1,12 +1,13 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
 import { signIn } from "./helpers.js";
 
 // Live per-source status (FR-043, FR-044, FR-065; spec 6.2, 6.6, 5.4). The local build serves mock
 // sources (ALLOW_MOCK_SOURCES) and the real dispatcher, so each plate below is a canned scenario:
 // ZZ-0001 and ABC123 return, FAIL1 fails at the state source, TIMEOUT times out at the national
-// source. Status only: the content of a response shows with M2 P1. Nothing here reaches any real
-// state or national system.
+// source. A returned source shows as a result card (spec 6.2); the announcements carry the query
+// type, the plate, counts, status words and the severity keyword, never other payload content
+// (ruling 12). Nothing here reaches any real state or national system.
 
 const STATE = "State system";
 const NATIONAL = "National system";
@@ -28,8 +29,10 @@ async function runPlate(page: Page, plate: string): Promise<void> {
   await field.press("Enter");
 }
 
-const statusLine = (page: Page, system: string, status: string) =>
-  page.getByText(`${system}: ${status}`, { exact: true });
+// Scoped to one request's row: earlier requests of the same user stay in the list, and a returned
+// source shows as a card headed with the same words.
+const statusLine = (row: Locator, system: string, status: string) =>
+  row.getByText(`${system}: ${status}`, { exact: true });
 
 test("ZZ-0001: both sources return, in the list, and one coalesced polite summary", async ({
   page,
@@ -39,13 +42,22 @@ test("ZZ-0001: both sources return, in the list, and one coalesced polite summar
   const row = list.getByRole("listitem").first();
   await expect(row).toContainText("Acknowledged");
   await expect(row.getByRole("group", { name: /Source status for Vehicle ZZ-0001/ })).toBeVisible();
-  await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
-  await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
-  // The summary speaks counts and words only: never the plate, never a payload.
+  await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
+  // The summary names the request by its plate (ruling 12) and says the keyword that set the
+  // severity; no other payload content.
   const polite = page.getByTestId("announcer-polite");
-  await expect(polite).toContainText("2 of 2 sources done. 2 returned.", { timeout: 5000 });
-  await expect(polite).not.toContainText("ZZ-0001");
-  await expect(polite).not.toContainText("STOLEN");
+  await expect(polite).toContainText(
+    "Vehicle ZZ-0001: 2 of 2 sources done. 2 returned, critical: STOLEN.",
+    { timeout: 5000 },
+  );
+  await expect(polite).not.toContainText("TESTMAKE");
+  await expect(polite).not.toContainText("SAMPLEMODEL");
+  // Each source is a card with a critical badge, and the entry header repeats the severity.
+  await expect(row.getByRole("region", { name: "State system: returned" })).toContainText(
+    "Critical",
+  );
+  await expect(row.locator(".qm-request__severity")).toContainText("Critical");
   await expectNoSeriousAxeViolations(page);
 });
 
@@ -54,9 +66,9 @@ test("[A4] ABC123: a clean no-record request ends with both sources returned", a
   await runPlate(page, "ABC123");
   const row = list.getByRole("listitem").first();
   await expect(row).toContainText("Acknowledged");
-  // No record is a returned source, not a failure; what it returned shows with M2 P1.
-  await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
-  await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
+  // No record is a returned source, not a failure; it shows as an info card.
+  await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
   await expect(row).not.toContainText("pending");
   await expectNoSeriousAxeViolations(page);
 });
@@ -65,8 +77,8 @@ test("FAIL1: the state source fails and the national source still returns", asyn
   const list = await openList(page);
   await runPlate(page, "FAIL1");
   const row = list.getByRole("listitem").first();
-  await expect(statusLine(page, STATE, "failed")).toBeVisible({ timeout: 5000 });
-  await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, STATE, "failed")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
   await expect(row).not.toContainText("pending");
   await expectNoSeriousAxeViolations(page);
 });
@@ -78,9 +90,9 @@ test("TIMEOUT: the national source times out within its limit plus two seconds",
   const list = await openList(page);
   await runPlate(page, "TIMEOUT");
   const row = list.getByRole("listitem").first();
-  await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 5000 });
   // timeoutMs is 10 s in the default site config.
-  await expect(statusLine(page, NATIONAL, "timed out")).toBeVisible({ timeout: 12_000 });
+  await expect(statusLine(row, NATIONAL, "timed out")).toBeVisible({ timeout: 12_000 });
   await expect(page.getByTestId("announcer-polite")).toContainText("timed out");
   await expect(row).not.toContainText("pending");
   await expectNoSeriousAxeViolations(page);
@@ -91,12 +103,13 @@ test("typing into Plate while statuses arrive keeps focus and value (spec 6.6)",
 }) => {
   const list = await openList(page);
   await runPlate(page, "ZZ-0001");
+  const row = list.getByRole("listitem").first();
   const field = page.getByLabel("Plate", { exact: true });
   // The form keeps its value after a submit; replace it, slowly, while the sources answer.
   await field.press("Control+A");
   await field.pressSequentially("ABC", { delay: 200 });
-  await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
-  await expect(statusLine(page, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
   await field.pressSequentially("123", { delay: 100 });
   await expect(field).toBeFocused();
   await expect(field).toHaveValue("ABC123");
@@ -114,13 +127,103 @@ test("[#587] a plate-only VEH shows the National system as not run, in words", a
   await field.press("Enter");
   const row = list.getByRole("listitem").first();
   await expect(row).toContainText("Acknowledged");
-  await expect(statusLine(page, STATE, "returned")).toBeVisible({ timeout: 5000 });
-  await expect(statusLine(page, NATIONAL, "not run (plate only)")).toBeVisible();
-  // The summary counts the dispatched source only and says what was not run; never the plate.
+  await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(statusLine(row, NATIONAL, "not run (plate only)")).toBeVisible();
+  // The summary counts the dispatched source only and says what was not run.
   const polite = page.getByTestId("announcer-polite");
-  await expect(polite).toContainText("1 of 1 source done. 1 returned. 1 not run.", {
-    timeout: 5000,
+  await expect(polite).toContainText(
+    "Vehicle ZZ-0001: 1 of 1 source done. 1 returned, critical: STOLEN. 1 not run.",
+    { timeout: 5000 },
+  );
+  await expectNoSeriousAxeViolations(page);
+});
+
+test("[FR-065, spec 6.8] a socket dropped after the 202 replays every status and card on reconnect", async ({
+  page,
+}) => {
+  test.slow();
+  // Hold the server's status events back (the proxy forwards everything else), and drop the socket
+  // only after the server has emitted both statuses (held >= 2). Neither can then reach the page
+  // live on the next connection: it has to get them by replay or refetch (FR-065, spec 6.8).
+  let holding = false;
+  let connections = 0;
+  let held = 0;
+  let statusAfterDrop = 0;
+  let refetchesAfterDrop = 0;
+  let dropped = false;
+  await page.routeWebSocket("**/api/v1/ws", (ws) => {
+    connections += 1;
+    const server = ws.connectToServer();
+    server.onMessage((message) => {
+      const isStatus = typeof message === "string" && /"type":\s*"sourceStatus"/.test(message);
+      if (
+        holding &&
+        typeof message === "string" &&
+        /"type":\s*"(sourceStatus|resultHidden)"/.test(message)
+      ) {
+        if (isStatus) held += 1;
+        return;
+      }
+      if (dropped && isStatus) statusAfterDrop += 1;
+      ws.send(message);
+    });
+    ws.onMessage((message) => server.send(message));
+    ws.onClose((code, reason) => void server.close({ code, reason }));
+    server.onClose((code, reason) => void ws.close({ code, reason }));
   });
-  await expect(polite).not.toContainText("ZZ-0001");
+  // Keep a handle on every socket the page opens, so the test can close it from the page.
+  await page.addInitScript(() => {
+    const sockets: WebSocket[] = [];
+    (window as unknown as { __qmSockets: WebSocket[] }).__qmSockets = sockets;
+    const Native = window.WebSocket;
+    window.WebSocket = class extends Native {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        sockets.push(this);
+      }
+    };
+  });
+  const list = await openList(page);
+  await page.waitForFunction(() =>
+    (window as unknown as { __qmSockets: WebSocket[] }).__qmSockets.some((s) => s.readyState === 1),
+  );
+  holding = true;
+  const posted = page.waitForResponse(
+    (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
+  );
+  await runPlate(page, "ZZ-0001");
+  expect((await posted).status()).toBe(202);
+  const correlationId = ((await (await posted).json()) as { correlationId: string }).correlationId;
+  page.on("request", (r) => {
+    if (dropped && r.method() === "GET" && r.url().includes(`/api/v1/queries/${correlationId}`)) {
+      refetchesAfterDrop += 1;
+    }
+  });
+  // Both sources' statuses were emitted by the server and withheld from the page.
+  await expect.poll(() => held, { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
+  dropped = true;
+  holding = false;
+  await page.evaluate(() => {
+    for (const s of (window as unknown as { __qmSockets: WebSocket[] }).__qmSockets) s.close();
+  });
+
+  const row = list.getByRole("listitem").first();
+  await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 20_000 });
+  await expect(statusLine(row, NATIONAL, "returned")).toBeVisible({ timeout: 20_000 });
+  await expect(row).not.toContainText("pending");
+  // The cards arrive too: the replayed status triggers the payload fetch.
+  await expect(row.getByRole("region", { name: "State system: returned" })).toContainText(
+    "Critical",
+  );
+  await expect(row.getByRole("region", { name: "National system: returned" })).toContainText(
+    "Critical",
+  );
+  await expect(page.getByTestId("announcer-polite")).toContainText(
+    "Vehicle ZZ-0001: 2 of 2 sources done.",
+  );
+  // The statuses were all emitted before the drop, so the page got them by recovery, not live:
+  // a second connection, and either the replayed frames or a refetch of the request.
+  expect(connections).toBeGreaterThanOrEqual(2);
+  expect(statusAfterDrop + refetchesAfterDrop).toBeGreaterThan(0);
   await expectNoSeriousAxeViolations(page);
 });

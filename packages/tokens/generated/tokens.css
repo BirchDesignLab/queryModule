@@ -57,7 +57,7 @@
   --qm-color-severity-warning-fg: #1a1a1a;
   --qm-color-severity-warning-bg: #ffd24d;
   --qm-color-severity-info-fg: #ffffff;
-  --qm-color-severity-info-bg: #1f5fbf;
+  --qm-color-severity-info-bg: #1a4fa3;
   --qm-focus-ring: #1f5fbf;
   --qm-field-required: #a00000;
 }
@@ -81,7 +81,7 @@
   --qm-color-severity-warning-fg: #121212;
   --qm-color-severity-warning-bg: #e0b000;
   --qm-color-severity-info-fg: #ffffff;
-  --qm-color-severity-info-bg: #1f5fbf;
+  --qm-color-severity-info-bg: #1a4fa3;
   --qm-focus-ring: #ffd24d;
   --qm-field-required: #ff8080;
 }
@@ -101,11 +101,11 @@
   --qm-color-border: #a05a00;
   --qm-color-border-subtle: #3a1600;
   --qm-color-severity-critical-fg: #0d0000;
-  --qm-color-severity-critical-bg: #ff4d4d;
+  --qm-color-severity-critical-bg: #ff7070;
   --qm-color-severity-warning-fg: #0d0000;
   --qm-color-severity-warning-bg: #ffb000;
   --qm-color-severity-info-fg: #0d0000;
-  --qm-color-severity-info-bg: #c08040;
+  --qm-color-severity-info-bg: #d09050;
   --qm-focus-ring: #ffe0a8;
   --qm-field-required: #ff4d4d;
 }

@@ -6,6 +6,7 @@ import {
   useStore,
 } from "@querymodule/client";
 import { type PERSONA_LAYOUTS, resolveShortcuts } from "@querymodule/core/config";
+import { assessResult } from "@querymodule/core/response";
 import type { ThemeSelection } from "@querymodule/tokens";
 import { ShortcutProvider, ThemeModeSeg, usePersona, useThemeMode } from "@querymodule/web-ui";
 import {
@@ -19,7 +20,10 @@ import {
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
-import { statusAnnouncementText } from "../query/announce-status.js";
+import { AckToast } from "../query/AckToast.js";
+import { criticalAnnouncementText, statusAnnouncementText } from "../query/announce-status.js";
+import { primaryTypedText } from "../query/request-name.js";
+import { assessEntry, highestSeverity } from "../query/result-view.js";
 import { AccountMenu } from "./AccountMenu.js";
 import { useCachedConfig } from "./cached-config.js";
 import { useT } from "./i18n-context.js";
@@ -253,20 +257,71 @@ export function AppShell() {
     return () => feed.close();
   }, [feed, signedInAs, configLoaded]);
   // Per-source status changes are announced here, not by a pane, so they are spoken whichever
-  // screen shows (spec 6.6): one polite sentence per request per 1500 ms, counts and words only.
-  // The store coalesces; labels read from the cached config at the time of speaking.
-  const queryTypes = config?.queryTypes;
+  // screen shows (spec 6.6): one polite sentence per request per 1500 ms. It names the request by
+  // its query type and primary typed field (ruling 12) and carries the counts, the highest severity
+  // and its configured keyword; never a payload value. The store coalesces; labels and keywords
+  // read from the cached config at the time of speaking.
   useEffect(() => {
-    if (signedInAs === undefined) return;
-    return requests.getState().onStatusSummary((announcement) => {
-      const labelKey = queryTypes?.find((q) => q.code === announcement.queryType)?.labelKey;
+    if (signedInAs === undefined || config === undefined) return;
+    const typeLabel = (code: string): string => {
+      const labelKey = config.queryTypes.find((q) => q.code === code)?.labelKey;
+      return labelKey === undefined ? code : t(labelKey);
+    };
+    const offSummary = requests.getState().onStatusSummary((announcement) => {
+      const entry = requests
+        .getState()
+        .items.find(
+          (item) =>
+            item.status === "acknowledged" && item.correlationId === announcement.correlationId,
+        );
+      const typed = entry === undefined ? "" : primaryTypedText(entry);
+      const highest =
+        entry?.status === "acknowledged"
+          ? highestSeverity(assessEntry(entry, config.keywords))
+          : null;
       announcer.announce(
-        statusAnnouncementText(announcement, t, (code) =>
-          labelKey === undefined ? code : t(labelKey),
-        ),
+        statusAnnouncementText(announcement, t, typeLabel, {
+          typed,
+          ...(highest === null ? {} : { highest }),
+        }),
       );
     });
-  }, [requests, announcer, signedInAs, queryTypes, t]);
+    // A critical result is announced assertively the moment its payload lands, never held by the
+    // 1500 ms window (spec 6.6, FR-064).
+    const offResult = requests.getState().onResult((arrival) => {
+      const entry = requests
+        .getState()
+        .items.find(
+          (item) => item.status === "acknowledged" && item.correlationId === arrival.correlationId,
+        );
+      if (entry?.status !== "acknowledged") return;
+      const payload = entry.parts
+        .find((part) => part.partId === arrival.partId)
+        ?.sources.find((source) => source.sourceId === arrival.sourceId)?.result?.payload;
+      if (payload === undefined) return;
+      const critical = assessResult(payload, config.keywords).matches.find(
+        (match) => match.severity === "critical",
+      );
+      if (critical === undefined) return;
+      const sourceKey = config.sources.find((s) => s.id === arrival.sourceId)?.labelKey;
+      const typed = primaryTypedText(entry);
+      announcer.announce(
+        criticalAnnouncementText(t, {
+          name: `${typeLabel(entry.queryType)} ${typed === "" ? entry.correlationId.slice(0, 8) : typed}`,
+          keyword: critical.keyword,
+          source:
+            sourceKey === undefined
+              ? t("sourceStatus.unlistedSource", { source: arrival.sourceId })
+              : t(sourceKey),
+        }),
+        "assertive",
+      );
+    });
+    return () => {
+      offSummary();
+      offResult();
+    };
+  }, [requests, announcer, signedInAs, config, t]);
   // Load GET /api/v1/config on every signed-in screen, not only the panel, so SiteConfig.theme
   // applies after a reload on /status too (spec 6.5); the panel reuses the cached entry.
   useEffect(() => {
@@ -289,6 +344,7 @@ export function AppShell() {
           <SkipLink />
           <AppHeader />
           <Outlet />
+          <AckToast />
         </ShortcutSheetProvider>
       </OnLoadEntry.Provider>
     </ShortcutProvider>

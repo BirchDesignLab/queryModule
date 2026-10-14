@@ -1,9 +1,9 @@
-import type { SocketLike } from "@querymodule/client";
+import type { QueryListEntry, SocketLike } from "@querymodule/client";
 import { HttpResponse, http } from "msw";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { heartbeatUrl } from "../status/use-status-checks.js";
 import { FakeSocket } from "../test/fake-socket.js";
-import { API, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
+import { API, detail202, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
 import { testServices } from "../test/render-routes.js";
 
 describe("SEC-006 sign-out clears query cache, announcer and preferences (spec 6.7)", () => {
@@ -165,5 +165,261 @@ describe("FR-065 feed socket in the composition root (spec 6.7, 6.8)", () => {
     vi.advanceTimersByTime(1000);
     expect(t.sockets).toHaveLength(2);
     t.services.reset.resetAll();
+  });
+});
+
+describe("FR-065 replay cursor, resync and the list load in the composition root (spec 4.7, 6.8)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    // The feed's reconnect jitter draws from Math.random: no wait, so each backoff step is exact.
+    vi.spyOn(Math, "random").mockReturnValue(0);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  /** Advances the fake clock, then yields to real I/O so MSW's answer lands before the next check. */
+  async function pass(ms: number): Promise<void> {
+    await vi.advanceTimersByTimeAsync(ms);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  const idOf = (n: number): string => `0198a1b2-c3d4-7e5f-8a9b-${n.toString().padStart(12, "0")}`;
+  /** A list entry for request n with the given source statuses (mock data only). */
+  const request = (n: number, statuses: ("pending" | "returned" | "failed")[]): QueryListEntry =>
+    ({
+      ...detail202(statuses.map((status, i) => ({ sourceId: `s${i}`, status }))),
+      correlationId: idOf(n),
+      submittedAt: Date.UTC(2026, 8, 29, 17, 0, n),
+    }) as QueryListEntry;
+  const listBody = (...requests: QueryListEntry[]) => ({
+    requests,
+    nextCursor: null,
+  });
+
+  function feedServices() {
+    const sockets: FakeSocket[] = [];
+    const services = testServices({
+      createSocket: (): SocketLike => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    /** Plays the server: delivers one message to the socket the feed is using. */
+    const deliver = (socket: FakeSocket, message: object): void =>
+      socket.onmessage?.({ data: JSON.stringify({ v: 1, ...message }) });
+    const hellos = (): unknown[] =>
+      sockets
+        .flatMap((socket) =>
+          socket.sent.map(
+            (frame) => JSON.parse(frame) as { type: string; lastSeq?: number | null },
+          ),
+        )
+        .filter((m) => m.type === "hello")
+        .map((m) => m.lastSeq);
+    return { services, sockets, deliver, hellos };
+  }
+
+  function recordList(requests: QueryListEntry[]) {
+    const calls: { url: URL; background: string | null }[] = [];
+    server.use(
+      http.get(`${API}/api/v1/queries`, ({ request: req }) => {
+        calls.push({ url: new URL(req.url), background: req.headers.get("x-background") });
+        return HttpResponse.json(listBody(...requests));
+      }),
+    );
+    return calls;
+  }
+
+  function recordDetails() {
+    const fetched: string[] = [];
+    server.use(
+      http.get(`${API}/api/v1/queries/:correlationId`, ({ params }) => {
+        fetched.push(String(params.correlationId));
+        // The request asked for, still with a pending source; the other has its payload.
+        return HttpResponse.json({
+          ...detail202([
+            { sourceId: "s0", status: "pending" },
+            { sourceId: "s1", status: "returned", payload: { ok: true } },
+          ]),
+          correlationId: String(params.correlationId),
+        });
+      }),
+    );
+    return fetched;
+  }
+
+  it("sign-in loads the list as a background call and shows its requests", async () => {
+    const calls = recordList([request(2, ["pending"]), request(1, ["failed"])]);
+    const { services } = feedServices();
+    await services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url.searchParams.get("limit")).toBe("50");
+    expect(calls[0]?.background).toBe("1");
+    const rows = services.requests.getState().items;
+    expect(rows.map((r) => r.status === "acknowledged" && r.correlationId)).toEqual([
+      idOf(2),
+      idOf(1),
+    ]);
+    services.reset.resetAll();
+  });
+
+  it("an existing session at page load also loads the list (the sign-in state is what counts)", async () => {
+    const calls = recordList([request(1, ["pending"])]);
+    const { services } = feedServices();
+    services.authStore.getState().setSignedIn({ ...TEST_USER });
+    await pass(50);
+    expect(calls).toHaveLength(1);
+    services.reset.resetAll();
+  });
+
+  it("a session still owing a password change loads nothing until it is changed", async () => {
+    const calls = recordList([request(1, ["pending"])]);
+    const { services } = feedServices();
+    services.authStore.getState().setSignedIn({ ...TEST_USER, mustChangePassword: true as const });
+    await pass(50);
+    expect(calls).toHaveLength(0);
+    services.authStore.getState().setPasswordChangeRequired(false);
+    await pass(50);
+    expect(calls).toHaveLength(1);
+    services.reset.resetAll();
+  });
+
+  it("a resync loads the list once and merges it without duplicating rows", async () => {
+    const calls = recordList([request(2, ["pending"]), request(1, ["failed"])]);
+    const t = feedServices();
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    expect(calls).toHaveLength(1);
+    t.services.feed.open();
+    const socket = t.sockets[0] as FakeSocket;
+    socket.onopen?.();
+    await pass(0);
+    t.deliver(socket, { type: "resync", reason: "tooOld", latestSeq: 3 });
+    await pass(50);
+    expect(calls).toHaveLength(2);
+    expect(t.services.requests.getState().items).toHaveLength(2);
+    t.services.reset.resetAll();
+  });
+
+  it("a reconnect says hello with the mark, and refetches entries with a pending source only", async () => {
+    const t = feedServices();
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    t.services.requests
+      .getState()
+      .applyList([request(2, ["pending", "returned"]), request(1, ["failed", "failed"])]);
+    const fetched = recordDetails();
+    t.services.feed.open();
+    const first = t.sockets[0] as FakeSocket;
+    first.onopen?.();
+    await pass(0);
+    t.deliver(first, {
+      type: "resultHidden",
+      seq: 7,
+      at: 1,
+      correlationId: idOf(9),
+      resultIds: [idOf(10)],
+    });
+    first.onclose?.({ code: 1006 });
+    await pass(1000);
+    fetched.length = 0;
+    const second = t.sockets[1] as FakeSocket;
+    second.onopen?.();
+    await pass(1000);
+    expect(t.hellos()).toEqual([null, 7]);
+    expect(fetched.length).toBeGreaterThan(0);
+    expect(new Set(fetched)).toEqual(new Set([idOf(2)]));
+    t.services.reset.resetAll();
+  });
+
+  it("the session's first welcome refetches entries the list snapshot left pending (FR-065)", async () => {
+    const t = feedServices();
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    t.services.requests.getState().applyList([request(2, ["pending"])]);
+    const fetched = recordDetails();
+    t.services.feed.open();
+    const first = t.sockets[0] as FakeSocket;
+    first.onopen?.();
+    await pass(1000);
+    expect(new Set(fetched)).toEqual(new Set([idOf(2)]));
+    t.services.reset.resetAll();
+  });
+
+  it("while the socket is down a pending entry is refetched at each backoff step", async () => {
+    const t = feedServices();
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    t.services.requests.getState().applyList([request(2, ["pending"])]);
+    const fetched = recordDetails();
+    t.services.feed.open();
+    const first = t.sockets[0] as FakeSocket;
+    first.onopen?.();
+    await pass(0);
+    first.onclose?.({ code: 1006 });
+    // Step 1: at most 1 s of jitter, then the reconnect attempt that never opens.
+    await pass(1000);
+    expect(t.sockets).toHaveLength(2);
+    expect(fetched).toEqual([idOf(2)]);
+    (t.sockets[1] as FakeSocket).onclose?.({ code: 1006 });
+    // Step 2: at most 2 s.
+    await pass(2000);
+    expect(t.sockets).toHaveLength(3);
+    expect(fetched).toEqual([idOf(2), idOf(2)]);
+    t.services.reset.resetAll();
+  });
+
+  it("logout resets the mark and the rows: the next session says hello with a null cursor and loads the list again", async () => {
+    const calls = recordList([request(1, ["pending"])]);
+    const t = feedServices();
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    t.services.feed.open();
+    const first = t.sockets[0] as FakeSocket;
+    first.onopen?.();
+    await pass(0);
+    t.deliver(first, {
+      type: "resultHidden",
+      seq: 4,
+      at: 1,
+      correlationId: idOf(9),
+      resultIds: [idOf(10)],
+    });
+    await t.services.session.signOut();
+    expect(t.services.requests.getState().items).toEqual([]);
+    await t.services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    expect(calls).toHaveLength(2);
+    t.services.feed.open();
+    const second = t.sockets[1] as FakeSocket;
+    second.onopen?.();
+    await pass(0);
+    expect(t.hellos()).toEqual([null, null]);
+    t.services.reset.resetAll();
+  });
+
+  it("a list answer that lands after logout is dropped", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${API}/api/v1/queries`, async () => {
+        await gate;
+        return HttpResponse.json(listBody(request(1, ["pending"])));
+      }),
+    );
+    const { services } = feedServices();
+    await services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    await services.session.signOut();
+    release();
+    await pass(50);
+    expect(services.requests.getState().items).toEqual([]);
   });
 });

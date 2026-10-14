@@ -1,4 +1,5 @@
-import { type JSX, useId, useLayoutEffect, useRef } from "react";
+import { type JSX, type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
+import { useShortcutAction } from "../shortcuts/ShortcutProvider.js";
 
 /** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
 export interface SourceLineView {
@@ -8,6 +9,11 @@ export interface SourceLineView {
   tone: "pending" | "ok" | "problem" | "notRun";
   /** Already in words, for example "State source: timed out". */
   text: string;
+  /**
+   * The source's result card, once its payload is here. It stands in for the status line (its own
+   * heading says "Source: returned"); the key stays, so the line becoming a card is one swap.
+   */
+  card?: ReactNode;
 }
 
 /** A part of a request: the primary part has no label, a nested one is labelled with its origin. */
@@ -32,6 +38,8 @@ export interface RequestRowView {
    * typed field, or the short correlation ID (ruling 12). Already in words.
    */
   name: string;
+  /** The request's highest severity badge (spec 6.2); absent until a returned source has one. */
+  severityBadge?: ReactNode;
   /** The full correlation ID; only an acknowledged row has one. */
   reference?: string;
   /** Epoch milliseconds. */
@@ -110,6 +118,41 @@ export function RequestList({
   t,
 }: RequestListProps): JSX.Element {
   const headingId = useId();
+  // Roving focus (spec 6.4, UX-015): one row is the tab stop. The selection is tracked by row id, so
+  // a row arriving on top, or an update to a row, never moves it; with none chosen the first row
+  // is the tab stop. Only the user's own keys or focus change it.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const selectedIndex = Math.max(
+    0,
+    rows.findIndex((row) => row.id === selectedId),
+  );
+  const rowElements = (): HTMLElement[] =>
+    Array.from(listRef.current?.children ?? []).filter(
+      (el): el is HTMLElement => el instanceof HTMLElement,
+    );
+  const move = (delta: number): void => {
+    const next = rows[Math.min(rows.length - 1, Math.max(0, selectedIndex + delta))];
+    if (next === undefined) return;
+    setSelectedId(next.id);
+    rowElements()[rows.indexOf(next)]?.focus();
+  };
+  useShortcutAction("selectPrev", () => move(-1));
+  useShortcutAction("selectNext", () => move(1));
+  // The cards of the selected row own their open state; their toggles are the one way to change it
+  // (a button, so a pointer or Space does the same). Enter opens every closed card of the row, or
+  // closes them all when none is closed. Focus stays where it is.
+  useShortcutAction("toggleDetail", () => {
+    const toggles = Array.from(
+      rowElements()[selectedIndex]?.querySelectorAll<HTMLButtonElement>(
+        "button.qm-view-toggle[aria-expanded]",
+      ) ?? [],
+    );
+    const anyClosed = toggles.some((b) => b.getAttribute("aria-expanded") === "false");
+    for (const b of toggles) {
+      if ((b.getAttribute("aria-expanded") === "false") === anyClosed) b.click();
+    }
+  });
   const headingRef = useRef<HTMLHeadingElement>(null);
   // The Retry button that had focus when it was pressed. Where a retry replaces its own row (the
   // officer's "last request" shows one row), or its acknowledgment retires the button (the failed
@@ -131,7 +174,7 @@ export function RequestList({
     if (active === null || active === document.body) headingRef.current?.focus();
   });
   return (
-    <section aria-labelledby={headingId} className="qm-requests">
+    <section aria-labelledby={headingId} className="qm-requests" data-shortcut-context="results">
       <div className="qm-requests__head">
         <h2 id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
           {heading}
@@ -141,12 +184,26 @@ export function RequestList({
       {rows.length === 0 ? (
         <p className="qm-requests__empty">{emptyText}</p>
       ) : (
-        <ol className="qm-requests__list">
-          {rows.map((row) => (
-            <li key={row.id} className={`qm-request qm-request--${row.status}`}>
+        <ol ref={listRef} className="qm-requests__list">
+          {rows.map((row, index) => (
+            <li
+              key={row.id}
+              className={`qm-request qm-request--${row.status}`}
+              aria-label={row.name}
+              tabIndex={index === selectedIndex ? 0 : -1}
+              // Focus entering the row or anything in it (a click, Tab, an arrow) selects it.
+              onFocus={() => setSelectedId(row.id)}
+            >
               <span className="qm-request__type">{row.typeLabel}</span>
               <code className="qm-request__summary">{row.summary}</code>
-              <span className={BADGE_CLASS[row.status]}>{t(`requests.status.${row.status}`)}</span>
+              <span className="qm-request__badges">
+                <span className={BADGE_CLASS[row.status]}>
+                  {t(`requests.status.${row.status}`)}
+                </span>
+                {row.severityBadge === undefined ? null : (
+                  <span className="qm-request__severity">{row.severityBadge}</span>
+                )}
+              </span>
               {row.status === "sending" ? null : (
                 <div className="qm-request__meta">
                   {row.status === "acknowledged" &&
@@ -209,33 +266,49 @@ export function RequestList({
                   className="qm-request__parts"
                   aria-label={t("sourceStatus.heading", { summary: row.name })}
                 >
-                  {row.parts.map((part) => (
-                    <div key={part.key} className="qm-request__part">
-                      {part.label === undefined ? null : (
-                        <span className="qm-request__part-label">{part.label}</span>
-                      )}
-                      {part.skippedText === undefined ? null : (
-                        <span className="qm-source qm-source--skipped">
-                          <span aria-hidden="true" className="qm-source__icon">
-                            –
+                  {row.parts.map((part) => {
+                    const partHeadingId = `${headingId}-${row.id}-${part.key}`;
+                    const Part = part.label === undefined ? "div" : "section";
+                    return (
+                      <Part
+                        key={part.key}
+                        className="qm-request__part"
+                        {...(part.label === undefined ? {} : { "aria-labelledby": partHeadingId })}
+                      >
+                        {part.label === undefined ? null : (
+                          <h4 id={partHeadingId} className="qm-request__part-label">
+                            {part.label}
+                          </h4>
+                        )}
+                        {part.skippedText === undefined ? null : (
+                          <span className="qm-source qm-source--skipped">
+                            <span aria-hidden="true" className="qm-source__icon">
+                              –
+                            </span>
+                            <span>{part.skippedText}</span>
                           </span>
-                          <span>{part.skippedText}</span>
-                        </span>
-                      )}
-                      {part.lines.length === 0 ? null : (
-                        <div className="qm-request__sources">
-                          {part.lines.map((line) => (
-                            <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
-                              <span aria-hidden="true" className="qm-source__icon">
-                                {SOURCE_ICON[line.tone]}
-                              </span>
-                              <span>{line.text}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        )}
+                        {part.lines.length === 0 ? null : (
+                          <div className="qm-request__sources">
+                            {part.lines.map((line) =>
+                              line.card === undefined ? (
+                                <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
+                                  <span aria-hidden="true" className="qm-source__icon">
+                                    {SOURCE_ICON[line.tone]}
+                                  </span>
+                                  <span>{line.text}</span>
+                                </div>
+                              ) : (
+                                <div key={line.key} className="qm-request__card">
+                                  {line.card}
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        )}
+                      </Part>
+                    );
+                  })}
                 </fieldset>
               )}
             </li>

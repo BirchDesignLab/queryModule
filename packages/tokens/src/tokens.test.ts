@@ -81,19 +81,38 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
     }
   });
 
-  it("declares every pair with its target: text 7:1, severity 4.5:1, non-text 3:1", () => {
+  it("declares every pair with its target: text 7:1, severity 7:1 (ruling 7), non-text 3:1", () => {
     expect(CONTRAST_PAIRS.slice(0, 10).map((p) => [p.fg, p.bg, p.min])).toEqual([
       ["color.text.body", "color.surface.base", 7],
       ["color.text.body", "color.surface.raised", 7],
       ["color.accent", "color.surface.base", 7],
       ["color.accent", "color.surface.raised", 7],
-      ["color.severity.critical.fg", "color.severity.critical.bg", 4.5],
-      ["color.severity.warning.fg", "color.severity.warning.bg", 4.5],
-      ["color.severity.info.fg", "color.severity.info.bg", 4.5],
+      ["color.severity.critical.fg", "color.severity.critical.bg", 7],
+      ["color.severity.warning.fg", "color.severity.warning.bg", 7],
+      ["color.severity.info.fg", "color.severity.info.bg", 7],
       ["field.required", "color.surface.base", 3],
       ["focus.ring", "color.surface.base", 3],
       ["color.border", "color.surface.base", 3],
     ]);
+  });
+
+  it("ruling 7: info rises to #1a4fa3 (Day, Night) and #d09050 (Red shift), Red shift critical to #ff7070", () => {
+    expect(COLOR_TOKENS["color.severity.info.bg"]).toEqual({
+      day: "#1a4fa3",
+      night: "#1a4fa3",
+      redShift: "#d09050",
+    });
+    expect(COLOR_TOKENS["color.severity.critical.bg"].redShift).toBe("#ff7070");
+  });
+
+  it("every severity pair is at least 7:1 in every mode", () => {
+    for (const mode of THEME_MODES) {
+      for (const s of ["critical", "warning", "info"]) {
+        const fg = tokenValue(`color.severity.${s}.fg` as never, mode);
+        const bg = tokenValue(`color.severity.${s}.bg` as never, mode);
+        expect(contrastRatio(fg, bg), `${s} ${mode}`).toBeGreaterThanOrEqual(7);
+      }
+    }
   });
 
   it("rejects a colour that is not #rrggbb", () => {
