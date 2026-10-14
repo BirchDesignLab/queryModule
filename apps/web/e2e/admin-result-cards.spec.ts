@@ -338,6 +338,12 @@ test("[#605] the cards editor with its preview, the Which card wins table and th
   await expect(pane).toBeVisible();
   await expectNoSeriousAxeViolations(page);
   // The preview's own controls are dense controls too (36 px).
+  expect(
+    await tooShort(36, {
+      "preview source": pane.getByLabel("Result from", { exact: true }),
+      "preview scenario": pane.getByLabel("Scenario", { exact: true }),
+    }),
+  ).toEqual([]);
   await pane.getByRole("radio", { name: "Type values" }).press("Space");
   const typed = pane.getByLabel("Plate", { exact: true });
   await typed.focus();

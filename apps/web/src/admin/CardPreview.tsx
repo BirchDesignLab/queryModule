@@ -199,6 +199,7 @@ export function CardPreview({
             <div>
               <label htmlFor={`${uid}-source`}>{t("admin.cards.preview.source")}</label>{" "}
               <select
+                className="qm-field__input"
                 id={`${uid}-source`}
                 value={sourceId}
                 onChange={(e) => setSource(e.target.value)}
@@ -228,6 +229,7 @@ export function CardPreview({
               <div>
                 <label htmlFor={`${uid}-scenario`}>{t("admin.cards.preview.scenario")}</label>{" "}
                 <select
+                  className="qm-field__input"
                   id={`${uid}-scenario`}
                   value={picked}
                   onChange={(e) => setScenario(e.target.value)}
