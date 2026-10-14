@@ -487,7 +487,7 @@ each violation by JSON pointer and key (`fixture.realPlate`, `fixture.validVin`,
 | `status` | `status` | a scalar with no run of 4 or more digits |
 | `freeText` | `remarks`, `note`, `caution`, `description`, `offense` | text with no digits at all |
 | `container` | `vehicle`, `owner`, `owners`, `subject`, `warrant`, `warrants` | an object or array, checked in turn |
-| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency` | a scalar with no run of 4 or more digits; `year` may be 1901 to 1999 |
+| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency`, `licensenumber` | a scalar with no run of 4 or more digits; `year` may be 1901 to 1999 |
 
 `SYNTHETIC_NAMES` is `TESTERSON`, `SAMPLEWORTH`, `EXAMPLESON`, `SAMPLE`, `TEST`, `TESTER` and
 `EXAMPLE` (compared upper-cased).

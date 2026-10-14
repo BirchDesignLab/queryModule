@@ -300,11 +300,45 @@ describe("status and other keys", () => {
   });
 });
 
+describe("a driver's licence record (#602, design ruling 10)", () => {
+  const dl = (licenseNumber: unknown) => ({
+    status: "VALID",
+    licenseNumber,
+    last: "TESTERSON",
+    first: "SAMPLE",
+    dob: "1901-01-02",
+    state: "TX",
+  });
+
+  it("accepts licenseNumber as a synthetic token with no run of 4 or more digits", () => {
+    expect(check(dl("ZZDLTEST"))).toEqual([]);
+    expect(check(dl("ZZDL-TEST-007"))).toEqual([]);
+  });
+
+  it("rejects a licenseNumber that looks like a real one (4 or more digits in a row)", () => {
+    expect(check(dl("ZZDL12345"))).toEqual([
+      { pointer: `${RESPOND}/licenseNumber`, key: "fixture.freeTextDigits" },
+    ]);
+    expect(check(dl(12345678))).toHaveLength(1);
+  });
+
+  it("matches the key whatever its spelling, and an object under it is still not a leaf", () => {
+    expect(check({ license_number: "ZZDLTEST" })).toEqual([]);
+    expect(check({ licenseNumber: { v: "ZZDLTEST" } })).toEqual([
+      { pointer: `${RESPOND}/licenseNumber`, key: "fixture.unknownKey" },
+    ]);
+  });
+});
+
 describe("FIXTURE_LEAF_KEYS", () => {
   it("lists only normalised keys, each in one kind", () => {
     const all = Object.values(FIXTURE_LEAF_KEYS).flat();
     for (const k of all) expect(normaliseFixtureKey(k)).toBe(k);
     expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("lists licensenumber under `other` (#602)", () => {
+    expect(FIXTURE_LEAF_KEYS.other).toContain("licensenumber");
   });
 });
 
