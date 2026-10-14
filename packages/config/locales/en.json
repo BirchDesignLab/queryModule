@@ -554,6 +554,7 @@
   "admin.cards.preview.matchedDefault": "Matched the default answer",
   "admin.cards.preview.noAnswer": "The mock has no answer for this source and query type.",
   "admin.cards.preview.paused": "Preview paused: the draft does not fit the preview.",
+  "admin.cards.preview.usedCard": "Card used: {name} ({id}).",
   "admin.cards.preview.thisCard": "Card used: {name} ({id}). This card.",
   "admin.cards.preview.otherCard": "Card used: {name} ({id}). Another card.",
   "admin.cards.preview.noCard": "No card fits, so every field shows under its path.",

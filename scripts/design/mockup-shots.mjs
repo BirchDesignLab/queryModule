@@ -23,7 +23,10 @@ const shoot = async (tab, framesId, frame, target, name) => {
   await page.click(`#tab-${tab}`);
   await page.click(`#${framesId} button[data-f="${frame}"]`);
   await page.waitForTimeout(300);
-  await page.locator(target).first().screenshot({ path: `${out}/${name}.png` });
+  await page
+    .locator(target)
+    .first()
+    .screenshot({ path: `${out}/${name}.png` });
   console.log(name);
 };
 

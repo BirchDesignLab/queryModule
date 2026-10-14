@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -98,5 +98,50 @@ describe("the card preview", () => {
     // In the summary, above the Show detail toggle: not hidden in the detail region.
     expect(term.closest(".qm-card__detail")).toBeNull();
     expect(within(card).getAllByText("TESTMAKE").length).toBeGreaterThan(0);
+  });
+
+  // BW3 polish (#642, CRITIC-M1): with a query type's row or Keywords and severity selected there is
+  // no "this card", so the Card used line names the card and says nothing about "another" one.
+  it("on a type row and on Keywords and severity the Card used line has no 'Another card'", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const nav = screen.getByRole("navigation", { name: "Configuration items" });
+    const tree = within(nav).getByRole("tree", { name: "Result cards" });
+    await t.user.click(within(tree).getByRole("treeitem", { name: /^Vehicle cards$/ }));
+    expect(await within(pane()).findByText(/^Card used: .*\(veh-summary\)\.$/)).toBeInTheDocument();
+    expect(within(pane()).queryByText(/Another card/)).toBeNull();
+    expect(within(pane()).queryByText(/This card/)).toBeNull();
+    await t.user.click(within(tree).getByRole("treeitem", { name: /^Keywords and severity/ }));
+    expect(await within(pane()).findByText(/^Card used: .*\(veh-summary\)\.$/)).toBeInTheDocument();
+    expect(within(pane()).queryByText(/Another card/)).toBeNull();
+  });
+
+  // BW3 polish (#642, T10-C3): a card narrowed by a rule wins in pick mode for the scenario whose
+  // own trigger satisfies the rule, and not for the default answer.
+  it("a rule-narrowed card wins in pick mode for the scenario that triggers its rule, not the default", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const store = configDraftStore(t.services).getState();
+    const mappings = (store.doc as { responseMappings: Record<string, unknown>[] })
+      .responseMappings;
+    act(() =>
+      store.setPath(
+        ["responseMappings"],
+        [
+          ...mappings,
+          {
+            id: "veh-plate",
+            queryType: "VEH",
+            when: { field: "plate", op: "eq", value: "ZZ-0001" },
+            elements: [{ kind: "value", path: "plate", labelKey: "field.plate", view: "summary" }],
+          },
+        ],
+      ),
+    );
+    const scenario = within(pane()).getByRole("combobox", { name: "Scenario" });
+    await t.user.selectOptions(scenario, "0:0");
+    expect(await within(pane()).findByText(/\(veh-plate\)\. Another card\.$/)).toBeInTheDocument();
+    await t.user.selectOptions(scenario, "0:d");
+    expect(await within(pane()).findByText(/\(veh-summary\)\. This card\.$/)).toBeInTheDocument();
   });
 });

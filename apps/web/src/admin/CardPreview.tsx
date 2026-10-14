@@ -2,7 +2,6 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { MockFile, SourcePayload } from "@querymodule/core/contracts";
 import { matchMockScenario } from "@querymodule/core/mock";
 import { assessResult, mapResponse } from "@querymodule/core/response";
-import { evaluateForm } from "@querymodule/core/rules";
 import { ResultCard, VisuallyHidden } from "@querymodule/web-ui";
 import { useId, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
@@ -12,6 +11,7 @@ import { asObjects, str } from "./controls.js";
 import type { JsonObject } from "./draft.js";
 import { parseMock } from "./mock-model.js";
 import { previewConfig, useOverlayTranslator } from "./Preview.js";
+import { formMatchOf, triggerInput } from "./preview-match.js";
 import { cardsTypeOf } from "./selection.js";
 
 /**
@@ -122,30 +122,24 @@ export function CardPreview({
       const s = si === null ? undefined : entry.scenarios[si];
       if (s?.behavior !== undefined)
         return { kind: "behavior", status: BEHAVIOR_STATUS[s.behavior], matched: matchedText(si) };
+      // The values the plan would hand part 0 for a query that triggers this scenario: its own
+      // trigger values through the form engine (none for the default), so a rule-narrowed card
+      // wins here as it would for that query.
+      const { values } = formMatchOf(config, code, triggerInput(s?.when ?? {}), Date.now());
       return {
         kind: "respond",
         payload: s?.respond ?? entry.default,
         matched: matchedText(si),
-        values: {},
+        values,
       };
     }
-    const input: Record<string, string> = {};
-    for (const [k, v] of Object.entries(typed)) if (v !== "") input[k] = v;
-    const state = evaluateForm(config, code, input, { now: Date.now() });
-    const typeValues: Record<string, string> = {};
-    for (const f of state.fields)
-      if (f.role === "type" && f.visible && typeof f.effectiveValue === "string")
-        typeValues[f.key] = f.effectiveValue;
-    const match = matchMockScenario(mock, sourceId, {
-      queryType: code,
-      typeValues,
-      values: state.values,
-    });
+    const { typeValues, values } = formMatchOf(config, code, typed, Date.now());
+    const match = matchMockScenario(mock, sourceId, { queryType: code, typeValues, values });
     if (match === null) return { kind: "none" };
     const matched = matchedText(match.scenarioIndex);
     return match.outcome.kind === "behavior"
       ? { kind: "behavior", status: BEHAVIOR_STATUS[match.outcome.behavior], matched }
-      : { kind: "respond", payload: match.outcome.payload, matched, values: state.values };
+      : { kind: "respond", payload: match.outcome.payload, matched, values };
   }, [mock, config, code, mode, picked, sourceId, typed, t]);
 
   const rendered = useMemo(() => {
@@ -166,10 +160,18 @@ export function CardPreview({
       ? null
       : used === null
         ? t("admin.cards.preview.noCard")
-        : t(used === cardIndex ? "admin.cards.preview.thisCard" : "admin.cards.preview.otherCard", {
-            name: cardName(asObjects(doc.responseMappings)[used]),
-            id: str(asObjects(doc.responseMappings)[used]?.id),
-          });
+        : t(
+            // With a type row or Keywords and severity selected there is no "this card" to compare.
+            cardIndex === null
+              ? "admin.cards.preview.usedCard"
+              : used === cardIndex
+                ? "admin.cards.preview.thisCard"
+                : "admin.cards.preview.otherCard",
+            {
+              name: cardName(asObjects(doc.responseMappings)[used]),
+              id: str(asObjects(doc.responseMappings)[used]?.id),
+            },
+          );
 
   return (
     <section className="qm-admin__preview qm-preview" aria-labelledby={headingId}>

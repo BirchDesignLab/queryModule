@@ -1857,6 +1857,21 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+/* A warning is not an error (T12-14): the severity warning token pair as a note, with the icon
+   and the word Warning in the text, so it never rests on colour alone. */
+.qm-mock__warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1) var(--qm-space-2);
+  margin: 0;
+  padding: calc(var(--qm-space-1) / 2) var(--qm-space-2);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-severity-warning-bg);
+  color: var(--qm-color-severity-warning-fg);
+  font-size: var(--qm-type-size-sm);
+}
+
 .qm-mock__scenarios {
   display: flex;
   flex-direction: column;
@@ -1931,7 +1946,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin-block: var(--qm-space-1);
 }
 
-.qm-mock__trigger .qm-mock__error {
+.qm-mock__trigger :where(.qm-mock__error, .qm-mock__warning) {
   grid-column: 1 / -1;
 }
 

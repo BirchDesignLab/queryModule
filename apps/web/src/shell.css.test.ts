@@ -68,6 +68,17 @@ describe("shell.css uses token variables only (spec 6.5)", () => {
   });
 });
 
+describe("admin warnings (BW3 polish, T12-14)", () => {
+  it("a mock warning uses the severity warning token pair, apart from the error style", () => {
+    const start = shellCss.indexOf(".qm-mock__warning {");
+    expect(start, "a .qm-mock__warning rule").toBeGreaterThanOrEqual(0);
+    const warning = shellCss.slice(start, shellCss.indexOf("}", start));
+    expect(warning).toContain("var(--qm-color-severity-warning-bg)");
+    expect(warning).toContain("var(--qm-color-severity-warning-fg)");
+    expect(warning).not.toContain("--qm-field-required");
+  });
+});
+
 describe("literal lengths: only in a query condition, and only a layout constant", () => {
   // A query condition cannot read var(), so its lengths are literals; each must equal a fixed
   // layout constant from the tokens package, which is the one place the breakpoint is written.
