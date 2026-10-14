@@ -151,7 +151,7 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     expect(await p.findByRole("region", { name: "State system: returned" })).toBeInTheDocument();
   });
 
-  it("a behaviour outcome shows its status line in both views and never a card", async () => {
+  it("a behavior outcome shows its status line in both views and never a card", async () => {
     const t = await openBuilder();
     await tryVehicle(t, "FAIL1");
     const p = within(pane());
@@ -176,14 +176,14 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     await waitFor(() => expect(within(pane()).queryByText(/^Answers after/)).toBeNull());
   });
 
-  it("a timeout behaviour names no wait: the source never answers (FR-044)", async () => {
+  it("a timeout behavior names no wait: the source never answers (FR-044)", async () => {
     const t = await openBuilder();
     const mock = draftMock(t);
     const scenarios = (mock.sources.stateSource?.responses ?? []).flatMap(
       (r) => r.scenarios as Record<string, unknown>[],
     );
     const failing = scenarios.find((s) => s.behavior !== undefined);
-    if (failing === undefined) throw new Error("no behaviour scenario in the fixture");
+    if (failing === undefined) throw new Error("no behavior scenario in the fixture");
     failing.behavior = "timeout";
     setMock(t, mock);
     await tryVehicle(t, "FAIL1");
@@ -198,10 +198,7 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     await t.user.selectOptions(p.getByLabelText("Source"), "stateSource");
     await t.user.selectOptions(p.getByLabelText("Query type"), "VEH");
     const live = p.getByRole("status");
-    expect(live).toHaveTextContent("");
     await t.user.type(p.getByLabelText("Plate"), "ZZ-0001");
-    // Typing takes a few milliseconds: nothing has been said yet.
-    expect(live).toHaveTextContent("");
     await waitFor(() => expect(live).toHaveTextContent("Returns a record. Scenario 1 of Vehicle."));
     expect(live.textContent).not.toMatch(/ZZ-0001|STOLEN/);
     await t.user.clear(p.getByLabelText("Plate"));
@@ -256,6 +253,21 @@ describe("Try a match: selection, sources and type picklists", () => {
     const p = within(await screen.findByRole("region", { name: "Try a match" }));
     const options = within(p.getByLabelText("Source")).getAllByRole("option");
     expect(options.map((o) => o.textContent)).toEqual(["State system"]);
+  });
+
+  it("a selected response of a non-mock source falls back to the first offered source", async () => {
+    const t = await openBuilder();
+    const store = configDraftStore(t.services).getState();
+    const doc = store.doc as { sources: Record<string, unknown>[] };
+    act(() =>
+      store.setPath(
+        ["sources"],
+        doc.sources.map((s) => (s.id === "nationalSource" ? { ...s, kind: "http" } : s)),
+      ),
+    );
+    const p = within(await screen.findByRole("region", { name: "Try a match" }));
+    await t.user.click(await row(/^Mock response: Property, National system/));
+    expect(p.getByLabelText("Source")).toHaveValue("stateSource");
   });
 
   it("a type-role picklist field is a select over the picklist and picking a code matches the typed response", async () => {

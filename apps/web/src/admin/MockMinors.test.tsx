@@ -230,7 +230,7 @@ describe("orphaned response and blank triggers", () => {
 
   // BW3 polish (#642, T12-14): a warning is not an error. The blank-trigger note takes the warning
   // class (the severity warning token pair in CSS), leads with the word Warning and keeps its icon,
-  // so it never rests on colour alone.
+  // so it never rests on color alone.
   it("the blank-trigger warning has the warning class, not the error class, and says Warning", async () => {
     const t = await openBuilder();
     await selectRow(t.user, /^Mock response: Vehicle, State system VEH/);

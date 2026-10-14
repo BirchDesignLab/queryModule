@@ -5,7 +5,7 @@ import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
 // BW3 polish (#642, item 12): screenshots of the result cards builder for a visual comparison with
-// the v5 mockup frames. Not a test of behaviour: it is skipped unless SHOTS_DIR is set, and it only
+// the v5 mockup frames. Not a test of behavior: it is skipped unless SHOTS_DIR is set, and it only
 // looks (opening rows and typing into the previews' own state changes nothing in the draft; nothing
 // is published). Run:
 //   SHOTS_DIR=<dir> pnpm e2e visual-shots.spec.ts

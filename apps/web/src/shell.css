@@ -1824,7 +1824,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-wins__table th:nth-child(4) {
-  inline-size: 26%;
+  inline-size: 25%;
 }
 
 /* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
@@ -1911,7 +1911,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 /* A warning is not an error (T12-14): the severity warning token pair as a note, with the icon
-   and the word Warning in the text, so it never rests on colour alone. */
+   and the word Warning in the text, so it never rests on color alone. */
 .qm-mock__warning {
   display: flex;
   flex-wrap: wrap;

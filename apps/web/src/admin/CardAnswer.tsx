@@ -8,7 +8,7 @@ import { useMemo } from "react";
 /**
  * The one way the builder draws an answer as a user sees it (ADR-0011 decision 4; BW3 polish,
  * CRITIC-M3): the card preview and Try a match both render the production ResultCard from the
- * draft's cards through `mapResponse` and `assessResult`, and a behaviour outcome as the status
+ * draft's cards through `mapResponse` and `assessResult`, and a behavior outcome as the status
  * line. Shared here so the two cannot drift. Configuration and mock content only: nothing typed is
  * kept, logged or announced.
  */
@@ -20,7 +20,7 @@ export const PERSONA_KEY: Readonly<Record<Persona, string>> = {
   officer: "mobileUnit",
 };
 
-/** A mock behaviour as the sourceStatus status key it shows under. */
+/** A mock behavior as the sourceStatus status key it shows under. */
 export const BEHAVIOR_STATUS = {
   timeout: "timedOut",
   error: "failed",
@@ -88,7 +88,7 @@ export function RenderedCard({
   );
 }
 
-/** A behaviour outcome (error, timeout, credentials rejected): the status line, never a card. */
+/** A behavior outcome (error, timeout, credentials rejected): the status line, never a card. */
 export function BehaviorLine({
   source,
   status,
