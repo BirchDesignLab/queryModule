@@ -395,7 +395,7 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
 });
 
 test.describe("B3 dispatcher requests list beside the panel (1440x900)", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  test.use({ viewport: { width: 1440, height: 900 }, emptyQueryList: true });
 
   for (const mode of MODES) {
     test(`${mode}: two panes, rows with text status, quick access on one row, the copy button 36 px, no overflow`, async ({

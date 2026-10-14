@@ -1,5 +1,6 @@
 import { formatAckTime, shortReference } from "@querymodule/web-ui";
 import { useEffect, useRef, useState } from "react";
+import { usePersonaLayout } from "../app/AppChrome.js";
 import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
@@ -27,6 +28,7 @@ export function AckToast() {
   const { requests, announcer } = useServices();
   const config = useCachedConfig();
   const t = useT();
+  const layout = usePersonaLayout();
   const [toast, setToast] = useState<Toast | null>(null);
 
   useEffect(() => {
@@ -76,7 +78,9 @@ export function AckToast() {
   const name = toast.typed === "" ? `${typeLabel} ${reference}` : `${typeLabel} ${toast.typed}`;
   return (
     <div
-      className="qm-toast"
+      // The toast sits beside the page, not inside it: the officer layout class goes on it so its
+      // buttons keep the 48 px touch floor (spec 6.3, UX-004).
+      className={layout === "mobileUnit" ? "qm-toast qm-layout--mobile-unit" : "qm-toast"}
       role="status"
       data-testid="ack-toast"
       onPointerEnter={() => setHovered(true)}

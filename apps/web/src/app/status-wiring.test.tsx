@@ -163,3 +163,46 @@ describe("FR-064 spec 6.6 a critical result is announced assertively at once", (
     expect(screen.getByTestId("announcer-polite").textContent).not.toContain("TESTMAKE");
   });
 });
+
+describe("FR-064, FR-065 spec 6.6 rows loaded from the list are history, never announced", () => {
+  it("a list load followed by detail fetches speaks nothing, critical payloads included", async () => {
+    const stolen = { status: "STOLEN", make: "ZZ-TESTMAKE" };
+    const source = (sourceId: string) => ({ sourceId, status: "returned" });
+    server.use(
+      http.get(`${API}/api/v1/queries`, () =>
+        HttpResponse.json({
+          requests: [detail202([source("stateSource"), source("nationalSource")])],
+          nextCursor: null,
+        }),
+      ),
+      http.get(`${API}/api/v1/queries/:id`, () =>
+        HttpResponse.json(
+          detail202([
+            { ...source("stateSource"), payload: stolen },
+            { ...source("nationalSource"), payload: stolen },
+          ]),
+        ),
+      ),
+    );
+    const driver = new FeedDriver();
+    const t = renderRoot({ createSocket: driver.createSocket });
+    const summaries: unknown[] = [];
+    const arrivals: unknown[] = [];
+    t.services.requests.getState().onStatusSummary((a) => summaries.push(a));
+    t.services.requests.getState().onResult((a) => arrivals.push(a));
+    await t.user.type(await screen.findByLabelText(/Email/), TEST_USER.email);
+    await t.user.type(screen.getByLabelText(/Password/), TEST_PASSWORD);
+    await t.user.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Query Module" });
+    const payload = () => {
+      const row = t.services.requests.getState().items[0];
+      return row?.status === "acknowledged" ? row.parts[0]?.sources[0]?.result?.payload : undefined;
+    };
+    await waitFor(() => expect(payload()).toEqual(stolen), { timeout: 4000 });
+    // Past the 1500 ms coalescing window, so a summary would have fired by now.
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    expect(arrivals).toEqual([]);
+    expect(summaries).toEqual([]);
+    expect(t.services.announcer.current()).toEqual({ polite: null, assertive: null });
+  });
+});

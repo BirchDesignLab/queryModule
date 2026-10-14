@@ -653,6 +653,19 @@ h1 {
   color: var(--qm-color-text-body);
 }
 
+/*
+ * On a narrow or short viewport a fixed toast would sit over page controls (WCAG 2.4.11, focus not
+ * obscured; hardening.spec). There it joins the page flow below the content instead, still polite,
+ * dismissible and paused on hover or focus; the request's entry holds the lasting record.
+ */
+@media (max-width: 64rem), (max-height: 40rem) {
+  .qm-toast {
+    position: static;
+    margin: var(--qm-space-4);
+    max-inline-size: none;
+  }
+}
+
 .qm-request--sending {
   border-style: dashed;
 }

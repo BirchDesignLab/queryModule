@@ -343,6 +343,10 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
   // Per correlation ID: the open coalescing window, and events whose 202 has not landed yet.
   const windows = new Map<string, unknown>();
   const held = new Map<string, SourceStatusEvent[]>();
+  // Correlation IDs of rows the list load added: history, so their detail fetches fill payloads
+  // without a summary or a critical announcement (spec 6.6, FR-064). A live event or a live 202
+  // for the request ends its history.
+  const history = new Set<string>();
   const clearWindows = (): void => {
     for (const timer of windows.values()) timers.clearTimeout(timer);
     windows.clear();
@@ -494,6 +498,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
               }
               // A placeholder the detail fetch built for this request (spec 6.7) hands over what it learned.
               if (placeholder?.status === "acknowledged") {
+                history.delete(outcome.response.correlationId);
                 const merged = overlay(filled, placeholder.parts);
                 filled = merged.parts;
                 if (merged.moved) pendingAnnouncement = outcome.response.correlationId;
@@ -544,6 +549,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
         }
         const parts = applyToParts(entry.parts, event);
         if (parts === null) return;
+        history.delete(event.correlationId);
         set((s) => ({
           items: s.items.map(
             (item): RequestEntry => (item.id === entry.id ? { ...entry, parts } : item),
@@ -574,6 +580,8 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
               item.id === entry.id ? { ...entry, parts: merged.parts } : item,
           ),
         }));
+        // History: the payload fills quietly, nothing is spoken for an old request.
+        if (history.has(detail.correlationId)) return;
         const landed = arrivals(detail.correlationId, entry.parts, merged.parts);
         // A payload that lands after the window closed (a slow fetch) still earns a summary, so its
         // severity keyword is spoken politely (spec 6.6). An open window already covers it.
@@ -604,6 +612,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
             }
             const row = placeholderRow(request);
             if (row === undefined) continue;
+            history.add(request.correlationId);
             // By time: above the first row that began earlier. The rows already shown stay as they are.
             const at = items.findIndex((item) => item.sentAt < row.sentAt);
             items = at === -1 ? [...items, row] : [...items.slice(0, at), row, ...items.slice(at)];
@@ -637,6 +646,7 @@ export function createRequestsStore(options: { timers?: Timers } = {}): Requests
       reset() {
         clearWindows();
         held.clear();
+        history.clear();
         set({ items: [] });
       },
     };

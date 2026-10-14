@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { seededUser, signIn } from "./helpers.js";
 
 // A6 (FR-043, FR-064, FR-065; spec 6.2, 10.2): a submit is acknowledged with its correlation ID and
 // ack time, the entry carries both, the ID is copyable, and a polite announcement says when the
@@ -16,11 +16,37 @@ async function typePlate(page: Page, plate: string): Promise<void> {
   await page.keyboard.type(plate);
 }
 
+/**
+ * Records every polite announcement, not just the region's current text: the announcer keeps only
+ * the latest message, so a later "Reference copied." would hide the results summary on a slow run.
+ */
+async function recordPolite(page: Page): Promise<() => Promise<string[]>> {
+  await page.addInitScript(() => {
+    const log: string[] = [];
+    (window as unknown as { __politeLog: string[] }).__politeLog = log;
+    const watch = () => {
+      const region = document.querySelector('[data-testid="announcer-polite"]');
+      if (region === null) {
+        requestAnimationFrame(watch);
+        return;
+      }
+      new MutationObserver(() => {
+        const text = region.textContent ?? "";
+        if (text !== "" && log[log.length - 1] !== text) log.push(text);
+      }).observe(region, { childList: true, characterData: true, subtree: true });
+    };
+    watch();
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as { __politeLog: string[] }).__politeLog ?? []);
+}
+
 test("[A6] submit is acknowledged with its correlation ID and ack time, and results are announced", async ({
   page,
   context,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const spoken = await recordPolite(page);
   await signIn(page);
   await typePlate(page, "ZZ-0001");
   const posted = page.waitForResponse(
@@ -69,8 +95,35 @@ test("[A6] submit is acknowledged with its correlation ID and ack time, and resu
   await expect(polite).toContainText("Reference copied.");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(correlationId);
 
-  // The results return: a coalesced polite summary naming the request, no payload content.
-  await expect(polite).toContainText("Vehicle ZZ-0001: 2 of 2 sources done.", { timeout: 8000 });
-  await expect(polite).not.toContainText("TESTMAKE");
+  // The results return: a coalesced polite summary naming the request, no payload content. Read
+  // from the log of everything spoken, so the copy announcements above cannot hide it.
+  await expect
+    .poll(
+      async () => (await spoken()).some((m) => m.includes("Vehicle ZZ-0001: 2 of 2 sources done.")),
+      {
+        timeout: 8000,
+      },
+    )
+    .toBe(true);
+  expect((await spoken()).join(" ")).not.toContain("TESTMAKE");
   await expectNoSeriousAxeViolations(page);
+});
+
+test.describe("officer layout", () => {
+  test.use({ viewport: { width: 1024, height: 768 } });
+
+  test("[A6] the ack toast's Copy and Dismiss are at least 48 px tall for the officer (spec 6.3, UX-004)", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await signIn(page, seededUser("officer@example.test"));
+    await typePlate(page, "ZZ-0001");
+    await page.keyboard.press("Enter");
+    const toast = page.getByTestId("ack-toast");
+    await expect(toast).toBeVisible();
+    for (const name of [/^Copy acknowledgment reference/, /^Dismiss acknowledgment/]) {
+      const box = await toast.getByRole("button", { name }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(48);
+    }
+  });
 });

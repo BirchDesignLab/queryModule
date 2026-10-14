@@ -6,6 +6,9 @@ import { seededUser, signIn, signOutFromHeader } from "./helpers.js";
 // officer's last request under the form. Submit stops at the 202 acknowledgment; nothing here
 // reaches any state or national system, and there are no responses yet (M2).
 
+// The e2e database is shared, and sign-in loads history: these scenarios start from an empty list.
+test.use({ emptyQueryList: true });
+
 const QUERIES = "**/api/v1/queries";
 
 async function panelReady(page: Page): Promise<void> {

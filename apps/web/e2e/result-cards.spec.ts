@@ -9,7 +9,11 @@ import { chooseTheme, seededUser, signIn } from "./helpers.js";
 // officer layout is checked at 1024x768 and the colour contrast of the badge, the keyword mark and
 // the severity edge in the two dark themes (Night and Red shift). Synthetic data only (spec 5.4).
 
-test.use({ reducedMotion: "reduce", viewport: { width: 1024, height: 768 } });
+test.use({
+  reducedMotion: "reduce",
+  viewport: { width: 1024, height: 768 },
+  emptyQueryList: true,
+});
 
 async function runStolenPlate(page: Page): Promise<void> {
   await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();

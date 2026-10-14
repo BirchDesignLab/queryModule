@@ -11,8 +11,9 @@ import { AckToast } from "./AckToast.js";
 
 const ACK_AT = Date.UTC(2026, 8, 29, 17, 4, 5);
 
-function setup() {
+function setup(persona: string | null = null) {
   const services = testServices();
+  services.preferences.getState().setPersonaOverride(persona);
   services.authStore.getState().setSignedIn(TEST_USER);
   services.queryClient.setQueryData(["config"], CLIENT_CONFIG);
   const view = renderRoutes([{ path: "/", element: <AckToast /> }], { services });
@@ -40,6 +41,20 @@ afterEach(() => {
 });
 
 describe("A6 the ack toast", () => {
+  it("takes the officer touch layout (48 px targets, spec 6.3, UX-004) only for the mobile-unit persona", async () => {
+    const officer = setup("mobileUnit");
+    officer.ack(officer.send({ plate: "ZZ-0001" }));
+    expect(
+      (await screen.findByTestId("ack-toast")).classList.contains("qm-layout--mobile-unit"),
+    ).toBe(true);
+    officer.unmount();
+    const dispatcher = setup();
+    dispatcher.ack(dispatcher.send({ plate: "ZZ-0001" }));
+    expect(
+      (await screen.findByTestId("ack-toast")).classList.contains("qm-layout--mobile-unit"),
+    ).toBe(false);
+  });
+
   it("shows nothing until a row is acknowledged", () => {
     const { send } = setup();
     send({ plate: "ZZ-0001" });

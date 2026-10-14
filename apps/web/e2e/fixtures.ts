@@ -3,7 +3,36 @@ import { test as base, expect, type Page } from "@playwright/test";
 import { shouldRunAxe } from "./axe-policy.js";
 
 /** Every scenario fails on any CSP violation (spec 9.3 step 12, from M0). */
-export const test = base.extend<{ cspViolations: string[]; axeAfterEach: undefined }>({
+export const test = base.extend<{
+  cspViolations: string[];
+  axeAfterEach: undefined;
+  emptyQueryList: boolean;
+  applyEmptyQueryList: undefined;
+}>({
+  /**
+   * The e2e database is shared by every scenario of a run, and sign-in loads the user's request
+   * history (spec 6.8, Q1). A scenario that starts from "no requests yet" or counts rows would see
+   * the earlier scenarios' requests, so it opts in with `test.use({ emptyQueryList: true })` and
+   * the list answers empty. Detail fetches and the feed stay real. Opt-in only: a route on the
+   * page changes load timing for every scenario, and a2's Tab walk starts from the on-load focus.
+   */
+  emptyQueryList: [false, { option: true }],
+  applyEmptyQueryList: [
+    async ({ page, emptyQueryList }, use) => {
+      if (emptyQueryList) {
+        await page.route(
+          (url) => url.pathname === "/api/v1/queries",
+          async (route) => {
+            if (route.request().method() !== "GET") return route.fallback();
+            return route.fulfill({ json: { requests: [], nextCursor: null } });
+          },
+        );
+      }
+      await use(undefined);
+    },
+    { auto: true },
+  ],
+
   /**
    * Axe runs after every scenario that passed its own assertions, on the page it ended on (spec
    * 10.6, 12.7 M1 row). Opt out with `test.info().annotations.push({ type: "axe-skip", description:
