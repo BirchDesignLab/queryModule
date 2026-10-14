@@ -183,6 +183,50 @@ export function winningCard(site: CardsSite, ctx: MapContext, now?: number): num
   return mapResponse(site, ctx, {}, now).mappingIndex;
 }
 
+export interface CardWin {
+  /** The winning card's index in `responseMappings`, or null: no card fits. */
+  winner: number | null;
+  /** What gave the winner its score, in mapResponse's order: rule +4, source +2, persona +1. */
+  reasons: readonly ("rule" | "source" | "persona")[];
+  /** A card of the type with the same score sits later in the list: the winner is first by order. */
+  byOrder: boolean;
+  /** How many cards of the type fit this context at all. */
+  fitting: number;
+}
+
+const SCORE = { rule: 4, source: 2, persona: 1 } as const;
+
+/**
+ * Which card wins for one context and why (design "Which card wins"). The winner is mapResponse's
+ * own pick (`winningCard`); a card "fits" when it would win alone, so the rule for `when` is the
+ * core's too. The score is the sum of the winner's narrowings (rule +4, source +2, persona +1).
+ */
+export function cardWins(site: CardsSite, ctx: MapContext, now?: number): CardWin {
+  const fits = (m: ResponseMapping) =>
+    winningCard({ ...site, responseMappings: [m] }, ctx, now) !== null;
+  const scoreOf = (m: ResponseMapping) =>
+    (m.when === undefined ? 0 : SCORE.rule) +
+    (m.sourceId === undefined ? 0 : SCORE.source) +
+    (m.persona === undefined ? 0 : SCORE.persona);
+  const candidates = site.responseMappings
+    .map((m, index) => ({ m, index }))
+    .filter(({ m }) => m.queryType === ctx.queryType && fits(m));
+  const winner = winningCard(site, ctx, now);
+  const won = winner === null ? undefined : site.responseMappings[winner];
+  if (winner === null || won === undefined)
+    return { winner: null, reasons: [], byOrder: false, fitting: candidates.length };
+  return {
+    winner,
+    reasons: [
+      ...(won.when === undefined ? [] : (["rule"] as const)),
+      ...(won.sourceId === undefined ? [] : (["source"] as const)),
+      ...(won.persona === undefined ? [] : (["persona"] as const)),
+    ],
+    byOrder: candidates.some(({ m, index }) => index > winner && scoreOf(m) === scoreOf(won)),
+    fitting: candidates.length,
+  };
+}
+
 const hasKeyword = (site: CardsSite, index: number): boolean =>
   Number.isInteger(index) && index >= 0 && index < site.keywords.length;
 

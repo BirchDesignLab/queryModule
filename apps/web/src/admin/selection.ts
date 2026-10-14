@@ -32,6 +32,27 @@ export const cardsTypeOf = (pointer: string): string | null =>
     ? decodeURIComponent(pointer.slice(CARDS_TYPE_PREFIX.length))
     : null;
 
+export const objectsOf = (v: unknown): Record<string, unknown>[] =>
+  Array.isArray(v)
+    ? v.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null)
+    : [];
+
+/**
+ * The cards row a card that is gone belongs on (Task 10 round 1, C2): the type of the card now at
+ * its index (the last card when the index is past the end), else the first query type's row. The
+ * bare `/responseMappings` list is not an item the editor can show.
+ */
+export function cardsFallback(
+  doc: Readonly<Record<string, unknown>>,
+  index: number | null,
+): string | null {
+  const cards = objectsOf(doc.responseMappings);
+  const near = cards[Math.min(index ?? 0, cards.length - 1)];
+  const code =
+    typeof near?.queryType === "string" ? near.queryType : objectsOf(doc.queryTypes)[0]?.code;
+  return typeof code === "string" ? cardsTypePointer(code) : null;
+}
+
 /** Top-level keys that are not settings a user edits: kept out of the tree and the form. */
 export const HIDDEN_KEYS: ReadonlySet<string> = new Set(["schemaVersion"]);
 

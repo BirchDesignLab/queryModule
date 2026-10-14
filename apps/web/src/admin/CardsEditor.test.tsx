@@ -188,6 +188,121 @@ describe("issues", () => {
   });
 });
 
+describe("issues inside a card (round 1, C1)", () => {
+  it("shows a new row's empty-path error at the row, and Go to the first issue opens it and focuses the path", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add row" }));
+    const path = await within(editor()).findByRole("combobox", { name: "Path" });
+    await waitFor(() => expect(path).toHaveAttribute("aria-describedby"));
+    const message = editor().querySelector<HTMLElement>('[data-issue-pointer$="/path"]');
+    expect(message).not.toBeNull();
+    expect(message).toBeVisible();
+    // Close the row, then use the issue button: the row opens and the path takes focus.
+    await t.user.click(within(editor()).getByRole("button", { name: /^Close/ }));
+    expect(within(editor()).queryByRole("combobox", { name: "Path" })).toBeNull();
+    await t.user.click(
+      await screen.findByRole("button", { name: /^\d+ errors?.*Go to the first issue\.$/ }),
+    );
+    const again = await within(editor()).findByRole("combobox", { name: "Path" });
+    await waitFor(() => expect(again).toHaveFocus());
+    expect(
+      document.getElementById(again.getAttribute("aria-describedby") ?? "")?.textContent ?? "",
+    ).not.toBe("");
+  });
+
+  it("shows an issue of a table column at the column's own control", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add row" }));
+    await within(editor()).findByRole("combobox", { name: "Path" });
+    await t.user.click(within(editor()).getByRole("radio", { name: "Table" }));
+    const column = await within(editor()).findByRole("textbox", { name: "Path of column 1" });
+    await waitFor(() => expect(column).toHaveAttribute("aria-describedby"));
+    expect(editor().querySelector('[data-issue-pointer$="/columns/0/path"]')).not.toBeNull();
+  });
+});
+
+describe("a selection the cards no longer have (round 1, C2)", () => {
+  it("shows the type's cards after Add card is undone, never a blank editor", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
+    await t.user.click(screen.getByRole("button", { name: /^Undo/ }));
+    expect(
+      await within(editor()).findByRole("heading", {
+        level: 3,
+        name: /^Vehicle cards|veh-summary/,
+      }),
+    ).toBeInTheDocument();
+    expect(cards(t).map((c) => c.id)).not.toContain("veh-card");
+  });
+});
+
+describe("the approved card editor items (round 1, S1)", () => {
+  it("lists which card wins for each source and persona, tagging this card", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const table = await within(editor()).findByRole("table", { name: "Which card wins" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    for (const row of rows) {
+      expect(within(row).getByText("This card")).toBeInTheDocument();
+      expect(within(row).getByText(/only card that fits/)).toBeInTheDocument();
+    }
+  });
+
+  it("names the score when a second card narrows by source", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
+    const source = within(editor()).getByRole("combobox", { name: "Source" });
+    const first = within(source).getAllByRole("option")[1] as HTMLOptionElement;
+    await t.user.selectOptions(source, first.value);
+    const table = await within(editor()).findByRole("table", { name: "Which card wins" });
+    expect(within(table).getAllByText(/source \+2/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("makes the card key read-only once the live config has it, and shows the pointer", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByText("Advanced settings"));
+    expect(within(editor()).getByRole("textbox", { name: "Card key" })).toHaveAttribute("readonly");
+    const advanced = within(editor())
+      .getByText("Advanced settings")
+      .closest("details") as HTMLElement;
+    expect(within(advanced).getByText("/responseMappings/0")).toBeInTheDocument();
+    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
+    await t.user.click(within(editor()).getByText("Advanced settings"));
+    expect(within(editor()).getByRole("textbox", { name: "Card key" })).not.toHaveAttribute(
+      "readonly",
+    );
+  });
+
+  it("offers Template, and a Format for each table column", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add row" }));
+    const format = await within(editor()).findByRole("combobox", { name: "Format" });
+    await t.user.selectOptions(format, "Template");
+    const template = await within(editor()).findByRole("textbox", { name: "Template" });
+    await t.user.clear(template);
+    await t.user.type(template, "Plate {{value}");
+    const veh = cards(t)[0] as unknown as { elements: Record<string, unknown>[] };
+    expect(veh.elements.at(-1)?.format).toEqual({ type: "template", template: "Plate {value}" });
+    await t.user.click(within(editor()).getByRole("radio", { name: "Table" }));
+    const col = await within(editor()).findByRole("combobox", { name: "Format of column 1" });
+    await t.user.selectOptions(col, "Upper case");
+    const table = (
+      cards(t)[0] as unknown as { elements: { columns?: { format?: unknown }[] }[] }
+    ).elements.at(-1);
+    expect(table?.columns?.[0]?.format).toEqual({ type: "upper" });
+  });
+});
+
 describe("Review lines", () => {
   it("the Changes view lists the added row under Result cards by card id", async () => {
     const t = await openBuilder();

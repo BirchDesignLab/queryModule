@@ -1,7 +1,13 @@
 import type { Translator } from "@querymodule/client";
 import { type ConfigChange, type DiffSegment, VALUE_IDENTITY } from "@querymodule/core/config";
 import type { JsonObject } from "./draft.js";
-import { defaultPointer, HIDDEN_KEYS, LABELS_ITEM } from "./selection.js";
+import {
+  cardsFallback,
+  cardsTypePointer,
+  defaultPointer,
+  HIDDEN_KEYS,
+  LABELS_ITEM,
+} from "./selection.js";
 
 /**
  * The Changes view's model (item 4): the core diff of the live config and the draft, as
@@ -126,6 +132,11 @@ export function targetOf(pointer: string, doc: Obj): string | null {
     const cards = doc.responseMappings;
     if (Array.isArray(cards) && Number(parts[1]) < cards.length)
       return `/responseMappings/${parts[1]}`;
+  }
+  // A removed card, or the bare list, has no card to open: a type's cards row does (round 1, C2).
+  if (top === "responseMappings") {
+    const row = cardsFallback(doc, null);
+    if (row !== null) return row;
   }
   if (top !== "queryTypes")
     return top in doc && !HIDDEN_KEYS.has(top) ? `/${top}` : defaultPointer(doc);
@@ -384,6 +395,13 @@ export function buildChangeGroups(
         .find((x) => x.code === code);
       const typeName = (type === undefined ? "" : deps.labelText(type.labelKey)) || code;
       const g = group("cards", t("admin.cards.review.title"), "responseMappings");
+      // A removed card has no card to open: its own type's cards row does (round 1, C2).
+      const cardsTarget =
+        target.startsWith("/responseMappings/") || code === "" ? target : cardsTypePointer(code);
+      const cardEntry = (what: string, keyText: string, withValues = true): ChangeEntry => ({
+        ...entry(what, keyText, withValues),
+        target: cardsTarget,
+      });
       const sect = section(
         g,
         `card:${cardId === "" ? `new:${segText(ref)}` : cardId}`,
@@ -398,7 +416,7 @@ export function buildChangeGroups(
       if (inner.length === 0) {
         const rows = objsOf(card?.elements).length;
         sect.entries.push({
-          ...entry(t("admin.cards.review.cardItem"), cardId, false),
+          ...cardEntry(t("admin.cards.review.cardItem"), cardId, false),
           ...(kind === "added" || kind === "removed"
             ? {
                 [kind === "added" ? "after" : "before"]: {
@@ -409,7 +427,7 @@ export function buildChangeGroups(
         });
       } else if (rowRef === undefined || inner.length < 2) {
         sect.entries.push(
-          entry(
+          cardEntry(
             kind === "moved" ? t("admin.diff.order") : plain(inner),
             [cardId, ...inner.map(segText)].join(" "),
             kind !== "moved",
@@ -429,7 +447,7 @@ export function buildChangeGroups(
             ? { text: t(`admin.cards.view.${view}`) }
             : undefined;
         sect.entries.push({
-          ...entry(
+          ...cardEntry(
             rest.length === 0 ? rowName : `${rowName} › ${plain(rest)}`,
             [cardId, ...inner.map(segText)].join(" "),
             rest.length > 0,

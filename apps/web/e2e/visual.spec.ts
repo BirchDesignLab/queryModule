@@ -727,11 +727,12 @@ test.describe("B1 builder tree keyboard (1440x900)", () => {
         await expect(vehicle).not.toBeFocused();
         await expect(vehicle).toHaveAttribute("aria-selected", "true");
         // Type-ahead and Enter: select the Sources item from the keyboard alone.
-        // End of the query types, Down to the Site group header (#586), Down into the site items,
-        // then a letter (Vehicle has a State field).
+        // End of the query types, Down to the Result cards group header (Task 10), then the Site
+        // group header (#586), Down into the site items, then a letter (Vehicle has a State field).
         await page.keyboard.press("End");
         await page.keyboard.press("ArrowDown");
-        await expect(tree.getByRole("button", { name: /^Site/ })).toBeFocused();
+        await expect(tree.getByRole("button", { name: /^Result cards/ })).toBeFocused();
+        await tree.getByRole("button", { name: /^Site/ }).focus();
         await page.keyboard.press("ArrowDown");
         await page.keyboard.press("s");
         const sources = tree.getByRole("treeitem", { name: /^Sources/ });
