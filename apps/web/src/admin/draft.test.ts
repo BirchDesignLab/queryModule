@@ -46,6 +46,16 @@ describe("config draft (Task 31 part 1, BR-001, FR-060)", () => {
     if (built.ok) expect(built.config.sources.every((s) => s.kind === "mock")).toBe(true);
   });
 
+  it("#572 buildSiteConfig keeps the server's source kind when the draft carries one", () => {
+    const doc = docFromClient(CLIENT_CONFIG);
+    const sources = (doc.sources as Record<string, unknown>[]).map((s, i) =>
+      i === 0 ? { ...s, kind: "stateSystem" } : s,
+    );
+    const built = buildSiteConfig({ ...doc, sources });
+    expect(built.ok).toBe(true);
+    if (built.ok) expect(built.config.sources.map((s) => s.kind)).toEqual(["stateSystem", "mock"]);
+  });
+
   it("validateDraft runs validateSiteConfig with the bundle plus the draft overlay", () => {
     const doc = setAtPath(docFromClient(CLIENT_CONFIG), ["site", "labelKey"], "site.nope");
     const bundle = flattenBundle(EN_BUNDLE);

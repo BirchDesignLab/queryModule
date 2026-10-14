@@ -356,7 +356,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
               )}
             </div>
             {shown.pointer !== null && mockPointer.is(shown.pointer) ? (
-              <MockPane />
+              <MockPane doc={doc} selected={shown.pointer} />
             ) : shown.pointer !== null &&
               (topItem(shown.pointer) === "responseMappings" ||
                 topItem(shown.pointer) === "keywords") ? (

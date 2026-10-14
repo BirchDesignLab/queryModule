@@ -4,7 +4,7 @@ import { RAW_MOCK, RAW_SITE } from "../test/msw-server.js";
 import { editorOf } from "./admin-config.js";
 import type { DraftChecks } from "./checks.js";
 import { groupByControl } from "./issues.js";
-import { mockEditorIssues, withMockIssues } from "./mock-checks.js";
+import { mockEditorIssues, mockIssuesOf, withMockIssues } from "./mock-checks.js";
 import { addScenario, scaffoldResponse, setResponseDefault, updateScenario } from "./mock-model.js";
 
 // Task 3b (#550, CFG-2): the mock's diagnostics join the builder's issues, at the server's
@@ -157,5 +157,53 @@ describe("withMockIssues", () => {
     expect(out.issues).toHaveLength(2);
     expect(out.groups.get("/terminal/delimiter")).toEqual([other]);
     expect([...out.groups.keys()].some((k) => k.startsWith("/mock"))).toBe(false);
+  });
+});
+
+describe("#572 Q4 as ruled: only a scenario with no non-empty trigger value is blocked", () => {
+  it("a blank value beside a filled one is no error", () => {
+    const m = addScenario(mock, "stateSource", 0, {
+      when: { plate: "ZZ-0007", state: "" },
+      behavior: "error",
+    });
+    expect(mockEditorIssues(m)).toEqual([]);
+  });
+
+  it("every value blank flags each blank field", () => {
+    const m = addScenario(mock, "stateSource", 0, {
+      when: { plate: "", state: " " },
+      behavior: "error",
+    });
+    expect(mockEditorIssues(m).map((i) => i.pointer.split("/").pop())).toEqual(["plate", "state"]);
+  });
+});
+
+describe("#572 (#577) orphaned responses", () => {
+  it("warns on a response whose query type no type of the site has, at the response", () => {
+    const m = MockFileSchema.parse({
+      ...mock,
+      sources: {
+        ...mock.sources,
+        stateSource: {
+          ...mock.sources.stateSource,
+          responses: [...(mock.sources.stateSource?.responses ?? []), scaffoldResponse("GONE")],
+        },
+      },
+    });
+    const at = (mock.sources.stateSource?.responses.length ?? 0) as number;
+    const found = mockIssuesOf(doc, m as unknown as Record<string, unknown> as never).filter(
+      (i) => i.key === "admin.mock.orphaned",
+    );
+    expect(found).toEqual([
+      {
+        level: "warning",
+        pointer: `/mock/sources/stateSource/responses/${at}`,
+        key: "admin.mock.orphaned",
+        params: { queryType: "GONE" },
+      },
+    ]);
+    expect(mockIssuesOf(doc, RAW_MOCK as never).some((i) => i.key === "admin.mock.orphaned")).toBe(
+      false,
+    );
   });
 });

@@ -73,8 +73,9 @@ export const toPointer = (path: readonly PropertyKey[]): string =>
   path.map((s) => `/${String(s).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
 
 /**
- * Rebuilds a SiteConfig from the client view: server-only parts take schema defaults and
- * sources get kind "mock". Section paths match the real config, so pointers carry over.
+ * Rebuilds a SiteConfig from the client view: server-only parts take schema defaults and a source
+ * keeps the server's kind when the draft carries one, else gets "mock" (#572). Section paths match
+ * the real config, so pointers carry over.
  */
 export function buildSiteConfig(doc: JsonObject): BuildResult {
   const sources = Array.isArray(doc.sources) ? doc.sources : [];
@@ -88,7 +89,13 @@ export function buildSiteConfig(doc: JsonObject): BuildResult {
       ...delegation,
       purposes: purposes.map((p) => ({ ...(p as JsonObject), delegatorRoles: ["admin"] })),
     },
-    sources: sources.map((s) => ({ ...(s as JsonObject), kind: "mock" })),
+    sources: sources.map((s) => {
+      const kind = (s as JsonObject).kind;
+      return {
+        ...(s as JsonObject),
+        kind: typeof kind === "string" && kind !== "" ? kind : "mock",
+      };
+    }),
   };
   const parsed = SiteConfigSchema.safeParse(candidate);
   if (parsed.success) return { ok: true, config: parsed.data };

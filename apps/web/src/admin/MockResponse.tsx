@@ -4,7 +4,7 @@ import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext } from "./checks.js";
 import { Sect } from "./controls.js";
-import { MockPayload } from "./MockPayload.js";
+import { DraftText, MockPayload } from "./MockPayload.js";
 import { requestMockFocus, useMockEnv } from "./mock-context.js";
 import {
   addTrigger,
@@ -246,22 +246,19 @@ function Scenario({
                     <label htmlFor={`${uid}-w${w}-v`}>
                       <VisuallyHidden>{t("admin.mock.triggerValue", { n: w + 1 })}</VisuallyHidden>
                     </label>
-                    <input
+                    <DraftText
                       id={`${uid}-w${w}-v`}
                       className="qm-field__input qm-mock__mono"
                       data-owner={base}
                       data-role={w === 0 ? "trigger" : undefined}
-                      value={String(value)}
+                      raw={value}
                       autoComplete="off"
                       spellCheck={false}
                       aria-invalid={empty || undefined}
                       aria-describedby={empty ? `${uid}-w${w}-e` : undefined}
-                      onChange={(e) =>
+                      onText={(text, as) =>
                         write(
-                          {
-                            ...scenario,
-                            when: setTriggerValue(scenario.when, field, e.target.value),
-                          },
+                          { ...scenario, when: setTriggerValue(scenario.when, field, text, as) },
                           `${base}/${field}`,
                         )
                       }
@@ -351,6 +348,14 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
     if (focusScenario !== null && Number.isInteger(focusScenario))
       setOpen((cur) => (cur.has(focusScenario) ? cur : new Set([...cur, focusScenario])));
   }, [focusScenario]);
+  // Open state is by position: a count this editor did not change (an undo or redo of an add or a
+  // remove) would leave it on other scenarios, so it closes them all instead (#572).
+  const scenarioCount = response?.scenarios.length ?? 0;
+  const expectedCount = useRef(scenarioCount);
+  useEffect(() => {
+    if (scenarioCount !== expectedCount.current) setOpen(new Set());
+    expectedCount.current = scenarioCount;
+  }, [scenarioCount]);
   if (source === undefined || response === undefined) return <p>{t("admin.mock.noResponse")}</p>;
   const type = env.site.queryTypes.find((q) => q.code === response.queryType);
   const count = response.scenarios.length;
@@ -383,6 +388,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
     },
     remove(at) {
       const left = count - 1;
+      expectedCount.current = left;
       env.edit((m: MockFile) => removeScenario(m, { sourceId, response: index, scenario: at }));
       env.announce(
         t(left === 1 ? "admin.mock.removed.one" : "admin.mock.removed.many", {
@@ -528,6 +534,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
           data-role="add"
           onClick={() => {
             const first = type?.fields[0]?.key ?? "";
+            expectedCount.current = count + 1;
             env.edit((m) =>
               addScenario(m, sourceId, index, {
                 when: first === "" ? {} : { [first]: "" },

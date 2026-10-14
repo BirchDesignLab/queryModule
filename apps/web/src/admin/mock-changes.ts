@@ -1,6 +1,7 @@
 import type { Translator } from "@querymodule/client";
+import type { MockFile } from "@querymodule/core/contracts";
 import type { JsonObject } from "./draft.js";
-import { mockPointer } from "./mock-edit.js";
+import { mockPointer, resultOf } from "./mock-edit.js";
 import type { MockChange } from "./mock-model.js";
 import { locateMockChanges, mockChangeCount, parseMock } from "./mock-model.js";
 
@@ -58,9 +59,11 @@ export function mockChangeEntries(
         queryType === null
           ? names.source(change.sourceId)
           : `${names.source(change.sourceId)}, ${names.type(queryType)}`,
-      text: t(`admin.diff.mock.${change.kind}`, {
-        n: "scenario" in change ? change.scenario + 1 : 0,
-      }),
+      text:
+        addedText(change, response, after.mock, t) ??
+        t(`admin.diff.mock.${change.kind}`, {
+          n: "scenario" in change ? change.scenario + 1 : 0,
+        }),
       // The response this change is about, found by the diff itself (query type, then type match,
       // then place among responses of one type); a removed response opens its source.
       target:
@@ -69,6 +72,24 @@ export function mockChangeEntries(
           : mockPointer.response(change.sourceId, response),
     };
   });
+}
+
+/**
+ * An added response's line says its default and how many scenarios it has (#572, design "(default
+ * no record, 0 scenarios)"); counts and the result word only, never content. Null for other changes.
+ */
+function addedText(
+  change: MockChange,
+  response: number | null,
+  edited: MockFile | null,
+  t: Translator["t"],
+): string | null {
+  if (change.kind !== "responseAdded" || response === null) return null;
+  const r = edited?.sources[change.sourceId]?.responses[response];
+  if (r === undefined) return null;
+  const count = r.scenarios.length;
+  const kind = resultOf(r.default) === "norecord" ? "NoRecord" : "Record";
+  return t(`admin.diff.mock.responseAdded${kind}${count === 1 ? "One" : "Many"}`, { count });
 }
 
 /** A difference that no line explains (the file's site id, a source with no responses): one plain line. */

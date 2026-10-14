@@ -207,6 +207,14 @@ function useTreeNodes(
               : `${r.queryType} ${Object.values(r.types).join(" ")}`,
           ),
         );
+        // The last child opens the source's add form (#572): one press from the tree.
+        responses.push(
+          node(
+            mockPointer.addResponse(id),
+            t("admin.mock.addResponseRow", { source: sourceName }),
+            "",
+          ),
+        );
         mockNodes.push(
           // Not rolled up: the source's pointer already covers every issue under its responses.
           node(
@@ -503,7 +511,21 @@ export function BuilderTree({
   flatRef.current = flat;
   const [active, setActive] = useState<string | null>(null);
   const has = (p: string | null): p is string => p !== null && flat.some((x) => x.pointer === p);
-  const tabStop = has(selected) ? selected : has(active) ? active : (flat[0]?.pointer ?? null);
+  // A selection deeper than any row (an issue's pointer inside a scenario) keeps the Tab stop on
+  // the deepest row on screen that holds it, not the first row (#572).
+  const holder =
+    selected === null
+      ? null
+      : (flat
+          .filter((x) => x.pointer === selected || selected.startsWith(`${x.pointer}/`))
+          .sort((a, b) => b.pointer.length - a.pointer.length)[0]?.pointer ?? null);
+  const tabStop = has(selected)
+    ? selected
+    : holder !== null
+      ? holder
+      : has(active)
+        ? active
+        : (flat[0]?.pointer ?? null);
   // The row that has focus, so focus lost with its row (a type closing when another opens) can be
   // repaired: never moved otherwise.
   const focused = useRef<string | null>(null);

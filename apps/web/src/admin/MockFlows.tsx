@@ -1,4 +1,4 @@
-import type { MockFile } from "@querymodule/core/contracts";
+import { BoundedIdSchema, type MockFile } from "@querymodule/core/contracts";
 import { VisuallyHidden } from "@querymodule/web-ui";
 import { useContext, useState } from "react";
 import { useT } from "../app/i18n-context.js";
@@ -22,19 +22,37 @@ import { SelectionContext } from "./selection.js";
 const hasResponse = (mock: MockFile, sourceId: string, code: string): boolean =>
   mock.sources[sourceId]?.responses.some((r) => r.queryType === code) ?? false;
 
+/** The frame a focus request is waiting on; a newer request cancels it (#572). */
+let waiting: number | null = null;
+
 /**
  * Focuses an element that renders after the selection changes: the editor that holds the button
  * unmounts first (and with it any pending focus request), so look for the target for a few frames.
+ * Only the newest request waits: an older one never takes focus after it.
  */
-function focusWhenRendered(owner: string, role: string, tries = 20): void {
+export function focusWhenRendered(owner: string, role: string, tries = 20): void {
+  if (waiting !== null) cancelAnimationFrame(waiting);
+  waiting = null;
   const el = document.querySelector<HTMLElement>(
     `[data-owner="${CSS.escape(owner)}"][data-role="${role}"]`,
   );
   if (el !== null) el.focus();
-  else if (tries > 0) requestAnimationFrame(() => focusWhenRendered(owner, role, tries - 1));
+  else if (tries > 0)
+    waiting = requestAnimationFrame(() => {
+      waiting = null;
+      focusWhenRendered(owner, role, tries - 1);
+    });
 }
 
-const rowId = (...parts: string[]): string => `qm-flow-${parts.join("-")}`.replace(/[^\w-]/g, "_");
+/**
+ * A row's data-owner from its parts. Every character outside [A-Za-z0-9] is written as its code, so
+ * parts that would join to the same text ("a b" and "a_b", "a-b" + "c" and "a" + "b-c") stay apart (#572).
+ */
+export const flowRowId = (...parts: string[]): string =>
+  `qm-flow-${parts
+    .map((p) => p.replace(/[^A-Za-z0-9]/g, (c) => `_${c.codePointAt(0)?.toString(16)}_`))
+    .join("-")}`;
+const rowId = flowRowId;
 
 function useFlowEnv(): MockEnv | null {
   const { doc } = useDraft();
@@ -70,7 +88,9 @@ export function TypeMockResponses({
   if (env === null) return null;
   const known = new Set(env.site.sources.map((s) => s.id));
   const asked = [...new Set(sourceIds)].filter((id) => known.has(id));
-  const name = code.trim();
+  // The raw code, as the source panel and the server use it (#572); one the mock file cannot hold
+  // (" BOAT") gets no gap and no button until it is fixed.
+  const name = BoundedIdSchema.safeParse(code).success ? code : "";
   const missing = asked.filter((id) => !hasResponse(env.mock, id, name));
   const open = (sourceId: string) => {
     const index =
@@ -113,7 +133,6 @@ export function TypeMockResponses({
                 <li key={sourceId} className="qm-mock__flow-row qm-mock__gap">
                   <span className="qm-mock__missing">
                     <span aria-hidden="true">⚠</span> {t("admin.mock.missing")}
-                    <VisuallyHidden>: {env.sourceName(sourceId)}</VisuallyHidden>
                   </span>
                   <span>{env.sourceName(sourceId)}</span>
                   <button
