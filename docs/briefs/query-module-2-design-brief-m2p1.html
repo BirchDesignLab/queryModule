@@ -48,7 +48,7 @@
         src: url("../../apps/web/src/fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2");
       }
 
-      /* Colours are the product's day tokens (packages/tokens), so the brief looks like the product. */
+      /* Colors are the product's day tokens (packages/tokens), so the brief looks like the product. */
       :root {
         --paper: #ffffff;
         --sunken: #eceff3;
@@ -125,7 +125,7 @@
         margin-top: 2pt;
       }
 
-      /* Screen: a centred stack of paper sheets. Print: one sheet per .page, margins from @page. */
+      /* Screen: a centered stack of paper sheets. Print: one sheet per .page, margins from @page. */
       main {
         max-width: 8.5in;
         margin: 0 auto;
@@ -214,7 +214,7 @@
       .principles {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 8pt 14pt;
+        gap: 6pt 14pt;
         counter-reset: p;
       }
       .principles > div {
@@ -240,7 +240,8 @@
       }
       .principles span {
         color: var(--muted);
-        font-size: 9pt;
+        font-size: 8.5pt;
+        line-height: 1.4;
       }
       figure {
         margin: 0;
@@ -267,6 +268,10 @@
         border: 1pt solid var(--rule);
         border-radius: 3pt;
         background: var(--sunken);
+      }
+      #fig-query-frame svg {
+        width: 90%;
+        margin: 0 auto;
       }
       .pair {
         display: grid;
@@ -350,7 +355,7 @@
       <!-- Page 1: the problem and the roles -->
       <article class="page" id="p-problem">
         <header class="masthead">
-          <p class="eyebrow">Design brief &middot; Milestone 2, phase 1 &middot; 14 Oct 2026</p>
+          <p class="eyebrow">Design brief &middot; Milestone 2, phase 1 &middot; Oct 14, 2026</p>
           <h1>Query Module 2.0</h1>
           <p class="lede">
             A Query Module for the CAD suite where dispatchers and officers query state and national
@@ -363,16 +368,14 @@
           <h2><span class="tag">The problem</span>Answers under time pressure, on every site's own terms</h2>
           <p>
             A dispatcher or officer asks a state or national system about a plate, a person, a
-            driver's licence or a piece of property, and has seconds to read the answer back
+            driver's license or a piece of property, and has seconds to read the answer back
             over the radio. The first release did that, but the verdict on it was blunt: it works,
             and it reads as a developer tool. Every site also wants different fields, rules,
             commands and result layouts, and a code release per site is not workable.
           </p>
           <p>
             The target is an operations console: dense, calm, dark-first, one clear accent, nothing
-            decorative. Four things have to hold. The answer is readable at a glance. A serious
-            result cannot be missed. Everything works by keyboard. And the people who run a site
-            can change what the screen shows, see exactly what dispatchers will see, and publish it.
+            decorative. The design holds to four goals. The answer is readable at a glance. A serious result is hard to miss. The screens are built to work by keyboard. And the people who run a site can change what the screen shows, see what dispatchers will see, and publish it.
           </p>
         </section>
 
@@ -393,7 +396,7 @@
               <h3>Officer</h3>
               <p class="meta">VEHICLE LAPTOP &middot; 1024 x 768</p>
               <ul>
-                <li>One column, touch targets of 48 px or more</li>
+                <li>One card at touch density, targets of 48 px or more</li>
                 <li>Large query tiles and a 64 px Run query</li>
                 <li>Night and red-shift themes one tap away</li>
                 <li>No muted text for anything that must be read; detail is one tap behind the summary</li>
@@ -427,16 +430,16 @@
               <span>The builder previews with the same renderer dispatchers use. What the implementer sees is what goes live.</span>
             </div>
             <div>
-              <h3>Accessible by default</h3>
-              <span>Every screen works by keyboard alone. An automated accessibility scan runs in the browser tests, and layouts hold at 200% zoom and 320 px.</span>
+              <h3>Accessible by design</h3>
+              <span>Built for keyboard and screen reader use from the start, with a visible focus ring and body text at 7:1 contrast or better in every theme. Browser tests drive the main dispatcher and officer flows by keyboard, run an automated accessibility scan on the main screens, and check the query screen at 200% zoom and 320 px wide.</span>
             </div>
             <div>
               <h3>Night and red shift</h3>
               <span>Day, night and a red-shift mode that protects night vision. Each has its own focus ring and contrast proof.</span>
             </div>
             <div>
-              <h3>Severity is never colour alone</h3>
-              <span>A serious result carries an icon, the word, a visible marker, a hidden spoken severity and a 4 px edge, as well as its colour.</span>
+              <h3>Severity is never color alone</h3>
+              <span>A serious result carries an icon, the word, a visible marker, a hidden spoken severity and a 4 px edge, as well as its color.</span>
             </div>
             <div>
               <h3>Read-back text in monospace</h3>
@@ -444,11 +447,11 @@
             </div>
             <div>
               <h3>One draft for form and terminal</h3>
-              <span>A command echo under the form shows the terminal command being built. Switching modes never loses what was typed.</span>
+              <span>A command echo under the form shows the terminal command being built. Switching modes keeps what was typed.</span>
             </div>
             <div>
               <h3>Focus is never lost</h3>
-              <span>Incoming results, status changes and published config never move focus or rebuild the control the user is on.</span>
+              <span>Incoming results, status changes and published config are built not to move focus or rebuild the control the user is on.</span>
             </div>
           </div>
         </section>
@@ -457,7 +460,7 @@
           <h2><span class="tag">Direction</span>An operations console</h2>
           <p>
             Four surface steps carry the hierarchy, so panels need few borders. One accent marks what
-            is selected or actionable. Severity colours are reserved for responses and badges. The
+            is selected or actionable. Severity colors are reserved for responses and badges. The
             signature element is the command echo: under every query form a monospace strip shows the
             terminal command the form is building, live as the user types, with an Edit as command
             action. It teaches the terminal syntax and makes the form and the terminal one thing.
@@ -485,7 +488,7 @@
                 <text x="324" y="39" fill="#4d5968">Wanted</text>
                 <rect x="364" y="22" width="60" height="26" rx="4" fill="#fff" stroke="#7a8494" />
                 <text x="374" y="39" fill="#121820" font-family="IBM Plex Mono">DL</text>
-                <text x="392" y="39" fill="#4d5968">Licence</text>
+                <text x="392" y="39" fill="#4d5968">License</text>
                 <text x="470" y="39" fill="#4d5968" font-size="9">Form  |  Terminal</text>
                 <text x="24" y="70" fill="#4d5968" font-size="8" letter-spacing="1">PLATE</text>
                 <rect x="24" y="76" width="150" height="28" rx="3" fill="#fff" stroke="#7a8494" />
@@ -601,7 +604,7 @@
                 <line x1="392" y1="44" x2="430" y2="44" stroke="#7a8494" />
                 <text x="436" y="47">Heading: source and status, in words</text>
                 <line x1="176" y1="90" x2="430" y2="90" stroke="#7a8494" stroke-dasharray="2 2" />
-                <text x="436" y="93">Keyword mark: colour, icon, word, marker</text>
+                <text x="436" y="93">Keyword mark: color, icon, word, marker</text>
                 <line x1="270" y1="90" x2="430" y2="112" stroke="#7a8494" stroke-dasharray="2 2" />
                 <text x="436" y="115">Plate left plain; the badge still scans it</text>
                 <line x1="208" y1="166" x2="430" y2="166" stroke="#7a8494" />
@@ -610,7 +613,7 @@
                 <text x="436" y="203">4 px edge repeats the badge, never replaces it</text>
               </g>
             </svg>
-            <figcaption>Anatomy of a card. Redrawn from the design; every severity cue has a non-colour twin.</figcaption>
+            <figcaption>Anatomy of a card. Redrawn from the design; every severity cue has a non-color twin.</figcaption>
           </figure>
           <p class="note">
             When no card is set up for a result, the card says so and shows every field under its path
@@ -626,9 +629,7 @@
         <section class="block" id="flow-officer">
           <h2><span class="tag">Key flow 3</span>The same card on the vehicle laptop</h2>
           <p>
-            The officer layout uses the same renderer at touch density. Summary values grow to 20 px
-            monospace, every label and reason is 16 px in body colour, Copy ID and Show detail are
-            48 px, and detail stays one tap behind the summary.
+            The officer layout uses the same renderer at touch density. Summary values are 20 px monospace, labels are 16 px in the body color, touch targets are 48 px or more, and detail stays one tap behind the summary.
           </p>
           <figure class="shot" id="shot-officer-card">
             <img src="shots/officer-card.png" alt="The officer layout showing a returned result card at 1024 by 768" />
@@ -687,9 +688,7 @@
           <p>
             Implementers shape the result cards in the same builder that shapes the query forms: a
             tree on the left, an editor in the middle and a live preview on the right, with undo,
-            Review and publish, history and roll back. A published change reaches open dispatcher
-            screens within seconds and redraws the cards already on screen, without losing what the
-            user was typing.
+            Review and publish, history and roll back. A published change reaches open dispatcher screens within 15 seconds and redraws the cards already on screen, keeping what the user was typing.
           </p>
           <figure id="fig-builder-frame">
             <svg viewBox="0 0 640 186" role="img" aria-labelledby="fb-t fb-d">
@@ -802,16 +801,16 @@
               <h3>M3: workflow and compliance</h3>
               <ul>
                 <li>Credentials and delegation for training officers</li>
-                <li>Multi-source and nested queries at scale</li>
-                <li>Delete from view, with an audited trail</li>
+                <li>Multi-source and nested queries, and delete from view</li>
+                <li>Multi-factor sign-in</li>
               </ul>
             </div>
             <div class="card">
               <h3>M4: mobile and host</h3>
               <ul>
-                <li>The CAD mobile app on the same screens and tokens</li>
+                <li>Mobile layouts and the CAD mobile app</li>
                 <li>Host integration</li>
-                <li>Real state and national connections once controls are signed off</li>
+                <li>Real state and national connections come later, after the security controls are signed off</li>
               </ul>
             </div>
           </div>
@@ -846,7 +845,7 @@
         },
         {
           "decision": "IBM Plex (Sans, Condensed, Mono), self-hosted.",
-          "why": "One family with a monospace face for read-back text, and no font request leaves the product.",
+          "why": "One family with a monospace face for read-back text, served by the product itself.",
           "source": "Ruling 09-29-26 (2)"
         },
         {
@@ -865,8 +864,8 @@
           "source": "Mockup v5 rulings 1 and 2; UX-015"
         },
         {
-          "decision": "Severity is never colour alone: icon, word, visible marker, spoken severity and a 4 px edge.",
-          "why": "Colour fails for some users and some displays; every cue has a twin.",
+          "decision": "Severity is never color alone: icon, word, visible marker, spoken severity and a 4 px edge.",
+          "why": "Color fails for some users and some displays; every cue has a twin.",
           "source": "Mockup v5 rulings 3 and 8; UX-010, UX-011"
         },
         {
@@ -901,11 +900,11 @@
         },
         {
           "decision": "No Retry button in this phase.",
-          "why": "Retry needs the full rules for repeated queries; it is its own piece of work.",
+          "why": "Retry behavior belongs with the spec 5.7 work, so this phase leaves it out.",
           "source": "Mockup v5 ruling 9; spec 5.7"
         },
         {
-          "decision": "Mock data only, and a fixture policy that rejects anything real-looking.",
+          "decision": "Mock data only, with a fixture policy that checks every mock payload against an allowlist of synthetic patterns.",
           "why": "The prototype must never hold or imitate real person, vehicle or property records.",
           "source": "Spec 5.4, 10.8"
         }
@@ -914,7 +913,7 @@
     <!-- Counts for the status line, filled at render time. -->
     <script type="application/json" id="status-data">
       {
-        "asOf": "14 Oct 2026",
+        "asOf": "Oct 14, 2026",
         "milestone": "M2 P1",
         "mergedChanges": 0,
         "workItems": 0,
@@ -946,7 +945,7 @@
         const s = JSON.parse(document.getElementById("status-data").textContent);
         const fmt = (n) => n.toLocaleString("en-US");
         document.getElementById("status-line").textContent =
-          `Status at ${s.milestone}, ${s.asOf}: ${fmt(s.mergedChanges)} merged changes, ` +
+          `Status at ${s.milestone} (${s.asOf}): ${fmt(s.mergedChanges)} merged changes, ` +
           `${fmt(s.workItems)} work items, ${s.adrs} architecture decisions, ` +
           `${fmt(s.tests)} automated tests and ${fmt(s.e2eScenarios)} browser scenarios.`;
       })();
