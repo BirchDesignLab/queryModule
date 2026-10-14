@@ -9,6 +9,7 @@ import {
   RequestList,
   type RequestPartView,
   type RequestRowView,
+  shortReference,
 } from "./RequestList.js";
 
 const LABELS: Record<string, string> = {
@@ -64,6 +65,26 @@ const base = {
   t,
 };
 
+describe("SEC-014 shortReference names a request by the random part of its UUIDv7", () => {
+  // Two UUIDv7 ids minted in the same second: the timestamp high bits agree, the random part differs.
+  const first = "01a139c3-5e2a-7b10-8c4d-9f0e1a2b3c4d";
+  const second = "01a139c3-5e9f-7d62-9a17-e3b8c6d5f7a1";
+
+  it("two ids from the same second have different short references, though their 8-character prefixes match", () => {
+    expect(first.slice(0, 8)).toBe(second.slice(0, 8));
+    expect(shortReference(first)).toBe("1a2b3c4d");
+    expect(shortReference(second)).toBe("c6d5f7a1");
+    expect(shortReference(first)).not.toBe(shortReference(second));
+  });
+
+  it("an id that is not UUID-shaped falls back without throwing and is never empty", () => {
+    expect(shortReference("x-1")).toBe("x-1");
+    expect(shortReference("a")).toBe("a");
+    expect(shortReference("not-a-hex-correlation-id")).toBe("ation-id");
+    expect(shortReference("")).toBe("");
+  });
+});
+
 describe("spec 6.7 requests list (B3)", () => {
   it("is a labelled section with an ordered list, not a live region (the announcer speaks)", () => {
     render(<RequestList {...base} rows={[ACKED]} />);
@@ -94,7 +115,7 @@ describe("spec 6.7 requests list (B3)", () => {
     expect(row).toHaveTextContent("Acknowledged");
     expect(row).toHaveTextContent(`Sent ${formatAckTime(ACKED.acknowledgedAt ?? 0)}`);
     expect(row).toHaveTextContent("09-29-26 13:04:05");
-    expect(row).toHaveTextContent("0198a1b2");
+    expect(row).toHaveTextContent("2e3f4a5b");
     expect(row).not.toHaveTextContent("0198a1b2-c3d4");
     expect(row).toHaveTextContent("State source: pending");
   });
@@ -103,7 +124,7 @@ describe("spec 6.7 requests list (B3)", () => {
     const onCopy = vi.fn();
     render(<RequestList {...base} rows={[ACKED]} onCopy={onCopy} />);
     const button = screen.getByRole("button", {
-      name: "Copy reference 0198a1b2 for Vehicle ZZ-0001",
+      name: "Copy reference 2e3f4a5b for Vehicle ZZ-0001",
     });
     await userEvent.click(button);
     expect(onCopy).toHaveBeenCalledWith(ACKED.reference);
@@ -210,7 +231,7 @@ describe("failed-row retry (the list only shows the button; the owner sends)", (
     render(<RequestList {...base} rows={rows} onRetry={() => undefined} />);
     expect(screen.getByRole("button", { name: "Retry Vehicle ZZ-0002" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Copy reference 0198a1b2 for Vehicle 0198a1b2" }),
+      screen.getByRole("button", { name: "Copy reference 2e3f4a5b for Vehicle 0198a1b2" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("group", { name: "Source status for Vehicle 0198a1b2" }),

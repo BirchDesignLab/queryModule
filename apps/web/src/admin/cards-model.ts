@@ -188,6 +188,8 @@ export interface CardWin {
   winner: number | null;
   /** What gave the winner its score, in mapResponse's order: rule +4, source +2, persona +1. */
   reasons: readonly ("rule" | "source" | "persona")[];
+  /** The winner's score: the sum of its reasons (rule +4, source +2, persona +1); 0 when none fits. */
+  score: number;
   /** A card of the type with the same score sits later in the list: the winner is first by order. */
   byOrder: boolean;
   /** How many cards of the type fit this context at all. */
@@ -214,7 +216,7 @@ export function cardWins(site: CardsSite, ctx: MapContext, now?: number): CardWi
   const winner = winningCard(site, ctx, now);
   const won = winner === null ? undefined : site.responseMappings[winner];
   if (winner === null || won === undefined)
-    return { winner: null, reasons: [], byOrder: false, fitting: candidates.length };
+    return { winner: null, reasons: [], score: 0, byOrder: false, fitting: candidates.length };
   return {
     winner,
     reasons: [
@@ -222,6 +224,7 @@ export function cardWins(site: CardsSite, ctx: MapContext, now?: number): CardWi
       ...(won.sourceId === undefined ? [] : (["source"] as const)),
       ...(won.persona === undefined ? [] : (["persona"] as const)),
     ],
+    score: scoreOf(won),
     byOrder: candidates.some(({ m, index }) => index > winner && scoreOf(m) === scoreOf(won)),
     fitting: candidates.length,
   };

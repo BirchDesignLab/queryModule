@@ -10,6 +10,7 @@ import {
   addExcept,
   addKeyword,
   cardsByType,
+  cardWins,
   moveCard,
   newLabelKey,
   payloadPaths,
@@ -440,5 +441,42 @@ describe("keywords and except phrases", () => {
     expect(diagnostics(bad).filter((d) => d.key === "config.exceptWithoutKeyword")).toEqual([
       expect.objectContaining({ path: `/keywords/${i}/except/0` }),
     ]);
+  });
+});
+
+// BW3 polish (#642, CRITIC-M4): the winner's score is the sum of its narrowings, as mapResponse
+// scores them (rule +4, source +2, persona +1), so the Which card wins table can show it.
+describe("cardWins score", () => {
+  const row = { kind: "value", path: "plate", labelKey: "field.plate", view: "summary" } as const;
+  const card = (id: string, over: Record<string, unknown> = {}) =>
+    ({ id, queryType: "VEH", elements: [row], ...over }) as unknown as ResponseMapping;
+  const sited = (...cards: ResponseMapping[]) => ({ ...site, responseMappings: cards });
+  const ctx = {
+    queryType: "VEH",
+    partValues: { plate: "ZZ-0001" },
+    sourceId: "stateSource",
+    persona: "dispatch",
+  };
+  const rule = { field: "plate", op: "eq", value: "ZZ-0001" };
+
+  it("is 0 for a card with no narrowing, 4 for a rule, 2 for a source, 1 for a persona", () => {
+    expect(cardWins(sited(card("a")), ctx).score).toBe(0);
+    expect(cardWins(sited(card("a", { when: rule })), ctx).score).toBe(4);
+    expect(cardWins(sited(card("a", { sourceId: "stateSource" })), ctx).score).toBe(2);
+    expect(cardWins(sited(card("a", { persona: "dispatch" })), ctx).score).toBe(1);
+  });
+
+  it("sums the narrowings of the winner and is 0 when no card fits", () => {
+    const all = card("a", { when: rule, sourceId: "stateSource", persona: "dispatch" });
+    expect(cardWins(sited(card("b"), all), ctx)).toMatchObject({ winner: 1, score: 7 });
+    expect(cardWins(sited(card("a", { persona: "mobileUnit" })), ctx)).toMatchObject({
+      winner: null,
+      score: 0,
+    });
+  });
+
+  it("keeps the earlier card of a tie and still reports the shared score", () => {
+    const tie = sited(card("a", { when: rule }), card("b", { when: { ...rule, op: "notEmpty" } }));
+    expect(cardWins(tie, ctx)).toMatchObject({ winner: 0, score: 4, byOrder: true });
   });
 });

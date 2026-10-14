@@ -227,4 +227,21 @@ describe("orphaned response and blank triggers", () => {
       card.queryByText("Enter the value that triggers this scenario."),
     ).not.toBeInTheDocument();
   });
+
+  // BW3 polish (#642, T12-14): a warning is not an error. The blank-trigger note takes the warning
+  // class (the severity warning token pair in CSS), leads with the word Warning and keeps its icon,
+  // so it never rests on color alone.
+  it("the blank-trigger warning has the warning class, not the error class, and says Warning", async () => {
+    const t = await openBuilder();
+    await selectRow(t.user, /^Mock response: Vehicle, State system VEH/);
+    await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
+    await t.user.click(within(scenarioCard(1)).getByRole("button", { name: "Add trigger field" }));
+    const note = within(scenarioCard(1))
+      .getByText(/This blank value never matches/)
+      .closest("p");
+    expect(note).not.toBeNull();
+    expect(note).toHaveClass("qm-mock__warning");
+    expect(note).not.toHaveClass("qm-mock__error");
+    expect(note?.textContent).toMatch(/^.?\s*Warning:/);
+  });
 });

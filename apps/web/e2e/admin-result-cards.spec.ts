@@ -311,7 +311,13 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   await page.keyboard.type("ZZ-0001");
   await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
   await expect(pane.getByText("Result: Returns a record")).toBeVisible();
+  // The answer opens as the production Result card; the Payload view is one key press away.
+  await expect(pane.getByRole("region", { name: "State system: returned" })).toBeVisible();
+  const showCard = pane.getByRole("button", { name: "Result card" });
+  const showPayload = pane.getByRole("button", { name: "Payload" });
+  await showPayload.press("Enter");
   await expect(pane.getByTestId("try-payload")).toContainText('"status": "STOLEN"');
+  await expect(pane.getByText("Answers after 50 to 400 ms.")).toBeVisible();
   // Typed values stay in the pane: they are in no link, and a plate with no scenario takes the default.
   expect(page.url()).not.toContain("ZZ-0001");
   await plate.fill("ZZ-0099");
@@ -320,8 +326,34 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
 
   // Desktop controls are 36 px or more.
-  expect(await tooShort(36, { source, type, plate })).toEqual([]);
+  expect(
+    await tooShort(36, { source, type, plate, "show card": showCard, "show payload": showPayload }),
+  ).toEqual([]);
   await expectNoSeriousAxeViolations(page);
+});
+
+// BW3 polish round 1 (CV2): the dispatcher's Try a match answer toggle is a 36 px control at 1024x768 too.
+test("[#605] Try a match controls and its answer toggle are 36 px at 1024x768", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openBuilder(page);
+  await selectRow(page, /^Mock response: Vehicle, State system/);
+  const pane = page.getByRole("region", { name: "Try a match" });
+  await expect(pane).toBeVisible();
+  const plate = pane.getByLabel("Plate", { exact: true });
+  await plate.focus();
+  await page.keyboard.type("ZZ-0001");
+  await expect(pane.getByText(/^Scenario 1 matches/)).toBeVisible();
+  expect(
+    await tooShort(36, {
+      source: pane.getByLabel("Source", { exact: true }),
+      type: pane.getByLabel("Query type", { exact: true }),
+      plate,
+      "show card": pane.getByRole("button", { name: "Result card" }),
+      "show payload": pane.getByRole("button", { name: "Payload" }),
+    }),
+  ).toEqual([]);
 });
 
 test("[#605] the cards editor with its preview, the Which card wins table and the keywords pane pass axe; controls are 36 px; the officer preview's Show detail is 48 px", async ({
@@ -392,10 +424,12 @@ test("[#605] the cards editor with its preview, the Which card wins table and th
   await expectNoSeriousAxeViolations(page);
 });
 
-// The table is wider than the editor pane at these widths (the pane is 369 px at 1366): the pane
-// scrolls sideways and the page does not. The last column must be reachable by scrolling the pane.
+// BW3 polish (#642, item 5): the Which card wins table fits the editor pane at 1366 and 1024: neither
+// the table's container, the editor's tab panel nor the page scrolls sideways, and every Why cell
+// (the last column, with the score) is fully inside the pane. Nothing is left to scroll, so there is
+// no hidden column for a keyboard user to miss.
 for (const width of [1366, 1024] as const) {
-  test(`[#605] the Which card wins table stays reachable in its pane and the page does not scroll sideways at ${width}`, async ({
+  test(`[#642] the Which card wins table fits its pane with nothing scrolling sideways at ${width}`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 768 });
@@ -406,20 +440,28 @@ for (const width of [1366, 1024] as const) {
     const fit = await wins.evaluate((table) => {
       const pane = table.closest('[role="tabpanel"]');
       if (!(pane instanceof HTMLElement)) throw new Error("the editor has no tab panel");
-      pane.scrollLeft = pane.scrollWidth;
-      const last = table.querySelector("thead th:last-child")?.getBoundingClientRect();
+      const holder = table.parentElement as HTMLElement;
       const box = pane.getBoundingClientRect();
       const root = document.documentElement;
+      const cells = [...table.querySelectorAll<HTMLElement>("tbody td:last-child")];
       return {
-        lastRight: Math.round(last?.right ?? Number.POSITIVE_INFINITY),
-        paneRight: Math.round(box.right),
+        tableOverflow: holder.scrollWidth - holder.clientWidth,
+        paneOverflow: pane.scrollWidth - pane.clientWidth,
         pageOverflow: root.scrollWidth - root.clientWidth,
+        cells: cells.length,
+        cutOff: cells.filter((c) => {
+          const r = c.getBoundingClientRect();
+          return r.right > box.right + 0.5 || c.scrollWidth > c.clientWidth;
+        }).length,
+        whyText: cells.map((c) => c.innerText.trim()),
       };
     });
-    expect(fit.lastRight, "the Why column after scrolling the pane").toBeLessThanOrEqual(
-      fit.paneRight,
-    );
+    expect(fit.tableOverflow, "the table container scrolls sideways").toBeLessThanOrEqual(0);
+    expect(fit.paneOverflow, "the editor tab panel scrolls sideways").toBeLessThanOrEqual(0);
     expect(fit.pageOverflow, "page horizontal overflow").toBeLessThanOrEqual(0);
+    expect(fit.cells).toBeGreaterThan(0);
+    expect(fit.cutOff, "Why cells cut off by the pane").toBe(0);
+    for (const text of fit.whyText) expect(text).toMatch(/^score \d+, /);
   });
 }
 
@@ -461,6 +503,47 @@ test("[#605] removing a keyword, a row or a card by keyboard leaves focus on a s
   await form.getByRole("button", { name: /^Remove card/ }).press("Enter");
   await expect(form.getByRole("heading", { level: 3, name: /^Vehicle cards/ })).toBeFocused();
   expect(await onBody()).toBe(false);
+});
+
+// BW3 polish round 1 (CV1): the keyed rows are moved by React, not remounted, so a keyboard move keeps
+// focus on the moved row's own arrow button, never the page.
+test("[#642] moving a card row up and down by keyboard keeps focus on that row's arrow button", async ({
+  page,
+}) => {
+  await openBuilder(page);
+  const form = editor(page);
+  await selectVehicleCard(page);
+  const rows = form.locator('[data-role="toggle"]');
+  const count = await rows.count();
+  await form.getByRole("button", { name: "Add row" }).press("Enter");
+  await expect(rows).toHaveCount(count + 1);
+  const active = () =>
+    page.evaluate(() => {
+      const el = document.activeElement;
+      return {
+        body: el === document.body,
+        owner: el?.getAttribute("data-owner") ?? "",
+        role: el?.getAttribute("data-role") ?? "",
+        name: el?.textContent ?? "",
+      };
+    });
+
+  // Up: the new last row moves one place up; focus stays on its Move up button at the new index.
+  await form.getByRole("button", { name: /^Move up New row/ }).press("Enter");
+  let now = await active();
+  expect(now.body).toBe(false);
+  expect(now.role).toBe("up");
+  expect(now.owner.endsWith(`-card-row-${count - 1}`)).toBe(true);
+  expect(now.name).toContain("New row");
+
+  // Down: the same row moves back; focus stays on its own arrow button at the last index (the last
+  // row has no Move down, so the Move up button holds it).
+  await form.getByRole("button", { name: /^Move down New row/ }).press("Enter");
+  now = await active();
+  expect(now.body).toBe(false);
+  expect(now.owner.endsWith(`-card-row-${count}`)).toBe(true);
+  expect(now.name).toContain("New row");
+  expect(["up", "down"]).toContain(now.role);
 });
 
 test("[#605] undoing an added scenario while a control inside it has focus moves focus to the selected tree row", async ({

@@ -24,6 +24,17 @@ describe("mockSiteOf", () => {
     expect(site.queryTypes.find((q) => q.code === "VEH")?.typeField).toBeNull();
   });
 
+  it("reads each source's kind, mock when the draft carries none (BW3 polish, T12-C3)", () => {
+    expect(site.sources.map((s) => s.kind)).toEqual(["mock", "mock"]);
+    const other = mockSiteOf({
+      sources: [
+        { id: "a", labelKey: "x", kind: "http" },
+        { id: "b", labelKey: "y" },
+      ],
+    });
+    expect(other.sources.map((s) => s.kind)).toEqual(["http", "mock"]);
+  });
+
   it("is empty for a draft without those sections", () => {
     expect(mockSiteOf({})).toEqual({ sources: [], queryTypes: [] });
   });

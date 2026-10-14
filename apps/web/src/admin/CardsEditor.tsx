@@ -37,6 +37,7 @@ import { EditorSection } from "./GenericForm.js";
 import type { DraftIssue } from "./issues.js";
 import { parseMock } from "./mock-model.js";
 import { ConditionEditor, useFieldInfo } from "./RulesEditor.js";
+import { useRowIds } from "./row-ids.js";
 import { cardsTypeOf, cardsTypePointer, issueWords, SelectionContext } from "./selection.js";
 
 /**
@@ -234,15 +235,18 @@ function CardEditor({
     return m !== null && Number(m[1]) === index ? Number(m[2]) : null;
   };
   const wanted = rowIn(selection.focus) ?? rowIn(selection.pointer);
+  // Rows have no identity of their own: each gets a stable one, so the open set and each row's
+  // local state follow the row through a move, a removal, an undo and a redo (CRITIC-M2).
+  const { ids, claim } = useRowIds(elements);
+  const wantedId = wanted === null ? undefined : ids[wanted];
   const [open, setOpen] = useState<ReadonlySet<number>>(
-    () => new Set(wanted === null ? [] : [wanted]),
+    () => new Set(wantedId === undefined ? [] : [wantedId]),
   );
   const [seenSeq, setSeenSeq] = useState(selection.seq);
   if (seenSeq !== selection.seq) {
     setSeenSeq(selection.seq);
-    if (wanted !== null && !open.has(wanted)) setOpen(new Set(open).add(wanted));
+    if (wantedId !== undefined && !open.has(wantedId)) setOpen(new Set(open).add(wantedId));
   }
-  const [gen, setGen] = useState(0);
   const owner = `${idPrefix}-card-head`;
   const rowOwner = (i: number) => `${idPrefix}-card-row-${i}`;
 
@@ -282,8 +286,9 @@ function CardEditor({
       view: "summary",
     } as MappingElement;
     const at = elements.length;
+    const rowId = claim(el);
     setElements([...elements, el]);
-    setOpen((s) => new Set(s).add(at));
+    setOpen((s) => new Set(s).add(rowId));
     focus([rowOwner(at), "path"]);
   };
   const moveRow = (from: number, to: number) => {
@@ -292,22 +297,10 @@ function CardEditor({
     if (moved === undefined) return;
     next.splice(to, 0, moved);
     setElements(next);
-    setOpen((s) => {
-      const out = new Set<number>();
-      for (const i of s) out.add(i === from ? to : i === to ? from : i);
-      return out;
-    });
-    setGen((g) => g + 1);
     focus([rowOwner(to), to < from ? "up" : "down"], [rowOwner(to), to < from ? "down" : "up"]);
   };
   const removeRow = (i: number) => {
     setElements(elements.filter((_, j) => j !== i));
-    setOpen((s) => {
-      const out = new Set<number>();
-      for (const j of s) if (j !== i) out.add(j > i ? j - 1 : j);
-      return out;
-    });
-    setGen((g) => g + 1);
     // Focus goes to the row that took its place, else the one before it, else Add row.
     const next = i < elements.length - 1 ? i : i - 1;
     focus(...(next >= 0 ? [[rowOwner(next), "toggle"] as const] : []), [`${idPrefix}-rows`, "add"]);
@@ -472,23 +465,23 @@ function CardEditor({
         <ul className="qm-mock__scenarios">
           {elements.map((el, i) => (
             <CardRow
-              // biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity; gen remounts on move
-              key={`${gen}-${i}`}
+              key={ids[i]}
               el={el}
               pointer={`${pointer}/elements/${i}`}
               issues={rowIssues(i)}
               index={i}
               count={elements.length}
               owner={rowOwner(i)}
-              open={open.has(i)}
+              open={open.has(ids[i] ?? -1)}
               paths={paths}
               cardId={id}
               takenKeys={takenKeys}
               onToggle={() =>
                 setOpen((s) => {
                   const out = new Set(s);
-                  if (out.has(i)) out.delete(i);
-                  else out.add(i);
+                  const rowId = ids[i] ?? -1;
+                  if (out.has(rowId)) out.delete(rowId);
+                  else out.add(rowId);
                   return out;
                 })
               }
@@ -628,12 +621,12 @@ function WinsTable({
     if (w.byOrder || (parts.length === 0 && w.fitting > 1))
       parts.push(t("admin.cards.wins.why.order"));
     if (parts.length === 0) parts.push(t("admin.cards.wins.why.only"));
-    return parts.join(", ");
+    return t("admin.cards.wins.score", { score: w.score, why: parts.join(", ") });
   };
   return (
-    <Sect title={t("admin.cards.wins.title")} hint={t("admin.cards.wins.hint")}>
-      <div>
-        <table className="qm-mock__table" aria-label={t("admin.cards.wins.title")}>
+    <Sect wide title={t("admin.cards.wins.title")} hint={t("admin.cards.wins.hint")}>
+      <div className="qm-wins">
+        <table className="qm-mock__table qm-wins__table" aria-label={t("admin.cards.wins.title")}>
           <thead>
             <tr>
               <th scope="col">{t("admin.cards.wins.source")}</th>

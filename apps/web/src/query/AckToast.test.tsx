@@ -1,3 +1,4 @@
+import { shortReference } from "@querymodule/web-ui";
 import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACK_CORRELATION_ID } from "../test/feed-driver.js";
@@ -68,11 +69,11 @@ describe("A6 the ack toast", () => {
     expect(toast.getAttribute("role")).toBe("status");
     expect(toast.textContent).toContain("Vehicle ZZ-0001");
     expect(toast.textContent).toMatch(/Sent \d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
-    expect(toast.textContent).toContain(ACK_CORRELATION_ID.slice(0, 8));
+    expect(toast.textContent).toContain(shortReference(ACK_CORRELATION_ID));
     const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     await user.click(
       screen.getByRole("button", {
-        name: `Copy acknowledgment reference ${ACK_CORRELATION_ID.slice(0, 8)} for Vehicle ZZ-0001`,
+        name: `Copy acknowledgment reference ${shortReference(ACK_CORRELATION_ID)} for Vehicle ZZ-0001`,
       }),
     );
     expect(writeText).toHaveBeenCalledWith(ACK_CORRELATION_ID);

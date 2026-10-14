@@ -1,4 +1,5 @@
 import type { RequestsState, SubmitQueryResponse } from "@querymodule/client";
+import { shortReference } from "@querymodule/web-ui";
 import { act, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ACK_CORRELATION_ID, FeedDriver } from "../test/feed-driver.js";
@@ -165,7 +166,7 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     expect(screen.getByRole("group", { name: "Source status for Vehicle ZZ-0001" })).toBeVisible();
     expect(
       screen.getByRole("button", {
-        name: `Copy reference ${ACK_CORRELATION_ID.slice(0, 8)} for Vehicle ZZ-0001`,
+        name: `Copy reference ${shortReference(ACK_CORRELATION_ID)} for Vehicle ZZ-0001`,
       }),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: /SECRETCMD/ })).toBeNull();
@@ -190,7 +191,7 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
 
   it("#576 ruling 12 the short correlation ID names a request whose primary field is empty", () => {
     setup(ACK, { queryType: "VEH", summary: "VEH.SECRETCMD" });
-    const short = ACK_CORRELATION_ID.slice(0, 8);
+    const short = shortReference(ACK_CORRELATION_ID);
     expect(screen.getByRole("group", { name: `Source status for Vehicle ${short}` })).toBeVisible();
     expect(
       screen.getByRole("button", { name: `Copy reference ${short} for Vehicle ${short}` }),

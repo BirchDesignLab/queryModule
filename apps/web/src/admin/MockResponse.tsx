@@ -279,8 +279,9 @@ function Scenario({
                       <span aria-hidden="true">×</span>
                     </button>
                     {blank !== undefined && !empty && (
-                      <p className="qm-mock__error" id={`${uid}-w${w}-e`}>
+                      <p className="qm-mock__warning" id={`${uid}-w${w}-e`}>
                         <span aria-hidden="true">⚠</span>
+                        <span>{t("admin.config.level.warning")}</span>
                         <span data-issue-pointer={pointer}>{t(blank.key, blank.params)}</span>
                       </p>
                     )}

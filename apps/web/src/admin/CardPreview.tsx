@@ -1,17 +1,23 @@
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { MockFile, SourcePayload } from "@querymodule/core/contracts";
 import { matchMockScenario } from "@querymodule/core/mock";
-import { assessResult, mapResponse } from "@querymodule/core/response";
-import { evaluateForm } from "@querymodule/core/rules";
-import { ResultCard, VisuallyHidden } from "@querymodule/web-ui";
+import { VisuallyHidden } from "@querymodule/web-ui";
 import { useId, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
+import {
+  BEHAVIOR_STATUS,
+  BehaviorLine,
+  type Persona,
+  RenderedCard,
+  useRenderedCard,
+} from "./CardAnswer.js";
 import { cardIndexOf, useCardName } from "./CardsEditor.js";
 import { asObjects, str } from "./controls.js";
 import type { JsonObject } from "./draft.js";
 import { parseMock } from "./mock-model.js";
 import { previewConfig, useOverlayTranslator } from "./Preview.js";
+import { formMatchOf, triggerInput } from "./preview-match.js";
 import { cardsTypeOf } from "./selection.js";
 
 /**
@@ -23,18 +29,17 @@ import { cardsTypeOf } from "./selection.js";
  * status line. Typed values live in this pane's state only: never the draft, storage, logs or URLs.
  */
 
-type Persona = "dispatcher" | "officer";
-const PERSONA_KEY: Record<Persona, string> = { dispatcher: "dispatch", officer: "mobileUnit" };
-const BEHAVIOR_STATUS = {
-  timeout: "timedOut",
-  error: "failed",
-  credentialsRejected: "credentialsRejected",
-} as const;
-
 type Answer =
   | { kind: "none" }
   | { kind: "respond"; payload: SourcePayload; matched: string; values: Record<string, unknown> }
-  | { kind: "behavior"; status: string; matched: string };
+  | {
+      kind: "behavior";
+      status: (typeof BEHAVIOR_STATUS)[keyof typeof BEHAVIOR_STATUS];
+      matched: string;
+    };
+
+/** The values of an answer with none: a stable object, so the rendered card is not rebuilt for nothing. */
+const NO_VALUES: Record<string, unknown> = {};
 
 export function CardPreview({
   doc,
@@ -122,43 +127,39 @@ export function CardPreview({
       const s = si === null ? undefined : entry.scenarios[si];
       if (s?.behavior !== undefined)
         return { kind: "behavior", status: BEHAVIOR_STATUS[s.behavior], matched: matchedText(si) };
+      // The values the plan would hand part 0 for a query that reaches this entry: the response's
+      // type values (a typed response answers only a query carrying them) and the scenario's own
+      // trigger values, through the form engine, so a rule-narrowed card wins here as it would for
+      // that query.
+      const { values } = formMatchOf(
+        config,
+        code,
+        triggerInput({ ...(entry.types ?? {}), ...(s?.when ?? {}) }),
+        Date.now(),
+      );
       return {
         kind: "respond",
         payload: s?.respond ?? entry.default,
         matched: matchedText(si),
-        values: {},
+        values,
       };
     }
-    const input: Record<string, string> = {};
-    for (const [k, v] of Object.entries(typed)) if (v !== "") input[k] = v;
-    const state = evaluateForm(config, code, input, { now: Date.now() });
-    const typeValues: Record<string, string> = {};
-    for (const f of state.fields)
-      if (f.role === "type" && f.visible && typeof f.effectiveValue === "string")
-        typeValues[f.key] = f.effectiveValue;
-    const match = matchMockScenario(mock, sourceId, {
-      queryType: code,
-      typeValues,
-      values: state.values,
-    });
+    const { typeValues, values } = formMatchOf(config, code, typed, Date.now());
+    const match = matchMockScenario(mock, sourceId, { queryType: code, typeValues, values });
     if (match === null) return { kind: "none" };
     const matched = matchedText(match.scenarioIndex);
     return match.outcome.kind === "behavior"
       ? { kind: "behavior", status: BEHAVIOR_STATUS[match.outcome.behavior], matched }
-      : { kind: "respond", payload: match.outcome.payload, matched, values: state.values };
+      : { kind: "respond", payload: match.outcome.payload, matched, values };
   }, [mock, config, code, mode, picked, sourceId, typed, t]);
 
-  const rendered = useMemo(() => {
-    if (answer.kind !== "respond" || config === null) return null;
-    const now = Date.now();
-    const mapped = mapResponse(
-      config,
-      { queryType: code, partValues: answer.values, sourceId, persona: PERSONA_KEY[persona] },
-      answer.payload,
-      now,
-    );
-    return { mapped, assessment: assessResult(answer.payload, config.keywords) };
-  }, [answer, config, code, sourceId, persona]);
+  const rendered = useRenderedCard(config, {
+    code,
+    sourceId,
+    persona,
+    payload: answer.kind === "respond" ? answer.payload : null,
+    values: answer.kind === "respond" ? answer.values : NO_VALUES,
+  });
 
   const used = rendered?.mapped.mappingIndex;
   const usedText =
@@ -166,13 +167,24 @@ export function CardPreview({
       ? null
       : used === null
         ? t("admin.cards.preview.noCard")
-        : t(used === cardIndex ? "admin.cards.preview.thisCard" : "admin.cards.preview.otherCard", {
-            name: cardName(asObjects(doc.responseMappings)[used]),
-            id: str(asObjects(doc.responseMappings)[used]?.id),
-          });
+        : t(
+            // With a type row or Keywords and severity selected there is no "this card" to compare.
+            cardIndex === null
+              ? "admin.cards.preview.usedCard"
+              : used === cardIndex
+                ? "admin.cards.preview.thisCard"
+                : "admin.cards.preview.otherCard",
+            {
+              name: cardName(asObjects(doc.responseMappings)[used]),
+              id: str(asObjects(doc.responseMappings)[used]?.id),
+            },
+          );
 
   return (
-    <section className="qm-admin__preview qm-preview" aria-labelledby={headingId}>
+    <section
+      className="qm-admin__preview qm-preview qm-preview--builder"
+      aria-labelledby={headingId}
+    >
       <div className="qm-preview__head">
         <h3 id={headingId}>{t("admin.cards.preview.title")}</h3>
         <fieldset className="qm-seg">
@@ -278,28 +290,19 @@ export function CardPreview({
                   }
                 >
                   {answer.kind === "behavior" ? (
-                    <div className="qm-source qm-source--problem">
-                      <span aria-hidden="true" className="qm-source__icon">
-                        !
-                      </span>
-                      <span>
-                        {translator.t("sourceStatus.line", {
-                          source: sourceName(sourceId),
-                          status: translator.t(`sourceStatus.status.${answer.status}`),
-                        })}
-                      </span>
-                    </div>
+                    <BehaviorLine
+                      source={sourceName(sourceId)}
+                      status={answer.status}
+                      translator={translator}
+                    />
                   ) : rendered === null ? null : (
-                    <ResultCard
+                    <RenderedCard
+                      rendered={rendered}
+                      config={config}
                       heading={sourceName(sourceId)}
-                      status={translator.t("sourceStatus.status.returned")}
-                      assessment={rendered.assessment}
-                      mapped={rendered.mapped}
-                      keywords={config.keywords}
-                      styles={config.keywordSeverityStyles}
+                      translator={translator}
                       view={view}
                       onToggleView={setView}
-                      t={translator.t}
                     />
                   )}
                 </div>

@@ -515,15 +515,18 @@ export function useLabelText(): (labelKey: unknown) => string {
 export function Sect({
   title,
   hint,
+  wide = false,
   children,
 }: {
   title: string;
   hint?: string;
+  /** The body takes the whole width under the title (a table), not the width beside the label. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const id = useId();
   return (
-    <div className="qm-sect">
+    <div className={wide ? "qm-sect qm-sect--wide" : "qm-sect"}>
       <div className="qm-sect__label">
         <h4 id={id}>{title}</h4>
         {hint !== undefined && <p className="qm-sect__hint">{hint}</p>}

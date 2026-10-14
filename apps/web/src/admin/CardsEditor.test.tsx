@@ -265,6 +265,48 @@ describe("the approved card editor items (round 1, S1)", () => {
     expect(within(table).getAllByText(/source \+2/).length).toBeGreaterThanOrEqual(1);
   });
 
+  // BW3 polish (#642, CRITIC-M4): the Why column names the score with the reason, as the design's
+  // "Which card wins" frame does: rule +4, source +2, persona +1, a tie to the earlier card.
+  it("shows the score with the reason for a source win, a persona win, a rule win and a tie", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const row = { kind: "value", path: "plate", labelKey: "field.plate", view: "summary" };
+    const store = configDraftStore(t.services).getState();
+    const list = cards(t);
+    act(() =>
+      store.setPath(
+        ["responseMappings"],
+        [
+          ...list,
+          { id: "veh-source", queryType: "VEH", sourceId: "nationalSource", elements: [row] },
+          { id: "veh-persona", queryType: "VEH", persona: "mobileUnit", elements: [row] },
+          {
+            id: "veh-rule-a",
+            queryType: "VEH",
+            when: { field: "plate", op: "eq", value: "ZZ-0001" },
+            elements: [row],
+          },
+          {
+            id: "veh-rule-b",
+            queryType: "VEH",
+            when: { field: "plate", op: "notEmpty" },
+            elements: [row],
+          },
+        ],
+      ),
+    );
+    const table = await within(editor()).findByRole("table", { name: "Which card wins" });
+    const why = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell").at(-1)?.textContent ?? "");
+    // A source win, a persona win, and a tie between two rules (the earlier card wins).
+    expect(why).toContain("score 2, source +2");
+    expect(why).toContain("score 1, persona +1");
+    expect(why).toContain("score 4, rule +4, earlier in the list");
+    for (const cell of why) expect(cell).toMatch(/^score \d+, /);
+  });
+
   it("makes the card key read-only once the live config has it, and shows the pointer", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
@@ -300,6 +342,42 @@ describe("the approved card editor items (round 1, S1)", () => {
       cards(t)[0] as unknown as { elements: { columns?: { format?: unknown }[] }[] }
     ).elements.at(-1);
     expect(table?.columns?.[0]?.format).toEqual({ type: "upper" });
+  });
+});
+
+// BW3 polish (#642, CRITIC-M2; spec 6.2 builder undo): after Undo or Redo the open rows follow the
+// rows they belong to, not their positions, and a control the user is on is never rebuilt.
+describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
+  const undo = (t: Opened) => act(() => void configDraftStore(t.services).getState().undo());
+
+  it("open row 4, remove row 3, undo: row 4 stays open and the returned row 3 is closed", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?State/ }));
+    expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
+    await t.user.click(within(editor()).getByRole("button", { name: /^Remove row Remarks/ }));
+    expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
+    undo(t);
+    expect(await within(editor()).findByRole("button", { name: /^Edit\s?Remarks/ })).toBeVisible();
+    expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
+    // Redo removes it again; the open row still follows its row.
+    act(() => void configDraftStore(t.services).getState().redo());
+    expect(within(editor()).queryByRole("button", { name: /^Edit\s?Remarks/ })).toBeNull();
+    expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
+  });
+
+  it("the control that has focus keeps focus, and is the same element, across an undo", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?State/ }));
+    await t.user.click(within(editor()).getByRole("button", { name: /^Remove row Remarks/ }));
+    const path = within(editor()).getByRole("combobox", { name: "Path" });
+    act(() => path.focus());
+    expect(path).toHaveFocus();
+    undo(t);
+    await within(editor()).findByRole("button", { name: /^Edit\s?Remarks/ });
+    expect(path.isConnected).toBe(true);
+    expect(path).toHaveFocus();
   });
 });
 

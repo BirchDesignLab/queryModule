@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.js";
-import { seededUser, signIn, signOutFromHeader } from "./helpers.js";
+import { seededUser, shortReference, signIn, signOutFromHeader } from "./helpers.js";
 
 // B3 (design system): the requests this session sent, on the dispatcher's right pane and as the
 // officer's last request under the form. Submit stops at the 202 acknowledgment; nothing here
@@ -68,9 +68,9 @@ test("dispatcher: Sending, then Acknowledged with the ack's reference, newest fi
   release();
   const reference = await first;
   await expect(row).toContainText("Acknowledged");
-  await expect(row).toContainText(reference.slice(0, 8));
+  await expect(row).toContainText(shortReference(reference));
   await expect(page.getByTestId("announcer-polite")).toContainText(
-    `Reference ${reference.slice(0, 8)}.`,
+    `Reference ${shortReference(reference)}.`,
   );
   // Focus stayed where the dispatcher was typing.
   await expect(page.getByLabel("Plate", { exact: true })).toBeFocused();
@@ -134,7 +134,7 @@ test("officer: the last request sits under the form, 48 px targets, and clears o
   const reference = await first;
   const row = last.getByRole("listitem");
   await expect(row).toContainText("Acknowledged");
-  await expect(row).toContainText(reference.slice(0, 8));
+  await expect(row).toContainText(shortReference(reference));
 
   // Below the form card, and every control in it is a 48 px target.
   const [card, box] = await Promise.all([

@@ -1,5 +1,5 @@
 import type { SubmitOutcome } from "@querymodule/client";
-import { formatAckTime } from "@querymodule/web-ui";
+import { formatAckTime, shortReference } from "@querymodule/web-ui";
 
 type T = (key: string, params?: Record<string, string | number | boolean>) => string;
 
@@ -18,7 +18,7 @@ export function outcomeAnnouncement(
       return t("submit.acknowledged", {
         queryType: typeLabel(outcome.queryType),
         time: formatAckTime(outcome.response.acknowledgedAt),
-        reference: outcome.response.correlationId.slice(0, 8),
+        reference: shortReference(outcome.response.correlationId),
       });
     case "rateLimited":
       return t("submit.rateLimited", { seconds: outcome.retryAfterSeconds });

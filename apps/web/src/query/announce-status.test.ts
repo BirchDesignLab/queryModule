@@ -1,4 +1,5 @@
 import { createTranslator } from "@querymodule/client";
+import { shortReference } from "@querymodule/web-ui";
 import { describe, expect, it } from "vitest";
 import { EN_BUNDLE } from "../test/en-bundle.js";
 import { criticalAnnouncementText, statusAnnouncementText } from "./announce-status.js";
@@ -6,6 +7,7 @@ import { criticalAnnouncementText, statusAnnouncementText } from "./announce-sta
 const { t } = createTranslator("en", EN_BUNDLE);
 const label = (code: string) => code;
 const base = { correlationId: "01923abc-c3d4-7e5f-8a9b-0c1d2e3f4a5b", queryType: "VEH" };
+const SHORT = shortReference(base.correlationId);
 
 describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
   it("says counts and the short reference", () => {
@@ -15,7 +17,7 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
         t,
         label,
       ),
-    ).toBe("VEH 01923abc: 2 of 2 sources done. 2 returned.");
+    ).toBe(`VEH ${SHORT}: 2 of 2 sources done. 2 returned.`);
   });
   it("words timedOut as timed out and keeps pending last", () => {
     expect(
@@ -32,7 +34,7 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
         t,
         label,
       ),
-    ).toBe("VEH 01923abc: 2 of 3 sources done. 1 returned, 1 timed out, 1 pending.");
+    ).toBe(`VEH ${SHORT}: 2 of 3 sources done. 1 returned, 1 timed out, 1 pending.`);
   });
   it("#587 says how many sources were not run, after the status counts", () => {
     expect(
@@ -41,7 +43,7 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
         t,
         label,
       ),
-    ).toBe("VEH 01923abc: 1 of 1 source done. 1 returned. 1 not run.");
+    ).toBe(`VEH ${SHORT}: 1 of 1 source done. 1 returned. 1 not run.`);
   });
   it("#576 with no status counts it says nothing dangling after the totals", () => {
     const text = statusAnnouncementText(
@@ -49,7 +51,7 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
       t,
       label,
     );
-    expect(text).toBe("VEH 01923abc: 0 of 0 sources done. 2 not run.");
+    expect(text).toBe(`VEH ${SHORT}: 0 of 0 sources done. 2 not run.`);
   });
   it("ruling 12 names the request by its primary typed field, never a payload value", () => {
     const text = statusAnnouncementText(
@@ -59,7 +61,7 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
       { typed: "ZZ-0001" },
     );
     expect(text).toBe("VEH ZZ-0001: 1 of 2 sources done. 1 returned, 1 pending.");
-    expect(text).not.toContain("01923abc");
+    expect(text).not.toContain(SHORT);
   });
   it("ruling 12 adds the highest severity and its configured keyword", () => {
     expect(
@@ -79,7 +81,7 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
         label,
         { highest: { severity: "warning", keyword: "EXPIRED" } },
       ),
-    ).toBe("VEH 01923abc: 0 of 0 sources done. warning: EXPIRED.");
+    ).toBe(`VEH ${SHORT}: 0 of 0 sources done. warning: EXPIRED.`);
   });
   it("a critical result is one assertive sentence naming the request, keyword and source", () => {
     expect(
@@ -97,6 +99,6 @@ describe("FR-044 the coalesced status sentence (spec 6.6)", () => {
         t,
         label,
       ),
-    ).toBe("VEH 01923abc: 1 of 1 source done. 1 failed.");
+    ).toBe(`VEH ${SHORT}: 1 of 1 source done. 1 failed.`);
   });
 });

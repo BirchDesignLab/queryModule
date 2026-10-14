@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -12,6 +12,7 @@ import {
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { configDraftStore } from "./ConfigBuilder.js";
+import type { JsonObject } from "./draft.js";
 
 beforeAll(preloadAdminRoutes);
 
@@ -98,5 +99,98 @@ describe("the card preview", () => {
     // In the summary, above the Show detail toggle: not hidden in the detail region.
     expect(term.closest(".qm-card__detail")).toBeNull();
     expect(within(card).getAllByText("TESTMAKE").length).toBeGreaterThan(0);
+  });
+
+  // BW3 polish (#642, CRITIC-M1): with a query type's row or Keywords and severity selected there is
+  // no "this card", so the Card used line names the card and says nothing about "another" one.
+  it("on a type row and on Keywords and severity the Card used line has no 'Another card'", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const nav = screen.getByRole("navigation", { name: "Configuration items" });
+    const tree = within(nav).getByRole("tree", { name: "Result cards" });
+    await t.user.click(within(tree).getByRole("treeitem", { name: /^Vehicle cards$/ }));
+    expect(await within(pane()).findByText(/^Card used: .*\(veh-summary\)\.$/)).toBeInTheDocument();
+    expect(within(pane()).queryByText(/Another card/)).toBeNull();
+    expect(within(pane()).queryByText(/This card/)).toBeNull();
+    await t.user.click(within(tree).getByRole("treeitem", { name: /^Keywords and severity/ }));
+    expect(await within(pane()).findByText(/^Card used: .*\(veh-summary\)\.$/)).toBeInTheDocument();
+    expect(within(pane()).queryByText(/Another card/)).toBeNull();
+  });
+
+  // BW3 polish (#642, T10-C3): a card narrowed by a rule wins in pick mode for the scenario whose
+  // own trigger satisfies the rule, and not for the default answer.
+  it("a rule-narrowed card wins in pick mode for the scenario that triggers its rule, not the default", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const store = configDraftStore(t.services).getState();
+    const mappings = (store.doc as { responseMappings: Record<string, unknown>[] })
+      .responseMappings;
+    act(() =>
+      store.setPath(
+        ["responseMappings"],
+        [
+          ...mappings,
+          {
+            id: "veh-plate",
+            queryType: "VEH",
+            when: { field: "plate", op: "eq", value: "ZZ-0001" },
+            elements: [{ kind: "value", path: "plate", labelKey: "field.plate", view: "summary" }],
+          },
+        ],
+      ),
+    );
+    const scenario = within(pane()).getByRole("combobox", { name: "Scenario" });
+    await t.user.selectOptions(scenario, "0:0");
+    expect(await within(pane()).findByText(/\(veh-plate\)\. Another card\.$/)).toBeInTheDocument();
+    await t.user.selectOptions(scenario, "0:d");
+    expect(await within(pane()).findByText(/\(veh-summary\)\. This card\.$/)).toBeInTheDocument();
+  });
+});
+
+// BW3 polish round 1 (C1): a typed response answers only a query carrying its type values, so pick
+// mode hands part 0 those type values with the scenario's own trigger. A card ruled on the type
+// field wins for the typed response's default and for its scenarios.
+describe("the card preview: typed responses", () => {
+  it("a card ruled on the type field wins in pick mode for a typed PRO response, default and scenario", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    const store = configDraftStore(t.services).getState();
+    const element = { kind: "value", path: "note", labelKey: "field.plate", view: "summary" };
+    act(() =>
+      store.setPath(
+        ["responseMappings"],
+        [
+          ...(store.doc as { responseMappings: Record<string, unknown>[] }).responseMappings,
+          { id: "pro-base", queryType: "PRO", elements: [element] },
+          {
+            id: "pro-firearm",
+            queryType: "PRO",
+            when: { field: "propertyType", op: "eq", value: "FIREARM" },
+            elements: [element],
+          },
+        ],
+      ),
+    );
+    const mock = structuredClone(store.mock) as unknown as {
+      sources: Record<string, { responses: Record<string, unknown>[] }>;
+    };
+    mock.sources.stateSource?.responses.push({
+      queryType: "PRO",
+      types: { propertyType: "FIREARM" },
+      default: { status: "NO RECORD", note: "firearm entry" },
+      scenarios: [{ when: { serial: "ZZ-0001" }, respond: { status: "STOLEN", note: "hit" } }],
+    });
+    act(() => store.setMock(mock as unknown as JsonObject));
+    const nav = screen.getByRole("navigation", { name: "Configuration items" });
+    const tree = within(nav).getByRole("tree", { name: "Result cards" });
+    await t.user.click(within(tree).getByRole("treeitem", { name: /^Property cards$/ }));
+    const scenario = within(pane()).getByRole("combobox", { name: "Scenario" });
+    const last = within(scenario).getAllByRole("option").length;
+    expect(last).toBeGreaterThan(1);
+    const options = within(scenario).getAllByRole("option") as HTMLOptionElement[];
+    for (const o of options.slice(-2)) {
+      await t.user.selectOptions(scenario, o.value);
+      expect(await within(pane()).findByText(/\(pro-firearm\)/)).toBeInTheDocument();
+    }
   });
 });

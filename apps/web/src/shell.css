@@ -1790,6 +1790,59 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   min-inline-size: calc(var(--qm-space-12) * 3);
 }
 
+/* Which card wins (BW3 polish, item 5): four short columns that fit the editor pane at 1366 and
+   1024 with nothing to scroll sideways. A fixed layout and wrapping text keep the Why column,
+   which carries the score, fully in view; the table keeps its table semantics. */
+.qm-wins {
+  min-inline-size: 0;
+}
+
+.qm-wins__table {
+  table-layout: fixed;
+}
+
+.qm-wins__table :where(th, td) {
+  min-inline-size: 0;
+  padding-inline: var(--qm-space-2);
+  overflow-wrap: anywhere;
+}
+
+.qm-wins__table thead th {
+  overflow-wrap: normal;
+}
+
+.qm-wins__table th:nth-child(1) {
+  inline-size: 23%;
+}
+
+.qm-wins__table th:nth-child(2) {
+  inline-size: 25%;
+}
+
+.qm-wins__table th:nth-child(3) {
+  inline-size: 27%;
+}
+
+.qm-wins__table th:nth-child(4) {
+  inline-size: 25%;
+}
+
+/* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
+   pane instead of scrolling it sideways (T12-7). */
+.qm-try__toggle {
+  align-self: flex-start;
+}
+
+.qm-seg.qm-try__toggle > button {
+  min-height: var(--qm-control-height-dense);
+}
+
+.qm-try__payload {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .qm-mock__na {
   color: var(--qm-color-text-muted);
   font-style: italic;
@@ -1854,6 +1907,21 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   gap: var(--qm-space-1) var(--qm-space-2);
   margin: 0;
   color: var(--qm-field-required);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* A warning is not an error (T12-14): the severity warning token pair as a note, with the icon
+   and the word Warning in the text, so it never rests on color alone. */
+.qm-mock__warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1) var(--qm-space-2);
+  margin: 0;
+  padding: calc(var(--qm-space-1) / 2) var(--qm-space-2);
+  border-radius: var(--qm-radius-control);
+  background: var(--qm-color-severity-warning-bg);
+  color: var(--qm-color-severity-warning-fg);
   font-size: var(--qm-type-size-sm);
 }
 
@@ -1931,7 +1999,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin-block: var(--qm-space-1);
 }
 
-.qm-mock__trigger .qm-mock__error {
+.qm-mock__trigger :where(.qm-mock__error, .qm-mock__warning) {
   grid-column: 1 / -1;
 }
 
@@ -2098,4 +2166,37 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-control);
   overflow-wrap: anywhere;
+}
+
+/* A table needs the whole width: the title and hint sit above it, not beside it. */
+.qm-sect--wide > .qm-sect__label,
+.qm-sect--wide > .qm-sect__body {
+  flex-basis: 100%;
+}
+
+/* The builder previews (Card preview, Try a match; visual check, BW3): the fields in two columns
+   where the pane allows, each label above its control, the control the column's width, and
+   everything else (the answer choice, the card, the notes) across the pane, as the mockup frames. */
+.qm-preview--builder .qm-preview__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3), 1fr));
+  align-content: start;
+  gap: var(--qm-space-2) var(--qm-space-3);
+}
+
+.qm-preview--builder .qm-preview__body > * {
+  grid-column: 1 / -1;
+}
+
+.qm-preview--builder .qm-preview__body > div:has(> label:first-child) {
+  display: flex;
+  flex-direction: column;
+  grid-column: auto;
+  gap: calc(var(--qm-space-1) / 2);
+  min-inline-size: 0;
+}
+
+.qm-preview--builder .qm-preview__body > div:has(> label:first-child) > .qm-field__input {
+  box-sizing: border-box;
+  inline-size: 100%;
 }

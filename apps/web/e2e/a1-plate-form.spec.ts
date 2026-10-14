@@ -1,5 +1,5 @@
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { shortReference, signIn } from "./helpers.js";
 
 test("[A1] the plate form shows Plate, State TX, Year and VIN, and Enter submits (FR-004, FR-006, FR-064)", {
   tag: "@smoke",
@@ -43,10 +43,10 @@ test("[A1] the plate form shows Plate, State TX, Year and VIN, and Enter submits
 
   // The polite region gives the short reference; the requests list shows the same short reference on its row.
   await expect(page.getByTestId("announcer-polite")).toHaveText(
-    new RegExp(String.raw`Vehicle query sent at .+\. Reference ${correlationId.slice(0, 8)}\.`),
+    new RegExp(String.raw`Vehicle query sent at .+\. Reference ${shortReference(correlationId)}\.`),
   );
   const ack = page.getByRole("region", { name: "Requests this shift" });
   await expect(ack).toBeVisible();
-  await expect(ack.getByRole("listitem")).toContainText(correlationId.slice(0, 8));
+  await expect(ack.getByRole("listitem")).toContainText(shortReference(correlationId));
   await expectNoSeriousAxeViolations(page);
 });
