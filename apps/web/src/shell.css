@@ -1537,6 +1537,11 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+/* In the review dialog the "Changes from the live version" heading is a section, not a second title. */
+.qm-leave-dialog__content .qm-editor__title {
+  font-size: var(--qm-type-size-lg);
+}
+
 .qm-diff__group {
   margin: 0 0 var(--qm-space-5);
   padding-block-start: var(--qm-space-3);

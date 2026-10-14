@@ -381,6 +381,20 @@ describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
   });
 });
 
+// Demo dry run G37: the row summary read "status Value, Both". It now says where the row shows.
+describe("a row's summary line", () => {
+  it("says in words where the row shows, not 'Value, Both'", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const status = within(editor()).getByRole("group", { name: "Status" });
+    expect(status).toHaveTextContent("Value, shown in the summary and the detail");
+    expect(status).not.toHaveTextContent(/Value, Both/);
+    const plate = within(editor()).getByRole("group", { name: "Plate" });
+    expect(plate).toHaveTextContent("Value, shown in the summary");
+    expect(plate).not.toHaveTextContent(/Summary,/);
+  });
+});
+
 describe("Review lines", () => {
   it("the Changes view lists the added row under Result cards by card name", async () => {
     const t = await openBuilder();

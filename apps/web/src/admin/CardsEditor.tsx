@@ -729,7 +729,7 @@ function CardRow({
   const headId = `${uid}-head`;
   const bodyId = `${uid}-body`;
   const kindWord = t(el.kind === "table" ? "admin.cards.kind.table" : "admin.cards.kind.value");
-  const viewWord = t(`admin.cards.view.${el.view}`);
+  const viewWord = t(`admin.cards.viewShown.${el.view}`);
   const marked = el.highlight !== false;
   const wanted = el.kind === "table" ? "array" : "leaf";
   const found = paths.filter((p) => p.kind === wanted);

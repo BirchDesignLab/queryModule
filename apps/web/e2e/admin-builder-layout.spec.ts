@@ -107,6 +107,37 @@ for (const size of SIZES) {
       ).toBeLessThanOrEqual(1);
     });
 
+    test("[G37] mock tree rows keep one line each, with the key under", async ({ page }) => {
+      const mock = tree(page).getByRole("treeitem", {
+        name: /^Mock response: Vehicle, State system/,
+      });
+      await mock.scrollIntoViewIfNeeded();
+      const label = mock.locator(".qm-tree__label");
+      await expect(label).toHaveText("Vehicle");
+      expect(await lines(label), "mock row label lines").toBe(1);
+      const source = tree(page).getByRole("treeitem", { name: /^Mock source: State system/ });
+      expect(await lines(source.locator(".qm-tree__label")), "mock source label lines").toBe(1);
+    });
+
+    test("[G18] the review dialog's section heading is smaller than its title", async ({
+      page,
+    }) => {
+      await page.getByRole("button", { name: "Review and publish" }).click();
+      const dialog = page.getByRole("dialog", { name: "Review and publish" });
+      await expect(dialog).toBeVisible();
+      const size = (name: string, level: number) =>
+        dialog
+          .getByRole("heading", { name, level })
+          .first()
+          .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+      const title = await dialog
+        .locator("h1, h2")
+        .first()
+        .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+      const section = await size("Changes from the live version", 3);
+      expect(section).toBeLessThan(title);
+    });
+
     test("[G37] the Which card wins cells stay within three lines", async ({ page }) => {
       await selectRow(page, /^Vehicle cards/);
       const card = tree(page).getByRole("treeitem", { name: /^1\. All results/ });
