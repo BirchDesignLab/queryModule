@@ -684,8 +684,9 @@ config order, numbered and named by what narrows them ("All results", a source o
   editor as field rules). A card whose source, persona and rule equal another's shows
   `config.duplicateMapping` with "Open <other card>", and Review and publish stays blocked.
 - **Which card wins:** a table over each source and persona (and the rule values the cards test)
-  naming the winning card and why ("rule +4", "source +2", "persona +1", "earlier in the list", "only
-  card that fits"); the rows this card wins are tagged. It uses the same scoring as the dispatcher's
+  naming the winning card and why, as its score and a reason ("score 2, source +2", "score 0, only
+  card that fits"; the other reasons read "rule +4", "persona +1" and "earlier in the list"); the rows
+  this card wins are tagged "This card". It uses the same scoring as the dispatcher's
   mapper.
 - **Rows:** one item per element with Edit, Move up, Move down and Remove. A row has Kind (value or
   table), Path (free text, with the paths found in the draft's mock answers as pick buttons), the
@@ -700,7 +701,8 @@ The right pane, **Card preview**, renders the production result card (the same c
 as the dispatcher's request entry) with the draft's cards, keywords and styles. Pick a mock source,
 then either pick a scenario of the draft's mock or type values: typed values go through the same
 matcher the mock adapter uses (`matchMockScenario`, spec 5.4), and the pane says which scenario or
-default answered and whether this card was the one used. A behavior scenario (timeout, error,
+default answered and whether this card was the one used. The Dispatcher and Officer buttons at the top
+of the pane switch the layout the card is drawn in. A behavior scenario (timeout, error,
 credentials rejected) previews the status line, not a card. Typed values stay in the pane.
 
 **Keywords and severity** (the last child of the Result cards group). Keywords are a table: keyword,
@@ -711,8 +713,9 @@ does not block. The right pane shows a sample line to try a keyword or an except
 
 **Try a match** (the mock editor's right pane). Pick a source and a query type, type the query's
 field values, and the pane shows which scenario matches or that the default answers, which response
-of the source answered, the result and the payload as read-only JSON. Same matching as the adapter; nothing is
-sent and the typed values are never saved.
+of the source answered and how long it waits, then the answer as the production Result card, or, with
+the Payload button, as read-only JSON. Same matching as the adapter; nothing is sent and the typed
+values are never saved.
 
 **Review and publish** lists the changes in plain sentences, one per change, in two lists named
 "Result cards" and "Keywords and severity" (card ids, row labels and paths, keyword text and severity;
