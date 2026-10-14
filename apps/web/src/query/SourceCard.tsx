@@ -10,8 +10,10 @@ export interface SourceCardProps {
   /** What the request sent, for the mapping's `when` (memory only). */
   submitted: SubmittedQuery | undefined;
   queryType: string;
-  /** The part's parent: null for the primary part, which is the only one with kept values. */
+  /** The part's parent: null for the primary part, which uses what was submitted. */
   parentPartId: number | null;
+  /** The values the server planned for this part (a nested part's `when`); memory only (#633). */
+  partValues?: Readonly<Record<string, unknown>> | undefined;
   sourceId: string;
   payload: Record<string, unknown>;
   persona: string;
@@ -33,6 +35,7 @@ export function SourceCard({
   submitted,
   queryType,
   parentPartId,
+  partValues,
   sourceId,
   payload,
   persona,
@@ -47,14 +50,19 @@ export function SourceCard({
       config,
       {
         queryType,
-        partValues: partValuesOf({ queryType, parentPartId }, submitted, config, now),
+        partValues: partValuesOf(
+          { queryType, parentPartId, values: partValues },
+          submitted,
+          config,
+          now,
+        ),
         sourceId,
         persona,
       },
       payload,
       now,
     );
-  }, [config, submitted, queryType, parentPartId, sourceId, persona, payload]);
+  }, [config, submitted, queryType, parentPartId, partValues, sourceId, persona, payload]);
   const assessment = useMemo(
     () => assessResult(payload, config.keywords),
     [config.keywords, payload],

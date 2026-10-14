@@ -263,6 +263,36 @@ describe("failed-row retry (the list only shows the button; the owner sends)", (
     expect(heading).not.toHaveFocus();
   });
 
+  it("keeps focus on the request row when the placeholder row it was on is removed (#633 critic M2)", async () => {
+    const REF = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+    const placeholder: RequestRowView = { ...ACKED, id: "p1", reference: REF };
+    const request: RequestRowView = { ...ACKED, id: "r7", reference: REF };
+    const { rerender } = render(<RequestList {...base} rows={[placeholder, FAILED]} />);
+    const row = screen.getByRole("listitem", { name: placeholder.name });
+    act(() => row.focus());
+    expect(row).toHaveFocus();
+    // The 202 lands: the real row (same reference) takes over and the placeholder leaves.
+    rerender(<RequestList {...base} rows={[request, FAILED]} />);
+    const successor = screen.getAllByRole("listitem")[0];
+    expect(successor).toHaveFocus();
+    expect(successor).toHaveAttribute("tabindex", "0");
+  });
+
+  it("does not take focus when the removed row did not have it, or no row replaces it", () => {
+    const REF = "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+    const { rerender } = render(
+      <RequestList {...base} rows={[{ ...ACKED, id: "p1", reference: REF }, FAILED]} />,
+    );
+    rerender(<RequestList {...base} rows={[{ ...ACKED, id: "r7", reference: REF }, FAILED]} />);
+    expect(document.body).toHaveFocus();
+    const lone = render(
+      <RequestList {...base} rows={[{ ...ACKED, id: "q1", reference: "x-1" }]} />,
+    );
+    act(() => screen.getAllByRole("listitem").at(-1)?.focus());
+    lone.rerender(<RequestList {...base} rows={[FAILED]} />);
+    expect(document.body).toHaveFocus();
+  });
+
   it("leaves focus alone when the retry button was not the focused element", async () => {
     const onRetry = vi.fn();
     const props = { ...base, onRetry };

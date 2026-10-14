@@ -319,6 +319,11 @@ A mapping says what to show from a source answer:
 `pattern`) and `template` (with a `template`); an unknown format is an error. Two mappings with the
 same query type, source, persona and `when` presence are an error.
 
+A mapping's `when` is checked per part, against that part's own values only, never another part's.
+For an also-run part those are the values the server planned for it (read from the request detail),
+so until the detail arrives, or when the part was purged, its `when` does not match and the
+unconditional card for that query type is shown.
+
 In M1 mappings are validated against the mock payloads and warn on a path that finds nothing. They
 are applied to real answers from M2.
 
@@ -482,7 +487,7 @@ each violation by JSON pointer and key (`fixture.realPlate`, `fixture.validVin`,
 | `status` | `status` | a scalar with no run of 4 or more digits |
 | `freeText` | `remarks`, `note`, `caution`, `description`, `offense` | text with no digits at all |
 | `container` | `vehicle`, `owner`, `owners`, `subject`, `warrant`, `warrants` | an object or array, checked in turn |
-| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency` | a scalar with no run of 4 or more digits; `year` may be 1901 to 1999 |
+| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency`, `licensenumber` | a scalar with no run of 4 or more digits, counted across the separators `-` `.` `/` and spaces (so `123-45-678` is rejected); `year` may be 1901 to 1999 |
 
 `SYNTHETIC_NAMES` is `TESTERSON`, `SAMPLEWORTH`, `EXAMPLESON`, `SAMPLE`, `TEST`, `TESTER` and
 `EXAMPLE` (compared upper-cased).

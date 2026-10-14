@@ -150,6 +150,25 @@ test("[A8] a result with no mapping shows every field under its path, with no to
   await expectNoSeriousAxeViolations(page);
 });
 
+test("[A8] the one synthetic licence record shows its status and licence number in the DL card (#602)", async ({
+  page,
+}) => {
+  await officer(page);
+  await chooseQueryType(page, "DL");
+  const number = page.getByLabel("License number");
+  await number.focus();
+  await page.keyboard.type("ZZDLTEST");
+  await page.keyboard.press("Enter");
+  const state = card(page, "State system");
+  await expect(state).toBeVisible({ timeout: 8000 });
+  // dl-summary: status and licenseNumber in the summary; the default NO RECORD has no number.
+  await expect(state).toContainText("VALID");
+  await expect(state).toContainText("ZZDLTEST");
+  await expect(state).not.toContainText("No card is set up for this result");
+  await expect(card(page, "National system")).toContainText("NO RECORD", { timeout: 8000 });
+  await expectNoSeriousAxeViolations(page);
+});
+
 test("[A8] typing in Plate while cards arrive keeps focus and value", async ({ page }) => {
   await officer(page);
   await submitPlate(page, "ZZ-0001");

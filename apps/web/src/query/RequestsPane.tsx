@@ -138,6 +138,7 @@ export const RequestsPane = memo(function RequestsPane({ config, variant }: Requ
                           submitted={entry.submitted}
                           queryType={part.queryType}
                           parentPartId={part.parentPartId}
+                          partValues={part.values}
                           sourceId={source.sourceId}
                           payload={payload}
                           persona={persona}

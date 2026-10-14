@@ -23,8 +23,9 @@ export interface FixtureDiagnostic {
  * Allowlist of payload keys by kind (spec 5.4); listed in docs/site-config.md.
  * Keys are normalised before lookup: lower-cased, "_" and "-" removed.
  * `container` keys must hold an object or array (recursed); a scalar there is a violation.
- * `other` holds descriptive vehicle, property and warrant leaf keys; its strings and numbers may
- * not carry a run of 4 or more digits (a `year` of 1901 to 1999 is the one exception).
+ * `other` holds descriptive vehicle, property, warrant and licence leaf keys; its strings and numbers may
+ * not carry a run of 4 or more digits, counted across the separators - . / and whitespace (a
+ * `year` of 1901 to 1999 is the one exception).
  */
 export const FIXTURE_LEAF_KEYS: {
   plate: readonly string[];
@@ -57,7 +58,17 @@ export const FIXTURE_LEAF_KEYS: {
   status: ["status"],
   freeText: ["remarks", "note", "caution", "description", "offense"],
   container: ["vehicle", "owner", "owners", "subject", "warrant", "warrants"],
-  other: ["make", "model", "year", "type", "state", "serial", "propertytype", "agency"],
+  other: [
+    "make",
+    "model",
+    "year",
+    "type",
+    "state",
+    "serial",
+    "propertytype",
+    "agency",
+    "licensenumber",
+  ],
 };
 
 export const SYNTHETIC_NAMES: ReadonlySet<string> = new Set([
@@ -131,6 +142,9 @@ function is1901Date(s: string): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= (DAYS_1901[month - 1] ?? 0);
 }
 
+/** What may sit between digits without breaking a run for the `other` kind: - . / and whitespace. */
+const DIGIT_SEPARATORS = /[-./\s]/g;
+
 function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unknown): Violation {
   switch (kind) {
     case "plate":
@@ -168,8 +182,9 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
           ? null
           : "fixture.freeTextDigits";
       }
+      // Separators do not hide a number: 123-45-678 and 12 34 count as one run (#636).
       return (typeof value === "string" || typeof value === "number") &&
-        /\d{4,}/.test(String(value))
+        /\d{4,}/.test(String(value).replace(DIGIT_SEPARATORS, ""))
         ? "fixture.freeTextDigits"
         : null;
     }

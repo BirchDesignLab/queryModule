@@ -97,6 +97,22 @@ export function propertyRecord(o: { serial: string }): SourcePayload {
   };
 }
 
+/**
+ * A driver's licence response (#602): the licence number is a trigger-style token with no run of 4
+ * or more digits (ZZDLTEST), the person is synthetic (person(n)), the state is the placeholder TX.
+ */
+export function licenseRecord(o: { licenseNumber: string; n: number }): SourcePayload {
+  const holder = person(o.n);
+  return {
+    status: "VALID",
+    licenseNumber: o.licenseNumber,
+    last: holder.last,
+    first: holder.first,
+    dob: holder.dob,
+    state: "TX",
+  };
+}
+
 /** A wanted-person response: birth date is day n of 1901, the warrant is issued the next day. */
 export function warrantRecord(o: { n: number }): SourcePayload {
   return {

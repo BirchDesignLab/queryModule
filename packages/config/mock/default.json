@@ -184,7 +184,21 @@
             "status": "NO RECORD"
           },
           "queryType": "DL",
-          "scenarios": []
+          "scenarios": [
+            {
+              "respond": {
+                "dob": "1901-01-01",
+                "first": "SAMPLE",
+                "last": "TESTERSON",
+                "licenseNumber": "ZZDLTEST",
+                "state": "TX",
+                "status": "VALID"
+              },
+              "when": {
+                "licenseNumber": "ZZDLTEST"
+              }
+            }
+          ]
         }
       ]
     }
