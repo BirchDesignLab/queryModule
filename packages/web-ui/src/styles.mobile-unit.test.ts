@@ -66,12 +66,17 @@ describe("B4 officer quick access: tiles, run button, no muted text", () => {
     );
     expect(tile).toMatch(/flex-direction:\s*column/);
   });
-  it("the run action is 64 px (touch control plus space-2) and takes the row beside Clear", () => {
-    const run = rulesFor('.qm-layout--mobile-unit .qm-action-bar > button[type="submit"]');
-    expect(run).toMatch(
+  it("Run and Clear are both 64 px (touch control plus space-2) and split the bar half each", () => {
+    const buttons = rulesFor(".qm-layout--mobile-unit .qm-action-bar > button");
+    expect(buttons).toMatch(
       /min-height:\s*calc\(var\(--qm-control-height-touch\)\s*\+\s*var\(--qm-space-2\)\)/,
     );
-    expect(run).toMatch(/flex:\s*1 1 12rem/);
+    expect(buttons).toMatch(/flex:\s*1 1 0;/);
+    expect(buttons).toMatch(/align-self:\s*stretch/);
+    // The status line takes its own full-width line (developer ruling 10-14-26).
+    expect(rulesFor(".qm-layout--mobile-unit .qm-action-bar__status")).toMatch(
+      /flex-basis:\s*100%/,
+    );
   });
   it("no rule of the officer layout uses the muted text colour (spec 6.3)", () => {
     const officerRules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
