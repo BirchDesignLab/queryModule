@@ -150,6 +150,32 @@ describe("A6 the ack toast", () => {
     expect(screen.queryByTestId("ack-toast")).toBeNull();
   });
 
+  it("dismissing returns focus to the control that had it before the toast, never body (#633 critic M1)", async () => {
+    const { send, ack, user } = setup();
+    const outside = document.createElement("button");
+    outside.textContent = "Plate";
+    document.body.append(outside);
+    outside.focus();
+    ack(send({ plate: "ZZ-0001" }));
+    await screen.findByTestId("ack-toast");
+    // Tab order lands inside the toast; move there as a keyboard user would.
+    const dismiss = screen.getByRole("button", { name: /dismiss/i });
+    act(() => dismiss.focus());
+    await user.keyboard("{Enter}");
+    expect(screen.queryByTestId("ack-toast")).toBeNull();
+    expect(outside).toHaveFocus();
+    outside.remove();
+  });
+
+  it("dismissing leaves focus alone when the toast was never focused", async () => {
+    const { send, ack, user } = setup();
+    ack(send({ plate: "ZZ-0001" }));
+    await screen.findByTestId("ack-toast");
+    await user.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(screen.queryByTestId("ack-toast")).toBeNull();
+    expect(document.body).toHaveFocus();
+  });
+
   it("does not move focus", async () => {
     const { send, ack } = setup();
     const before = document.activeElement;
