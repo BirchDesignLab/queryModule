@@ -56,6 +56,9 @@ export function AckToast() {
   // full 10 s runs again once both have left.
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  // The control that had focus when it entered the toast, so Dismiss can hand it back instead of
+  // letting the removed button drop focus to body (#633 critic M1).
+  const returnFocus = useRef<HTMLElement | null>(null);
   const paused = hovered || focused;
   const key = toast?.correlationId;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -85,7 +88,14 @@ export function AckToast() {
       data-testid="ack-toast"
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
-      onFocus={() => setFocused(true)}
+      onFocus={(event) => {
+        setFocused(true);
+        // Only focus arriving from outside the toast names a place to return to.
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          returnFocus.current =
+            event.relatedTarget instanceof HTMLElement ? event.relatedTarget : null;
+        }
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
       }}
@@ -112,7 +122,13 @@ export function AckToast() {
         type="button"
         className="qm-button qm-button--ghost"
         aria-label={t("toast.ack.dismiss", { name })}
-        onClick={() => setToast(null)}
+        onClick={() => {
+          const back = returnFocus.current;
+          returnFocus.current = null;
+          setToast(null);
+          // Hand focus back before the dismissed button leaves the page.
+          if (back?.isConnected) back.focus();
+        }}
       >
         {t("toast.dismiss")}
       </button>

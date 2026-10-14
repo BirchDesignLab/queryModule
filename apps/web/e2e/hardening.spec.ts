@@ -163,12 +163,11 @@ async function tabThroughNotObscured(page: Page): Promise<{ obscured: string[]; 
 for (const persona of PERSONAS) {
   for (const condition of CONDITIONS) {
     test.describe(`${persona.name} at ${condition.name}`, () => {
-      // Starts from an empty list (fixtures.ts): the shared e2e database holds earlier scenarios'
-      // history, and a long page puts a control under the desktop-width ack toast (open design call).
+      // The ack toast flows in the page at every width (#633), so a long page, with the shared
+      // e2e database's earlier history, never puts a control under it.
       test.use({
         viewport: condition.viewport,
         deviceScaleFactor: condition.scale,
-        emptyQueryList: true,
       });
 
       test("reflows whole, targets hold, focus is never hidden behind the action bar", async ({
