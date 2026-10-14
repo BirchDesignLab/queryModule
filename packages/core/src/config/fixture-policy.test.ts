@@ -390,6 +390,33 @@ describe("exponent-form numbers are rejected (#638)", () => {
   });
 });
 
+describe("non-Latin decimal digits count as digits (#647)", () => {
+  // Arabic-Indic U+0661.., Extended Arabic-Indic U+06F1.., Devanagari U+0967..
+  const arabic = "١٢٣٤٥٦";
+  const extended = "۱۲۳۴";
+  const devanagari = "१२३४५";
+  const runs = [arabic, extended, devanagari, "١٢-٣٤-٥٦", `AB ${devanagari}`, "١٢,٣٤,٥٦٧"];
+
+  it.each(runs)("rejects %s in status, serial and licenseNumber", (value) => {
+    for (const key of ["status", "serial", "licenseNumber"]) {
+      expect(check({ [key]: value }), `${key}: ${value}`).toEqual([
+        { pointer: `${RESPOND}/${key}`, key: "fixture.freeTextDigits" },
+      ]);
+    }
+  });
+
+  it.each([arabic, extended, devanagari, "REMARKS ١"])("rejects a free text with %s", (value) => {
+    expect(check({ remarks: value })).toEqual([
+      { pointer: `${RESPOND}/remarks`, key: "fixture.freeTextDigits" },
+    ]);
+  });
+
+  it("keeps short non-Latin digit groups in status and serial, and free text without digits", () => {
+    expect(check({ status: "١٢-AB-٣٤", serial: "ZZ١٢٣" })).toEqual([]);
+    expect(check({ remarks: "STOLEN VEHICLE" })).toEqual([]);
+  });
+});
+
 describe("a driver's licence record (#602, design ruling 10)", () => {
   const dl = (licenseNumber: unknown) => ({
     status: "VALID",
