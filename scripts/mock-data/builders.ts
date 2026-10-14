@@ -64,25 +64,41 @@ export function address(n: number): string {
 }
 
 /**
- * A vehicle response. "NO RECORD" is the bare status. "STOLEN" is the full state record, or with
- * `summary` the short national record (status, plate, remarks).
+ * A vehicle response. "NO RECORD" is the bare status. "STOLEN" and "REGISTERED" are the full state
+ * record, or with `summary` the short national record (status, plate, remarks). REGISTERED is the
+ * calm hit: a record that matches no keyword, so it carries no severity.
  */
 export function vehicleRecord(o: {
   plate: string;
-  status: "STOLEN" | "NO RECORD";
+  status: "STOLEN" | "REGISTERED" | "NO RECORD";
   n: number;
   summary?: boolean;
 }): SourcePayload {
   if (o.status === "NO RECORD") return { status: "NO RECORD" };
-  if (o.summary === true) return { status: "STOLEN", plate: o.plate, remarks: "STOLEN VEHICLE" };
+  const remarks = o.status === "STOLEN" ? "STOLEN VEHICLE" : "REGISTRATION CURRENT";
+  if (o.summary === true) return { status: o.status, plate: o.plate, remarks };
   const owner = person(o.n);
   return {
-    status: "STOLEN",
+    status: o.status,
     plate: o.plate,
     state: "TX",
     vehicle: { make: "TESTMAKE", model: "SAMPLEMODEL", year: 1901, vin: vin(o.n) },
     owner: { last: owner.last, first: owner.first, address: address(o.n) },
-    remarks: "STOLEN VEHICLE",
+    remarks,
+  };
+}
+
+/**
+ * A person record that matches no keyword (the calm person hit): the subject is the synthetic
+ * person(n), the address is on Example Ave.
+ */
+export function personRecord(o: { n: number }): SourcePayload {
+  const subject = person(o.n);
+  return {
+    status: "RECORD FOUND",
+    subject: { last: subject.last, first: subject.first, dob: subject.dob },
+    address: address(o.n),
+    remarks: "NO ALERTS",
   };
 }
 

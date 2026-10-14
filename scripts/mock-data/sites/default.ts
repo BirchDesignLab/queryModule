@@ -5,6 +5,7 @@ import type * as Builders from "../builders";
 export const site = (b: typeof Builders): MockFile => {
   const none = { status: "NO RECORD" };
   const p = b.plate(1);
+  const calm = b.plate(10);
   return {
     siteId: "default",
     sources: {
@@ -24,9 +25,20 @@ export const site = (b: typeof Builders): MockFile => {
                 respond: b.vehicleRecord({ plate: "ABC123", status: "NO RECORD", n: 0 }),
               },
               { when: { plate: "FAIL1" }, behavior: "error" },
+              {
+                when: { plate: calm },
+                respond: b.vehicleRecord({ plate: calm, status: "REGISTERED", n: 2 }),
+              },
             ],
           },
-          { queryType: "PER", default: none, scenarios: [] },
+          {
+            queryType: "PER",
+            default: none,
+            scenarios: [
+              // The calm person hit: person(3) is EXAMPLESON, SAMPLE.
+              { when: { last: "EXAMPLESON", first: "SAMPLE" }, respond: b.personRecord({ n: 3 }) },
+            ],
+          },
           {
             queryType: "PRO",
             default: none,
@@ -58,6 +70,15 @@ export const site = (b: typeof Builders): MockFile => {
                 respond: b.vehicleRecord({ plate: p, status: "STOLEN", n: 1, summary: true }),
               },
               { when: { plate: "TIMEOUT" }, behavior: "timeout" },
+              {
+                when: { plate: calm },
+                respond: b.vehicleRecord({
+                  plate: calm,
+                  status: "REGISTERED",
+                  n: 2,
+                  summary: true,
+                }),
+              },
             ],
           },
           { queryType: "PER", default: none, scenarios: [] },

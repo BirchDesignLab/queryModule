@@ -23,9 +23,18 @@ const DEFAULT_ROWS: Row[] = [
   ["nationalSource", "WNT", '{"last":"MISSING"}', "MISSING PERSON"],
   // #602: the one synthetic licence record, so the DL card can show data (design ruling 10).
   ["stateSource", "DL", '{"licenseNumber":"ZZDLTEST"}', "VALID"],
+  // Demo scenario pack: a calm (non-critical) vehicle hit on both sources and a person hit.
+  ["stateSource", "VEH", '{"plate":"ZZ-0010"}', "REGISTERED"],
+  ["nationalSource", "VEH", '{"plate":"ZZ-0010"}', "REGISTERED"],
+  ["stateSource", "PER", '{"first":"SAMPLE","last":"EXAMPLESON"}', "RECORD FOUND"],
 ];
 const EXAMPLE_OK_ROWS: Row[] = DEFAULT_ROWS.filter(
-  ([, q, when]) => q !== "PRO" && q !== "DL" && !when.includes("MISSING"),
+  ([, q, when]) =>
+    q !== "PRO" &&
+    q !== "DL" &&
+    q !== "PER" &&
+    !when.includes("MISSING") &&
+    !when.includes("ZZ-0010"),
 );
 const STATE_TYPES = ["VEH", "PER", "PRO", "DL"];
 const NATIONAL_TYPES = ["VEH", "PER", "PRO", "WNT", "DL"];
@@ -76,6 +85,52 @@ describe("the generated default mock answers the one synthetic licence query (#6
     });
     const national = matchMockScenario(mock, "nationalSource", req({ licenseNumber: "ZZDLTEST" }));
     expect(national).toMatchObject({ scenarioIndex: null });
+  });
+});
+
+describe("the default mock answers the demo scenario pack hits with non-critical records", () => {
+  const mock = MockFileSchema.parse(JSON.parse(generate("default")));
+  const req = (queryType: string, values: Record<string, unknown>) => ({
+    queryType,
+    values,
+    typeValues: {},
+  });
+
+  it("VEH ZZ-0010 is a registered vehicle on both sources, not a keyword hit", () => {
+    for (const source of ["stateSource", "nationalSource"]) {
+      const m = matchMockScenario(mock, source, req("VEH", { plate: "ZZ-0010", state: "TX" }));
+      expect(m?.scenarioIndex).not.toBeNull();
+      expect(m?.outcome).toMatchObject({
+        kind: "respond",
+        payload: { status: "REGISTERED", plate: "ZZ-0010" },
+      });
+    }
+    // The state record carries the detail rows; the national one is the short summary.
+    const state = matchMockScenario(mock, "stateSource", req("VEH", { plate: "ZZ-0010" }));
+    expect(state?.outcome).toMatchObject({ payload: { vehicle: { make: "TESTMAKE" } } });
+    const national = matchMockScenario(mock, "nationalSource", req("VEH", { plate: "ZZ-0010" }));
+    expect(national?.outcome).not.toMatchObject({ payload: { vehicle: expect.anything() } });
+  });
+
+  it("PER EXAMPLESON SAMPLE is a person record on the state source; the national source has none", () => {
+    const values = { last: "EXAMPLESON", first: "SAMPLE", dob: "1901-01-01", state: "TX" };
+    const state = matchMockScenario(mock, "stateSource", req("PER", values));
+    expect(state?.outcome).toMatchObject({
+      kind: "respond",
+      payload: { status: "RECORD FOUND", subject: { last: "EXAMPLESON", first: "SAMPLE" } },
+    });
+    const national = matchMockScenario(mock, "nationalSource", req("PER", values));
+    expect(national).toMatchObject({
+      scenarioIndex: null,
+      outcome: { payload: { status: "NO RECORD" } },
+    });
+    // The M1 person queries still find no record.
+    const old = matchMockScenario(
+      mock,
+      "stateSource",
+      req("PER", { last: "TESTERSON", first: "SAMPLE" }),
+    );
+    expect(old?.scenarioIndex).toBeNull();
   });
 });
 

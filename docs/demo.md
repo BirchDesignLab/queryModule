@@ -14,6 +14,100 @@ The live demo at https://querymodule.birchdesignlab.com uses these accounts. Pas
 
 All data behind these accounts is mock data (spec 5.4 fixture policy). No real person, vehicle or property record exists in this system.
 
+## Demo stories
+
+Every story below is one command away on the default site, with mock data only (ZZ- plates, ZZ
+serials, 1901 dates, synthetic names). Type the command in the terminal ("Terminal mode", or `/`
+from outside a field), or fill the same values in the form. Each command was run end to end against
+a local build with the mock sources, and the results below are what that run showed.
+
+**Accounts.** The passwords are handed out on request.
+
+| Account | Use it for |
+|---|---|
+| `dispatcher@example.test` | every story below; the dispatcher layout |
+| `officer@example.test` | the same stories in the 48 px officer layout |
+| `admin@example.test` | the publish that makes the config-changed story (story 9) |
+
+**A plate on its own asks only the State system.** `VEH.ZZ-0001` shows the State card and the line
+"National system: not run (plate only)". Add a year (`..26`) to ask both sources, as the commands
+below do.
+
+| # | Story | Command | What it shows |
+|---|---|---|---|
+| 1 | Record hit, critical | `VEH.ZZ-0001..26` | `STOLEN` on both sources: critical badge, `!!` mark, the request header badge |
+| 2 | Record hit, calm | `VEH.ZZ-0010..26` | `REGISTERED`, plate `ZZ-0010`, remarks `REGISTRATION CURRENT` on both sources; no keyword, so no severity (until a keyword such as `TESTMAKE` is published: the make is in the detail rows) |
+| 3 | No record | `VEH.ABC123..26` | `NO RECORD` on both sources, the info mark, nothing critical |
+| 4 | Critical WANTED | `WNT.WANTED` | National system card, `WANTED`, critical; Show detail opens the warrants table |
+| 5 | Driver's license ZZDLTEST | `DL.ZZDLTEST` | State card `VALID`, the license number in the summary; National system `NO RECORD` |
+| 6 | Person record | `PER.EXAMPLESON.SAMPLE.01011901` | State card `RECORD FOUND` for EXAMPLESON, SAMPLE; National system `NO RECORD`; the "Wanted check, also run" card reads `NO WANTS OR WARRANTS`. `PER.TESTERSON.SAMPLE.01011901` is the no-record person |
+| 7 | Partial result | `VEH.FAIL1..26` | State system `failed` (a status line, no card); National system `NO RECORD` |
+| 8 | Slow source, then timeout | `VEH.TIMEOUT..26` | State card at once; "National system: pending" for about 10 seconds (the source deadline), then "timed out". The other source never waits for it. This is the wait story: the mock has no slow-but-returns scenario (that needs per-source-scenario latency in the mock contract), so the timeout is how the wait is shown |
+| 9 | Config changed: Edit as new query | click path below | A "Failed" row, "The site configuration changed. Check the form and submit again.", and "Edit as new query" instead of Retry |
+
+Stolen property is `PRO.ZZSTOLEN1.ELECTRONICS` (`STOLEN` on both sources) and a missing person is
+`WNT.MISSING`; both are in "Example queries" below.
+
+**Story 9, config changed (#477).** The open form follows a newer configuration within 15 seconds, so
+the publish and the submit have to fall inside that window. **The publish changes the live site
+configuration** for everyone on that site, so do it on a rehearsal site or put it back afterwards
+(step 5).
+
+1. Window A: sign in as `dispatcher@example.test`, choose the form, type plate `ZZ-0001` and leave
+   the cursor in the field.
+2. Window B (a private window or a second browser; a plain second window shares window A's session
+   and would sign the dispatcher out): sign in as `admin@example.test`, open
+   the builder, Keywords and severity, Add keyword `TESTMAKE`, Review and publish, and stop on the
+   Publish button.
+3. Press Publish in window B, go straight to window A and press Enter. Both have to happen within 15
+   seconds; slower, window A has already picked up the new configuration and the query just runs.
+4. The row reads "Failed" with the config-changed line and an "Edit as new query" button, no Retry.
+   Press it: the plate comes back into the form, focus lands on it, and nothing is sent. If the
+   publish had removed a field the form had a value for, a note under the form names what was not
+   loaded.
+5. Put the live configuration back: History, pick the version that was live before your publish and
+   Roll back. That publishes the earlier version again as a new version (the history only grows), so
+   the demo is back to a calm story 2. The failed row stays in the list.
+
+## Seed once
+
+`scripts/dev/demo-seed.ts` fills the request list so the demo opens with history. It signs in as
+`dispatcher@example.test` and submits stories 1 to 8 (and the stolen property), each once through
+`POST /api/v1/queries`, so every row is a real, audited request. It never deletes, never resets and
+never touches the database directly: it only signs in, reads the config, reads the list and submits.
+There is no reset: run it once against the demo database, then leave it.
+
+**Which database it targets.** The one behind the base URL you pass as the argument, and nothing
+else: the script has no database connection of its own. For the live demo that is
+`https://querymodule.birchdesignlab.com`. To rehearse, start a local production build on a throwaway
+data directory, the way `scripts/dev/smoke-local.ts` does: `pnpm --filter @querymodule/web build` and
+`pnpm --filter @querymodule/api build`, then `node packages/api/dist/main.js` with `NODE_ENV=production`,
+`PORT=3100`, `PUBLIC_ORIGIN=http://localhost:3100`, `DATA_DIR=<a new empty folder>`,
+`SECRETS_DIR=.dev/secrets` (created by the first `pnpm dev` or `pnpm e2e`), `ALLOW_MOCK_SOURCES=true`, `SITE_CONFIG=packages/config/sites/default.json`,
+`MIGRATIONS_DIR=packages/api/drizzle` and `WEB_DIST=apps/web/dist`. Run
+`node packages/api/dist/ops/seed.js` once with the same variables for the demo users, run the seed
+script with `http://localhost:3100`, and delete the folder when done. The sign-in sends the base URL as
+its `Origin`, so it must be the address the server was started with as `PUBLIC_ORIGIN`.
+
+```
+DEMO_DISPATCHER_PASSWORD=<the dispatcher password> node scripts/dev/demo-seed.ts https://querymodule.birchdesignlab.com
+```
+
+On a machine that can read the seed secret file, `SEED_PASSWORD_SECRET_FILE=<file>` replaces the
+password variable (the password is derived as `scripts/ops/smoke.sh` derives it). The password is
+read from the environment, never from argv, and is never printed. The script needs Node 24 and the
+repository checkout.
+
+- It refuses when the dispatcher already has any request (exit code 3, nothing sent). The API only
+  shows a user their own requests, so that is what it can see: it does not check other accounts.
+- It waits up to 30 seconds for every source to settle (story 8 needs about 10) and says so when one
+  is still pending. The requests are recorded either way.
+- If it stops part-way (a rejected submit, a lost connection), the rows already recorded stay, and a
+  second run refuses. Run the missing commands by hand from the table above.
+- It submits 9 queries, well under the limit of 30 submits per user per minute (a rerun that gets
+  past the guard would not hit it either).
+- It ends with the critical `STOLEN` vehicle on top, because the list is newest first.
+
 ## Demo runbook
 
 [docs/demo/m1-v1.md](demo/m1-v1.md) is the M1 v1 click path, one section per persona: dispatcher,
@@ -56,6 +150,10 @@ generated by `scripts/mock-data/generate.ts`). Use the form or the terminal as i
 | `VEH` plate `FAIL1` | stateSource settles `failed`, nationalSource `returned` |
 | `VEH` plate `TIMEOUT` | nationalSource stays `pending` until the source deadline (10 s by default), then `timed out`; stateSource `returned` |
 | `PER` last `WANTED` | part 0 on both sources `returned`, then an "Also run: Wanted check" part with nationalSource `returned` (`WANTED`) |
+
+A plate-only form submit (no Year or other field) asks only the State system and shows "National
+system: not run (plate only)"; the rows above that name both sources need a Year too, for example
+`VEH.ZZ-0001..26`.
 
 The timeout case is the one to show live: the other line has long settled while the slow source
 keeps showing "pending", and one source never holds up another. If the server restarts while a
