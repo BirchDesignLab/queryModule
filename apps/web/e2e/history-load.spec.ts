@@ -10,6 +10,9 @@ test("[Q1] a request sent earlier is listed after a fresh sign-in, quietly", asy
   const user = seededUser("dispatcher@example.test");
   await signIn(page, user, { fresh: true });
   await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+  // A year makes it a full query, so both sources are dispatched (a plate-only query leaves the
+  // national source unrun).
+  await page.getByLabel("Year", { exact: true }).fill("26");
   await page.getByLabel("Plate", { exact: true }).fill("ZZ-0001");
   const sent = page.waitForResponse(
     (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
@@ -17,9 +20,12 @@ test("[Q1] a request sent earlier is listed after a fresh sign-in, quietly", asy
   await page.keyboard.press("Enter");
   expect((await sent).status()).toBe(202);
   const list = page.getByRole("region", { name: "Requests this shift" });
-  // Both sources settle before the reload: a source that settles after it is a live result.
+  // Both sources of the request just sent settle before the reload: a source that settles after it
+  // is a live result. Look in the newest item, not anywhere in the list: the e2e database is shared
+  // and an older request of this user would satisfy a list-wide match while this one is in flight.
+  const sentItem = list.getByRole("listitem").first();
   for (const source of ["State system", "National system"]) {
-    await expect(list.getByRole("region", { name: `${source}: returned` }).first()).toBeVisible({
+    await expect(sentItem.getByRole("region", { name: `${source}: returned` })).toBeVisible({
       timeout: 8000,
     });
   }
