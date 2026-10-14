@@ -8,6 +8,10 @@ test("[A2] a field revealed by a rule is announced and focus stays put (FR-002, 
   await signIn(page, undefined, { fresh: true });
   const state = page.getByLabel("State", { exact: true });
   const plateType = page.getByLabel("Plate type");
+  // Wait for the form first: the heading holds focus while the config loads, and a Tab before the
+  // form exists leaves <main> for the skip link, so the walk below runs out of presses (#645).
+  await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+  await expect(state).toBeVisible();
   await expect(plateType).toHaveCount(0);
 
   // Keyboard only: Tab from the heading until State has focus (quick access, query type, Plate).
