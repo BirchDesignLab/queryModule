@@ -379,3 +379,61 @@ it("ConfigChange is what the core diff exports", () => {
   const change: ConfigChange | undefined = diffConfig({ a: 1 }, { a: 2 })[0];
   expect(change?.kind).toBe("changed");
 });
+
+describe("plain sentences for keywords and result cards (demo dry run G18)", () => {
+  const card = (view: string) => ({
+    id: "veh-summary",
+    queryType: "VEH",
+    elements: [{ kind: "value", path: "vehicle.make", labelKey: "f.make", view }],
+  });
+  const cardDeps: ChangeDeps = {
+    ...deps,
+    t,
+    labelText: (k) => (k === "q.veh" ? "Vehicle" : k === "f.make" ? "Make" : ""),
+    cardName: () => "All results",
+  };
+  const cardGroups = (before: unknown[], after: unknown[]) => {
+    const l = { ...live(), responseMappings: before, keywords: [] as unknown[] };
+    const d = { ...live(), responseMappings: after, keywords: [] as unknown[] };
+    return buildChangeGroups(diffConfig(l, d), l, d, cardDeps);
+  };
+
+  it("a keyword added reads as one sentence with its severity, not its JSON", () => {
+    const l = { ...live(), keywords: [] as unknown[] };
+    const d = { ...live(), keywords: [{ keyword: "TESTMAKE", severity: "warning" }] };
+    const [group] = buildChangeGroups(diffConfig(l, d), l, d, deps);
+    const [entry] = group?.sections.flatMap((s) => s.entries) ?? [];
+    expect(entry?.sentence).toContain("admin.diff.keyword.added");
+    expect(entry?.sentence).toContain('"keyword":"TESTMAKE"');
+    expect(entry?.sentence).toContain("severity.word.warning");
+  });
+
+  it("a keyword whose severity changed names both severities", () => {
+    const l = { ...live(), keywords: [{ keyword: "FIREARM", severity: "warning" }] };
+    const d = { ...live(), keywords: [{ keyword: "FIREARM", severity: "critical" }] };
+    const [group] = buildChangeGroups(diffConfig(l, d), l, d, deps);
+    const [entry] = group?.sections.flatMap((s) => s.entries) ?? [];
+    expect(entry?.sentence).toContain("admin.diff.keyword.severity");
+    expect(entry?.sentence).toContain("severity.word.warning");
+    expect(entry?.sentence).toContain("severity.word.critical");
+  });
+
+  it("a row moved from detail to summary reads 'moves to the summary', with no path in the sentence", () => {
+    const [group] = cardGroups([card("detail")], [card("summary")]);
+    const entries = group?.sections.flatMap((s) => s.entries) ?? [];
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.sentence).toContain("admin.cards.sentence.moves.summary");
+    expect(entries[0]?.sentence).not.toContain("vehicle.make");
+    // The path stays in the key line.
+    expect(entries[0]?.keyText).toContain("vehicle.make");
+  });
+
+  it("a card is named by its plain name, with the id kept for the key line", () => {
+    const [group] = cardGroups([], [card("summary")]);
+    const section = group?.sections[0];
+    expect(section?.title).toContain("All results");
+    expect(section?.title).not.toContain("veh-summary");
+    expect(section?.keyText).toBe("veh-summary");
+    expect(section?.entries[0]?.sentence).toContain("admin.cards.sentence.added");
+  });
+});

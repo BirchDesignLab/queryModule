@@ -521,7 +521,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
         )}
       </Sect>
       <Sect
-        title={`${t("admin.mock.scenarios.title")} ${count}`}
+        title={`${t("admin.mock.scenarios.title")} (${count})`}
         hint={t("admin.mock.scenarios.hint")}
       >
         {count === 0 ? (

@@ -1,3 +1,4 @@
+import { formatAckTime } from "@querymodule/web-ui";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -201,7 +202,7 @@ describe("users table (Task 34, D-A26, ADR-0011 item 8)", () => {
     expect(rose.getByText("Active")).toBeInTheDocument();
     expect(rose.getByText("3")).toBeInTheDocument();
     expect(rose.getByText("1")).toBeInTheDocument();
-    expect(rose.getByText(/2026/).closest("time")).toHaveAttribute(
+    expect(rose.getByText(formatAckTime(T0 - 86_400_000)).closest("time")).toHaveAttribute(
       "datetime",
       new Date(T0 - 86_400_000).toISOString(),
     );

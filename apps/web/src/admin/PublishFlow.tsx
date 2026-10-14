@@ -119,6 +119,9 @@ export function usePublishFlow(): PublishFlow {
     );
   }, [doc, labels, mock, server]);
 
+  // No edits of the user's own: the draft is the live version.
+  const untouched = changeCount === 0;
+
   /** Runs `work` as the one action in flight; a second request while it runs does nothing. */
   const exclusive = useCallback(async (work: () => Promise<void>) => {
     if (working.current) return;
@@ -304,11 +307,13 @@ export function usePublishFlow(): PublishFlow {
         setNotice({ kind: "info", text });
         void queryClient.invalidateQueries({ queryKey: ["config"], refetchType: "all" });
         setHistoryStamp((n) => n + 1);
-        // The draft is left as it is, so its base is now stale: the next save or publish takes the
-        // 409 path. Only the live view the changes are counted against is refreshed.
-        setStale((await refreshLive()) ? null : "live");
+        // With edits of its own the draft is left as it is, so its base is now stale: the next save
+        // or publish takes the 409 path, and only the live view the changes are counted against is
+        // refreshed. A draft that matched the live version has nothing to keep: it follows the new
+        // live version, so the toolbar names it and publish waits for a real change (G20).
+        setStale((await (untouched ? load(true) : refreshLive())) ? null : "live");
       }),
-    [announcer, api, exclusive, queryClient, refreshLive, rollingBack, t],
+    [announcer, api, exclusive, load, queryClient, refreshLive, rollingBack, t, untouched],
   );
 
   const [confirmReload, setConfirmReload] = useState(false);

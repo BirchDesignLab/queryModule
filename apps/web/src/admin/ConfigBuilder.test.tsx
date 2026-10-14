@@ -47,8 +47,9 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("labels server-only sections; publish needs changes (aria-disabled, focusable); history is enabled", async () => {
     const t = await openBuilder();
     expect(
-      screen.getByText(/server settings: available after the config store lands/i),
+      screen.getByText(/sign-in, data retention and source server settings are not edited here/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/config store/i)).toBeNull();
     const publish = screen.getByRole("button", { name: "Review and publish" });
     const history = screen.getByRole("button", { name: "History" });
     expect(publish).not.toBeDisabled();

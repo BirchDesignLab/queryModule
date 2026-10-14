@@ -109,18 +109,17 @@ describe("Changes view (item 4)", () => {
     expect(within(group).getByText(".")).toBeInTheDocument();
   });
 
-  it("lists a changed setting under its plain name, old and new, with the key in hidden text", async () => {
+  it("writes a changed setting as a sentence, with the key in a secondary line", async () => {
     const t = await openBuilder();
     await setDelimiter(t, "~");
     await openChanges(t);
     const group = await groupOf(/Terminal settings/);
     const entry = within(group).getByRole("button", { name: /Changed/ });
-    expect(entry).toHaveTextContent("Was");
-    expect(entry).toHaveTextContent("Now");
+    expect(entry).toHaveTextContent(/changed from \. to ~\./);
+    expect(entry).not.toHaveTextContent(/\bWas\b|\bNow\b/);
     expect(within(entry).getByText("~")).toBeInTheDocument();
-    // The key is there for screen readers only.
-    const hidden = within(entry).getByText(/terminal delimiter/);
-    expect(hidden.closest("span")).toHaveStyle({ position: "absolute" });
+    // The key stays, as a secondary detail line (G18).
+    expect(within(entry).getByText(/terminal delimiter/)).toHaveClass("qm-diff__detail");
   });
 
   it("groups a field edit under its query type", async () => {
@@ -135,7 +134,9 @@ describe("Changes view (item 4)", () => {
     const type = await groupOf(/Vehicle/);
     const field = within(type).getByRole("heading", { level: 5 });
     expect(field).toHaveTextContent(/Field/);
-    expect(within(type).getByRole("button", { name: /Required/ })).toHaveTextContent(/Was.*Now/);
+    expect(within(type).getByRole("button", { name: /Required/ })).toHaveTextContent(
+      /Required changed from .* to /,
+    );
   });
 
   it("opens the entry's item in the Form view and puts focus in it", async () => {
@@ -171,7 +172,7 @@ describe("Changes view (item 4)", () => {
     expect(within(missing).getByText("query.nothing.here")).toBeInTheDocument();
   });
 
-  it("shows Was for an overlay text in any locale, from that locale's shipped bundle", async () => {
+  it("shows the shipped text an overlay replaces in any locale, from that locale's shipped bundle", async () => {
     server.use(
       http.get(`${API}/api/v1/locales/fr`, () =>
         HttpResponse.json({ "queryType.VEH": "Véhicule", "site.same": "Pareil" }),
@@ -194,16 +195,18 @@ describe("Changes view (item 4)", () => {
         .getAllByRole("button")
         .find((b) => b.textContent?.includes(`Text in ${language}`) && b.textContent.includes(key));
     await waitFor(() =>
-      expect(entry("French", "queryType.VEH")).toHaveTextContent(/Was.*Véhicule/),
+      expect(entry("French", "queryType.VEH")).toHaveTextContent(
+        /changed from Véhicule to Automobile/,
+      ),
     );
-    expect(entry("French", "queryType.VEH")).toHaveTextContent(/Changed.*Now.*Automobile/);
-    expect(entry("English", "queryType.VEH")).toHaveTextContent(/Was.*Vehicle/);
+    expect(entry("French", "queryType.VEH")).toHaveTextContent(/Changed.*to Automobile/);
+    expect(entry("English", "queryType.VEH")).toHaveTextContent(/changed from Vehicle to Car/);
     // No shipped text to replace: added, with no Was.
     expect(entry("French", "site.new")).toHaveTextContent(/Added/);
-    expect(entry("French", "site.new")).not.toHaveTextContent("Was");
+    expect(entry("French", "site.new")).not.toHaveTextContent("changed from");
     // A locale with no shipped bundle has nothing to compare with.
     expect(entry("German", "queryType.VEH")).toHaveTextContent(/Added/);
-    expect(entry("German", "queryType.VEH")).not.toHaveTextContent("Was");
+    expect(entry("German", "queryType.VEH")).not.toHaveTextContent("changed from");
   });
 
   it("lists a label key named like an object member as added, never as a change to it", async () => {
@@ -220,7 +223,7 @@ describe("Changes view (item 4)", () => {
     expect(entries).toHaveLength(3);
     for (const entry of entries) {
       expect(entry).toHaveTextContent(/Added/);
-      expect(entry).not.toHaveTextContent("Was");
+      expect(entry).not.toHaveTextContent("changed from");
     }
   });
 
@@ -279,7 +282,7 @@ describe("Changes view (item 4)", () => {
     });
   });
 
-  it("shows an edited rule as one entry with a Was and a Now", async () => {
+  it("shows an edited rule as one sentence entry, changed from one rule to another", async () => {
     const t = await openBuilder();
     const store = configDraftStore(t.services).getState();
     const types = (store.doc?.queryTypes ?? []) as { rules: { when: unknown }[] }[];
@@ -291,7 +294,7 @@ describe("Changes view (item 4)", () => {
     const group = await groupOf(/Vehicle/);
     const rule = within(group).getAllByRole("button", { name: /Rule/ });
     expect(rule).toHaveLength(1);
-    expect(rule[0]).toHaveTextContent(/Changed.*Was.*Now/);
+    expect(rule[0]).toHaveTextContent(/Changed.*Rule changed from .* to /);
   });
 
   it("keeps a new query type with no code yet apart from the one that was removed", async () => {

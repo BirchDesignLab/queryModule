@@ -1,3 +1,4 @@
+import { formatAckTime } from "@querymodule/web-ui";
 import { screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -162,6 +163,9 @@ describe("the history drawer", () => {
     expect(row(region, 5)).toHaveTextContent("Created");
     const when = row(region, 4).querySelector("time");
     expect(when?.getAttribute("datetime")).toBe(new Date(T0 + 4000).toISOString());
+    // The query side's date style, MM-DD-YY HH:mm:ss (demo dry run G39), not "Sep 29, 2026".
+    expect(when).toHaveTextContent(formatAckTime(T0 + 4000));
+    expect(when?.textContent).toMatch(/^\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     // Contract: user ids only and no note, so neither is shown in M1.
     expect(region).not.toHaveTextContent("user-0001");
   });
@@ -251,7 +255,7 @@ describe("roll back", () => {
     );
     const dialog = await screen.findByRole("dialog", { name: "Roll back to version 3?" });
     expect(dialog).toHaveTextContent(/as a new version/);
-    expect(dialog).toHaveTextContent(/draft is left as it is/);
+    expect(dialog).toHaveTextContent(/edits you have not published are left as they are/);
     expect(calls.rollbacks).toEqual([]);
     // Cancel publishes nothing and focus returns to the control that opened it.
     await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -398,6 +402,75 @@ describe("roll back", () => {
     release();
     await waitFor(() => expect(screen.queryByText(reason)).not.toBeInTheDocument());
     expect(calls.gets).toBe(gets + 1);
+  });
+
+  // Demo dry run G20: version 4 is live, nobody edited, then a roll back makes version 5 live. The
+  // draft showed "based on version 4, 1 unpublished change" and offered to publish what was just
+  // rolled back. With no edits of the user's own, the draft now follows the new live version.
+  it("after a roll back with no edits the toolbar reflects the live version and publish stays disabled", async () => {
+    const rolledBack = { ...RAW_SITE, terminal: { delimiter: "/" } };
+    let rolled = false;
+    const t = await openBuilder({
+      adminGet: () =>
+        rolled
+          ? HttpResponse.json(adminConfigBody({ liveVersion: 5, siteConfig: rolledBack }))
+          : undefined,
+      rollback: () => {
+        rolled = true;
+        live = 5;
+        return HttpResponse.json(versionRow(5, "published", { rollbackOf: 2 }));
+      },
+    });
+    const region = await openHistory(t);
+    await t.user.click(
+      within(row(region, 2)).getByRole("button", { name: "Roll back to version 2" }),
+    );
+    await t.user.click(
+      within(await screen.findByRole("dialog", { name: "Roll back to version 2?" })).getByRole(
+        "button",
+        { name: "Roll back to version 2" },
+      ),
+    );
+    expect(
+      await screen.findByText(/Draft, based on version 5\. No unpublished changes\./),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review and publish" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it("after a roll back with edits of the user's own the draft is left as it is", async () => {
+    const rolledBack = { ...RAW_SITE, terminal: { delimiter: "/" } };
+    let rolled = false;
+    const t = await openBuilder({
+      adminGet: () =>
+        rolled
+          ? HttpResponse.json(adminConfigBody({ liveVersion: 5, siteConfig: rolledBack }))
+          : undefined,
+      rollback: () => {
+        rolled = true;
+        live = 5;
+        return HttpResponse.json(versionRow(5, "published", { rollbackOf: 2 }));
+      },
+    });
+    await setDelimiter(t, ";");
+    const region = await openHistory(t);
+    await t.user.click(
+      within(row(region, 2)).getByRole("button", { name: "Roll back to version 2" }),
+    );
+    await t.user.click(
+      within(await screen.findByRole("dialog", { name: "Roll back to version 2?" })).getByRole(
+        "button",
+        { name: "Roll back to version 2" },
+      ),
+    );
+    await screen.findAllByText(/Published version 5/);
+    expect(screen.getByText(/Draft, based on version 4\./)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review and publish" })).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("an invalid version cannot be rolled back and says so", async () => {
