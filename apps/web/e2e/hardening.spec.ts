@@ -80,9 +80,15 @@ async function audit(
           const tb = target.getBoundingClientRect();
           // Controls in the page (fields, buttons, quick access) hold the persona's control height;
           // the segmented switches and the header hold its target size; Run holds its own.
+          // The result card's Show detail toggle is a target, not a form control: the design holds it
+          // to the persona's target size (48 px at touch density, v5 ruling), so it is not required to
+          // reach the 56 px control height. It appears in the page whenever a returned card has detail
+          // rows (a request just answered, or history from an earlier scenario in the shared e2e
+          // database), which made this audit fail about one run in sixteen (#645).
           const isControl =
             el.closest("main") !== null &&
             el.closest(".qm-seg") === null &&
+            !el.matches(".qm-view-toggle") &&
             el.matches("select, input:not([type=checkbox]), .qm-button, .qm-quick-access__button");
           const min = el.matches("button[type=submit]")
             ? minRun
@@ -133,22 +139,30 @@ async function tabThroughNotObscured(page: Page): Promise<{ obscured: string[]; 
         (el.contains(hit) ||
           hit.contains(el) ||
           (el as HTMLInputElement).labels?.[0]?.contains(hit) === true);
+      // Sample what is on screen of the control: its box clipped to the viewport. A focused control
+      // taller than the viewport (a request entry with a result card) has most of its box off screen,
+      // and sample points taken over the whole box would all miss the part the user can see (#645).
+      const left = Math.max(box.left, 0);
+      const top = Math.max(box.top, 0);
+      const right = Math.min(box.right, innerWidth);
+      const bottom = Math.min(box.bottom, innerHeight);
       let seen = 0;
-      for (const [fx, fy] of [
-        [0.5, 0.5],
-        [0.15, 0.15],
-        [0.85, 0.15],
-        [0.15, 0.85],
-        [0.85, 0.85],
-      ] as const) {
-        const x = box.left + box.width * fx;
-        const y = box.top + box.height * fy;
-        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
-        if (inChip(document.elementFromPoint(x, y))) seen++;
+      if (right > left && bottom > top) {
+        for (const [fx, fy] of [
+          [0.5, 0.5],
+          [0.15, 0.15],
+          [0.85, 0.15],
+          [0.15, 0.85],
+          [0.85, 0.85],
+        ] as const) {
+          const x = left + (right - left) * fx;
+          const y = top + (bottom - top) * fy;
+          if (inChip(document.elementFromPoint(x, y))) seen++;
+        }
       }
-      const cover = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      const cover = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
       return {
-        name: `${el.tagName.toLowerCase()}#${el.id}`,
+        name: `${el.tagName.toLowerCase()}#${el.id} box ${Math.round(box.top)}..${Math.round(box.bottom)} of ${innerHeight}`,
         seen,
         cover: cover === null ? "" : `${cover.tagName.toLowerCase()}.${String(cover.className)}`,
       };
@@ -206,6 +220,10 @@ for (const persona of PERSONAS) {
         await plate.press("Enter");
         expect((await sent).status()).toBe(202);
         await expect(page.getByText("Acknowledged").first()).toBeVisible();
+        // The sources answer in the background (the mock waits 50 to 800 ms) and each returned
+        // source draws a result card with a Show detail toggle, so the page grows under the Tab pass
+        // below. Measure the settled page: wait until no source line is pending (#645).
+        await expect(page.locator(".qm-source--pending")).toHaveCount(0);
         await expectWhole(page, "panel with a request row", persona);
         const second = await tabThroughNotObscured(page);
         expect(second.stops, "Tab stops visited after a request").toBeGreaterThan(8);
