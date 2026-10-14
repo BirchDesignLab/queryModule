@@ -175,6 +175,20 @@ describe("the keywords editor", () => {
     expect(doc(t).keywords[2]?.keyword).toBe("EXPIRED");
   });
 
+  it("typing in two keyword boxes in a row is two undo steps", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    const three = within(editor()).getByRole("textbox", { name: "Keyword 3" });
+    const four = within(editor()).getByRole("textbox", { name: "Keyword 4" });
+    const was3 = doc(t).keywords[2]?.keyword;
+    const was4 = doc(t).keywords[3]?.keyword;
+    await t.user.type(three, "X");
+    await t.user.type(four, "Y");
+    await t.user.click(screen.getByRole("button", { name: /^Undo/ }));
+    expect(doc(t).keywords[3]?.keyword).toBe(was4);
+    expect(doc(t).keywords[2]?.keyword).toBe(`${was3}X`);
+  });
+
   it("shows config.exceptWithoutKeyword at the exception it is about", async () => {
     const t = await openBuilder();
     await openKeywords(t);

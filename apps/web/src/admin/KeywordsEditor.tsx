@@ -123,9 +123,13 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
   const newId = useId();
   const newSeverityId = useId();
 
-  const edit = (change: Parameters<typeof applyCardsEdit>[1], coalesce = false) =>
+  const edit = (change: Parameters<typeof applyCardsEdit>[1], coalesce: string | false = false) =>
     applyCardsEdit(store, change, { coalesce });
-  const changeKeyword = (i: number, next: (k: KeywordStyle) => KeywordStyle, coalesce = false) =>
+  const changeKeyword = (
+    i: number,
+    next: (k: KeywordStyle) => KeywordStyle,
+    coalesce: string | false = false,
+  ) =>
     edit((site) => {
       const current = site.keywords[i];
       return current === undefined ? site : updateKeyword(site, i, next(current));
@@ -266,7 +270,9 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
                       keywordIssues={keywordIssues}
                       severityIssues={severityIssues}
                       exceptIssues={(j) => at(`/keywords/${i}/except/${j}`)}
-                      onKeyword={(text) => changeKeyword(i, (c) => ({ ...c, keyword: text }), true)}
+                      onKeyword={(text) =>
+                        changeKeyword(i, (c) => ({ ...c, keyword: text }), `keyword:${i}`)
+                      }
                       onSeverity={(severity) => changeKeyword(i, (c) => ({ ...c, severity }))}
                       onExcept={(j, text) =>
                         changeKeyword(
@@ -276,7 +282,7 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
                               c,
                               exceptOf(c).map((p, m) => (m === j ? text : p)),
                             ),
-                          true,
+                          `except:${i}:${j}`,
                         )
                       }
                       onAddExcept={(phrase) => {

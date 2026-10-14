@@ -8,7 +8,7 @@ import {
   validateSiteConfig,
 } from "@querymodule/core/config";
 import type { ConfigDocument } from "@querymodule/core/contracts";
-import { tokensContrast } from "./contrast-context.js";
+import { tokensContrast } from "@querymodule/tokens";
 
 /**
  * The config builder's draft (Task 31, BR-001, FR-060). It is memory only: never localStorage,
@@ -191,7 +191,8 @@ export interface StartOptions {
 }
 
 export interface SetPathOptions {
-  coalesce?: boolean;
+  /** true: consecutive edits of the path are one step; a string names one control under it. */
+  coalesce?: boolean | string;
 }
 
 export interface ConfigDraftState {
@@ -329,7 +330,12 @@ export function createConfigDraftStore(): ConfigDraftStore {
     },
     setPath(path, value, options) {
       if (state.doc === null || Object.is(valueAt(state.doc, path), value)) return;
-      record(options?.coalesce === true ? `path:${path.join("\u0000")}` : null);
+      const c = options?.coalesce;
+      record(
+        c === undefined || c === false
+          ? null
+          : `path:${path.join("\u0000")}${typeof c === "string" ? `\u0000${c}` : ""}`,
+      );
       publish({ doc: setAtPath(state.doc, path, value) });
     },
     setDoc(doc) {

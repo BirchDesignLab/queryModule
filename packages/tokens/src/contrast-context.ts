@@ -1,18 +1,11 @@
 import type { ContrastContext } from "@querymodule/core/config";
-import {
-  contrastFailures,
-  contrastRatio,
-  TOKEN_NAMES,
-  type TokenName,
-  tokenValue,
-} from "@querymodule/tokens";
+import { contrastFailures, contrastRatio } from "./contrast";
+import { TOKEN_NAMES, type TokenName, tokenValue } from "./tokens";
 
 /**
- * The token lookups behind the contrast checks (spec 4.1, UX-011), as the API passes them to
- * validateSiteConfig, so the builder shows `config.severityContrast` and `config.themeContrast` at
- * the server's pointers. The API's own copy sits in a critical-tier module the web app cannot
- * import. A draft's theme override that is not #rrggbb is skipped here (the contrast maths throws
- * on one); the theme section's own check flags it.
+ * The token lookups behind the contrast checks (spec 4.1, UX-011), as validateSiteConfig takes
+ * them. One copy for the web builder and, in a follow-up, the API loader. An override that is not
+ * #rrggbb is skipped (the contrast maths throws on one); the theme section's own check flags it.
  */
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
