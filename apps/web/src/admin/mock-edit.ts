@@ -15,6 +15,8 @@ export const mockPointer = {
   /** The coverage grid item (not part of the mock file). */
   coverage: "/mock/coverage",
   source: (sourceId: string): string => toPointer(["mock", "sources", sourceId]),
+  /** The tree's "Add mock response" row of a source (#572): the builder's own, not in the file. */
+  addResponse: (sourceId: string): string => toPointer(["mock", "sources", sourceId, "add"]),
   response: (sourceId: string, index: number): string =>
     toPointer(["mock", "sources", sourceId, "responses", index]),
   /** A pointer into the mock: the whole `/mock` subtree, nothing that merely starts with it. */
@@ -60,13 +62,18 @@ function typed(text: string, original: unknown): string | number | boolean {
   return text;
 }
 
+/**
+ * Sets a scalar from edited text. `as` is the value the field held when editing began (#572): a
+ * number cleared on the way to "1.5" stays a number, though the payload held "" for a moment.
+ */
 export function setPayloadValue(
   payload: SourcePayload,
   path: readonly PathSegment[],
   text: string,
+  as?: unknown,
 ): SourcePayload {
   const original = payloadAt(payload, path);
-  const next = typed(text, original);
+  const next = typed(text, as === undefined ? original : as);
   return Object.is(original, next) ? payload : setAtPath(payload, path, next);
 }
 
@@ -109,17 +116,18 @@ export function removePayloadAt(
 const keysOf = (kinds: readonly (keyof typeof FIXTURE_LEAF_KEYS)[]): string[] =>
   kinds.flatMap((k) => [...FIXTURE_LEAF_KEYS[k]]);
 
-/** The first allowlisted key of these kinds that the object does not use yet. */
-function freeKey(parent: Json, kinds: readonly (keyof typeof FIXTURE_LEAF_KEYS)[]): string {
+/** The first allowlisted key of these kinds that the object does not use yet; null when all are used. */
+function freeKey(parent: Json, kinds: readonly (keyof typeof FIXTURE_LEAF_KEYS)[]): string | null {
   const used = new Set(Object.keys(parent).map(normaliseFixtureKey));
-  return keysOf(kinds).find((k) => !used.has(k)) ?? keysOf(kinds)[0] ?? "remarks";
+  return keysOf(kinds).find((k) => !used.has(k) && !(k in parent)) ?? null;
 }
 
 /**
  * Adds a row inside the group or list at `path` (the payload itself for an empty path). In a group
  * the row gets an unused allowlisted key: free text for a value, a container key for a group or a
  * list, so the new row passes the fixture policy until the person fills it in. In a list it is a
- * new empty group (the policy allows objects, not scalars, in arrays).
+ * new empty group (the policy allows objects, not scalars, in arrays). Once every allowlisted key of
+ * the kind is used it is a no-op: a row never overwrites another (#572).
  */
 export function addPayloadChild(
   payload: SourcePayload,
@@ -131,6 +139,7 @@ export function addPayloadChild(
   if (!isObject(parent)) return payload;
   const key =
     kind === "value" ? freeKey(parent, ["freeText", "other"]) : freeKey(parent, ["container"]);
+  if (key === null) return payload;
   const value = kind === "value" ? "" : kind === "group" ? {} : [];
   const next = { ...parent, [key]: value };
   return path.length === 0 ? next : setAtPath(payload, path, next);
@@ -193,11 +202,11 @@ export function withDefaultResult(
 
 type When = MockScenario["when"];
 
-/** A trigger value edited as text keeps a number or a boolean when the text still reads as one. */
-export function setTriggerValue(when: When, field: string, text: string): When {
+/** A trigger value edited as text keeps a number or a boolean when the text still reads as one; `as` as in setPayloadValue. */
+export function setTriggerValue(when: When, field: string, text: string, as?: unknown): When {
   const original = when[field];
   if (original === undefined) return when;
-  const next = typed(text, original);
+  const next = typed(text, as === undefined ? original : as);
   return Object.is(original, next) ? when : { ...when, [field]: next };
 }
 

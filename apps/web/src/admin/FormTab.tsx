@@ -2,11 +2,13 @@ import { useCallback, useContext, useId } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { configDraftStore, useDraft } from "./builder-store.js";
+import { CardsEditor } from "./CardsEditor.js";
 import { CommandsEditor, QuickAccessEditor } from "./CommandsEditor.js";
 import { ChecksContext, IssueMessages } from "./checks.js";
 import { asObjects, str, useLabelText } from "./controls.js";
 import { type JsonObject, type PathSegment, type SetPathOptions, toPointer } from "./draft.js";
 import { EditorSection, NodeEditor } from "./GenericForm.js";
+import { KeywordsEditor } from "./KeywordsEditor.js";
 import { LabelOverlayEditor } from "./LabelOverlay.js";
 import { MockEditor } from "./MockEditor.js";
 import { SourceMockResponses } from "./MockFlows.js";
@@ -78,7 +80,13 @@ export function FormTab({ doc }: { doc: JsonObject }) {
           configKey: str(type.code),
           countPointer: toPointer(["queryTypes", typeIndex]),
         };
-  const crumb = t(top === "queryTypes" ? "admin.tree.types" : "admin.tree.site");
+  const crumb = t(
+    top === "queryTypes"
+      ? "admin.tree.types"
+      : top === "keywords"
+        ? "admin.tree.cards"
+        : "admin.tree.site",
+  );
   return (
     <fieldset
       className="qm-admin__form"
@@ -96,6 +104,10 @@ export function FormTab({ doc }: { doc: JsonObject }) {
         <p>{t("admin.editor.empty")}</p>
       ) : top === "mock" ? (
         <MockEditor doc={doc} />
+      ) : top === "responseMappings" ? (
+        <CardsEditor doc={doc} idPrefix={idPrefix} />
+      ) : top === "keywords" ? (
+        <KeywordsEditor doc={doc} idPrefix={idPrefix} />
       ) : top === LABELS_ITEM ? (
         <EditorSection pointer={LABELS_ITEM} label={name(LABELS_ITEM)} crumb={crumb}>
           <LabelOverlayEditor locales={locales} idPrefix={idPrefix} />

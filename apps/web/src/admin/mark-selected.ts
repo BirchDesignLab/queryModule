@@ -10,7 +10,10 @@ function isTopPointer(pointer: string): boolean {
   // A mock item (the coverage grid, a source, a response) is shown whole, like a query type.
   if (pointer === "/mock" || pointer.startsWith("/mock/")) return true;
   const depth = pointer.split("/").length - 1;
-  return depth <= (topItem(pointer) === "queryTypes" ? 2 : 1);
+  // A query type and a result card (and a type's cards row, "#cards/...") are shown whole too.
+  if (pointer.startsWith("#")) return true;
+  const top = topItem(pointer);
+  return depth <= (top === "queryTypes" || top === "responseMappings" ? 2 : 1);
 }
 
 /**

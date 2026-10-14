@@ -1,3 +1,4 @@
+import { FIXTURE_LEAF_KEYS } from "@querymodule/core/config";
 import { describe, expect, it } from "vitest";
 import {
   addPayloadChild,
@@ -193,5 +194,13 @@ describe("trigger fields (when)", () => {
     });
     const full = { plate: "a" };
     expect(addTrigger(full, ["plate"])).toBe(full);
+  });
+});
+
+describe("#572 adding a row never overwrites a key", () => {
+  it("addPayloadChild is a no-op once every allowlisted key of the kind is used", () => {
+    const full = Object.fromEntries(FIXTURE_LEAF_KEYS.container.map((k) => [k, { status: "X" }]));
+    expect(addPayloadChild(full, [], "group")).toBe(full);
+    expect(addPayloadChild(full, [], "list")).toBe(full);
   });
 });

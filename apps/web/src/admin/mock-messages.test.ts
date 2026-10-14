@@ -8,7 +8,7 @@ import { EN_BUNDLE } from "../test/en-bundle.js";
 // resolve a relative file URL here, so the directory comes from node:path (en-bundle.ts precedent).
 const dir = dirname(fileURLToPath(import.meta.url));
 const sources = readdirSync(dir).filter(
-  (f) => /^(Mock[A-Z].*|mock-.*)\.tsx?$/.test(f) && !f.includes(".test."),
+  (f) => /^(Mock[A-Z].*|mock-.*|TryMatchPane)\.tsx?$/.test(f) && !f.includes(".test."),
 );
 
 const keysIn = (file: string): string[] => {

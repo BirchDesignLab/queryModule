@@ -46,6 +46,16 @@ describe("config draft (Task 31 part 1, BR-001, FR-060)", () => {
     if (built.ok) expect(built.config.sources.every((s) => s.kind === "mock")).toBe(true);
   });
 
+  it("#572 buildSiteConfig keeps the server's source kind when the draft carries one", () => {
+    const doc = docFromClient(CLIENT_CONFIG);
+    const sources = (doc.sources as Record<string, unknown>[]).map((s, i) =>
+      i === 0 ? { ...s, kind: "stateSystem" } : s,
+    );
+    const built = buildSiteConfig({ ...doc, sources });
+    expect(built.ok).toBe(true);
+    if (built.ok) expect(built.config.sources.map((s) => s.kind)).toEqual(["stateSystem", "mock"]);
+  });
+
   it("validateDraft runs validateSiteConfig with the bundle plus the draft overlay", () => {
     const doc = setAtPath(docFromClient(CLIENT_CONFIG), ["site", "labelKey"], "site.nope");
     const bundle = flattenBundle(EN_BUNDLE);
@@ -55,6 +65,30 @@ describe("config draft (Task 31 part 1, BR-001, FR-060)", () => {
     const fixed = validateDraft(doc, { en: { "site.nope": "Nope" } }, bundle);
     expect(fixed.ok).toBe(true);
     if (fixed.ok) expect(fixed.errors.map((e) => e.path)).not.toContain("/site/labelKey");
+  });
+
+  it("validateDraft reports a low-contrast severity style at the server's pointer (UX-011)", () => {
+    const bundle = flattenBundle(EN_BUNDLE);
+    const clean = validateDraft(docFromClient(CLIENT_CONFIG), {}, bundle);
+    expect(clean.ok && clean.errors.map((e) => e.key)).not.toContain("config.severityContrast");
+    const doc = setAtPath(
+      docFromClient(CLIENT_CONFIG),
+      ["keywordSeverityStyles", "critical", "color"],
+      "color.severity.critical.bg",
+    );
+    const result = validateDraft(doc, {}, bundle);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const found = result.errors.filter((e) => e.key === "config.severityContrast");
+    expect([...new Set(found.map((e) => e.path))]).toEqual(["/keywordSeverityStyles/critical"]);
+    expect(found.map((e) => e.params.mode)).toEqual(["day", "night", "redShift"]);
+  });
+
+  it("validateDraft does not throw on a theme override that is not #rrggbb", () => {
+    const doc = setAtPath(docFromClient(CLIENT_CONFIG), ["theme", "tokens"], {
+      all: { "color.text.body": "red" },
+    });
+    expect(() => validateDraft(doc, {}, flattenBundle(EN_BUNDLE))).not.toThrow();
   });
 
   it("validateDraft reports shape issues with JSON pointers", () => {

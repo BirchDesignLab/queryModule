@@ -19,12 +19,66 @@ export interface Selection {
   select?(pointer: string): void;
 }
 
+/**
+ * A query type's row in the Result cards group (Task 10, #603): the builder's own item, not a
+ * pointer into the draft, so it starts with "#" like LABELS_ITEM. It belongs to responseMappings.
+ */
+export const CARDS_TYPE_PREFIX = "#cards/";
+export const cardsTypePointer = (code: string): string =>
+  `${CARDS_TYPE_PREFIX}${encodeURIComponent(code)}`;
+/** The query type code of a Result cards type row, else null. */
+export const cardsTypeOf = (pointer: string): string | null =>
+  pointer.startsWith(CARDS_TYPE_PREFIX)
+    ? decodeURIComponent(pointer.slice(CARDS_TYPE_PREFIX.length))
+    : null;
+
+/**
+ * The item that edits a pointer. The keyword styles are edited with the keywords (Task 11, #604),
+ * so a pointer into them selects the keywords item; the pointer itself still names the control
+ * (an issue's pointer travels as the selection's focus).
+ */
+export const editorItem = (pointer: string): string =>
+  pointer === "/keywordSeverityStyles" || pointer.startsWith("/keywordSeverityStyles/")
+    ? "/keywords"
+    : pointer;
+
+export const objectsOf = (v: unknown): Record<string, unknown>[] =>
+  Array.isArray(v)
+    ? v.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null)
+    : [];
+
+/**
+ * The cards row a card that is gone belongs on (Task 10 round 1, C2): the type of the card now at
+ * its index (the last card when the index is past the end), else the first query type's row. The
+ * bare `/responseMappings` list is not an item the editor can show.
+ */
+export function cardsFallback(
+  doc: Readonly<Record<string, unknown>>,
+  index: number | null,
+): string | null {
+  const cards = objectsOf(doc.responseMappings);
+  const near = cards[Math.min(index ?? 0, cards.length - 1)];
+  const code =
+    typeof near?.queryType === "string" ? near.queryType : objectsOf(doc.queryTypes)[0]?.code;
+  return typeof code === "string" ? cardsTypePointer(code) : null;
+}
+
+/**
+ * The query type whose card the preview shows while the keywords are edited: the type of the first
+ * card, else the first query type. Null when the draft has neither.
+ */
+export function keywordsPreviewPointer(doc: Readonly<Record<string, unknown>>): string | null {
+  const code = objectsOf(doc.responseMappings)[0]?.queryType ?? objectsOf(doc.queryTypes)[0]?.code;
+  return typeof code === "string" ? cardsTypePointer(code) : null;
+}
+
 /** Top-level keys that are not settings a user edits: kept out of the tree and the form. */
 export const HIDDEN_KEYS: ReadonlySet<string> = new Set(["schemaVersion"]);
 
 /** The top-level item a pointer belongs to: a config key, or LABELS_ITEM. */
 export function topItem(pointer: string): string {
   if (pointer === LABELS_ITEM) return LABELS_ITEM;
+  if (pointer.startsWith(CARDS_TYPE_PREFIX)) return "responseMappings";
   const first = pointer.split("/")[1] ?? "";
   return first.replaceAll("~1", "/").replaceAll("~0", "~");
 }

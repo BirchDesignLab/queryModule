@@ -476,12 +476,75 @@
       "id": "veh-summary",
       "queryType": "VEH",
       "elements": [
-        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" },
+        {
+          "kind": "value",
+          "path": "status",
+          "labelKey": "mapping.status",
+          "view": "both"
+        },
         {
           "kind": "value",
           "path": "plate",
           "labelKey": "field.plate",
           "view": "summary",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "remarks",
+          "labelKey": "mapping.remarks",
+          "view": "summary"
+        },
+        {
+          "kind": "value",
+          "path": "state",
+          "labelKey": "field.state",
+          "view": "detail"
+        },
+        {
+          "kind": "value",
+          "path": "vehicle.make",
+          "labelKey": "field.make",
+          "view": "detail"
+        },
+        {
+          "kind": "value",
+          "path": "vehicle.model",
+          "labelKey": "field.model",
+          "view": "detail"
+        },
+        {
+          "kind": "value",
+          "path": "vehicle.year",
+          "labelKey": "field.year",
+          "view": "detail"
+        },
+        {
+          "kind": "value",
+          "path": "vehicle.vin",
+          "labelKey": "field.vin",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "owner.last",
+          "labelKey": "mapping.ownerLast",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "owner.first",
+          "labelKey": "mapping.ownerFirst",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "owner.address",
+          "labelKey": "mapping.ownerAddress",
+          "view": "detail",
           "highlight": false
         }
       ]
@@ -490,20 +553,82 @@
       "id": "per-summary",
       "queryType": "PER",
       "elements": [
-        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" }
+        {
+          "kind": "value",
+          "path": "status",
+          "labelKey": "mapping.status",
+          "view": "both"
+        },
+        {
+          "kind": "value",
+          "path": "subject.last",
+          "labelKey": "field.last",
+          "view": "summary",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "subject.first",
+          "labelKey": "field.first",
+          "view": "summary",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "remarks",
+          "labelKey": "mapping.remarks",
+          "view": "summary"
+        },
+        {
+          "kind": "value",
+          "path": "subject.dob",
+          "labelKey": "field.dob",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "address",
+          "labelKey": "mapping.address",
+          "view": "detail",
+          "highlight": false
+        }
       ]
     },
     {
       "id": "pro-summary",
       "queryType": "PRO",
       "elements": [
-        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" },
+        {
+          "kind": "value",
+          "path": "status",
+          "labelKey": "mapping.status",
+          "view": "both"
+        },
         {
           "kind": "value",
           "path": "serial",
           "labelKey": "field.serial",
           "view": "summary",
           "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "description",
+          "labelKey": "field.description",
+          "view": "summary"
+        },
+        {
+          "kind": "value",
+          "path": "remarks",
+          "labelKey": "mapping.remarks",
+          "view": "summary"
+        },
+        {
+          "kind": "value",
+          "path": "propertyType",
+          "labelKey": "field.propertyType",
+          "view": "detail"
         }
       ]
     },
@@ -511,13 +636,54 @@
       "id": "wnt-summary",
       "queryType": "WNT",
       "elements": [
-        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" },
+        {
+          "kind": "value",
+          "path": "status",
+          "labelKey": "mapping.status",
+          "view": "both"
+        },
         {
           "kind": "value",
           "path": "subject.last",
           "labelKey": "field.last",
           "view": "summary",
           "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "subject.first",
+          "labelKey": "field.first",
+          "view": "summary",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "remarks",
+          "labelKey": "mapping.remarks",
+          "view": "summary"
+        },
+        {
+          "kind": "value",
+          "path": "subject.dob",
+          "labelKey": "field.dob",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "table",
+          "path": "warrants",
+          "labelKey": "mapping.warrants",
+          "view": "detail",
+          "columns": [
+            {
+              "path": "offense",
+              "labelKey": "mapping.offense"
+            },
+            {
+              "path": "issued",
+              "labelKey": "mapping.issued"
+            }
+          ]
         }
       ]
     },
@@ -525,13 +691,51 @@
       "id": "dl-summary",
       "queryType": "DL",
       "elements": [
-        { "kind": "value", "path": "status", "labelKey": "mapping.status", "view": "both" },
+        {
+          "kind": "value",
+          "path": "status",
+          "labelKey": "mapping.status",
+          "view": "both"
+        },
         {
           "kind": "value",
           "path": "licenseNumber",
           "labelKey": "field.licenseNumber",
           "view": "summary",
           "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "remarks",
+          "labelKey": "mapping.remarks",
+          "view": "summary"
+        },
+        {
+          "kind": "value",
+          "path": "last",
+          "labelKey": "field.last",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "first",
+          "labelKey": "field.first",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "dob",
+          "labelKey": "field.dob",
+          "view": "detail",
+          "highlight": false
+        },
+        {
+          "kind": "value",
+          "path": "state",
+          "labelKey": "field.state",
+          "view": "detail"
         }
       ]
     }

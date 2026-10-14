@@ -1,7 +1,7 @@
 import { FIXTURE_LEAF_KEYS, normaliseFixtureKey } from "@querymodule/core/config";
 import type { SourcePayload } from "@querymodule/core/contracts";
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { useContext, useId, useRef } from "react";
+import { type InputHTMLAttributes, useContext, useId, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { ChecksContext } from "./checks.js";
 import type { PathSegment } from "./draft.js";
@@ -76,6 +76,94 @@ const FIX: Record<string, { label: string; value: string } | null> = {
   "fixture.nonExampleAddress": { label: "admin.mock.fix.address", value: "1 Example Ave" },
 };
 
+type InputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">;
+
+/**
+ * A text input over a draft value that shows what was typed while it has focus (#572): "1." on the
+ * way to "1.5" keeps its dot though the draft holds 1. `onText` gets the text and the value the field
+ * held when editing began, so a cleared number stays a number.
+ */
+export function DraftText({
+  raw,
+  onText,
+  onFocus,
+  onBlur,
+  ...rest
+}: InputProps & { raw: unknown; onText(text: string, as: unknown): void }) {
+  const [text, setText] = useState<string | null>(null);
+  const started = useRef<unknown>(undefined);
+  return (
+    <input
+      {...rest}
+      value={text ?? String(raw)}
+      onFocus={(e) => {
+        started.current = raw;
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setText(null);
+        started.current = undefined;
+        onBlur?.(e);
+      }}
+      onChange={(e) => {
+        setText(e.target.value);
+        onText(e.target.value, started.current === undefined ? raw : started.current);
+      }}
+    />
+  );
+}
+
+/**
+ * A payload key: the typed text stays while it has focus. A key the group already has is refused;
+ * the text stays as typed and a message says why (#572), until the person changes it or leaves.
+ */
+function KeyInput({
+  segment,
+  rename,
+  takenId,
+  describedBy,
+  invalid,
+  onBlur,
+  ...rest
+}: InputProps & {
+  segment: string;
+  /** Renames to `key`; false when the group refused it. */
+  rename(key: string): boolean;
+  takenId: string;
+  describedBy: string | undefined;
+  invalid: boolean;
+}) {
+  const t = useT();
+  const [text, setText] = useState<string | null>(null);
+  const [refused, setRefused] = useState(false);
+  const ids = [describedBy, refused ? takenId : undefined].filter(Boolean).join(" ");
+  return (
+    <>
+      <input
+        {...rest}
+        value={text ?? segment}
+        aria-invalid={invalid || refused || undefined}
+        aria-describedby={ids === "" ? undefined : ids}
+        onBlur={(e) => {
+          setText(null);
+          setRefused(false);
+          onBlur?.(e);
+        }}
+        onChange={(e) => {
+          const key = e.target.value;
+          setText(key);
+          setRefused(key !== segment && !rename(key));
+        }}
+      />
+      {refused && (
+        <span className="qm-mock__error" id={takenId}>
+          <span aria-hidden="true">⚠</span> <span>{t("admin.mock.keyTaken")}</span>
+        </span>
+      )}
+    </>
+  );
+}
+
 export function MockPayload({
   base,
   payload,
@@ -110,7 +198,8 @@ export function MockPayload({
       }),
     );
   };
-  const id = (path: readonly PathSegment[], what: string) => `${uid}-${path.join("_")}-${what}`;
+  // By row position: paths such as ["a_b"] and ["a", "b"] would join to the same text (#572).
+  const id = (index: number, what: string) => `${uid}-r${index}-${what}`;
   const nameOf = (row: Row, index: number): string =>
     row.kind === "item" || typeof row.segment === "number"
       ? t("admin.config.item", { n: Number(row.segment) + 1 })
@@ -137,7 +226,9 @@ export function MockPayload({
             (!keyAllowed(row.segment) || row.kind === "group" || row.kind === "list") &&
             issues.length > 0;
           const valueBad = issues.length > 0 && !keyBad;
-          const errorId = `${uid}-${index}-e`;
+          // One id per message: two issues on one row each get their own (#572).
+          const errorIds = issues.map((_, k) => id(index, `e${k}`)).join(" ");
+          const errorId = errorIds === "" ? undefined : errorIds;
           const name = nameOf(row, index);
           const container = row.kind === "group" || row.kind === "list" || row.kind === "item";
           return (
@@ -154,26 +245,28 @@ export function MockPayload({
                 </span>
               ) : (
                 <>
-                  <label htmlFor={id(row.path, "k")}>
+                  <label htmlFor={id(index, "k")}>
                     <VisuallyHidden>{t("admin.mock.keyRow", { n: index + 1 })}</VisuallyHidden>
                   </label>
-                  <input
-                    id={id(row.path, "k")}
+                  <KeyInput
+                    id={id(index, "k")}
                     className="qm-field__input qm-mock__mono"
                     list={listId}
-                    value={row.segment}
+                    segment={row.segment}
                     autoComplete="off"
                     spellCheck={false}
-                    aria-invalid={keyBad || undefined}
-                    aria-describedby={keyBad ? errorId : undefined}
+                    invalid={keyBad}
+                    describedBy={keyBad ? errorId : undefined}
+                    takenId={id(index, "taken")}
                     onFocus={entered}
                     onBlur={left}
-                    onChange={(e) =>
-                      onChange(
-                        renamePayloadKey(payload, row.path, e.target.value),
-                        id(row.path, "k"),
-                      )
-                    }
+                    rename={(key) => {
+                      const next = renamePayloadKey(payload, row.path, key);
+                      if (next === payload) return false;
+                      // One undo step per rename: coalesced by the row, not by the changing key.
+                      onChange(next, id(index, "k"));
+                      return true;
+                    }}
                   />
                 </>
               )}
@@ -189,26 +282,23 @@ export function MockPayload({
                 </span>
               ) : (
                 <>
-                  <label htmlFor={id(row.path, "v")}>
+                  <label htmlFor={id(index, "v")}>
                     <VisuallyHidden>{t("admin.mock.valueFor", { name })}</VisuallyHidden>
                   </label>
-                  <input
-                    id={id(row.path, "v")}
+                  <DraftText
+                    id={id(index, "v")}
                     data-owner={pointer}
                     data-role="value"
                     className="qm-field__input qm-mock__mono"
-                    value={String(row.value)}
+                    raw={row.value}
                     autoComplete="off"
                     spellCheck={false}
                     aria-invalid={valueBad || undefined}
                     aria-describedby={valueBad ? errorId : undefined}
                     onFocus={entered}
                     onBlur={left}
-                    onChange={(e) =>
-                      onChange(
-                        setPayloadValue(payload, row.path, e.target.value),
-                        id(row.path, "v"),
-                      )
+                    onText={(text, as) =>
+                      onChange(setPayloadValue(payload, row.path, text, as), id(index, "v"))
                     }
                   />
                 </>
@@ -258,10 +348,10 @@ export function MockPayload({
                   <span aria-hidden="true">×</span>
                 </button>
               </span>
-              {issues.map((issue) => {
+              {issues.map((issue, k) => {
                 const fix = FIX[issue.key] ?? null;
                 return (
-                  <p key={issue.key} className="qm-mock__error" id={errorId}>
+                  <p key={issue.key} className="qm-mock__error" id={id(index, `e${k}`)}>
                     <span aria-hidden="true">⚠</span>
                     <span data-issue-pointer={issue.pointer}>
                       <VisuallyHidden>{t("admin.config.level.error")} </VisuallyHidden>

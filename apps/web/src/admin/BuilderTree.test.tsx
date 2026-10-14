@@ -55,7 +55,9 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
       expect(item(new RegExp(`^${escapeRegExp(name)}`))).toBeInTheDocument();
     // Every site item has a plain name with its key in mono; schemaVersion is not a setting.
     expect(item(/^Terminal settings terminal$/)).toBeInTheDocument();
-    expect(item(/^Keyword styles keywordSeverityStyles$/)).toBeInTheDocument();
+    // The keyword styles are edited with the keywords, under Result cards (Task 11).
+    expect(within(tree()).queryByRole("treeitem", { name: /keywordSeverityStyles/ })).toBeNull();
+    expect(item(/^Keywords and severity keywords$/)).toBeInTheDocument();
     expect(within(tree()).queryByRole("treeitem", { name: /schemaVersion/ })).toBeNull();
     expect(within(tree()).getByText(/^Server settings: available after/)).toBeInTheDocument();
   });
@@ -278,11 +280,13 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
     return el;
   };
 
-  it("is two trees of treeitems with levels, expansion and selection, and groups for children", async () => {
+  it("is three trees of treeitems with levels, expansion and selection, and groups for children", async () => {
     await openBuilder();
     const trees = within(tree()).getAllByRole("tree");
-    expect(trees.map((x) => x.getAttribute("aria-labelledby"))).toHaveLength(2);
+    // Query types, Result cards (Task 10) and Site.
+    expect(trees.map((x) => x.getAttribute("aria-labelledby"))).toHaveLength(3);
     expect(within(tree()).getByRole("tree", { name: "Query types" })).toBeInTheDocument();
+    expect(within(tree()).getByRole("tree", { name: "Result cards" })).toBeInTheDocument();
     expect(within(tree()).getByRole("tree", { name: "Site" })).toBeInTheDocument();
     const vehicle = item(/^Vehicle VEH/);
     expect(vehicle).toHaveAttribute("aria-level", "1");
@@ -355,6 +359,14 @@ describe("builder tree keyboard (B1, WAI-ARIA tree pattern)", () => {
       -1,
     ) as HTMLElement;
     act(() => lastType.focus());
+    await t.user.keyboard("{ArrowDown}");
+    // The Result cards group's header follows the query types (Task 10); Down again enters it.
+    expect(within(tree()).getByRole("button", { name: "Result cards" })).toHaveFocus();
+    const cardsTree = within(tree()).getByRole("tree", { name: "Result cards" });
+    const lastCardRow = [...cardsTree.querySelectorAll<HTMLElement>('[role="treeitem"]')].at(
+      -1,
+    ) as HTMLElement;
+    act(() => lastCardRow.focus());
     await t.user.keyboard("{ArrowDown}");
     // The Site group's header sits between the two trees; Down again enters the tree.
     expect(within(tree()).getByRole("button", { name: "Site" })).toHaveFocus();

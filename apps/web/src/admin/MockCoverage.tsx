@@ -35,9 +35,34 @@ export function MockCoverage() {
       (i) =>
         i.level === "error" && i.pointer.startsWith(`${mockPointer.response(sourceId, index)}/`),
     ).length;
+  // Every gap of a source that has mock data (a source without any has its own fix below): "Add
+  // all" fills them in one undo step (#572, for the dropped "Start each mock source" checkbox).
+  const gaps = env.site.queryTypes.flatMap((q) =>
+    [...new Set(q.sourceIds)]
+      .filter((id) => id in env.mock.sources && !isCovered(id, q.code))
+      .map((sourceId) => ({ sourceId, code: q.code })),
+  );
   return (
     <>
       <p className="qm-mock__lead">{t("admin.mock.coverage.intro")}</p>
+      {gaps.length > 1 && (
+        <button
+          type="button"
+          className="qm-button"
+          onClick={() => {
+            env.edit((m) =>
+              gaps.reduce((acc, g) => addResponse(acc, g.sourceId, scaffoldResponse(g.code)), m),
+            );
+            env.announce(t("admin.mock.addedAll", { count: gaps.length }));
+            // The button goes with the last gap: focus moves to the first new response's cell.
+            const first = gaps[0];
+            if (first !== undefined)
+              requestMockFocus(gapPointer(first.sourceId, first.code), "open");
+          }}
+        >
+          {t("admin.mock.addAll", { count: gaps.length })}
+        </button>
+      )}
       {env.site.sources
         .filter((s) => !(s.id in env.mock.sources))
         .map((s) => {
@@ -166,13 +191,15 @@ export function MockCoverage() {
                   return (
                     <td key={s.id}>
                       <div className="qm-mock__cells">
-                        {responses.map(({ r, i }) => {
+                        {responses.map(({ r, i }, k) => {
                           const errors = errorsAt(s.id, i);
                           return (
                             <button
                               key={i}
                               type="button"
                               className="qm-button qm-mock__cell"
+                              data-owner={k === 0 ? gapPointer(s.id, q.code) : undefined}
+                              data-role={k === 0 ? "open" : undefined}
                               onClick={() => select?.(mockPointer.response(s.id, i))}
                             >
                               <b>

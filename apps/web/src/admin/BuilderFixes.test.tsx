@@ -90,14 +90,15 @@ describe("config builder fixes (Tasks 31, 33; UX-004)", () => {
 
   it("M5: Add item clears the new item's identity key; an empty list adds through Raw JSON", async () => {
     const t = await openBuilder();
-    await openSection(t, "keywords");
-    await t.user.click(await findAddItem("keywords"));
-    const keywords = draft(t).keywords as { keyword: string }[];
-    expect(keywords.at(-1)?.keyword).toBe("");
-    expect(keywords.at(-2)?.keyword).not.toBe("");
+    // Keywords have a purpose-built editor (Task 11): a generic list with an identity key is used.
+    await openSection(t, "personas");
+    await t.user.click(await findAddItem("personas"));
+    const personas = draft(t).personas as { key: string }[];
+    expect(personas.at(-1)?.key).toBe("");
+    expect(personas.at(-2)?.key).not.toBe("");
     // Task 31 part 2: rules have a purpose-built editor; an emptied generic list shows the rule.
-    act(() => configDraftStore(t.services).getState().setPath(["keywords"], []));
-    const add = await findAddItem("keywords");
+    act(() => configDraftStore(t.services).getState().setPath(["personas"], []));
+    const add = await findAddItem("personas");
     expect(add).toBeDisabled();
     expect(add).toHaveAccessibleDescription(/Add the first item in Raw JSON/);
   });
