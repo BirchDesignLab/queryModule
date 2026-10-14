@@ -455,7 +455,7 @@ describe("#633 a nested part's mapping `when` reads the values the server planne
         elements: [
           {
             kind: "value",
-            path: "remarks",
+            path: "conditionalMarker",
             labelKey: "field.description",
             view: "both",
             highlight: false,
@@ -482,7 +482,11 @@ describe("#633 a nested part's mapping `when` reads the values the server planne
         sources: [
           {
             sourceId: "nationalSource",
-            payload: { status: "WANTED", remarks: "ZZ-CONDITIONAL-REMARKS" },
+            payload: {
+              status: "WANTED",
+              remarks: "ZZ-DEFAULT-REMARKS",
+              conditionalMarker: "ZZ-CONDITIONAL-REMARKS",
+            },
           },
         ],
       },
