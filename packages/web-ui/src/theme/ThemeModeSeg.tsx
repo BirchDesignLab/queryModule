@@ -25,10 +25,11 @@ const ICON_PATHS: Readonly<Record<ThemeModePreference, JSX.Element>> = {
     </>
   ),
   night: <path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z" />,
+  // A sun on the horizon (red shift is the dusk theme); the crescent stays Night's alone (G36).
   redShift: (
     <>
-      <path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z" />
-      <path d="M3 21h18" />
+      <path d="M6 16a6 6 0 0 1 12 0" />
+      <path d="M3 19h18M12 5v3M5 9l1.5 1.5M19 9l-1.5 1.5" />
     </>
   ),
 };

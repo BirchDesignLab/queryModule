@@ -66,20 +66,30 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     expect(within(list).getByText("National system: pending")).toBeInTheDocument();
   });
 
-  it("an event turns one line into returned in place while focus and the typed value stay", async () => {
+  it("an event turns one line into its new status in place while focus and the typed value stay", async () => {
     const { driver, services, user } = setup();
     services.feed.open();
     await user.click(screen.getByLabelText("Plate"));
     await user.keyboard("ABC");
     const line = within(sourceList()).getByText("State system: pending").closest(".qm-source");
     const row = line?.closest("li.qm-request");
-    act(() => driver.status("stateSource", "returned"));
-    const after = within(sourceList()).getByText("State system: returned").closest(".qm-source");
+    act(() => driver.status("stateSource", "failed"));
+    const after = within(sourceList()).getByText("State system: failed").closest(".qm-source");
     expect(after).toBe(line);
     expect(within(sourceList()).getByText("National system: pending")).toBeInTheDocument();
     expect(after?.closest("li.qm-request")).toBe(row);
     expect(screen.getByLabelText("Plate")).toHaveFocus();
     expect(screen.getByLabelText("Plate")).toHaveValue("ABC");
+    services.feed.close();
+  });
+
+  it("G6: a source that returned shows a loading line, not returned, until its card arrives", () => {
+    const { driver, services } = setup();
+    services.feed.open();
+    act(() => driver.status("stateSource", "returned"));
+    const list = sourceList();
+    expect(within(list).getByText("State system: loading result")).toBeInTheDocument();
+    expect(within(list).queryByText("State system: returned")).not.toBeInTheDocument();
     services.feed.close();
   });
 

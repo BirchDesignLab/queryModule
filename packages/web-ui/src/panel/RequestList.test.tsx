@@ -206,6 +206,81 @@ describe("spec 6.7 requests list (B3)", () => {
   });
 });
 
+describe("G11 a request that starts sending scrolls the list into view when it is below the fold", () => {
+  const props = {
+    heading: "Last request",
+    emptyText: "Nothing sent yet.",
+    onCopy: () => undefined,
+    t,
+  };
+
+  /** The list's top edge is read live, so a test can move it between renders. */
+  function spyOnLayout(initialTop: number) {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const state = { top: initialTop };
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({
+      top: state.top,
+      bottom: state.top + 100,
+      left: 0,
+      right: 100,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: state.top,
+      toJSON: () => ({}),
+    }));
+    return Object.assign(scrollIntoView, { state });
+  }
+
+  it("scrolls to the list top when a new Sending row arrives and the list starts below the top 30% of the screen", () => {
+    const scrollIntoView = spyOnLayout(window.innerHeight * 0.8);
+    const { rerender } = render(<RequestList {...props} rows={[ACKED]} revealOnSend />);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    rerender(<RequestList {...props} rows={[SENDING, ACKED]} revealOnSend />);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+  });
+
+  it("keeps bringing the list into view while the page is still too short, then stops once it is up", () => {
+    const scrollIntoView = spyOnLayout(window.innerHeight * 0.8);
+    const { rerender } = render(<RequestList {...props} rows={[ACKED]} revealOnSend />);
+    rerender(<RequestList {...props} rows={[SENDING, ACKED]} revealOnSend />);
+    // The first scroll stopped at the end of a short page; the cards arrive and the page grows.
+    const settled = [{ ...SENDING, status: "acknowledged" as const }, ACKED];
+    rerender(<RequestList {...props} rows={settled} revealOnSend />);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    scrollIntoView.state.top = 10;
+    rerender(<RequestList {...props} rows={[...settled]} revealOnSend />);
+    scrollIntoView.state.top = window.innerHeight * 0.8;
+    rerender(<RequestList {...props} rows={[...settled]} revealOnSend />);
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  it("does nothing when the list is already in the upper half, when the prop is off, or on first render", () => {
+    const scrollIntoView = spyOnLayout(10);
+    const { rerender } = render(<RequestList {...props} rows={[ACKED]} revealOnSend />);
+    rerender(<RequestList {...props} rows={[SENDING, ACKED]} revealOnSend />);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    const low = spyOnLayout(window.innerHeight * 0.8);
+    const off = render(<RequestList {...props} rows={[SENDING]} />);
+    off.rerender(<RequestList {...props} rows={[{ ...SENDING, id: "r3" }, SENDING]} />);
+    expect(low).not.toHaveBeenCalled();
+  });
+
+  it("never moves focus", () => {
+    spyOnLayout(window.innerHeight * 0.8);
+    render(
+      <>
+        <button type="button">Run query</button>
+        <RequestList {...props} rows={[SENDING]} revealOnSend />
+      </>,
+    );
+    screen.getByRole("button", { name: "Run query" }).focus();
+    expect(screen.getByRole("button", { name: "Run query" })).toHaveFocus();
+  });
+});
+
 describe("failed-row retry (the list only shows the button; the owner sends)", () => {
   const RETRYABLE: RequestRowView = { ...FAILED, retryable: true };
 

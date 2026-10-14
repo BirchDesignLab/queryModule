@@ -31,6 +31,43 @@ describe("the ack toast flows in the page at every width (#633, developer decisi
   });
 });
 
+describe("request entries match mockup v5 (G1, G12, G25, G36)", () => {
+  it("G25: meta, parts and cards span the whole entry, so every card starts at the same edge", () => {
+    expect(decls(".qm-request__meta")).toMatch(/flex:\s*1\s+0\s+100%/);
+    expect(decls(".qm-request__parts")).toMatch(/flex:\s*1\s+0\s+100%/);
+    expect(decls(".qm-request__sources")).not.toMatch(/padding-inline-start/);
+  });
+
+  it("G1: the entry head wraps (flex), so a narrow column never stacks the command one character per line", () => {
+    expect(decls(".qm-request")).toMatch(/display:\s*flex/);
+    expect(decls(".qm-request")).toMatch(/flex-wrap:\s*wrap/);
+    expect(decls(".qm-request__summary")).toMatch(/flex:\s*1\s+1\s+auto/);
+  });
+
+  it("G1: at 1024 px the requests column keeps room for its cards (the panel gives way first)", () => {
+    const media = css.match(
+      /@media \(min-width: 1024px\)\s*\{\s*\.qm-query-panel:not\([^)]*\) \.qm-panes\s*\{([^}]*)\}/,
+    );
+    expect(media?.[1]).toMatch(/minmax\(24rem,\s*1fr\)/);
+    expect(media?.[1]).toMatch(/minmax\(35rem,/);
+  });
+
+  it("G12: the ack toast is a compact, centered chip, still in the page flow", () => {
+    const toast = decls(".qm-toast");
+    expect(toast).toMatch(/inline-size:\s*fit-content/);
+    expect(toast).toMatch(/margin-inline:\s*auto/);
+  });
+
+  it("G36: officer card and part headings are at least the 16 px floor", () => {
+    expect(decls(".qm-layout--mobile-unit .qm-card__title")).toMatch(
+      /font-size:\s*var\(--qm-type-body-size\)/,
+    );
+    expect(decls(".qm-layout--mobile-unit .qm-request__part-label")).toMatch(
+      /font-size:\s*var\(--qm-type-body-size\)/,
+    );
+  });
+});
+
 describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)", () => {
   it("dispatch density: inputs and selects are the 36 px dense height", () => {
     expect(decls(".qm-field__input")).toMatch(/min-height:\s*var\(--qm-control-height-dense\)/);

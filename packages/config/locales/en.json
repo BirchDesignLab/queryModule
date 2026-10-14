@@ -145,6 +145,7 @@
   "sourceStatus.detail": "{count} {status}",
   "sourceStatus.heading": "Source status for {summary}",
   "sourceStatus.line": "{source}: {status}",
+  "sourceStatus.loadingResult": "{source}: loading result",
   "sourceStatus.alsoRun": "{queryType}, also run from {from}",
   "sourceStatus.skipped": "{queryType} was not run.",
   "sourceStatus.skippedWhy": "{queryType} not run: {reasons}.",
