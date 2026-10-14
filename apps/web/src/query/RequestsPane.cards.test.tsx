@@ -52,6 +52,9 @@ function detail(
     origin: string;
     queryType: string;
     sources: { sourceId: string; payload: Record<string, unknown> }[];
+    /** What the server planned for the part (GET /queries/{id}); absent when purged or not sent. */
+    values?: Record<string, unknown>;
+    purged?: boolean;
   }[],
 ) {
   const base = detail202();
@@ -424,11 +427,129 @@ describe("spec 4.2 the mapping's `when` reads canonical values, not raw typed te
     expect(mapResponse(config, ctx(canonical), payload, NOW).mappingIndex).toBe(0);
   });
 
+  it("a nested part's values are the ones the server planned for it; the primary uses what it submitted (#633)", () => {
+    const nested = { queryType: "WNT", parentPartId: 0, values: { last: "ZZTEST" } };
+    expect(partValuesOf(nested, submitted, config, NOW)).toEqual({ last: "ZZTEST" });
+    expect(partValuesOf({ ...nested, values: undefined }, submitted, config, NOW)).toEqual({});
+    const primary = { queryType: "VEH", parentPartId: null, values: { plate: "NOT-USED" } };
+    expect(partValuesOf(primary, submitted, config, NOW).plate).toBe("ZZ-0001");
+  });
+
   it("only the primary part kept its values", () => {
     expect(partValuesOf({ queryType: "WNT", parentPartId: 0 }, submitted, config, NOW)).toEqual({});
     expect(partValuesOf({ queryType: "VEH", parentPartId: null }, undefined, config, NOW)).toEqual(
       {},
     );
+  });
+});
+
+describe("#633 a nested part's mapping `when` reads the values the server planned for it", () => {
+  // Per part, own values only (ruling 10-13-26): the primary's values and a sibling's never apply.
+  const wantedByLast = (config: ClientSiteConfig): ClientSiteConfig => ({
+    ...config,
+    responseMappings: [
+      {
+        id: "wnt-zztest",
+        queryType: "WNT",
+        when: { field: "last", op: "eq", value: "ZZTEST" },
+        elements: [
+          {
+            kind: "value",
+            path: "remarks",
+            labelKey: "field.description",
+            view: "both",
+            highlight: false,
+          },
+        ],
+      },
+      ...config.responseMappings,
+    ],
+  });
+  const PER_ACK: SubmitQueryResponse = {
+    ...ACK,
+    parts: [{ ...VEH_PART, queryType: "PER", sourceIds: ["nationalSource"] }, WNT_PART],
+  };
+  const parts = (nested: { values?: Record<string, unknown>; purged?: boolean }) =>
+    detail([
+      {
+        ...VEH_PART,
+        queryType: "PER",
+        sources: [{ sourceId: "nationalSource", payload: { status: "NO RECORD" } }],
+      },
+      {
+        ...WNT_PART,
+        ...nested,
+        sources: [
+          {
+            sourceId: "nationalSource",
+            payload: { status: "WANTED", remarks: "ZZ-CONDITIONAL-REMARKS" },
+          },
+        ],
+      },
+    ]);
+  const nestedCard = () => screen.getByRole("region", { name: /Wanted check, also run from/ });
+
+  it("uses the conditional mapping when the detail's values for that part match", () => {
+    setup(PER_ACK, parts({ values: { last: "ZZTEST" } }), {
+      config: wantedByLast(CLIENT_CONFIG),
+      queryType: "PER",
+      values: { last: "OTHER" },
+    });
+    expect(within(nestedCard()).getByText("ZZ-CONDITIONAL-REMARKS")).toBeVisible();
+  });
+
+  it("falls back to the unconditional card when the detail carried no values for the part", () => {
+    setup(PER_ACK, parts({}), {
+      config: wantedByLast(CLIENT_CONFIG),
+      queryType: "PER",
+      values: { last: "ZZTEST" },
+    });
+    // the primary's submitted last name never stands in for the nested part's own values
+    expect(within(nestedCard()).queryByText("ZZ-CONDITIONAL-REMARKS")).toBeNull();
+  });
+
+  it("falls back when the part was purged (no values), and a values mismatch does not match", () => {
+    setup(PER_ACK, parts({ purged: true }), {
+      config: wantedByLast(CLIENT_CONFIG),
+      queryType: "PER",
+    });
+    expect(within(nestedCard()).queryByText("ZZ-CONDITIONAL-REMARKS")).toBeNull();
+  });
+
+  it("a mismatching planned value picks the unconditional card too", () => {
+    setup(PER_ACK, parts({ values: { last: "OTHER" } }), {
+      config: wantedByLast(CLIENT_CONFIG),
+      queryType: "PER",
+    });
+    expect(within(nestedCard()).queryByText("ZZ-CONDITIONAL-REMARKS")).toBeNull();
+  });
+
+  it("a skipped nested part has no card, whatever values the detail holds", () => {
+    const skipped: SubmitQueryResponse = {
+      ...PER_ACK,
+      parts: [
+        { ...VEH_PART, queryType: "PER", sourceIds: ["nationalSource"] },
+        {
+          ...WNT_PART,
+          status: "skipped",
+          sourceIds: [],
+          skipReasons: [{ key: "validation.required", params: { field: "dob" } }],
+        },
+      ],
+    };
+    setup(
+      skipped,
+      detail([
+        {
+          ...VEH_PART,
+          queryType: "PER",
+          sources: [{ sourceId: "nationalSource", payload: { status: "NO RECORD" } }],
+        },
+        { ...WNT_PART, sources: [], values: { last: "ZZTEST" } },
+      ]),
+      { config: wantedByLast(CLIENT_CONFIG), queryType: "PER" },
+    );
+    expect(screen.queryByText("ZZ-CONDITIONAL-REMARKS")).toBeNull();
   });
 });
 

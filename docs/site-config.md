@@ -319,6 +319,11 @@ A mapping says what to show from a source answer:
 `pattern`) and `template` (with a `template`); an unknown format is an error. Two mappings with the
 same query type, source, persona and `when` presence are an error.
 
+A mapping's `when` is checked per part, against that part's own values only, never another part's.
+For an also-run part those are the values the server planned for it (read from the request detail),
+so until the detail arrives, or when the part was purged, its `when` does not match and the
+unconditional card for that query type is shown.
+
 In M1 mappings are validated against the mock payloads and warn on a path that finds nothing. They
 are applied to real answers from M2.
 

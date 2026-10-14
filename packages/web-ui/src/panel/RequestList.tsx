@@ -154,6 +154,11 @@ export function RequestList({
     }
   });
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // The row that held focus when it left the list (a placeholder row built from the detail fetch
+  // is replaced by the request's own row when the 202 lands), with its reference. Set by the row's
+  // ref cleanup, which runs before the node leaves the page; the layout effect below tells a real
+  // removal from a ref re-attach on a render, and hands focus to the row with the same reference.
+  const lostRow = useRef<{ id: string; reference: string | undefined } | null>(null);
   // The Retry button that had focus when it was pressed. Where a retry replaces its own row (the
   // officer's "last request" shows one row), or its acknowledgment retires the button (the failed
   // row is superseded, M1 exit C1), the button leaves the page with focus on it; then, and only
@@ -161,6 +166,19 @@ export function RequestList({
   const retryFocus = useRef<Element | null>(null);
   // Every commit: a no-op until a Retry was pressed while it had focus.
   useLayoutEffect(() => {
+    const lost = lostRow.current;
+    lostRow.current = null;
+    if (lost !== null && !rows.some((row) => row.id === lost.id)) {
+      const active = document.activeElement;
+      const successor =
+        lost.reference === undefined
+          ? undefined
+          : rows.find((row) => row.reference === lost.reference);
+      if (successor !== undefined && (active === null || active === document.body)) {
+        setSelectedId(successor.id);
+        rowElements()[rows.indexOf(successor)]?.focus();
+      }
+    }
     const pressed = retryFocus.current;
     if (pressed === null) return;
     if (pressed.isConnected) {
@@ -190,6 +208,10 @@ export function RequestList({
               key={row.id}
               className={`qm-request qm-request--${row.status}`}
               aria-label={row.name}
+              ref={(node) => () => {
+                if (node?.contains(document.activeElement))
+                  lostRow.current = { id: row.id, reference: row.reference };
+              }}
               tabIndex={index === selectedIndex ? 0 : -1}
               // Focus entering the row or anything in it (a click, Tab, an arrow) selects it.
               onFocus={() => setSelectedId(row.id)}

@@ -19,6 +19,18 @@ function decls(selector: string): string {
     .join("\n");
 }
 
+describe("the ack toast flows in the page at every width (#633, developer decision a)", () => {
+  it("is never fixed, so it cannot sit over a focused control", () => {
+    const toast = decls(".qm-toast");
+    expect(toast).not.toMatch(/position:\s*fixed/);
+    expect(toast).not.toMatch(/inset-(block|inline)-(start|end)/);
+  });
+
+  it("has no width-dependent override: the same in-flow rule applies on a wide, tall viewport", () => {
+    expect(css).not.toMatch(/@media[^{]*\{\s*\.qm-toast/);
+  });
+});
+
 describe("design system D0.3 controls (docs/design/2026-09-29-visual-system.md)", () => {
   it("dispatch density: inputs and selects are the 36 px dense height", () => {
     expect(decls(".qm-field__input")).toMatch(/min-height:\s*var\(--qm-control-height-dense\)/);
