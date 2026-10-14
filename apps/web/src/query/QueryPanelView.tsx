@@ -1,4 +1,4 @@
-import type { DraftStore } from "@querymodule/client";
+import { type DraftStore, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { resolveShortcuts } from "@querymodule/core/config";
 import {
@@ -19,11 +19,14 @@ import {
   TypeFieldBar,
   useShortcutAction,
 } from "@querymodule/web-ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
+import { useServices } from "../app/services-context.js";
 import { useShortcutSheet } from "../app/shortcut-sheet-context.js";
 import { isDataField } from "./data-field.js";
+import { editAsNewNote, planEditAsNew } from "./edit-as-new.js";
+import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
 import { terminalExample } from "./terminal-example.js";
@@ -58,11 +61,16 @@ function ReadyPanel({
   idPrefix,
   selectType,
   selectTypeSeq,
+  editNote,
+  onDismissNote,
 }: {
   panel: ReadyQueryPanel;
   idPrefix: string;
   selectType?: string | undefined;
   selectTypeSeq?: number | undefined;
+  /** What "Edit as new query" left out, in words (#477); shown until the form is cleared or run. */
+  editNote?: string | undefined;
+  onDismissNote?: (() => void) | undefined;
 }) {
   const preview = panel.mode === "preview";
   const t = useT();
@@ -244,6 +252,13 @@ function ReadyPanel({
         />
       )}
       <div ref={panel.formContainerRef} className="qm-panel__body">
+        {editNote === undefined ? null : (
+          // Plain text before the form, so it is read in order; the shared announcer says it once
+          // when it appears. A sentence, never color or an icon alone.
+          <p className="qm-edit-note" data-testid="edit-as-new-note">
+            {editNote}
+          </p>
+        )}
         {terminal.mode === "terminal" ? (
           <TerminalInput
             id={`${idPrefix}-terminal`}
@@ -272,7 +287,10 @@ function ReadyPanel({
             />
             <ActionBar
               clearLabel={t("form.clear")}
-              onClear={terminal.clear}
+              onClear={() => {
+                onDismissNote?.();
+                terminal.clear();
+              }}
               status={
                 terminal.errors.length > 0
                   ? t("terminal.problems", { count: terminal.errors.length })
@@ -329,7 +347,10 @@ function ReadyPanel({
               />
               <ActionBar
                 clearLabel={t("form.clear")}
-                onClear={terminal.clear}
+                onClear={() => {
+                  onDismissNote?.();
+                  terminal.clear();
+                }}
                 status={
                   blockedCount > 0 ? t("form.fieldsNeedAttention", { count: blockedCount }) : ""
                 }
@@ -402,6 +423,27 @@ export function QueryPanelView({
   selectTypeSeq,
 }: QueryPanelViewProps) {
   const panel = useQueryPanel({ config, drafts, mode, onConfigChanged });
+  const t = useT();
+  const { announcer, requests: requestsStore } = useServices();
+  // Edit as new query (#477): what the current config left out of the loaded values, in words, and
+  // the type it belongs to (a note about Vehicle fields means nothing on a Person form). Memory only.
+  const [editNote, setEditNote] = useState<{ queryType: string; text: string } | null>(null);
+  // Counts the user's own presses of the action; focus moves to the form only for one (never on
+  // mount, never from a render).
+  const [editFocus, setEditFocus] = useState(0);
+  const formContainer = panel?.formContainerRef;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: editFocus is the trigger
+  useLayoutEffect(() => {
+    if (editFocus > 0) firstField(formContainer?.current)?.focus();
+  }, [editFocus]);
+  // A request that goes out ends the note: the loaded values were run or replaced.
+  const newestRow = useStore(requestsStore, (s) => s.items[0]?.id);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new newest row is the trigger
+  useEffect(() => setEditNote(null), [newestRow]);
+  // The pane is memoised (it renders a row per request): the callback keeps one identity and reads
+  // the latest panel through a ref.
+  const editAsNewRef = useRef<(rowId: string) => void>(() => undefined);
+  const onEditAsNew = useCallback((rowId: string) => editAsNewRef.current(rowId), []);
   // The preview's store is private and memory-only; it goes with the view (ADR-0011).
   useEffect(
     () => () => {
@@ -410,19 +452,53 @@ export function QueryPanelView({
     [mode, drafts],
   );
   if (panel === null) return null;
+  editAsNewRef.current = (rowId) => {
+    const entry = requestsStore.getState().items.find((item) => item.id === rowId);
+    if (entry?.submitted === undefined) return;
+    const plan = planEditAsNew(panel.config, entry.submitted);
+    // The user's action replaces the draft of that type with what the row kept; the failed row
+    // itself is never changed and nothing is sent. In terminal mode the form is where it lands: the
+    // command text is derived again if the user goes back (use-terminal enterTerminal).
+    if (plan.queryType !== null) {
+      panel.selectQueryType(plan.queryType);
+      drafts.getState().replaceValues(plan.queryType, plan.values);
+      drafts.getState().setSources(plan.sourceIds);
+    }
+    drafts.getState().setMode("form");
+    const nameOf = (key: string): string => {
+      const labelKey =
+        panel.config.queryTypes
+          .find((q) => q.code === entry.queryType)
+          ?.fields.find((f) => f.key === key)?.labelKey ?? `field.${key}`;
+      const text = t(labelKey);
+      return text === labelKey ? key : text;
+    };
+    const typeName = (code: string): string => {
+      const text = t(`queryType.${code}`);
+      return text === `queryType.${code}` ? code : text;
+    };
+    const text = editAsNewNote(plan.dropped, t, nameOf, typeName);
+    setEditNote(text === null ? null : { queryType: plan.queryType ?? panel.queryType, text });
+    announcer.announce(
+      [plan.queryType === null ? null : t("editAsNew.loaded"), text].filter(Boolean).join(" "),
+    );
+    setEditFocus((n) => n + 1);
+  };
   const ready = (
     <ReadyPanel
       panel={panel}
       idPrefix={idPrefix}
       selectType={mode === "preview" ? selectType : undefined}
       selectTypeSeq={mode === "preview" ? selectTypeSeq : undefined}
+      editNote={editNote?.queryType === panel.queryType ? editNote.text : undefined}
+      onDismissNote={() => setEditNote(null)}
     />
   );
   if (requests === undefined) return ready;
   return (
     <div className="qm-panes">
       <div className="qm-panes__panel">{ready}</div>
-      <RequestsPane config={panel.config} variant={requests} />
+      <RequestsPane config={panel.config} variant={requests} onEditAsNew={onEditAsNew} />
     </div>
   );
 }
