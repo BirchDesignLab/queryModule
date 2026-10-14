@@ -23,7 +23,7 @@ export interface FixtureDiagnostic {
  * Allowlist of payload keys by kind (spec 5.4); listed in docs/site-config.md.
  * Keys are normalised before lookup: lower-cased, "_" and "-" removed.
  * `container` keys must hold an object or array (recursed); a scalar there is a violation.
- * `other` holds descriptive vehicle, property and warrant leaf keys; its strings and numbers may
+ * `other` holds descriptive vehicle, property, warrant and licence leaf keys; its strings and numbers may
  * not carry a run of 4 or more digits (a `year` of 1901 to 1999 is the one exception).
  */
 export const FIXTURE_LEAF_KEYS: {

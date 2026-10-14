@@ -63,36 +63,6 @@ describe("matchMockScenario over the generated default mock", () => {
     });
   });
 
-  it("ZZDLTEST on stateSource DL returns the one synthetic licence record; elsewhere DL is NO RECORD (#602)", () => {
-    const m = matchMockScenario(
-      DEFAULT_MOCK,
-      "stateSource",
-      req("DL", { licenseNumber: "ZZDLTEST", state: "TX" }),
-    );
-    expect(m?.outcome).toEqual({
-      kind: "respond",
-      payload: {
-        status: "VALID",
-        licenseNumber: "ZZDLTEST",
-        last: "TESTERSON",
-        first: "SAMPLE",
-        dob: "1901-01-01",
-        state: "TX",
-      },
-    });
-    const other = matchMockScenario(DEFAULT_MOCK, "stateSource", req("DL", { licenseNumber: "X" }));
-    expect(other).toMatchObject({
-      scenarioIndex: null,
-      outcome: { payload: { status: "NO RECORD" } },
-    });
-    const national = matchMockScenario(
-      DEFAULT_MOCK,
-      "nationalSource",
-      req("DL", { licenseNumber: "ZZDLTEST" }),
-    );
-    expect(national).toMatchObject({ scenarioIndex: null });
-  });
-
   it("TIMEOUT on nationalSource VEH is the timeout behaviour", () => {
     const m = matchMockScenario(DEFAULT_MOCK, "nationalSource", req("VEH", { plate: "TIMEOUT" }));
     expect(m).toEqual({

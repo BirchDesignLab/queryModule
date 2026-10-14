@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkFixturePolicy, vinCheckDigitValid } from "@querymodule/core/config";
 import { type MockFile, MockFileSchema } from "@querymodule/core/contracts";
+import { matchMockScenario } from "@querymodule/core/mock";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { address, dob, person, plate, vehicleRecord, vin, warrantRecord } from "./builders";
 import { checkMockFiles, generate, main, mockFileStates } from "./generate";
@@ -43,6 +44,40 @@ function rowsOf(file: MockFile): Row[] {
   return rows;
 }
 const sortRows = (rows: Row[]) => [...rows].sort((a, b) => a.join("|").localeCompare(b.join("|")));
+
+describe("the generated default mock answers the one synthetic licence query (#602)", () => {
+  const mock = MockFileSchema.parse(JSON.parse(generate("default")));
+  const req = (values: Record<string, unknown>) => ({ queryType: "DL", values, typeValues: {} });
+
+  it("ZZDLTEST on stateSource DL returns the synthetic licence record", () => {
+    const m = matchMockScenario(
+      mock,
+      "stateSource",
+      req({ licenseNumber: "ZZDLTEST", state: "TX" }),
+    );
+    expect(m?.outcome).toEqual({
+      kind: "respond",
+      payload: {
+        status: "VALID",
+        licenseNumber: "ZZDLTEST",
+        last: "TESTERSON",
+        first: "SAMPLE",
+        dob: "1901-01-01",
+        state: "TX",
+      },
+    });
+  });
+
+  it("any other licence number, and nationalSource, stay NO RECORD", () => {
+    const other = matchMockScenario(mock, "stateSource", req({ licenseNumber: "X" }));
+    expect(other).toMatchObject({
+      scenarioIndex: null,
+      outcome: { payload: { status: "NO RECORD" } },
+    });
+    const national = matchMockScenario(mock, "nationalSource", req({ licenseNumber: "ZZDLTEST" }));
+    expect(national).toMatchObject({ scenarioIndex: null });
+  });
+});
 
 describe("generate (FR-043, FR-044; spec 5.4)", () => {
   it("default parses, passes the fixture policy, and is byte-stable", () => {
