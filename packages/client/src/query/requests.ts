@@ -61,6 +61,12 @@ export interface RequestSource {
 /** A part of the 202 with its sources: every dispatched pair starts pending, a skipped part has none. */
 export type RequestPart = SubmitQueryResponse["parts"][number] & {
   sources: readonly RequestSource[];
+  /**
+   * The values the server planned for this part, from a fetched detail (GET /queries/{id}); absent
+   * until then and for a purged part. A nested part's mapping `when` reads these (#633). Regulated
+   * client data like the payloads: memory only, never logged or announced, gone with the row.
+   */
+  values?: Readonly<Record<string, unknown>>;
 };
 
 export interface StatusSummary {
@@ -241,15 +247,19 @@ function mergeDetail(
       }
       return status === local.status ? local : { ...local, status };
     });
+    const gainsValues = part.values === undefined && fetched.values !== undefined;
+    if (gainsValues) changed = true;
     const same =
       part.origin === fetched.origin &&
       part.parentPartId === fetched.parentPartId &&
       JSON.stringify(part.skipReasons) === JSON.stringify(fetched.skipReasons);
     if (!same) changed = true;
+    const values = gainsValues && fetched.values !== undefined ? { values: fetched.values } : {};
     return same
-      ? { ...part, sources }
+      ? { ...part, ...values, sources }
       : {
           ...part,
+          ...values,
           origin: fetched.origin,
           parentPartId: fetched.parentPartId,
           skipReasons: fetched.skipReasons,
@@ -270,6 +280,7 @@ function placeholderParts(detail: QueryDetail): RequestPart[] {
     sourceIds: part.sources.map((source) => source.sourceId),
     droppedSourceIds: part.droppedSourceIds,
     skipReasons: part.skipReasons,
+    ...(part.values === undefined ? {} : { values: part.values }),
     sources: part.sources.map((source) => ({
       sourceId: source.sourceId,
       status: source.status,
@@ -291,6 +302,7 @@ function overlay(
     if (known === undefined) return part;
     return {
       ...part,
+      ...(part.values === undefined && known.values !== undefined ? { values: known.values } : {}),
       sources: part.sources.map((local) => {
         const other = known.sources.find((s) => s.sourceId === local.sourceId);
         if (other === undefined) return local;

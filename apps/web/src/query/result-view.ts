@@ -11,16 +11,24 @@ type Acknowledged = Extract<RequestEntry, { status: "acknowledged" }>;
  * The values `mapResponse` matches a mapping's `when` against (spec 4.2, 4.5): the canonical
  * FormState values of what was submitted (4-digit years, upper-case picklist codes, numbers as
  * numbers), evaluated at `now` like the form. Raw typed text would not match a canonical literal.
- * Only the primary part (the one with no parent) kept its values; a nested part gets none, so a
- * mapping with a `when` on a nested part's own fields falls back to the unconditional card.
+ * The primary part (the one with no parent) uses what was submitted. A nested part uses the values
+ * the server planned for it, from the fetched detail (the config the server planned with may differ
+ * from the current one, so nothing is re-planned here); until the detail arrives, or when the part
+ * was purged or skipped, it has none and a `when` on its fields falls back to the unconditional
+ * card. A part's `when` reads that part's own values only (#633, ruling 10-13-26).
  */
 export function partValuesOf(
-  part: { queryType: string; parentPartId: number | null },
+  part: {
+    queryType: string;
+    parentPartId: number | null;
+    values?: Readonly<Record<string, unknown>> | undefined;
+  },
   submitted: SubmittedQuery | undefined,
   config: ClientSiteConfig,
   now: number,
 ): Readonly<Record<string, unknown>> {
-  if (part.parentPartId !== null || submitted === undefined) return {};
+  if (part.parentPartId !== null) return part.values ?? {};
+  if (submitted === undefined) return {};
   return evaluateForm(config, part.queryType, submitted.values, { now }).values;
 }
 

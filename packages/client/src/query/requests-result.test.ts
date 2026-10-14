@@ -139,3 +139,48 @@ describe("spec 6.6 a payload that lands after the summary window earns its own s
     expect(summaries).toEqual([2, 2]);
   });
 });
+
+describe("#633 a fetched detail's part values reach the part (memory only, for a nested part's `when`)", () => {
+  const withValues = (values: Record<string, unknown> | undefined, purged = false): QueryDetail => {
+    const base = detail([{ sourceId: "state", status: "returned", payload: { ok: true } }]);
+    const part = (base.parts[0] ?? {}) as Record<string, unknown>;
+    return {
+      ...base,
+      parts: [{ ...part, purged, ...(values === undefined ? {} : { values }) }],
+    } as unknown as QueryDetail;
+  };
+
+  it("applyDetail stores the part's values once, and a later detail without them keeps them", () => {
+    const { store } = setup();
+    store.getState().applyDetail(withValues({ dob: "1990-01-02" }));
+    const item = store.getState().items[0];
+    expect(item?.status === "acknowledged" && item.parts[0]?.values).toEqual({ dob: "1990-01-02" });
+    store.getState().applyDetail(withValues(undefined));
+    const again = store.getState().items[0];
+    expect(again?.status === "acknowledged" && again.parts[0]?.values).toEqual({
+      dob: "1990-01-02",
+    });
+  });
+
+  it("a part without values (purged, or from the list) has none, never an empty guess", () => {
+    const { store } = setup();
+    store.getState().applyDetail(withValues(undefined, true));
+    const item = store.getState().items[0];
+    expect(item?.status === "acknowledged" && item.parts[0]?.values).toBeUndefined();
+  });
+
+  it("a placeholder row built from a detail carries the values, and the real 202 inherits them", () => {
+    const store = createRequestsStore();
+    store.getState().applyDetail(withValues({ dob: "1990-01-02" }));
+    const placeholder = store.getState().items[0];
+    expect(placeholder?.status === "acknowledged" && placeholder.parts[0]?.values).toEqual({
+      dob: "1990-01-02",
+    });
+    const id = store.getState().begin({ queryType: "VEH", summary: "VEH.X" });
+    store.getState().settle(id, { kind: "acknowledged", response: RESPONSE, queryType: "VEH" });
+    const real = store.getState().items[0];
+    expect(real?.status === "acknowledged" && real.parts[0]?.values).toEqual({
+      dob: "1990-01-02",
+    });
+  });
+});
