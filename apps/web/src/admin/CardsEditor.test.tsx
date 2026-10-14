@@ -463,7 +463,7 @@ describe("the card editor: the Columns table", () => {
     const table = await within(editor()).findByRole("table", { name: "Columns" });
     const mark = within(table).getByRole("columnheader", { name: "Mark keywords" });
     expect(mark.querySelector("[aria-hidden='true']")?.textContent).toBe("Mark");
-    await t.user.click(within(table).getByRole("button", { name: "Add column" }));
+    await t.user.click(within(editor()).getByRole("button", { name: "Add column" }));
     const remove = within(table).getAllByRole("button", { name: /^Remove column/ });
     expect(remove.length).toBeGreaterThan(1);
     for (const b of remove) expect(b.querySelector("[aria-hidden='true']")?.textContent).toBe("×");
@@ -471,6 +471,6 @@ describe("the card editor: the Columns table", () => {
     const first = remove[0];
     if (first === undefined) throw new Error("no remove button");
     await t.user.click(first);
-    expect(within(table).getByRole("button", { name: "Add column" })).toHaveFocus();
+    expect(within(editor()).getByRole("button", { name: "Add column" })).toHaveFocus();
   });
 });

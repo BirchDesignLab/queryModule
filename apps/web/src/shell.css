@@ -2201,7 +2201,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   inline-size: 100%;
 }
 
-/* Mockup gaps (#642, item 1): Applies to. Source and Shown to share a row that stacks when the
+/* Mockup gaps (issue 642, item 1): Applies to. Source and Shown to share a row that stacks when the
    pane is narrow; the two rule choices are side-by-side cards whose whole face is the radio's
    label. The checked card shows the accent edge and fill and the radio dot (never color alone);
    the ring sits on the card when its radio has keyboard focus. */
@@ -2328,9 +2328,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-columns__table :where(th, td) {
-  min-inline-size: 0;
   padding-inline: var(--qm-space-1);
   overflow-wrap: anywhere;
+}
+
+/* Beats .qm-mock__table td's minimum width, which would keep the table wider than the pane. */
+.qm-columns__table td {
+  min-inline-size: 0;
 }
 
 .qm-columns__table thead th {
@@ -2348,15 +2352,15 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-columns__table th:nth-child(1) {
-  inline-size: 26%;
+  inline-size: 24%;
 }
 
 .qm-columns__table th:nth-child(2) {
-  inline-size: 26%;
+  inline-size: 24%;
 }
 
 .qm-columns__table th:nth-child(3) {
-  inline-size: 25%;
+  inline-size: 24%;
 }
 
 .qm-columns__table th:nth-child(4) {
@@ -2364,7 +2368,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-columns__table th:nth-child(5) {
-  inline-size: 12%;
+  inline-size: 16%;
 }
 
 .qm-columns__table :where(th, td):nth-child(n + 4) {
@@ -2374,10 +2378,4 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-columns__remove {
   min-inline-size: var(--qm-control-height-dense);
   padding-inline: 0;
-}
-
-/* Item 5: the mock editor's fixed Query type and type-field controls fill their column. */
-.qm-mock__two :where(input.qm-field__input, select.qm-field__input) {
-  box-sizing: border-box;
-  inline-size: 100%;
 }
