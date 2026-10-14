@@ -30,23 +30,25 @@ P0 waves (one PR each): [W1](https://github.com/BirchDesignLab/queryModule/issue
 
 | Path | Role | State |
 |---|---|---|
-| `packages/core` | Pure domain logic and contracts (Zod) | Present: version, `ApiError`, `ValidationError`, identity, source status, the audit catalogue, WebSocket messages and primitives; config for features and shortcuts |
-| `packages/client` | Framework-neutral client logic | Planned, Task 24 |
-| `packages/tokens` | Design tokens, day, night and red-shift modes | Planned, Task 23 |
-| `packages/web-ui` | React DOM primitives | Planned, Task 24 |
-| `packages/config` | Shipped sites, locales, mocks, generated JSON Schema | Planned, Task 16 |
-| `packages/api` | HTTP and WebSocket API | Planned, Track A M0 P1 |
-| `apps/web` | Vite + React web app | Planned, Task 25 |
+| `packages/core` | Pure domain logic and contracts (Zod) | Present: contracts (version, `ApiError`, identity, source status, the audit catalogue, WebSocket messages), the site config schema and rules, the terminal parser, the query planner, the mock scenario matcher and fixture policy, the result mapper, `assessResult` and the highlighter |
+| `packages/client` | Framework-neutral client logic | Present: API client, session and sign-in, config and draft state, the query submit and the feed (WebSocket with replay), terminal, announcer, i18n, preferences |
+| `packages/tokens` | Design tokens, day, night and red-shift modes | Present |
+| `packages/web-ui` | React DOM primitives | Present: query panel, fields and forms, terminal, result cards, shortcuts, announcer, themes |
+| `packages/config` | Shipped sites, locales, mocks, generated JSON Schema | Present |
+| `packages/api` | HTTP and WebSocket API | Present: auth and sessions, query submit, dispatch and the mock source adapter, the read routes and the WebSocket feed with replay, the admin console routes and config store, audit, the encrypted database |
+| `apps/web` | Vite + React web app | Present: sign-in, query panel, requests with result cards, status page, admin console (site builder, mock editor, users) |
 | `apps/host-simulator` | Embedded-mode test host | Placeholder until M4 |
-| `apps/mobile` | Expo app | Planned, Task 26 (placeholder shell); Track D owns it from M4 |
-| `deploy/` | Docker, compose, tunnel | Present: README only; Track A M0 P1 |
-| `scripts/ops` | Committed ops scripts (`gh-create-p0-issues.sh`, `gh-setup-labels.sh`) | Present |
-| `scripts/mock-data` | Fixture-policy mock generator | README present; `generate.ts` lands Track A M1 P3 |
-| `scripts/sdd` | `task-brief.sh` for the SDD workflows | Present |
-| `scripts/ci` | Contract generators, config validation, licence and story gates | Planned, Tasks 17 to 22 |
-| `docs/` | Specs, plans, decisions, reviews | Present |
+| `apps/mobile` | Expo app | Placeholder shell; Track D owns it from M4 |
+| `deploy/` | Docker, compose, tunnel | Present: `Dockerfile`, `compose.yml`, systemd units, README |
+| `scripts/ops` | Committed ops scripts: smoke, backup, deploy pull, lost-key and role tools, GitHub board setup | Present |
+| `scripts/mock-data` | Fixture-policy mock generator | Present (`generate.ts`) |
+| `scripts/sdd` | Task briefs, ledger append and the workflow harness for the SDD workflows | Present |
+| `scripts/ci` | Contract generators, config validation, licence, story-tag and sensitive-review gates | Present |
+| `scripts/dev` | Dev server, the e2e launcher and the local smoke launcher | Present |
+| `scripts/briefs` | Renders the design brief HTML under `docs/briefs/` to PDF | Present |
+| `docs/` | Specs, plans, decisions, reviews, release notes | Present |
 | `.claude/agents` | Model and effort role definitions for subagent dispatch | Present |
-| `.claude/workflows` | `sdd-task.js`, `wave-review.js` | Present |
+| `.claude/workflows` | `sdd-task.js`, `sdd-wave.js`, `wave-review.js` | Present |
 
 ## Getting started
 
@@ -75,12 +77,13 @@ pnpm 12 notes:
 | `lint` | `biome ci --error-on-warnings .` | Now |
 | `test` | `vitest run` | Now |
 | `coverage` | `vitest run --coverage` | Now |
-| `verify` | lint, typecheck, coverage, `config:validate`, `gen:check`, `sdd:harness` | Now, but stops at `config:validate` until Task 18 lands that script's target |
-| `contracts:gen`, `gen:check` | generate and check derived contract files | Task 17 |
-| `config:validate`, `config:migrate` | validate and migrate `SiteConfig` files | Task 18 |
-| `tokens:gen` | regenerate design tokens | Task 23 |
-| `dev:web` | Vite dev server | Task 25 |
-| `dev`, `dev:api`, `e2e`, `image:smoke` | full dev loop, API only, Playwright/axe, image smoke test | Track A M0 P1 |
+| `verify` | lint, typecheck, coverage, `config:validate`, `gen:check`, `sdd:harness` | Now |
+| `contracts:gen`, `client:gen`, `gen:check` | generate and check derived contract files and the generated client types | Now |
+| `config:validate`, `config:migrate` | validate and migrate `SiteConfig` files | Now |
+| `tokens:gen` | regenerate design tokens | Now |
+| `sdd:harness` | run the saved workflow scripts against mocked agents | Now |
+| `dev:web` | Vite dev server | Now |
+| `dev`, `dev:api`, `e2e`, `image:smoke` | full dev loop, API only, Playwright/axe, image smoke test | Now |
 
 `pnpm e2e` serves on port 3000; set `E2E_PORT` (for example `E2E_PORT=3100 pnpm e2e`) to run it beside another server on 3000. It signs in as the seeded smoke user: when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` are both unset it derives them from `.dev/secrets/SEED_PASSWORD_SECRET` the way CI does, without printing them (set both to override; setting only one is an error).
 

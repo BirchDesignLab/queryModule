@@ -219,6 +219,7 @@
       }
       .principles > div {
         display: grid;
+        align-content: start;
         gap: 2pt;
         padding-left: 22pt;
         position: relative;
@@ -271,6 +272,23 @@
       }
       #fig-query-frame svg {
         width: 90%;
+        margin: 0 auto;
+      }
+      #shot-query-panel,
+      #shot-requests-status {
+        width: 78%;
+        margin: 0 auto;
+      }
+      #shot-officer-card {
+        width: 70%;
+        margin: 0 auto;
+      }
+      #fig-builder-frame svg {
+        width: 74%;
+        margin: 0 auto;
+      }
+      #shot-try-a-match {
+        width: 62%;
         margin: 0 auto;
       }
       .pair {
@@ -470,7 +488,7 @@
               <title id="fq-t">The query panel</title>
               <desc id="fq-d">
                 Quick access buttons, a form with plate and state fields, the command echo
-                VEH.ZZ-0001.TX, source chips and the Run query button.
+                VEH.ZZ-0001, source chips and the Run query button.
               </desc>
               <rect x="10" y="10" width="620" height="194" rx="6" fill="#fff" stroke="#7a8494" />
               <g font-size="10">
@@ -500,7 +518,7 @@
                 <rect x="316" y="76" width="200" height="28" rx="3" fill="#fff" stroke="#7a8494" />
                 <rect x="24" y="116" width="492" height="24" rx="3" fill="#eceff3" />
                 <text x="34" y="132" fill="#4d5968" font-size="8" letter-spacing="1">COMMAND</text>
-                <text x="94" y="132" fill="#121820" font-family="IBM Plex Mono" font-size="11" font-weight="500">VEH.ZZ-0001.TX</text>
+                <text x="94" y="132" fill="#121820" font-family="IBM Plex Mono" font-size="11" font-weight="500">VEH.ZZ-0001</text>
                 <text x="440" y="132" fill="#0b4a9e" font-size="9">Edit as command</text>
                 <rect x="24" y="152" width="108" height="22" rx="11" fill="#e1ebfa" />
                 <text x="36" y="167" fill="#0b4a9e" font-size="9">State system</text>
@@ -586,18 +604,19 @@
               <rect x="40" y="26" width="360" height="190" rx="4" fill="#f7f9fb" stroke="#7a8494" />
               <rect x="40" y="26" width="4" height="190" fill="#a00000" />
               <text x="56" y="48" font-size="11" font-weight="600" fill="#121820">State system: returned</text>
-              <text x="236" y="48" font-size="9" font-family="IBM Plex Mono" fill="#4d5968">412 ms</text>
               <rect x="300" y="34" width="90" height="20" rx="3" fill="#a00000" />
-              <text x="308" y="48" font-size="9" font-weight="600" fill="#fff">!! Critical</text>
+              <text x="308" y="48" font-size="9" font-weight="600" fill="#fff">CRITICAL !!</text>
               <text x="56" y="74" font-size="7.5" fill="#4d5968" letter-spacing="1">STATUS</text>
               <rect x="56" y="80" width="118" height="20" rx="2" fill="#a00000" />
-              <text x="62" y="94" font-size="10" font-weight="600" fill="#fff" font-family="IBM Plex Mono">!! STOLEN</text>
+              <text x="62" y="94" font-size="10" font-weight="600" fill="#fff" font-family="IBM Plex Mono">STOLEN !!</text>
               <text x="210" y="74" font-size="7.5" fill="#4d5968" letter-spacing="1">PLATE</text>
               <text x="210" y="94" font-size="11" fill="#121820" font-family="IBM Plex Mono">ZZ-0001</text>
               <text x="56" y="122" font-size="7.5" fill="#4d5968" letter-spacing="1">REMARKS</text>
-              <text x="56" y="140" font-size="10" fill="#121820" font-family="IBM Plex Mono">STOLEN VEHICLE</text>
+              <rect x="56" y="128" width="104" height="16" rx="2" fill="#a00000" />
+              <text x="62" y="140" font-size="9" font-weight="600" fill="#fff" font-family="IBM Plex Mono">STOLEN !!</text>
+              <text x="168" y="140" font-size="10" fill="#121820" font-family="IBM Plex Mono">VEHICLE</text>
               <rect x="56" y="154" width="150" height="24" rx="3" fill="#fff" stroke="#7a8494" />
-              <text x="66" y="170" font-size="9.5" fill="#0b4a9e">Show detail  |  7 more items</text>
+              <text x="66" y="170" font-size="9.5" fill="#0b4a9e">Show detail  8 more items</text>
               <line x1="56" y1="190" x2="384" y2="190" stroke="#dde2e8" />
               <text x="56" y="206" font-size="8" fill="#4d5968">Detail opens here, below the toggle</text>
               <g font-size="9" fill="#121820">
@@ -915,11 +934,11 @@
       {
         "asOf": "Oct 14, 2026",
         "milestone": "M2 P1",
-        "mergedChanges": 0,
-        "workItems": 0,
+        "mergedChanges": 247,
+        "workItems": 402,
         "adrs": 13,
-        "tests": 0,
-        "e2eScenarios": 0
+        "tests": 4999,
+        "e2eScenarios": 267
       }
     </script>
     <script>
