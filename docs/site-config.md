@@ -394,11 +394,20 @@ request header carries the highest severity over its returned sources. Announcem
 the query type, the primary typed field (the short correlation ID when it is empty), counts, status
 words, severity and the configured keyword; never payload content.
 
-**Shipped cards (default site).** Each shipped query type has a summary card (`veh-summary`,
-`per-summary`, `pro-summary`, `wnt-summary`, `dl-summary`) that shows `status` in both views and one
-identifying value in the summary (plate, serial, subject last name, licence number). TODO(AW4, after
-BW3 merges): replace this paragraph with the final card set (summary and detail rows for all five
-types, the warrants table).
+**Shipped cards (default site).** One card per query type, each with `status` in both views and the
+identifying values in the summary, the rest in the detail:
+
+| Card | Summary | Detail |
+|---|---|---|
+| `veh-summary` | status, plate, remarks | state, make, model, year, VIN, owner name and address |
+| `per-summary` | status, last and first name, remarks | date of birth, address |
+| `pro-summary` | status, serial, description, remarks | property type |
+| `wnt-summary` | status, last and first name, remarks | date of birth and a warrants table (offense, issued) |
+| `dl-summary` | status, licence number, remarks | last and first name, date of birth, state |
+
+Identifiers such as the plate, VIN, serial, names and dates have `highlight: false`, so they render
+plain, and the severity badge still scans them. A site that deletes a card gets the generic dump
+for that type.
 
 **The driver's licence record.** The default mock holds one synthetic licence record: licence number
 `ZZDLTEST` on the state source (Texas, `status: "VALID"`); every other `DL` query answers
@@ -408,10 +417,9 @@ types, the warrants table).
 `when` references, its label keys in every listed locale and `config.duplicateMapping`. Resolving
 mapping `path` values against the mock payloads in `config:validate` is M2 P2.
 
-TODO(AW4, after BW3 merges): the builder's Result cards group (card editor, "which card wins", card
-preview), the Keywords and severity editor and "Try a match" in the mock editor. Design:
-[design note](design/2026-10-07-result-card-config.md) and "Result cards and the cards builder" in
-the [visual system](design/2026-09-29-visual-system.md).
+The builder edits all of this without JSON: see "Result cards, keywords and Try a match" under the
+admin builder below. Design: the [design note](design/2026-10-07-result-card-config.md) and "Result
+cards and the cards builder" in the [visual system](design/2026-09-29-visual-system.md).
 
 ## Personas
 
@@ -661,6 +669,57 @@ built (the `adminAudit` feature, M2).
 
 The store holds one document per version: the `siteConfig`, the label overlay, and, only where
 `ALLOW_MOCK_SOURCES=true`, the mock file. Routes for all of this are in [api.md](api.md).
+
+### Result cards, keywords and Try a match
+
+Three parts of the builder edit the response config (M2 P1). They share the builder's draft, undo,
+Changes tab, Review and publish, history and roll back, and add no schema, route or migration.
+
+**Result cards** (a tree group between Query types and Site). Each query type lists its cards in
+config order, numbered and named by what narrows them ("All results", a source or persona name, or
+"when a rule matches"), with "Add card". The card editor has:
+
+- **Applies to:** Source (any, or one of the query type's sources), Shown to (everyone, or one
+  persona) and "Use this card" (always, or only when a rule matches, using the same sentence rule
+  editor as field rules). A card whose source, persona and rule equal another's shows
+  `config.duplicateMapping` with "Open <other card>", and Review and publish stays blocked.
+- **Which card wins:** a table over each source and persona (and the rule values the cards test)
+  naming the winning card and why ("rule +4", "source +2", "persona +1", "earlier in the list", "only
+  card that fits"); the rows this card wins are tagged. It uses the same scoring as the dispatcher's
+  mapper.
+- **Rows:** one item per element with Edit, Move up, Move down and Remove. A row has Kind (value or
+  table), Path (free text, with the paths found in the draft's mock answers as pick buttons), the
+  label shown to users (stored as a message key under `mapping.<cardId>.` with its text in the
+  label overlay), Show in (summary, detail or both), Format (as sent, upper case, phone number, date
+  MM-DD-YY, template) and Mark keywords. A table row has Columns (path relative to one record, label,
+  format, mark keywords). A path found in no mock answer is a warning, not an error: a real source
+  may still send it, and until then the card leaves the row out.
+- **Advanced settings:** the card key (fixed once published) and the label key prefix.
+
+The right pane, **Card preview**, renders the production result card (the same component and mapper
+as the dispatcher's request entry) with the draft's cards, keywords and styles. Pick a mock source,
+then either pick a scenario of the draft's mock or type values: typed values go through the same
+matcher the mock adapter uses (`matchMockScenario`, spec 5.4), and the pane says which scenario or
+default answered and whether this card was the one used. A behaviour scenario (timeout, error,
+credentials rejected) previews the status line, not a card. Typed values stay in the pane.
+
+**Keywords and severity** (the last child of the Result cards group). Keywords are a table: keyword,
+severity and exception phrases (add and remove), with Add keyword. The three severity styles each
+have text and background colour token pickers, bold, icon and marker, a live sample and the contrast
+ratio per theme mode: below 4.5:1 is an error that blocks publish, 4.5 to 7:1 shows "(under 7:1)" and
+does not block. The right pane shows a sample line to try a keyword or an exception.
+
+**Try a match** (the mock editor's right pane). Pick a source and a query type, type the query's
+field values, and the pane shows which scenario matches or that the default answers, which response
+of the source answered, the result and the payload as read-only JSON. Same matching as the adapter; nothing is
+sent and the typed values are never saved.
+
+**Review and publish** lists the changes in plain sentences, one per change, in two lists named
+"Result cards" and "Keywords and severity" (card ids, row labels and paths, keyword text and severity;
+never payload content or typed values). A publish reaches open dispatcher tabs at the next config
+refresh, and cards already on screen are redrawn with the new settings; a label added in the builder
+reaches a tab already open only after it reloads, because a refresh does not refetch the locale
+bundle.
 
 ## Not yet built
 

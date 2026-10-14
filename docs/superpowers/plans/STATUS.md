@@ -38,7 +38,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Machine | Track | Current phase | State | Last update |
 |---|---|---|---|---|
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
-| Windows 11 | A (`C:\git\queryModule-a`) | M2 P1 feed | active (AW4 on `feat/m2-a-p1-wave-4`: Task 8 docs for merged work; builder docs, demo.md and Task 9 wait for Track B BW3) | 10-14-26 |
+| Windows 11 | A (`C:\git\queryModule-a`) | M2 P1 feed | active (AW4 on `feat/m2-a-p1-wave-4`: Task 8 docs done; Task 9 and the design brief wait for the BW3 polish PR) | 10-14-26 |
 | Windows 11 | B (`C:\git\queryModule`) | M2 P0.5 B | idle (no local B session; BW2 and BW3 ran in the cloud and merged, cloud credits spent) | 10-07-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
@@ -54,9 +54,9 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 - Issue: #593 (docs), #606 (release note, gate, promote), #615 (brief and documentation refresh)
 - Branch / PR: `feat/m2-a-p1-wave-4` (AW4), PR not yet open; AW1 #611, AW2 #618, AW3 #621 merged
-- Last green: main 0db6170 (#639)
-- Next step: Task 8 docs for merged work (api.md, site-config.md, release note skeleton); after Track B BW3 merges: builder docs, demo.md, Task 9, then #615
-- Blocked by: Track B BW3 (builder editors, keywords editor, Try a match, demo scenarios)
+- Last green: main 1147739 (BW3 #641)
+- Next step: after the BW3 polish PR merges: release note Results and Gate, Task 9 gate and promote steps, then the #615 design brief (HTML and PDF under `docs/briefs/`); Task 8 docs are written
+- Blocked by: Track B BW3 polish PR (final screens for the brief and the gate run)
 - Local-only state: `C:\git\queryModule-a\.superpowers\sdd\2026-10-07-m2-track-a-p1\handover.md`
 - Notes: manager "M2 Manager 3" (its push approvals count as the developer's for Track A); open follow-ups #574, #572, #558, #610, #620, #622, #623, #638.
 
