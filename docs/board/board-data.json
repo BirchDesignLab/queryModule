@@ -1738,6 +1738,45 @@
       "reqIds": "none",
       "title": "ci: run the sdd workflow harness (scripts/sdd/workflow-harness.mjs) in CI",
       "body": "`scripts/sdd/workflow-harness.mjs` (156 scenarios over `.claude/workflows/sdd-task.js`, `sdd-wave.js` and `wave-review.js`) runs only by hand (README). Neither `pnpm verify` nor CI runs it, so a change to a workflow script can merge with failing scenarios. Seen on #626 (10-13-26): the new verifyHead parse scenarios are not exercised by CI.\n\n**Fix:** run the harness in CI when `.claude/workflows/**` or `scripts/sdd/**` change (or always, if it is fast): a step in an existing job or a small path-scoped job; optionally a `pnpm` script so `pnpm verify` can include it.\n\n**Tier:** gate (`.github/**`); ride the next gate-tier PR.\n\n**Acceptance:** a PR that breaks a harness scenario fails CI.\n"
+    },
+    {
+      "number": 633,
+      "labels": ["web", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "BW2 follow-ups: desktop ack toast over focused control (design), toast and row focus, nested-part card conditions",
+      "body": "Follow-ups from M2 P1 Track B wave BW2 (branch `feat/m2-b-p1-wave-2`, 10-13-26). None blocked the wave; the details are in `.superpowers/sdd/2026-10-07-m2-track-b-p1/progress.md` in the B lane.\n\n- [ ] **Design call (developer):** at desktop width the fixed acknowledgment toast can sit over a focused control on a long page (`hardening.spec` starts with an empty list for that reason). Options: (a) the toast always flows in-page, as it now does on narrow and short viewports; (b) shared scroll-padding clearance with `use-action-bar-clearance.ts`.\n- [ ] **Critic M1:** Dismiss on the toast sends focus to `body`; return it to the control that had focus before.\n- [ ] **Critic M2:** removing the placeholder row loses focus; keep focus on the request row.\n- [ ] **Nested-part conditional mapping:** a card mapping whose `when` condition depends on a nested (alsoRun) part is not covered; decide the rule and add the case.\n\nRefs #599, #600, #601.\n"
+    },
+    {
+      "number": 636,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "fixture-policy: digit-run check is bypassed by separators (dashed or spaced numbers)",
+      "body": "Raised by the fix/mock-dl-record fast review (10-13-26), pre-existing: `packages/core/src/config/fixture-policy.ts` forbids 4+ digit runs in the `other` and `serial` kinds, but a real-looking number split by dashes or spaces (e.g. `123-45-678`) still passes, because each run is under four digits. Mock data must never look like real person, vehicle or property records (CLAUDE.md, spec 5.4, 10.8).\n\n**Fix:** count digits across separators (strip `-`, space, `.`, `/` before the run check) for `other` and `serial`, or cap total digits per value; RED-first cases for dashed and spaced numbers; check the shipped mock still passes.\n\n**Tier:** gate (`fixture-policy.ts`). Ride the next gate-tier PR.\n"
+    },
+    {
+      "number": 638,
+      "labels": ["platform", "p3", "follow-up"],
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "fixture-policy: remaining digit-run gaps (all non-alphanumeric separators, status kind, exponent form)",
+      "body": "Leftovers from the #636 fix review (`fix/fixture-policy-separators`, 10-13-26). #636 made the `other` kind ignore `-`, `.`, `/` and whitespace when counting digit runs. Still open in `packages/core/src/config/fixture-policy.ts`:\n\n- [ ] Other separators: `,`, `_`, `:` and Unicode dashes still split a run, so `123,456,789` or `123_456_789` pass `other`. Suggested: treat every non-alphanumeric character as a separator (`/[^A-Za-z0-9]/g`).\n- [ ] The `status` kind has the same separator gap (`123-45-6789` passes as a status).\n- [ ] Numbers of 1e21 and above stringify in exponent form and slip the run check (not realistic; pin or reject non-integer forms).\n\nMock data must never look like real person, vehicle or property records (CLAUDE.md, spec 5.4, 10.8). Gate tier; ride the next gate PR. RED-first cases for each; the shipped mock must still pass.\n\nRefs #636.\n"
     }
   ]
 }
