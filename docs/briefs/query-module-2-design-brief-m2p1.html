@@ -6,7 +6,7 @@
     <title>Query Module 2.0 design brief</title>
     <meta
       name="description"
-      content="Design brief for Query Module 2.0 at M2 P1: the problem, the roles, the principles, the key flows and the decisions behind them."
+      content="Design brief for Query Module 2.0 at M2 P1: the problem, the roles, the principles, and the key flows."
     />
     <style>
       /* Fonts: self-hosted IBM Plex from the web app (Latin-1 subset: no arrows, dashes or curly quotes in copy). */
@@ -287,14 +287,6 @@
         width: 84%;
         margin: 0 auto;
       }
-      #shot-builder-keywords {
-        width: 88%;
-        margin: 0 auto;
-      }
-      #shot-try-a-match {
-        width: 76%;
-        margin: 0 auto;
-      }
       .stats {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -391,7 +383,7 @@
         font-size: 8pt;
         color: var(--muted);
       }
-      svg text {
+      svg text:not([font-family]) {
         font-family: var(--f-body);
       }
     </style>
@@ -401,7 +393,7 @@
       <!-- Page 1: the problem and the roles -->
       <article class="page" id="p-problem">
         <header class="masthead">
-          <p class="eyebrow">Design brief &middot; Milestone 2, phase 1 &middot; Oct 14, 2026</p>
+          <p class="eyebrow">Design brief &middot; Milestone 2, phase 1 &middot; Oct 15, 2026</p>
           <h1>Query Module 2.0</h1>
           <p class="lede">
             A Query Module for the CAD suite where dispatchers and officers query state and national
@@ -562,16 +554,16 @@
                 <rect x="28" y="253" width="180" height="26" rx="3" fill="#fff" stroke="#7a8494" />
 
                 <text x="28" y="304" fill="#4d5968" font-size="7.5" letter-spacing="1">SOURCES</text>
-                <rect x="28" y="311" width="152" height="30" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
+                <rect x="28" y="311" width="172" height="30" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
                 <rect x="37" y="319" width="14" height="14" rx="2" fill="#0b4a9e" />
                 <path d="M40 326 l3 3 l6 -6" fill="none" stroke="#fff" stroke-width="1.8" />
                 <text x="59" y="330" fill="#121820" font-size="9.5">State system</text>
-                <text x="170" y="330" fill="#4d5968" font-family="IBM Plex Mono" font-size="8.5" text-anchor="end">10 s</text>
-                <rect x="190" y="311" width="168" height="30" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
-                <rect x="199" y="319" width="14" height="14" rx="2" fill="#0b4a9e" />
-                <path d="M202 326 l3 3 l6 -6" fill="none" stroke="#fff" stroke-width="1.8" />
-                <text x="221" y="330" fill="#121820" font-size="9.5">National system</text>
-                <text x="348" y="330" fill="#4d5968" font-family="IBM Plex Mono" font-size="8.5" text-anchor="end">10 s</text>
+                <text x="190" y="330" fill="#4d5968" font-family="IBM Plex Mono" font-size="8.5" text-anchor="end">10 s limit</text>
+                <rect x="210" y="311" width="188" height="30" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
+                <rect x="219" y="319" width="14" height="14" rx="2" fill="#0b4a9e" />
+                <path d="M222 326 l3 3 l6 -6" fill="none" stroke="#fff" stroke-width="1.8" />
+                <text x="241" y="330" fill="#121820" font-size="9.5">National system</text>
+                <text x="388" y="330" fill="#4d5968" font-family="IBM Plex Mono" font-size="8.5" text-anchor="end">10 s limit</text>
 
                 <line x1="28" y1="354" x2="612" y2="354" stroke="#dde2e8" />
                 <rect x="28" y="362" width="124" height="26" rx="4" fill="#0b4a9e" />
@@ -596,11 +588,13 @@
         <section class="block" id="flow-query">
           <h2><span class="tag">Key flow 1</span>Ask, acknowledge, watch each source answer</h2>
           <p>
-            Run query records the request and answers at once with an acknowledgment: a row in
-            Requests this shift with the send time and a short reference. Under it, one line per
-            source reads pending, then settles on its own as that source answers. A slow or failed
+            Run query records the request and answers at once with an acknowledgment at the top of
+            Requests this shift, with the send time and a short reference, and a request entry under
+            it. In the entry, one line per source reads pending, then settles on its own as that
+            source answers. A slow or failed
             source never holds up another. The text carries the status; an icon is never the only
-            signal, and a screen reader hears one summary after each change.
+            signal, and a screen reader hears one summary after each change. Edit as new query on a
+            request puts its values back in the form to change and run again.
           </p>
           <figure class="shot" id="shot-query-panel">
             <img
@@ -706,7 +700,7 @@
           </p>
           <figure class="shot" id="shot-officer-card">
             <img src="shots/officer-card.png" alt="The officer layout showing a returned result card at 1024 by 768" />
-            <figcaption>Officer layout at 1024 x 768.</figcaption>
+            <figcaption>Officer layout at 1024 x 768, scrolled to the last request.</figcaption>
           </figure>
         </section>
 
@@ -789,7 +783,7 @@
                 <text x="162" y="76" fill="#4d5968">Applies to: any source, everyone, always</text>
                 <text x="162" y="96" font-weight="600">Which card wins</text>
                 <rect x="162" y="102" width="266" height="26" rx="2" fill="#f7f9fb" stroke="#dde2e8" />
-                <text x="170" y="118" fill="#4d5968">State system: veh-summary (only card that fits)</text>
+                <text x="170" y="118" fill="#4d5968">Dispatch: 1. All results (only card that fits)</text>
                 <text x="162" y="148" font-weight="600">Rows</text>
                 <text x="162" y="164" fill="#4d5968">Status  |  Plate  |  Remarks  |  Make  ...</text>
                 <text x="452" y="56" font-weight="600">Card preview</text>
@@ -797,7 +791,7 @@
                 <rect x="452" y="64" width="3" height="100" fill="#a00000" />
                 <text x="462" y="82" font-size="8.5" font-weight="600">State system: returned</text>
                 <rect x="462" y="90" width="64" height="14" rx="2" fill="#a00000" />
-                <text x="468" y="100" font-size="8" fill="#fff" font-weight="600">!! STOLEN</text>
+                <text x="468" y="100" font-size="8" fill="#fff" font-weight="600">STOLEN !!</text>
                 <text x="462" y="124" font-size="8" fill="#4d5968">Same card dispatchers see</text>
               </g>
             </svg>
@@ -817,57 +811,37 @@
       <article class="page" id="p-flow-builder-2">
         <section class="block" id="flow-builder-2">
           <h2><span class="tag">Key flow 5, continued</span>Keywords, contrast and Try a match</h2>
-          <p>
-            A keyword marks a whole word or phrase in a result, in any letter case, at a severity the
-            implementer picks. Each severity has a style, and the contrast of that style is shown per
-            theme as it is edited. Below 4.5:1 blocks publish; between 4.5 and 7:1 shows a hint.
-          </p>
-          <figure class="shot" id="shot-builder-keywords">
-            <img
-              src="shots/builder-keywords.png"
-              alt="The Keywords and severity editor with the Critical style and its contrast ratios per theme, beside the card preview"
-            />
-            <figcaption>Severity styles with contrast per theme (Night, Day, Red shift), beside the card preview.</figcaption>
-          </figure>
-          <p>
-            Try a match tests a mock response without sending anything: type values, and the pane says
-            which scenario answers and shows the result card dispatchers would see. Payload shows the
-            same answer as read-only JSON.
-          </p>
-          <figure class="shot" id="shot-try-a-match">
-            <img
-              src="shots/try-a-match.png"
-              alt="Try a match: typed values matched to a mock scenario, shown as the result card dispatchers would see"
-            />
-            <figcaption>Try a match: type values, see which mock scenario answers. Nothing is sent or saved.</figcaption>
-          </figure>
-        </section>
-      </article>
-
-      <!-- Page 7: decisions -->
-      <article class="page" id="p-decisions">
-        <section class="block" id="decisions">
-          <h2><span class="tag">Design decisions</span>What was decided, and why</h2>
-          <p>
-            Each row is a decision the developer approved or a rule the product is held to. The
-            design documents named below the table carry the full text.
-          </p>
-          <table aria-describedby="decisions-note">
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">Decision</th>
-                <th scope="col">Why</th>
-                <th scope="col">Source</th>
-              </tr>
-            </thead>
-            <tbody id="decision-rows"></tbody>
-          </table>
-          <p class="note" id="decisions-note">
-            Sources: the product's visual system and result-card design documents, the approved
-            design mockup and the rulings recorded with it, the design decision records, and
-            the requirements for the Query Module.
-          </p>
+          <div class="pair builder-pair">
+            <div class="flow">
+              <p>
+                A keyword marks a whole word or phrase in a result, in any letter case, at a severity
+                the implementer picks. Each severity has a style, and the contrast of that style is
+                shown per theme as it is edited. Below 4.5:1 blocks publish; between 4.5 and 7:1
+                shows a hint.
+              </p>
+              <figure class="shot" id="shot-builder-keywords">
+                <img
+                  src="shots/builder-keywords.png"
+                  alt="The Keywords and severity editor showing the Critical style with its contrast ratios for Night, Day and Red shift"
+                />
+                <figcaption>Severity styles with contrast per theme (Night, Day, Red shift).</figcaption>
+              </figure>
+            </div>
+            <div class="flow">
+              <p>
+                Try a match tests a mock response without sending anything: type values, and the pane
+                says which scenario answers and shows the result card dispatchers would see. Payload
+                shows the same answer as read-only JSON.
+              </p>
+              <figure class="shot" id="shot-try-a-match">
+                <img
+                  src="shots/try-a-match.png"
+                  alt="Try a match: typed values matched to a mock scenario, shown as the result card dispatchers would see"
+                />
+                <figcaption>Try a match: type values, see which mock scenario answers. Nothing is sent or saved.</figcaption>
+              </figure>
+            </div>
+          </div>
         </section>
       </article>
 
@@ -947,126 +921,28 @@
           <h2><span class="tag" id="status-tag">Status</span>Where the prototype stands</h2>
           <div class="stats" id="status-tiles"></div>
           <p class="statusline" id="status-line"></p>
+          <p class="note">
+            Sources: the product's visual system and result-card design documents, the approved
+            design mockup and the rulings recorded with it, and the requirements for the Query
+            Module.
+          </p>
         </section>
       </article>
     </main>
 
-    <!-- The decision table as data, so a web version can reuse it. -->
-    <script type="application/json" id="decisions-data">
-      [
-        {
-          "decision": "A dark-first operations console with one accent and nothing decorative.",
-          "why": "The first release read as a developer tool; an operator needs calm and density.",
-          "source": "Visual system: Why, Direction"
-        },
-        {
-          "decision": "A command echo under every query form.",
-          "why": "It teaches the terminal syntax and makes the form and the terminal one draft.",
-          "source": "Visual system: Direction; FR-050 to FR-055"
-        },
-        {
-          "decision": "The night focus ring is amber; the red-shift ring is pale amber.",
-          "why": "A red ring beside the red invalid edge would blur the two; amber stays visible on near-black.",
-          "source": "Ruling 09-29-26 (1); E1"
-        },
-        {
-          "decision": "IBM Plex (Sans, Condensed, Mono), self-hosted.",
-          "why": "One family with a monospace face for read-back text, served by the product itself.",
-          "source": "Ruling 09-29-26 (2)"
-        },
-        {
-          "decision": "36 px dispatcher controls; officer targets of 48 px or more and a 64 px Run query.",
-          "why": "Density for the desk, reach and certainty for a vehicle laptop.",
-          "source": "Ruling 09-29-26 (3); spec 6.3"
-        },
-        {
-          "decision": "The mockup is the target; each capability ships in its own phase.",
-          "why": "A control that cannot work yet is disabled with a visible reason instead of being hidden.",
-          "source": "Ruling 09-29-26 (4); spec 6.2"
-        },
-        {
-          "decision": "Summary first; Show detail sits directly under the summary and opens below it.",
-          "why": "The first read stays short, and the toggle and everything above it never move.",
-          "source": "Mockup v5 rulings 1 and 2; UX-015"
-        },
-        {
-          "decision": "Severity is never color alone: icon, word, visible marker, spoken severity and a 4 px edge.",
-          "why": "Color fails for some users and some displays; every cue has a twin.",
-          "source": "Mockup v5 rulings 3 and 8; UX-010, UX-011"
-        },
-        {
-          "decision": "The severity badge scans the whole answer, not just the rows on the card.",
-          "why": "A serious word in a detail-only row must still raise the badge and the announcement.",
-          "source": "Spec 4.5; FR-060"
-        },
-        {
-          "decision": "Below 4.5:1 contrast blocks publish; 4.5 to 7:1 shows a hint; shipped styles are 7:1 or better.",
-          "why": "An implementer cannot publish a style that fails the floor, and is nudged toward the better one.",
-          "source": "Mockup v5 ruling 7"
-        },
-        {
-          "decision": "A skipped nested query says why, in a sentence that names the missing field.",
-          "why": "A silent gap looks like a clean result.",
-          "source": "Mockup v5 ruling 4"
-        },
-        {
-          "decision": "Announcements carry the query type, the typed field, counts, status and severity, never answer content.",
-          "why": "Spoken and logged text must not leak what the answer said.",
-          "source": "Mockup v5 ruling 12; spec 5.9, 6.6"
-        },
-        {
-          "decision": "The preview in the builder is the production card, fed by the draft.",
-          "why": "What an implementer approves is exactly what dispatchers will see.",
-          "source": "Builder design decision"
-        },
-        {
-          "decision": "A result with no card shows every field under its path, with no size cap.",
-          "why": "Nothing is hidden by a missing configuration.",
-          "source": "Mockup v5 ruling 5; spec 4.5"
-        },
-        {
-          "decision": "No Retry button in this phase.",
-          "why": "Retry behavior belongs with the spec 5.7 work, so this phase leaves it out.",
-          "source": "Mockup v5 ruling 9; spec 5.7"
-        },
-        {
-          "decision": "Mock data only, with a fixture policy that checks every mock payload against an allowlist of synthetic patterns.",
-          "why": "The prototype must never hold or imitate real person, vehicle or property records.",
-          "source": "Spec 5.4, 10.8"
-        }
-      ]
-    </script>
     <!-- Counts for the status line, filled at render time. -->
     <script type="application/json" id="status-data">
       {
-        "asOf": "Oct 14, 2026",
+        "asOf": "Oct 15, 2026",
         "milestone": "M2 P1",
-        "mergedChanges": 257,
+        "mergedChanges": 264,
         "workItems": 403,
-        "tests": 5056,
-        "e2eScenarios": 274
+        "tests": 5142,
+        "e2eScenarios": 332
       }
     </script>
     <script>
       (() => {
-        const rows = JSON.parse(document.getElementById("decisions-data").textContent);
-        const body = document.getElementById("decision-rows");
-        rows.forEach((r, i) => {
-          const tr = document.createElement("tr");
-          const cells = [
-            ["n", String(i + 1)],
-            ["", r.decision],
-            ["", r.why],
-            ["src", r.source],
-          ];
-          for (const [cls, text] of cells) {
-            const td = document.createElement("td");
-            if (cls) td.className = cls;
-            td.textContent = text;
-            tr.appendChild(td);
-          }
-          body.appendChild(tr);
-        });
         const s = JSON.parse(document.getElementById("status-data").textContent);
         const fmt = (n) => n.toLocaleString("en-US");
         document.getElementById("status-tag").textContent = `Status at ${s.milestone}`;
