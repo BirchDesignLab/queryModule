@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
+import { restoreShippedConfig, saveGapDraft } from "./admin-draft.js";
 import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
@@ -88,5 +89,32 @@ for (const mode of ["day", "night", "redShift"] as const) {
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");
     await save(page, `ring-${mode}-3-quick-access`);
+  });
+}
+
+// Builder card rows: Remove is an icon like the Moves. Saves a draft, then puts the shipped config back.
+for (const [width, height] of [
+  [1366, 768],
+  [1024, 768],
+] as const) {
+  test(`admin ${width}x${height}: builder card rows, icon-only Remove`, async ({
+    page,
+    browser,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.context().clearCookies();
+    await signIn(page, seededUser("admin@example.test"));
+    await saveGapDraft(page);
+    await page.goto("/admin/config");
+    await expect(page.getByTestId("draft-status")).toContainText("Draft, based on version");
+    const tree = page.getByRole("navigation", { name: "Configuration items" });
+    const card = tree.getByRole("treeitem", { name: /^1\. All results/ });
+    if ((await card.count()) === 0)
+      await tree.getByRole("treeitem", { name: /^Vehicle cards/ }).press("ArrowRight");
+    await card.first().click();
+    const tools = page.getByTestId("form-tab").locator(".qm-mock__scenario-tools--row").first();
+    await tools.scrollIntoViewIfNeeded();
+    await save(page, `admin-${width}-01-card-rows`);
+    await restoreShippedConfig(browser);
   });
 }
