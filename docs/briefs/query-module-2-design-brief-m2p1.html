@@ -271,7 +271,7 @@
         background: var(--sunken);
       }
       #fig-query-frame svg {
-        width: 90%;
+        width: 56%;
         margin: 0 auto;
       }
       #shot-query-panel,
@@ -284,12 +284,40 @@
         margin: 0 auto;
       }
       #fig-builder-frame svg {
-        width: 74%;
+        width: 84%;
+        margin: 0 auto;
+      }
+      #shot-builder-keywords {
+        width: 88%;
         margin: 0 auto;
       }
       #shot-try-a-match {
-        width: 62%;
+        width: 76%;
         margin: 0 auto;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8pt;
+      }
+      .stat {
+        border: 1pt solid var(--rule);
+        border-radius: 4pt;
+        background: var(--raised);
+        padding: 8pt 9pt;
+        display: grid;
+        gap: 2pt;
+        align-content: start;
+        break-inside: avoid;
+      }
+      .stat strong {
+        font: 600 18pt/1.1 var(--f-head);
+        color: var(--accent);
+      }
+      .stat span {
+        font-size: 8.5pt;
+        color: var(--muted);
+        line-height: 1.3;
       }
       .pair {
         display: grid;
@@ -484,53 +512,79 @@
             action. It teaches the terminal syntax and makes the form and the terminal one thing.
           </p>
           <figure id="fig-query-frame">
-            <svg viewBox="0 0 640 214" role="img" aria-labelledby="fq-t fq-d">
+            <svg viewBox="0 0 640 404" role="img" aria-labelledby="fq-t fq-d">
               <title id="fq-t">The query panel</title>
               <desc id="fq-d">
-                Quick access buttons, a form with plate and state fields, the command echo
-                VEH.ZZ-0001, source chips and the Run query button.
+                The Vehicle query panel: a Form mode and Terminal mode switch, five quick access
+                buttons, the command echo VEH.ZZ-0001 with Edit as command, the Plate, State and Year
+                fields with the State default marked, a VIN field, two source choices with their
+                10 second limits, and the Run query and Clear buttons.
               </desc>
-              <rect x="10" y="10" width="620" height="194" rx="6" fill="#fff" stroke="#7a8494" />
+              <rect x="10" y="10" width="620" height="384" rx="6" fill="#fff" stroke="#7a8494" />
               <g font-size="10">
-                <rect x="24" y="22" width="86" height="26" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
-                <text x="34" y="39" fill="#0b4a9e" font-family="IBM Plex Mono" font-weight="500">VEH</text>
-                <text x="64" y="39" fill="#4d5968">Vehicle</text>
-                <rect x="118" y="22" width="76" height="26" rx="4" fill="#fff" stroke="#7a8494" />
-                <text x="128" y="39" fill="#121820" font-family="IBM Plex Mono">PER</text>
-                <text x="158" y="39" fill="#4d5968">Person</text>
-                <rect x="202" y="22" width="76" height="26" rx="4" fill="#fff" stroke="#7a8494" />
-                <text x="212" y="39" fill="#121820" font-family="IBM Plex Mono">PRO</text>
-                <text x="242" y="39" fill="#4d5968">Property</text>
-                <rect x="286" y="22" width="70" height="26" rx="4" fill="#fff" stroke="#7a8494" />
-                <text x="296" y="39" fill="#121820" font-family="IBM Plex Mono">WNT</text>
-                <text x="324" y="39" fill="#4d5968">Wanted</text>
-                <rect x="364" y="22" width="60" height="26" rx="4" fill="#fff" stroke="#7a8494" />
-                <text x="374" y="39" fill="#121820" font-family="IBM Plex Mono">DL</text>
-                <text x="392" y="39" fill="#4d5968">License</text>
-                <text x="470" y="39" fill="#4d5968" font-size="9">Form  |  Terminal</text>
-                <text x="24" y="70" fill="#4d5968" font-size="8" letter-spacing="1">PLATE</text>
-                <rect x="24" y="76" width="150" height="28" rx="3" fill="#fff" stroke="#7a8494" />
-                <text x="34" y="95" fill="#121820" font-family="IBM Plex Mono" font-size="12">ZZ-0001</text>
-                <text x="190" y="70" fill="#4d5968" font-size="8" letter-spacing="1">STATE</text>
-                <rect x="190" y="76" width="110" height="28" rx="3" fill="#fff" stroke="#7a8494" />
-                <text x="200" y="95" fill="#121820" font-size="11">Texas (TX)</text>
-                <text x="316" y="70" fill="#4d5968" font-size="8" letter-spacing="1">VIN</text>
-                <rect x="316" y="76" width="200" height="28" rx="3" fill="#fff" stroke="#7a8494" />
-                <rect x="24" y="116" width="492" height="24" rx="3" fill="#eceff3" />
-                <text x="34" y="132" fill="#4d5968" font-size="8" letter-spacing="1">COMMAND</text>
-                <text x="94" y="132" fill="#121820" font-family="IBM Plex Mono" font-size="11" font-weight="500">VEH.ZZ-0001</text>
-                <text x="440" y="132" fill="#0b4a9e" font-size="9">Edit as command</text>
-                <rect x="24" y="152" width="108" height="22" rx="11" fill="#e1ebfa" />
-                <text x="36" y="167" fill="#0b4a9e" font-size="9">State system</text>
-                <rect x="140" y="152" width="124" height="22" rx="11" fill="#e1ebfa" />
-                <text x="152" y="167" fill="#0b4a9e" font-size="9">National system</text>
-                <rect x="522" y="146" width="96" height="40" rx="4" fill="#0b4a9e" />
-                <text x="534" y="170" fill="#fff" font-size="11" font-weight="600">Run query</text>
+                <text x="28" y="40" font-size="13" font-weight="600" fill="#121820">Vehicle query</text>
+                <rect x="440" y="22" width="172" height="26" rx="4" fill="#eceff3" stroke="#dde2e8" />
+                <rect x="444" y="25" width="74" height="20" rx="3" fill="#e1ebfa" stroke="#0b4a9e" />
+                <text x="454" y="39" fill="#121820" font-weight="600" font-size="9">Form mode</text>
+                <text x="530" y="39" fill="#4d5968" font-size="9">Terminal mode</text>
+
+                <rect x="28" y="62" width="92" height="28" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
+                <text x="38" y="80" fill="#0b4a9e" font-family="IBM Plex Mono" font-weight="500" font-size="9">VEH</text>
+                <text x="64" y="80" fill="#121820" font-weight="600">Vehicle</text>
+                <text x="136" y="80" fill="#0b4a9e" font-family="IBM Plex Mono" font-size="9">PER</text>
+                <text x="162" y="80" fill="#4d5968">Person</text>
+                <text x="216" y="80" fill="#0b4a9e" font-family="IBM Plex Mono" font-size="9">PRO</text>
+                <text x="242" y="80" fill="#4d5968">Property</text>
+                <text x="306" y="80" fill="#0b4a9e" font-family="IBM Plex Mono" font-size="9">WNT</text>
+                <text x="334" y="80" fill="#4d5968">Wanted check</text>
+                <text x="426" y="80" fill="#0b4a9e" font-family="IBM Plex Mono" font-size="9">DL</text>
+                <text x="446" y="80" fill="#4d5968">Driver's license</text>
+                <text x="612" y="104" fill="#4d5968" font-size="8" text-anchor="end">Alt+1 to Alt+5 pick a type</text>
+
+                <rect x="28" y="112" width="584" height="28" rx="3" fill="#eceff3" />
+                <text x="40" y="130" fill="#0b4a9e" font-family="IBM Plex Mono" font-size="10">&gt;</text>
+                <text x="54" y="130" fill="#121820" font-family="IBM Plex Mono" font-size="11" font-weight="500">VEH.ZZ-0001</text>
+                <text x="598" y="130" fill="#0b4a9e" font-size="9" font-weight="600" text-anchor="end">Edit as command</text>
+
+                <text x="28" y="162" fill="#4d5968" font-size="7.5" letter-spacing="1">DETAILS</text>
+                <text x="28" y="180" fill="#121820" font-size="8.5">Plate</text>
+                <rect x="28" y="185" width="180" height="26" rx="3" fill="#fff" stroke="#0b4a9e" stroke-width="1.5" />
+                <text x="38" y="203" fill="#121820" font-family="IBM Plex Mono" font-size="11">ZZ-0001</text>
+                <text x="222" y="180" fill="#121820" font-size="8.5">State</text>
+                <rect x="222" y="185" width="160" height="26" rx="3" fill="#fff" stroke="#7a8494" />
+                <text x="232" y="203" fill="#121820" font-size="10.5">Texas</text>
+                <path d="M366 196 l4 4 l4 -4" fill="none" stroke="#121820" stroke-width="1.4" />
+                <rect x="222" y="215" width="44" height="12" rx="2" fill="#e1ebfa" />
+                <text x="228" y="224" fill="#4d5968" font-size="6.5" font-weight="600" letter-spacing="0.8">DEFAULT</text>
+                <text x="396" y="180" fill="#121820" font-size="8.5">Year</text>
+                <rect x="396" y="185" width="70" height="26" rx="3" fill="#fff" stroke="#7a8494" />
+                <text x="28" y="248" fill="#121820" font-size="8.5">VIN</text>
+                <rect x="28" y="253" width="180" height="26" rx="3" fill="#fff" stroke="#7a8494" />
+
+                <text x="28" y="304" fill="#4d5968" font-size="7.5" letter-spacing="1">SOURCES</text>
+                <rect x="28" y="311" width="152" height="30" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
+                <rect x="37" y="319" width="14" height="14" rx="2" fill="#0b4a9e" />
+                <path d="M40 326 l3 3 l6 -6" fill="none" stroke="#fff" stroke-width="1.8" />
+                <text x="59" y="330" fill="#121820" font-size="9.5">State system</text>
+                <text x="170" y="330" fill="#4d5968" font-family="IBM Plex Mono" font-size="8.5" text-anchor="end">10 s</text>
+                <rect x="190" y="311" width="168" height="30" rx="4" fill="#e1ebfa" stroke="#0b4a9e" />
+                <rect x="199" y="319" width="14" height="14" rx="2" fill="#0b4a9e" />
+                <path d="M202 326 l3 3 l6 -6" fill="none" stroke="#fff" stroke-width="1.8" />
+                <text x="221" y="330" fill="#121820" font-size="9.5">National system</text>
+                <text x="348" y="330" fill="#4d5968" font-family="IBM Plex Mono" font-size="8.5" text-anchor="end">10 s</text>
+
+                <line x1="28" y1="354" x2="612" y2="354" stroke="#dde2e8" />
+                <rect x="28" y="362" width="124" height="26" rx="4" fill="#0b4a9e" />
+                <text x="40" y="379" fill="#fff" font-size="10.5" font-weight="600">Run query</text>
+                <rect x="108" y="368" width="36" height="14" rx="3" fill="none" stroke="#fff" />
+                <text x="126" y="378" fill="#fff" font-size="7.5" font-family="IBM Plex Mono" text-anchor="middle" font-weight="600">Enter</text>
+                <rect x="160" y="362" width="56" height="26" rx="4" fill="#f7f9fb" stroke="#7a8494" />
+                <text x="188" y="379" fill="#121820" font-size="10.5" font-weight="600" text-anchor="middle">Clear</text>
               </g>
             </svg>
             <figcaption>
               The dispatcher's query panel: quick access, the fields, the command echo, the
-              sources and one primary action. Redrawn from the design; the live screen is on the
+              sources and one primary action. Redrawn from the product; the live screen is on the
               next pages.
             </figcaption>
           </figure>
@@ -749,22 +803,37 @@
             </svg>
             <figcaption>The builder with the card editor open. Redrawn from the design.</figcaption>
           </figure>
-          <div class="pair">
-            <figure class="shot" id="shot-builder-cards">
-              <img
-                src="shots/builder-cards.png"
-                alt="The builder with the Vehicle card editor, Which card wins table and card preview"
-              />
-              <figcaption>Card editor, Which card wins and the card preview.</figcaption>
-            </figure>
-            <figure class="shot" id="shot-builder-keywords">
-              <img
-                src="shots/builder-keywords.png"
-                alt="The Keywords and severity editor with contrast ratios per theme"
-              />
-              <figcaption>Keywords and severity, with contrast per theme.</figcaption>
-            </figure>
-          </div>
+          <figure class="shot" id="shot-builder-cards">
+            <img
+              src="shots/builder-cards.png"
+              alt="The builder's Vehicle card editor with Applies to and the Which card wins table, beside the card preview"
+            />
+            <figcaption>The card editor (Applies to, Which card wins) beside the card preview, which is the card dispatchers see.</figcaption>
+          </figure>
+        </section>
+      </article>
+
+      <!-- Page 7: builder, continued -->
+      <article class="page" id="p-flow-builder-2">
+        <section class="block" id="flow-builder-2">
+          <h2><span class="tag">Key flow 5, continued</span>Keywords, contrast and Try a match</h2>
+          <p>
+            A keyword marks a whole word or phrase in a result, in any letter case, at a severity the
+            implementer picks. Each severity has a style, and the contrast of that style is shown per
+            theme as it is edited. Below 4.5:1 blocks publish; between 4.5 and 7:1 shows a hint.
+          </p>
+          <figure class="shot" id="shot-builder-keywords">
+            <img
+              src="shots/builder-keywords.png"
+              alt="The Keywords and severity editor with the Critical style and its contrast ratios per theme, beside the card preview"
+            />
+            <figcaption>Severity styles with contrast per theme (Night, Day, Red shift), beside the card preview.</figcaption>
+          </figure>
+          <p>
+            Try a match tests a mock response without sending anything: type values, and the pane says
+            which scenario answers and shows the result card dispatchers would see. Payload shows the
+            same answer as read-only JSON.
+          </p>
           <figure class="shot" id="shot-try-a-match">
             <img
               src="shots/try-a-match.png"
@@ -781,7 +850,7 @@
           <h2><span class="tag">Design decisions</span>What was decided, and why</h2>
           <p>
             Each row is a decision the developer approved or a rule the product is held to. The
-            visual system and the result-card design note are the sources; they carry the full text.
+            design documents named below the table carry the full text.
           </p>
           <table aria-describedby="decisions-note">
             <thead>
@@ -795,10 +864,9 @@
             <tbody id="decision-rows"></tbody>
           </table>
           <p class="note" id="decisions-note">
-            Sources: <code>docs/design/2026-09-29-visual-system.md</code> (rulings 09-29-26 and
-            10-05-26, and the result-card section with the rulings approved 10-13-26),
-            <code>docs/design/2026-10-07-result-card-config.md</code>, ADR-0009, ADR-0010, ADR-0011,
-            ADR-0013 and the requirements (FR-, UX-, SEC- IDs).
+            Sources: the product's visual system and result-card design documents, the approved
+            design mockup and the rulings recorded with it, the design decision records, and
+            the requirements for the Query Module.
           </p>
         </section>
       </article>
@@ -840,7 +908,46 @@
           </p>
         </section>
 
-        <p class="statusline" id="status-line"></p>
+        <section class="block" id="access">
+          <h2><span class="tag">Who sees what</span>The four roles in this prototype</h2>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Role</th>
+                <th scope="col">Layout</th>
+                <th scope="col">What they can do</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Dispatcher</td>
+                <td>Dispatch, 36 px controls</td>
+                <td>Run queries from the form or the terminal and read the results; no Admin link</td>
+              </tr>
+              <tr>
+                <td>Officer (training officer)</td>
+                <td>Mobile unit, 48 px targets</td>
+                <td>The same queries and results at touch density; no Admin link</td>
+              </tr>
+              <tr>
+                <td>Implementer</td>
+                <td>Dispatch, with Admin</td>
+                <td>Edit, preview, publish, roll back and export site configuration; cannot run queries</td>
+              </tr>
+              <tr>
+                <td>Administrator</td>
+                <td>Dispatch, with Admin</td>
+                <td>Everything the implementer does, plus users, roles and sessions</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="block" id="status">
+          <h2><span class="tag" id="status-tag">Status</span>Where the prototype stands</h2>
+          <div class="stats" id="status-tiles"></div>
+          <p class="statusline" id="status-line"></p>
+        </section>
       </article>
     </main>
 
@@ -910,7 +1017,7 @@
         {
           "decision": "The preview in the builder is the production card, fed by the draft.",
           "why": "What an implementer approves is exactly what dispatchers will see.",
-          "source": "ADR-0011 (4)"
+          "source": "Builder design decision"
         },
         {
           "decision": "A result with no card shows every field under its path, with no size cap.",
@@ -934,11 +1041,10 @@
       {
         "asOf": "Oct 14, 2026",
         "milestone": "M2 P1",
-        "mergedChanges": 251,
+        "mergedChanges": 257,
         "workItems": 403,
-        "adrs": 13,
-        "tests": 5010,
-        "e2eScenarios": 267
+        "tests": 5056,
+        "e2eScenarios": 274
       }
     </script>
     <script>
@@ -963,10 +1069,25 @@
         });
         const s = JSON.parse(document.getElementById("status-data").textContent);
         const fmt = (n) => n.toLocaleString("en-US");
-        document.getElementById("status-line").textContent =
-          `Status at ${s.milestone} (${s.asOf}): ${fmt(s.mergedChanges)} merged changes, ` +
-          `${fmt(s.workItems)} work items, ${s.adrs} architecture decisions, ` +
-          `${fmt(s.tests)} automated tests and ${fmt(s.e2eScenarios)} browser scenarios.`;
+        document.getElementById("status-tag").textContent = `Status at ${s.milestone}`;
+        const tiles = [
+          [s.mergedChanges, "merged changes"],
+          [s.workItems, "work items"],
+          [s.tests, "automated tests"],
+          [s.e2eScenarios, "browser scenarios"],
+        ];
+        const holder = document.getElementById("status-tiles");
+        for (const [n, label] of tiles) {
+          const tile = document.createElement("div");
+          tile.className = "stat";
+          const num = document.createElement("strong");
+          num.textContent = fmt(n);
+          const text = document.createElement("span");
+          text.textContent = label;
+          tile.append(num, text);
+          holder.appendChild(tile);
+        }
+        document.getElementById("status-line").textContent = `As of ${s.asOf}.`;
       })();
     </script>
   </body>
