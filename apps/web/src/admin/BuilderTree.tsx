@@ -302,10 +302,10 @@ function TreeLabel({
         <span className="qm-tree__label">{shown}</span>
       ) : (
         <>
+          <VisuallyHidden>{shown}</VisuallyHidden>
           <span className="qm-tree__label" aria-hidden="true">
             {short}
           </span>
-          <VisuallyHidden>{shown}</VisuallyHidden>
         </>
       )}
       {node.key !== undefined && node.key !== shown && (
