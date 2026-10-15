@@ -22,7 +22,6 @@ import { ChecksContext, IssueMessages, isError } from "./checks.js";
 import {
   Advanced,
   asObjects,
-  ItemButtons,
   type Obj,
   Sect,
   SelectControl,
@@ -826,16 +825,18 @@ function CardRow({
                 </button>
               );
             })}
-            <ItemButtons
-              owner={owner}
-              name={shownName}
-              index={index}
-              count={count}
-              removeLabel={t("admin.cards.row.remove")}
-              onMove={onMove}
-              onRemove={onRemove}
-              movable={false}
-            />
+            <button
+              type="button"
+              className="qm-button qm-button--ghost qm-mock__icon"
+              aria-label={t("admin.cards.row.remove", { name: shownName })}
+              data-owner={owner}
+              data-role="remove"
+              onClick={() => onRemove(index)}
+            >
+              <span aria-hidden="true" className="qm-icon-x">
+                ×
+              </span>
+            </button>
           </div>
         </div>
         {open && (

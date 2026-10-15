@@ -650,7 +650,7 @@ test("[#605] removing a keyword, a row or a card by keyboard leaves focus on a s
   await form.getByRole("button", { name: "Add row" }).press("Enter");
   await expect(form.getByRole("combobox", { name: "Path" })).toBeFocused();
   await expect(rows).toHaveCount(before + 1);
-  await form.getByRole("button", { name: /^Remove row New row/ }).press("Enter");
+  await form.getByRole("button", { name: /^Remove New row/ }).press("Enter");
   await expect(rows).toHaveCount(before);
   await expect(rows.last()).toBeFocused();
   expect(await onBody()).toBe(false);

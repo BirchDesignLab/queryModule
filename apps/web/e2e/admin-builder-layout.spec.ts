@@ -85,7 +85,7 @@ for (const size of SIZES) {
           Math.round(
             await tools
               .nth(i)
-              .getByRole("button", { name: /^Remove row/ })
+              .getByRole("button", { name: /^Remove / })
               .evaluate((el) => el.getBoundingClientRect().left),
           ),
         );
@@ -116,7 +116,17 @@ for (const size of SIZES) {
         Math.max(...upLefts) - Math.min(...upLefts),
         `Move up left edges ${upLefts}`,
       ).toBeLessThanOrEqual(1);
-      // Remove row too: a first row with no Move up keeps its slot, so the columns line up.
+      // Remove is icon only like the Moves, 36 px, named "Remove <row>" (demo polish 7).
+      const removes = tools.getByRole("button", { name: /^Remove / });
+      expect(await removes.count(), "a Remove on every row").toBe(count);
+      expect((await removes.first().textContent())?.trim(), "Remove has no words").toBe("×");
+      const removeSize = await removes.first().evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { w: r.width, h: r.height };
+      });
+      expect(removeSize.h, "Remove height").toBeGreaterThanOrEqual(36);
+      expect(removeSize.w, "Remove width").toBeGreaterThanOrEqual(36);
+      // Remove too: a first row with no Move up keeps its slot, so the columns line up.
       expect(
         Math.max(...removeLefts) - Math.min(...removeLefts),
         `Remove row left edges ${removeLefts}`,

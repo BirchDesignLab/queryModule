@@ -58,7 +58,7 @@
   --qm-color-severity-warning-bg: #ffd24d;
   --qm-color-severity-info-fg: #ffffff;
   --qm-color-severity-info-bg: #1a4fa3;
-  --qm-focus-ring: #1f5fbf;
+  --qm-focus-ring: #1a3fc0;
   --qm-field-required: #a00000;
 }
 :root[data-theme="night"] {

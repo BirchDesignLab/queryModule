@@ -27,7 +27,7 @@ export const COLOR_TOKENS = {
   "color.severity.info.fg": { day: "#ffffff", night: "#ffffff", redShift: "#0d0000" },
   "color.severity.info.bg": { day: "#1a4fa3", night: "#1a4fa3", redShift: "#d09050" },
   // E1: the ring never matches the invalid edge (field.required); red shift's ring is pale amber.
-  "focus.ring": { day: "#1f5fbf", night: "#ffd24d", redShift: "#ffe0a8" },
+  "focus.ring": { day: "#1a3fc0", night: "#ffd24d", redShift: "#ffe0a8" },
   "field.required": { day: "#a00000", night: "#ff8080", redShift: "#ff4d4d" },
 } as const satisfies Record<string, ModeValues>;
 
