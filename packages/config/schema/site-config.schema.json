@@ -543,6 +543,10 @@
                   "default": false,
                   "type": "boolean"
                 },
+                "formOnly": {
+                  "default": false,
+                  "type": "boolean"
+                },
                 "section": {
                   "default": "base",
                   "type": "string",

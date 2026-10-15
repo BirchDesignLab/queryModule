@@ -294,6 +294,7 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     "queryTypes.fields.custom",
     "queryTypes.fields.dataType",
     "queryTypes.fields.defaultValue",
+    "queryTypes.fields.formOnly",
     "queryTypes.fields.inputFormats",
     "queryTypes.fields.key",
     "queryTypes.fields.labelKey",

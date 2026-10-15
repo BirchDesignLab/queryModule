@@ -213,6 +213,63 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(delays).toEqual([500, 1000, 2000]);
   });
 
+  it("R6 recheck probes health at once, lifts the gate when it answers, and the poll chain stops", async () => {
+    const delays: number[] = [];
+    serveQueries(() => HttpResponse.error());
+    let reachable = false;
+    let health = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () => {
+        health += 1;
+        return reachable ? HttpResponse.json({ status: "ok" }) : HttpResponse.error();
+      }),
+    );
+    const { controller } = setup({ delays });
+    await controller.getState().submit(REQ);
+    expect(controller.getState().status).toBe("noConnection");
+    // Still down: the re-check says so and leaves the gate and the one poll chain alone.
+    expect(await controller.getState().recheck()).toBe(false);
+    expect(controller.getState().status).toBe("noConnection");
+    expect(delays).toEqual([1000]);
+    // The connection is back before the jittered poll fires: no waiting for it.
+    reachable = true;
+    expect(await controller.getState().recheck()).toBe(true);
+    expect(controller.getState().status).toBe("idle");
+    const probes = health;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(health).toBe(probes);
+  });
+
+  it("R6 recheck on an idle controller asks nothing and says it is open", async () => {
+    let health = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () => {
+        health += 1;
+        return HttpResponse.json({ status: "ok" });
+      }),
+    );
+    const { controller } = setup();
+    expect(await controller.getState().recheck()).toBe(true);
+    expect(health).toBe(0);
+  });
+
+  it("R6 two Enter presses in a row share one probe", async () => {
+    serveQueries(() => HttpResponse.error());
+    let health = 0;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () => {
+        health += 1;
+        return HttpResponse.json({ status: "ok" });
+      }),
+    );
+    const { controller } = setup();
+    await controller.getState().submit(REQ);
+    const first = controller.getState().recheck();
+    const second = controller.getState().recheck();
+    expect(await Promise.all([first, second])).toEqual([true, true]);
+    expect(health).toBe(1);
+  });
+
   it("#382 B1 a health answer from a stopped poll chain starts no second chain", async () => {
     const delays: number[] = [];
     const replies = [

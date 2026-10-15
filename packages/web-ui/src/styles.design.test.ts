@@ -19,28 +19,7 @@ function decls(selector: string): string {
     .join("\n");
 }
 
-describe("the ack toast flows in the page at every width (#633, developer decision a)", () => {
-  it("is never fixed, so it cannot sit over a focused control", () => {
-    const toast = decls(".qm-toast");
-    expect(toast).not.toMatch(/position:\s*fixed/);
-    expect(toast).not.toMatch(/inset-(block|inline)-(start|end)/);
-  });
-
-  it("has no width-dependent override: the same in-flow rule applies on a wide, tall viewport", () => {
-    expect(css).not.toMatch(/@media[^{]*\{\s*\.qm-toast/);
-  });
-});
-
-describe("G12 the toast in the Requests pane does not look like a request card", () => {
-  it("has the ok edge and the overlay surface, and spans the pane like the cards", () => {
-    const toast = decls(".qm-requests__toast > .qm-toast");
-    expect(toast).toMatch(/border-color:\s*var\(--qm-color-status-ok\)/);
-    expect(toast).toMatch(/background:\s*var\(--qm-color-surface-overlay\)/);
-    expect(toast).toMatch(/inline-size:\s*auto/);
-  });
-});
-
-describe("request entries match mockup v5 (G1, G12, G25, G36)", () => {
+describe("request entries match mockup v5 (G1, G25, G36)", () => {
   it("G25: meta, parts and cards span the whole entry, so every card starts at the same edge", () => {
     expect(decls(".qm-request__meta")).toMatch(/flex:\s*1\s+0\s+100%/);
     expect(decls(".qm-request__parts")).toMatch(/flex:\s*1\s+0\s+100%/);
@@ -59,12 +38,6 @@ describe("request entries match mockup v5 (G1, G12, G25, G36)", () => {
     );
     expect(media?.[1]).toMatch(/minmax\(24rem,\s*1fr\)/);
     expect(media?.[1]).toMatch(/minmax\(35rem,/);
-  });
-
-  it("G12: the ack toast is a compact, centered chip, still in the page flow", () => {
-    const toast = decls(".qm-toast");
-    expect(toast).toMatch(/inline-size:\s*fit-content/);
-    expect(toast).toMatch(/margin-inline:\s*auto/);
   });
 
   it("G36: officer card and part headings are at least the 16 px floor", () => {
@@ -387,5 +360,25 @@ describe("dispatch app bar keeps one row at 200% zoom (683 px)", () => {
     expect(css).toMatch(
       /@media \(min-width: 576px\) and \(max-width: 1000px\)\s*\{\s*\.qm-app-header \.qm-app-header__site\s*\{\s*flex:\s*1 1 12ch/,
     );
+  });
+});
+
+describe("R8 a long keyword mark spans two columns of a card's grid", () => {
+  it("the wide item spans two grid columns", () => {
+    expect(decls(".qm-result-list__item--wide")).toMatch(/grid-column:\s*span\s+2/);
+  });
+});
+
+describe("R22 at 1024 the request entry's head and meta line stay compact", () => {
+  it("a media block for 1024 to 1279 px tightens the entry's gap and inset and the meta size", () => {
+    const block = css.match(
+      /@media \(min-width: 1024px\) and \(max-width: 1279px\)\s*\{([\s\S]*?)\n\}\n/,
+    )?.[1];
+    expect(block).toBeDefined();
+    expect(block).toMatch(/\.qm-request\s*\{[^}]*column-gap:\s*var\(--qm-space-2\)/);
+    expect(block).toMatch(/\.qm-request\s*\{[^}]*padding-inline:\s*var\(--qm-space-3\)/);
+    expect(block).toMatch(/\.qm-request__meta\s*\{[^}]*font-size:\s*var\(--qm-type-size-xs\)/);
+    // The officer layout is left alone.
+    expect(block).not.toMatch(/mobile-unit \.qm-request/);
   });
 });

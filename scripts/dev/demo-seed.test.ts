@@ -114,6 +114,12 @@ describe("DEMO_STORIES", () => {
       expect(`demo-seed-${s.id}`.length).toBeGreaterThanOrEqual(16);
     }
   });
+
+  it("sends the year on every vehicle story, so both sources run as the story table says (VEH.ZZ-0001..26)", () => {
+    const vehicles = DEMO_STORIES.filter((s) => s.queryType === "VEH");
+    expect(vehicles.length).toBeGreaterThanOrEqual(5);
+    for (const s of vehicles) expect(s.values.year).toBe("26");
+  });
 });
 
 describe("runDemoSeed", () => {

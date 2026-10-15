@@ -489,6 +489,8 @@ export interface components {
                     visible: boolean;
                     /** @default false */
                     required: boolean;
+                    /** @default false */
+                    formOnly: boolean;
                     /** @default base */
                     section: string;
                     /** @default false */

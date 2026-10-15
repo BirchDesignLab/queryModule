@@ -16,6 +16,19 @@ describe("FR-056 form to terminal (spec 4.4 Toggle)", () => {
     expect(r).toEqual({ text: "VEH.ZZ-0001.OK", unshown: 1 });
   });
 
+  it("R11 a two-digit year is written as typed (..26), not widened to ..2026, so the echo mirrors the row", () => {
+    expect(formToTerminal(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", year: "26" }, NOW).text).toBe(
+      "VEH.ZZ-0001..26",
+    );
+    expect(formToTerminal(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", year: "2026" }, NOW).text).toBe(
+      "VEH.ZZ-0001..2026",
+    );
+    // A year the form cannot read stays as typed too (nothing to widen).
+    expect(formToTerminal(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", year: "2" }, NOW).text).toBe(
+      "VEH.ZZ-0001..2",
+    );
+  });
+
   it("an empty draft gives the bare command and nothing unshown", () => {
     expect(formToTerminal(CLIENT_CONFIG, "VEH", {}, NOW)).toEqual({ text: "VEH", unshown: 0 });
   });

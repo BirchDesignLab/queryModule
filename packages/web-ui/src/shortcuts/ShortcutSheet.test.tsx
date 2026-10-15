@@ -8,6 +8,8 @@ import { ShortcutSheet } from "./ShortcutSheet.js";
 const MESSAGES: Record<string, string> = {
   "shortcut.sheetTitle": "Keyboard shortcuts",
   "shortcut.close": "Close",
+  "shortcut.then": "then",
+  "shortcut.action.quickAccessType": "Quick access: {type}",
   "shortcut.action.submit": "Submit the query",
   "shortcut.action.focusTerminal": "Go to the command line",
   "shortcut.action.goPanel": "Go to the query panel",
@@ -44,14 +46,15 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
     await user.click(screen.getByRole("button", { name: "opener" }));
     const dialog = screen.getByRole("dialog", { name: "Keyboard shortcuts" });
     const submit = row(dialog, "Submit the query");
-    expect(within(submit).getByText("Ctrl + Enter")).toBeInTheDocument();
+    expect(within(submit).getByText("Ctrl+Enter")).toBeInTheDocument();
     expect(within(submit).getByText("Query panel")).toBeInTheDocument();
     const terminal = row(dialog, "Go to the command line");
-    expect(within(terminal).getByText("Slash")).toBeInTheDocument();
+    expect(within(terminal).getByText("/")).toBeInTheDocument();
     expect(within(terminal).getByText("Anywhere")).toBeInTheDocument();
     const chord = row(dialog, "Go to the query panel");
-    expect(within(chord).getByText("KeyG")).toBeInTheDocument();
-    expect(within(chord).getByText("KeyQ")).toBeInTheDocument();
+    expect(within(chord).getByText("G")).toBeInTheDocument();
+    expect(within(chord).getByText("then")).toBeInTheDocument();
+    expect(within(chord).getByText("Q")).toBeInTheDocument();
   });
 
   it("lists every binding of an action that has several", () => {
@@ -68,7 +71,7 @@ describe("UX-004 shortcut sheet (spec 6.2 dialogs, 6.4)", () => {
         t={t}
       />,
     );
-    expect(screen.getByText("Ctrl + Enter")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+Enter")).toBeInTheDocument();
     expect(screen.getByText("F5")).toBeInTheDocument();
   });
 
@@ -217,6 +220,49 @@ describe("G8 key names a person can read", () => {
     expect(screen.getByText("Esc")).toBeInTheDocument();
     expect(screen.getByText("Delete")).toBeInTheDocument();
   });
+
+  it("R5: names the keys as a person reads them, never as an event code", () => {
+    render(
+      <ShortcutSheet
+        open
+        onClose={() => undefined}
+        bindings={{
+          focusTerminal: [{ keys: "Slash", context: "global" }],
+          shortcutSheet: [{ keys: "Shift+Slash", context: "global" }],
+          toggleMode: [{ keys: "Ctrl+Backquote", context: "global" }],
+          quickType1: [{ keys: "Alt+Digit1", context: "global" }],
+          goPanel: [{ keys: "KeyG KeyQ", context: "global" }],
+        }}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("/")).toBeInTheDocument();
+    expect(screen.getByText("Shift+/")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+`")).toBeInTheDocument();
+    expect(screen.getByText("Alt+1")).toBeInTheDocument();
+    expect(screen.getByText("G")).toBeInTheDocument();
+    expect(screen.getByText("Q")).toBeInTheDocument();
+    for (const code of ["Slash", "Backquote", "Digit1", "KeyG", "KeyQ"]) {
+      expect(screen.queryByText(new RegExp(code))).toBeNull();
+    }
+  });
+
+  it("R5: an actionLabel names a row by what it does, and the generic label stays for the rest", () => {
+    render(
+      <ShortcutSheet
+        open
+        onClose={() => undefined}
+        bindings={{
+          quickType1: [{ keys: "Alt+Digit1", context: "global" }],
+          submit: [{ keys: "Ctrl+Enter", context: "panel" }],
+        }}
+        t={t}
+        actionLabel={(action) => (action === "quickType1" ? "Quick access: Vehicle" : undefined)}
+      />,
+    );
+    expect(screen.getByText("Quick access: Vehicle")).toBeInTheDocument();
+    expect(screen.getByText("Submit the query")).toBeInTheDocument();
+  });
 });
 
 describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
@@ -231,13 +277,17 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
   } as const;
   const sheet = () => <ShortcutSheet open onClose={() => undefined} bindings={bindings} t={t} />;
 
-  it("renders combos with every modifier and no raw stroke string when no layout map exists", () => {
-    render(sheet());
-    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
-    expect(screen.queryByText("Ctrl+Backquote")).not.toBeInTheDocument();
-  });
+  it(
+    "renders combos with every modifier joined by " +
+      " and the readable key when no layout map exists",
+    () => {
+      render(sheet());
+      expect(screen.getByText("Ctrl+`")).toBeInTheDocument();
+      expect(screen.queryByText("Ctrl+Backquote")).not.toBeInTheDocument();
+    },
+  );
 
-  it("shows the code where a code has no US character and no layout map exists", () => {
+  it("shows the name of a key with no other label (F5) when no layout map exists", () => {
     render(
       <ShortcutSheet
         open
@@ -246,7 +296,7 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
         t={t}
       />,
     );
-    expect(screen.getByText("Ctrl + Alt + Shift + F5")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+Alt+Shift+F5")).toBeInTheDocument();
   });
 
   it("renders the fallback immediately, then swaps in the layout map's labels", async () => {
@@ -258,7 +308,7 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
         }),
     });
     render(sheet());
-    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+`")).toBeInTheDocument();
     resolve(
       new Map([
         ["Backquote", "²"],
@@ -266,8 +316,8 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
         ["KeyQ", "a"],
       ]),
     );
-    expect(await screen.findByText("Ctrl + ²")).toBeInTheDocument();
-    expect(screen.getByText("a")).toBeInTheDocument();
+    expect(await screen.findByText("Ctrl+²")).toBeInTheDocument();
+    expect(screen.getByText("A")).toBeInTheDocument();
   });
 
   it("falls back when the layout map rejects", async () => {
@@ -279,7 +329,7 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+`")).toBeInTheDocument();
   });
 
   it("falls back when getLayoutMap throws synchronously", () => {
@@ -289,10 +339,10 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
       },
     });
     render(sheet());
-    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+`")).toBeInTheDocument();
   });
 
-  it("falls back to the code, never a US character, for a code the layout map does not carry", async () => {
+  it("falls back to the key's readable name for a code the layout map does not carry", async () => {
     setKeyboard({ getLayoutMap: () => Promise.resolve(new Map([["KeyQ", "a"]])) });
     render(
       <ShortcutSheet
@@ -302,15 +352,14 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
         t={t}
       />,
     );
-    // The map has resolved once a mapped key shows its layout label (US layout would say "q").
-    expect(await screen.findByText("a")).toBeInTheDocument();
-    // #319: Slash has a US character ("/"), so only the code proves the fallback skips US labels.
-    expect(screen.getByText("Slash")).toBeInTheDocument();
-    expect(screen.queryByText("/")).not.toBeInTheDocument();
-    expect(screen.getByText("Ctrl + Backquote")).toBeInTheDocument();
+    // The map has resolved once a mapped key shows its layout label (a capital of the map's "a").
+    expect(await screen.findByText("A")).toBeInTheDocument();
+    expect(screen.getByText("/")).toBeInTheDocument();
+    expect(screen.queryByText("Slash")).not.toBeInTheDocument();
+    expect(screen.getByText("Ctrl+`")).toBeInTheDocument();
   });
 
-  it("with a layout map, Shift+Slash reads 'Shift + /': the map gives the unshifted character", async () => {
+  it("with a layout map, Shift+Slash reads 'Shift+/': the map gives the unshifted character", async () => {
     setKeyboard({ getLayoutMap: () => Promise.resolve(new Map([["Slash", "/"]])) });
     render(
       <ShortcutSheet
@@ -320,7 +369,7 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
         t={t}
       />,
     );
-    expect(await screen.findByText("Shift + /")).toBeInTheDocument();
+    expect(await screen.findByText("Shift+/")).toBeInTheDocument();
     expect(screen.queryByText("?")).not.toBeInTheDocument();
   });
 
@@ -329,10 +378,10 @@ describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
     setKeyboard({ getLayoutMap });
     const props = { onClose: () => undefined, bindings, t };
     const { rerender } = render(<ShortcutSheet open {...props} />);
-    expect(await screen.findByText("a")).toBeInTheDocument();
+    expect(await screen.findByText("A")).toBeInTheDocument();
     rerender(<ShortcutSheet open={false} {...props} />);
     rerender(<ShortcutSheet open {...props} />);
-    expect(await screen.findByText("a")).toBeInTheDocument();
+    expect(await screen.findByText("A")).toBeInTheDocument();
     expect(getLayoutMap).toHaveBeenCalledTimes(1);
   });
 

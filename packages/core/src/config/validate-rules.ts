@@ -303,12 +303,15 @@ export function checkWarnings(config: SiteConfig, out: DiagnosticSink): void {
   // literal once at context.now (#303).
 }
 
-/** A field some rule can make required, with no position in a command of its query type. */
+/**
+ * A field some rule can make required, with no position in a command of its query type. A field
+ * marked formOnly is deliberately form-only and is skipped; an unmarked one still warns.
+ */
 function checkRequiredWithoutPosition(config: SiteConfig, out: DiagnosticSink): void {
   config.queryTypes.forEach((qt, q) => {
     qt.rules.forEach((r, i) => {
       const f = qt.fields.find((x) => x.key === r.field);
-      if (r.effect !== "require" || !f || f.required) return;
+      if (r.effect !== "require" || !f || f.required || f.formOnly) return;
       for (const c of config.commands) {
         if (c.queryType !== qt.code) continue;
         const positioned = c.positions.some(

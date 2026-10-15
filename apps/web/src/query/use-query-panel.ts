@@ -3,6 +3,7 @@ import {
   type DraftStore,
   type DraftValue,
   type SubmitOutcome,
+  type SubmittedQuery,
   useStore,
 } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
@@ -71,6 +72,12 @@ export interface ReadyQueryPanel {
   submitGated(): boolean;
   /** Sends a checked request, as the form does; the terminal passes the type it parsed. */
   sendChecked(request: CheckedRequest): Promise<void>;
+  /**
+   * A Retry from the list was acknowledged: starts the form over as any acknowledged run does, but
+   * only while the draft of that type still holds exactly what the retry sent (R12). Form mode only:
+   * the command line's own text is not the retry's to rewrite.
+   */
+  startOverAfterRetry(submitted: SubmittedQuery): void;
   /** Why the submit button is blocked, or null (spec 6.2). */
   submitReason: SubmitBlockReason | null;
 }
@@ -596,6 +603,25 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     },
     submitGated,
     sendChecked,
+    startOverAfterRetry(submitted) {
+      if (preview || drafts.getState().mode !== "form") return;
+      const draft = drafts.getState().drafts[submitted.queryType];
+      if (draft === undefined) return;
+      const sent = new Set(submitted.sourceIds);
+      // No source choice means the defaults went out; a choice must be the one that went out.
+      if (
+        draft.sources !== null &&
+        !(draft.sources.length === sent.size && draft.sources.every((id) => sent.has(id)))
+      )
+        return;
+      startOver({
+        queryType: submitted.queryType,
+        values: submitted.values,
+        sourceIds: submitted.sourceIds,
+        state: formState,
+        draftSources: draft.sources,
+      });
+    },
     submitReason: preview
       ? "preview"
       : submitStatus === "submitting"

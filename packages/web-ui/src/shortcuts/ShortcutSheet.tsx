@@ -1,11 +1,16 @@
 import type { ShortcutBinding } from "@querymodule/core/config";
-import { type JSX, useEffect, useRef, useState } from "react";
+import { Fragment, type JSX, useEffect, useRef, useState } from "react";
 
 export interface ShortcutSheetProps {
   open: boolean;
   onClose(): void;
   bindings: Readonly<Record<string, readonly ShortcutBinding[]>>;
-  t(key: string): string;
+  t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
+  /**
+   * Names an action in the owner's words where the generic label would hide what it does (quick
+   * access picks a query type: "Quick access: Vehicle"). Undefined: the action's own label.
+   */
+  actionLabel?(action: string): string | undefined;
   /** Where focus goes on close when the opener has left the page (a persona flip remounts the
    *  account menu; a shortcut pressed inside an open menu closes it). Null or absent: focus stays
    *  where the browser leaves it. Never used while the opener is still connected. */
@@ -19,24 +24,51 @@ type LayoutMap = { get(code: string): string | undefined };
 
 const MODIFIERS = ["Ctrl", "Alt", "Shift"] as const;
 
-/** Keys whose name is the same on every layout: said in words, not as a KeyboardEvent code (G8). */
+/** Keys said in words, not as a KeyboardEvent code (G8). */
 const KEY_WORDS: Readonly<Record<string, string>> = {
   ArrowUp: "Up arrow",
   ArrowDown: "Down arrow",
   ArrowLeft: "Left arrow",
   ArrowRight: "Right arrow",
   Escape: "Esc",
+  Backquote: "`",
+  Slash: "/",
+  Backslash: "\\",
+  Period: ".",
+  Comma: ",",
+  Semicolon: ";",
+  Quote: "'",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Minus: "-",
+  Equal: "=",
 };
 
-/** Modifiers and key joined with " + ". The key is the layout's label where the browser gave one,
- *  else the code (spec 6.4). Never a US character: on another layout it would name the wrong key.
- *  The layout map gives each key's unshifted character, so Shift+Slash reads "Shift + /", not "?". */
+/** The label a person reads on the keycap: "G" for KeyG, "1" for Digit1, "/" for Slash, "Num 1"
+ *  for Numpad1. Any other code (Enter, F5, Delete) already reads as the key's name (R5). */
+function readableKey(code: string): string {
+  const word = KEY_WORDS[code];
+  if (word !== undefined) return word;
+  const letter = /^Key([A-Z])$/.exec(code)?.[1];
+  if (letter !== undefined) return letter;
+  const digit = /^Digit([0-9])$/.exec(code)?.[1];
+  if (digit !== undefined) return digit;
+  const numpad = /^Numpad([0-9])$/.exec(code)?.[1];
+  if (numpad !== undefined) return `Num ${numpad}`;
+  return code;
+}
+
+/** Modifiers and key joined with "+" ("Alt+1", "Ctrl+`", "Shift+/"). The key is the layout's label
+ *  where the browser gave one (a single letter is shown as a capital, as on a keycap), else the
+ *  readable name of the code. The layout map gives each key's unshifted character, so Shift+Slash
+ *  reads "Shift+/", not "?". */
 function strokeLabel(stroke: string, layout: LayoutMap | null): string {
   const parts = stroke.split("+");
   const code = parts[parts.length - 1] ?? stroke;
   const mods = parts.slice(0, -1);
-  const key = layout?.get(code) ?? KEY_WORDS[code] ?? code;
-  return [...MODIFIERS.filter((m) => mods.includes(m)), key].join(" + ");
+  const mapped = layout?.get(code);
+  const key = mapped === undefined ? readableKey(code) : mapped.toLocaleUpperCase();
+  return [...MODIFIERS.filter((m) => mods.includes(m)), key].join("+");
 }
 
 /** The layout map where the browser exposes one (Chromium); null until it resolves, and for good
@@ -78,6 +110,7 @@ export function ShortcutSheet({
   onClose,
   bindings,
   t,
+  actionLabel,
   returnFocus,
 }: ShortcutSheetProps): JSX.Element {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -127,11 +160,19 @@ export function ShortcutSheet({
         {Object.entries(bindings).flatMap(([action, list]) =>
           list.map((binding) => (
             <li key={`${action}:${binding.context}:${binding.keys}`}>
-              <span className="qm-shortcut-sheet__action">{t(`shortcut.action.${action}`)}</span>{" "}
+              <span className="qm-shortcut-sheet__action">
+                {actionLabel?.(action) ?? t(`shortcut.action.${action}`)}
+              </span>{" "}
               <span className="qm-shortcut-sheet__keys">
                 {binding.keys.split(" ").map((stroke, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: a chord may repeat a stroke; order is fixed
-                  <kbd key={i}>{strokeLabel(stroke, layout)}</kbd>
+                  <Fragment key={i}>
+                    {/* A chord reads "G then Q" (R5). */}
+                    {i === 0 ? null : (
+                      <span className="qm-shortcut-sheet__then">{t("shortcut.then")}</span>
+                    )}
+                    <kbd>{strokeLabel(stroke, layout)}</kbd>
+                  </Fragment>
                 ))}
               </span>{" "}
               <span className="qm-shortcut-sheet__context">

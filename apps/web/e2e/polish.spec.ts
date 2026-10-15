@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
 // Demo polish (#642): measured, not eyeballed. Ghost buttons line up with the text above them, an
-// also-run part has its rule, the ack toast fits two rows, the date hint fits two lines, quick access
+// also-run part has its rule, the date hint fits two lines, quick access
 // keeps 36 px targets, and the Day focus ring is the 7:1 blue.
 
 test.use({ emptyQueryList: true, colorScheme: "light", reducedMotion: "reduce" });
@@ -47,37 +47,13 @@ for (const layout of LAYOUTS) {
   test.describe(`${layout.name} ${layout.width}x${layout.height}`, () => {
     test.use({ viewport: { width: layout.width, height: layout.height } });
 
-    test("ghost buttons line up with the text above, the also-run part has its rule, the toast fits two rows", async ({
+    test("ghost buttons line up with the text above, the also-run part has its rule", async ({
       page,
     }) => {
       await startAs(page, layout.email, layout.width, layout.height);
       await runCommand(page, "PER.EXAMPLESON.SAMPLE.01011901");
-      const toast = page.getByTestId("ack-toast");
-      await expect(toast).toBeVisible();
       const region = page.getByRole("region", { name: /Requests this shift|Last request/ });
       await expect(region.getByText("NO WANTS OR WARRANTS")).toBeVisible({ timeout: 15_000 });
-
-      // The toast: two rows or fewer, and the officer's spans the card's edges.
-      const rows = await toast.evaluate((el) => {
-        const tops = new Set<number>();
-        for (const child of el.children) {
-          const r = child.getBoundingClientRect();
-          if (r.width > 2 && r.height > 2) tops.add(Math.round((r.top + r.height / 2) / 12));
-        }
-        return tops.size;
-      });
-      expect(rows, "toast rows").toBeLessThanOrEqual(2);
-      if (layout.name === "officer") {
-        const card = region.getByRole("listitem").first();
-        const [t, c] = await Promise.all([toast.boundingBox(), card.boundingBox()]);
-        expect(Math.abs((t?.x ?? 0) - (c?.x ?? 99)), "toast left edge vs card").toBeLessThanOrEqual(
-          1,
-        );
-        expect(
-          Math.abs((t?.x ?? 0) + (t?.width ?? 0) - ((c?.x ?? 0) + (c?.width ?? 0))),
-          "toast right edge vs card",
-        ).toBeLessThanOrEqual(1);
-      }
 
       // Show detail starts where the card's text does (the card's own left padding).
       const card = region.getByRole("listitem").first();

@@ -90,9 +90,7 @@ describe("B3 dispatcher requests list (spec 6.7)", () => {
     );
     // One announcement per state change: the acknowledgment, said once, by the shared announcer.
     expect(announce.mock.calls.filter(([text]) => /query sent/.test(String(text)))).toHaveLength(1);
-    expect(
-      region.querySelector("[aria-live], [role=status]:not([data-testid=ack-toast]), [role=alert]"),
-    ).toBeNull();
+    expect(region.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
     // Focus never moves on its own.
     expect(screen.getByLabelText("Plate")).toHaveFocus();
   });

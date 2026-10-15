@@ -47,7 +47,7 @@ for (const [width, height] of [
   [1366, 768],
   [1024, 768],
 ] as const) {
-  test(`dispatcher ${width}x${height}: entries, cards, toast, long form`, async ({ page }) => {
+  test(`dispatcher ${width}x${height}: entries, cards, long form`, async ({ page }) => {
     await startAs(page, "dispatcher@example.test", width, height);
     await save(page, `dispatcher-${width}-01-empty`);
 
@@ -55,7 +55,7 @@ for (const [width, height] of [
     await expect(page.getByRole("region", { name: "State system: returned" })).toBeVisible({
       timeout: 15_000,
     });
-    await save(page, `dispatcher-${width}-02-veh-settled-and-toast`);
+    await save(page, `dispatcher-${width}-02-veh-settled`);
 
     await runCommand(page, "WNT.WANTED");
     const national = requests(page).getByRole("region", { name: "National system: returned" });

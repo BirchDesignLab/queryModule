@@ -177,8 +177,8 @@ async function tabThroughNotObscured(page: Page): Promise<{ obscured: string[]; 
 for (const persona of PERSONAS) {
   for (const condition of CONDITIONS) {
     test.describe(`${persona.name} at ${condition.name}`, () => {
-      // The ack toast flows in the page at every width (#633), so a long page, with the shared
-      // e2e database's earlier history, never puts a control under it.
+      // A long page, with the shared e2e database's earlier history, never puts a control under
+      // the action bar.
       test.use({
         viewport: condition.viewport,
         deviceScaleFactor: condition.scale,

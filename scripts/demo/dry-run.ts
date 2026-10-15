@@ -635,6 +635,9 @@ async function queryWalk(w: Walk): Promise<void> {
   await w.run("vehicle by form: plate, Enter", async () => {
     await w.tabTo(page.getByLabel("Plate", { exact: true }), "Plate field");
     await w.type("ZZ-0001");
+    // A plate on its own asks only the State system; the Year (26) asks both (docs/demo.md "Submit").
+    await w.tabTo(page.getByLabel("Year", { exact: true }), "Year field");
+    await w.type("26");
     await w.shot("vehicle form filled");
     await throttle();
     if (officer) {
@@ -648,7 +651,7 @@ async function queryWalk(w: Walk): Promise<void> {
   });
 
   await w.run("terminal: typed command and unrecognized command", async () => {
-    await w.terminal("VEH.ZZ-0001", "terminal VEH ZZ-0001");
+    await w.terminal("VEH.ZZ-0001..26", "terminal VEH ZZ-0001");
     await w.terminalProblem("XYZ.1", "terminal XYZ.1");
     const problems = page.getByRole("list", { name: "Command problems" });
     if ((await problems.count()) === 0) w.find("failed", "XYZ.1 shows no 'Command problems' list");
@@ -656,13 +659,13 @@ async function queryWalk(w: Walk): Promise<void> {
   });
 
   await w.run("live status: clean no-record", () =>
-    w.terminal("VEH.ABC123", "VEH ABC123").then(() => {}),
+    w.terminal("VEH.ABC123..26", "VEH ABC123").then(() => {}),
   );
   await w.run("live status: FAIL1 (one source fails)", () =>
-    w.terminal("VEH.FAIL1", "VEH FAIL1").then(() => {}),
+    w.terminal("VEH.FAIL1..26", "VEH FAIL1").then(() => {}),
   );
   await w.run("live status: TIMEOUT (national source waits for its deadline)", async () => {
-    await w.terminal("VEH.TIMEOUT", "VEH TIMEOUT", {
+    await w.terminal("VEH.TIMEOUT..26", "VEH TIMEOUT", {
       settleMs: 20_000,
       expectedSettle: 10_000,
       holdPending: true,
@@ -1025,12 +1028,13 @@ async function adminWalk(w: Walk, opts: { publish: boolean; dispatcher?: Walk })
   });
 
   await w.run("builder: move Make to the summary", async () => {
-    // The preview starts on "Default answer" (no record), which has no Make; pick scenario 1.
+    // The preview opens on "Scenario 1" (the plate ZZ-0001, a record with Make); leave it there.
     const scenario = preview.getByLabel("Scenario", { exact: true });
-    if (await w.tabTo(scenario, "preview Scenario select")) {
-      await w.key("ArrowDown");
-      await sleep(300);
-    }
+    const picked = await scenario
+      .evaluate((el) => (el as HTMLSelectElement).selectedOptions[0]?.textContent ?? "")
+      .catch(() => "");
+    if (!/Scenario 1/.test(picked))
+      w.find("failed", `the card preview does not open on Scenario 1 (it shows "${picked}")`);
     const edit = editor.getByRole("button", { name: /^Edit\s?Make/ }).first();
     if (!(await w.activate(edit, "Edit Make button"))) return;
     await sleep(250);

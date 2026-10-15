@@ -372,6 +372,22 @@ describe("warnings (spec 4.1)", () => {
       },
     ]);
   });
+  it("no warning for a field marked formOnly, and an unmarked one still warns", () => {
+    const rules = [
+      { field: "note", when: { field: "plate", op: "notEmpty" }, effect: "require" },
+    ] as const;
+    const marked = run((r) => {
+      vehicle(r).rules = [...rules];
+      const note = vehicle(r).fields.find((f) => f.key === "note");
+      if (!note) throw new Error("fixture has note");
+      note.formOnly = true;
+    });
+    expect(marked.warnings).toEqual([]);
+    const unmarked = run((r) => {
+      vehicle(r).rules = [...rules];
+    });
+    expect(unmarked.warnings).toHaveLength(1);
+  });
   it("no warning when the command positions the field", () => {
     const { warnings } = run((r) => {
       vehicle(r).rules = [

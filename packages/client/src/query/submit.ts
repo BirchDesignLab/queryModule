@@ -45,6 +45,14 @@ export interface SubmitState {
    * identical body, else a fresh one. A request row keeps it for its Retry (SUBMIT-1).
    */
   keyFor(req: SubmitRequest): string;
+  /**
+   * Asks the connection now instead of waiting for the next jittered health poll (up to 30 s
+   * apart): a user who presses Retry the moment the connection returns must not have to press
+   * twice (R6). Resolves true when a submit can go (status idle, lifting the gate if the health
+   * check answered), false while the gate holds. Idle: true, asks nothing. Presses made while a
+   * probe is out share it. Never changes the poll chain when the probe finds the server down.
+   */
+  recheck(): Promise<boolean>;
   reset(): void;
   /** Unsubscribes from the platform signal and stops polling (the web app keeps it for the page's life). */
   dispose(): void;
@@ -148,6 +156,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
   let unsubscribeOnline: () => void = () => undefined;
   let disposed = false;
   let goOffline: () => void = () => undefined;
+  let probing: Promise<boolean> | null = null;
 
   const keyFor = (req: SubmitRequest): string => {
     const fingerprint = bodyFingerprint(buildSubmitBody(req));
@@ -188,6 +197,30 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
       if (polling) return;
       polling = true;
       schedulePoll(0);
+    };
+
+    const recheck = (): Promise<boolean> => {
+      if (get().status !== "noConnection") return Promise.resolve(get().status === "idle");
+      if (probing !== null) return probing;
+      const gen = generation;
+      const promise: Promise<boolean> = options.api
+        .GET("/api/v1/health", { headers: { "X-Background": "1" } })
+        .then(({ response }) => response.ok)
+        .catch(() => false)
+        .then((answered) => {
+          // A reset, a dispose or another way out of the gate while the probe was out wins.
+          if (gen !== generation || disposed) return get().status === "idle";
+          if (answered && get().status === "noConnection") {
+            stopPolling();
+            set({ status: "idle" });
+          }
+          return get().status === "idle";
+        })
+        .finally(() => {
+          if (probing === promise) probing = null;
+        });
+      probing = promise;
+      return promise;
     };
 
     const enterNoConnection = (): void => {
@@ -263,6 +296,7 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
     return {
       status: "idle",
       keyFor,
+      recheck,
       submit(req) {
         if (inFlight !== null) return inFlight;
         const gen = generation;

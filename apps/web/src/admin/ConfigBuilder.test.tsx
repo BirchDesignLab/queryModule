@@ -84,6 +84,9 @@ describe("config builder (Task 31 part 1, BR-001, FR-060, UX-004)", () => {
   it("the raw JSON tab shows the draft and a valid edit updates it", async () => {
     const t = await openBuilder();
     await t.user.click(screen.getByRole("tab", { name: "Raw JSON" }));
+    // The editor pane is marked, so the stylesheet can fill it to the panes area whether or not
+    // draft issues are listed under the text (visual.spec "the panes end at the same place").
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("data-tab", "raw");
     const area = screen.getByRole("textbox", { name: "Draft JSON" }) as HTMLTextAreaElement;
     expect(area.value).toContain('"delimiter"');
     const next = JSON.parse(area.value);

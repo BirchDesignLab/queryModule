@@ -198,3 +198,46 @@ describe("mapped elements", () => {
     expect(screen.getByRole("region", { name: /History/ })).toBeInTheDocument();
   });
 });
+
+describe("R8 a long keyword mark keeps its badge on one line", () => {
+  const elements = (value: string) =>
+    [
+      { kind: "scalar", label: { text: "Status" }, value, view: "both", highlight: true },
+      {
+        kind: "scalar",
+        label: { text: "Last name" },
+        value: "SAMPLEWORTH",
+        view: "both",
+        highlight: false,
+      },
+    ] as const;
+  const keywords = [
+    { keyword: "NO WANTS OR WARRANTS", severity: "info" as const },
+    { keyword: "WANTED", severity: "critical" as const },
+  ];
+
+  it("the item with a 20-character mark spans two grid columns", () => {
+    render(
+      <MappedElements
+        elements={elements("NO WANTS OR WARRANTS")}
+        keywords={keywords}
+        styles={STYLES}
+        t={t}
+      />,
+    );
+    const item = screen.getByText("Status").closest(".qm-result-list__item");
+    expect(item).toHaveClass("qm-result-list__item--wide");
+    expect(screen.getByText("Last name").closest(".qm-result-list__item")).not.toHaveClass(
+      "qm-result-list__item--wide",
+    );
+  });
+
+  it("a short mark and plain text take one column", () => {
+    render(
+      <MappedElements elements={elements("WANTED")} keywords={keywords} styles={STYLES} t={t} />,
+    );
+    expect(screen.getByText("Status").closest(".qm-result-list__item")).not.toHaveClass(
+      "qm-result-list__item--wide",
+    );
+  });
+});

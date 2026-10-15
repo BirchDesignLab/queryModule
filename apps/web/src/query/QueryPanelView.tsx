@@ -1,4 +1,4 @@
-import { type DraftStore, useStore } from "@querymodule/client";
+import { type DraftStore, type SubmittedQuery, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { resolveShortcuts } from "@querymodule/core/config";
 import { tokenize } from "@querymodule/core/terminal";
@@ -219,6 +219,14 @@ function ReadyPanel({
             onClose={() => setSheetOpen(false)}
             bindings={sheetBindings(bindings, quickCodes.length)}
             t={t}
+            // A quick-access row names the type its key picks (R5): "Quick access: Vehicle".
+            actionLabel={(action) => {
+              const n = /^quickType(\d+)$/.exec(action)?.[1];
+              const code = n === undefined ? undefined : quickCodes[Number(n) - 1];
+              return code === undefined
+                ? undefined
+                : t("shortcut.action.quickAccessType", { type: labelOfType(code) });
+            }}
             // The opener can leave the page while the sheet is open (an open account menu closes
             // when the modal takes focus; a persona flip remounts it): the account button, else main.
             returnFocus={() =>
@@ -454,6 +462,9 @@ export function QueryPanelView({
   // the latest panel through a ref.
   const editAsNewRef = useRef<(rowId: string) => void>(() => undefined);
   const onEditAsNew = useCallback((rowId: string) => editAsNewRef.current(rowId), []);
+  // The same for an acknowledged Retry, which starts the form over (R12).
+  const retriedRef = useRef<(submitted: SubmittedQuery) => void>(() => undefined);
+  const onRetried = useCallback((submitted: SubmittedQuery) => retriedRef.current(submitted), []);
   // The preview's store is private and memory-only; it goes with the view (ADR-0011).
   useEffect(
     () => () => {
@@ -462,6 +473,7 @@ export function QueryPanelView({
     [mode, drafts],
   );
   if (panel === null) return null;
+  retriedRef.current = (submitted) => panel.startOverAfterRetry(submitted);
   editAsNewRef.current = (rowId) => {
     const entry = requestsStore.getState().items.find((item) => item.id === rowId);
     const submitted = entry === undefined ? undefined : submittedOf(entry);
@@ -509,7 +521,12 @@ export function QueryPanelView({
   return (
     <div className="qm-panes">
       <div className="qm-panes__panel">{ready}</div>
-      <RequestsPane config={panel.config} variant={requests} onEditAsNew={onEditAsNew} />
+      <RequestsPane
+        config={panel.config}
+        variant={requests}
+        onEditAsNew={onEditAsNew}
+        onRetried={onRetried}
+      />
     </div>
   );
 }

@@ -194,7 +194,7 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     const i = doc.commands.findIndex((c) => c.code === "VEH");
     act(() => store.getState().setPath(["commands", i, "code"], "V.EH"));
     const button = await screen.findByRole("button", {
-      name: /^1 error, \d+ warnings?\. Go to the first issue\.$/,
+      name: /^1 error(?:, \d+ warnings?)?\. Go to the first issue\.$/,
     });
     await t.user.click(button);
     await waitFor(() => expect(document.activeElement).toHaveValue("V.EH"));
@@ -635,7 +635,7 @@ describe("collapsible groups (#586)", () => {
     act(() => store.getState().setPath(["commands", i, "code"], "V.EH"));
     await t.user.click(
       await screen.findByRole("button", {
-        name: /^1 error, \d+ warnings?\. Go to the first issue\.$/,
+        name: /^1 error(?:, \d+ warnings?)?\. Go to the first issue\.$/,
       }),
     );
     await waitFor(() => expect(header("Site")).toHaveAttribute("aria-expanded", "true"));

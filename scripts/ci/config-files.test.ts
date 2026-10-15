@@ -40,39 +40,12 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
     "test/all-on.json",
     "test/flags-off.json",
   ]) {
-    it(`${rel} has no errors and only the known required-without-position warnings`, () => {
+    it(`${rel} has no errors and no warnings`, () => {
       const r = checkConfigFile(cfg(rel), fsIo, { tokenNames: TOKEN_NAMES });
       expect(r.errors).toEqual([]);
-      // VEH plateType (and plateColor, example-ok's own rule, #347); PRO and PROP make and
-      // caliber, PROP description (per-type rules, #346). Each pointer is found by rule content
-      // in the resolved config, not by a fixed rules/<n> index (#303).
-      const okOnly = rel === "sites/example-ok.json";
-      const resolved = r.resolved as {
-        queryTypes: { code: string; rules: { field: string; effect: string }[] }[];
-      };
-      const required = (queryType: string, field: string, command: string) => {
-        const qi = resolved.queryTypes.findIndex((q) => q.code === queryType);
-        const ri = resolved.queryTypes[qi]?.rules.findIndex(
-          (x) => x.field === field && x.effect === "require",
-        );
-        if (qi < 0 || ri === undefined || ri < 0)
-          throw new Error(`no require rule for ${queryType} ${field}`);
-        return {
-          level: "warning",
-          path: `/queryTypes/${qi}/rules/${ri}/field`,
-          key: "config.conditionallyRequiredWithoutPosition",
-          params: { field, command },
-        };
-      };
-      expect(r.warnings).toEqual([
-        required("VEH", "plateType", "VEH"),
-        ...(okOnly ? [required("VEH", "plateColor", "VEH")] : []),
-        required("PRO", "make", "PRO"),
-        required("PRO", "make", "PROP"),
-        required("PRO", "caliber", "PRO"),
-        required("PRO", "caliber", "PROP"),
-        required("PRO", "description", "PROP"),
-      ]);
+      // The shipped sites mark their form-only fields formOnly (VEH plateType and plateColor, PRO
+      // make, caliber and description), so no required-without-position warning remains.
+      expect(r.warnings).toEqual([]);
     });
   }
 

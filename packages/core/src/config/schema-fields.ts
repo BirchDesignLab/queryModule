@@ -75,6 +75,9 @@ export function makeFieldSchemas(mode: SchemaMode) {
     defaultValue: Literal.optional(),
     visible: z.boolean().default(true),
     required: z.boolean().default(false),
+    // Deliberately not positional in any terminal command: a rule may require it and the form is
+    // the only way to fill it, so the "required without a position" warning does not apply.
+    formOnly: z.boolean().default(false),
     section: Key.default("base"),
     custom: z.boolean().default(false),
     minLength: z.int().min(0).optional(),

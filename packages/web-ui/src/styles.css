@@ -566,8 +566,13 @@ h1 {
 .qm-shortcut-sheet__keys {
   display: inline-flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--qm-space-1);
+}
+
+.qm-shortcut-sheet__then {
+  color: var(--qm-color-text-muted);
 }
 
 .qm-shortcut-sheet__context {
@@ -694,77 +699,10 @@ h1 {
   background: var(--qm-color-surface-base);
 }
 
-/*
- * The ack toast (spec 6.6): in the page flow below the content at every width, never taking focus.
- * It never floats over the page, so it cannot cover a focused control (WCAG 2.4.11, focus not
- * obscured; hardening.spec); polite, dismissible and paused on hover or focus, and the request's
- * entry holds the lasting record (#633, developer decision a).
- */
-.qm-toast {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--qm-space-2) var(--qm-space-3);
-  /* A compact chip centered under the page, not a full-width panel (mockup v5 toast; G12). */
-  inline-size: fit-content;
-  max-inline-size: calc(100% - var(--qm-space-8));
-  margin: var(--qm-space-4);
-  margin-inline: auto;
-  padding: var(--qm-space-3) var(--qm-space-4);
-  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
-  border-radius: var(--qm-radius-panel);
-  background: var(--qm-color-surface-base);
-  color: var(--qm-color-text-body);
-}
-
-/* The toast in the Requests pane's slot: a little room under it before the list (G12). */
-.qm-requests__toast > .qm-toast {
-  inline-size: auto;
-  max-inline-size: none;
-  margin: 0 0 var(--qm-space-3);
-  /* Not a request card: the "ok" edge on the overlay surface, as mockup v5's .toast. */
-  border-color: var(--qm-color-status-ok);
-  background: var(--qm-color-surface-overlay);
-}
-
-/* Dismiss reads as a word where the toast has room and as a small x where it does not (the same
-   polite name either way, from its aria-label). */
-.qm-toast__dismiss-x {
-  display: none;
-}
-
 /* The x of an icon-only button reads at the weight of the arrows beside it. */
 .qm-icon-x {
   font-size: var(--qm-type-size-xl);
   line-height: 1;
-}
-
-/* The dispatcher's Requests pane is narrow on a small screen: the toast keeps its title, the sent
-   time and the two actions on two rows, not three (polish 4). The reference stays for assistive
-   technology and in the request's own row right below; Dismiss becomes an x and the text steps down
-   one size. The officer's toast spans the page, so it keeps everything. */
-@media (max-width: 1279px) {
-  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) {
-    font-size: var(--qm-type-size-md);
-    column-gap: var(--qm-space-3);
-    row-gap: 0;
-  }
-
-  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) .qm-toast__reference,
-  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) .qm-toast__dismiss-word {
-    position: absolute;
-    inline-size: var(--qm-border-width);
-    block-size: var(--qm-border-width);
-    margin: calc(-1 * var(--qm-border-width));
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) .qm-toast__dismiss-x {
-    display: inline;
-  }
 }
 
 .qm-request--sending {
@@ -814,6 +752,26 @@ h1 {
   gap: var(--qm-space-2) var(--qm-space-4);
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-sm);
+}
+
+/* At 1024 to 1279 px the requests column is its 24 rem floor (G1). The head keeps type, command and
+   badge on one line where they fit, and the meta line (sent, reference, Copy reference) on one more,
+   so the head is two rows, not four (R22): a tighter gap and inset, and the meta a size smaller. The
+   officer layout keeps its own touch sizes. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .qm-query-panel:not(.qm-layout--mobile-unit) .qm-request {
+    column-gap: var(--qm-space-2);
+    padding-inline: var(--qm-space-3);
+  }
+
+  .qm-query-panel:not(.qm-layout--mobile-unit) .qm-request__meta {
+    column-gap: var(--qm-space-2);
+    font-size: var(--qm-type-size-xs);
+  }
+
+  .qm-query-panel:not(.qm-layout--mobile-unit) .qm-request__meta .qm-button--ghost {
+    font-size: var(--qm-type-size-sm);
+  }
 }
 
 /* Retry and Edit as new query: their own row under the meta line, in every layout (G32). */
@@ -1513,6 +1471,11 @@ h1 {
   min-inline-size: 0;
 }
 
+/* A long keyword mark (NO WANTS OR WARRANTS) spans two columns, so its badge stays on one line (R8). */
+.qm-result-list__item--wide {
+  grid-column: span 2;
+}
+
 .qm-result-list dt {
   color: var(--qm-color-text-muted);
   font-family: var(--qm-type-family-label);
@@ -1541,7 +1504,6 @@ h1 {
    inset, mockup v5 .copy, pulled back by itself, so the label starts where the text does and the gap
    to a neighbour on the same line stays the gap. */
 .qm-request__meta .qm-button--ghost,
-.qm-toast .qm-button--ghost,
 .qm-view-toggle {
   padding-inline: var(--qm-space-2);
   margin-inline-start: calc(-1 * (var(--qm-space-2) + var(--qm-border-width)));
@@ -1565,6 +1527,8 @@ h1 {
 .qm-mark {
   display: inline-flex;
   align-items: center;
+  /* The icon, the word and the marker read as one badge. */
+  max-inline-size: 100%;
   gap: var(--qm-space-1);
   padding: 0 var(--qm-space-1);
   border-radius: var(--qm-radius-sm);

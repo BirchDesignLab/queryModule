@@ -267,14 +267,18 @@ export function usePublishFlow(): PublishFlow {
           return;
         }
         const text = t("admin.config.published", { version: result.version.version });
-        setReviewing(null);
         setConflict(false);
         announcer.announce(text);
-        setNotice({ kind: "info", text });
         // Dispatchers' view: the cached client config is refetched now, not at the next poll.
         void queryClient.invalidateQueries({ queryKey: ["config"], refetchType: "all" });
         setHistoryStamp((n) => n + 1);
-        setStale((await load(false)) ? null : "replace");
+        // The dialog stays open (Publishing, wait) until the draft is reloaded from the new live
+        // version. The notice, the toolbar status and the buttons then change together, so the
+        // builder never reads "Published" over "3 unpublished changes" and "Working" (R16).
+        const reloaded = await load(false);
+        setReviewing(null);
+        setStale(reloaded ? null : "replace");
+        setNotice({ kind: "info", text });
       }),
     [announcer, api, exclusive, load, queryClient, reviewing, store, t],
   );

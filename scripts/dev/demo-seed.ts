@@ -34,8 +34,8 @@ const story = (
  * line in docs/demo.md "Demo stories".
  */
 export const DEMO_STORIES: readonly DemoStory[] = [
-  story("veh-timeout", "VEH", { plate: "TIMEOUT", state: "TX" }),
-  story("veh-partial", "VEH", { plate: "FAIL1", state: "TX" }),
+  story("veh-timeout", "VEH", { plate: "TIMEOUT", state: "TX", year: "26" }),
+  story("veh-partial", "VEH", { plate: "FAIL1", state: "TX", year: "26" }),
   story("dl-zzdltest", "DL", { licenseNumber: "ZZDLTEST", state: "TX" }),
   story("per-hit", "PER", { last: "EXAMPLESON", first: "SAMPLE", dob: "01011901", state: "TX" }),
   story("pro-stolen", "PRO", {
@@ -46,9 +46,9 @@ export const DEMO_STORIES: readonly DemoStory[] = [
   }),
   // Wanted checks go to the national system only (the WNT query type lists no other source).
   story("wnt-wanted", "WNT", { last: "WANTED" }, ["nationalSource"]),
-  story("veh-no-record", "VEH", { plate: "ABC123", state: "TX" }),
-  story("veh-calm-hit", "VEH", { plate: "ZZ-0010", state: "TX" }),
-  story("veh-stolen", "VEH", { plate: "ZZ-0001", state: "TX" }),
+  story("veh-no-record", "VEH", { plate: "ABC123", state: "TX", year: "26" }),
+  story("veh-calm-hit", "VEH", { plate: "ZZ-0010", state: "TX", year: "26" }),
+  story("veh-stolen", "VEH", { plate: "ZZ-0001", state: "TX", year: "26" }),
 ];
 
 /** base64url(HMAC-SHA256(trimmed secret, lowercase email)), as scripts/ops/smoke.sh derives it. */

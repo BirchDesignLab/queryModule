@@ -163,6 +163,7 @@ A field has these settings:
 | `picklistFilter` | `{ "byField": key }`: only values whose `parent` equals that field's value. |
 | `defaultValue` | A configured default for this field. |
 | `visible`, `required` | Start state: visible `true`, required `false`. Rules change them. |
+| `formOnly` | `true` says the field is deliberately not positional in any terminal command (the form, or a named token, is the way to fill it); default `false`. It only silences the required-without-position warning below. |
 | `section` | The section key; default `base`. `expanded` is the "More details" section. |
 | `custom` | `true` marks a site-added field; documentation and admin display only. |
 | `minLength`, `maxLength` | String length; `maxLength` default 64, at most 4096. |
@@ -293,7 +294,10 @@ command code or field name, is shown to the user and never logged).
 
 Config checks on commands: a field that is always required and has no position, preset or default
 is an error; a field that a rule can make required and that has no position is a warning (a named
-token can still supply it).
+token can still supply it) unless the field is marked `formOnly`. The shipped sites mark VEH
+`plateType` and `plateColor` and PRO `make`, `caliber` and `description` `formOnly`, so their
+validation reports no warning (so the builder's warnings chip is empty on the untouched config); an
+unmarked field without a position still warns.
 
 ## Keyword styles and severity styles
 
