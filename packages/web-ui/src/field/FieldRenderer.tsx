@@ -93,7 +93,9 @@ export function FieldRenderer({
         : undefined;
   const description =
     field.dataType === "date" && inputFormats !== undefined && inputFormats.length > 0
-      ? t("form.dateFormats", { formats: inputFormats.join(", ") })
+      ? t("form.dateFormats", {
+          formats: inputFormats.map((format) => format.replaceAll("-", "‑")).join(", "),
+        })
       : undefined;
   return (
     <TextField

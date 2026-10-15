@@ -1050,7 +1050,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     );
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
-    expect(await screen.findByText("No connection to server")).toBeInTheDocument();
+    expect((await screen.findAllByText("No connection to server")).length).toBeGreaterThan(0);
     healthUp();
     server.use(
       http.post(`${API}/api/v1/queries`, async ({ request }) => {

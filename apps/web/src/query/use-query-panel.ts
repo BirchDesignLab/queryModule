@@ -81,6 +81,8 @@ export interface CheckedRequest {
   values: Readonly<Record<string, DraftValue>>;
   sourceIds: readonly string[];
   state: FormState;
+  /** The command as typed (terminal mode): the list shows it as typed, so NAM stays NAM (G31). */
+  typed?: string;
   /**
    * Shows a server 400's errors where the request came from. The terminal lists them under its
    * input (spec 6.2, FR-055); without it they go to the form fields.
@@ -483,7 +485,9 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       ? null
       : requests.getState().begin({
           queryType: request.queryType,
-          summary: formToTerminal(config, request.queryType, request.values, Date.now()).text,
+          summary:
+            request.typed?.trim() ||
+            formToTerminal(config, request.queryType, request.values, Date.now()).text,
           submitted,
           idempotencyKey,
         });

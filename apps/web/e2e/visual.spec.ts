@@ -1439,7 +1439,10 @@ test.describe("Status page (three tiles)", () => {
         await asUser(page, persona.email, mode, async () => {
           await page.goto("/status");
           await expect(page.getByRole("heading", { level: 1, name: "Status" })).toBeVisible();
-          await expect(page.getByText("Connected", { exact: true }).first()).toBeVisible();
+          // The header pill (G24) also says Connected, at once: wait for the status tile's own chip.
+          await expect(
+            page.locator(".qm-status__tile .qm-badge", { hasText: "Connected" }),
+          ).toBeVisible();
           await capture(page, `status-${persona.name}-${mode}`);
 
           const read = () =>

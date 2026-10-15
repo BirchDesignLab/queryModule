@@ -370,6 +370,8 @@ h1 {
 }
 
 .qm-chip__label input {
+  /* Never squeezed by a long label (a narrow screen kept the 24 px target at 24 px, G29). */
+  flex: none;
   inline-size: var(--qm-space-6);
   block-size: var(--qm-space-6);
   margin: 0;
@@ -520,7 +522,11 @@ h1 {
 
 /* Shortcut sheet (spec 6.4, 6.2 dialogs) */
 .qm-shortcut-sheet {
+  /* Never taller than the screen (the title was clipped at 768 px) and wide enough for two columns (G8). */
+  inline-size: min(44rem, calc(100% - var(--qm-space-8)));
   max-inline-size: 100%;
+  max-block-size: calc(100dvh - var(--qm-space-8));
+  overflow-y: auto;
   box-sizing: border-box;
   padding: var(--qm-space-4);
   border: var(--qm-border-width) solid var(--qm-color-border);
@@ -529,12 +535,48 @@ h1 {
   color: var(--qm-color-text-body);
 }
 
+.qm-shortcut-sheet h2 {
+  margin-block: 0 var(--qm-space-4);
+}
+
+.qm-shortcut-sheet > .qm-button {
+  margin-block-start: var(--qm-space-4);
+}
+
 .qm-shortcut-sheet__list {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
-  gap: var(--qm-space-2);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--qm-space-2) var(--qm-space-6);
+}
+
+/* Action at the start, its keys at the end, where it works under them: the rows line up (G8). */
+.qm-shortcut-sheet__list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0 var(--qm-space-3);
+}
+
+.qm-shortcut-sheet__keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--qm-space-1);
+}
+
+.qm-shortcut-sheet__context {
+  grid-column: 1 / -1;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+@media (max-width: 40rem) {
+  .qm-shortcut-sheet__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .qm-shortcut-sheet__keys kbd {
@@ -1496,7 +1538,9 @@ h1 {
   min-height: var(--qm-target-min);
 }
 
-.qm-layout--mobile-unit .qm-result-table table {
+.qm-layout--mobile-unit .qm-result-table table,
+.qm-layout--mobile-unit .qm-result-table caption {
+  color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);
 }
 

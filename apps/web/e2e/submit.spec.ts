@@ -76,7 +76,8 @@ test("an aborted request shows No connection, and the retry reuses the Idempoten
   const submit = page.getByRole("button", { name: "Run query" });
   await expect(submit).toHaveAttribute("aria-disabled", "true");
   await expect(submit).not.toHaveAttribute("disabled", /.*/);
-  await expect(page.getByText("No connection to server")).toBeVisible();
+  // The header pill (G24) and the reason under Run query both say it.
+  await expect(page.getByText("No connection to server").first()).toBeVisible();
   const reasonId = (await submit.getAttribute("aria-describedby")) ?? "";
   expect(reasonId).not.toBe("");
   await expect(page.locator(`#${reasonId.split(" ").at(-1)}`)).toHaveText(

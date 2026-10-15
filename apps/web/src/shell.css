@@ -208,6 +208,58 @@ main[tabindex="-1"]:focus {
   margin-inline-start: auto;
 }
 
+/* The connection pill (mockup v5 .conn): a dot and a word; the word carries the state, the dot only
+   repeats it, and a lost connection reads as a dashed outline too. */
+.qm-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  min-block-size: calc(var(--qm-control-height-dense) - var(--qm-space-1));
+  padding: 0 var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-space-8);
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-size-sm);
+  white-space: nowrap;
+}
+
+.qm-conn__dot {
+  flex: none;
+  inline-size: var(--qm-space-2);
+  block-size: var(--qm-space-2);
+  border-radius: 50%;
+  background: var(--qm-color-status-ok);
+}
+
+.qm-conn--lost {
+  border-style: dashed;
+  font-weight: 600;
+}
+
+.qm-conn--lost .qm-conn__dot {
+  background: var(--qm-color-severity-warning-bg);
+}
+
+/* Where the bar is tight (the admin bar must keep one row at 833 px), the calm "Connected" is the dot
+   alone, its word kept for assistive technology; a lost or restored connection keeps its words. */
+@media (width < 1024px) {
+  .qm-app-header:not(.qm-app-header--compact) .qm-conn--ok .qm-conn__text {
+    position: absolute;
+    inline-size: var(--qm-border-width);
+    block-size: var(--qm-border-width);
+    margin: calc(var(--qm-border-width) * -1);
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.qm-app-header--compact .qm-conn {
+  font-size: var(--qm-type-body-size);
+  min-block-size: var(--qm-target-min);
+}
+
 .qm-app-header__user {
   margin: 0;
   min-inline-size: 0;

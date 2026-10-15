@@ -31,6 +31,7 @@ import { criticalAnnouncementText, statusAnnouncementText } from "../query/annou
 import { primaryTypedText } from "../query/request-name.js";
 import { assessEntry, highestSeverity } from "../query/result-view.js";
 import { AccountMenu } from "./AccountMenu.js";
+import { ConnectionPill } from "./ConnectionPill.js";
 import { useCachedConfig } from "./cached-config.js";
 import { useT } from "./i18n-context.js";
 import { MAIN_LANDMARK } from "./main-landmark.js";
@@ -183,15 +184,20 @@ export function AppHeader() {
         </p>
       )}
       <nav className="qm-app-header__nav" aria-label={t("home.navLabel")}>
-        <NavLink className="qm-app-header__link" to="/" end>
-          {t("nav.queries")}
-        </NavLink>
+        {/* An implementer edits the site configuration only: every query from that account is
+            refused, so the link is not offered (G40). */}
+        {user?.role === "implementer" ? null : (
+          <NavLink className="qm-app-header__link" to="/" end>
+            {t("nav.queries")}
+          </NavLink>
+        )}
         <NavLink className="qm-app-header__link" to="/status">
           {t("nav.status")}
         </NavLink>
         <AdminLink />
       </nav>
       <div className="qm-app-header__end">
+        <ConnectionPill />
         {compact ? <ThemeModeSeg value={themeMode} onChange={changeTheme} t={t} icons /> : null}
         <AccountMenu
           // A flip between the two bars remounts it: an open panel closes and focus goes to <main>.
