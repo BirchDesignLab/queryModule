@@ -181,10 +181,10 @@ test("[#605] the admin adds a card row and a warning keyword, previews, publishe
     await admin.keyboard.type("TESTMAKE");
     await admin.keyboard.press("Enter");
     await expect(word).toBeFocused();
-    await expect(form.getByRole("textbox", { name: "Keyword 7", exact: true })).toHaveValue(
+    await expect(form.getByRole("textbox", { name: "Keyword 8", exact: true })).toHaveValue(
       "TESTMAKE",
     );
-    await expect(form.getByRole("combobox", { name: "Severity of keyword 7" })).toHaveValue(
+    await expect(form.getByRole("combobox", { name: "Severity of keyword 8" })).toHaveValue(
       "warning",
     );
     await expect(admin.getByTestId("draft-summary")).toContainText(/Draft checks: 0 errors/);
@@ -636,12 +636,12 @@ test("[#605] removing a keyword, a row or a card by keyboard leaves focus on a s
   await word.focus();
   await page.keyboard.type("ZZTESTWORD");
   await page.keyboard.press("Enter");
-  await expect(form.getByRole("textbox", { name: "Keyword 7", exact: true })).toHaveValue(
+  await expect(form.getByRole("textbox", { name: "Keyword 8", exact: true })).toHaveValue(
     "ZZTESTWORD",
   );
   await form.getByRole("button", { name: "Remove keyword ZZTESTWORD" }).press("Enter");
-  await expect(form.getByRole("textbox", { name: "Keyword 7", exact: true })).toHaveCount(0);
-  await expect(form.getByRole("textbox", { name: "Keyword 6", exact: true })).toBeFocused();
+  await expect(form.getByRole("textbox", { name: "Keyword 8", exact: true })).toHaveCount(0);
+  await expect(form.getByRole("textbox", { name: "Keyword 7", exact: true })).toBeFocused();
 
   // A row: the new last row goes, and focus moves to the Edit button of the row before it.
   await selectVehicleCard(page);

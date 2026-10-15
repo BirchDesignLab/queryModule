@@ -40,10 +40,16 @@ below do.
 | 3 | No record | `VEH.ABC123..26` | `NO RECORD` on both sources, the info mark, nothing critical |
 | 4 | Critical WANTED | `WNT.WANTED` | National system card, `WANTED`, critical; Show detail opens the warrants table |
 | 5 | Driver's license ZZDLTEST | `DL.ZZDLTEST` | State card `VALID`, the license number in the summary; National system `NO RECORD` |
-| 6 | Person record | `PER.EXAMPLESON.SAMPLE.01011901` | State card `RECORD FOUND` for EXAMPLESON, SAMPLE; National system `NO RECORD`; the "Wanted check, also run" card reads `NO WANTS OR WARRANTS`. `PER.TESTERSON.SAMPLE.01011901` is the no-record person |
-| 7 | Partial result | `VEH.FAIL1..26` | State system `failed` (a status line, no card); National system `NO RECORD` |
+| 6 | Person record | `PER.EXAMPLESON.SAMPLE.01011901` | State card `RECORD FOUND` for EXAMPLESON, SAMPLE; National system `NO RECORD`; the "Wanted check, also run" card reads `NO WANTS OR WARRANTS` with the info mark and badge. `PER.TESTERSON.SAMPLE.01011901` is the no-record person |
+| 7 | Partial result | `VEH.FAIL1..26` | State system `failed` with the reason "the source reported an error" (a status line, no card); National system `NO RECORD` |
 | 8 | Slow source, then timeout | `VEH.TIMEOUT..26` | State card at once; "National system: pending" for about 10 seconds (the source deadline), then "timed out". The other source never waits for it. This is the wait story: the mock has no slow-but-returns scenario (that needs per-source-scenario latency in the mock contract), so the timeout is how the wait is shown |
 | 9 | Config changed: Edit as new query | click path below | A "Failed" row, "The site configuration changed. Check the form and submit again.", and "Edit as new query" instead of Retry |
+
+**A database that already ran keeps its published settings.** The site file only seeds an empty
+store (version 1). A demo database that published a version before the four-digit birth and warrant
+dates and the `NO WANTS OR WARRANTS` info keyword landed keeps the old two-digit dates and the plain
+card until a version with the new settings is published (builder, or Roll back to a seeded one) or
+the database is reset.
 
 Stolen property is `PRO.ZZSTOLEN1.ELECTRONICS` (`STOLEN` on both sources) and a missing person is
 `WNT.MISSING`; both are in "Example queries" below.
@@ -153,7 +159,8 @@ E2E_PORT=3200 node scripts/demo/dry-run.ts
    random time in the source's `latencyMs` range). A source that has answered reads "loading
    result" until its card arrives, then the card takes the line's place (its heading says "State
    system: returned"). The calm tone is a returned source; anything else
-   (failed, timed out, interrupted, credentials missing or rejected) reads as a problem. The text
+   (failed, timed out, interrupted, credentials missing or rejected) reads as a problem and says why in words ("the source reported an error", "no answer in 10 s",
+   "the server restarted before it answered"). The text
    carries the status, never the icon alone, and a screen reader hears a summary such as "Vehicle
    <last 8 characters of the reference>: 1 of 2 sources done. ..." after each change. The lines come over the WebSocket feed, so they
    update without a refresh.
@@ -221,12 +228,12 @@ Everything here is synthetic.
 |---|---|
 | `VEH.ZZ-0001..26` | Both sources return (`VEH.ZZ-0001` alone shows the State card only). Each card has a critical badge and a `!!` mark on `STOLEN` (the plate renders plain); the request header carries the critical badge; a critical result is announced at once. Show detail on the State system card for make, model, year, VIN and the owner. |
 | `VEH.ABC123..26` | A clean no-record: `NO RECORD` with the info mark and badge on each card. No critical result, nothing announced as critical. |
-| `WNT.WANTED` | National system card, critical on `WANTED`. Show detail opens a warrants table (offense, issued) in its own scroll box. |
+| `WNT.WANTED` | National system card, critical on `WANTED`. Show detail opens the date of birth (`01-01-1901`) and a warrants table (offense, issued) in its own scroll box. |
 | `PER.WANTED.SAMPLE.01011901` | The Person card plus an also-run "Wanted check" card, critical on `WANTED`. |
 | `WNT.MISSING` | `MISSING PERSON`, critical. |
 | `PRO.ZZSTOLEN1.ELECTRONICS` | Both sources return `STOLEN` (remarks `STOLEN PROPERTY`, description `SAMPLE ELECTRONICS`), critical. |
 | `DL.ZZDLTEST` | State system card, `VALID`, the license number in the summary, name, date of birth and state in the detail. National system: no record. |
-| `VEH.FAIL1..26` and `VEH.TIMEOUT..26` | A status line for the failed or timed-out source ("State system: failed", "National system: timed out"), never a card; the other source's card shows. |
+| `VEH.FAIL1..26` and `VEH.TIMEOUT..26` | A status line for the failed or timed-out source, with the reason ("State system: failed, the source reported an error", "National system: timed out, no answer in 10 s"), never a card; the other source's card shows. |
 
 **Generic dump.** A result with no card shows every field under its path, with the note "No card is
 set up for this result, so every field shows under its path." To show it, remove a card in the
@@ -234,8 +241,11 @@ builder (for example the `dl-summary` card), preview it, publish, and submit `DL
 rolling back restores the card. The open request redraws with the new settings at the next config
 refresh.
 
-**Reconnect and reload.** Submit a query, reload the page: the request entry returns with its cards
-(the list route, then the detail route per returned source). Stop and restart the API during a
+**Reconnect and reload.** Submit a query, reload the page: the request entry returns with its command
+(rebuilt from the values the server planned, so it can read slightly fuller than what you typed, for
+example with the default state) and its cards (the list route, then the detail route per returned
+source). A Retry pressed while the connection is down or a submit is in flight sends nothing and
+says "No connection to server" or "Submitting" on the failed row until the gate lifts. Stop and restart the API during a
 dispatch: the source line settles to `interrupted` and the page shows it after it reconnects.
 
 ### Builder: cards, keywords and Try a match

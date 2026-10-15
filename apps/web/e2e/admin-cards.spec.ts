@@ -67,7 +67,7 @@ test("the keywords editor has no serious axe violations, and a low-contrast styl
   await editor.getByRole("textbox", { name: "New keyword" }).fill("TESTMAKE");
   await editor.getByRole("textbox", { name: "New keyword" }).press("Enter");
   await expect(editor.getByRole("textbox", { name: "New keyword" })).toBeFocused();
-  const exception = editor.getByRole("textbox", { name: /^New exception for keyword 7$/ });
+  const exception = editor.getByRole("textbox", { name: /^New exception for keyword 8$/ });
   await exception.fill("SOMETHING ELSE");
   await exception.press("Enter");
   await expect(editor.locator('[data-issue-pointer$="/except/0"]')).toBeVisible();

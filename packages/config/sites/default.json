@@ -442,6 +442,7 @@
     { "keyword": "WANTED", "severity": "critical", "except": ["NOT WANTED"] },
     { "keyword": "EXPIRED", "severity": "warning" },
     { "keyword": "NO RECORD", "severity": "info" },
+    { "keyword": "NO WANTS OR WARRANTS", "severity": "info" },
     { "keyword": "MISSING", "severity": "critical" },
     { "keyword": "RECOVERED", "severity": "info" }
   ],
@@ -584,6 +585,7 @@
           "path": "subject.dob",
           "labelKey": "field.dob",
           "view": "detail",
+          "format": { "type": "date", "pattern": "MM-DD-YYYY" },
           "highlight": false
         },
         {
@@ -667,6 +669,7 @@
           "path": "subject.dob",
           "labelKey": "field.dob",
           "view": "detail",
+          "format": { "type": "date", "pattern": "MM-DD-YYYY" },
           "highlight": false
         },
         {
@@ -681,7 +684,8 @@
             },
             {
               "path": "issued",
-              "labelKey": "mapping.issued"
+              "labelKey": "mapping.issued",
+              "format": { "type": "date", "pattern": "MM-DD-YYYY" }
             }
           ]
         }
@@ -729,6 +733,7 @@
           "path": "dob",
           "labelKey": "field.dob",
           "view": "detail",
+          "format": { "type": "date", "pattern": "MM-DD-YYYY" },
           "highlight": false
         },
         {

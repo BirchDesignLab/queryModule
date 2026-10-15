@@ -181,14 +181,14 @@ describe("the keywords editor", () => {
     await addKeyword(t, "TESTMAKE", "warning");
     await typeSample(t, "NOT TESTMAKE");
     expect(sampleMarks().some((m) => m.includes("TESTMAKE"))).toBe(true);
-    const row = within(editor()).getByRole("textbox", { name: "Keyword 7" });
+    const row = within(editor()).getByRole("textbox", { name: "Keyword 8" });
     expect(row).toHaveValue("TESTMAKE");
     await t.user.type(
-      within(editor()).getByRole("textbox", { name: "New exception for keyword 7" }),
+      within(editor()).getByRole("textbox", { name: "New exception for keyword 8" }),
       "NOT TESTMAKE",
     );
     await t.user.click(
-      within(editor()).getByRole("button", { name: /^Add exception to keyword 7/ }),
+      within(editor()).getByRole("button", { name: /^Add exception to keyword 8/ }),
     );
     expect(doc(t).keywords.at(-1)?.except).toEqual(["NOT TESTMAKE"]);
     expect(sampleMarks().some((m) => m.includes("TESTMAKE"))).toBe(false);
@@ -228,13 +228,13 @@ describe("the keywords editor", () => {
     await openKeywords(t);
     await addKeyword(t, "TESTMAKE", "warning");
     await t.user.type(
-      within(editor()).getByRole("textbox", { name: "New exception for keyword 7" }),
+      within(editor()).getByRole("textbox", { name: "New exception for keyword 8" }),
       "SOMETHING ELSE",
     );
     await t.user.click(
-      within(editor()).getByRole("button", { name: /^Add exception to keyword 7/ }),
+      within(editor()).getByRole("button", { name: /^Add exception to keyword 8/ }),
     );
-    const input = within(editor()).getByRole("textbox", { name: "Exception 1 of keyword 7" });
+    const input = within(editor()).getByRole("textbox", { name: "Exception 1 of keyword 8" });
     await waitFor(() => expect(input).toHaveAttribute("aria-invalid", "true"));
     const message = document.getElementById(input.getAttribute("aria-describedby") ?? "");
     expect(message?.textContent).toMatch(
@@ -327,7 +327,7 @@ describe("keyboard", () => {
     await t.user.keyboard("{Enter}");
     expect(doc(t).keywords.map((k) => k.keyword)).not.toContain("TESTMAKE");
     await waitFor(() =>
-      expect(within(editor()).getByRole("textbox", { name: "Keyword 6" })).toHaveFocus(),
+      expect(within(editor()).getByRole("textbox", { name: "Keyword 7" })).toHaveFocus(),
     );
   });
 
