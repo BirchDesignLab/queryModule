@@ -34,6 +34,35 @@ async function save(target: Page | Locator, name: string, clipHeight?: number): 
   await target.screenshot({ path });
 }
 
+/**
+ * A crop of the builder's editor and its side pane (the card preview or Try a match), so the brief
+ * can print it at full page width with text that reads. The editor's own box is its whole scrolled
+ * content, so the rows come from the side pane, which fills the visible pane height: the shot is
+ * the two panes' width and at most `maxHeight` CSS pixels from the top of that row.
+ */
+async function saveCrop(
+  page: Page,
+  name: string,
+  editorPane: Locator,
+  sidePane: Locator,
+  maxHeight: number,
+): Promise<void> {
+  const left = await editorPane.boundingBox();
+  const side = await sidePane.boundingBox();
+  if (left === null || side === null) throw new Error(`${name}: a pane has no box`);
+  const dir = DIR ?? "";
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({
+    path: join(dir, `${name}.png`),
+    clip: {
+      x: left.x,
+      y: side.y,
+      width: side.x + side.width - left.x,
+      height: Math.min(side.height, maxHeight),
+    },
+  });
+}
+
 async function startAs(page: Page, email: string, width: number, height: number): Promise<void> {
   await page.setViewportSize({ width, height });
   await page.context().clearCookies();
@@ -161,7 +190,7 @@ async function selectRow(page: Page, name: RegExp): Promise<void> {
 }
 
 async function openBuilder(page: Page): Promise<void> {
-  await startAs(page, "admin@example.test", 1600, 1000);
+  await startAs(page, "admin@example.test", 1500, 900);
   await page.getByRole("link", { name: "Admin" }).press("Enter");
   await page.getByRole("link", { name: "Site configuration" }).press("Enter");
   await expect(page.getByRole("heading", { name: "Site configuration", level: 2 })).toBeVisible();
@@ -188,9 +217,12 @@ test("builder shots: cards, keywords, try a match", async ({ page }) => {
   await preview(page).getByRole("radio", { name: "Type values" }).check();
   await preview(page).getByLabel("Plate", { exact: true }).fill("ZZ-0001");
   await expect(preview(page).getByRole("region", { name: "State system: returned" })).toBeVisible();
-  await editor(page).getByRole("table", { name: "Which card wins" }).scrollIntoViewIfNeeded();
+  // Applies to at the top of the editor, so the crop holds it and the start of Which card wins.
+  await editor(page)
+    .getByText("Applies to", { exact: true })
+    .evaluate((el) => el.scrollIntoView({ block: "start" }));
   await page.mouse.move(0, 0);
-  await save(page, "builder-cards");
+  await saveCrop(page, "builder-cards", editor(page), preview(page), 640);
 
   // Keywords and severity with the contrast per theme.
   await selectRow(page, /^Keywords and severity/);
@@ -199,11 +231,11 @@ test("builder shots: cards, keywords, try a match", async ({ page }) => {
   ).toBeVisible();
   // The editor opens on the sample and keywords; the styles with their contrast per theme follow.
   await editor(page)
-    .getByRole("list", { name: "Contrast by theme" })
+    .getByText(/^Severity styles$/)
     .first()
-    .scrollIntoViewIfNeeded();
+    .evaluate((el) => el.scrollIntoView({ block: "start" }));
   await page.mouse.move(0, 0);
-  await save(page, "builder-keywords");
+  await saveCrop(page, "builder-keywords", editor(page), preview(page), 600);
 
   // Try a match on the state system's Vehicle response.
   const mockRow = tree(page).getByRole("treeitem", {
@@ -220,5 +252,5 @@ test("builder shots: cards, keywords, try a match", async ({ page }) => {
       el.scrollTop = 0;
   });
   await page.mouse.move(0, 0);
-  await save(page, "try-a-match");
+  await saveCrop(page, "try-a-match", editor(page), pane, 400);
 });
