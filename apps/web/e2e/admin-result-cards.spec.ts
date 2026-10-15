@@ -682,7 +682,7 @@ test("[#642] moving a card row up and down by keyboard keeps focus on that row's
         body: el === document.body,
         owner: el?.getAttribute("data-owner") ?? "",
         role: el?.getAttribute("data-role") ?? "",
-        name: el?.textContent ?? "",
+        name: el?.getAttribute("aria-label") ?? el?.textContent ?? "",
       };
     });
 
