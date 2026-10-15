@@ -63,8 +63,9 @@ export interface RequestRowView {
   /** A failed row the owner can send again; shows a Retry button when the list has onRetry. */
   retryable?: boolean;
   /**
-   * A failed row whose values cannot succeed again as they are (the site configuration changed, #434)
-   * but were kept: shows "Edit as new query" when the list has onEditAsNew. Never set with `retryable`.
+   * A settled row whose values the owner can load into the form as a new query (G32: every row, not
+   * only a config-changed failure, #477): shows "Edit as new query" when the list has onEditAsNew.
+   * It sits beside Retry on a failed row that has both. A row still sending never shows it.
    */
   editable?: boolean;
 }
@@ -80,7 +81,7 @@ export interface RequestListProps {
   /** Sends a retryable failed row's values again as a new request; the owner adds the new row. */
   onRetry?(rowId: string): void;
   /**
-   * Loads an editable failed row's kept values into the form as a new query; the owner does it and
+   * Loads an editable row's kept values into the form as a new query; the owner does it and
    * moves focus, because the user pressed the action. The row itself stays as history.
    */
   onEditAsNew?(rowId: string): void;
@@ -353,7 +354,7 @@ export function RequestList({
                       {t("requests.retry")}
                     </button>
                   ) : null}
-                  {row.status === "failed" && row.editable === true && onEditAsNew !== undefined ? (
+                  {row.editable === true && onEditAsNew !== undefined ? (
                     <button
                       type="button"
                       className="qm-button qm-button--secondary"

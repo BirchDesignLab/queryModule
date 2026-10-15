@@ -12,6 +12,7 @@ import { useResolvedPersona } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
+import { submittedOf } from "./edit-as-new.js";
 import { requestAccessibleName } from "./request-name.js";
 import { assessEntry, highestSeverity, skipReasonText, sourceWhy } from "./result-view.js";
 import { rowSummary } from "./row-summary.js";
@@ -22,8 +23,9 @@ export interface RequestsPaneProps {
   /** "list": every request this session (dispatcher). "last": only the latest (officer, spec 6.3). */
   variant: "list" | "last";
   /**
-   * Loads a config-changed row's kept values into the form (#477). The panel owns the form, its note
-   * and its focus; this pane only offers the action on the rows that can use it. Absent, no row does.
+   * Loads a row's values into the form as a new query (#477, G32). The panel owns the form, its note
+   * and its focus; this pane offers the action on every settled row that still has its values (a
+   * row this browser sent, or a listed one whose planned values have arrived). Absent, no row does.
    */
   onEditAsNew?: (rowId: string) => void;
 }
@@ -93,9 +95,9 @@ export const RequestsPane = memo(function RequestsPane({
         ...base,
         status: "failed",
         retryable: isRetryable(entry),
-        // A 409 row offers no Retry (#434: the same values cannot succeed), so it offers a way to
-        // recover what was typed, when the row kept it (#477).
-        editable: entry.failure === "configChanged" && entry.submitted !== undefined,
+        // A 409 row offers no Retry (#434: the same values cannot succeed), so Edit as new query is
+        // how it recovers what was typed (#477); the other failed rows offer it beside Retry (G32).
+        editable: entry.submitted !== undefined,
         failureText: t(`requests.failure.${entry.failure}`),
         notes: heldRows.has(entry.id) ? [heldRows.get(entry.id) as string] : [],
       };
@@ -106,6 +108,8 @@ export const RequestsPane = memo(function RequestsPane({
     return {
       ...base,
       status: "acknowledged",
+      // Every request can start the next one (G32), once its values are known.
+      editable: submittedOf(entry) !== undefined,
       reference: entry.correlationId,
       acknowledgedAt: entry.acknowledgedAt,
       notes: [],

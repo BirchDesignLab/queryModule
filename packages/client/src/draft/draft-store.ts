@@ -22,6 +22,11 @@ export interface DraftState {
   setSources(sourceIds: readonly string[]): void;
   /** M1 P3 applies mergeDraft through this. */
   replaceValues(queryType: string, values: Readonly<Record<string, DraftValue>>): void;
+  /**
+   * Starts one type over (G32, after a run): its values empty and its sources back to the defaults.
+   * Every other type's draft, the selected type and the mode stay.
+   */
+  clearDraft(queryType: string): void;
   /** Global, not per query type (D-B10); "form" after reset. */
   mode: PanelMode;
   setMode(mode: PanelMode): void;
@@ -79,6 +84,7 @@ export function createDraftStore(): DraftStore {
         const draft = draftOf(s.drafts, queryType);
         return { drafts: { ...s.drafts, [queryType]: { ...draft, values: { ...values } } } };
       }),
+    clearDraft: (queryType) => set((s) => ({ drafts: { ...s.drafts, [queryType]: EMPTY_DRAFT } })),
     setMode: (mode) => set({ mode }),
     setTerminalText: (terminalText) => set({ terminalText }),
     reset: () => set({ queryType: null, drafts: {}, mode: "form", terminalText: "" }),

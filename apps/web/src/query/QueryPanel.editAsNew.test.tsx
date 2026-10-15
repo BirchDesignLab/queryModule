@@ -1,10 +1,19 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import type { QueryDetail } from "@querymodule/client";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
 import { ClientSupportProvider } from "../app/client-support-context.js";
 import { appRoutes } from "../app/routes.js";
-import { API, CLIENT_CONFIG, server, submitRecorder, TEST_USER } from "../test/msw-server.js";
+import {
+  ACK_202,
+  API,
+  CLIENT_CONFIG,
+  detail202,
+  server,
+  submitRecorder,
+  TEST_USER,
+} from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
 
 // Edit as new query (#477, ruling #434). A 409 row offers no Retry, since the same values cannot
@@ -187,13 +196,16 @@ describe("edit as new query after a 409 (#477)", () => {
     expect(screen.queryByTestId("edit-as-new-note")).toBeNull();
   });
 
-  it("a row that failed another way gets no Edit as new query", async () => {
+  it("G32 a row that failed another way offers it too, and it loads the row's values", async () => {
     server.use(http.post(`${API}/api/v1/queries`, () => new HttpResponse(null, { status: 403 })));
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const row = await screen.findByRole("listitem");
     await waitFor(() => expect(row).toHaveTextContent("Failed"));
-    expect(within(row).queryByRole("button", { name: /Edit as new query/ })).toBeNull();
+    await user.clear(screen.getByLabelText("Plate"));
+    await user.click(within(row).getByRole("button", { name: /^Edit as new query/ }));
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
   });
 
   it("the officer's last request offers the action too", async () => {
@@ -203,6 +215,99 @@ describe("edit as new query after a 409 (#477)", () => {
     const region = await screen.findByRole("region", { name: "Last request" });
     const edit = await within(region).findByRole("button", { name: /^Edit as new query/ });
     await user.clear(screen.getByLabelText("Plate"));
+    await user.click(edit);
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+  });
+});
+
+describe("G32 Edit as new query on every request row", () => {
+  it("an acknowledged row brings back the values the run just cleared, loads them and moves focus", async () => {
+    const { user, services } = await openPanel();
+    await user.type(screen.getByLabelText("Year"), "24");
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    const edit = await within(region).findByRole("button", {
+      name: "Edit as new query: Vehicle ZZ-0001",
+    });
+    // The run cleared the draft; the row still has what it sent.
+    await waitFor(() => expect(screen.getByLabelText("Plate")).toHaveValue(""));
+    expect(services.drafts.getState().drafts.VEH?.values).toEqual({});
+    await user.click(edit);
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    expect(screen.getByLabelText("Year")).toHaveValue("24");
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+    expect(screen.getByTestId("announcer-polite")).toHaveTextContent(
+      "Values loaded from the earlier request. Check them, then run the query.",
+    );
+    // Nothing was sent, and the row is history.
+    expect(within(region).getAllByRole("listitem")).toHaveLength(1);
+    expect(services.requests.getState().items).toHaveLength(1);
+  });
+
+  it("from terminal mode it lands in the form", async () => {
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    const edit = await within(region).findByRole("button", { name: /^Edit as new query/ });
+    await user.click(screen.getByRole("button", { name: "Person" }));
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    await user.click(edit);
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    expect(screen.queryByLabelText("Command")).toBeNull();
+  });
+
+  it("a row listed after a reload is rebuilt from the planned values once they arrive", async () => {
+    const { user, services } = await openPanel();
+    const detail = detail202();
+    const [part] = detail.parts;
+    act(() =>
+      services.requests.getState().applyDetail({
+        ...detail,
+        parts: [{ ...part, values: { plate: "ZZ-0007", state: "TX" } }],
+      } as unknown as QueryDetail),
+    );
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    const edit = await within(region).findByRole("button", { name: /^Edit as new query/ });
+    await user.click(edit);
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0007");
+    expect(screen.getByLabelText("Plate")).toHaveFocus();
+  });
+
+  it("a listed row with no planned values yet offers nothing to load", async () => {
+    const { services } = await openPanel();
+    act(() => services.requests.getState().applyDetail(detail202() as unknown as QueryDetail));
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    await within(region).findByRole("listitem");
+    expect(within(region).queryByRole("button", { name: /^Edit as new query/ })).toBeNull();
+  });
+
+  it("a row still sending has no action", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`${API}/api/v1/queries`, async () => {
+        await gate;
+        return HttpResponse.json(ACK_202, { status: 202 });
+      }),
+    );
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    await within(region).findByRole("listitem");
+    expect(within(region).queryByRole("button", { name: /^Edit as new query/ })).toBeNull();
+    release();
+    await within(region).findByRole("button", { name: /^Edit as new query/ });
+  });
+
+  it("the officer's last request offers it after a normal run", async () => {
+    const { user } = await openPanel("mobileUnit");
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = await screen.findByRole("region", { name: "Last request" });
+    const edit = await within(region).findByRole("button", { name: /^Edit as new query/ });
+    await waitFor(() => expect(screen.getByLabelText("Plate")).toHaveValue(""));
     await user.click(edit);
     expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
     expect(screen.getByLabelText("Plate")).toHaveFocus();

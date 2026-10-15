@@ -45,6 +45,18 @@ below do.
 | 8 | Slow source, then timeout | `VEH.TIMEOUT..26` | State card at once; "National system: pending" for about 10 seconds (the source deadline), then "timed out". The other source never waits for it. This is the wait story: the mock has no slow-but-returns scenario (that needs per-source-scenario latency in the mock contract), so the timeout is how the wait is shown |
 | 9 | Config changed: Edit as new query | click path below | A "Failed" row, "The site configuration changed. Check the form and submit again.", and "Edit as new query" instead of Retry |
 
+**After a run the form starts over; every row can bring its query back (G32).** Once a request is
+acknowledged, the query type stays and the form returns to the site defaults (State is TX again,
+every source is checked again) with the typed values gone, in the form and the command line alike, so
+nothing from the last query rides into the next. A run that does not reach an acknowledgment (a
+failure, a server 400) keeps what was typed. Every settled row, acknowledged or failed, offers "Edit
+as new query": it loads that row's values into the form, moves focus to the first field, shows the
+"Values loaded from the earlier request" line (read out, not shown) and names anything the current
+configuration no longer has; nothing is sent. A row listed after a reload offers it once the request's
+details arrive. Use it in the demo to re-run a query with one change, for example the same plate with
+a year added. The form and the command line share one draft; switching between them is not what
+clears it.
+
 **A database that already ran keeps its published settings.** The site file only seeds an empty
 store (version 1). A demo database that published a version before the four-digit birth and warrant
 dates and the `NO WANTS OR WARRANTS` info keyword landed keeps the old two-digit dates and the plain

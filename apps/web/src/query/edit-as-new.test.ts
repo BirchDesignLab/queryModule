@@ -1,8 +1,8 @@
-import type { SubmittedQuery } from "@querymodule/client";
+import type { RequestEntry, SubmittedQuery } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { describe, expect, it } from "vitest";
 import { CLIENT_CONFIG } from "../test/msw-server.js";
-import { editAsNewNote, planEditAsNew } from "./edit-as-new.js";
+import { editAsNewNote, planEditAsNew, submittedOf } from "./edit-as-new.js";
 
 // Edit as new query (#477): what a 409 row kept is loaded into the form under the config the panel
 // has now. Whatever that config no longer has is dropped and named, never sent.
@@ -147,5 +147,70 @@ describe("editAsNewNote", () => {
     expect(note).toBe(
       "Not loaded, because the site configuration no longer has them: Year, State (that choice is no longer offered), a source, the Vehicle query type.",
     );
+  });
+});
+
+describe("submittedOf (G32: Edit as new query on every row)", () => {
+  const primary = {
+    partId: 1,
+    parentPartId: null,
+    queryType: "VEH",
+    status: "dispatched",
+    droppedSourceIds: [],
+    sources: [
+      { sourceId: "stateSource", status: "returned" },
+      { sourceId: "nationalSource", status: "pending" },
+    ],
+    values: { plate: "ZZ-0001", state: "TX", year: 2024, flag: true, nested: { a: 1 } },
+  };
+  const acknowledged = (over: Record<string, unknown> = {}): RequestEntry =>
+    ({
+      id: "r1",
+      sentAt: 0,
+      queryType: "VEH",
+      summary: "",
+      status: "acknowledged",
+      correlationId: "c1",
+      acknowledgedAt: 1,
+      parts: [primary],
+      ...over,
+    }) as unknown as RequestEntry;
+
+  it("a row this browser sent keeps what it sent", () => {
+    const kept = submitted();
+    expect(submittedOf(acknowledged({ submitted: kept }))).toBe(kept);
+  });
+
+  it("a row listed after a reload is rebuilt from its primary part's planned values and its sources", () => {
+    expect(submittedOf(acknowledged())).toEqual({
+      queryType: "VEH",
+      values: { plate: "ZZ-0001", state: "TX", year: "2024", flag: true },
+      sourceIds: ["stateSource", "nationalSource"],
+      mode: "normal",
+    });
+  });
+
+  it("sources the planner dropped before dispatch were still the user's choice", () => {
+    const row = acknowledged({
+      parts: [{ ...primary, droppedSourceIds: ["nationalSource"], sources: [primary.sources[0]] }],
+    });
+    expect(submittedOf(row)?.sourceIds).toEqual(["stateSource", "nationalSource"]);
+  });
+
+  it("takes the primary part, not a nested one", () => {
+    const nested = { ...primary, partId: 2, parentPartId: 1, queryType: "WNT", values: { q: "x" } };
+    expect(submittedOf(acknowledged({ parts: [nested, primary] }))?.values).toMatchObject({
+      plate: "ZZ-0001",
+    });
+  });
+
+  it("is undefined while the values have not arrived, for a purged part and for a row still sending", () => {
+    expect(
+      submittedOf(acknowledged({ parts: [{ ...primary, values: undefined }] })),
+    ).toBeUndefined();
+    expect(submittedOf(acknowledged({ parts: [] }))).toBeUndefined();
+    expect(
+      submittedOf({ id: "r2", sentAt: 0, queryType: "VEH", summary: "", status: "sending" }),
+    ).toBeUndefined();
   });
 });

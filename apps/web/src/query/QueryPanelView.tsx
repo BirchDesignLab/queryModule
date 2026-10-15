@@ -26,7 +26,7 @@ import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { useShortcutSheet } from "../app/shortcut-sheet-context.js";
 import { isDataField } from "./data-field.js";
-import { editAsNewNote, planEditAsNew } from "./edit-as-new.js";
+import { editAsNewNote, planEditAsNew, submittedOf } from "./edit-as-new.js";
 import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
@@ -464,8 +464,9 @@ export function QueryPanelView({
   if (panel === null) return null;
   editAsNewRef.current = (rowId) => {
     const entry = requestsStore.getState().items.find((item) => item.id === rowId);
-    if (entry?.submitted === undefined) return;
-    const plan = planEditAsNew(panel.config, entry.submitted);
+    const submitted = entry === undefined ? undefined : submittedOf(entry);
+    if (entry === undefined || submitted === undefined) return;
+    const plan = planEditAsNew(panel.config, submitted);
     // The user's action replaces the draft of that type with what the row kept; the failed row
     // itself is never changed and nothing is sent. In terminal mode the form is where it lands: the
     // command text is derived again if the user goes back (use-terminal enterTerminal).

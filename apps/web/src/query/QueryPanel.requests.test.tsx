@@ -262,7 +262,8 @@ describe("B3 officer last request (spec 6.3)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     const region = await screen.findByRole("region", { name: "Last request" });
     await waitFor(() => expect(region).toHaveTextContent("Acknowledged"));
-    await user.type(screen.getByLabelText("Plate"), "{Enter}");
+    // The run started the draft over (G32): the next query is typed fresh.
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
     await waitFor(() => expect(submitRecorder.calls.length).toBeGreaterThanOrEqual(2));
     await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(1));
     expect(
