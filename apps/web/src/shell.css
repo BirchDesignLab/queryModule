@@ -869,12 +869,12 @@ main[tabindex="-1"]:focus {
   border-radius: var(--qm-radius-panel);
 }
 
-/* Where the three panes do not fit in a row (the section is under about 1050 px: a 1024 to 1279 px
+/* Where the three panes do not fit in a row (the section is 1024 px or narrower: a 1024 to 1079 px
    window), the tree takes the left column for the whole height and the editor and the preview share
    the right one, so the card preview is in view beside the tree instead of under it, below the fold
    (re-walk R15). Below 1024 px the page flows as one column and the panes wrap as before. */
 @media (min-width: 1024px) {
-  @container (max-width: 1050px) {
+  @container (max-width: 1024px) {
     .qm-builder__panes {
       display: grid;
       grid-template-columns: calc(var(--qm-space-12) * 4.25) minmax(0, 1fr);
@@ -1955,7 +1955,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 /* The rule values under a source name wrap inside their own block, so they never widen the column. */
 .qm-wins__table td:first-child .qm-sect__hint {
   display: block;
-  max-inline-size: 10em;
+  max-inline-size: calc(var(--qm-space-12) * 3.5);
   white-space: normal;
   overflow-wrap: anywhere;
 }

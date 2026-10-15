@@ -269,6 +269,51 @@ async function main(): Promise<void> {
       await shot(page, "edit as new query loaded");
       await c.close();
     });
+    // R21: on the longest forms, scrolled to the bottom, nothing may sit under the sticky action bar.
+    for (const width of [1366, 1024]) {
+      await step(`action bar clearance ${width}: longest form scrolled to the bottom`, async () => {
+        const { c, page } = await ctx("dispatcher@example.test", width);
+        current = page;
+        for (const [label, kind] of [
+          ["Property", "FIREARM"],
+          ["Vehicle", "OK"],
+        ] as const) {
+          await page.keyboard.press(label === "Property" ? "Alt+Digit3" : "Alt+Digit1");
+          await sleep(300);
+          if (kind === "FIREARM") {
+            await page
+              .getByRole("radio", { name: /firearm/i })
+              .first()
+              .evaluate((el: HTMLInputElement) => el.click());
+          } else {
+            await page.getByLabel("State", { exact: true }).selectOption({ label: "Oklahoma" });
+          }
+          await sleep(400);
+          await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+          await sleep(300);
+          const report = await page.evaluate(() => {
+            const bar = document.querySelector(".qm-action-bar");
+            if (!bar) return "no action bar";
+            const top = bar.getBoundingClientRect().top;
+            const under: string[] = [];
+            for (const el of document.querySelectorAll(
+              "main input, main select, main textarea, main fieldset, main legend",
+            )) {
+              if (bar.contains(el)) continue;
+              const r = el.getBoundingClientRect();
+              if (r.height > 0 && r.bottom > top + 1 && r.top < bar.getBoundingClientRect().bottom)
+                under.push(
+                  `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 20)}" bottom=${Math.round(r.bottom)} > bar top=${Math.round(top)}`,
+                );
+            }
+            return under.length === 0 ? "nothing under the bar" : under.join("\n    ");
+          });
+          note(`- ${label} ${kind} at ${width}: ${report}`);
+          await shot(page, `action bar ${width} ${label} ${kind} scrolled to bottom`);
+        }
+        await c.close();
+      });
+    }
     await step("dispatcher 1366: Status page", async () => {
       const { c, page } = await ctx("dispatcher@example.test", 1366);
       const link = page.getByRole("link", { name: /status/i }).first();
