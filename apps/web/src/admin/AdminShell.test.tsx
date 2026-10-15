@@ -125,6 +125,10 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
       await screen.findByRole("heading", { name: "Site configuration", level: 2 }),
     ).toBeInTheDocument();
     expect(adminLink()).not.toBeNull();
+    // G40: every submit from this account is refused, so the header does not offer Queries.
+    const main = screen.getByRole("navigation", { name: "Main" });
+    expect(within(main).queryByRole("link", { name: "Queries" })).toBeNull();
+    expect(within(main).getByRole("link", { name: "Status" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Admin sections" });
     expect(within(nav).getByRole("link", { name: "Site configuration" })).toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Users and roles" })).toBeNull();

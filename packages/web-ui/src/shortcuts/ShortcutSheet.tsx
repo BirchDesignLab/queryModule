@@ -19,6 +19,15 @@ type LayoutMap = { get(code: string): string | undefined };
 
 const MODIFIERS = ["Ctrl", "Alt", "Shift"] as const;
 
+/** Keys whose name is the same on every layout: said in words, not as a KeyboardEvent code (G8). */
+const KEY_WORDS: Readonly<Record<string, string>> = {
+  ArrowUp: "Up arrow",
+  ArrowDown: "Down arrow",
+  ArrowLeft: "Left arrow",
+  ArrowRight: "Right arrow",
+  Escape: "Esc",
+};
+
 /** Modifiers and key joined with " + ". The key is the layout's label where the browser gave one,
  *  else the code (spec 6.4). Never a US character: on another layout it would name the wrong key.
  *  The layout map gives each key's unshifted character, so Shift+Slash reads "Shift + /", not "?". */
@@ -26,7 +35,7 @@ function strokeLabel(stroke: string, layout: LayoutMap | null): string {
   const parts = stroke.split("+");
   const code = parts[parts.length - 1] ?? stroke;
   const mods = parts.slice(0, -1);
-  const key = layout?.get(code) ?? code;
+  const key = layout?.get(code) ?? KEY_WORDS[code] ?? code;
   return [...MODIFIERS.filter((m) => mods.includes(m)), key].join(" + ");
 }
 
@@ -92,7 +101,10 @@ export function ShortcutSheet({
     }
     if (!open && opener.current !== null) {
       const target =
-        opener.current instanceof HTMLElement && opener.current.isConnected
+        opener.current instanceof HTMLElement &&
+        opener.current.isConnected &&
+        // Opened with nothing focused (a shortcut on the bare page): the body is not a place to return to.
+        opener.current !== document.body
           ? opener.current
           : (returnFocusRef.current?.() ?? null);
       target?.focus();

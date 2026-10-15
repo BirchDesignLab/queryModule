@@ -147,8 +147,9 @@ describe("UX-004 required and invalid state never rely on colour", () => {
 describe("FR-005 data type semantics", () => {
   it("lists accepted formats for a date field", () => {
     setup({ dataType: "date" }, { inputFormats: ["MM/DD/YYYY", "YYYY-MM-DD"] });
+    // G30: the hyphens are non-breaking (U+2011), so a narrow column wraps between formats, never inside one.
     expect(screen.getByLabelText("Name")).toHaveAccessibleDescription(
-      "Accepted formats: MM/DD/YYYY, YYYY-MM-DD",
+      "Accepted formats: MM/DD/YYYY, YYYY‑MM‑DD",
     );
     expect(screen.getByLabelText("Name")).toHaveAttribute("inputmode", "numeric");
   });

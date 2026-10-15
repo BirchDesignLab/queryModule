@@ -118,6 +118,12 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
     expect(connection.getByRole("button", { name: "Check again" })).toBeInTheDocument();
   });
 
+  it("G35: while a check runs, Last checked says so instead of keeping the old time", async () => {
+    await openStatus(() => new FakeSocket());
+    const connection = tile("Connection");
+    expect(connection.getByText("Last checked").closest("div")).toHaveTextContent("Checking now");
+  });
+
   it("Connection: Failed uses the critical (error) badge and keeps the reason in the sentence", async () => {
     await openStatus(() => {
       const socket = new FakeSocket();
@@ -142,6 +148,10 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
     await openStatus(autoHeartbeatSocket());
     await statusReady();
     const config = tile("Configuration");
+    // G35: plain words for a dispatcher, not "Version hash" and "Schema version".
+    expect(config.getByText("Settings version")).toBeInTheDocument();
+    expect(config.getByText("Settings format")).toBeInTheDocument();
+    expect(config.queryByText("Version hash")).toBeNull();
     expect(config.getByText(CLIENT_CONFIG.configHash.slice(0, 12))).toBeInTheDocument();
     expect(config.getByText(String(CLIENT_CONFIG.schemaVersion))).toBeInTheDocument();
     expect(config.getByText(/^\d\d-\d\d-\d\d \d\d:\d\d:\d\d$/)).toBeInTheDocument();
@@ -153,7 +163,7 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
     await openStatus(autoHeartbeatSocket());
     const chip = await screen.findByText("Unavailable", { selector: ".qm-badge" });
     expect(chip).toHaveClass("qm-badge--critical");
-    expect(tile("Configuration").queryByText("Version hash")).toBeNull();
+    expect(tile("Configuration").queryByText("Settings version")).toBeNull();
     // The layout is not "Loading" for ever: it says what the configuration says.
     expect(tile("Session").getByText("Layout").closest("div")).toHaveTextContent("Unavailable");
     await waitFor(() =>

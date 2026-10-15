@@ -77,6 +77,48 @@ describe("request entries match mockup v5 (G1, G12, G25, G36)", () => {
   });
 });
 
+describe("officer density: a table's caption is 16 px in body color (critic PR2)", () => {
+  it("matches the mockup's .touch .tbl caption", () => {
+    const caption = decls(".qm-layout--mobile-unit .qm-result-table caption");
+    expect(caption).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+    expect(caption).toMatch(/color:\s*var\(--qm-color-text-body\)/);
+  });
+});
+
+describe("G29 a chip's checkbox keeps its target size beside the deadline label", () => {
+  it("is not flex-shrunk", () => {
+    expect(decls(".qm-chip__label input")).toMatch(/flex:\s*none/);
+  });
+});
+
+describe("G8 the shortcuts sheet fits the screen and lines its rows up", () => {
+  it("is never taller than the viewport and scrolls inside", () => {
+    const sheet = decls(".qm-shortcut-sheet");
+    expect(sheet).toMatch(/max-block-size:\s*calc\(100dvh/);
+    expect(sheet).toMatch(/overflow-y:\s*auto/);
+  });
+
+  it("lists two columns, each row action then keys", () => {
+    expect(decls(".qm-shortcut-sheet__list")).toMatch(/repeat\(2,/);
+    expect(decls(".qm-shortcut-sheet__list > li")).toMatch(
+      /grid-template-columns:\s*minmax\(0, 1fr\) auto/,
+    );
+  });
+});
+
+describe("officer density: the shortcuts dialog is 16 px and not muted (critic PR3)", () => {
+  it("sets the sheet, its context lines and its key caps at body size and color", () => {
+    for (const sel of [
+      ".qm-layout--mobile-unit .qm-shortcut-sheet",
+      ".qm-layout--mobile-unit .qm-shortcut-sheet__context",
+      ".qm-layout--mobile-unit .qm-shortcut-sheet__keys kbd",
+    ]) {
+      expect(decls(sel), sel).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+      expect(decls(sel), sel).toMatch(/color:\s*var\(--qm-color-text-body\)/);
+    }
+  });
+});
+
 describe("G27 the info mark stays a lower-case i", () => {
   it("the badge marker is exempt from the badge's uppercase", () => {
     expect(decls(".qm-badge__marker")).toMatch(/text-transform:\s*none/);

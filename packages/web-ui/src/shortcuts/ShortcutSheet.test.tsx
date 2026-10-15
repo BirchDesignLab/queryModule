@@ -165,6 +165,60 @@ describe("focus repair A: an opener that left the page (spec 6.4 focus is never 
   });
 });
 
+describe("G9 closing the sheet never leaves focus on the page body", () => {
+  it("uses the fallback when the sheet was opened with nothing focused (a shortcut from the bare page)", async () => {
+    const user = userEvent.setup();
+    function BareHarness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)} tabIndex={-1}>
+            hidden opener
+          </button>
+          <button type="button">fallback</button>
+          <ShortcutSheet
+            open={open}
+            onClose={() => setOpen(false)}
+            bindings={resolveShortcuts()}
+            t={t}
+            returnFocus={() => screen.getByRole("button", { name: "fallback" })}
+          />
+        </>
+      );
+    }
+    render(<BareHarness />);
+    // Open with focus on the body, as the Shift+Slash shortcut does on a freshly loaded page.
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    screen.getByRole("button", { name: "hidden opener" }).click();
+    const close = await screen.findByRole("button", { name: "Close" });
+    await user.click(close);
+    expect(screen.getByRole("button", { name: "fallback" })).toHaveFocus();
+  });
+});
+
+describe("G8 key names a person can read", () => {
+  it("names the arrow, Escape and Delete keys in words, with no layout map", () => {
+    render(
+      <ShortcutSheet
+        open
+        onClose={() => undefined}
+        bindings={{
+          selectPrev: [{ keys: "ArrowUp", context: "results" }],
+          selectNext: [{ keys: "ArrowDown", context: "results" }],
+          dismiss: [{ keys: "Escape", context: "global" }],
+          deleteFromView: [{ keys: "Delete", context: "results" }],
+        }}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("Up arrow")).toBeInTheDocument();
+    expect(screen.getByText("Down arrow")).toBeInTheDocument();
+    expect(screen.getByText("Esc")).toBeInTheDocument();
+    expect(screen.getByText("Delete")).toBeInTheDocument();
+  });
+});
+
 describe("FR-006 shortcut sheet key labels (spec 6.4, #313)", () => {
   const setKeyboard = (value: unknown) =>
     Object.defineProperty(navigator, "keyboard", { configurable: true, value });

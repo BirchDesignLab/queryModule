@@ -1,6 +1,7 @@
 import { type DraftStore, useStore } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { resolveShortcuts } from "@querymodule/core/config";
+import { tokenize } from "@querymodule/core/terminal";
 import {
   ActionBar,
   blockedErrorCount,
@@ -29,6 +30,7 @@ import { editAsNewNote, planEditAsNew } from "./edit-as-new.js";
 import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
+import { sheetBindings } from "./sheet-bindings.js";
 import { terminalExample } from "./terminal-example.js";
 import { useActionBarClearance } from "./use-action-bar-clearance.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
@@ -100,6 +102,14 @@ function ReadyPanel({
     const labelKey = config.queryTypes.find((q) => q.code === code)?.labelKey;
     return labelKey === undefined ? code : t(labelKey);
   };
+  // In terminal mode the heading names the query the command line holds (the parser is not touched:
+  // it only reads the text); the pressed quick-access button stays the form's type (G31).
+  const typedType =
+    terminal.mode === "terminal" ? tokenize(config, terminal.text).queryType : undefined;
+  const headingType =
+    typedType !== undefined && config.queryTypes.some((q) => q.code === typedType)
+      ? typedType
+      : queryType;
   const labelOfSource = (sourceId: string): string => {
     const labelKey = config.sources.find((s) => s.id === sourceId)?.labelKey;
     return labelKey === undefined ? sourceId : t(labelKey);
@@ -207,7 +217,7 @@ function ReadyPanel({
           <ShortcutSheet
             open={sheetOpen}
             onClose={() => setSheetOpen(false)}
-            bindings={bindings}
+            bindings={sheetBindings(bindings, quickCodes.length)}
             t={t}
             // The opener can leave the page while the sheet is open (an open account menu closes
             // when the modal takes focus; a persona flip remounts it): the account button, else main.
@@ -219,7 +229,7 @@ function ReadyPanel({
         </>
       )}
       <div className="qm-panel-head">
-        <h2>{t("panel.title", { type: labelOfType(queryType) })}</h2>
+        <h2>{t("panel.title", { type: labelOfType(headingType) })}</h2>
         <ModeSeg
           legend={t("mode.label")}
           formLabel={t("mode.form")}
@@ -230,7 +240,7 @@ function ReadyPanel({
       </div>
       <QuickAccessBar
         codes={quickCodes}
-        current={queryType}
+        current={headingType}
         labelOf={labelOfType}
         onSelect={terminal.selectType}
         shortcutOf={preview ? undefined : (_code, index) => quickShortcut(bindings, index)}

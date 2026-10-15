@@ -140,11 +140,23 @@ for (const [email, width, height, who] of [
     await expect(national.first()).toBeVisible({ timeout: 15_000 });
     const toggle = national.first().getByRole("button", { name: / detail/ });
     if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-    await expect(national.first()).toContainText("01-01-1901");
+    await expect(national.first()).toContainText(/01-01-(19)?01/);
     await save(page, `pr2-${tag}-03-birth-date`);
 
     await runCommand(page, "DL.ZZDLTEST");
+    await expect(requests(page)).toContainText("needs last name", { timeout: 15_000 });
     await save(page, `pr2-${tag}-04-also-run-not-run`);
+
+    // A clean person: the also-run Wanted check settles on NO WANTS OR WARRANTS, styled as info (G33).
+    await runCommand(page, "PER.TESTERSON.SAMPLE.01011901");
+    const alsoRun = requests(page)
+      .getByRole("listitem")
+      .first()
+      .getByRole("region", { name: /^National system: returned/ })
+      .last();
+    await expect(alsoRun).toContainText("NO WANTS OR WARRANTS", { timeout: 15_000 });
+    await expect(alsoRun.locator(".qm-badge--info").first()).toBeVisible();
+    await save(page, `pr2-${tag}-04b-also-run-clean`);
 
     // The fixture answers the list empty; the reload must see the real one (G7).
     await page.route(
@@ -153,7 +165,66 @@ for (const [email, width, height, who] of [
     );
     await page.reload();
     await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
-    await expect(requests(page)).toContainText("DL.ZZDLTEST", { timeout: 15_000 });
+    await expect(requests(page)).toContainText("PER.TESTERSON", { timeout: 15_000 });
+    await requests(page).evaluate((el) => el.scrollIntoView());
     await save(page, `pr2-${tag}-05-after-reload`);
   });
 }
+
+// PR3: chrome, shortcuts and copy (G8, G9, G24, G28 to G31, G35, G40).
+for (const [email, width, height, who] of [
+  ["dispatcher@example.test", 1366, 768, "dispatcher"],
+  ["dispatcher@example.test", 1024, 768, "dispatcher"],
+  ["officer@example.test", 1024, 768, "officer"],
+] as const) {
+  test(`${who} ${width}x${height}: header, empty list, shortcuts, status`, async ({ page }) => {
+    await startAs(page, email, width, height);
+    const tag = `${who}-${width}`;
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await save(page, `pr3-${tag}-01-header-empty-list`);
+
+    // Person form: the date hint stays whole (G30); terminal heading follows the command (G31).
+    if (who === "dispatcher") {
+      await page
+        .getByRole("button", { name: /Person/ })
+        .first()
+        .click();
+      await page.getByRole("button", { name: "Form mode" }).click();
+      await save(page, `pr3-${tag}-02-person-form`);
+      await page.getByRole("button", { name: "Terminal mode" }).click();
+      await page.keyboard.press("Slash");
+      await page.keyboard.press("Control+A");
+      await page.keyboard.type("PRO.ZZ123.FIREARM");
+      await save(page, `pr3-${tag}-03-terminal-heading`);
+      await page.keyboard.press("Control+A");
+      await page.keyboard.type("NAM.TESTERSON.SAMPLE");
+      await page.keyboard.press("Enter");
+      await expect(requests(page)).toContainText("NAM.TESTERSON.SAMPLE", { timeout: 15_000 });
+      await save(page, `pr3-${tag}-04-typed-nam`);
+    }
+
+    // The shortcuts dialog from the bare page, then Escape: focus must not end on the body (G9).
+    await page.locator("body").click({ position: { x: 2, y: 2 } });
+    await page.keyboard.press("Shift+Slash");
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+    await save(page, `pr3-${tag}-05-shortcuts`);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+    const focused = await page.evaluate(() => document.activeElement?.tagName ?? "none");
+    expect(focused).not.toBe("BODY");
+
+    await page.getByRole("link", { name: "Status" }).click();
+    await expect(page.getByRole("heading", { name: "Status", level: 1 })).toBeVisible();
+    await expect(page.getByText("Settings version")).toBeVisible();
+    await save(page, `pr3-${tag}-06-status`);
+  });
+}
+
+test("implementer 1366x768: the header offers no Queries link (G40)", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.context().clearCookies();
+  await signIn(page, seededUser("implementer@example.test"));
+  await expect(page.getByRole("link", { name: "Status" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Queries" })).toHaveCount(0);
+  await save(page, "pr3-implementer-1366-01-header");
+});

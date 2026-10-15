@@ -65,8 +65,13 @@ export function StatusPage() {
     headingRef.current?.focus();
   }, []);
 
+  // While a check runs the row says so, so a fast check still visibly changes it (G35).
   const checkedAt = (at: number | null) =>
-    at === null ? t("status.checked.pending") : formatAckTime(at);
+    checks.checking
+      ? t("status.checked.running")
+      : at === null
+        ? t("status.checked.pending")
+        : formatAckTime(at);
 
   let sentence = t("status.checking");
   if (checks.connection !== null) {

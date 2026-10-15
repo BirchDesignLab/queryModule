@@ -208,6 +208,7 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
         values,
         sourceIds,
         state: formState,
+        typed: text,
         onInvalid: (serverErrors) => showProblems(serverErrors),
       });
     },
