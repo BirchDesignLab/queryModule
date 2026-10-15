@@ -17,6 +17,8 @@ export interface SourceLineView {
   tone: "pending" | "ok" | "problem" | "notRun";
   /** Already in words, for example "State source: timed out". */
   text: string;
+  /** Why the source did not return, in words ("no answer in 10 s"); absent when it did or is pending. */
+  why?: string;
   /**
    * The source's result card, once its payload is here. It stands in for the status line (its own
    * heading says "Source: returned"); the key stays, so the line becoming a card is one swap.
@@ -408,6 +410,12 @@ export function RequestList({
                                     {SOURCE_ICON[line.tone]}
                                   </span>
                                   <span>{line.text}</span>
+                                  {line.why === undefined ? null : (
+                                    <>
+                                      {/* A space for assistive technology; a flex row drops it visually. */}{" "}
+                                      <span className="qm-source__why">{line.why}</span>
+                                    </>
+                                  )}
                                 </div>
                               ) : (
                                 <div key={line.key} className="qm-request__card">

@@ -423,6 +423,38 @@ describe("failed-row retry (the list only shows the button; the owner sends)", (
   });
 });
 
+describe("G5 a source line that did not return says why, in words", () => {
+  it("shows the reason beside the status, as its own text", () => {
+    const row: RequestRowView = {
+      ...ACKED,
+      notes: [],
+      parts: [
+        {
+          key: "p1",
+          lines: [
+            {
+              key: "p1:state",
+              tone: "problem",
+              text: "State system: failed",
+              why: "the source reported an error",
+            },
+            { key: "p1:nat", tone: "ok", text: "National system: not run" },
+          ],
+        },
+      ],
+    };
+    render(<RequestList {...base} rows={[row]} />);
+    const line = screen.getByText("State system: failed").closest(".qm-source");
+    expect(line).toHaveTextContent(/State system: failed the source reported an error/);
+    expect(within(line as HTMLElement).getByText("the source reported an error")).toHaveClass(
+      "qm-source__why",
+    );
+    expect(
+      screen.getByText("National system: not run").closest(".qm-source"),
+    ).not.toHaveTextContent("reported");
+  });
+});
+
 describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
   const PARTS: readonly RequestPartView[] = [
     {

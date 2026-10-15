@@ -30,6 +30,40 @@ const ctx = (queryType: string, sourceId: string) => ({
   sourceId,
 });
 
+describe("G26 a date of birth shows its four-digit year", () => {
+  it("every dob row of the default site formats MM-DD-YYYY, so 1901 never reads as 2001", () => {
+    const dobRows = site.responseMappings.flatMap((m) =>
+      m.elements.filter((e) => e.kind === "value" && e.path.endsWith("dob")),
+    );
+    expect(dobRows.length).toBeGreaterThan(0);
+    for (const row of dobRows) {
+      expect(row.kind === "value" ? row.format : undefined).toEqual({
+        type: "date",
+        pattern: "MM-DD-YYYY",
+      });
+    }
+  });
+});
+
+describe("G26 a warrant's issued date shows its four-digit year too", () => {
+  it("formats the warrants table's issued column MM-DD-YYYY", () => {
+    const columns = site.responseMappings.flatMap((m) =>
+      m.elements.flatMap((e) => (e.kind === "table" ? e.columns : [])),
+    );
+    const issued = columns.filter((c) => c.path === "issued");
+    expect(issued.length).toBeGreaterThan(0);
+    for (const column of issued) {
+      expect(column.format).toEqual({ type: "date", pattern: "MM-DD-YYYY" });
+    }
+  });
+});
+
+describe("G33 the clean also-run wanted check is styled like NO RECORD", () => {
+  it("has an info keyword for NO WANTS OR WARRANTS", () => {
+    expect(site.keywords).toContainEqual({ keyword: "NO WANTS OR WARRANTS", severity: "info" });
+  });
+});
+
 describe("default cards (ruling 10)", () => {
   it("each of the five query types has one card, with summary and detail rows", () => {
     for (const queryType of TYPES) {
@@ -77,7 +111,9 @@ describe("default cards (ruling 10)", () => {
     const mapped = mapResponse(site, ctx("WNT", "nationalSource"), payload);
     const table = mapped.elements.find((e) => e.kind === "table");
     expect(table?.view).toBe("detail");
-    expect(table?.kind === "table" ? table.rows : []).toEqual([["FAILURE TO APPEAR", "01-02-01"]]);
+    expect(table?.kind === "table" ? table.rows : []).toEqual([
+      ["FAILURE TO APPEAR", "01-02-1901"],
+    ]);
   });
 
   it("a missing person and a stolen article map their fields", () => {

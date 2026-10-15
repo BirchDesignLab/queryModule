@@ -304,7 +304,7 @@ describe("#576 the skip reason of a part that was not run (design ruling 4)", ()
       queryType: "PER",
       values: { first: "ZZTEST" },
     });
-    expect(screen.getByText("Wanted check not run: needs Last name.")).toBeVisible();
+    expect(screen.getByText("Wanted check not run: needs last name.")).toBeVisible();
   });
 
   it("a plan reason is its own sentence, and several make one sentence each", () => {
@@ -318,7 +318,7 @@ describe("#576 the skip reason of a part that was not run (design ruling 4)", ()
     );
     expect(
       screen.getByText(
-        "Wanted check not run: needs Date of birth. The linked query has no sources to run.",
+        "Wanted check not run: needs date of birth. The linked query has no sources to run.",
       ),
     ).toBeVisible();
   });

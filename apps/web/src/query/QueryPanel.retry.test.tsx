@@ -179,6 +179,9 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     expect(announce).toHaveBeenCalledWith("No connection to server");
     expect(services.requests.getState().items).toHaveLength(1);
     expect(retry).toHaveFocus();
+    // G10: the press is not silent on screen either; the failed row says so beside Retry.
+    const row = retry.closest("li") as HTMLElement;
+    expect(within(row).getByText("No connection to server")).toBeVisible();
   });
 
   it("the kept values leave with a reset and never reach browser storage", async () => {

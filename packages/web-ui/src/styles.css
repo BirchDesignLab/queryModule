@@ -768,6 +768,7 @@ h1 {
 
 .qm-source {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--qm-space-2);
 }
@@ -780,6 +781,16 @@ h1 {
 .qm-source--pending,
 .qm-source--notRun {
   color: var(--qm-color-text-muted);
+}
+
+/* The reason a source did not return (mockup v5 .src-line .why); a problem's icon is the invalid color. */
+.qm-source__why {
+  color: var(--qm-color-text-muted);
+  font-weight: 400;
+}
+
+.qm-source--problem .qm-source__icon {
+  color: var(--qm-field-required);
 }
 
 .qm-source--problem {
@@ -915,6 +926,7 @@ h1 {
 .qm-layout--mobile-unit .qm-chip__meta,
 .qm-layout--mobile-unit .qm-source--pending,
 .qm-layout--mobile-unit .qm-source--notRun,
+.qm-layout--mobile-unit .qm-source__why,
 .qm-layout--mobile-unit .qm-request__part-label {
   color: var(--qm-color-text-body);
   font-size: var(--qm-type-body-size);
@@ -1410,6 +1422,8 @@ h1 {
 .qm-badge__marker,
 .qm-mark__marker {
   font-family: var(--qm-type-family-data);
+  /* The badge uppercases its word; the info mark is a lower-case "i", not a capital I (G27). */
+  text-transform: none;
 }
 
 .qm-severity-icon {
