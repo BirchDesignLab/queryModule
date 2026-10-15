@@ -337,6 +337,20 @@ export function RequestList({
                   {row.failureText === undefined ? null : (
                     <span className="qm-request__failure">{row.failureText}</span>
                   )}
+                  {row.notes.map((note, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: notes are static text; two may match
+                    <span key={index} className="qm-badge qm-badge--status">
+                      {note}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* The actions sit on their own row under the meta line, the same in every layout (G32),
+                  so a 48 px officer button never stretches the line of small facts above it. */}
+              {row.status !== "sending" &&
+              ((row.status === "failed" && row.retryable === true && onRetry !== undefined) ||
+                (row.editable === true && onEditAsNew !== undefined)) ? (
+                <div className="qm-request__actions">
                   {row.status === "failed" && row.retryable === true && onRetry !== undefined ? (
                     <button
                       type="button"
@@ -365,14 +379,8 @@ export function RequestList({
                       {t("requests.editAsNew")}
                     </button>
                   ) : null}
-                  {row.notes.map((note, index) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: notes are static text; two may match
-                    <span key={index} className="qm-badge qm-badge--status">
-                      {note}
-                    </span>
-                  ))}
                 </div>
-              )}
+              ) : null}
               {row.parts === undefined || row.parts.length === 0 ? null : (
                 // A labelled group of divs, not nested lists: the row stays one list item (an
                 // assistive technology reads the list's count as requests), and each line is text.

@@ -774,6 +774,15 @@ h1 {
   font-size: var(--qm-type-size-sm);
 }
 
+/* Retry and Edit as new query: their own row under the meta line, in every layout (G32). */
+.qm-request__actions {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-4);
+}
+
 .qm-request__meta code {
   font-family: var(--qm-type-family-data);
 }
