@@ -118,5 +118,44 @@ for (const persona of PERSONAS) {
       await expect(region.getByRole("listitem")).toContainText("Failed");
       await expect(edit).toBeVisible();
     });
+
+    // G32: a run starts the draft over (type and site defaults stay, what was typed goes), and every
+    // request row can bring its values back.
+    test("an acknowledged run clears the typed values, and Edit as new query on its row brings them back", async ({
+      page,
+    }) => {
+      await signIn(page, seededUser(persona.email));
+      await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+      const plate = page.getByLabel("Plate", { exact: true });
+      const year = page.getByLabel("Year", { exact: true });
+      await year.fill("26");
+      await plate.fill("ZZ-0010");
+      await plate.press("Enter");
+
+      const region = page.getByRole("region", { name: persona.region });
+      const edit = region.getByRole("button", { name: /^Edit as new query: Vehicle ZZ-0010/ });
+      await expect(edit).toBeVisible();
+      // Nothing from the last query rides into the next; the site default State is back.
+      await expect(plate).toHaveValue("");
+      await expect(year).toHaveValue("");
+      await expect(page.getByLabel("State", { exact: true })).toHaveValue("TX");
+      await expect(plate).toBeFocused();
+
+      const box = await edit.boundingBox();
+      expect(Math.round(box?.height ?? 0), "target height").toBeGreaterThanOrEqual(
+        persona.minTarget,
+      );
+
+      await tabTo(page, edit);
+      await page.keyboard.press("Enter");
+      await expect(plate).toHaveValue("ZZ-0010");
+      await expect(year).toHaveValue("26");
+      await expect(plate).toBeFocused();
+      await expect(page.getByTestId("announcer-polite")).toContainText(
+        "Values loaded from the earlier request",
+      );
+      // Nothing was sent: the row is history and stays the only one.
+      await expect(region.getByRole("listitem")).toHaveCount(1);
+    });
   });
 }

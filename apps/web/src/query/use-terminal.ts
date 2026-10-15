@@ -210,6 +210,9 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
         state: formState,
         typed: text,
         onInvalid: (serverErrors) => showProblems(serverErrors),
+        // A command typed on while the run was in flight is the next query: it stays (G32).
+        stillCurrent: () => drafts.getState().terminalText === text,
+        onDraftCleared: () => derive(queryType),
       });
     },
   };

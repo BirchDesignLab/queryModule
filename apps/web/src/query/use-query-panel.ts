@@ -88,6 +88,13 @@ export interface CheckedRequest {
    * input (spec 6.2, FR-055); without it they go to the form fields.
    */
   onInvalid?(errors: readonly ValidationError[]): void;
+  /**
+   * False when the owner's input moved on while the request was in flight (the terminal's text), so
+   * the draft is not started over under it (G32). Absent, the draft alone decides.
+   */
+  stillCurrent?(): boolean;
+  /** Called after the draft was started over, so the owner can redraw what it derives from it (the terminal's text). */
+  onDraftCleared?(): void;
 }
 
 export type LiveConfigModel =
@@ -207,6 +214,9 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   const t = useT();
   const [showErrors, setShowErrors] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
+  // Counts the drafts started over after a run: focus that was in the form goes back to its first
+  // field, because the control it was on (a type radio) may have lost its value (G32, B2).
+  const [startOverTick, setStartOverTick] = useState(0);
   const [serverErrors, setServerErrors] = useState<readonly ValidationError[]>([]);
   // Fields a rule revealed since the type opened (the Shown tag): cleared by focus, an edit or a reset.
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(NO_KEYS);
@@ -388,6 +398,12 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     }
   }, [focusTick]);
 
+  useEffect(() => {
+    const container = formContainerRef.current;
+    if (startOverTick > 0 && container?.contains(document.activeElement) === true)
+      firstField(container)?.focus();
+  }, [startOverTick]);
+
   if (queryType === null || formState === null || evaluated === null) return null;
 
   const checkedSources = resolveCheckedSources(formState, draftSources);
@@ -423,11 +439,36 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     return labelKey === undefined ? code : t(labelKey);
   };
 
+  /**
+   * After an acknowledged run the type keeps the site defaults and drops what was typed, so nothing
+   * from the last query rides into the next (G32). Only while the draft still holds exactly what was
+   * sent: a user who has started the next query keeps it. A run that was not acknowledged never gets
+   * here, so Retry, a fix and Edit as new query still have their values.
+   */
+  const startOver = (request: SentRequest): void => {
+    const draft = drafts.getState().drafts[request.queryType];
+    if (
+      draft === undefined ||
+      !sameValues(draft.values, request.values) ||
+      !sameSources(draft.sources, request.draftSources) ||
+      request.stillCurrent?.() === false
+    )
+      return;
+    drafts.getState().clearDraft(request.queryType);
+    if (onScreen.current?.queryType === request.queryType) {
+      setShowErrors(false);
+      setRevealed(NO_KEYS);
+      setStartOverTick((n) => n + 1);
+    }
+    request.onDraftCleared?.();
+  };
+
   const handleOutcome = (outcome: SubmitOutcome, request: SentRequest): void => {
     const { state } = request;
     switch (outcome.kind) {
       case "acknowledged":
         announcer.announce(outcomeAnnouncement(outcome, t, typeLabel));
+        startOver(request);
         return;
       case "invalid":
         if (!sameAsSent(request)) {

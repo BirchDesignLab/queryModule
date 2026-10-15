@@ -336,6 +336,9 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(screen.getByLabelText(/Description/), "TESTITEM");
     await user.click(screen.getByRole("button", { name: "Run query" }));
     await screen.findByRole("region", { name: "Requests this shift" });
+    // The acknowledged run starts the draft over (G32): the radio loses its value and focus must
+    // not stay on it.
+    await waitFor(() => expect(screen.getByLabelText(/Description/)).toHaveValue(""));
     const active = document.activeElement as HTMLInputElement;
     expect(active.type === "radio" ? active.checked : true).toBe(true);
   });
@@ -345,6 +348,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     await user.type(screen.getByLabelText("Plate"), "ZZ-1234");
     await user.click(screen.getByRole("button", { name: "Run query" }));
     await screen.findByRole("region", { name: "Requests this shift" });
+    await waitFor(() => expect(screen.getByLabelText("Plate")).toHaveValue(""));
     expect(screen.getByLabelText("Plate")).toHaveFocus();
     (screen.getByLabelText("VIN") as HTMLElement).focus();
     await user.keyboard("{Enter}");
@@ -440,7 +444,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(services.drafts.getState().drafts.VEH?.sources).toEqual(["nationalSource"]);
   });
 
-  it("[A1] Enter in Plate posts once, announces the acknowledgment, shows it and keeps draft and focus", async () => {
+  it("[A1] Enter in Plate posts once, announces the acknowledgment, shows it, starts the draft over and keeps focus", async () => {
     const { user } = await openPanel();
     const plate = screen.getByLabelText("Plate");
     await user.type(plate, "ZZ-0001{Enter}");
@@ -461,7 +465,8 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const ack = screen.getByRole("region", { name: "Requests this shift" });
     expect(ack).toHaveTextContent(shortReference(ACK_202.correlationId));
     expect(ack).toHaveTextContent(/\d\d-\d\d-\d\d \d\d:\d\d:\d\d/);
-    expect(plate).toHaveValue("ZZ-0001");
+    // The acknowledged run starts the draft over, keeping the type and the site defaults (G32).
+    await waitFor(() => expect(plate).toHaveValue(""));
     expect(plate).toHaveFocus();
   });
 
@@ -1337,7 +1342,7 @@ describe("FR-053 FR-054 FR-055 terminal submit (spec 4.4, 6.2)", () => {
     screen.getByRole("button", { name: /^(Form|Terminal) mode$/, pressed: false });
   const terminal = () => screen.getByLabelText("Command");
 
-  it("[A4] VEH.ABC123..26 then Enter posts the typed values, announces the ack and the form shows them", async () => {
+  it("[A4] VEH.ABC123..26 then Enter posts the typed values, announces the ack and the draft starts over", async () => {
     const { user } = await openPanel();
     await user.click(toggle());
     await user.type(terminal(), ".ABC123..26{Enter}");
@@ -1346,9 +1351,11 @@ describe("FR-053 FR-054 FR-055 terminal submit (spec 4.4, 6.2)", () => {
     const body = submitRecorder.calls[0]?.body as { queryType: string; values: object };
     expect(body).toMatchObject({ queryType: "VEH", values: { plate: "ABC123", year: "26" } });
     expect(body.values).not.toHaveProperty("state");
+    // The acknowledged run starts the one draft over (G32): the form has nothing from it.
+    await waitFor(() => expect((terminal() as HTMLInputElement).value).not.toContain("ABC123"));
     await user.click(toggle());
-    expect(screen.getByLabelText("Plate")).toHaveValue("ABC123");
-    expect(screen.getByLabelText("Year")).toHaveValue("26");
+    expect(screen.getByLabelText("Plate")).toHaveValue("");
+    expect(screen.getByLabelText("Year")).toHaveValue("");
   });
 
   it("[A4] an unknown command lists one error, keeps focus and text, sends nothing and announces the count", async () => {

@@ -1,4 +1,4 @@
-import type { DraftValue, SubmittedQuery } from "@querymodule/client";
+import type { DraftValue, RequestEntry, SubmittedQuery } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { compileQueryType, optionsFor } from "@querymodule/core/rules";
 
@@ -21,6 +21,31 @@ type Translate = (
   key: string,
   params?: Readonly<Record<string, string | number | boolean>>,
 ) => string;
+
+/**
+ * What a row can be edited from (G32: every row offers the action). A row this browser sent kept its
+ * own values. A row listed after a reload has none, so it is rebuilt from the primary part's planned
+ * values, the server's visible effective values, and the sources the request went to or the planner
+ * dropped. Undefined while those have not arrived, for a purged part and for a row still sending.
+ * Memory only; never logged.
+ */
+export function submittedOf(entry: RequestEntry): SubmittedQuery | undefined {
+  if (entry.submitted !== undefined) return entry.submitted;
+  if (entry.status !== "acknowledged") return undefined;
+  const primary = entry.parts.find((part) => part.parentPartId === null);
+  if (primary?.values === undefined) return undefined;
+  const values: Record<string, DraftValue> = {};
+  for (const [key, value] of Object.entries(primary.values)) {
+    if (typeof value === "string" || typeof value === "boolean") values[key] = value;
+    else if (typeof value === "number") values[key] = String(value);
+  }
+  return {
+    queryType: entry.queryType,
+    values,
+    sourceIds: [...primary.sources.map((s) => s.sourceId), ...primary.droppedSourceIds],
+    mode: "normal",
+  };
+}
 
 /**
  * What an "Edit as new query" loads: the row's kept values under the config the panel has now

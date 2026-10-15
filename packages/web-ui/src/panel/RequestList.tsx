@@ -63,8 +63,9 @@ export interface RequestRowView {
   /** A failed row the owner can send again; shows a Retry button when the list has onRetry. */
   retryable?: boolean;
   /**
-   * A failed row whose values cannot succeed again as they are (the site configuration changed, #434)
-   * but were kept: shows "Edit as new query" when the list has onEditAsNew. Never set with `retryable`.
+   * A settled row whose values the owner can load into the form as a new query (G32: every row, not
+   * only a config-changed failure, #477): shows "Edit as new query" when the list has onEditAsNew.
+   * It sits beside Retry on a failed row that has both. A row still sending never shows it.
    */
   editable?: boolean;
 }
@@ -80,7 +81,7 @@ export interface RequestListProps {
   /** Sends a retryable failed row's values again as a new request; the owner adds the new row. */
   onRetry?(rowId: string): void;
   /**
-   * Loads an editable failed row's kept values into the form as a new query; the owner does it and
+   * Loads an editable row's kept values into the form as a new query; the owner does it and
    * moves focus, because the user pressed the action. The row itself stays as history.
    */
   onEditAsNew?(rowId: string): void;
@@ -336,6 +337,20 @@ export function RequestList({
                   {row.failureText === undefined ? null : (
                     <span className="qm-request__failure">{row.failureText}</span>
                   )}
+                  {row.notes.map((note, index) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: notes are static text; two may match
+                    <span key={index} className="qm-badge qm-badge--status">
+                      {note}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* The actions sit on their own row under the meta line, the same in every layout (G32),
+                  so a 48 px officer button never stretches the line of small facts above it. */}
+              {row.status !== "sending" &&
+              ((row.status === "failed" && row.retryable === true && onRetry !== undefined) ||
+                (row.editable === true && onEditAsNew !== undefined)) ? (
+                <div className="qm-request__actions">
                   {row.status === "failed" && row.retryable === true && onRetry !== undefined ? (
                     <button
                       type="button"
@@ -353,7 +368,7 @@ export function RequestList({
                       {t("requests.retry")}
                     </button>
                   ) : null}
-                  {row.status === "failed" && row.editable === true && onEditAsNew !== undefined ? (
+                  {row.editable === true && onEditAsNew !== undefined ? (
                     <button
                       type="button"
                       className="qm-button qm-button--secondary"
@@ -364,14 +379,8 @@ export function RequestList({
                       {t("requests.editAsNew")}
                     </button>
                   ) : null}
-                  {row.notes.map((note, index) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: notes are static text; two may match
-                    <span key={index} className="qm-badge qm-badge--status">
-                      {note}
-                    </span>
-                  ))}
                 </div>
-              )}
+              ) : null}
               {row.parts === undefined || row.parts.length === 0 ? null : (
                 // A labelled group of divs, not nested lists: the row stays one list item (an
                 // assistive technology reads the list's count as requests), and each line is text.

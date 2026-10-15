@@ -228,3 +228,32 @@ test("implementer 1366x768: the header offers no Queries link (G40)", async ({ p
   await expect(page.getByRole("link", { name: "Queries" })).toHaveCount(0);
   await save(page, "pr3-implementer-1366-01-header");
 });
+
+// G32: after a run the form starts over and every row offers Edit as new query. Two shots per layout:
+// right after the run (cleared form, the row with its action) and after pressing the action (the
+// row's values back in the form, focus on the first field).
+for (const [who, email, width, height] of [
+  ["dispatcher", "dispatcher@example.test", 1366, 768],
+  ["officer", "officer@example.test", 1024, 768],
+] as const) {
+  test(`${who} ${width}x${height}: draft after a run, Edit as new query (G32)`, async ({
+    page,
+  }) => {
+    await startAs(page, email, width, height);
+    const plate = page.getByLabel("Plate", { exact: true });
+    await page.getByLabel("Year", { exact: true }).fill("26");
+    await plate.fill("ZZ-0001");
+    await plate.press("Enter");
+    const edit = requests(page).getByRole("button", {
+      name: /^Edit as new query: Vehicle ZZ-0001/,
+    });
+    await expect(edit).toBeVisible();
+    await expect(plate).toHaveValue("");
+    await expect(requests(page).getByText("Acknowledged", { exact: true })).toBeVisible();
+    await save(page, `g32-${who}-${width}-01-after-run`);
+    await edit.click();
+    await expect(plate).toHaveValue("ZZ-0001");
+    await expect(plate).toBeFocused();
+    await save(page, `g32-${who}-${width}-02-edit-as-new`);
+  });
+}

@@ -169,6 +169,30 @@ describe("FR-056 panel mode and terminal text (spec 6.7, D-B10)", () => {
   });
 });
 
+describe("G32 clearDraft starts one query type over", () => {
+  it("empties that type's values and returns its sources to the defaults, and touches nothing else", () => {
+    const store = createDraftStore();
+    store.getState().select("VEH");
+    store.getState().setValue("plate", "ZZ-0001");
+    store.getState().setSources(["stateSource"]);
+    store.getState().replaceValues("PER", { last: "Testcase" });
+    store.getState().setMode("terminal");
+    store.getState().setTerminalText("VEH.ZZ-0001");
+    store.getState().clearDraft("VEH");
+    expect(store.getState().drafts.VEH).toEqual({ values: {}, sources: null });
+    expect(store.getState().drafts.PER?.values).toEqual({ last: "Testcase" });
+    expect(store.getState().queryType).toBe("VEH");
+    expect(store.getState().mode).toBe("terminal");
+    expect(store.getState().terminalText).toBe("VEH.ZZ-0001");
+  });
+
+  it("is safe for a type with no draft", () => {
+    const store = createDraftStore();
+    store.getState().clearDraft("constructor");
+    expect(store.getState().drafts.constructor).toEqual({ values: {}, sources: null });
+  });
+});
+
 describe("SEC-006 the store never touches browser storage", () => {
   it("writes to no storage across every action", () => {
     const writes: string[] = [];

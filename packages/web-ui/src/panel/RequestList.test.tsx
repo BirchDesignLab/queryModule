@@ -795,13 +795,38 @@ describe("edit as new query on a row that cannot be retried (#477)", () => {
     expect(onEditAsNew).toHaveBeenCalledWith("r0");
   });
 
-  it("no action on a row that is not editable, sending, acknowledged, or when there is no handler", () => {
+  it("no action on a row that is not editable, a row still sending, or when there is no handler", () => {
     const { rerender } = render(
-      <RequestList {...base} rows={[FAILED, SENDING, ACKED]} onEditAsNew={() => undefined} />,
+      <RequestList
+        {...base}
+        rows={[FAILED, SENDING, ACKED, { ...SENDING, editable: true }]}
+        onEditAsNew={() => undefined}
+      />,
     );
     expect(screen.queryByRole("button", { name: /Edit as new query/ })).toBeNull();
     rerender(<RequestList {...base} rows={[EDITABLE]} />);
     expect(screen.queryByRole("button", { name: /Edit as new query/ })).toBeNull();
+  });
+
+  it("G32 every settled row can offer it: an acknowledged row, and a failed row that also has Retry", async () => {
+    const user = userEvent.setup();
+    const onEditAsNew = vi.fn();
+    render(
+      <RequestList
+        {...base}
+        rows={[
+          { ...ACKED, editable: true },
+          { ...FAILED, id: "r9", retryable: true, editable: true },
+        ]}
+        onEditAsNew={onEditAsNew}
+        onRetry={() => undefined}
+      />,
+    );
+    const buttons = screen.getAllByRole("button", { name: /^Edit as new query/ });
+    expect(buttons).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /^Retry/ })).toBeInTheDocument();
+    await user.click(buttons[0] as HTMLElement);
+    expect(onEditAsNew).toHaveBeenCalledWith(ACKED.id);
   });
 
   it("does not move focus by itself", () => {
