@@ -33,16 +33,26 @@ const ACK_BODY = {
   parts: [{ partId: 0, queryType: "VEH", status: "dispatched", sourceIds: ["state"] }],
 };
 
-function fakeSubmit(status: SubmitState["status"], outcome: SubmitOutcome = ACK) {
+/** `reachable`: what a connection re-check finds while the status is noConnection (R6). */
+function fakeSubmit(
+  status: SubmitState["status"],
+  outcome: SubmitOutcome = ACK,
+  reachable = false,
+) {
   const submit = vi.fn(async (_req: SubmitRequest) => outcome);
+  const recheck = vi.fn(async () => {
+    if (reachable && store.getState().status === "noConnection") store.setState({ status: "idle" });
+    return store.getState().status === "idle";
+  });
   const store: SubmitController = createStore<SubmitState>(() => ({
     status,
     submit,
+    recheck,
     keyFor: () => "key-fresh",
     reset: () => undefined,
     dispose: () => undefined,
   }));
-  return { store, submit };
+  return { store, submit, recheck };
 }
 
 function failedRow(kind: "noResponse" | "invalid" = "noResponse") {
@@ -127,6 +137,7 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
     const store: SubmitController = createStore<SubmitState>(() => ({
       status: "idle",
       submit,
+      recheck: async () => true,
       keyFor: () => "key-fresh",
       reset: () => undefined,
       dispose: () => undefined,
@@ -203,6 +214,38 @@ describe("retryRequest: the stored values go as a new attempt and add a new row"
       expect(submit).not.toHaveBeenCalled();
       expect(requests.getState().items).toHaveLength(1);
     }
+  });
+
+  it("R6 a Retry pressed while the gate is still up re-checks the connection once and sends at once when it answers", async () => {
+    const { requests, id } = failedRow();
+    const { store, submit, recheck } = fakeSubmit("noConnection", ACK, true);
+    const result = await retryRequest({ requests, submit: store }, id, "h");
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ kind: "sent", outcome: ACK, rowId: expect.any(String) });
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(requests.getState().items[0]).toMatchObject({ status: "acknowledged" });
+  });
+
+  it("R6 the re-check that finds no connection leaves the Retry gated, nothing sent", async () => {
+    const { requests, id } = failedRow();
+    const { store, submit, recheck } = fakeSubmit("noConnection", ACK, false);
+    expect(await retryRequest({ requests, submit: store }, id, "h")).toEqual({
+      kind: "gated",
+      status: "noConnection",
+    });
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(submit).not.toHaveBeenCalled();
+    expect(requests.getState().items).toHaveLength(1);
+  });
+
+  it("R6 a request already in flight is not re-checked: Retry is gated as before", async () => {
+    const { requests, id } = failedRow();
+    const { store, recheck } = fakeSubmit("submitting");
+    expect(await retryRequest({ requests, submit: store }, id, "h")).toEqual({
+      kind: "gated",
+      status: "submitting",
+    });
+    expect(recheck).not.toHaveBeenCalled();
   });
 
   it("does nothing for a row that is gone (a reset) or not retryable", async () => {

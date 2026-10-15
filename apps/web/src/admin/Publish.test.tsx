@@ -295,6 +295,50 @@ describe("review and publish", () => {
     await waitFor(() => expect(button("Review and publish")).toHaveFocus());
   });
 
+  it("after Publish the toolbar reads as published: no unpublished changes, no Working text (R16)", async () => {
+    const t = await openBuilder();
+    await setDelimiter(t, ",");
+    expect(status()).toHaveTextContent("1 unpublished change.");
+    await t.user.click(button("Review and publish"));
+    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    // The reload after a publish is slow: the notice must not run ahead of it.
+    server.use(
+      http.get(`${API}/api/v1/admin/config`, async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return HttpResponse.json(adminConfigBody());
+      }),
+    );
+    await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
+    await screen.findByText("Published version 2. Dispatchers see it within 15 seconds.", {
+      selector: ".qm-builder__notice",
+    });
+    // The notice and the draft state arrive together: never "Published" over "N unpublished changes".
+    expect(status()).toHaveTextContent("No unpublished changes.");
+    expect(screen.queryByText(/Working. Wait/)).toBeNull();
+  });
+
+  it("while a save and check run, the Working reason is printed once, not once per button (R16)", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const t = await openBuilder({
+      validate: async () => {
+        await gate;
+        return HttpResponse.json({ errors: [], warnings: [] });
+      },
+    });
+    await setDelimiter(t, ",");
+    await t.user.click(button("Review and publish"));
+    await waitFor(() => expect(screen.getAllByText(/Working. Wait/)).toHaveLength(1));
+    expect(button("Save draft")).toHaveAttribute("aria-disabled", "true");
+    expect(button("Review and publish")).toHaveAttribute("aria-disabled", "true");
+    const reason = screen.getByText(/Working. Wait/);
+    expect(button("Save draft").getAttribute("aria-describedby")).toContain(reason.id);
+    expect(button("Review and publish").getAttribute("aria-describedby")).toContain(reason.id);
+    release();
+  });
+
   it("a Cancel in the dialog publishes nothing and returns focus to the button", async () => {
     const t = await openBuilder();
     await setDelimiter(t, ",");

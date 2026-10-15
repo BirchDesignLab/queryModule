@@ -37,9 +37,19 @@ export async function retryRequest(
   rowId: string,
   configHash: string,
 ): Promise<RetryResult> {
-  const entry = deps.requests.getState().items.find((item) => item.id === rowId);
-  if (entry === undefined || !isRetryable(entry) || entry.submitted === undefined)
-    return { kind: "unavailable" };
+  const lookup = (): RequestEntry | undefined => {
+    const found = deps.requests.getState().items.find((item) => item.id === rowId);
+    return found !== undefined && isRetryable(found) && found.submitted !== undefined
+      ? found
+      : undefined;
+  };
+  if (lookup() === undefined) return { kind: "unavailable" };
+  // The gate may be a health poll behind the truth: a press made while it is up asks the connection
+  // once, now, so the first Enter after the connection returns sends (R6).
+  if (deps.submit.getState().status === "noConnection") await deps.submit.getState().recheck();
+  // The row can leave while the probe is out (a reset, an ack that superseded it): look again.
+  const entry = lookup();
+  if (entry === undefined || entry.submitted === undefined) return { kind: "unavailable" };
   const status = deps.submit.getState().status;
   if (status !== "idle") return { kind: "gated", status };
   const idempotencyKey =

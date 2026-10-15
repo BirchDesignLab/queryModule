@@ -92,6 +92,22 @@ describe("the keywords editor", () => {
     expect(within(editor()).getByRole("group", { name: "Critical style" })).toBeInTheDocument();
   });
 
+  // Re-walk R1: the keywords sat in a four-column table wider than the editor at 1024 and 1366. Each
+  // keyword is now a small card (a list item) that stacks its parts, so no width clips a control.
+  it("lists the keywords as a named list of cards with visible captions and a short Remove (R1)", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    const list = within(editor()).getByRole("list", { name: "Keywords" });
+    const first = within(list).getAllByRole("listitem")[0] as HTMLElement;
+    expect(within(first).getByRole("textbox", { name: "Keyword 1" })).toHaveValue("STOLEN");
+    for (const caption of ["Keyword", "Severity", "Exceptions"])
+      expect(within(first).getByText(caption)).toBeVisible();
+    const remove = within(first).getByRole("button", { name: "Remove keyword STOLEN" });
+    // Visible text is the short "Remove"; the accessible name still says which keyword.
+    expect(remove.querySelector('[aria-hidden="true"]')?.textContent).toBe("Remove");
+    expect(within(editor()).queryByRole("table")).toBeNull();
+  });
+
   // Demo dry run G3: Add keyword with an empty word did nothing and said nothing.
   it("Add keyword with no word says so and puts focus in the New keyword box; typing clears it", async () => {
     const t = await openBuilder();

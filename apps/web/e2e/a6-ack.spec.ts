@@ -64,22 +64,8 @@ test("[A6] submit is acknowledged with its correlation ID and ack time, and resu
     new RegExp(`Vehicle query sent at ${ACK_TIME}\\. Reference ${short}\\.`),
   );
 
-  // The toast: type and plate, ack time, the reference; polite, no payload, dismissible by keyboard.
-  const toast = page.getByTestId("ack-toast");
-  await expect(toast).toHaveAttribute("role", "status");
-  await expect(toast).toContainText("Vehicle ZZ-0001 acknowledged");
-  await expect(toast).toContainText(new RegExp(`Sent ${ACK_TIME}`));
-  await expect(toast.locator("code", { hasText: short })).toBeVisible();
-  await expect(toast).not.toContainText("TESTMAKE");
-  const toastCopy = toast.getByRole("button", {
-    name: `Copy acknowledgment reference ${short} for Vehicle ZZ-0001`,
-  });
-  await toastCopy.focus();
-  await page.keyboard.press("Enter");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(correlationId);
-  await toast.getByRole("button", { name: "Dismiss acknowledgment for Vehicle ZZ-0001" }).focus();
-  await page.keyboard.press("Enter");
-  await expect(toast).toBeHidden();
+  // No visible acknowledgment panel (R4): the entry below carries the same facts.
+  await expect(page.getByTestId("ack-toast")).toHaveCount(0);
 
   // The entry carries the ack time (MM-DD-YY HH:mm:ss) and the correlation ID.
   const list = page.getByRole("region", { name: "Requests this shift" });
@@ -112,18 +98,18 @@ test("[A6] submit is acknowledged with its correlation ID and ack time, and resu
 test.describe("officer layout", () => {
   test.use({ viewport: { width: 1024, height: 768 } });
 
-  test("[A6] the ack toast's Copy and Dismiss are at least 48 px tall for the officer (spec 6.3, UX-004)", async ({
+  test("[A6] the entry's Copy reference is at least 48 px tall for the officer (spec 6.3, UX-004)", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await signIn(page, seededUser("officer@example.test"));
     await typePlate(page, "ZZ-0001");
     await page.keyboard.press("Enter");
-    const toast = page.getByTestId("ack-toast");
-    await expect(toast).toBeVisible();
-    for (const name of [/^Copy acknowledgment reference/, /^Dismiss acknowledgment/]) {
-      const box = await toast.getByRole("button", { name }).boundingBox();
-      expect(box?.height ?? 0).toBeGreaterThanOrEqual(48);
-    }
+    const list = page.getByRole("region", { name: /^Last request/ });
+    const copy = list.getByRole("button", { name: /^Copy reference/ });
+    await expect(copy).toBeVisible();
+    await expect(page.getByTestId("ack-toast")).toHaveCount(0);
+    const box = await copy.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(48);
   });
 });

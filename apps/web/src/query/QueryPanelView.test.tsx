@@ -1,7 +1,7 @@
 import { createDraftStore, createTranslator, type Translator } from "@querymodule/client";
 import { type ClientSiteConfig, resolveShortcuts } from "@querymodule/core/config";
 import { ShortcutProvider } from "@querymodule/web-ui";
-import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JsonObject } from "../admin/draft.js";
@@ -137,6 +137,23 @@ describe("BR-001 / ADR-0011 query panel view renders from an injected config", (
     expect(second).toHaveAttribute("aria-pressed", "false");
     await user.keyboard("{Alt>}2{/Alt}");
     expect(second).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("R5 the shortcuts dialog names quick-access rows by type and keys as people read them", async () => {
+    renderView({ config: TWO, mode: "live" });
+    await screen.findByRole("button", { name: "custom.zzr.label" });
+    // user-event's key map has no Slash: dispatch Shift+Slash on the page.
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      code: "Slash",
+      key: "?",
+      shiftKey: true,
+    });
+    const dialog = await screen.findByRole("dialog");
+    const second = within(dialog).getByText("Quick access: custom.zzr.label").closest("li");
+    expect(second).not.toBeNull();
+    expect(within(second as HTMLElement).getByText("Alt+2")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Quick access query type/)).toBeNull();
+    expect(within(dialog).queryByText(/Digit|Slash|Backquote|Key[A-Z]/)).toBeNull();
   });
 
   it("preview: registers no global shortcuts (Alt+2 does nothing, Shift+/ opens no dialog)", async () => {

@@ -5,7 +5,7 @@ import { restoreShippedConfig, saveGapDraft } from "./admin-draft.js";
 import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
-// Evidence screenshots for the demo polish PR (focus ring, ghost alignment, part rule, toast, date
+// Evidence screenshots for the demo polish PR (focus ring, ghost alignment, part rule, date
 // hint, quick access row, builder Remove, rebuilt command). Skipped unless GAP_SHOTS_DIR is set;
 // synthetic values only, nothing published. Day theme, 1x.
 //   GAP_SHOTS_DIR=C:/git/queryModule/.dev/gap-shots/polish E2E_PORT=3000 pnpm e2e polish-shots.spec.ts
@@ -33,7 +33,7 @@ async function startAs(page: Page, email: string, width: number, height: number)
 const requests = (page: Page) =>
   page.getByRole("region", { name: /Requests this shift|Last request/ });
 
-/** Runs a terminal command from the form page and returns with the toast showing. */
+/** Runs a terminal command from the form page and returns. */
 async function runCommand(page: Page, command: string): Promise<void> {
   await page.keyboard.press("Slash");
   const input = page.getByRole("textbox", { name: "Command" });
@@ -48,14 +48,12 @@ for (const [who, email, width, height] of [
   ["dispatcher", "dispatcher@example.test", 1024, 768],
   ["officer", "officer@example.test", 1024, 768],
 ] as const) {
-  test(`${who} ${width}x${height}: toast, ghost alignment, also-run rule`, async ({ page }) => {
+  test(`${who} ${width}x${height}: ghost alignment, also-run rule`, async ({ page }) => {
     await startAs(page, email, width, height);
     await runCommand(page, "PER.EXAMPLESON.SAMPLE.01011901");
-    const toast = page.getByTestId("ack-toast");
-    await expect(toast).toBeVisible();
     await expect(requests(page).getByText("Acknowledged", { exact: true })).toBeVisible();
     await expect(page.getByText("NO WANTS OR WARRANTS")).toBeVisible({ timeout: 15_000 });
-    await save(page, `${who}-${width}-01-toast-card`);
+    await save(page, `${who}-${width}-01-ghost-card`);
   });
 }
 

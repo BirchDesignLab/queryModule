@@ -311,7 +311,9 @@ function TreeLabel({
       {node.key !== undefined && node.key !== shown && (
         <>
           {" "}
-          <span className="qm-tree__key">{node.key}</span>
+          <span className="qm-tree__key" title={node.key}>
+            {node.key}
+          </span>
         </>
       )}
     </>

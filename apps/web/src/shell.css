@@ -732,6 +732,35 @@ main[tabindex="-1"]:focus {
   font-size: var(--qm-type-size-sm);
 }
 
+/* Skip buttons (re-walk R18): out of sight until the keyboard reaches one, then drawn over the top
+   edge of the panes. They sit before the tree, so one Tab and Enter pass the tree. */
+.qm-builder__skips {
+  position: relative;
+}
+
+.qm-builder__skip:not(:focus) {
+  position: absolute;
+  inline-size: var(--qm-border-width);
+  block-size: var(--qm-border-width);
+  margin: calc(var(--qm-border-width) * -1);
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.qm-builder__skip:focus {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: var(--qm-space-2);
+  z-index: 2;
+  padding: var(--qm-space-1) var(--qm-space-3);
+  background: var(--qm-color-surface-raised);
+  color: var(--qm-color-text-body);
+  border: var(--qm-border-width) solid var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
+}
+
 /* The panes' column: what the row leaves, never more, so the panes inside can scroll. */
 .qm-builder__body {
   grid-column: 1 / -1;
@@ -785,7 +814,8 @@ main[tabindex="-1"]:focus {
   display: flex;
   flex-direction: column;
   gap: var(--qm-space-2);
-  padding: var(--qm-space-3);
+  /* 8 px at the sides: the row's label and key keep one line where they can (re-walk R17). */
+  padding: var(--qm-space-3) var(--qm-space-2);
   background: var(--qm-color-surface-base);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-panel);
@@ -837,6 +867,36 @@ main[tabindex="-1"]:focus {
   background: var(--qm-color-surface-base);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-panel);
+}
+
+/* Where the three panes do not fit in a row (the section is under about 1050 px: a 1024 to 1279 px
+   window), the tree takes the left column for the whole height and the editor and the preview share
+   the right one, so the card preview is in view beside the tree instead of under it, below the fold
+   (re-walk R15). Below 1024 px the page flows as one column and the panes wrap as before. */
+@media (min-width: 1024px) {
+  @container (max-width: 1050px) {
+    .qm-builder__panes {
+      display: grid;
+      grid-template-columns: calc(var(--qm-space-12) * 4.25) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) minmax(0, 1.25fr);
+      align-items: stretch;
+    }
+
+    .qm-builder__panes > .qm-tree {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+    }
+
+    .qm-builder__panes > .qm-builder__editor {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .qm-builder__panes > .qm-admin__preview {
+      grid-column: 2;
+      grid-row: 2;
+    }
+  }
 }
 
 /* Preview (A4): the head carries the Dispatcher or Officer switch; below it the panel, or one of
@@ -1016,28 +1076,36 @@ main[tabindex="-1"]:focus {
   font-weight: 600;
 }
 
-/* The row's own text: label, key and issue count share one line (they name the row together). */
+/* The row's own text: label, key and issue count share one line (they name the row together) and
+   stay on it: when the pane is narrow the key gives way first and ends in an ellipsis, then the
+   label does (re-walk R17: keys no longer drop to a second line). */
 .qm-tree__name {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--qm-space-2);
   min-inline-size: 0;
 }
 
-/* A label keeps its own line before it wraps: the key drops under it when both do not fit, so
-   "1. All results" and "Training delegation" never break word by word beside their key (G37). */
 .qm-tree__label {
+  flex: 0 0 auto;
+  max-inline-size: 100%;
   min-inline-size: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qm-tree__key {
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
+  overflow: hidden;
   color: var(--qm-color-text-muted);
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Issue count per row: the number is visual only; the words are visually hidden in the row name. */
@@ -1860,14 +1928,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 /* Which card wins (BW3 polish, item 5): four short columns that fit the editor pane at 1366 and
-   1024 with nothing to scroll sideways. A fixed layout and wrapping text keep the Why column,
-   which carries the score, fully in view; the table keeps its table semantics. */
+   1024 with nothing to scroll sideways; the table keeps its table semantics. The first two columns
+   (the source and the persona) never break inside a name: "State / system" and "Mobile / unit"
+   read badly (re-walk R17). The card and the Why column share what is left and wrap at their
+   spaces, so the Why column, which carries the score, stays fully in view. */
 .qm-wins {
   min-inline-size: 0;
-}
-
-.qm-wins__table {
-  table-layout: fixed;
 }
 
 .qm-wins__table :where(th, td) {
@@ -1881,25 +1947,21 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: normal;
 }
 
-.qm-wins__table .qm-tag {
+.qm-wins__table :where(th, td):nth-child(-n + 2) {
+  overflow-wrap: normal;
   white-space: nowrap;
 }
 
-/* The Why column carries the longest text (the score and its reason), so it gets the most. */
-.qm-wins__table th:nth-child(1) {
-  inline-size: 20%;
+/* The rule values under a source name wrap inside their own block, so they never widen the column. */
+.qm-wins__table td:first-child .qm-sect__hint {
+  display: block;
+  max-inline-size: 10em;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.qm-wins__table th:nth-child(2) {
-  inline-size: 19%;
-}
-
-.qm-wins__table th:nth-child(3) {
-  inline-size: 29%;
-}
-
-.qm-wins__table th:nth-child(4) {
-  inline-size: 32%;
+.qm-wins__table .qm-tag {
+  white-space: nowrap;
 }
 
 /* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
@@ -2076,8 +2138,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   white-space: nowrap;
 }
 
+/* Edit keeps its own width at the start of the row: stretched over the free column it spanned a
+   whole 500 px row at 1024 (re-walk R17). */
 .qm-mock__scenario-tools--row [data-role="toggle"] {
   grid-column: 1;
+  justify-self: start;
+  min-inline-size: calc(var(--qm-space-12) * 1.5);
 }
 
 .qm-mock__scenario-tools--row [data-role="up"] {
@@ -2228,7 +2294,71 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   align-items: center;
 }
 
-/* Keywords and severity editor (Task 11). */
+/* Keywords and severity editor (Task 11). Each keyword is a card that stacks its parts, so no editor
+   width clips the Severity select or the Remove button (re-walk R1: the old four-column table ran
+   to 1370 px at 1024). The word and the severity share the first line while they fit, Remove at its
+   end, the exceptions under them. */
+.qm-kw__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-kw__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-3);
+  min-inline-size: 0;
+  padding: var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-kw__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--qm-space-2);
+}
+
+.qm-kw__cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  min-inline-size: 0;
+}
+
+.qm-kw__cell--keyword {
+  flex: 1 1 calc(var(--qm-space-12) * 2);
+}
+
+.qm-kw__cell--severity {
+  flex: 0 1 calc(var(--qm-space-12) * 2.25);
+}
+
+.qm-kw__cap {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-kw__remove {
+  margin-inline-start: auto;
+}
+
+.qm-kw__phrases li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2);
+}
+
+.qm-kw__input {
+  flex: 1 1 calc(var(--qm-space-12) * 2.5);
+}
+
 .qm-kw__phrases {
   display: flex;
   flex-direction: column;

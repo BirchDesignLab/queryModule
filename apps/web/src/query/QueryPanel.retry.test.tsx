@@ -91,9 +91,65 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     expect(retry).not.toBeInTheDocument();
     expect(within(failed as HTMLElement).queryByRole("button", { name: /^Retry/ })).toBeNull();
     expect(screen.getByRole("heading", { name: "Requests this shift" })).toHaveFocus();
-    expect(
-      region.querySelector("[aria-live], [role=status]:not([data-testid=ack-toast]), [role=alert]"),
-    ).toBeNull();
+    expect(region.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
+    // R12: the user had started another query in the meantime, so the retry leaves it alone.
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0009");
+  });
+
+  it("R12 an acknowledged retry starts the form over, like any acknowledged run", async () => {
+    const answers = flaky();
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    const retry = await within(region).findByRole("button", { name: /^Retry/ });
+    // A failed run keeps what was typed.
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    answers.failing = false;
+    await user.click(retry);
+    await waitFor(() =>
+      expect(within(region).getAllByRole("listitem")[0]).toHaveTextContent("Acknowledged"),
+    );
+    await waitFor(() => expect(screen.getByLabelText("Plate")).toHaveValue(""));
+  });
+
+  it("R12 a retry that fails again keeps what was typed", async () => {
+    flaky();
+    const { user } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    await user.click(await within(region).findByRole("button", { name: /^Retry/ }));
+    await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(2));
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+  });
+
+  it("R6 the first Retry after the connection returns sends, though the health poll has not noticed yet", async () => {
+    // The poll fires at random() x ceiling: pinned late, so only the Retry's own check can lift the gate.
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const posts = { n: 0 };
+    server.use(
+      http.post(`${API}/api/v1/queries`, async ({ request }) => {
+        posts.n += 1;
+        submitRecorder.calls.push({
+          key: request.headers.get("idempotency-key"),
+          body: await request.json(),
+        });
+        return posts.n === 1 ? HttpResponse.error() : HttpResponse.json(ACK_202, { status: 202 });
+      }),
+      http.get(`${API}/api/v1/health`, () => HttpResponse.json({ status: "ok" })),
+    );
+    const { user, services } = await openPanel();
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    const retry = await within(region).findByRole("button", { name: /^Retry/ });
+    await waitFor(() => expect(services.submit.getState().status).toBe("noConnection"));
+    await user.click(retry);
+    // One press: the request went out and a new row is listed.
+    await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(2));
+    expect(submitRecorder.calls).toHaveLength(2);
+    await waitFor(() =>
+      expect(within(region).getAllByRole("listitem")[0]).toHaveTextContent("Acknowledged"),
+    );
+    expect(within(region).queryByText("No connection to server")).toBeNull();
   });
 
   it("a failed retry stays a failed row of its own, and can be retried again", async () => {

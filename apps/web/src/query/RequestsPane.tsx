@@ -1,4 +1,10 @@
-import { isRetryable, type RequestEntry, retryRequest, useStore } from "@querymodule/client";
+import {
+  isRetryable,
+  type RequestEntry,
+  retryRequest,
+  type SubmittedQuery,
+  useStore,
+} from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import {
   RequestList,
@@ -28,6 +34,11 @@ export interface RequestsPaneProps {
    * row this browser sent, or a listed one whose planned values have arrived). Absent, no row does.
    */
   onEditAsNew?: (rowId: string) => void;
+  /**
+   * A Retry from this list was acknowledged: the panel starts its form over, as it does for any
+   * acknowledged run (R12), given what the retry sent.
+   */
+  onRetried?: (submitted: SubmittedQuery) => void;
 }
 
 /**
@@ -42,6 +53,7 @@ export const RequestsPane = memo(function RequestsPane({
   config,
   variant,
   onEditAsNew,
+  onRetried,
 }: RequestsPaneProps) {
   const t = useT();
   const persona = useResolvedPersona();
@@ -219,8 +231,6 @@ export const RequestsPane = memo(function RequestsPane({
       onEditAsNew={onEditAsNew}
       // The officer's last request sits under the form: show it once a request is on its way (G11).
       revealOnSend={variant === "last"}
-      // The acknowledgment toast lands here: under the dispatcher's heading, above the officer's.
-      toastSlot={variant === "last" ? "beforeHeading" : "afterHeading"}
       onRetry={(rowId) => {
         // The failed row keeps its place; the values it kept go as a new request under the panel's
         // current config hash, and the new row joins the list.
@@ -245,8 +255,13 @@ export const RequestsPane = memo(function RequestsPane({
             result.kind === "sent" &&
             result.outcome.kind !== "configChanged" &&
             stillListed(result.rowId)
-          )
+          ) {
             announcer.announce(outcomeAnnouncement(result.outcome, t, typeLabel));
+            if (result.outcome.kind === "acknowledged") {
+              const sent = requests.getState().items.find((item) => item.id === result.rowId);
+              if (sent?.submitted !== undefined) onRetried?.(sent.submitted);
+            }
+          }
         });
       }}
       onCopy={(reference) => {

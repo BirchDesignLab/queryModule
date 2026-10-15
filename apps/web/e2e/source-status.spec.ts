@@ -114,11 +114,7 @@ test("typing into Plate while statuses arrive keeps focus and value (spec 6.6)",
   await expect(field).toBeFocused();
   await expect(field).toHaveValue("ABC123");
   // The status block is not a live region: only the shared announcer speaks.
-  expect(
-    await list
-      .locator("[aria-live], [role=status]:not([data-testid=ack-toast]), [role=alert]")
-      .count(),
-  ).toBe(0);
+  expect(await list.locator("[aria-live], [role=status], [role=alert]").count()).toBe(0);
   await expect(page.getByTestId("announcer-polite")).toContainText("sources done");
   await expectNoSeriousAxeViolations(page);
 });

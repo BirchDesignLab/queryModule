@@ -86,6 +86,14 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     expect(within(nav).queryByRole("button", { name: "Audit log" })).toBeNull();
   });
 
+  it("an implementer cannot query, so the rail has no Back to queries link (R20)", async () => {
+    await openAs("implementer", "/admin/config");
+    await screen.findByRole("heading", { name: "Site configuration", level: 2 });
+    const nav = screen.getByRole("navigation", { name: "Admin sections" });
+    expect(within(nav).queryByRole("link", { name: "Back to queries" })).toBeNull();
+    expect(within(nav).getByRole("link", { name: "Site configuration" })).toBeInTheDocument();
+  });
+
   it("a user at /admin gets the query panel, as for any unknown path", async () => {
     await openAs("user", "/admin/config");
     expect(await screen.findByRole("heading", { name: /^Query Module$/ })).toBeInTheDocument();

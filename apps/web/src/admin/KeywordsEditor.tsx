@@ -234,85 +234,73 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
           )}
         </fieldset>
       </Sect>
-      <Sect title={t("admin.keywords.keywords.title")} hint={t("admin.keywords.keywords.hint")}>
+      <Sect
+        wide
+        title={t("admin.keywords.keywords.title")}
+        hint={t("admin.keywords.keywords.hint")}
+      >
         {keywords.length === 0 ? (
           <p>{t("admin.keywords.none")}</p>
         ) : (
-          <div className="qm-mock__table-wrap">
-            <table
-              className="qm-mock__table"
-              aria-describedby={rest.length > 0 ? restId : undefined}
-            >
-              <caption>
-                <VisuallyHidden>{t("admin.keywords.table")}</VisuallyHidden>
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("admin.keywords.col.keyword")}</th>
-                  <th scope="col">{t("admin.keywords.col.severity")}</th>
-                  <th scope="col">{t("admin.keywords.col.except")}</th>
-                  <th scope="col">
-                    <VisuallyHidden>{t("admin.keywords.remove")}</VisuallyHidden>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {keywords.map((k, i) => {
-                  const n = i + 1;
-                  const style: KeywordStyle = {
-                    keyword: str(k.keyword),
-                    severity: isSeverity(k.severity) ? k.severity : "info",
-                    ...(Array.isArray(k.except)
-                      ? { except: k.except.map((e) => (typeof e === "string" ? e : "")) }
-                      : {}),
-                  };
-                  const keywordIssues = at(`/keywords/${i}/keyword`);
-                  const severityIssues = at(`/keywords/${i}/severity`);
-                  const name =
-                    style.keyword === "" ? t("admin.keywords.unnamed", { n }) : style.keyword;
-                  return (
-                    <KeywordRow
-                      key={ids[i]}
-                      n={n}
-                      owner={rowOwner(i)}
-                      style={style}
-                      name={name}
-                      keywordIssues={keywordIssues}
-                      severityIssues={severityIssues}
-                      exceptIssues={(j) => at(`/keywords/${i}/except/${j}`)}
-                      onKeyword={(text) =>
-                        changeKeyword(i, (c) => ({ ...c, keyword: text }), `keyword:${i}`)
-                      }
-                      onSeverity={(severity) => changeKeyword(i, (c) => ({ ...c, severity }))}
-                      onExcept={(j, text) =>
-                        changeKeyword(
-                          i,
-                          (c) =>
-                            withExceptList(
-                              c,
-                              exceptOf(c).map((p, m) => (m === j ? text : p)),
-                            ),
-                          `except:${i}:${j}`,
-                        )
-                      }
-                      onAddExcept={(phrase) => {
-                        let added = false;
-                        edit((site) => {
-                          const next = addExcept(site, i, phrase);
-                          added = next !== site;
-                          return next;
-                        });
-                        return added;
-                      }}
-                      onRemoveExcept={(j) => edit((site) => removeExcept(site, i, j))}
-                      onRemove={() => remove(i)}
-                      focus={focus}
-                    />
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ul
+            className="qm-kw__list"
+            aria-label={t("admin.keywords.table")}
+            aria-describedby={rest.length > 0 ? restId : undefined}
+          >
+            {keywords.map((k, i) => {
+              const n = i + 1;
+              const style: KeywordStyle = {
+                keyword: str(k.keyword),
+                severity: isSeverity(k.severity) ? k.severity : "info",
+                ...(Array.isArray(k.except)
+                  ? { except: k.except.map((e) => (typeof e === "string" ? e : "")) }
+                  : {}),
+              };
+              const keywordIssues = at(`/keywords/${i}/keyword`);
+              const severityIssues = at(`/keywords/${i}/severity`);
+              const name =
+                style.keyword === "" ? t("admin.keywords.unnamed", { n }) : style.keyword;
+              return (
+                <KeywordRow
+                  key={ids[i]}
+                  n={n}
+                  owner={rowOwner(i)}
+                  style={style}
+                  name={name}
+                  keywordIssues={keywordIssues}
+                  severityIssues={severityIssues}
+                  exceptIssues={(j) => at(`/keywords/${i}/except/${j}`)}
+                  onKeyword={(text) =>
+                    changeKeyword(i, (c) => ({ ...c, keyword: text }), `keyword:${i}`)
+                  }
+                  onSeverity={(severity) => changeKeyword(i, (c) => ({ ...c, severity }))}
+                  onExcept={(j, text) =>
+                    changeKeyword(
+                      i,
+                      (c) =>
+                        withExceptList(
+                          c,
+                          exceptOf(c).map((p, m) => (m === j ? text : p)),
+                        ),
+                      `except:${i}:${j}`,
+                    )
+                  }
+                  onAddExcept={(phrase) => {
+                    let added = false;
+                    edit((site) => {
+                      const next = addExcept(site, i, phrase);
+                      added = next !== site;
+                      return next;
+                    });
+                    return added;
+                  }}
+                  onRemoveExcept={(j) => edit((site) => removeExcept(site, i, j))}
+                  onRemove={() => remove(i)}
+                  focus={focus}
+                />
+              );
+            })}
+          </ul>
         )}
         <IssueMessages id={restId} issues={rest.length > 0 ? rest : undefined} />
         <div className="qm-kw__add">
@@ -406,7 +394,7 @@ interface KeywordRowProps {
   focus: ReturnType<typeof useFocusRequest>;
 }
 
-/** One keyword: its word, severity and exception phrases, and Remove. Name and cells carry its number. */
+/** One keyword card: its word, severity and exception phrases, and Remove. Each control carries its number. */
 function KeywordRow({
   n,
   owner,
@@ -440,43 +428,65 @@ function KeywordRow({
     const next = j < phrases.length - 1 ? j : j - 1;
     focus(...(next >= 0 ? [[exOwner(next), "phrase"] as const] : []), [exAdd, "text"]);
   };
+  // The captions are visual only: each control keeps its numbered accessible name ("Keyword 1").
   return (
-    <tr>
-      <td>
-        <input
-          type="text"
-          className="qm-field__input"
-          autoComplete="off"
-          aria-label={t("admin.keywords.keyword.n", { n })}
-          aria-invalid={isError(keywordIssues)}
-          aria-describedby={keywordIssues === undefined ? undefined : `${uid}-keyword-issues`}
-          data-owner={owner}
-          data-role="keyword"
-          value={style.keyword}
-          onChange={(e) => onKeyword(e.target.value)}
-        />
-        <IssueMessages id={`${uid}-keyword-issues`} issues={keywordIssues} />
-      </td>
-      <td>
-        <select
-          aria-label={t("admin.keywords.severity.n", { n })}
-          aria-invalid={isError(severityIssues)}
-          aria-describedby={severityIssues === undefined ? undefined : `${uid}-severity-issues`}
-          value={style.severity}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (isSeverity(v)) onSeverity(v);
-          }}
+    <li className="qm-kw__row">
+      <div className="qm-kw__main">
+        <div className="qm-kw__cell qm-kw__cell--keyword">
+          <span className="qm-kw__cap" aria-hidden="true">
+            {t("admin.keywords.col.keyword")}
+          </span>
+          <input
+            type="text"
+            className="qm-field__input"
+            autoComplete="off"
+            aria-label={t("admin.keywords.keyword.n", { n })}
+            aria-invalid={isError(keywordIssues)}
+            aria-describedby={keywordIssues === undefined ? undefined : `${uid}-keyword-issues`}
+            data-owner={owner}
+            data-role="keyword"
+            value={style.keyword}
+            onChange={(e) => onKeyword(e.target.value)}
+          />
+          <IssueMessages id={`${uid}-keyword-issues`} issues={keywordIssues} />
+        </div>
+        <div className="qm-kw__cell qm-kw__cell--severity">
+          <span className="qm-kw__cap" aria-hidden="true">
+            {t("admin.keywords.col.severity")}
+          </span>
+          <select
+            aria-label={t("admin.keywords.severity.n", { n })}
+            aria-invalid={isError(severityIssues)}
+            aria-describedby={severityIssues === undefined ? undefined : `${uid}-severity-issues`}
+            value={style.severity}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (isSeverity(v)) onSeverity(v);
+            }}
+          >
+            {SEVERITIES.map((s) => (
+              <option key={s} value={s}>
+                {t(`severity.${s}`)}
+              </option>
+            ))}
+          </select>
+          <IssueMessages id={`${uid}-severity-issues`} issues={severityIssues} />
+        </div>
+        <button
+          type="button"
+          className="qm-button qm-button--danger qm-kw__remove"
+          onClick={onRemove}
         >
-          {SEVERITIES.map((s) => (
-            <option key={s} value={s}>
-              {t(`severity.${s}`)}
-            </option>
-          ))}
-        </select>
-        <IssueMessages id={`${uid}-severity-issues`} issues={severityIssues} />
-      </td>
-      <td>
+          <span aria-hidden="true">{t("admin.keywords.removeShort")}</span>
+          <VisuallyHidden>
+            {t("admin.keywords.remove")} {name}
+          </VisuallyHidden>
+        </button>
+      </div>
+      <div className="qm-kw__cell">
+        <span className="qm-kw__cap" aria-hidden="true">
+          {t("admin.keywords.col.except")}
+        </span>
         <ul className="qm-kw__phrases">
           {phrases.map((p, j) => {
             const issues = exceptIssues(j);
@@ -486,7 +496,7 @@ function KeywordRow({
               <li key={j}>
                 <input
                   type="text"
-                  className="qm-field__input"
+                  className="qm-field__input qm-kw__input"
                   autoComplete="off"
                   aria-label={t("admin.keywords.except.n", { m, n })}
                   aria-invalid={isError(issues)}
@@ -512,7 +522,7 @@ function KeywordRow({
         <div className="qm-kw__phrase-add">
           <input
             type="text"
-            className="qm-field__input"
+            className="qm-field__input qm-kw__input"
             autoComplete="off"
             aria-label={t("admin.keywords.except.new", { n })}
             data-owner={exAdd}
@@ -534,14 +544,8 @@ function KeywordRow({
             {t("admin.keywords.except.add")}
           </button>
         </div>
-      </td>
-      <td>
-        <button type="button" className="qm-button qm-button--danger" onClick={onRemove}>
-          {t("admin.keywords.remove")}
-          <VisuallyHidden> {name}</VisuallyHidden>
-        </button>
-      </td>
-    </tr>
+      </div>
+    </li>
   );
 }
 

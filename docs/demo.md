@@ -100,7 +100,8 @@ its history.
 `dispatcher@example.test` and submits stories 1 to 8 (and the stolen property), each once through
 `POST /api/v1/queries`, so every row is a real, audited request. It never deletes, never resets and
 never touches the database directly: it only signs in, reads the config, reads the list and submits.
-There is no reset: run it once against the demo database, then leave it.
+The vehicle stories send the year `26`, as the story table's `..26` commands do, so both sources
+run (a plate alone would ask only the State system). There is no reset: run it once against the demo database, then leave it.
 
 **Which database it targets.** The one behind the base URL you pass as the argument, and nothing
 else: the script has no database connection of its own. For the live demo that is
@@ -165,7 +166,9 @@ E2E_PORT=3200 node scripts/demo/dry-run.ts
    `POST /api/v1/queries`. (A plate on its own asks only the State system; the Year makes it a full
    query that asks both.)
 3. The row in "Requests this shift" reads "Acknowledged" with the send time and a short reference
-   (the HTTP 202 and its correlation id). Under it, one line per source the query asks reads "State
+   (the HTTP 202 and its correlation id; "Copy reference" copies the full id). There is no separate
+   acknowledgment panel: the row is the visible record, and a screen reader hears "Vehicle query sent
+   at ... Reference ..." once. Under it, one line per source the query asks reads "State
    system: pending" and "National system: pending".
 4. Within a second or so each line settles on its own, as that source answers (the mock waits a
    random time in the source's `latencyMs` range). A source that has answered reads "loading
@@ -256,14 +259,20 @@ refresh.
 **Reconnect and reload.** Submit a query, reload the page: the request entry returns with its command
 (rebuilt from the values the server planned, so it can read slightly fuller than what you typed, for
 example with the default state) and its cards (the list route, then the detail route per returned
-source). A Retry pressed while the connection is down or a submit is in flight sends nothing and
-says "No connection to server" or "Submitting" on the failed row until the gate lifts. Stop and restart the API during a
+source). A Retry pressed while the connection is marked down asks the server at once: if it
+answers, that one press sends the request (no second Enter, no wait for the "Connection restored"
+poll). If it does not answer, or a submit is in flight, nothing is sent and the failed row says "No
+connection to server" or "Submitting" until the gate lifts. An acknowledged Retry starts the form
+over like any acknowledged run, unless you have typed something else meanwhile. Stop and restart the API during a
 dispatch: the source line settles to `interrupted` and the page shows it after it reconnects.
 
 ### Builder: cards, keywords and Try a match
 
 Sign in as `admin@example.test` or `implementer@example.test`, open the admin console and the
-builder.
+builder. (The implementer's rail has no "Back to queries": that account cannot query.) Two skip
+buttons ahead of the panes, "Skip to editor" and "Skip to preview", move keyboard focus past the tree
+in one step. Between 1024 and 1279 px wide the tree sits on the left and the editor and the card
+preview share the column beside it, so the preview stays in view.
 
 1. **Move a row to the summary.** Result cards, Vehicle, "All results" card: edit the Make row
    (`vehicle.make`) and set Show in to "Summary". The card preview opens on the first scenario that
@@ -282,8 +291,10 @@ builder.
    example `NOPE`) says "No scenario matches, so the default answers".
 5. **Review and publish.** The dialog lists the changes as plain sentences, never payload
    content: "Make moves to the summary.", "Keyword TESTMAKE added with warning severity." and
-   "Vehicle card added, with its rows." under the new card; the setting keys sit in a small line
-   under each. Publish, then submit `VEH.ZZ-0001` in a dispatcher tab that was already open: Make
+   "Vehicle card added, with 1 row." under the new card (the count is the card's rows); the setting
+   keys sit in a small line under each. Publish (the dialog stays open, "Publishing", until the
+   draft has reloaded; the toolbar then reads "No unpublished changes" under "Published version
+   2"), then submit `VEH.ZZ-0001` in a dispatcher tab that was already open: Make
    is in the summary with a warning mark on `TESTMAKE`, and cards already on screen redraw at the
    next config refresh. History, Roll back restores the old card.
 

@@ -30,24 +30,30 @@ export function AdminLayout() {
   return (
     <main className="qm-admin" {...MAIN_LANDMARK}>
       <h1 style={visuallyHiddenStyle}>{t("admin.title")}</h1>
-      <AdminRail users={canManageUsers(role) && !adminUsersOff(features)} />
+      <AdminRail
+        users={canManageUsers(role) && !adminUsersOff(features)}
+        back={role !== "implementer"}
+      />
       <div className="qm-admin__main">{outlet}</div>
     </main>
   );
 }
 
 /**
- * The admin rail (design target, A1): the way back first, then the sections by group. The audit
- * log has no page yet, so the rail does not list it (demo dry run G15).
+ * The admin rail (design target, A1): the way back first (not for an implementer, who cannot
+ * query), then the sections by group. The audit log has no page yet, so the rail does not list it
+ * (demo dry run G15).
  */
-function AdminRail({ users }: { users: boolean }) {
+function AdminRail({ users, back }: { users: boolean; back: boolean }) {
   const t = useT();
   const uid = useId();
   return (
     <nav className="qm-admin__rail" aria-label={t("admin.navLabel")}>
-      <Link className="qm-admin__back" to="/">
-        {t("admin.nav.back")}
-      </Link>
+      {back && (
+        <Link className="qm-admin__back" to="/">
+          {t("admin.nav.back")}
+        </Link>
+      )}
       <div className="qm-admin__section">
         <p className="qm-admin__group" id={`${uid}-configure`}>
           {t("admin.nav.configure")}

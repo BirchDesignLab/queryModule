@@ -108,6 +108,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
   // Errors outrank warnings: the button goes to the first error, else the first warning.
   const firstIssue = checks.issues.find((i) => i.level === "error") ?? checks.issues[0];
   const panelRef = useRef<HTMLDivElement>(null);
+  const panesRef = useRef<HTMLDivElement>(null);
   useMarkSelected(panelRef, selection, tab);
   // Before any selection the editor shows the first query type (design lead 09-29-26).
   const fallback = defaultPointer(doc);
@@ -336,7 +337,27 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
               <p>{t("admin.config.raw.counts", { errors: errorCount, warnings: warningCount })}</p>
             )}
           </div>
-          <div className="qm-builder__panes">
+          <div className="qm-builder__skips">
+            <button
+              type="button"
+              className="qm-builder__skip"
+              onClick={() => focusPane(panelRef.current)}
+            >
+              {t("admin.config.skipEditor")}
+            </button>
+            <button
+              type="button"
+              className="qm-builder__skip"
+              onClick={() =>
+                focusPane(
+                  panesRef.current?.querySelector<HTMLElement>(".qm-admin__preview") ?? null,
+                )
+              }
+            >
+              {t("admin.config.skipPreview")}
+            </button>
+          </div>
+          <div ref={panesRef} className="qm-builder__panes">
             <BuilderTree doc={doc} mock={mock} selected={shown.pointer} onSelect={onSelect} />
             <div
               ref={panelRef}
@@ -410,4 +431,11 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
       />
     </ChecksContext.Provider>
   );
+}
+
+/** Moves focus to a pane that is not a control itself (it takes focus from here, not from Tab). */
+function focusPane(pane: HTMLElement | null) {
+  if (pane === null) return;
+  pane.tabIndex = -1;
+  pane.focus();
 }
