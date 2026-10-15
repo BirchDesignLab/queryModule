@@ -145,7 +145,7 @@ describe("label checks use the shipped strings, like the server (CFG-5, ADR-0011
   });
 });
 
-describe("the Changes view shows the live text as Was (M1 exit Q1)", () => {
+describe("the Changes view shows the live text it replaces (M1 exit Q1)", () => {
   /** The live overlay gives `key` its live text; the draft overlay changes it. */
   async function openChanges(locale: string, key: string, liveText: string, draftText: string) {
     const siteConfig = {
@@ -174,19 +174,19 @@ describe("the Changes view shows the live text as Was (M1 exit Q1)", () => {
     const t = await openBuilder();
     await waitFor(() => expect(summary()).toHaveTextContent(/Draft checks: \d+ errors/));
     await t.user.click(screen.getByRole("tab", { name: "Changes" }));
-    const what = await screen.findByText(/^Text in /, { selector: ".qm-diff__what" });
+    const what = await screen.findByText(/^Text in /, { selector: ".qm-diff__says" });
     return what.closest("li") as HTMLElement;
   }
 
-  it("a changed live-only English label is Changed, Was its live text", async () => {
+  it("a changed live-only English label is Changed, from its live text", async () => {
     const row = await openChanges("en", "custom.liveOnly", "Live only", "Edited");
     expect(row).toHaveTextContent("Changed");
-    expect(row).toHaveTextContent("Was Live only");
+    expect(row).toHaveTextContent("changed from Live only to Edited");
   });
 
-  it("a changed override in another locale is Changed, Was its live text", async () => {
+  it("a changed override in another locale is Changed, from its live text", async () => {
     const row = await openChanges("fr", "site.default", "Live fr", "Edited fr");
     expect(row).toHaveTextContent("Changed");
-    expect(row).toHaveTextContent("Was Live fr");
+    expect(row).toHaveTextContent("changed from Live fr to Edited fr");
   });
 });

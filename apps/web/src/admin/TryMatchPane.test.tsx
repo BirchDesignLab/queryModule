@@ -58,7 +58,7 @@ describe("Try a match", () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0001");
     const p = within(pane());
-    expect(p.getByText("Scenario 1 of Vehicle")).toBeInTheDocument();
+    expect(p.getByText("Scenario 1 matches")).toBeInTheDocument();
     expect(p.getByText("Returns a record")).toBeInTheDocument();
     await t.user.click(p.getByRole("button", { name: "Payload" }));
     expect(p.getByTestId("try-payload").textContent).toContain('"status": "STOLEN"');
@@ -68,7 +68,7 @@ describe("Try a match", () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0099");
     const p = within(pane());
-    expect(p.getByText("Default of Vehicle")).toBeInTheDocument();
+    expect(p.getByText("No scenario matches, so the default answers")).toBeInTheDocument();
     expect(p.getByText("No record")).toBeInTheDocument();
   });
 
@@ -76,7 +76,7 @@ describe("Try a match", () => {
     const t = await openBuilder();
     await tryVehicle(t, "FAIL1");
     const p = within(pane());
-    expect(p.getByText("Scenario 3 of Vehicle")).toBeInTheDocument();
+    expect(p.getByText("Scenario 3 matches")).toBeInTheDocument();
     expect(p.getByText("Source error")).toBeInTheDocument();
     await t.user.click(p.getByRole("button", { name: "Payload" }));
     expect(p.queryByTestId("try-payload")).not.toBeInTheDocument();
@@ -85,7 +85,7 @@ describe("Try a match", () => {
   it("follows the draft: reordering the scenarios changes the match", async () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0001");
-    expect(within(pane()).getByText("Scenario 1 of Vehicle")).toBeInTheDocument();
+    expect(within(pane()).getByText("Scenario 1 matches")).toBeInTheDocument();
     const store = configDraftStore(t.services).getState();
     act(() => {
       const parsed = parseMock(store.mock);
@@ -98,7 +98,7 @@ describe("Try a match", () => {
         ) as unknown as JsonObject,
       );
     });
-    expect(within(pane()).getByText("Scenario 3 of Vehicle")).toBeInTheDocument();
+    expect(within(pane()).getByText("Scenario 3 matches")).toBeInTheDocument();
   });
 
   it("typed values never reach the draft, Review or storage", async () => {
@@ -164,15 +164,15 @@ describe("Try a match: the answer, the wait and the announcement", () => {
   it("names the wait from the source's latency: a range, one value, or nothing", async () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0001");
-    expect(within(pane()).getByText("Answers after 50 to 400 ms.")).toBeInTheDocument();
+    expect(within(pane()).getByText("Takes 50 to 400 ms to answer.")).toBeInTheDocument();
     const same = draftMock(t);
     (same.sources.stateSource as { latencyMs: number[] }).latencyMs = [120, 120];
     setMock(t, same);
-    expect(await within(pane()).findByText("Answers after 120 ms.")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Takes 120 ms to answer.")).toBeInTheDocument();
     const none = draftMock(t);
     (none.sources.stateSource as { latencyMs: number[] }).latencyMs = [0, 0];
     setMock(t, none);
-    await waitFor(() => expect(within(pane()).queryByText(/^Answers after/)).toBeNull());
+    await waitFor(() => expect(within(pane()).queryByText(/^Takes .* to answer\.$/)).toBeNull());
   });
 
   it("a timeout behavior names no wait: the source never answers (FR-044)", async () => {
@@ -188,7 +188,7 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     await tryVehicle(t, "FAIL1");
     const p = within(pane());
     expect(await p.findByText("State system: timed out")).toBeInTheDocument();
-    expect(p.queryByText(/^Answers after/)).toBeNull();
+    expect(p.queryByText(/^Takes .* to answer\.$/)).toBeNull();
   });
 
   it("announces the outcome kind once typing pauses, never a typed value or the payload", async () => {
@@ -311,18 +311,18 @@ describe("Try a match: the head note and the outcome row", () => {
     await tryVehicle(t, "ZZ-0001");
     const head = within(pane()).getByTestId("outcome-head");
     expect(head.querySelector(".qm-badge")).toHaveTextContent("Returns a record");
-    expect(head).toHaveTextContent("Scenario 1 of Vehicle");
-    expect(head.nextElementSibling).toHaveTextContent("Answers after 50 to 400 ms.");
+    expect(head).toHaveTextContent("Scenario 1 matches");
+    expect(head.nextElementSibling).toHaveTextContent("Takes 50 to 400 ms to answer.");
     expect(within(pane()).queryByText(/^Result: /)).toBeNull();
     expect(within(pane()).queryByText(/matches:/)).toBeNull();
   });
 
-  it("the default answer reads Default of Vehicle", async () => {
+  it("the default answer says no scenario matches", async () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0099");
     const head = within(pane()).getByTestId("outcome-head");
     expect(head.querySelector(".qm-badge")).toHaveTextContent("No record");
-    expect(head).toHaveTextContent("Default of Vehicle");
+    expect(head).toHaveTextContent("No scenario matches, so the default answers");
   });
 
   it("a timeout row says the source never answers, with no wait", async () => {
@@ -340,6 +340,6 @@ describe("Try a match: the head note and the outcome row", () => {
     expect(head.nextElementSibling).toHaveTextContent(
       "Never answers; the source's timeout ends the wait.",
     );
-    expect(within(pane()).queryByText(/^Answers after/)).toBeNull();
+    expect(within(pane()).queryByText(/^Takes .* to answer\.$/)).toBeNull();
   });
 });

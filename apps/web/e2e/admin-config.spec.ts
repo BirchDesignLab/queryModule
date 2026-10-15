@@ -438,7 +438,7 @@ test("[#362] a stale submit across a publish gets 409, refetches and asks to res
   await dispatcher.unroute("**/api/v1/queries");
 });
 
-test("[#362] roll back restores the previous form; history, export and the conflict alert", async ({
+test("[#362] roll back restores the previous form; history, export, and the draft follows the new live version", async ({
   page,
 }) => {
   await openBuilder(page);
@@ -480,19 +480,15 @@ test("[#362] roll back restores the previous form; history, export and the confl
   await expect(dispatcher.getByLabel("Tag sticker")).toHaveCount(0, { timeout: BOUND });
   await expectNoSeriousAxeViolations(dispatcher);
 
-  // The draft was left as it was, so its base is stale: the next publish is the 409 path, with
-  // its alert and the way to the latest version.
+  // No edits of its own, so the draft follows the new live version: the toolbar names it and
+  // publish waits for a real change (demo dry run G20). The 409 path is the stale-submit test above.
   await page.getByRole("button", { name: "Close history" }).press("Enter");
-  await page.getByRole("button", { name: "Review and publish" }).press("Enter");
-  const alert = page.getByRole("alert").filter({ hasText: "A newer version was published" });
-  await expect(alert).toBeVisible();
-  await expectNoSeriousAxeViolations(page);
-  await alert.getByRole("button", { name: "Load the latest" }).press("Enter");
-  const discard = page.getByRole("dialog", { name: "Load the latest version?" });
-  await expect(discard).toBeVisible();
-  await discard.getByRole("button", { name: "Discard and load" }).press("Enter");
-  await expect(alert).toBeHidden();
-  await expect(page.getByTestId("draft-status")).toContainText("No unpublished changes");
+  const status = page.getByTestId("draft-status");
+  await expect(status).toContainText("No unpublished changes");
+  await expect(page.getByRole("button", { name: "Review and publish" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
 });
 
 test("[#362] a long change list publishes: the review dialog stays accessible; the dispatcher never reloaded", async ({

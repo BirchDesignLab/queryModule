@@ -59,7 +59,9 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     expect(within(tree()).queryByRole("treeitem", { name: /keywordSeverityStyles/ })).toBeNull();
     expect(item(/^Keywords and severity keywords$/)).toBeInTheDocument();
     expect(within(tree()).queryByRole("treeitem", { name: /schemaVersion/ })).toBeNull();
-    expect(within(tree()).getByText(/^Server settings: available after/)).toBeInTheDocument();
+    expect(
+      within(tree()).getByText(/^Sign-in, data retention and source server settings/),
+    ).toBeInTheDocument();
   });
 
   it("only the selected query type is expanded; the others toggle with aria-expanded", async () => {

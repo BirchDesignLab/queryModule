@@ -365,14 +365,6 @@ main[tabindex="-1"]:focus {
   text-transform: uppercase;
 }
 
-/* The audit log's reason, visible under it (spec 6.2). */
-.qm-admin__soon {
-  display: block;
-  padding: 0 var(--qm-space-3) var(--qm-space-1);
-  color: var(--qm-color-text-muted);
-  font-size: var(--qm-type-size-xs);
-}
-
 /* The section is a size container: the builder's heading and toolbar share a row by the section's
    own width (layout.toolbar), whichever way the rail sits. */
 .qm-admin__main {
@@ -1591,6 +1583,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-weight: 500;
 }
 
+/* A change written as a sentence takes the rest of the row. */
+.qm-diff__says {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
 .qm-diff__values {
   display: flex;
   flex: 1 1 auto;
@@ -1600,12 +1599,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
 }
 
-.qm-diff__tag {
+/* The keys behind a plain sentence: a secondary line, for someone who needs to find the setting. */
+.qm-diff__detail {
+  flex: 1 0 100%;
   color: var(--qm-color-text-muted);
-  font-family: var(--qm-type-family-label);
+  font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-xs);
-  font-weight: 600;
-  text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .qm-diff__value {
@@ -1701,6 +1701,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
   text-align: start;
   vertical-align: middle;
+}
+
+.qm-users__table time {
+  white-space: nowrap;
 }
 
 .qm-users__table thead th {

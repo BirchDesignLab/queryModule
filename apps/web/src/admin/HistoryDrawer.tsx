@@ -1,6 +1,7 @@
 import type { ConfigVersion } from "@querymodule/core/contracts";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { useT, useTranslator } from "../app/i18n-context.js";
+import { formatAckTime } from "@querymodule/web-ui";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { exportVersion, fetchVersions } from "./admin-config.js";
 import { configDraftStore } from "./builder-store.js";
@@ -59,7 +60,6 @@ export function HistoryDrawer({
   onRollback(version: number): void;
 }) {
   const t = useT();
-  const { locale } = useTranslator();
   const services = useServices();
   const { api } = services;
   const store = configDraftStore(services);
@@ -101,11 +101,6 @@ export function HistoryDrawer({
     region.addEventListener("keydown", onKey);
     return () => region.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  const time = useMemo(
-    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }),
-    [locale],
-  );
 
   // One export per version at a time: a second click on a version whose export is in flight
   // downloads nothing twice. An export of another version is its own request and goes ahead, so
@@ -179,7 +174,7 @@ export function HistoryDrawer({
                   <span className={STATUS_BADGE[v.status]}>{t(STATUS_TEXT[v.status])}</span>
                   <span className="qm-history__when">
                     {t(v.status === "draft" ? "admin.history.created" : "admin.history.published")}{" "}
-                    <time dateTime={new Date(at).toISOString()}>{time.format(at)}</time>
+                    <time dateTime={new Date(at).toISOString()}>{formatAckTime(at)}</time>
                   </span>
                   {v.rollbackOf !== null && (
                     <span className="qm-history__of">

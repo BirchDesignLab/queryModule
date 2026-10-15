@@ -38,7 +38,7 @@ export function AdminLayout() {
 
 /**
  * The admin rail (design target, A1): the way back first, then the sections by group. The audit
- * log is listed but not yet built (M2): aria-disabled keeps it focusable with its reason (spec 6.2).
+ * log has no page yet, so the rail does not list it (demo dry run G15).
  */
 function AdminRail({ users }: { users: boolean }) {
   const t = useT();
@@ -66,14 +66,6 @@ function AdminRail({ users }: { users: boolean }) {
           <ul aria-labelledby={`${uid}-people`}>
             <li>
               <NavLink to="/admin/users">{t("admin.nav.users")}</NavLink>
-            </li>
-            <li>
-              <button type="button" aria-disabled="true" aria-describedby={`${uid}-audit`}>
-                {t("admin.nav.audit")}
-              </button>
-              <span className="qm-admin__soon" id={`${uid}-audit`}>
-                {t("admin.nav.auditPending")}
-              </span>
             </li>
           </ul>
         </div>

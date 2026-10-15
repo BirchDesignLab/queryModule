@@ -59,17 +59,17 @@ describe("the card preview", () => {
     // The remarks row, its keyword marked (the mark splits the text).
     expect(within(card).getByText("Remarks")).toBeInTheDocument();
     expect(card.querySelectorAll("mark").length).toBeGreaterThan(0);
-    expect(within(pane()).getByText(/This card/)).toBeInTheDocument();
+    expect(within(pane()).getByText(/the card you are editing/)).toBeInTheDocument();
   });
 
   it("typed plate ZZ-0001 picks the STOLEN scenario, ABC123 the no-record one", async () => {
     const t = await openVehicleCard();
     await screen.findByRole("region", { name: "Card preview" });
     await typeValues(t, "ZZ-0001");
-    expect(await within(pane()).findByText("Scenario 1 of Vehicle")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Scenario 1 matches")).toBeInTheDocument();
     expect(within(pane()).getAllByText("STOLEN").length).toBeGreaterThan(0);
     await typeValues(t, "ABC123");
-    expect(await within(pane()).findByText("Scenario 2 of Vehicle")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Scenario 2 matches")).toBeInTheDocument();
     expect(within(pane()).getByText("NO RECORD")).toBeInTheDocument();
     // Typed values never reach the draft.
     expect(JSON.stringify(configDraftStore(t.services).getState().doc)).not.toContain("ABC123");
@@ -109,12 +109,16 @@ describe("the card preview", () => {
     const nav = screen.getByRole("navigation", { name: "Configuration items" });
     const tree = within(nav).getByRole("tree", { name: "Result cards" });
     await t.user.click(within(tree).getByRole("treeitem", { name: /^Vehicle cards$/ }));
-    expect(await within(pane()).findByText(/^Card used: .*\(veh-summary\)\.$/)).toBeInTheDocument();
-    expect(within(pane()).queryByText(/Another card/)).toBeNull();
-    expect(within(pane()).queryByText(/This card/)).toBeNull();
+    expect(
+      await within(pane()).findByText(/^Card shown to dispatchers: [^,]*\.$/),
+    ).toBeInTheDocument();
+    expect(within(pane()).queryByText(/a different card/)).toBeNull();
+    expect(within(pane()).queryByText(/the card you are editing/)).toBeNull();
     await t.user.click(within(tree).getByRole("treeitem", { name: /^Keywords and severity/ }));
-    expect(await within(pane()).findByText(/^Card used: .*\(veh-summary\)\.$/)).toBeInTheDocument();
-    expect(within(pane()).queryByText(/Another card/)).toBeNull();
+    expect(
+      await within(pane()).findByText(/^Card shown to dispatchers: [^,]*\.$/),
+    ).toBeInTheDocument();
+    expect(within(pane()).queryByText(/a different card/)).toBeNull();
   });
 
   // BW3 polish (#642, T10-C3): a card narrowed by a rule wins in pick mode for the scenario whose
@@ -141,9 +145,9 @@ describe("the card preview", () => {
     );
     const scenario = within(pane()).getByRole("combobox", { name: "Scenario" });
     await t.user.selectOptions(scenario, "0:0");
-    expect(await within(pane()).findByText(/\(veh-plate\)\. Another card\.$/)).toBeInTheDocument();
+    expect(await within(pane()).findByText(/, a different card\.$/)).toBeInTheDocument();
     await t.user.selectOptions(scenario, "0:d");
-    expect(await within(pane()).findByText(/\(veh-summary\)\. This card\.$/)).toBeInTheDocument();
+    expect(await within(pane()).findByText(/, the card you are editing\.$/)).toBeInTheDocument();
   });
 });
 
@@ -190,7 +194,7 @@ describe("the card preview: typed responses", () => {
     const options = within(scenario).getAllByRole("option") as HTMLOptionElement[];
     for (const o of options.slice(-2)) {
       await t.user.selectOptions(scenario, o.value);
-      expect(await within(pane()).findByText(/\(pro-firearm\)/)).toBeInTheDocument();
+      expect(await within(pane()).findByText(/^Card shown to dispatchers: /)).toBeInTheDocument();
     }
   });
 });
@@ -256,7 +260,7 @@ describe("the card preview: the Values segmented control and the outcome row", (
     await typeValues(t, "ZZ-0001");
     const head = await within(pane()).findByTestId("outcome-head");
     expect(head).toHaveTextContent("Returns a record");
-    expect(head).toHaveTextContent("Scenario 1 of Vehicle");
+    expect(head).toHaveTextContent("Scenario 1 matches");
     expect(head.querySelector(".qm-badge")).toHaveTextContent("Returns a record");
     await typeValues(t, "ABC123");
     expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent("No record");
@@ -267,11 +271,11 @@ describe("the card preview: the Values segmented control and the outcome row", (
     expect(within(pane()).queryByText(/^Matched scenario/)).toBeNull();
   });
 
-  it("the default answer says Default of the query type", async () => {
+  it("the default answer says no scenario matches", async () => {
     await openVehicleCard();
     await screen.findByRole("region", { name: "Card preview" });
     expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent(
-      "Default of Vehicle",
+      "No scenario matches, so the default answers",
     );
   });
 });

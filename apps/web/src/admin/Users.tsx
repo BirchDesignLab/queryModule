@@ -1,6 +1,7 @@
 import { type AdminUser, ROLES } from "@querymodule/core/contracts";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { useT, useTranslator } from "../app/i18n-context.js";
+import { formatAckTime } from "@querymodule/web-ui";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { CreateUserDialog } from "./CreateUserDialog.js";
 import { LeaveDialog } from "./LeaveGuard.js";
@@ -20,7 +21,6 @@ type Notice = { kind: "info" | "error"; text: string };
 export function UsersView() {
   const { api } = useServices();
   const t = useT();
-  const { locale } = useTranslator();
   const uid = useId();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -45,10 +45,6 @@ export function UsersView() {
     };
   }, [api, attempt]);
 
-  const time = useMemo(
-    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }),
-    [locale],
-  );
   const replace = useCallback(
     (user: AdminUser) =>
       setUsers((list) => list?.map((u) => (u.id === user.id ? user : u)) ?? list),
@@ -244,7 +240,7 @@ export function UsersView() {
                         t("admin.users.never")
                       ) : (
                         <time dateTime={new Date(u.lastSignInAt).toISOString()}>
-                          {time.format(u.lastSignInAt)}
+                          {formatAckTime(u.lastSignInAt)}
                         </time>
                       )}
                     </td>

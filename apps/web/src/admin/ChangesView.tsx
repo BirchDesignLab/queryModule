@@ -3,6 +3,7 @@ import { VisuallyHidden } from "@querymodule/web-ui";
 import { type ReactNode, useContext, useId, useMemo } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
+import { useCardName } from "./CardsEditor.js";
 import {
   buildChangeGroups,
   type ChangeDeps,
@@ -59,12 +60,16 @@ export function ChangesView({
   const { issues, status, served } = useContext(ChecksContext);
   const labelText = useLabelText();
   const itemName = useItemName();
+  const cardName = useCardName(doc);
   const headingId = useId();
   const language = useMemo(
     () => (locale: string) => languageName(locale, translator.locale),
     [translator.locale],
   );
-  const deps = useMemo<ChangeDeps>(() => ({ t, labelText, itemName }), [t, labelText, itemName]);
+  const deps = useMemo<ChangeDeps>(
+    () => ({ t, labelText, itemName, cardName }),
+    [t, labelText, itemName, cardName],
+  );
   const groups = useMemo<ChangeGroup[]>(() => {
     if (live === null) return [];
     const list = buildChangeGroups(diffConfig(live, doc), live, doc, deps);
@@ -222,23 +227,42 @@ function EntryButton({
   return (
     <Row onOpen={onOpen === undefined ? undefined : () => onOpen(entry.target)}>
       <span className="qm-badge qm-diff__kind">{t(`admin.diff.kind.${entry.kind}`)}</span>
-      <span className="qm-diff__what">{entry.what}</span>
-      <span className="qm-diff__values">
-        {entry.before !== undefined && (
-          <span className="qm-diff__side">
-            <span className="qm-diff__tag">{t("admin.diff.was")}</span>{" "}
-            <Value value={entry.before} />
-          </span>
-        )}
-        {entry.after !== undefined && (
-          <span className="qm-diff__side">
-            <span className="qm-diff__tag">{t("admin.diff.now")}</span>{" "}
-            <Value value={entry.after} />
-          </span>
-        )}
+      <span className="qm-diff__says">
+        <EntrySentence entry={entry} />
       </span>
-      <VisuallyHidden>{entry.keyText}</VisuallyHidden>
+      {entry.keyText !== "" && <span className="qm-diff__detail">{entry.keyText}</span>}
     </Row>
+  );
+}
+
+/**
+ * One change as a plain sentence (demo dry run G18): a bespoke one from the model, else the plain
+ * name and the two values joined by words. No Was or Now labels; the keys go in the detail line.
+ */
+function EntrySentence({ entry }: { entry: ChangeEntry }) {
+  const t = useT();
+  if (entry.sentence !== undefined) return <>{entry.sentence}</>;
+  const { what, before, after } = entry;
+  if (entry.kind === "moved")
+    return (
+      <>
+        {t(what === t("admin.diff.order") ? "admin.diff.s.order" : "admin.diff.s.moved", { what })}.
+      </>
+    );
+  if (before !== undefined && after !== undefined)
+    return (
+      <>
+        {t("admin.diff.s.changed", { what })} <Value value={before} /> {t("admin.diff.s.to")}{" "}
+        <Value value={after} />.
+      </>
+    );
+  const value = after ?? before;
+  if (value === undefined) return <>{t(`admin.diff.s.${entry.kind}`, { what })}.</>;
+  return (
+    <>
+      {t(after === undefined ? "admin.diff.s.removed" : "admin.diff.s.added", { what })}:{" "}
+      <Value value={value} />.
+    </>
   );
 }
 

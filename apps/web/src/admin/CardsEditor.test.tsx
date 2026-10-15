@@ -382,15 +382,15 @@ describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
 });
 
 describe("Review lines", () => {
-  it("the Changes view lists the added row under Result cards by card id", async () => {
+  it("the Changes view lists the added row under Result cards by card name", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
     await addMakeRow(t);
     await t.user.click(screen.getByRole("tab", { name: "Changes" }));
     const heading = await screen.findByRole("heading", { level: 4, name: /^Result cards/ });
     const group = heading.closest("section") as HTMLElement;
-    expect(within(group).getByText(/Vehicle, card veh-summary/)).toBeInTheDocument();
-    expect(within(group).getByText(/Row Make test \(vehicle\.make\)/)).toBeInTheDocument();
+    expect(within(group).getByText(/^Vehicle card: All results$/)).toBeInTheDocument();
+    expect(within(group).getByText(/^Make test added to the /)).toBeInTheDocument();
   });
 });
 

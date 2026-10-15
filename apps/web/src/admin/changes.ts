@@ -29,6 +29,11 @@ export interface ChangeEntry {
   after?: ChangeValue;
   /** The item to open in the builder. */
   target: string;
+  /**
+   * The whole change as one plain sentence ("Make moves to the summary."), where the entry has a
+   * bespoke one. The view writes the rest from `what` and the two values (demo dry run G18).
+   */
+  sentence?: string;
 }
 
 export interface ChangeSection {
@@ -52,6 +57,8 @@ export interface ChangeDeps {
   labelText(labelKey: unknown): string;
   /** The plain name of a top-level item ("Terminal commands"). */
   itemName(key: string): string;
+  /** A result card's plain name ("All results"), from its source, persona and rule. */
+  cardName?(mapping: unknown): string;
 }
 
 type Obj = JsonObject;
@@ -407,7 +414,7 @@ export function buildChangeGroups(
         `card:${cardId === "" ? `new:${segText(ref)}` : cardId}`,
         t("admin.cards.review.card", {
           type: typeName,
-          id: cardId === "" ? t("admin.diff.unnamedShort") : cardId,
+          name: deps.cardName?.(card) ?? (cardId === "" ? t("admin.diff.unnamedShort") : cardId),
         }),
         cardId,
       );
@@ -417,6 +424,14 @@ export function buildChangeGroups(
         const rows = objsOf(card?.elements).length;
         sect.entries.push({
           ...cardEntry(t("admin.cards.review.cardItem"), cardId, false),
+          ...(kind === "added" || kind === "removed"
+            ? {
+                sentence: t(
+                  kind === "added" ? "admin.cards.sentence.added" : "admin.cards.sentence.removed",
+                  { type: typeName, rows: t("admin.cards.review.rows", { count: rows }) },
+                ),
+              }
+            : {}),
           ...(kind === "added" || kind === "removed"
             ? {
                 [kind === "added" ? "after" : "before"]: {
@@ -438,7 +453,6 @@ export function buildChangeGroups(
         const label = deps.labelText(row?.labelKey);
         const rowName = t("admin.cards.review.row", {
           label: label !== "" ? label : str(row?.path),
-          path: str(row?.path),
         });
         const rest = inner.slice(2);
         const view = str(row?.view);
@@ -446,12 +460,29 @@ export function buildChangeGroups(
           view === "summary" || view === "detail" || view === "both"
             ? { text: t(`admin.cards.view.${view}`) }
             : undefined;
+        // "Make moves to the summary": the row's name and where it shows, never its path or the
+        // old and new view words.
+        const viewKey = view === "summary" || view === "detail" || view === "both" ? view : null;
+        const viewChanged = rest.length === 1 && rest[0] === "view" && kind === "changed";
+        const sentence =
+          viewKey === null
+            ? undefined
+            : viewChanged
+              ? t(`admin.cards.sentence.moves.${viewKey}`, { row: rowName })
+              : rest.length === 0 && kind === "added"
+                ? t(`admin.cards.sentence.rowAdded.${viewKey}`, { row: rowName })
+                : undefined;
         sect.entries.push({
           ...cardEntry(
             rest.length === 0 ? rowName : `${rowName} › ${plain(rest)}`,
-            [cardId, ...inner.map(segText)].join(" "),
+            [cardId, str(row?.path), ...rest.map(segText)].filter((x) => x !== "").join(" "),
             rest.length > 0,
           ),
+          ...(rest.length === 0 && kind === "removed"
+            ? { sentence: t("admin.cards.sentence.rowRemoved", { row: rowName }) }
+            : sentence === undefined
+              ? {}
+              : { sentence }),
           ...(rest.length === 0 &&
           viewText !== undefined &&
           (kind === "added" || kind === "removed")
@@ -464,6 +495,37 @@ export function buildChangeGroups(
 
     const g = group(`site:${top}`, deps.itemName(top), top);
     const rest = p.slice(1);
+    if (top === "keywords" && p.length >= 2) {
+      // One plain sentence per keyword ("Keyword TESTMAKE added as a warning."), not its JSON.
+      const word =
+        typeof p[1] === "object"
+          ? p[1].is
+          : str(((after(2) ?? before(2)) as Obj | undefined)?.keyword);
+      const sev = (value: unknown): string => t(`severity.word.${str(value)}`);
+      const whole = p.length === 2;
+      const severityOnly = p.length === 3 && p[2] === "severity" && kind === "changed";
+      const sentence = whole
+        ? kind === "added"
+          ? t("admin.diff.keyword.added", {
+              keyword: word,
+              severity: sev((after(2) as Obj | undefined)?.severity),
+            })
+          : kind === "removed"
+            ? t("admin.diff.keyword.removed", { keyword: word })
+            : undefined
+        : severityOnly
+          ? t("admin.diff.keyword.severity", {
+              keyword: word,
+              from: sev(change.before),
+              to: sev(change.after),
+            })
+          : undefined;
+      section(g, "own", null).entries.push({
+        ...entry(plain(rest), p.map(segText).join(" "), kind !== "moved"),
+        ...(sentence === undefined ? {} : { sentence }),
+      });
+      continue;
+    }
     // A list that only changed its order has nothing else to name.
     const reordered =
       kind === "moved" || (rest.length === 0 && kind !== "added" && kind !== "removed");
