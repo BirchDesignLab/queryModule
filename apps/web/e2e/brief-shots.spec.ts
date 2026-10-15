@@ -195,12 +195,18 @@ test("officer shot: a critical card at 1024x768", async ({ page }) => {
   await expect(card(page, "State system")).toBeVisible({ timeout: 8000 });
   await expect(card(page, "National system")).toBeVisible({ timeout: 8000 });
   // The cards sit below the form at this size: bring the Last request region (its heading and the
-  // cards) to the top of the viewport, so no banner is cut off above it.
-  await page
-    .getByRole("region", { name: "Last request" })
-    .evaluate((el) => el.scrollIntoView({ block: "start" }));
+  // entry) into view, then keep the frame from that heading down, so no half of the form's action
+  // bar shows above it.
+  const last = page.getByRole("region", { name: "Last request" });
+  await last.evaluate((el) => el.scrollIntoView({ block: "start" }));
   await page.mouse.move(0, 0);
-  await save(page, "officer-card");
+  const box = await last.boundingBox();
+  if (box === null) throw new Error("officer-card: the Last request region has no box");
+  const top = Math.max(0, Math.floor(box.y) - 8);
+  await page.screenshot({
+    path: join(DIR ?? "", "officer-card.png"),
+    clip: { x: 0, y: top, width: 1024, height: 768 - top },
+  });
 });
 
 const tree = (page: Page) => page.getByRole("navigation", { name: "Configuration items" });

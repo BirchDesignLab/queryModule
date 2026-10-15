@@ -412,8 +412,8 @@
             commands and result layouts, and a code release per site is not workable.
           </p>
           <p>
-            The target is an operations console: dense, calm, dark-first, one clear accent, nothing
-            decorative. The design holds to four goals. The answer is readable at a glance. A serious result is hard to miss. The screens are built to work by keyboard. And the people who run a site can change what the screen shows, see what dispatchers will see, and publish it.
+            The target is an operations console: dense, calm, one clear accent, nothing
+            decorative, in day, night and red-shift themes that follow the operating system by default. The design holds to four goals. The answer is readable at a glance. A serious result is hard to miss. The screens are built to work by keyboard. And the people who run a site can change what the screen shows, see what dispatchers will see, and publish it.
           </p>
         </section>
 
@@ -586,15 +586,16 @@
       <!-- Page 3: key flows, query and acknowledgment -->
       <article class="page" id="p-flow-query">
         <section class="block" id="flow-query">
-          <h2><span class="tag">Key flow 1</span>Ask, acknowledge, watch each source answer</h2>
+          <h2><span class="tag">Key flow 1</span>Ask, see it recorded, watch each source answer</h2>
           <p>
-            Run query records the request and answers at once with an acknowledgment at the top of
-            Requests this shift, with the send time and a short reference, and a request entry under
-            it. In the entry, one line per source reads pending, then settles on its own as that
-            source answers. A slow or failed
-            source never holds up another. The text carries the status; an icon is never the only
-            signal, and a screen reader hears one summary after each change. Edit as new query on a
-            request puts its values back in the form to change and run again.
+            Run query records the request and answers at once: a new entry appears at the top of
+            Requests this shift, marked Acknowledged, with the send time and a short reference to
+            copy, and the form starts over for the next query. In the entry, one line per source
+            reads pending, then settles on its own as that source answers. A slow or failed source
+            never holds up another. The text carries the status; an icon is never the only signal,
+            and a screen reader hears the acknowledgment and then one summary after each change.
+            Edit as new query on a request puts its values back in the form to change and run
+            again.
           </p>
           <figure class="shot" id="shot-query-panel">
             <img
@@ -606,9 +607,9 @@
           <figure class="shot" id="shot-requests-status">
             <img
               src="shots/requests-status.png"
-              alt="Requests this shift with an acknowledged request and live per-source status"
+              alt="Requests this shift with one request marked Acknowledged: the State system returned a critical card and the National system is still pending"
             />
-            <figcaption>An acknowledged request with each source settling on its own.</figcaption>
+            <figcaption>The request entry, Acknowledged, with the State system answered and the National system still pending.</figcaption>
           </figure>
         </section>
       </article>
@@ -700,7 +701,7 @@
           </p>
           <figure class="shot" id="shot-officer-card">
             <img src="shots/officer-card.png" alt="The officer layout showing a returned result card at 1024 by 768" />
-            <figcaption>Officer layout at 1024 x 768, scrolled to the last request.</figcaption>
+            <figcaption>Officer layout at 1024 x 768: the last request under the form, both sources returned.</figcaption>
           </figure>
         </section>
 
@@ -710,7 +711,8 @@
             Live status travels over a socket. Every event is also written to a per-user log, and the
             client remembers the last event it applied. After a drop or a reload it says where it was
             and the server replays what it missed. If it was away too long, the server says so and the
-            client reloads the request list instead.
+            client reloads the request list instead. A request that could not be sent keeps a Retry on
+            its entry, and once the server is back one Enter sends it again.
           </p>
           <figure id="fig-replay">
             <svg viewBox="0 0 640 170" role="img" aria-labelledby="fr-t fr-d">
@@ -935,9 +937,9 @@
       {
         "asOf": "Oct 15, 2026",
         "milestone": "M2 P1",
-        "mergedChanges": 264,
+        "mergedChanges": 266,
         "workItems": 403,
-        "tests": 5142,
+        "tests": 5151,
         "e2eScenarios": 332
       }
     </script>
