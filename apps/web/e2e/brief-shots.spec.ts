@@ -63,6 +63,28 @@ async function saveCrop(
   });
 }
 
+/**
+ * A crop of one builder pane: the pane's own width, from the top row of the side pane down to at
+ * most `maxHeight` CSS pixels, so two crops can print side by side with text that reads.
+ */
+async function savePane(
+  page: Page,
+  name: string,
+  pane: Locator,
+  topRow: Locator,
+  maxHeight: number,
+): Promise<void> {
+  const box = await pane.boundingBox();
+  const top = await topRow.boundingBox();
+  if (box === null || top === null) throw new Error(`${name}: a pane has no box`);
+  const dir = DIR ?? "";
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({
+    path: join(dir, `${name}.png`),
+    clip: { x: box.x, y: top.y, width: box.width, height: Math.min(top.height, maxHeight) },
+  });
+}
+
 async function startAs(page: Page, email: string, width: number, height: number): Promise<void> {
   await page.setViewportSize({ width, height });
   await page.context().clearCookies();
@@ -172,8 +194,11 @@ test("officer shot: a critical card at 1024x768", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(card(page, "State system")).toBeVisible({ timeout: 8000 });
   await expect(card(page, "National system")).toBeVisible({ timeout: 8000 });
-  // The card sits below the form at this size: bring the cards to the top of the viewport.
-  await card(page, "State system").evaluate((el) => el.scrollIntoView({ block: "start" }));
+  // The cards sit below the form at this size: bring the Last request region (its heading and the
+  // cards) to the top of the viewport, so no banner is cut off above it.
+  await page
+    .getByRole("region", { name: "Last request" })
+    .evaluate((el) => el.scrollIntoView({ block: "start" }));
   await page.mouse.move(0, 0);
   await save(page, "officer-card");
 });
@@ -190,7 +215,7 @@ async function selectRow(page: Page, name: RegExp): Promise<void> {
 }
 
 async function openBuilder(page: Page): Promise<void> {
-  await startAs(page, "admin@example.test", 1500, 900);
+  await startAs(page, "admin@example.test", 1500, 1000);
   await page.getByRole("link", { name: "Admin" }).press("Enter");
   await page.getByRole("link", { name: "Site configuration" }).press("Enter");
   await expect(page.getByRole("heading", { name: "Site configuration", level: 2 })).toBeVisible();
@@ -222,7 +247,7 @@ test("builder shots: cards, keywords, try a match", async ({ page }) => {
     .getByText("Applies to", { exact: true })
     .evaluate((el) => el.scrollIntoView({ block: "start" }));
   await page.mouse.move(0, 0);
-  await saveCrop(page, "builder-cards", editor(page), preview(page), 640);
+  await saveCrop(page, "builder-cards", editor(page), preview(page), 650);
 
   // Keywords and severity with the contrast per theme.
   await selectRow(page, /^Keywords and severity/);
@@ -235,7 +260,7 @@ test("builder shots: cards, keywords, try a match", async ({ page }) => {
     .first()
     .evaluate((el) => el.scrollIntoView({ block: "start" }));
   await page.mouse.move(0, 0);
-  await saveCrop(page, "builder-keywords", editor(page), preview(page), 600);
+  await savePane(page, "builder-keywords", editor(page), preview(page), 665);
 
   // Try a match on the state system's Vehicle response.
   const mockRow = tree(page).getByRole("treeitem", {
@@ -252,5 +277,5 @@ test("builder shots: cards, keywords, try a match", async ({ page }) => {
       el.scrollTop = 0;
   });
   await page.mouse.move(0, 0);
-  await saveCrop(page, "try-a-match", editor(page), pane, 400);
+  await savePane(page, "try-a-match", pane, pane, 672);
 });
