@@ -113,10 +113,12 @@ const listName = (officer: boolean) => (officer ? "Last request" : "Requests thi
 /** Terminal command, then wait for the acknowledgment, every source settled and a card drawn. */
 async function runTerminal(page: Any, officer: boolean, cmd: string): Promise<string> {
   const input = page.getByRole("textbox", { name: "Command" });
-  if (!(await input.isVisible().catch(() => false))) {
+  for (let tries = 0; tries < 4; tries++) {
+    if (await input.isVisible().catch(() => false)) break;
     await page.keyboard.press("Control+Backquote");
-    await sleep(300);
+    await sleep(500);
   }
+  await input.waitFor({ timeout: 5000 });
   await input.fill(cmd);
   await input.press("Enter");
   const row = page
@@ -279,6 +281,9 @@ async function main(): Promise<void> {
           ["Vehicle", "OK"],
         ] as const) {
           await page.keyboard.press(label === "Property" ? "Alt+Digit3" : "Alt+Digit1");
+          await page
+            .getByRole("heading", { name: new RegExp(`^${label} query`) })
+            .waitFor({ timeout: 5000 });
           await sleep(300);
           if (kind === "FIREARM") {
             await page
@@ -449,6 +454,8 @@ async function main(): Promise<void> {
         await sleep(300);
         await shot(page, "publish: Make moved to summary");
         await treeClick(/^Keywords and severity/);
+        await editor.getByLabel("New keyword", { exact: true }).waitFor({ timeout: 10000 });
+        await shot(page, "publish: keywords editor opened");
         await editor.getByLabel("New keyword", { exact: true }).fill("TESTMAKE");
         await editor
           .getByLabel("Severity of the new keyword")
