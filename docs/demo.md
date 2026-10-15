@@ -9,7 +9,7 @@ The live demo at https://querymodule.birchdesignlab.com uses these accounts. Pas
 | mobileunit@example.test | user (mobile-unit layout) |
 | officer@example.test | trainingOfficer (mobile-unit layout) |
 | admin@example.test | admin |
-| implementer@example.test | implementer (site config only) |
+| implementer@example.test | implementer (site config only; its header has no Queries link) |
 | smoke@example.test | user (smoke tests only) |
 
 All data behind these accounts is mock data (spec 5.4 fixture policy). No real person, vehicle or property record exists in this system.
