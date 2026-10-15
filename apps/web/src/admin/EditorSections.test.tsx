@@ -199,7 +199,9 @@ describe("A3 query type editor: ruled sections", () => {
     await t.user.click(adv().querySelector("summary") as HTMLElement);
     expect(adv().open).toBe(false);
     await t.user.click(
-      screen.getByRole("button", { name: /^1 error(?:, \d+ warnings?)?\. Go to the first issue\.$/ }),
+      screen.getByRole("button", {
+        name: /^1 error(?:, \d+ warnings?)?\. Go to the first issue\.$/,
+      }),
     );
     const pattern = within(adv()).getByLabelText("Allowed pattern");
     await waitFor(() => expect(pattern).toHaveFocus());
