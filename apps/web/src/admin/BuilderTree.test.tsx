@@ -571,6 +571,22 @@ describe("collapsible groups (#586)", () => {
       expect(header(name)).toHaveAttribute("aria-expanded", "true");
   });
 
+  // Demo dry run G37: the mock rows read "Mock response: Vehicle, State system" and wrapped to three
+  // lines. The row shows the short name ("Vehicle") with its key under it; its accessible name keeps
+  // the full words, so rows that share a short name are still told apart.
+  it("mock rows show a short name and keep their full accessible name", async () => {
+    await openWithMock();
+    const row = within(tree()).getByRole("treeitem", {
+      name: /^Mock response: Vehicle, State system VEH/,
+    });
+    expect(row.querySelector(".qm-tree__label")).toHaveTextContent(/^Vehicle$/);
+    expect(row.querySelector(".qm-tree__label")).toHaveAttribute("aria-hidden", "true");
+    const source = within(tree()).getByRole("treeitem", { name: /^Mock source: State system/ });
+    expect(source.querySelector(".qm-tree__label")).toHaveTextContent(/^State system$/);
+    const add = within(tree()).getByRole("treeitem", { name: /^Add mock response: State system/ });
+    expect(add.querySelector(".qm-tree__label")).toHaveTextContent(/^Add response$/);
+  });
+
   it("Left and Right on the Site and Mock responses groups close and open them", async () => {
     const t = await openWithMock();
     for (const [name, child] of [

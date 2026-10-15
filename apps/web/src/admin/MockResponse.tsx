@@ -488,7 +488,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
           )}
         </div>
       </Sect>
-      <Sect title={t("admin.mock.default.title")} hint={t("admin.mock.default.hint")}>
+      <Sect wide title={t("admin.mock.default.title")} hint={t("admin.mock.default.hint")}>
         <ResultRadios
           name={`${base}-default`}
           value={defaultResult}
@@ -521,6 +521,7 @@ export function MockResponse({ sourceId, index }: { sourceId: string; index: num
         )}
       </Sect>
       <Sect
+        wide
         title={`${t("admin.mock.scenarios.title")} (${count})`}
         hint={t("admin.mock.scenarios.hint")}
       >

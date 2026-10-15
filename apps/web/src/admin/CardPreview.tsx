@@ -172,10 +172,15 @@ export function CardPreview({
       })),
     ];
   });
+  // Until one is picked, the preview opens on the first scenario that answers with a record, so
+  // a card edit shows at once; the default answer is the fallback (G22).
+  const firstRecord = responses
+    .flatMap(({ r, ri }) => r.scenarios.map((sc, si) => ({ sc, value: `${ri}:${si}` })))
+    .find(({ sc }) => resultOf(sc) === "record")?.value;
   const picked =
     scenario !== null && options.some((o) => o.value === scenario)
       ? scenario
-      : (options[0]?.value ?? "");
+      : (firstRecord ?? options[0]?.value ?? "");
 
   const answer = useMemo<Answer>(() => {
     if (mock === null || config === null || code === "") return { kind: "none" };

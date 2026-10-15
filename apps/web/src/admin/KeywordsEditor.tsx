@@ -118,6 +118,9 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
   // a redo (CRITIC-M2): rows are keyed by a stable identity, not by position.
   const { ids } = useRowIds(keywords);
   const [newText, setNewText] = useState("");
+  // Add keyword pressed with no word: said out loud, not ignored (demo dry run G3).
+  const [needWord, setNeedWord] = useState(false);
+  const needWordId = useId();
   const [newSeverity, setNewSeverity] = useState<Sev>("warning");
   const [sampleText, setSampleText] = useState<string | null>(null);
   const addOwner = `${idPrefix}-kw-add`;
@@ -145,7 +148,13 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
       index = r.index;
       return r.site;
     });
-    if (index < 0) return;
+    if (index < 0) {
+      if (newText.trim() === "") {
+        setNeedWord(true);
+        focus([addOwner, "text"]);
+      }
+      return;
+    }
     setNewText("");
     focus([addOwner, "text"]);
   };
@@ -317,13 +326,25 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
               data-owner={addOwner}
               data-role="text"
               value={newText}
-              onChange={(e) => setNewText(e.target.value)}
+              aria-invalid={needWord ? "true" : undefined}
+              aria-describedby={needWord ? needWordId : undefined}
+              onChange={(e) => {
+                setNewText(e.target.value);
+                setNeedWord(false);
+              }}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
                 add();
               }}
             />
+            {needWord && (
+              <span id={needWordId} className="qm-admin__issues">
+                <span className="qm-admin__issue qm-admin__issue--error">
+                  {t("admin.config.level.error")} {t("admin.keywords.newRequired")}
+                </span>
+              </span>
+            )}
           </div>
           <div>
             <label htmlFor={newSeverityId}>{t("admin.keywords.newSeverity")}</label>{" "}
@@ -347,7 +368,7 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
           </button>
         </div>
       </Sect>
-      <Sect title={t("admin.keywords.styles.title")} hint={t("admin.keywords.styles.hint")}>
+      <Sect wide title={t("admin.keywords.styles.title")} hint={t("admin.keywords.styles.hint")}>
         {SEVERITIES.map((s) => (
           <StyleFieldset
             key={s}
@@ -585,6 +606,11 @@ function StyleFieldset({
   const translator = useTranslator();
   const label = t(`severity.${severity}`);
   const path = ["keywordSeverityStyles", severity] as const;
+  // A token's plain name ("Critical background"); a token with none lists by its key.
+  const colorName = (token: string): string => {
+    const key = `admin.keywords.color.${token.replace(/^color\./, "").replaceAll(".", "-")}`;
+    return translator.has(key) ? t(key) : token;
+  };
   const { describedBy, messages } = useItemIssues(idPrefix, path, [
     "color",
     "background",
@@ -606,6 +632,7 @@ function StyleFieldset({
         label={t("admin.keywords.style.color")}
         value={style.color}
         options={COLOR_NAMES}
+        optionLabel={colorName}
       />
       <SelectControl
         idPrefix={idPrefix}
@@ -613,6 +640,7 @@ function StyleFieldset({
         label={t("admin.keywords.style.background")}
         value={style.background}
         options={COLOR_NAMES}
+        optionLabel={colorName}
       />
       <CheckControl
         idPrefix={idPrefix}

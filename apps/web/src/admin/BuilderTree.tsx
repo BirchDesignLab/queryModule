@@ -54,6 +54,11 @@ interface TreeNode {
   labelKey?: string;
   /** The config key or code beside it, in mono; omitted when it equals the label. */
   key?: string;
+  /**
+   * A shorter name the row shows in place of `label`; the full label stays as its accessible name,
+   * so rows that share a short name are still told apart (a mock response by its source).
+   */
+  short?: string;
   children: TreeNode[];
   errors: number;
   warnings: number;
@@ -88,6 +93,7 @@ function useTreeNodes(
       children: TreeNode[] = [],
       rollUp = false,
       labelKey = "",
+      short = "",
     ): TreeNode => {
       const own = under(pointer);
       const counts = rollUp
@@ -100,6 +106,7 @@ function useTreeNodes(
         pointer,
         label: text,
         ...(labelKey !== "" ? { labelKey } : {}),
+        ...(short !== "" ? { short } : {}),
         ...(key !== "" ? { key } : {}),
         children,
         ...counts,
@@ -205,6 +212,10 @@ function useTreeNodes(
             r.types === undefined
               ? r.queryType
               : `${r.queryType} ${Object.values(r.types).join(" ")}`,
+            [],
+            false,
+            "",
+            labelText(typeKeys.get(r.queryType)) || r.queryType,
           ),
         );
         // The last child opens the source's add form (#572): one press from the tree.
@@ -213,6 +224,10 @@ function useTreeNodes(
             mockPointer.addResponse(id),
             t("admin.mock.addResponseRow", { source: sourceName }),
             "",
+            [],
+            false,
+            "",
+            t("admin.mock.addResponseShort"),
           ),
         );
         mockNodes.push(
@@ -223,6 +238,8 @@ function useTreeNodes(
             id,
             responses,
             false,
+            "",
+            sourceName,
           ),
         );
       }
@@ -263,7 +280,11 @@ function useLabelResolver(): LabelText {
  * One row's label. It follows its own key in the draft store, so a keystroke in one label
  * re-renders the rows that show it and no others: the memoized rows around it stay as they are.
  */
-function TreeLabel({ node }: { node: { label: string; labelKey?: string; key?: string } }) {
+function TreeLabel({
+  node,
+}: {
+  node: { label: string; labelKey?: string; key?: string; short?: string };
+}) {
   count("labels");
   const translator = useTranslator();
   const store = configDraftStore(useServices());
@@ -273,9 +294,20 @@ function TreeLabel({ node }: { node: { label: string; labelKey?: string; key?: s
   );
   const text = draftText ?? (key !== "" && translator.has(key) ? translator.t(key) : "");
   const shown = text === "" ? node.label : text;
+  // A short name is what the row shows; the full label is still its name for a screen reader.
+  const short = text === "" ? node.short : undefined;
   return (
     <>
-      <span className="qm-tree__label">{shown}</span>
+      {short === undefined ? (
+        <span className="qm-tree__label">{shown}</span>
+      ) : (
+        <>
+          <VisuallyHidden>{shown}</VisuallyHidden>
+          <span className="qm-tree__label" aria-hidden="true">
+            {short}
+          </span>
+        </>
+      )}
       {node.key !== undefined && node.key !== shown && (
         <>
           {" "}

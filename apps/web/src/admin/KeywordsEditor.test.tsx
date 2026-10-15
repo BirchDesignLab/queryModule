@@ -92,6 +92,40 @@ describe("the keywords editor", () => {
     expect(within(editor()).getByRole("group", { name: "Critical style" })).toBeInTheDocument();
   });
 
+  // Demo dry run G3: Add keyword with an empty word did nothing and said nothing.
+  it("Add keyword with no word says so and puts focus in the New keyword box; typing clears it", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    const before = doc(t).keywords.length;
+    await t.user.click(within(editor()).getByRole("button", { name: "Add keyword" }));
+    const box = within(editor()).getByRole("textbox", { name: "New keyword" });
+    expect(doc(t).keywords).toHaveLength(before);
+    expect(box).toHaveFocus();
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box).toHaveAccessibleDescription(/Type the keyword first/);
+    await t.user.type(box, "T");
+    expect(box).not.toHaveAttribute("aria-invalid", "true");
+    expect(within(editor()).queryByText(/Type the keyword first/)).toBeNull();
+  });
+
+  // Demo dry run G17: the color selects showed raw token keys ("color.severity.crit..."), clipped.
+  it("the style color selects list plain names, and keep the token key as the value", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    const style = within(editor()).getByRole("group", { name: "Critical style" });
+    const text = within(style).getByRole("combobox", { name: "Text color" });
+    const background = within(style).getByRole("combobox", { name: "Background color" });
+    expect(text).toHaveDisplayValue("Critical text");
+    expect(background).toHaveDisplayValue("Critical background");
+    const options = within(background).getAllByRole("option") as HTMLOptionElement[];
+    expect(options.map((o) => o.textContent).join(" ")).not.toMatch(/color\./);
+    expect(options.find((o) => o.textContent === "Warning background")?.value).toBe(
+      "color.severity.warning.bg",
+    );
+    await t.user.selectOptions(background, "color.severity.info.bg");
+    expect(background).toHaveDisplayValue("Info background");
+  });
+
   it("adds a warning keyword TESTMAKE, as one edit, and keeps focus in the new keyword box", async () => {
     const t = await openBuilder();
     await openKeywords(t);

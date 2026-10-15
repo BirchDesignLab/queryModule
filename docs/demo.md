@@ -242,11 +242,11 @@ Sign in as `admin@example.test` or `implementer@example.test`, open the admin co
 builder.
 
 1. **Move a row to the summary.** Result cards, Vehicle, "All results" card: edit the Make row
-   (`vehicle.make`) and set Show in to "Summary". The card preview opens on "Default answer" (the
-   `NO RECORD` card), which has no make: in the Scenario list pick "Scenario 1" (the plate `ZZ-0001`
-   record). The preview then says "Returns a record", "Scenario 1 matches" and shows the card
-   with Make in the summary, as dispatchers will see it. The Dispatcher and Officer buttons above the
-   preview switch the layout.
+   (`vehicle.make`) and set Show in to "Summary". The card preview opens on the first scenario that
+   answers with a record, "Scenario 1" (the plate `ZZ-0001`): it says "Returns a record" and
+   "Scenario 1 matches" and shows the card with Make in the summary at once, as dispatchers will see
+   it. The Scenario list picks another answer, "Default answer" among them. The Dispatcher and
+   Officer buttons above the preview switch the layout.
 2. **Add a keyword.** Keywords and severity: Add keyword `TESTMAKE`, severity Warning. The sample
    line marks it; the contrast under each severity style shows per theme.
 3. **Which card wins.** Add a second Vehicle card with Source "National system": the table now shows

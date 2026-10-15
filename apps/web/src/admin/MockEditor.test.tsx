@@ -191,6 +191,17 @@ describe("a response", () => {
     expect(scenarioCard(2)).toBeInTheDocument();
   });
 
+  // Demo dry run G19, G38: the scenario list had a label column beside it, so each scenario's last
+  // button (Remove) was cut off at the pane's edge. Mockup v5 puts the title above, full width.
+  it("the Scenarios section spans the pane and its title carries the count in brackets", async () => {
+    const t = await openBuilder();
+    await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
+    const heading = await editor().findByRole("heading", { level: 4, name: "Scenarios (2)" });
+    expect(heading.closest(".qm-sect")).toHaveClass("qm-sect--wide");
+    const defaults = editor().getByRole("heading", { level: 4, name: "When no scenario matches" });
+    expect(defaults.closest(".qm-sect")).toHaveClass("qm-sect--wide");
+  });
+
   it("adds a scenario with a trigger and a record payload, and writes them to the draft", async () => {
     const t = await openBuilder();
     await selectRow(t.user, /^Mock response: Vehicle, National system VEH/);
