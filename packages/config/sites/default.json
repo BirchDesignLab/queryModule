@@ -136,6 +136,7 @@
         {
           "key": "plateType",
           "labelKey": "field.plateType",
+          "formOnly": true,
           "dataType": "picklist",
           "picklist": "plateType",
           "visible": false
@@ -143,6 +144,7 @@
         {
           "key": "plateColor",
           "labelKey": "field.plateColor",
+          "formOnly": true,
           "dataType": "picklist",
           "picklist": "plateColor",
           "section": "expanded",
@@ -238,6 +240,7 @@
         {
           "key": "description",
           "labelKey": "field.description",
+          "formOnly": true,
           "dataType": "string",
           "maxLength": 200,
           "charset": "printable"
@@ -246,6 +249,7 @@
         {
           "key": "make",
           "labelKey": "field.make",
+          "formOnly": true,
           "dataType": "string",
           "maxLength": 40,
           "transform": "upper",
@@ -264,6 +268,7 @@
         {
           "key": "caliber",
           "labelKey": "field.caliber",
+          "formOnly": true,
           "dataType": "string",
           "maxLength": 20,
           "transform": "upper",

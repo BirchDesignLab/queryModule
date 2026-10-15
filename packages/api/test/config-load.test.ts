@@ -26,7 +26,7 @@ function copy(): string {
  * step 6), so it changes with packages/config/sites/default.json and with any core schema
  * default; update it deliberately in the change that does that.
  */
-const DEFAULT_CONFIG_HASH = "847dcf08c0c3665e015ae4789723e7a55b9a3e13b9c913cb7a4365a0b40ed419";
+const DEFAULT_CONFIG_HASH = "d90b6d5b28d646c28f6b7bf7416abfd640df88fc13a39c5ae191bc34371ea9be";
 
 /*
  * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
@@ -34,28 +34,7 @@ const DEFAULT_CONFIG_HASH = "847dcf08c0c3665e015ae4789723e7a55b9a3e13b9c913cb7a4
  * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
  * default; update it deliberately in the change that does that.
  */
-const EXAMPLE_OK_CONFIG_HASH = "7222d93bd31c2f01387973cb3d1e0f3774e0600b16fac4966ec4a6b4aede9067";
-
-/**
- * example-ok's resolved warnings: fields a rule can require with no position in a command. VEH
- * plateType, and plateColor (example-ok's own rule, #347); PRO make and caliber, and PROP make,
- * caliber and description (per-type rules, #346).
- */
-const required = (path: string, field: string, command: string) => ({
-  level: "warning",
-  path,
-  key: "config.conditionallyRequiredWithoutPosition",
-  params: { field, command },
-});
-const BUNDLED_WARNINGS = [
-  required("/queryTypes/0/rules/1/field", "plateType", "VEH"),
-  required("/queryTypes/0/rules/3/field", "plateColor", "VEH"),
-  required("/queryTypes/2/rules/1/field", "make", "PRO"),
-  required("/queryTypes/2/rules/1/field", "make", "PROP"),
-  required("/queryTypes/2/rules/3/field", "caliber", "PRO"),
-  required("/queryTypes/2/rules/3/field", "caliber", "PROP"),
-  required("/queryTypes/2/rules/6/field", "description", "PROP"),
-];
+const EXAMPLE_OK_CONFIG_HASH = "93840ee660dea187233831cfd1fe6ab30fd37a88aaff5ef041a657bdd83b5d6d";
 
 describe("BR-001 site config load", () => {
   it("loads the bundled default site", async () => {
@@ -190,7 +169,8 @@ describe("BR-001 config load chain (spec 5.8)", () => {
     expect(c.extendsChain).toEqual(["default"]);
     expect(c.clientConfig.terminal.delimiter).toBe("/");
     expect(c.configHash).toBe(EXAMPLE_OK_CONFIG_HASH);
-    expect(c.warnings).toEqual(BUNDLED_WARNINGS);
+    // The shipped sites mark their form-only fields formOnly: nothing warns.
+    expect(c.warnings).toEqual([]);
   });
   it("default site has an empty extends chain", async () => {
     const c = await loadSiteConfig(join(bundled, "sites/default.json"));

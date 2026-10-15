@@ -41,6 +41,7 @@ describe("FR-004 FR-008 FieldDef defaults (spec 4.1)", () => {
       dataType: "string",
       visible: true,
       required: false,
+      formOnly: false,
       section: "base",
       custom: false,
       maxLength: 64,
