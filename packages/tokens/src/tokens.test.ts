@@ -37,7 +37,7 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
       has("color.text.body", bg, 7);
       has("color.text.muted", bg, 4.5);
       has("color.border", bg, 3);
-      has("focus.ring", bg, 3);
+      has("focus.ring", bg, 7);
     }
     has("color.text.body", "color.accent.subtle", 7);
     has("color.accent", "color.accent.subtle", 4.5);
@@ -49,6 +49,41 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
       has("field.required", bg, 4.5);
       has("color.status.ok", bg, 4.5);
     }
+  });
+
+  it("polish: the Day focus ring is a blue at 7:1 or more on every Day surface, and not the accent", () => {
+    const ring = COLOR_TOKENS["focus.ring"].day;
+    for (const surface of [
+      "color.surface.sunken",
+      "color.surface.base",
+      "color.surface.raised",
+      "color.surface.overlay",
+    ] as const)
+      expect(contrastRatio(ring, COLOR_TOKENS[surface].day), surface).toBeGreaterThanOrEqual(7);
+    // Clearly blue: the blue channel leads, red stays low. And not the accent fill's colour.
+    const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(ring.slice(i, i + 2), 16)) as [
+      number,
+      number,
+      number,
+    ];
+    expect(b).toBeGreaterThan(g + 40);
+    expect(b).toBeGreaterThan(r + 100);
+    expect(ring).not.toBe(COLOR_TOKENS["color.accent"].day);
+    expect(ring).not.toBe(COLOR_TOKENS["color.accent.fill"].day);
+  });
+
+  it("polish: every mode's focus ring is 7:1 or more on every surface", () => {
+    for (const mode of THEME_MODES)
+      for (const surface of [
+        "color.surface.sunken",
+        "color.surface.base",
+        "color.surface.raised",
+        "color.surface.overlay",
+      ] as const)
+        expect(
+          contrastRatio(tokenValue("focus.ring", mode), tokenValue(surface, mode)),
+          `${mode} ${surface}`,
+        ).toBeGreaterThanOrEqual(7);
   });
 
   it("E1: the focus ring never shares a colour with the invalid edge in any mode", () => {
@@ -91,7 +126,7 @@ describe("UX-011 UX-002 tokens (spec 6.5)", () => {
       ["color.severity.warning.fg", "color.severity.warning.bg", 7],
       ["color.severity.info.fg", "color.severity.info.bg", 7],
       ["field.required", "color.surface.base", 3],
-      ["focus.ring", "color.surface.base", 3],
+      ["focus.ring", "color.surface.base", 7],
       ["color.border", "color.surface.base", 3],
     ]);
   });

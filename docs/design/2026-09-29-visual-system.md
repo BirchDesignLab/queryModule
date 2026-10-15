@@ -36,13 +36,13 @@ All values stay in `packages/tokens` (spec 6.5: components use no literal colour
 | `color.accent.onFill` | #0a0e13 | #ffffff | #0d0000 | new: primary button label |
 | `color.accent.subtle` | #1b2f4d | #e1ebfa | #3a1800 | new: selected row, pressed chip |
 | `color.status.ok` | #5fd39a | #0f6b44 | #e0b84a | new: connected, acknowledged |
-| `focus.ring` | #ffd24d | #1f5fbf | #ffe0a8 | changed red shift (see E1) |
+| `focus.ring` | #ffd24d | #1a3fc0 | #ffe0a8 | changed red shift (see E1); Day raised to 7:1 on every surface (demo polish) |
 | `field.required` | #ff8080 | #a00000 | #ff4d4d | unchanged; invalid edge, error text |
 | `color.severity.*` | unchanged | unchanged | unchanged | reserved for responses |
 
 Red shift keeps its rule: amber and red on near-black, no blue-dominant colour. Its focus ring moves from #ff4d4d to pale amber #ffe0a8, because a red ring beside a red invalid edge breaks E1.
 
-Contrast pairs (checked by the script for every mode; the tokens package tests take them over in the implementation task): body text 7:1 on all four surfaces and on `accent.subtle`; muted text 4.5:1, also on `accent.subtle`; accent text 7:1 on base and raised, 4.5:1 on `accent.subtle` (a pressed button's type code); primary label 4.5:1 on its fill; control edge and focus ring 3:1 on every surface; error text and status text 4.5:1. The focus ring sits outside a 2 px gap, so its neighbour is always a surface, never the button fill.
+Contrast pairs (checked by the script for every mode; the tokens package tests take them over in the implementation task): body text 7:1 on all four surfaces and on `accent.subtle`; muted text 4.5:1, also on `accent.subtle`; accent text 7:1 on base and raised, 4.5:1 on `accent.subtle` (a pressed button's type code); primary label 4.5:1 on its fill; control edge 3:1 on every surface; focus ring 7:1 on every surface (Day #1a3fc0 is 7.2:1 on the darkest, the sunken page, and a blue distinct from the accent); error text and status text 4.5:1. The focus ring sits outside a 2 px gap, so its neighbour is always a surface, never the button fill (a dark ring on the dark accent fill cannot reach 7:1, since the two are within a few percent of each other in luminance).
 
 ### Type
 

@@ -38,7 +38,7 @@ const READING: readonly Surface[] = ["color.surface.base", "color.surface.raised
 
 /**
  * The design-system pairs (docs/design/2026-09-29-visual-system.md): 7:1 body text on every
- * surface, 4.5:1 secondary text, 3:1 non-text edges and rings. The ring sits outside a 2 px gap,
+ * surface, 4.5:1 secondary text, 3:1 non-text edges, 7:1 focus rings. The ring sits outside a 2 px gap,
  * so its neighbour is always a surface, never a button fill.
  */
 function designSystemPairs(): ContrastPair[] {
@@ -61,7 +61,7 @@ function designSystemPairs(): ContrastPair[] {
       pair("color.border", bg, 3, "control edge (non-text)"),
     ),
     ...SURFACES.filter((bg) => bg !== "color.surface.base").map((bg) =>
-      pair("focus.ring", bg, 3, "focus ring (non-text)"),
+      pair("focus.ring", bg, 7, "focus ring (non-text)"),
     ),
     ...READING.map((bg) => pair("field.required", bg, 4.5, "error text, required mark")),
     pair("field.required", "color.accent.subtle", 4.5, "danger button on hover"),
@@ -108,7 +108,7 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
     use: "info severity style",
   },
   { fg: "field.required", bg: "color.surface.base", min: 3, use: "required marker (non-text)" },
-  { fg: "focus.ring", bg: "color.surface.base", min: 3, use: "focus ring (non-text)" },
+  { fg: "focus.ring", bg: "color.surface.base", min: 7, use: "focus ring (non-text)" },
   {
     fg: "color.border",
     bg: "color.surface.base",
