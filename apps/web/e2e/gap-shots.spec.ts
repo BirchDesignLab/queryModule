@@ -147,6 +147,17 @@ for (const [email, width, height, who] of [
     await expect(requests(page)).toContainText("needs last name", { timeout: 15_000 });
     await save(page, `pr2-${tag}-04-also-run-not-run`);
 
+    // A clean person: the also-run Wanted check settles on NO WANTS OR WARRANTS, styled as info (G33).
+    await runCommand(page, "PER.TESTERSON.SAMPLE.01011901");
+    const alsoRun = requests(page)
+      .getByRole("listitem")
+      .first()
+      .getByRole("region", { name: /^National system: returned/ })
+      .last();
+    await expect(alsoRun).toContainText("NO WANTS OR WARRANTS", { timeout: 15_000 });
+    await expect(alsoRun.locator(".qm-badge--info").first()).toBeVisible();
+    await save(page, `pr2-${tag}-04b-also-run-clean`);
+
     // The fixture answers the list empty; the reload must see the real one (G7).
     await page.route(
       (url) => url.pathname === "/api/v1/queries",
@@ -154,7 +165,7 @@ for (const [email, width, height, who] of [
     );
     await page.reload();
     await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
-    await expect(requests(page)).toContainText("DL.ZZDLTEST", { timeout: 15_000 });
+    await expect(requests(page)).toContainText("PER.TESTERSON", { timeout: 15_000 });
     await requests(page).evaluate((el) => el.scrollIntoView());
     await save(page, `pr2-${tag}-05-after-reload`);
   });
