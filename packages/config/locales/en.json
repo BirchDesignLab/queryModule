@@ -505,6 +505,8 @@
   "admin.cards.row.edit": "Edit",
   "admin.cards.row.close": "Close",
   "admin.cards.row.remove": "Remove row",
+  "admin.cards.row.moveUp": "Move {name} up",
+  "admin.cards.row.moveDown": "Move {name} down",
   "admin.cards.kindLegend": "Kind",
   "admin.cards.kind.value": "Value",
   "admin.cards.kind.table": "Table",

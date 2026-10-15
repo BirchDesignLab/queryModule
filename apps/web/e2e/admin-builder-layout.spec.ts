@@ -95,6 +95,27 @@ for (const size of SIZES) {
         // One line, or two when the pane is narrow: never staggered by more than a button.
         expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual((heights[0] ?? 0) + 8);
       }
+      // Move up and Move down are on every row (icon only, 36 px), disabled at the two ends.
+      const ups = tools.getByRole("button", { name: /^Move .* up$/ });
+      const downs = tools.getByRole("button", { name: /^Move .* down$/ });
+      expect(await ups.count(), "a Move up on every row").toBe(count);
+      expect(await downs.count(), "a Move down on every row").toBe(count);
+      await expect(ups.first()).toHaveAttribute("aria-disabled", "true");
+      await expect(downs.last()).toHaveAttribute("aria-disabled", "true");
+      await expect(ups.last()).not.toHaveAttribute("aria-disabled", "true");
+      const size = await ups.first().evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { w: r.width, h: r.height };
+      });
+      expect(size.h, "Move up height").toBeGreaterThanOrEqual(36);
+      expect(size.w, "Move up width").toBeGreaterThanOrEqual(36);
+      const upLefts = await ups.evaluateAll((els) =>
+        els.map((e) => Math.round(e.getBoundingClientRect().left)),
+      );
+      expect(
+        Math.max(...upLefts) - Math.min(...upLefts),
+        `Move up left edges ${upLefts}`,
+      ).toBeLessThanOrEqual(1);
       // Remove row too: a first row with no Move up keeps its slot, so the columns line up.
       expect(
         Math.max(...removeLefts) - Math.min(...removeLefts),

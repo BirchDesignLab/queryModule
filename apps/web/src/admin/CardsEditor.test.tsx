@@ -382,6 +382,37 @@ describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
 });
 
 // Demo dry run G37: the row summary read "status Value, Both". It now says where the row shows.
+// Mockup v5, and the developer's ruling of 10-14-26: a card row always has Move up and Move down as
+// icon-only buttons (named "Move <row> up/down"), disabled at the ends, so the rows line up.
+describe("a card row's Move buttons", () => {
+  it("are on every row, named with the row, aria-disabled at the ends, and still move the row", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const ed = within(editor());
+    const first = ed.getByRole("button", { name: "Move Status up" });
+    const last = ed.getAllByRole("button", { name: /^Move .* down$/ }).at(-1) as HTMLElement;
+    expect(first).toHaveAttribute("aria-disabled", "true");
+    expect(last).toHaveAttribute("aria-disabled", "true");
+    expect(ed.getByRole("button", { name: "Move Status down" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
+    // Icon only: no visible words, the arrow is not read out.
+    expect(first.textContent).toBe("↑");
+    expect(first.querySelector("[aria-hidden]")).not.toBeNull();
+    // A press at an end does nothing; a press elsewhere moves the row and keeps focus on its button.
+    const order = () =>
+      (
+        cards(t).find((c) => c.id === "veh-summary") as unknown as { elements: { path: string }[] }
+      ).elements.map((e) => e.path);
+    const before = order();
+    await t.user.click(first);
+    expect(order()).toEqual(before);
+    await t.user.click(ed.getByRole("button", { name: "Move Status down" }));
+    expect(order()[0]).toBe(before[1]);
+    expect(ed.getByRole("button", { name: "Move Status down" })).toHaveFocus();
+  });
+});
+
 describe("a row's summary line", () => {
   it("says in words where the row shows, not 'Value, Both'", async () => {
     const t = await openBuilder();

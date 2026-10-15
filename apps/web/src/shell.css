@@ -2006,7 +2006,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
    own: a first row with no Move up leaves its slot empty, so every button lines up row to row (G37). */
 .qm-mock__scenario-tools--row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns:
+    minmax(0, 1fr) var(--qm-control-height-dense) var(--qm-control-height-dense)
+    minmax(0, 1.3fr);
+  align-items: center;
   flex-basis: 100%;
   margin-inline-start: 0;
 }

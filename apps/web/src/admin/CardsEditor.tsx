@@ -801,6 +801,31 @@ function CardRow({
               {t(open ? "admin.cards.row.close" : "admin.cards.row.edit")}
               <VisuallyHidden> {shownName}</VisuallyHidden>
             </button>
+            {(["up", "down"] as const).map((kind) => {
+              const target = kind === "up" ? index - 1 : index + 1;
+              const blocked = target < 0 || target >= count;
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  className="qm-button qm-button--ghost qm-mock__icon"
+                  aria-disabled={blocked ? "true" : undefined}
+                  aria-label={t(
+                    kind === "up" ? "admin.cards.row.moveUp" : "admin.cards.row.moveDown",
+                    {
+                      name: shownName,
+                    },
+                  )}
+                  data-owner={owner}
+                  data-role={kind}
+                  onClick={() => {
+                    if (!blocked) onMove?.(index, target);
+                  }}
+                >
+                  <span aria-hidden="true">{kind === "up" ? "↑" : "↓"}</span>
+                </button>
+              );
+            })}
             <ItemButtons
               owner={owner}
               name={shownName}
@@ -809,6 +834,7 @@ function CardRow({
               removeLabel={t("admin.cards.row.remove")}
               onMove={onMove}
               onRemove={onRemove}
+              movable={false}
             />
           </div>
         </div>

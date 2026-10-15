@@ -478,22 +478,44 @@ for (const width of [1366, 1024] as const) {
     await openBuilder(page);
     await selectVehicleCard(page);
     const form = editor(page);
-    const top = async (l: Locator) => Math.round((await l.boundingBox())?.y ?? -1);
-    const left = async (l: Locator) => Math.round((await l.boundingBox())?.x ?? -1);
     const source = form.getByRole("combobox", { name: "Source", exact: true });
     const shown = form.getByRole("combobox", { name: "Shown to", exact: true });
-    await expect(source).toBeVisible();
-    expect(await top(source), "Source and Shown to share a row").toBe(await top(shown));
-    expect(await left(shown)).toBeGreaterThan(await left(source));
     const always = form.locator("label.qm-choice").filter({ hasText: "Always" });
     const rule = form.locator("label.qm-choice").filter({ hasText: "Only when a rule matches" });
-    await expect(always).toBeVisible();
-    expect(await top(always), "the choice cards sit side by side").toBe(await top(rule));
-    expect(await left(rule)).toBeGreaterThan(await left(always));
-    // The title is above the controls, not in a side column.
     const title = form.getByRole("heading", { level: 4, name: "Applies to" });
-    expect(await top(title)).toBeLessThan(await top(source));
-    expect(await left(title)).toBeLessThanOrEqual((await left(source)) + 1);
+    await expect(source).toBeVisible();
+    await expect(always).toBeVisible();
+    // Positions are read together, in one frame after the fonts are in and the editor has stopped
+    // scrolling into view: reading them one await at a time let a late scroll or a font swap move
+    // the second control by a pixel or two, so two controls in one row read as two rows (#642).
+    const at = async (...targets: Locator[]) => {
+      const handles = await Promise.all(targets.map((t) => t.elementHandle()));
+      return page.evaluate(async (els) => {
+        await document.fonts.ready;
+        await new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done())),
+        );
+        return els.map((el) => {
+          const r = (el as HTMLElement).getBoundingClientRect();
+          return { x: Math.round(r.x), y: Math.round(r.y) };
+        });
+      }, handles);
+    };
+    const [sourceAt, shownAt, alwaysAt, ruleAt, titleAt] = await at(
+      source,
+      shown,
+      always,
+      rule,
+      title,
+    );
+    if (!sourceAt || !shownAt || !alwaysAt || !ruleAt || !titleAt) throw new Error("no position");
+    expect(sourceAt.y, "Source and Shown to share a row").toBe(shownAt.y);
+    expect(shownAt.x).toBeGreaterThan(sourceAt.x);
+    expect(alwaysAt.y, "the choice cards sit side by side").toBe(ruleAt.y);
+    expect(ruleAt.x).toBeGreaterThan(alwaysAt.x);
+    // The title is above the controls, not in a side column.
+    expect(titleAt.y).toBeLessThan(sourceAt.y);
+    expect(titleAt.x).toBeLessThanOrEqual(sourceAt.x + 1);
     // Controls are 36 px, the cards at least that.
     expect(await tooShort(36, { source, shown, "always card": always, "rule card": rule })).toEqual(
       [],
@@ -665,7 +687,7 @@ test("[#642] moving a card row up and down by keyboard keeps focus on that row's
     });
 
   // Up: the new last row moves one place up; focus stays on its Move up button at the new index.
-  await form.getByRole("button", { name: /^Move up New row/ }).press("Enter");
+  await form.getByRole("button", { name: /^Move New row up/ }).press("Enter");
   let now = await active();
   expect(now.body).toBe(false);
   expect(now.role).toBe("up");
@@ -674,7 +696,7 @@ test("[#642] moving a card row up and down by keyboard keeps focus on that row's
 
   // Down: the same row moves back; focus stays on its own arrow button at the last index (the last
   // row has no Move down, so the Move up button holds it).
-  await form.getByRole("button", { name: /^Move down New row/ }).press("Enter");
+  await form.getByRole("button", { name: /^Move New row down/ }).press("Enter");
   now = await active();
   expect(now.body).toBe(false);
   expect(now.owner.endsWith(`-card-row-${count}`)).toBe(true);
