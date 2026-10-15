@@ -85,7 +85,7 @@ for (const size of SIZES) {
           Math.round(
             await tools
               .nth(i)
-              .getByRole("button", { name: /^Remove row/ })
+              .getByRole("button", { name: /^Remove / })
               .evaluate((el) => el.getBoundingClientRect().left),
           ),
         );
@@ -116,7 +116,7 @@ for (const size of SIZES) {
         Math.max(...upLefts) - Math.min(...upLefts),
         `Move up left edges ${upLefts}`,
       ).toBeLessThanOrEqual(1);
-      // Remove row too: a first row with no Move up keeps its slot, so the columns line up.
+      // Remove too (icon only, 36 px): a first row with no Move up keeps its slot, so the columns line up.
       expect(
         Math.max(...removeLefts) - Math.min(...removeLefts),
         `Remove row left edges ${removeLefts}`,

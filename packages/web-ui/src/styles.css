@@ -725,6 +725,40 @@ h1 {
   background: var(--qm-color-surface-overlay);
 }
 
+/* Dismiss reads as a word where the toast has room and as a 36 px x where it does not (polite name
+   either way, from its aria-label). */
+.qm-toast__dismiss-x {
+  display: none;
+}
+
+/* The dispatcher's Requests pane is narrow below 1280 px (384 px at 1024): the toast keeps its title,
+   the sent time and the two actions on two rows, not three (polish 4). The reference stays for
+   assistive technology and in the request's own row right below; the words Dismiss and the longer
+   time shrink to what fits. The officer's toast spans the page, so it keeps everything. */
+@media (max-width: 1279px) {
+  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) {
+    font-size: var(--qm-type-size-md);
+    column-gap: var(--qm-space-3);
+    row-gap: 0;
+  }
+
+  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) .qm-toast__reference,
+  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) .qm-toast__dismiss-word {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .qm-requests__toast > .qm-toast:not(.qm-layout--mobile-unit) .qm-toast__dismiss-x {
+    display: inline;
+  }
+}
+
 .qm-request--sending {
   border-style: dashed;
 }
@@ -817,6 +851,12 @@ h1 {
 
 .qm-request__sources {
   gap: var(--qm-space-2);
+}
+
+/* An also-run part starts under the same subtle rule the first one does (mockup v5 .part; polish 3). */
+.qm-request__part + .qm-request__part {
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
 .qm-request__part-label {
@@ -1142,6 +1182,14 @@ h1 {
 
 .qm-form-cell > .qm-field {
   margin-block-end: var(--qm-space-2);
+}
+
+/* A hint under a narrow field (the date field's accepted formats under a 150 px input) may run past
+   its cell, up to 12 rem, into the empty space beside it instead of breaking one word per line;
+   in a full-width cell it still wraps at the cell (polish 5). */
+.qm-form-cell .qm-field__description {
+  inline-size: max-content;
+  max-inline-size: max(100%, 12rem);
 }
 
 @media (min-width: 576px) {
@@ -1473,6 +1521,16 @@ h1 {
 
 .qm-view-toggle {
   justify-self: start;
+}
+
+/* A ghost button's own inset must not push its words off the text above it (polish 2): a smaller
+   inset, mockup v5 .copy, pulled back by itself, so the label starts where the text does and the gap
+   to a neighbour on the same line stays the gap. */
+.qm-request__meta .qm-button--ghost,
+.qm-toast .qm-button--ghost,
+.qm-view-toggle {
+  padding-inline: var(--qm-space-2);
+  margin-inline-start: calc(-1 * (var(--qm-space-2) + var(--qm-border-width)));
 }
 
 .qm-view-toggle__count {

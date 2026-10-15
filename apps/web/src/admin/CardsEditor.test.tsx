@@ -355,7 +355,7 @@ describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
     await openVehicleCard(t);
     await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?State/ }));
     expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
-    await t.user.click(within(editor()).getByRole("button", { name: /^Remove row Remarks/ }));
+    await t.user.click(within(editor()).getByRole("button", { name: "Remove Remarks" }));
     expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
     undo(t);
     expect(await within(editor()).findByRole("button", { name: /^Edit\s?Remarks/ })).toBeVisible();
@@ -370,7 +370,7 @@ describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
     const t = await openBuilder();
     await openVehicleCard(t);
     await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?State/ }));
-    await t.user.click(within(editor()).getByRole("button", { name: /^Remove row Remarks/ }));
+    await t.user.click(within(editor()).getByRole("button", { name: "Remove Remarks" }));
     const path = within(editor()).getByRole("combobox", { name: "Path" });
     act(() => path.focus());
     expect(path).toHaveFocus();
@@ -517,5 +517,20 @@ describe("the card editor: the Columns table", () => {
     if (first === undefined) throw new Error("no remove button");
     await t.user.click(first);
     expect(within(editor()).getByRole("button", { name: "Add column" })).toHaveFocus();
+  });
+});
+
+// Demo polish (#642, item 7): a row's Remove is icon-only, like the Move buttons beside it, and its
+// accessible name is "Remove <row>".
+describe("the card editor: a row's Remove button", () => {
+  it("is an x with no visible words, named Remove and the row, like the Move buttons", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const remove = within(editor()).getByRole("button", { name: "Remove Remarks" });
+    expect(remove.textContent).toBe("×");
+    expect(remove.querySelector("[aria-hidden='true']")?.textContent).toBe("×");
+    const moveUp = within(editor()).getByRole("button", { name: /^Move Remarks up$/ });
+    expect(remove.className).toBe(moveUp.className);
+    expect(within(editor()).queryByText("Remove row")).toBeNull();
   });
 });

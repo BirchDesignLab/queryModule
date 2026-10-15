@@ -109,7 +109,7 @@ export function AckToast() {
     >
       <strong className="qm-toast__title">{t("toast.ack.title", { name })}</strong>
       <span>{t("requests.sentAt", { time: formatAckTime(toast.acknowledgedAt) })}</span>
-      <span>
+      <span className="qm-toast__reference">
         {t("submit.reference")} <code>{reference}</code>
       </span>
       <button
@@ -137,7 +137,10 @@ export function AckToast() {
           if (back?.isConnected) back.focus();
         }}
       >
-        {t("toast.dismiss")}
+        <span className="qm-toast__dismiss-word">{t("toast.dismiss")}</span>
+        <span aria-hidden="true" className="qm-toast__dismiss-x">
+          ×
+        </span>
       </button>
     </div>
   );
