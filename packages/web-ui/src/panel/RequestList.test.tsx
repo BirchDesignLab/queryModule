@@ -206,6 +206,26 @@ describe("spec 6.7 requests list (B3)", () => {
   });
 });
 
+describe("G12 the list offers a toast slot", () => {
+  const props = { heading: "Requests this shift", emptyText: "none", onCopy: () => undefined, t };
+
+  it("puts the slot under the heading by default, above the list", () => {
+    render(<RequestList {...props} rows={[ACKED]} />);
+    const slot = document.querySelector("[data-toast-slot]") as HTMLElement;
+    const heading = screen.getByRole("heading", { name: "Requests this shift" });
+    const list = screen.getByRole("list");
+    expect(heading.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(slot.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("puts the slot above the heading when asked (the officer's Last request)", () => {
+    render(<RequestList {...props} rows={[ACKED]} toastSlot="beforeHeading" />);
+    const slot = document.querySelector("[data-toast-slot]") as HTMLElement;
+    const heading = screen.getByRole("heading", { name: "Requests this shift" });
+    expect(slot.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe("G11 a request that starts sending scrolls the list into view when it is below the fold", () => {
   const props = {
     heading: "Last request",

@@ -88,6 +88,12 @@ export interface RequestListProps {
    * officer layout stacks it under the form, G11). Never moves focus.
    */
   revealOnSend?: boolean;
+  /**
+   * Where the owner's toast slot sits: under the heading, above the list (default), or above the
+   * heading (the officer's "Last request"). The slot is an empty `[data-toast-slot]` element the
+   * acknowledgment toast portals into, so it never lands below the fold (G12).
+   */
+  toastSlot?: "afterHeading" | "beforeHeading";
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
 }
 
@@ -151,6 +157,7 @@ export function RequestList({
   onRetry,
   onEditAsNew,
   revealOnSend = false,
+  toastSlot = "afterHeading",
   t,
 }: RequestListProps): JSX.Element {
   const headingId = useId();
@@ -258,12 +265,18 @@ export function RequestList({
       className="qm-requests"
       data-shortcut-context="results"
     >
+      {toastSlot === "beforeHeading" ? (
+        <div data-toast-slot="" className="qm-requests__toast" />
+      ) : null}
       <div className="qm-requests__head">
         <h2 id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
           {heading}
         </h2>
         {countText === undefined ? null : <p className="qm-requests__count">{countText}</p>}
       </div>
+      {toastSlot === "afterHeading" ? (
+        <div data-toast-slot="" className="qm-requests__toast" />
+      ) : null}
       {rows.length === 0 ? (
         <p className="qm-requests__empty">{emptyText}</p>
       ) : (

@@ -195,6 +195,8 @@ export const RequestsPane = memo(function RequestsPane({
       onEditAsNew={onEditAsNew}
       // The officer's last request sits under the form: show it once a request is on its way (G11).
       revealOnSend={variant === "last"}
+      // The acknowledgment toast lands here: under the dispatcher's heading, above the officer's.
+      toastSlot={variant === "last" ? "beforeHeading" : "afterHeading"}
       onRetry={(rowId) => {
         // The failed row keeps its place; the values it kept go as a new request under the panel's
         // current config hash, and the new row joins the list.

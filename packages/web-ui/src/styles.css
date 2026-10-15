@@ -664,6 +664,16 @@ h1 {
   color: var(--qm-color-text-body);
 }
 
+/* The toast in the Requests pane's slot: a little room under it before the list (G12). */
+.qm-requests__toast > .qm-toast {
+  inline-size: auto;
+  max-inline-size: none;
+  margin: 0 0 var(--qm-space-3);
+  /* Not a request card: the "ok" edge on the overlay surface, as mockup v5's .toast. */
+  border-color: var(--qm-color-status-ok);
+  background: var(--qm-color-surface-overlay);
+}
+
 .qm-request--sending {
   border-style: dashed;
 }

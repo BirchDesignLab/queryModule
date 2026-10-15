@@ -31,6 +31,15 @@ describe("the ack toast flows in the page at every width (#633, developer decisi
   });
 });
 
+describe("G12 the toast in the Requests pane does not look like a request card", () => {
+  it("has the ok edge and the overlay surface, and spans the pane like the cards", () => {
+    const toast = decls(".qm-requests__toast > .qm-toast");
+    expect(toast).toMatch(/border-color:\s*var\(--qm-color-status-ok\)/);
+    expect(toast).toMatch(/background:\s*var\(--qm-color-surface-overlay\)/);
+    expect(toast).toMatch(/inline-size:\s*auto/);
+  });
+});
+
 describe("request entries match mockup v5 (G1, G12, G25, G36)", () => {
   it("G25: meta, parts and cards span the whole entry, so every card starts at the same edge", () => {
     expect(decls(".qm-request__meta")).toMatch(/flex:\s*1\s+0\s+100%/);

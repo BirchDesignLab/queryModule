@@ -1,5 +1,6 @@
 import { formatAckTime, shortReference } from "@querymodule/web-ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePersonaLayout } from "../app/AppChrome.js";
 import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
@@ -74,12 +75,18 @@ export function AckToast() {
     }
   }, [key]);
 
+  // The Requests pane's toast slot, when this page has one: the toast is in view beside the list it
+  // acknowledges instead of after it (G12). Elsewhere it stays in place, at the end of the page.
+  const [slot, setSlot] = useState<Element | null>(null);
+  useLayoutEffect(() => {
+    setSlot(toast === null ? null : document.querySelector("[data-toast-slot]"));
+  }, [toast]);
   if (toast === null) return null;
   const labelKey = config?.queryTypes.find((q) => q.code === toast.queryType)?.labelKey;
   const typeLabel = labelKey === undefined ? toast.queryType : t(labelKey);
   const reference = shortReference(toast.correlationId);
   const name = toast.typed === "" ? `${typeLabel} ${reference}` : `${typeLabel} ${toast.typed}`;
-  return (
+  const node = (
     <div
       // The toast sits beside the page, not inside it: the officer layout class goes on it so its
       // buttons keep the 48 px touch floor (spec 6.3, UX-004).
@@ -134,4 +141,5 @@ export function AckToast() {
       </button>
     </div>
   );
+  return slot === null ? node : createPortal(node, slot);
 }

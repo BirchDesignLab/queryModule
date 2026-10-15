@@ -41,6 +41,42 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("G12 the toast sits in the Requests pane's toast slot, where it is never below the fold", () => {
+  it("renders inside [data-toast-slot] when the page has one, and in place when it has none", async () => {
+    const services = testServices();
+    services.authStore.getState().setSignedIn(TEST_USER);
+    services.queryClient.setQueryData(["config"], CLIENT_CONFIG);
+    renderRoutes(
+      [
+        {
+          path: "/",
+          element: (
+            <>
+              <div data-testid="slot" data-toast-slot="" />
+              <AckToast />
+            </>
+          ),
+        },
+      ],
+      { services },
+    );
+    const id = services.requests.getState().begin({
+      queryType: "VEH",
+      summary: "ignored",
+      submitted: { queryType: "VEH", values: { plate: "ZZ-0001" }, sourceIds: [], mode: "normal" },
+    });
+    act(() => {
+      services.requests.getState().settle(id, {
+        kind: "acknowledged",
+        queryType: "VEH",
+        response: { correlationId: ACK_CORRELATION_ID, acknowledgedAt: ACK_AT, parts: [] },
+      });
+    });
+    const toast = await screen.findByTestId("ack-toast");
+    expect(screen.getByTestId("slot")).toContainElement(toast);
+  });
+});
+
 describe("A6 the ack toast", () => {
   it("takes the officer touch layout (48 px targets, spec 6.3, UX-004) only for the mobile-unit persona", async () => {
     const officer = setup("mobileUnit");
