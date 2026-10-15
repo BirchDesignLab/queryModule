@@ -833,7 +833,9 @@ function CardRow({
               data-role="remove"
               onClick={() => onRemove(index)}
             >
-              <span aria-hidden="true">×</span>
+              <span aria-hidden="true" className="qm-icon-x">
+                ×
+              </span>
             </button>
           </div>
         </div>

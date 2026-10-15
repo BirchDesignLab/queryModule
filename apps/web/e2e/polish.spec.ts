@@ -137,6 +137,18 @@ for (const layout of LAYOUTS) {
       );
       expect(boxes.length).toBe(5);
       for (const b of boxes) expect(b.height, "quick access height").toBeGreaterThanOrEqual(36);
+      // A focused button's ring and its gap (4 px) clear the neighbour's edge.
+      const edges = await quick.evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          return { top: Math.round(r.top), left: r.left, right: r.right };
+        }),
+      );
+      for (let i = 1; i < edges.length; i++) {
+        const [prev, next] = [edges[i - 1], edges[i]];
+        if (prev !== undefined && next !== undefined && prev.top === next.top)
+          expect(next.left - prev.right, "quick access gap").toBeGreaterThanOrEqual(6);
+      }
     });
   });
 }

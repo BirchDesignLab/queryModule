@@ -470,7 +470,9 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--qm-space-1);
+  /* Room for a focused button's ring and its gap between it and the pressed neighbour's edge (the
+     Day ring and accent are both dark blues, so they must not touch). */
+  gap: var(--qm-space-2);
   min-inline-size: 0;
   margin: 0 0 var(--qm-space-3);
   padding: 0;
@@ -729,6 +731,12 @@ h1 {
    polite name either way, from its aria-label). */
 .qm-toast__dismiss-x {
   display: none;
+}
+
+/* The x of an icon-only button reads at the weight of the arrows beside it. */
+.qm-icon-x {
+  font-size: var(--qm-type-size-xl);
+  line-height: 1;
 }
 
 /* The dispatcher's Requests pane is narrow on a small screen: the toast keeps its title, the sent
@@ -1190,6 +1198,12 @@ h1 {
 .qm-form-cell .qm-field__description {
   inline-size: max-content;
   max-inline-size: max(100%, 12rem);
+}
+
+/* Not when the cell beside it has a hint or an error of its own: the two would collide. */
+.qm-form-cell:where(:has(+ .qm-form-cell .qm-field__description, + .qm-form-cell .qm-field__error))
+.qm-field__description {
+  max-inline-size: 100%;
 }
 
 @media (min-width: 576px) {

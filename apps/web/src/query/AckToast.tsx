@@ -138,7 +138,7 @@ export function AckToast() {
         }}
       >
         <span className="qm-toast__dismiss-word">{t("toast.dismiss")}</span>
-        <span aria-hidden="true" className="qm-toast__dismiss-x">
+        <span aria-hidden="true" className="qm-toast__dismiss-x qm-icon-x">
           ×
         </span>
       </button>
