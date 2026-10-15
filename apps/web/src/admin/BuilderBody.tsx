@@ -362,6 +362,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
             <div
               ref={panelRef}
               className="qm-builder__editor"
+              data-tab={tab}
               role="tabpanel"
               id={`${uid}-panel`}
               aria-labelledby={`${uid}-tab-${tab}`}
