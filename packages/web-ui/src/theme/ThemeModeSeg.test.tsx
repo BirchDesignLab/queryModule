@@ -55,6 +55,15 @@ describe("UX-002 theme mode segmented control (visual system: controls and state
     await userEvent.click(screen.getByRole("button", { name: "Red shift" }));
     expect(onChange).toHaveBeenCalledWith("redShift");
   });
+  it("G36: Night and Red shift draw different icons, and neither is a moon inside the other's outline", () => {
+    render(<ThemeModeSeg value="night" onChange={() => undefined} t={t} icons />);
+    const markup = (name: string) =>
+      screen.getByRole("button", { name }).querySelector("svg")?.innerHTML ?? "";
+    expect(markup("Night")).not.toBe(markup("Red shift"));
+    // Red shift is a sun on the horizon, not a crescent: it must not reuse the crescent path.
+    const crescent = markup("Night");
+    expect(markup("Red shift")).not.toContain(crescent);
+  });
   it("icons: each button is named by its label and shows a decorative icon, no text", () => {
     render(<ThemeModeSeg value="night" onChange={() => undefined} t={t} icons />);
     const group = screen.getByRole("group", { name: "Theme" });

@@ -91,7 +91,9 @@ describe("retry on the dispatcher's list (spec 6.7)", () => {
     expect(retry).not.toBeInTheDocument();
     expect(within(failed as HTMLElement).queryByRole("button", { name: /^Retry/ })).toBeNull();
     expect(screen.getByRole("heading", { name: "Requests this shift" })).toHaveFocus();
-    expect(region.querySelector("[aria-live], [role=status], [role=alert]")).toBeNull();
+    expect(
+      region.querySelector("[aria-live], [role=status]:not([data-testid=ack-toast]), [role=alert]"),
+    ).toBeNull();
   });
 
   it("a failed retry stays a failed row of its own, and can be retried again", async () => {

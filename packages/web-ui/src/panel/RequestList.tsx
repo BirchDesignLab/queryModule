@@ -1,4 +1,12 @@
-import { type JSX, type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type JSX,
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useShortcutAction } from "../shortcuts/ShortcutProvider.js";
 
 /** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
@@ -74,8 +82,25 @@ export interface RequestListProps {
    * moves focus, because the user pressed the action. The row itself stays as history.
    */
   onEditAsNew?(rowId: string): void;
+  /**
+   * Scrolls the list to the top of the screen when the user's own request starts sending and the list
+   * begins in the lower half of the viewport, so a result that lands below the form is seen (the
+   * officer layout stacks it under the form, G11). Never moves focus.
+   */
+  revealOnSend?: boolean;
+  /**
+   * Where the owner's toast slot sits: under the heading, above the list (default), or above the
+   * heading (the officer's "Last request"). The slot is an empty `[data-toast-slot]` element the
+   * acknowledgment toast portals into, so it never lands below the fold (G12).
+   */
+  toastSlot?: "afterHeading" | "beforeHeading";
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
 }
+
+/** How long after a request starts the list keeps being brought into view while it grows. */
+const REVEAL_MS = 5000;
+/** The list counts as in view once its top is in the top 30% of the viewport. */
+const REVEAL_TOP = 0.3;
 
 const pad = (n: number): string => String(n).padStart(2, "0");
 
@@ -131,9 +156,35 @@ export function RequestList({
   onCopy,
   onRetry,
   onEditAsNew,
+  revealOnSend = false,
+  toastSlot = "afterHeading",
   t,
 }: RequestListProps): JSX.Element {
   const headingId = useId();
+  const sectionRef = useRef<HTMLElement>(null);
+  const newest = rows[0];
+  const sendingId = newest?.status === "sending" ? newest.id : null;
+  // The row that was already sending at mount is not "new": only a request started afterwards reveals.
+  const seenSending = useRef<string | null>(sendingId);
+  // A reveal stays owed for a few seconds: the list is short when the row starts sending and grows as
+  // the cards arrive, so the first scroll may stop at the end of a page that is still short.
+  const revealUntil = useRef(0);
+  // Every commit: a no-op unless a reveal is owed.
+  useEffect(() => {
+    if (!revealOnSend) return;
+    if (sendingId !== null && sendingId !== seenSending.current) {
+      seenSending.current = sendingId;
+      revealUntil.current = Date.now() + REVEAL_MS;
+    }
+    if (Date.now() >= revealUntil.current) return;
+    const section = sectionRef.current;
+    if (section === null) return;
+    if (section.getBoundingClientRect().top > window.innerHeight * REVEAL_TOP) {
+      section.scrollIntoView({ block: "start" });
+    } else {
+      revealUntil.current = 0;
+    }
+  });
   // Roving focus (spec 6.4, UX-015): one row is the tab stop. The selection is tracked by row id, so
   // a row arriving on top, or an update to a row, never moves it; with none chosen the first row
   // is the tab stop. Only the user's own keys or focus change it.
@@ -208,13 +259,24 @@ export function RequestList({
     if (active === null || active === document.body) headingRef.current?.focus();
   });
   return (
-    <section aria-labelledby={headingId} className="qm-requests" data-shortcut-context="results">
+    <section
+      ref={sectionRef}
+      aria-labelledby={headingId}
+      className="qm-requests"
+      data-shortcut-context="results"
+    >
+      {toastSlot === "beforeHeading" ? (
+        <div data-toast-slot="" className="qm-requests__toast" />
+      ) : null}
       <div className="qm-requests__head">
         <h2 id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
           {heading}
         </h2>
         {countText === undefined ? null : <p className="qm-requests__count">{countText}</p>}
       </div>
+      {toastSlot === "afterHeading" ? (
+        <div data-toast-slot="" className="qm-requests__toast" />
+      ) : null}
       {rows.length === 0 ? (
         <p className="qm-requests__empty">{emptyText}</p>
       ) : (

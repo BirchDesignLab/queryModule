@@ -62,7 +62,11 @@ test.describe("dispatcher retry (1366x768)", () => {
     await expect(retry).toHaveCount(0);
     await expect(region.getByRole("heading", { name: "Requests this shift" })).toBeFocused();
     await expect(page.getByTestId("announcer-polite")).toContainText(/Vehicle query sent at/);
-    expect(await region.locator("[aria-live], [role=status], [role=alert]").count()).toBe(0);
+    expect(
+      await region
+        .locator("[aria-live], [role=status]:not([data-testid=ack-toast]), [role=alert]")
+        .count(),
+    ).toBe(0);
   });
 });
 

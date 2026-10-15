@@ -150,7 +150,9 @@ E2E_PORT=3200 node scripts/demo/dry-run.ts
    (the HTTP 202 and its correlation id). Under it, one line per source the query asks reads "State
    system: pending" and "National system: pending".
 4. Within a second or so each line settles on its own, as that source answers (the mock waits a
-   random time in the source's `latencyMs` range): "returned" is the calm tone, anything else
+   random time in the source's `latencyMs` range). A source that has answered reads "loading
+   result" until its card arrives, then the card takes the line's place (its heading says "State
+   system: returned"). The calm tone is a returned source; anything else
    (failed, timed out, interrupted, credentials missing or rejected) reads as a problem. The text
    carries the status, never the icon alone, and a screen reader hears a summary such as "Vehicle
    <last 8 characters of the reference>: 1 of 2 sources done. ..." after each change. The lines come over the WebSocket feed, so they

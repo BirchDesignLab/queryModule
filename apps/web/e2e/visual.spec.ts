@@ -413,7 +413,7 @@ test.describe("B3 dispatcher requests list beside the panel (1440x900)", () => {
         }
         const list = page.getByRole("region", { name: "Requests this shift" });
         await expect(list.getByRole("listitem")).toHaveCount(2);
-        await expect(list.getByText("Acknowledged")).toHaveCount(2);
+        await expect(list.getByText("Acknowledged", { exact: true })).toHaveCount(2);
         const [panel, pane] = await Promise.all([
           page.locator(".qm-panes__panel").boundingBox(),
           list.boundingBox(),

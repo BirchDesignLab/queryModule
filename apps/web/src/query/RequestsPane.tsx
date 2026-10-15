@@ -129,18 +129,23 @@ export const RequestsPane = memo(function RequestsPane({
           lines: [
             ...part.sources.map((source): SourceLineView => {
               const payload = source.status === "returned" ? source.result?.payload : undefined;
+              // A source that returned owes its payload (spec 6.7): until the card arrives the line
+              // says so, instead of "returned" with nothing under it (G6).
+              const loading = source.status === "returned" && payload === undefined;
               return {
                 key: `${key}:${source.sourceId}`,
                 tone:
-                  source.status === "pending"
+                  source.status === "pending" || loading
                     ? "pending"
                     : source.status === "returned"
                       ? "ok"
                       : "problem",
-                text: t("sourceStatus.line", {
-                  source: sourceLabel(source.sourceId),
-                  status: t(`sourceStatus.status.${source.status}`),
-                }),
+                text: loading
+                  ? t("sourceStatus.loadingResult", { source: sourceLabel(source.sourceId) })
+                  : t("sourceStatus.line", {
+                      source: sourceLabel(source.sourceId),
+                      status: t(`sourceStatus.status.${source.status}`),
+                    }),
                 ...(payload === undefined
                   ? {}
                   : {
@@ -188,6 +193,10 @@ export const RequestsPane = memo(function RequestsPane({
       }
       emptyText={t(variant === "last" ? "requests.emptyLast" : "requests.empty")}
       onEditAsNew={onEditAsNew}
+      // The officer's last request sits under the form: show it once a request is on its way (G11).
+      revealOnSend={variant === "last"}
+      // The acknowledgment toast lands here: under the dispatcher's heading, above the officer's.
+      toastSlot={variant === "last" ? "beforeHeading" : "afterHeading"}
       onRetry={(rowId) => {
         // The failed row keeps its place; the values it kept go as a new request under the panel's
         // current config hash, and the new row joins the list.

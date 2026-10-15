@@ -29,6 +29,7 @@ import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
 import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
+import { revealLastInvalid } from "./reveal-invalid.js";
 import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
@@ -380,6 +381,8 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   useEffect(() => {
     if (focusTick > 0 && formContainerRef.current !== null) {
       focusFirstInvalid(formContainerRef.current);
+      // The last invalid field must not sit under the sticky action bar (G13); focus stays put.
+      revealLastInvalid(formContainerRef.current);
     }
   }, [focusTick]);
 

@@ -88,9 +88,9 @@ describe("B4 officer quick access: tiles, run button, no muted text", () => {
 });
 
 describe("B3 requests list: two panes on dispatch, a quiet last-request card for the officer", () => {
-  it("dispatch puts the panel and the list in two columns from 1024 px; the panel's content is 640 px (682 with its padding and border), so the five quick-access buttons fit one row", () => {
+  it("dispatch puts the panel and the list in two columns from 1024 px; the panel's content is 640 px (682 with its padding and border) and gives way to 35 rem so the requests keep 24 rem (G1)", () => {
     expect(css).toMatch(
-      /@media\s*\(min-width:\s*1024px\)\s*\{\s*\.qm-query-panel:not\(\.qm-layout--mobile-unit\)\s+\.qm-panes\s*\{[^}]*grid-template-columns:\s*minmax\(\s*0,\s*calc\(40rem \+ var\(--qm-space-5\) \* 2 \+ var\(--qm-border-width\) \* 2\)\s*\)\s+minmax\(0,\s*1fr\)/,
+      /@media\s*\(min-width:\s*1024px\)\s*\{\s*\.qm-query-panel:not\(\.qm-layout--mobile-unit\)\s+\.qm-panes\s*\{[^}]*grid-template-columns:\s*minmax\(\s*35rem,\s*calc\(40rem \+ var\(--qm-space-5\) \* 2 \+ var\(--qm-border-width\) \* 2\)\s*\)\s+minmax\(24rem,\s*1fr\)/,
     );
   });
   it("the officer layout never gets the two columns", () => {

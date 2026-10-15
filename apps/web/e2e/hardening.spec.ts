@@ -323,17 +323,19 @@ test.describe("focus repair A in a real browser: the sheet opened from inside th
   });
 });
 
-// The dispatcher's panel column is 682 px (640 of content), so the five quick-access buttons, the
-// widest being "Driver's license", sit on one row (they need 622 px). What it costs the requests pane.
-for (const [width, minRequests] of [
-  [1024, 280],
-  [1366, 600],
-  [1440, 680],
+// The dispatcher's panel column is 682 px (640 of content) where the window has room, so the five
+// quick-access buttons, the widest being "Driver's license", sit on one row (they need 622 px). Below
+// 1280 px the panel gives way, down to 560 px, so the requests pane keeps room for its cards (G1,
+// mockup v5: minmax(560px, 640px) then 1fr); the buttons then wrap to a second row.
+for (const [width, panelWidth, maxRows, minRequests] of [
+  [1024, 584, 2, 384],
+  [1366, 682, 1, 600],
+  [1440, 682, 1, 680],
 ] as const) {
   test.describe(`dispatcher panel column at ${width}`, () => {
     test.use({ viewport: { width, height: 768 } });
 
-    test("682 px card, quick access on one row, requests pane still readable, no overflow", async ({
+    test("panel width, quick access rows, requests pane still readable, no overflow", async ({
       page,
     }) => {
       await signIn(page, seededUser("dispatcher@example.test"));
@@ -353,8 +355,8 @@ for (const [width, minRequests] of [
         };
       });
       test.info().annotations.push({ type: "measured", description: JSON.stringify(m) });
-      expect(m.panel).toBe(682);
-      expect(m.rows, "quick-access rows").toBe(1);
+      expect(m.panel).toBe(panelWidth);
+      expect(m.rows, "quick-access rows").toBeLessThanOrEqual(maxRows);
       expect(m.requests, "requests pane width").toBeGreaterThanOrEqual(minRequests);
       // A row of the requests pane fits it: no overflow with a request in the list.
       const plate = page.getByLabel("Plate", { exact: true });

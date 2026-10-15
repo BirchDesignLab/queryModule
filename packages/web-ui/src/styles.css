@@ -567,8 +567,10 @@ h1 {
 
 /* Two panes at desktop width: the query panel, then the requests. The panel's content is 640 px
    (682 with its padding and border): the five quick-access buttons, "Driver's license" included,
-   need 622 px and fit one row. Width picks the panes, never the density: the persona layout does
-   that (spec 6.1). */
+   need 622 px and fit one row. Where the window is narrower the panel gives way first, down to
+   35 rem (the buttons wrap to a second row), so the requests keep at least 24 rem for their cards
+   (mockup v5: minmax(560px, 640px) then 1fr; G1). Width picks the panes, never the density: the
+   persona layout does that (spec 6.1). */
 .qm-query-panel:not(.qm-layout--mobile-unit) {
   max-width: 90rem;
 }
@@ -576,8 +578,8 @@ h1 {
 @media (min-width: 1024px) {
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes {
     grid-template-columns:
-      minmax(0, calc(40rem + var(--qm-space-5) * 2 + var(--qm-border-width) * 2))
-      minmax(0, 1fr);
+      minmax(35rem, calc(40rem + var(--qm-space-5) * 2 + var(--qm-border-width) * 2))
+      minmax(24rem, 1fr);
   }
 }
 
@@ -624,9 +626,13 @@ h1 {
   list-style: none;
 }
 
+/* The head wraps like mockup v5's .re-head: type, command (it takes the room that is left and wraps
+   to its own line before it splits mid-token) and badges; in a narrow column the badges drop to
+   their own line, never a character per line (G1). The meta line and the parts take the whole width
+   under it. */
 .qm-request {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--qm-space-1) var(--qm-space-3);
   align-items: center;
   padding: var(--qm-space-3) var(--qm-space-4);
@@ -646,12 +652,26 @@ h1 {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--qm-space-2) var(--qm-space-3);
+  /* A compact chip centered under the page, not a full-width panel (mockup v5 toast; G12). */
+  inline-size: fit-content;
+  max-inline-size: calc(100% - var(--qm-space-8));
   margin: var(--qm-space-4);
+  margin-inline: auto;
   padding: var(--qm-space-3) var(--qm-space-4);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-panel);
   background: var(--qm-color-surface-base);
   color: var(--qm-color-text-body);
+}
+
+/* The toast in the Requests pane's slot: a little room under it before the list (G12). */
+.qm-requests__toast > .qm-toast {
+  inline-size: auto;
+  max-inline-size: none;
+  margin: 0 0 var(--qm-space-3);
+  /* Not a request card: the "ok" edge on the overlay surface, as mockup v5's .toast. */
+  border-color: var(--qm-color-status-ok);
+  background: var(--qm-color-surface-overlay);
 }
 
 .qm-request--sending {
@@ -669,6 +689,7 @@ h1 {
 }
 
 .qm-request__badges {
+  margin-inline-start: auto;
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
@@ -685,12 +706,15 @@ h1 {
 }
 
 .qm-request__summary {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 100%;
   font-family: var(--qm-type-family-data);
   overflow-wrap: anywhere;
 }
 
 .qm-request__meta {
-  grid-column: 2 / -1;
+  flex: 1 0 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -718,15 +742,21 @@ h1 {
   list-style: none;
 }
 
+/* The parts span the whole entry under a subtle rule, so a card's left edge is the entry's, whatever
+   the type label before the value (mockup v5 .part; G25). */
 .qm-request__parts {
-  grid-column: 2 / -1;
+  flex: 1 0 100%;
   min-inline-size: 0;
+  gap: var(--qm-space-3);
+  margin-block-start: var(--qm-space-2);
+  padding: var(--qm-space-3) 0 0;
   border: 0;
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
   font-size: var(--qm-type-size-sm);
 }
 
 .qm-request__sources {
-  padding-inline-start: var(--qm-space-4);
+  gap: var(--qm-space-2);
 }
 
 .qm-request__part-label {
@@ -1436,6 +1466,11 @@ h1 {
 .qm-layout--mobile-unit .qm-view-toggle__count,
 .qm-layout--mobile-unit .qm-card__diagnostics {
   color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
+}
+
+/* Card source headings are body size on the officer layout, 16 px at least (mockup .touch .rc-h h4). */
+.qm-layout--mobile-unit .qm-card__title {
   font-size: var(--qm-type-body-size);
 }
 
