@@ -106,6 +106,19 @@ describe("G8 the shortcuts sheet fits the screen and lines its rows up", () => {
   });
 });
 
+describe("officer density: the shortcuts dialog is 16 px and not muted (critic PR3)", () => {
+  it("sets the sheet, its context lines and its key caps at body size and color", () => {
+    for (const sel of [
+      ".qm-layout--mobile-unit .qm-shortcut-sheet",
+      ".qm-layout--mobile-unit .qm-shortcut-sheet__context",
+      ".qm-layout--mobile-unit .qm-shortcut-sheet__keys kbd",
+    ]) {
+      expect(decls(sel), sel).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+      expect(decls(sel), sel).toMatch(/color:\s*var\(--qm-color-text-body\)/);
+    }
+  });
+});
+
 describe("G27 the info mark stays a lower-case i", () => {
   it("the badge marker is exempt from the badge's uppercase", () => {
     expect(decls(".qm-badge__marker")).toMatch(/text-transform:\s*none/);

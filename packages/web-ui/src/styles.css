@@ -550,6 +550,7 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--qm-space-2) var(--qm-space-6);
+  align-items: start;
 }
 
 /* Action at the start, its keys at the end, where it works under them: the rows line up (G8). */
@@ -586,6 +587,14 @@ h1 {
   background: var(--qm-color-surface-raised);
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-xs);
+}
+
+/* Officer: nothing under 16 px and nothing muted (mockup .touch). */
+.qm-layout--mobile-unit .qm-shortcut-sheet,
+.qm-layout--mobile-unit .qm-shortcut-sheet__context,
+.qm-layout--mobile-unit .qm-shortcut-sheet__keys kbd {
+  color: var(--qm-color-text-body);
+  font-size: var(--qm-type-body-size);
 }
 
 /* A full-width button (the sign-in submit). */

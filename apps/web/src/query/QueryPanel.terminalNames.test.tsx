@@ -40,6 +40,16 @@ describe("G31 terminal mode names what is typed", () => {
     await user.clear(input);
     await user.type(input, "PRO.ZZ123.FIREARM");
     expect(screen.getByRole("heading", { level: 2, name: "Property query" })).toBeVisible();
+    // The pressed quick-access button agrees with the heading (one type state, as in mockup v5).
+    const quick = screen.getByRole("group", { name: "Quick access" });
+    expect(within(quick).getByRole("button", { name: /Property/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(quick).getByRole("button", { name: /Vehicle/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     await user.clear(input);
     await user.type(input, "XYZ");
     expect(screen.getByRole("heading", { level: 2, name: "Vehicle query" })).toBeVisible();

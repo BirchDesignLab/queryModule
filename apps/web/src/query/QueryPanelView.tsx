@@ -240,7 +240,7 @@ function ReadyPanel({
       </div>
       <QuickAccessBar
         codes={quickCodes}
-        current={queryType}
+        current={headingType}
         labelOf={labelOfType}
         onSelect={terminal.selectType}
         shortcutOf={preview ? undefined : (_code, index) => quickShortcut(bindings, index)}
