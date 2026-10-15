@@ -830,26 +830,6 @@ main[tabindex="-1"]:focus {
   border-radius: var(--qm-radius-panel);
 }
 
-/* The raw JSON tab is an editor, not a form: it fills the panes area down to the same edge as the
-   other panes whether or not draft issues are listed under it (they used to fill the pane by
-   accident), the textarea keeps its 24 rows as a minimum and takes the rest. */
-.qm-builder__editor[data-tab="raw"] {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-}
-
-.qm-builder__editor[data-tab="raw"] > div {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  min-block-size: 0;
-}
-
-.qm-builder__editor[data-tab="raw"] textarea {
-  flex: 1 0 auto;
-}
-
 /* Scroll panes clip what overflows them, focus rings included: keep room for the ring inside the
    pane on every side, and when scrolling to an item (E1, critic I3). */
 .qm-builder__editor,
@@ -2651,4 +2631,24 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-columns__remove {
   min-inline-size: var(--qm-control-height-dense);
   padding-inline: 0;
+}
+
+/* The raw JSON tab is an editor, not a form: it fills the panes area down to the same edge as the
+   other panes whether or not draft issues are listed under it (they used to fill the pane by
+   accident), the textarea keeps its 24 rows as a minimum and takes the rest. */
+.qm-builder__editor[data-tab="raw"] {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+}
+
+.qm-builder__editor[data-tab="raw"] > div {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.qm-builder__editor[data-tab="raw"] textarea {
+  flex: 1 0 auto;
 }
