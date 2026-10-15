@@ -58,11 +58,13 @@ async function shot(page: Any, label: string): Promise<void> {
 }
 
 async function step(name: string, fn: () => Promise<void>): Promise<void> {
+  if (only && !only.test(name)) return;
   note(`\n## ${name}`);
   try {
     await fn();
   } catch (e) {
     note(`- FAILED: ${(e instanceof Error ? e.message : String(e)).split("\n")[0]}`);
+    if (current) await shot(current, `FAILED ${name}`);
   }
 }
 
@@ -101,7 +103,9 @@ async function signIn(ctxPage: Any, email: string): Promise<void> {
   await ctxPage.getByLabel("Email").fill(email);
   await ctxPage.getByLabel("Password").fill(passwordFor(email));
   await ctxPage.getByRole("button", { name: "Sign in" }).click();
-  await ctxPage.getByRole("heading", { name: "Query Module", exact: true }).waitFor({ timeout: 15000 });
+  await ctxPage
+    .getByRole("heading", { name: "Query Module", exact: true })
+    .waitFor({ timeout: 15000 });
 }
 
 const listName = (officer: boolean) => (officer ? "Last request" : "Requests this shift");
@@ -115,11 +119,18 @@ async function runTerminal(page: Any, officer: boolean, cmd: string): Promise<st
   }
   await input.fill(cmd);
   await input.press("Enter");
-  const row = page.getByRole("region", { name: listName(officer) }).getByRole("listitem").first();
+  const row = page
+    .getByRole("region", { name: listName(officer) })
+    .getByRole("listitem")
+    .first();
   const t0 = Date.now();
   while (Date.now() - t0 < 25000) {
     const t = await row.innerText().catch(() => "");
-    if (/acknowledged/i.test(t) && !/pending/i.test(t) && (await row.getByRole("region").count()) > 0)
+    if (
+      /acknowledged/i.test(t) &&
+      !/pending/i.test(t) &&
+      (await row.getByRole("region").count()) > 0
+    )
       break;
     await sleep(150);
   }
@@ -178,7 +189,13 @@ async function overflowReport(page: Any): Promise<string> {
       const pr = p?.getBoundingClientRect();
       const label = `${el.tagName.toLowerCase()}.${String((el as HTMLElement).className).slice(0, 30)} "${(el.textContent ?? "").trim().slice(0, 20)}"`;
       if (r.right > vw + 1) out.push(`past viewport: ${label} right=${Math.round(r.right)}`);
-      else if (p && pr && getComputedStyle(p).overflow === "visible" && r.right > pr.right + 2 && pr.width > 0)
+      else if (
+        p &&
+        pr &&
+        getComputedStyle(p).overflow === "visible" &&
+        r.right > pr.right + 2 &&
+        pr.width > 0
+      )
         out.push(`spills parent: ${label} by ${Math.round(r.right - pr.right)} px`);
       if (out.length > 14) break;
     }
@@ -191,7 +208,11 @@ async function setTheme(page: Any, label: string): Promise<void> {
   if ((await bar.count()) === 0) {
     await page.getByRole("banner").locator(".qm-account__button").click();
     await sleep(250);
-    await page.getByRole("group", { name: "Account" }).getByRole("group", { name: "Theme" }).getByRole("button", { name: label, exact: true }).click();
+    await page
+      .getByRole("group", { name: "Account" })
+      .getByRole("group", { name: "Theme" })
+      .getByRole("button", { name: label, exact: true })
+      .click();
     await sleep(400);
     await page.keyboard.press("Escape");
   } else {
@@ -217,15 +238,34 @@ async function main(): Promise<void> {
       const text = await runTerminal(page, false, "VEH.ZZ-0001..26");
       note(`- first row after run: ${text.replace(/\s+/g, " ").slice(0, 200)}`);
       await shot(page, "dispatcher after run, form reset");
-      const row = page.getByRole("region", { name: listName(false) }).getByRole("listitem").first();
+      const row = page
+        .getByRole("region", { name: listName(false) })
+        .getByRole("listitem")
+        .first();
       const edit = row.getByRole("button", { name: /Edit as new query/i });
       note(`- Edit as new query buttons on the row: ${await edit.count()}`);
       await edit.first().click();
       await sleep(500);
-      note(`- focus after Edit as new query: ${await page.evaluate(() => `${document.activeElement?.tagName} ${document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.id ?? ""}`)}`);
-      note(`- loaded line visible: ${await page.getByText(/Values loaded from the earlier request/i).count()}`);
-      note(`- plate field value: ${await page.getByLabel(/^Plate/).first().inputValue().catch(() => "n/a")}`);
-      note(`- Year field value: ${await page.getByLabel(/^Year/).first().inputValue().catch(() => "n/a")}`);
+      note(
+        `- focus after Edit as new query: ${await page.evaluate(() => `${document.activeElement?.tagName} ${document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.id ?? ""}`)}`,
+      );
+      note(
+        `- loaded line visible: ${await page.getByText(/Values loaded from the earlier request/i).count()}`,
+      );
+      note(
+        `- plate field value: ${await page
+          .getByLabel(/^Plate/)
+          .first()
+          .inputValue()
+          .catch(() => "n/a")}`,
+      );
+      note(
+        `- Year field value: ${await page
+          .getByLabel(/^Year/)
+          .first()
+          .inputValue()
+          .catch(() => "n/a")}`,
+      );
       await shot(page, "edit as new query loaded");
       await c.close();
     });
@@ -236,7 +276,16 @@ async function main(): Promise<void> {
       else await page.goto("/status");
       await sleep(800);
       note(`- url: ${page.url()}`);
-      note(`- text: ${(await page.locator("main").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 500)}`);
+      note(
+        `- text: ${(
+          await page
+            .locator("main")
+            .innerText()
+            .catch(() => "")
+        )
+          .replace(/\s+/g, " ")
+          .slice(0, 500)}`,
+      );
       await shot(page, "status page on arrival");
       const check = page.getByRole("button", { name: /Check again/i });
       if ((await check.count()) > 0) {
@@ -244,7 +293,16 @@ async function main(): Promise<void> {
         await check.first().click();
         await sleep(1500);
         await shot(page, "status page after check again");
-        note(`- text after: ${(await page.locator("main").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 500)}`);
+        note(
+          `- text after: ${(
+            await page
+              .locator("main")
+              .innerText()
+              .catch(() => "")
+          )
+            .replace(/\s+/g, " ")
+            .slice(0, 500)}`,
+        );
       }
       await c.close();
     });
@@ -258,7 +316,9 @@ async function main(): Promise<void> {
         const { c, page } = await ctx(email, width);
         for (const theme of ["Night", "Red shift"]) {
           await setTheme(page, theme);
-          note(`- theme ${theme}: data-theme=${await page.locator("html").getAttribute("data-theme")}`);
+          note(
+            `- theme ${theme}: data-theme=${await page.locator("html").getAttribute("data-theme")}`,
+          );
           await runTerminal(page, officer, "VEH.ZZ-0001..26");
           note(`- contrast CRITICAL badge: ${await contrastOf(page, "^critical$")}`);
           note(`- contrast STOLEN value: ${await contrastOf(page, "^stolen$")}`);
@@ -280,7 +340,9 @@ async function main(): Promise<void> {
       const { c, page } = await ctx("admin@example.test", 1024);
       await page.getByRole("link", { name: "Admin" }).click();
       await page.getByRole("link", { name: "Site configuration" }).click();
-      await page.getByRole("heading", { name: "Site configuration", level: 2 }).waitFor({ timeout: 10000 });
+      await page
+        .getByRole("heading", { name: "Site configuration", level: 2 })
+        .waitFor({ timeout: 10000 });
       await sleep(600);
       await shot(page, "builder 1024 on open");
       note(`- overflow on open: ${await overflowReport(page)}`);
@@ -303,58 +365,90 @@ async function main(): Promise<void> {
       }
       await c.close();
     });
-    await step("publish payoff: admin 1366 publishes, dispatcher 1366 shows Make and TESTMAKE", async () => {
-      const a = await ctx("admin@example.test", 1366);
-      const d = await ctx("dispatcher@example.test", 1366);
-      const before = await runTerminal(d.page, false, "VEH.ZZ-0010..26");
-      note(`- before publish, ZZ-0010 row: ${before.replace(/\s+/g, " ").slice(0, 240)}`);
-      const page = a.page;
-      current = page;
-      await page.getByRole("link", { name: "Admin" }).click();
-      await page.getByRole("link", { name: "Site configuration" }).click();
-      await page.getByRole("heading", { name: "Site configuration", level: 2 }).waitFor({ timeout: 10000 });
-      const tree = page.getByRole("navigation", { name: "Configuration items" });
-      const editor = page.getByTestId("form-tab");
-      const treeClick = async (rx: RegExp, expand?: RegExp) => {
-        if (expand) {
-          const g = tree.getByRole("treeitem", { name: expand }).first();
-          if ((await g.count()) > 0 && (await g.getAttribute("aria-expanded")) === "false") await g.click();
-        }
-        await tree.getByRole("treeitem", { name: rx }).first().click();
+    await step(
+      "publish payoff: admin 1366 publishes, dispatcher 1366 shows Make and TESTMAKE",
+      async () => {
+        const a = await ctx("admin@example.test", 1366);
+        const d = await ctx("dispatcher@example.test", 1366);
+        const before = await runTerminal(d.page, false, "VEH.ZZ-0010..26");
+        note(`- before publish, ZZ-0010 row: ${before.replace(/\s+/g, " ").slice(0, 240)}`);
+        const page = a.page;
+        current = page;
+        await page.getByRole("link", { name: "Admin" }).click();
+        await page.getByRole("link", { name: "Site configuration" }).click();
+        await page
+          .getByRole("heading", { name: "Site configuration", level: 2 })
+          .waitFor({ timeout: 10000 });
+        const tree = page.getByRole("navigation", { name: "Configuration items" });
+        const editor = page.getByTestId("form-tab");
+        const treeClick = async (rx: RegExp, expand?: RegExp) => {
+          if (expand) {
+            const g = tree.getByRole("treeitem", { name: expand }).first();
+            if ((await g.count()) > 0 && (await g.getAttribute("aria-expanded")) === "false")
+              await g.click();
+          }
+          await tree.getByRole("treeitem", { name: rx }).first().click();
+          await sleep(400);
+        };
+        await treeClick(/^1\. All results/, /^Vehicle cards/);
+        await editor
+          .getByRole("button", { name: /^Edit\s?Make/ })
+          .first()
+          .click();
+        await sleep(300);
+        await editor
+          .getByRole("group", { name: /Show in/i })
+          .first()
+          .getByLabel(/Summary/i)
+          .check();
+        await sleep(300);
+        await shot(page, "publish: Make moved to summary");
+        await treeClick(/^Keywords and severity/);
+        await editor.getByLabel("New keyword", { exact: true }).fill("TESTMAKE");
+        await editor
+          .getByLabel("Severity of the new keyword")
+          .selectOption({ label: "Warning" })
+          .catch(() => note("- severity select: selectOption failed"));
+        await editor.getByRole("button", { name: /Add keyword/ }).click();
         await sleep(400);
-      };
-      await treeClick(/^1\. All results/, /^Vehicle cards/);
-      await editor.getByRole("button", { name: /^Edit\s?Make/ }).first().click();
-      await sleep(300);
-      await editor.getByRole("group", { name: /Show in/i }).first().getByLabel(/Summary/i).check();
-      await sleep(300);
-      await shot(page, "publish: Make moved to summary");
-      await treeClick(/^Keywords and severity/);
-      await editor.getByLabel("New keyword", { exact: true }).fill("TESTMAKE");
-      await editor.getByLabel("Severity of the new keyword").selectOption({ label: "Warning" }).catch(() => note("- severity select: selectOption failed"));
-      await editor.getByRole("button", { name: /Add keyword/ }).click();
-      await sleep(400);
-      await page.getByRole("button", { name: "Review and publish" }).click();
-      const dlg = page.getByRole("dialog", { name: "Review and publish" });
-      await dlg.waitFor({ timeout: 5000 });
-      note(`- review dialog text: ${(await dlg.innerText()).replace(/\s+/g, " ").slice(0, 600)}`);
-      await shot(page, "publish: review dialog");
-      await dlg.getByRole("button", { name: /^Publish version \d+$/ }).click();
-      await page.getByText(/^Published version \d+\./).first().waitFor({ timeout: 10000 });
-      const t0 = Date.now();
-      await d.page.getByText(/The form was updated by your administrator/).first().waitFor({ timeout: 30000 }).catch(() => note("- dispatcher never showed the form-updated notice"));
-      note(`- dispatcher form updated ${((Date.now() - t0) / 1000).toFixed(1)} s after publish`);
-      await shot(d.page, "publish: dispatcher after form update (old row redrawn?)");
-      const after = await runTerminal(d.page, false, "VEH.ZZ-0001..26");
-      note(`- after publish, ZZ-0001 row: ${after.replace(/\s+/g, " ").slice(0, 400)}`);
-      note(`- Make in summary: ${/Make/i.test(after)}; TESTMAKE present: ${/TESTMAKE/.test(after)}`);
-      note(`- contrast TESTMAKE: ${await contrastOf(d.page, "TESTMAKE")}`);
-      await shot(d.page, "publish: dispatcher result Make and TESTMAKE");
-      const ten = await d.page.getByRole("region", { name: listName(false) }).getByRole("listitem").nth(1).innerText().catch(() => "");
-      note(`- the earlier ZZ-0010 row now (redraw at next refresh): ${ten.replace(/\s+/g, " ").slice(0, 300)}`);
-      await a.c.close();
-      await d.c.close();
-    });
+        await page.getByRole("button", { name: "Review and publish" }).click();
+        const dlg = page.getByRole("dialog", { name: "Review and publish" });
+        await dlg.waitFor({ timeout: 5000 });
+        note(`- review dialog text: ${(await dlg.innerText()).replace(/\s+/g, " ").slice(0, 600)}`);
+        await shot(page, "publish: review dialog");
+        await dlg.getByRole("button", { name: /^Publish version \d+$/ }).click();
+        await page
+          .getByText(/^Published version \d+\./)
+          .first()
+          .waitFor({ timeout: 10000 });
+        const t0 = Date.now();
+        await d.page
+          .getByText(/The form was updated by your administrator/)
+          .first()
+          .waitFor({ timeout: 30000 })
+          .catch(() => note("- dispatcher never showed the form-updated notice"));
+        note(`- dispatcher form updated ${((Date.now() - t0) / 1000).toFixed(1)} s after publish`);
+        await shot(d.page, "publish: dispatcher after form update (old row redrawn?)");
+        const after = await runTerminal(d.page, false, "VEH.ZZ-0001..26");
+        note(`- after publish, ZZ-0001 row: ${after.replace(/\s+/g, " ").slice(0, 400)}`);
+        note(
+          `- Make in summary: ${/Make/i.test(after)}; TESTMAKE present: ${/TESTMAKE/.test(after)}`,
+        );
+        note(`- contrast TESTMAKE: ${await contrastOf(d.page, "TESTMAKE")}`);
+        await shot(d.page, "publish: dispatcher result Make and TESTMAKE");
+        const ten = await d.page
+          .getByRole("region", { name: listName(false) })
+          .getByRole("listitem")
+          .nth(1)
+          .innerText()
+          .catch(() => "");
+        note(
+          `- the earlier ZZ-0010 row now (redraw at next refresh): ${ten.replace(/\s+/g, " ").slice(0, 300)}`,
+        );
+        await a.c.close();
+        await d.c.close();
+      },
+    );
   } finally {
     server.kill("SIGTERM");
   }
@@ -362,10 +456,13 @@ async function main(): Promise<void> {
   // 4. demo-seed.ts run once on a throwaway second server.
   const port2 = String(Number(target.port) + 1);
   const origin2 = `http://localhost:${port2}`;
-  const server2 = only && !/seed/i.test(only.source) ? undefined : await startServer(port2, origin2, `${origin2}/api/v1/health`).catch((e: Error) => {
-    note(`\n## demo-seed: second server failed: ${e.message}`);
-    return undefined;
-  });
+  const server2 =
+    only && !/seed/i.test(only.source)
+      ? undefined
+      : await startServer(port2, origin2, `${origin2}/api/v1/health`).catch((e: Error) => {
+          note(`\n## demo-seed: second server failed: ${e.message}`);
+          return undefined;
+        });
   if (server2) {
     try {
       await step("demo-seed.ts on a throwaway database", async () => {
@@ -378,22 +475,50 @@ async function main(): Promise<void> {
           });
         const t0 = Date.now();
         const first = run();
-        note(`- first run: exit ${first.status} in ${((Date.now() - t0) / 1000).toFixed(1)} s; stdout: ${(first.stdout ?? "").replace(/\s+/g, " ").slice(0, 400)}`);
+        note(
+          `- first run: exit ${first.status} in ${((Date.now() - t0) / 1000).toFixed(1)} s; stdout: ${(first.stdout ?? "").replace(/\s+/g, " ").slice(0, 400)}`,
+        );
         const second = run();
-        note(`- second run: exit ${second.status} (3 = refused); stderr: ${(second.stderr ?? "").trim().slice(0, 200)}`);
-        const c = await browser.newContext({ viewport: { width: 1366, height: 768 }, baseURL: origin2 });
+        note(
+          `- second run: exit ${second.status} (3 = refused); stderr: ${(second.stderr ?? "").trim().slice(0, 200)}`,
+        );
+        const c = await browser.newContext({
+          viewport: { width: 1366, height: 768 },
+          baseURL: origin2,
+        });
         const page = await c.newPage();
         await signIn(page, "dispatcher@example.test");
         await sleep(1500);
         await shot(page, "dispatcher after demo-seed 1366");
-        const rows = await page.getByRole("region", { name: listName(false) }).getByRole("listitem").count();
+        const rows = await page
+          .getByRole("region", { name: listName(false) })
+          .getByRole("listitem")
+          .count();
         note(`- rows listed after seed: ${rows}`);
-        note(`- first row: ${(await page.getByRole("region", { name: listName(false) }).getByRole("listitem").first().innerText()).replace(/\s+/g, " ").slice(0, 300)}`);
+        note(
+          `- first row: ${(
+            await page
+              .getByRole("region", { name: listName(false) })
+              .getByRole("listitem")
+              .first()
+              .innerText()
+          )
+            .replace(/\s+/g, " ")
+            .slice(0, 300)}`,
+        );
         await c.close();
-        const rec = await browser.newContext({ viewport: { width: 1366, height: 768 }, baseURL: origin2 });
+        const rec = await browser.newContext({
+          viewport: { width: 1366, height: 768 },
+          baseURL: origin2,
+        });
         const rp = await rec.newPage();
         await signIn(rp, "records@example.test");
-        note(`- records account rows after seed (should be 0): ${await rp.getByRole("region", { name: listName(false) }).getByRole("listitem").count()}`);
+        note(
+          `- records account rows after seed (should be 0): ${await rp
+            .getByRole("region", { name: listName(false) })
+            .getByRole("listitem")
+            .count()}`,
+        );
         await rec.close();
       });
     } finally {
