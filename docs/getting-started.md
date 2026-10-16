@@ -86,7 +86,7 @@ local production build.
 
 ## Toolchain
 
-Node 24, pnpm 12.6, TypeScript 7 (`packages/client` still pins 6.0.3), Vitest 5, Biome 2.5, zod 4.
+Node 24, pnpm 12.6, TypeScript 7 (`packages/client` pins 6.0.3 for API type generation only, because `openapi-typescript` needs the TypeScript 5 or 6 compiler API; #182 drops the pin), Vitest 5, Biome 2.5, zod 4.
 Exact versions are in the `package.json` files and `pnpm-lock.yaml`. Dependencies follow the newest
 stable release, and a known advisory is never left standing.
 
