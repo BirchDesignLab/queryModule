@@ -295,7 +295,13 @@ describe("ci.yml image build, boot smoke, publish (task 29, BR-006 SEC-006 NFR-0
     const publish = jobs.publish;
     expect(publish).toBeDefined();
     expect(jobNeeds(publish)).toEqual(["ci"]);
-    expect(publish.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/main'");
+    // An `if:` without a status function gets an implicit success(), which is false when any
+    // ancestor was skipped. `board` (#617) is skipped on every push and is an ancestor through
+    // `ci`, so publish must check ci's result itself or it never runs (promote failed 10-16-26).
+    expect(publish.if).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal GitHub Actions expression
+      "${{ !cancelled() && needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}",
+    );
     // A pull_request event can never satisfy this condition.
     expect(publish.if.includes("pull_request")).toBe(false);
   });

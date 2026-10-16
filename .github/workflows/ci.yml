@@ -408,10 +408,13 @@ jobs:
   # `image` job already built, boot-smoked and ran Playwright against
   # (C2, round 1 review): it loads the artifact that job uploaded and pushes
   # it, rebuilding nothing. Push to main only; a PR never has packages: write.
+  # The explicit ci result check matters: without a status function the `if:`
+  # gets an implicit success(), which is false when any ancestor was skipped,
+  # and `board` is skipped on every push (publish never ran from #621 to 10-16-26).
   publish:
     name: publish
     needs: [ci]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
