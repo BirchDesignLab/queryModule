@@ -75,7 +75,7 @@ key is a validation error. A feature that is off hides its UI and its routes ans
 | `credentials` | State-system credential entry | Not built yet; keep off. |
 | `delegation` | Delegated credentials | Not built yet; keep off. |
 | `resultHide` | Delete from view | Not built yet; keep off. |
-| `adminAudit` | The admin audit viewer | Not built yet (M2); keep off. |
+| `adminAudit` | The admin audit viewer | Not built yet (M2 P2); keep off. |
 | `adminConfig` | The admin config routes and the builder | Live. On in the shipped default site. |
 | `adminUsers` | The admin user routes and the Users page | Live. On in the shipped default site. |
 
@@ -697,8 +697,8 @@ config order, numbered and named by what narrows them ("All results", a source o
   label shown to users (stored as a message key under `mapping.<cardId>.` with its text in the
   label overlay), Show in (summary, detail or both), Format (as sent, upper case, phone number, date
   MM-DD-YY, template) and Mark keywords. A table row has Columns (path relative to one record, label,
-  format, mark keywords). A path found in no mock answer is a warning, not an error: a real source
-  may still send it, and until then the card leaves the row out.
+  format, mark keywords). A path found in no mock answer is a warning, not an error: a source answer can carry paths no
+  mock answer shows, and until one does the card leaves the row out.
 - **Advanced settings:** the card key (fixed once published) and the label key prefix.
 
 The right pane, **Card preview**, renders the production result card (the same component and mapper
@@ -734,5 +734,5 @@ bundle.
 |---|---|
 | Mapping paths resolved against mock payloads in `config:validate` | M2 P2 |
 | Credentials, delegation, delete from view (`credentials`, `delegation`, `resultHide`) | M3 |
-| Audit viewer (`adminAudit`) | M2 |
+| Audit viewer (`adminAudit`) | M2 P2 |
 | `pnpm config:validate --diff <tag>` | M2 P2 |

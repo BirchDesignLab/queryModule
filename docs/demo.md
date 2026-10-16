@@ -19,7 +19,9 @@ All data behind these accounts is mock data (spec 5.4 fixture policy). No real p
 Every story below is one command away on the default site, with mock data only (ZZ- plates, ZZ
 serials, 1901 dates, synthetic names). Type the command in the terminal ("Terminal mode", or `/`
 from outside a field), or fill the same values in the form. Each command was run end to end against
-a local build with the mock sources, and the results below are what that run showed.
+a local build with the mock sources, and the results below are what that run showed. The "State
+system" and the "National system" are the two mock sources: both answer from canned files, and
+neither is connected to a real system.
 
 **Accounts.** The passwords are handed out on request.
 
