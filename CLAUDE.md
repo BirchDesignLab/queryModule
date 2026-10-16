@@ -209,6 +209,52 @@ Controller rules for every workflow run:
 
 The superpowers skills (brainstorming, writing specs and plans, subagent-driven development, executing plans) are recommended, not required. The plugin's rule that a skill must be invoked before any response does not apply in this repo. TDD is required for every task with behaviour, whichever way the task runs.
 
+## Sessions: managers, lanes and machines
+
+Developer direction 10-16-26. These rules override the "Session start" limits text in older plans
+(plans are records and stay as written); new plans and session prompts follow this section.
+
+**Roles.** Planning sessions write plans. Lane sessions implement plans. The manager session
+manages the other sessions: it briefs lanes, rules on their questions, approves their pushes (its
+approvals count as the developer's) and tracks every lane's state. The developer merges every PR.
+
+**The manager alone monitors context and usage.** Lanes do not track their own context window or
+the 5-hour and weekly usage windows, and lane and plan prompts carry no context percentages or
+handover lines: work quality dropped as lanes approached a stated limit, the same way it drops as a
+context window fills. The manager reads each lane's context with the session tools (`get_usage`
+with the lane's session id; no report from the lane is needed) and the account's usage windows,
+and tells a lane when to finish its current item and write its handover (see "Where records go").
+The manager does not launch, and tells lanes not to launch, a workflow that will not finish
+inside the remaining 5-hour window.
+
+**Machines.** Work runs on the developer's Windows machine, which has Docker locally: one manager
+plus two or three concurrent lanes. Every local test run sets `VITEST_MAX_WORKERS=3` (PowerShell
+`$env:VITEST_MAX_WORKERS="3"`, Git Bash `VITEST_MAX_WORKERS=3 pnpm verify`); without it, parallel
+lanes time tests out and make the machine unusable. Parallel lanes take distinct `E2E_PORT` values.
+The Linux host is used only for work that must happen on it: deploy checks, smoke, database reset,
+demo seed, backups and restore tests.
+
+**No in-session browser pane.** Sessions never open the app's browser pane (`preview_start` or the
+`Claude_Browser` tools), not even to verify. Verify with scripts (headless Playwright, e2e, the
+dry run), tests and screenshots read as files; when the developer needs to see something, give a
+link or a file path.
+
+**Where records go.** One home per kind of record, and no file that only grows. `docs/` holds
+anything that could be reused; `.superpowers/` (ignored) holds only working scratch such as
+ledgers and review files, and anything in it that later work depends on is promoted first.
+
+| Record | Home |
+|---|---|
+| Architecture or policy decision | An ADR, `docs/decisions/NNNN-*.md`, listed in `docs/decisions/README.md` |
+| Decision waiting on the developer | A GitHub issue labeled `decision`; it closes when ruled |
+| Ruling on one issue | A comment on that issue that starts with "Ruling:" (who ruled, when, what, why) |
+| Ruling that spans a phase | The "Rulings" section at the end of that phase's plan in `docs/superpowers/plans/` |
+| Handoff | One new dated file per handoff, `docs/handoffs/<MM-DD-YY>-<lane>.md`, committed with the lane's last PR or in a small docs PR; never appended to. `STATUS.md` links the latest per track |
+| Working scratch | `.superpowers/sdd/<plan>/` (ledgers, review working files) |
+
+A handoff holds the state, the branch and head sha, the rulings it depends on (as links to where
+they are recorded), and the next step. Write rulings to their home before writing the handoff.
+
 ## Scripts stay in the repo, not in temp
 
 Founder direction 08-13-26, carried over from earlier repos.

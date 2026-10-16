@@ -48,7 +48,7 @@ From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time a
 
 ## Handoff notes
 
-Overwrite your track's note at pause using the seven-line format in the master plan 7.1; clear it on resume.
+Overwrite your track's note at pause using the seven-line format in the master plan 7.1 and link the track's latest handoff file in [docs/handoffs/](../../handoffs/) (CLAUDE.md, "Where records go"); clear it on resume.
 
 ### Track A
 
