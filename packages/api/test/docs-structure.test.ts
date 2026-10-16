@@ -53,14 +53,23 @@ const links = (text: string): string[] => {
   return [...inline, ...defs];
 };
 
+/** Removes inline HTML tags, repeating until none is left, so a tag split by another is removed too. */
+const stripTags = (text: string): string => {
+  let out = text;
+  let prev: string;
+  do {
+    prev = out;
+    out = out.replace(/<[^<>]*>/g, "");
+  } while (out !== prev);
+  return out;
+};
+
 /** GitHub heading anchors, github-slugger rules: lowercase, drop punctuation, space to hyphen. */
 const anchors = (text: string): Set<string> => {
   const seen = new Map<string, number>();
   const out = new Set<string>();
   for (const m of prose(text).matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gm)) {
-    const base = (m[1] as string)
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/<[^>]+>/g, "")
+    const base = stripTags((m[1] as string).replace(/\[([^\]]*)\]\([^)]*\)/g, "$1"))
       .toLowerCase()
       .replace(/[^\p{L}\p{N}\s_-]/gu, "")
       .replace(/ /g, "-");
@@ -124,6 +133,13 @@ describe("BR-005 reader docs: link and anchor rules", () => {
   it("slugs headings the way GitHub does", () => {
     const slugs = anchors("# Review tiers (ADR-0007)\n## `code` & more\n## Intro\n## Intro\n");
     expect([...slugs]).toEqual(["review-tiers-adr-0007", "code--more", "intro", "intro-1"]);
+  });
+
+  it("drops inline HTML tags from a heading, including tags split by another tag", () => {
+    expect([...anchors("## A <b>bold</b> word\n## Odd <<b>i>tag\n")]).toEqual([
+      "a-bold-word",
+      "odd-tag",
+    ]);
   });
 });
 
