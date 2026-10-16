@@ -1068,9 +1068,9 @@
       "title": "Wave A5 minors: submit replay error sanitising, policy delegation branch, ack latency span",
       "labels": ["platform", "p2", "sensitive", "follow-up"],
       "milestone": "M2 Results and audit",
-      "parent": 44,
+      "parent": 45,
       "track": "Platform (A)",
-      "phase": "P1",
+      "phase": "P2",
       "size": "S",
       "priority": "High",
       "reqIds": "FR-064",
@@ -1559,11 +1559,11 @@
     },
     {
       "number": 561,
-      "labels": ["platform", "p1", "follow-up", "decision"],
+      "labels": ["platform", "p2", "follow-up", "decision"],
       "milestone": "M2 Results and audit",
-      "parent": 44,
+      "parent": 45,
       "track": "Platform (A)",
-      "phase": "P1",
+      "phase": "P2",
       "size": "M",
       "priority": "Medium",
       "reqIds": "none",
@@ -1920,6 +1920,19 @@
       "title": "Re-walk residual polish after #675: Which card wins wrap, 1024 entry header, ..2026 after reload, 1024 builder editor height",
       "body": "Left open by the demo re-walk PR #675 (gaps.md \"Fix status\", Opus critic). All polish; none blocks the demo.\n\n- [ ] R17: at 1366 the builder \"Which card wins\" cells still wrap to two lines (within the G37 e2e allowance). `apps/web/src/admin`.\n- [ ] R22: at 1024, a long command such as `PRO.ZZSTOLEN1.ELECTRONICS` pushes the ACKNOWLEDGED/CRITICAL badges under the command and \"Copy reference\" onto its own line, so the request entry header is three rows. `apps/web/src/query/RequestsPane.tsx`, `apps/web/src/shell.css`.\n- [ ] N1: a request rebuilt from stored values after a reload (and the demo-seeded rows) reads the year as `..2026`, while a request typed in this session reads `..26` (R11 keeps the year as typed). `docs/demo.md` documents it; the two forms should match.\n- [ ] N2: at 1024 the builder editor pane is about 240 px tall and scrolls inside.\n\nDone when each item is fixed or ruled, with a headless shot at the named width as proof (no checks left for a person).\n",
       "labels": ["web", "p3", "follow-up"]
+    },
+    {
+      "number": 685,
+      "milestone": "M3 Workflow and compliance",
+      "parent": 48,
+      "track": "Platform (A)",
+      "phase": "P1",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "SEC-006, SEC-011",
+      "title": "Key rotation for DATA_KEY and CREDENTIAL_KEY: ruling and ADR (M3 planning)",
+      "body": "**Goal (developer, 10-16-26):** the module ends up with full key rotation for both `DATA_KEY` and `CREDENTIAL_KEY`. The ruling and an ADR are made in the M3 planning session; M3 P1 (encrypted credential storage) is the recommended home, so both keys share one rotation design and one critical review.\n\n**Where it stands**\n- M2 P0-W3 (#524) rules option A: `request_key.key_version` records the wrapping `DATA_KEY` version (`REQUEST_KEY_VERSION = CURRENT_KEY_VERSION`, `packages/api/src/keys/request-keys.ts`), bound into the wrap AAD. That is the prerequisite for rotation; no rotation procedure exists.\n- Spec v2 section 2 lists \"credential key rotation (a `key_version` column is recorded, no rotation procedure is built)\" as a non-goal. `DATA_KEY` rotation is not designed. `SECURITY.md` states both.\n\n**For the ADR to decide**\n- Rotation procedure for each key: re-wrap job (`request_key` rows; `state_credential` rows from M3 P1), batching, resumability, and what happens to rows written mid-rotation.\n- Coexisting key versions during a rotation: how the old and new keys are supplied (Docker secrets), canaries for each version, fail-closed boot rules, and when the old key may be removed.\n- Whether a separate row format version is needed (option B from #524) or the key version stays the only version.\n- Audit events for a rotation (who, when, key, versions, row counts), and the runbook in `docs/deploy.md`.\n- Backups taken under the old key: retention window (spec 8.6) and restore after rotation.\n- Amending the spec non-goal; updating `SECURITY.md` built and planned lines.\n\nRefs #524, #511, #311.\n",
+      "labels": ["platform", "sensitive", "decision"]
     }
   ]
 }
