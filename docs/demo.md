@@ -118,15 +118,22 @@ script with `http://localhost:3100`, and delete the folder when done. The sign-i
 its `Origin`, so it must be the address the server was started with as `PUBLIC_ORIGIN`.
 
 ```
-DEMO_DISPATCHER_PASSWORD=<the dispatcher password> node scripts/dev/demo-seed.ts https://querymodule.birchdesignlab.com
+DEMO_PASSWORD=<the dispatcher password> node scripts/dev/demo-seed.ts https://querymodule.birchdesignlab.com
 ```
 
-On a machine that can read the seed secret file, `SEED_PASSWORD_SECRET_FILE=<file>` replaces the
-password variable (the password is derived as `scripts/ops/smoke.sh` derives it). The password is
-read from the environment, never from argv, and is never printed. The script needs Node 24 and the
-repository checkout.
+**Another account (#679).** `DEMO_EMAIL` seeds a different demo account the same way, for example the
+admin account a live demo is given from: `DEMO_EMAIL=admin@example.test DEMO_PASSWORD=<the admin
+password> node scripts/dev/demo-seed.ts <baseUrl>`. Only `@example.test` accounts are accepted, and the
+account's role must be allowed to query (user, trainingOfficer or admin; the implementer is refused by
+the API). Idempotency keys are per user, so each account can be seeded once.
 
-- It refuses when the dispatcher already has any request (exit code 3, nothing sent). The API only
+On a machine that can read the seed secret file, `SEED_PASSWORD_SECRET_FILE=<file>` replaces the
+password variable (the password is derived for the chosen account as `scripts/ops/smoke.sh` derives
+it). `DEMO_DISPATCHER_PASSWORD` still works in place of `DEMO_PASSWORD`. The password is read from the
+environment, never from argv, and is never printed. The script needs Node 24 and the repository
+checkout.
+
+- It refuses when the account already has any request (exit code 3, nothing sent). The API only
   shows a user their own requests, so that is what it can see: it does not check other accounts.
 - It waits up to 30 seconds for every source to settle (story 8 needs about 10) and says so when one
   is still pending. The requests are recorded either way.

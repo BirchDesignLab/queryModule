@@ -5,7 +5,9 @@ import {
   DEMO_STORIES,
   type DemoFetch,
   DemoSeedRefusedError,
+  demoEmailFromEnv,
   demoPassword,
+  passwordFromEnv,
   runDemoSeed,
 } from "./demo-seed.ts";
 
@@ -122,7 +124,58 @@ describe("DEMO_STORIES", () => {
   });
 });
 
+describe("demoEmailFromEnv (#679)", () => {
+  it("defaults to the demo dispatcher", () => {
+    expect(demoEmailFromEnv({})).toBe(DEMO_EMAIL);
+    expect(demoEmailFromEnv({ DEMO_EMAIL: "" })).toBe(DEMO_EMAIL);
+  });
+
+  it("takes another seeded demo account, lowercased and trimmed", () => {
+    expect(demoEmailFromEnv({ DEMO_EMAIL: " Admin@Example.test " })).toBe("admin@example.test");
+  });
+
+  it("refuses anything outside the synthetic example.test demo accounts", () => {
+    for (const email of [
+      "admin@birchdesignlab.com",
+      "someone@example.test.evil.com",
+      "not-an-email",
+    ])
+      expect(() => demoEmailFromEnv({ DEMO_EMAIL: email })).toThrow(
+        "demo-seed: DEMO_EMAIL must be a seeded demo account (@example.test)",
+      );
+  });
+});
+
+describe("passwordFromEnv (#679)", () => {
+  it("prefers DEMO_PASSWORD, still accepts DEMO_DISPATCHER_PASSWORD", () => {
+    expect(passwordFromEnv({ DEMO_PASSWORD: "a", DEMO_DISPATCHER_PASSWORD: "b" }, DEMO_EMAIL)).toBe(
+      "a",
+    );
+    expect(passwordFromEnv({ DEMO_DISPATCHER_PASSWORD: "b" }, DEMO_EMAIL)).toBe("b");
+  });
+
+  it("names DEMO_PASSWORD when neither a password nor the secret file is set", () => {
+    expect(() => passwordFromEnv({}, "admin@example.test")).toThrow(
+      "demo-seed: set DEMO_PASSWORD or SEED_PASSWORD_SECRET_FILE",
+    );
+  });
+});
+
 describe("runDemoSeed", () => {
+  it("signs in as the account it is given (#679)", async () => {
+    const { calls, fetchFn } = fakeServer({});
+    await runDemoSeed({
+      origin: ORIGIN,
+      email: "admin@example.test",
+      password: "pw",
+      fetchFn,
+      sleepFn: noSleep,
+      log: vi.fn(),
+      settleTimeoutMs: 1000,
+    });
+    expect(calls[0]?.body).toEqual({ email: "admin@example.test", password: "pw" });
+  });
+
   it("signs in as the demo dispatcher, then submits each story once through the public API", async () => {
     const { calls, fetchFn } = fakeServer({});
     const log = vi.fn();
