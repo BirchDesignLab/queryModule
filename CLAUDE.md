@@ -223,8 +223,8 @@ the 5-hour and weekly usage windows, and lane and plan prompts carry no context 
 handover lines: work quality dropped as lanes approached a stated limit, the same way it drops as a
 context window fills. The manager reads each lane's context with the session tools (`get_usage`
 with the lane's session id; no report from the lane is needed) and the account's usage windows,
-and tells a lane when to finish its current item and write its handover
-(`.superpowers/sdd/<plan>/handover.md`: state, branch and sha, open rulings, next step). The
+and tells a lane when to finish its current item and write its handover (see "Where records go").
+The
 manager does not launch, and tells lanes not to launch, a workflow that will not finish inside the
 remaining 5-hour window.
 
@@ -239,6 +239,22 @@ demo seed, backups and restore tests.
 `Claude_Browser` tools), not even to verify. Verify with scripts (headless Playwright, e2e, the
 dry run), tests and screenshots read as files; when the developer needs to see something, give a
 link or a file path.
+
+**Where records go.** One home per kind of record, and no file that only grows. `docs/` holds
+anything that could be reused; `.superpowers/` (ignored) holds only working scratch such as
+ledgers and review files, and anything in it that later work depends on is promoted first.
+
+| Record | Home |
+|---|---|
+| Architecture or policy decision | An ADR, `docs/decisions/NNNN-*.md`, listed in `docs/decisions/README.md` |
+| Decision waiting on the developer | A GitHub issue labeled `decision`; it closes when ruled |
+| Ruling on one issue | A comment on that issue that starts with "Ruling:" (who ruled, when, what, why) |
+| Ruling that spans a phase | The "Rulings" section at the end of that phase's plan in `docs/superpowers/plans/` |
+| Handoff | One new dated file per handoff, `docs/handoffs/<MM-DD-YY>-<lane>.md`, committed with the lane's last PR or in a small docs PR; never appended to. `STATUS.md` links the latest per track |
+| Working scratch | `.superpowers/sdd/<plan>/` (ledgers, review working files) |
+
+A handoff holds the state, the branch and head sha, the rulings it depends on (as links to where
+they are recorded), and the next step. Write rulings to their home before writing the handoff.
 
 ## Scripts stay in the repo, not in temp
 

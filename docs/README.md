@@ -47,6 +47,7 @@ code disagree, the code and the newest decision record win.
 | [superpowers/specs](superpowers/specs/) | The design spec (v2 is binding; v1, the review and its decisions are history) |
 | [superpowers/plans](superpowers/plans/) | The implementation master plan, one plan per phase and track, and [STATUS.md](superpowers/plans/STATUS.md), the live phase grid |
 | [decisions](decisions/) | Architecture decision records (ADRs); each changes the spec or settles a choice it left open |
+| [handoffs](handoffs/) | One dated file per session handoff (state, branch, rulings it depends on, next step) |
 | [releases](releases/) | One release note per milestone exit and per promoted phase |
 | [reviews](reviews/) | Review artifacts for pull requests that touch sensitive paths |
 | [design](design/) | The visual system and design notes |

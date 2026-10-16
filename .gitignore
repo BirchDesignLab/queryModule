@@ -11,5 +11,5 @@ apps/web/playwright-report/
 apps/web/dist-types/
 licences.json
 .smoke/
-# Local workflow workspaces (ledgers, reviews, handovers); reusable records go in docs/
-.superpowers/
+# Local workflow scratch (ledgers, review working files); handoffs and other reusable records go in docs/
+/.superpowers/
