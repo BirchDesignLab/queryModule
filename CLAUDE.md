@@ -224,9 +224,8 @@ handover lines: work quality dropped as lanes approached a stated limit, the sam
 context window fills. The manager reads each lane's context with the session tools (`get_usage`
 with the lane's session id; no report from the lane is needed) and the account's usage windows,
 and tells a lane when to finish its current item and write its handover (see "Where records go").
-The
-manager does not launch, and tells lanes not to launch, a workflow that will not finish inside the
-remaining 5-hour window.
+The manager does not launch, and tells lanes not to launch, a workflow that will not finish
+inside the remaining 5-hour window.
 
 **Machines.** Work runs on the developer's Windows machine, which has Docker locally: one manager
 plus two or three concurrent lanes. Every local test run sets `VITEST_MAX_WORKERS=3` (PowerShell
