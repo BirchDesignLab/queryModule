@@ -1,190 +1,64 @@
 # Query Module 2.0
 
-Configuration-driven query front end and API for a Computer-Aided Dispatch (CAD) suite. Users query external state and national systems from CAD Dispatch, CAD Mobile Unit, CAD Mobile and other host products; a host embeds the module or calls its versioned HTTP API directly.
+A configuration-driven query front end and API for a Computer-Aided Dispatch (CAD) suite.
+Dispatchers, records staff and mobile units build a query from a form or a command terminal, and
+see each source's answer as a result card inside the request. A site changes its forms, rules,
+commands and result cards from an admin console, without a code change or a rebuild.
 
-The prototype uses mock data sources with canned, fictitious responses. It never connects to real state or national systems and holds no CJIS data.
-
-## Status
+> This runs on mock data only and is not connected to real state or national systems. It is still
+> built to the standard a real connection and use would demand: encryption in transit and at rest, a
+> complete audit trail, and security controls rooted directly in CJIS rules. Encrypted storage for
+> state-system credentials comes in M3.
 
 [![ci](https://img.shields.io/github/actions/workflow/status/BirchDesignLab/queryModule/ci.yml?branch=main&label=ci)](https://github.com/BirchDesignLab/queryModule/actions/workflows/ci.yml)
 [![Project board](https://img.shields.io/badge/board-Query_Module_2.0-3E4B9E?logo=github)](https://github.com/users/BirchDesignLab/projects/1)
 [![Open PRs](https://img.shields.io/github/issues-pr/BirchDesignLab/queryModule?label=open%20PRs)](https://github.com/BirchDesignLab/queryModule/pulls)
-[![Follow-ups](https://img.shields.io/github/issues/BirchDesignLab/queryModule/follow-up?label=follow-ups&color=C5DEF5)](https://github.com/BirchDesignLab/queryModule/issues?q=is%3Aissue+is%3Aopen+label%3Afollow-up)
-[![Decisions pending](https://img.shields.io/github/issues/BirchDesignLab/queryModule/decision?label=decisions%20pending&color=D93F0B)](https://github.com/BirchDesignLab/queryModule/issues?q=is%3Aissue+is%3Aopen+label%3Adecision)
 
-The badges read GitHub live each time this page loads. Progress is closed issues over all issues in the milestone; each phase parent issue shows its own sub-issue progress bar. The board is [Query Module 2.0](https://github.com/users/BirchDesignLab/projects/1) (guide: `docs/project-board.md`).
+## Where it stands (10-16-26)
 
-| Milestone | Done | Open | Phase parents |
-|---|---|---|---|
-| [M0 Skeleton](https://github.com/BirchDesignLab/queryModule/milestone/1) | [![M0 Skeleton progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/1?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/1) | [![M0 Skeleton issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/1?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/1) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/39), [P1 Foundation](https://github.com/BirchDesignLab/queryModule/issues/40) |
-| [M1 Forms and terminal](https://github.com/BirchDesignLab/queryModule/milestone/2) | [![M1 Forms and terminal progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/2?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/2) | [![M1 Forms and terminal issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/2?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/2) | [P2 Engine](https://github.com/BirchDesignLab/queryModule/issues/41), [P3 Flow](https://github.com/BirchDesignLab/queryModule/issues/42) |
-| [M2 Results and audit](https://github.com/BirchDesignLab/queryModule/milestone/3) | [![M2 Results and audit progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/3?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/3) | [![M2 Results and audit issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/3?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/3) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/43), [P1 Feed](https://github.com/BirchDesignLab/queryModule/issues/44), [P2 Audit](https://github.com/BirchDesignLab/queryModule/issues/45), [P3 Hardening](https://github.com/BirchDesignLab/queryModule/issues/46) |
-| [M3 Workflow and compliance](https://github.com/BirchDesignLab/queryModule/milestone/4) | [![M3 Workflow and compliance progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/4?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/4) | [![M3 Workflow and compliance issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/4?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/4) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/47), [P1 Credentials and MFA](https://github.com/BirchDesignLab/queryModule/issues/48), [P2 Multi-source, nested, hide](https://github.com/BirchDesignLab/queryModule/issues/49), [P3 Delegation](https://github.com/BirchDesignLab/queryModule/issues/50) |
-| [M4 Mobile and host integration](https://github.com/BirchDesignLab/queryModule/milestone/5) | [![M4 Mobile and host integration progress](https://img.shields.io/github/milestones/progress-percent/BirchDesignLab/queryModule/5?label=done)](https://github.com/BirchDesignLab/queryModule/milestone/5) | [![M4 Mobile and host integration issues](https://img.shields.io/github/milestones/issues-open/BirchDesignLab/queryModule/5?label=open)](https://github.com/BirchDesignLab/queryModule/milestone/5) | [P0 Contracts](https://github.com/BirchDesignLab/queryModule/issues/51), [P1 Layouts and host](https://github.com/BirchDesignLab/queryModule/issues/52), [P2 Native](https://github.com/BirchDesignLab/queryModule/issues/53), [P3 Exit](https://github.com/BirchDesignLab/queryModule/issues/54) |
+| | |
+|---|---|
+| Built | M0 skeleton; M1 forms, terminal and admin console; M2 P0.5 dispatch to the mock sources with live per-source status; M2 P1 result cards, keyword severity and replay |
+| Next | M2 P0 last contract wave, M2 P2 audit viewer, M2 P3 hardening |
+| Planned | M3 credentials, MFA, multi-source and delegation; M4 mobile layouts, native app and host-page embedding |
 
-P0 waves (one PR each): [W1](https://github.com/BirchDesignLab/queryModule/issues/55), [W2](https://github.com/BirchDesignLab/queryModule/issues/56), [W3](https://github.com/BirchDesignLab/queryModule/issues/57), [W4](https://github.com/BirchDesignLab/queryModule/issues/58), [W5](https://github.com/BirchDesignLab/queryModule/issues/59), [W6](https://github.com/BirchDesignLab/queryModule/issues/60).
+What each milestone delivered: [overview](docs/overview.md). What is planned and not built:
+[roadmap](docs/roadmap.md). A live demo runs the latest promoted build with demo accounts
+([demo guide](docs/demo.md)).
 
-`docs/superpowers/plans/STATUS.md` holds the session grid and the handoff notes.
+## Quick start
 
-## Repository map
+Needs Node 24 (24.15 or newer) and corepack.
 
-| Path | Role | State |
-|---|---|---|
-| `packages/core` | Pure domain logic and contracts (Zod) | Present: contracts (version, `ApiError`, identity, source status, the audit catalogue, WebSocket messages), the site config schema and rules, the terminal parser, the query planner, the mock scenario matcher and fixture policy, the result mapper, `assessResult` and the highlighter |
-| `packages/client` | Framework-neutral client logic | Present: API client, session and sign-in, config and draft state, the query submit and the feed (WebSocket with replay), terminal, announcer, i18n, preferences |
-| `packages/tokens` | Design tokens, day, night and red-shift modes | Present |
-| `packages/web-ui` | React DOM primitives | Present: query panel, fields and forms, terminal, result cards, shortcuts, announcer, themes |
-| `packages/config` | Shipped sites, locales, mocks, generated JSON Schema | Present |
-| `packages/api` | HTTP and WebSocket API | Present: auth and sessions, query submit, dispatch and the mock source adapter, the read routes and the WebSocket feed with replay, the admin console routes and config store, audit, the encrypted database |
-| `apps/web` | Vite + React web app | Present: sign-in, query panel, requests with result cards, status page, admin console (site builder, mock editor, users) |
-| `apps/host-simulator` | Embedded-mode test host | Placeholder until M4 |
-| `apps/mobile` | Expo app | Placeholder shell; Track D owns it from M4 |
-| `deploy/` | Docker, compose, tunnel | Present: `Dockerfile`, `compose.yml`, systemd units, README |
-| `scripts/ops` | Committed ops scripts: smoke, backup, deploy pull, lost-key and role tools, GitHub board setup | Present |
-| `scripts/mock-data` | Fixture-policy mock generator | Present (`generate.ts`) |
-| `scripts/sdd` | Task briefs, ledger append and the workflow harness for the SDD workflows | Present |
-| `scripts/ci` | Contract generators, config validation, licence, story-tag and sensitive-review gates | Present |
-| `scripts/dev` | Dev server, the e2e launcher and the local smoke launcher | Present |
-| `scripts/briefs` | Renders the design brief HTML under `docs/briefs/` to PDF | Present |
-| `docs/` | Specs, plans, decisions, reviews, release notes | Present |
-| `.claude/agents` | Model and effort role definitions for subagent dispatch | Present |
-| `.claude/workflows` | `sdd-task.js`, `sdd-wave.js`, `wave-review.js` | Present |
-
-## Getting started
-
-Full machine setup: `docs/superpowers/plans/2026-09-25-implementation-master-plan.md` section 9 (9.1 Linux, 9.2 Windows).
-
-Minimal steps:
-
-```
-# Node 24 per .nvmrc (ADR-0001)
-# Node 24.15 or newer 24.x (engines floor; .nvmrc stays 24 so CI takes the latest 24)
+```bash
 corepack enable
 pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-pnpm 12 notes:
+Setup on Windows and Linux, the root scripts and the end-to-end tests:
+[getting started](docs/getting-started.md).
 
-- `engineStrict: true` and `allowBuilds` live in `pnpm-workspace.yaml`, because pnpm 12 does not read `engine-strict` from `.npmrc` (`.npmrc` is kept anyway).
-- esbuild's install script is denied (`allowBuilds: { esbuild: false }`); tsx does not need it.
-- Installs may resolve one patch behind the newest publish, because of pnpm's release-age cooldown.
+## Documentation
 
-## Root scripts
+| Read this | For |
+|---|---|
+| [Documentation index](docs/README.md) | Every document, by reader |
+| [Overview](docs/overview.md) and [roadmap](docs/roadmap.md) | What exists today and what is planned |
+| [Getting started](docs/getting-started.md) | Setup, local run, root scripts, tests |
+| [Architecture](docs/architecture.md) | Packages, apps, data flow, repository map |
+| [Demo guide](docs/demo.md) | Demo accounts and demo stories |
+| [Site configuration](docs/site-config.md) | Changing a site's forms, rules, commands and cards |
+| [API reference](docs/api.md) | The HTTP and WebSocket contract |
+| [Deploying](docs/deploy.md) | The single-node Docker host |
+| [Contributing](CONTRIBUTING.md) | How the work is planned, built and reviewed |
+| [Security](SECURITY.md) | The security model and how to report a problem |
 
-| Script | Does | Available |
-|---|---|---|
-| `typecheck` | `tsc -b` | Now |
-| `lint` | `biome ci --error-on-warnings .` | Now |
-| `test` | `vitest run` | Now |
-| `coverage` | `vitest run --coverage` | Now |
-| `verify` | lint, typecheck, coverage, `config:validate`, `gen:check`, `sdd:harness` | Now |
-| `contracts:gen`, `client:gen`, `gen:check` | generate and check derived contract files and the generated client types | Now |
-| `config:validate`, `config:migrate` | validate and migrate `SiteConfig` files | Now |
-| `tokens:gen` | regenerate design tokens | Now |
-| `sdd:harness` | run the saved workflow scripts against mocked agents | Now |
-| `dev:web` | Vite dev server | Now |
-| `dev`, `dev:api`, `e2e`, `image:smoke` | full dev loop, API only, Playwright/axe, image smoke test | Now |
+## License and provenance
 
-`pnpm e2e` serves on port 3000; set `E2E_PORT` (for example `E2E_PORT=3100 pnpm e2e`) to run it beside another server on 3000. It signs in as the seeded smoke user: when `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` are both unset it derives them from `.dev/secrets/SEED_PASSWORD_SECRET` the way CI does, without printing them (set both to override; setting only one is an error).
+Copyright Birch Design Lab. All rights reserved; see [LICENSE](LICENSE). Third-party components
+are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Toolchain: Node 24, pnpm 12.6 through corepack, TypeScript 7, Vitest 5, Biome 2.5, zod 4 (`package.json`).
-
-## How the work is organised
-
-Docs map:
-
-- Requirements: `Requirements Definition - Query Module Usability Enhancements.md`.
-- Design spec v2: `docs/superpowers/specs/2026-09-25-query-module-2-design-v2.md`, the binding authority.
-- Master plan: `docs/superpowers/plans/2026-09-25-implementation-master-plan.md` (tracks, phases, session protocol, definition of done).
-- `docs/superpowers/plans/STATUS.md`: the live grid.
-- Phase plans: `docs/superpowers/plans/`.
-- ADRs: `docs/decisions/` (README there explains process). 0001 Node 24 LTS as the runtime. 0002 Replace Watchtower with a systemd pull timer. 0003 Audit partId in envelope and details. 0004 WebSocket close codes. 0005 Field key, type code and id formats. 0006 Run plans through Workflow scripts; superpowers skills recommended.
-- Sensitive-review artifacts: `docs/reviews/pr-<n>.md` (currently `pr-31.md`).
-
-Tracks (master plan section 2):
-
-| Track | Machine | Owns |
-|---|---|---|
-| A platform | Linux laptop, also the deploy host | `packages/api`, `deploy/`, `.github/`, `scripts/ops`, `scripts/mock-data`, `scripts/ci`, `scripts/migrations` |
-| B web | Windows 11, PowerShell | `apps/web`, `apps/host-simulator`, `packages/web-ui`, `packages/tokens`, `packages/client` |
-| Core | either machine | `packages/core`, `packages/config/*`, contract files, `docs/testing/stories.json` |
-| D mobile | Windows, from M4 | `apps/mobile`, `packages/rn-ui`, Maestro flows |
-
-Process:
-
-- One GitHub issue per task, with labels and milestones (master plan 5.2).
-- One PR per wave; the developer reviews and merges.
-- Contract-first after each P0 gate (master plan 8): a Zod schema, route, WS event, audit type or config schema change lands in its own `contract` PR before any consumer.
-
-## Project management framework
-
-Hierarchy, top down:
-
-```
-Milestone (M0 to M4, plus Later)
-  > Phase (P0 to P3 inside a milestone grid)
-    > Track cell (one phase plan file)
-      > Wave (one PR, a run of consecutive tasks)
-        > Task (one GitHub issue, one sdd-task workflow run)
-          > Roles (the agents inside a run)
-```
-
-**Milestones.** M0 to M4, plus a Later bucket with no phase or milestone of its own (master plan 3.1, section 4). Each milestone is a GitHub milestone (names in 5.2) and is closed by a release tag `m<k>` through `promote.yml` after its exit gate; exit ownership is split in 4.6.
-
-**Phases.** P0 to P3 inside each milestone grid; M0 and M1 share one grid (3.1). P0 is contracts, run by one owner session across all its cells (3.3). Tracks run concurrently, but a track's own phases run in order (3.2). Each phase row carries a Gate cell verified on `main`; phase plans are frozen at the gate with a `Frozen: MM-DD-YY` line (5.4).
-
-**Tracks.** A platform (Linux laptop, also the deploy host), B web (Windows), Core (either machine), D mobile (Windows, from M4). Section 2 lists what each owns and never edits; 3.4 caps Track A at half a milestone ahead of Track B (the backend lead).
-
-**Waves.** A wave is a run of consecutive tasks from one phase plan that lands as one PR. The developer reviews and merges every wave PR; the session only pushes (developer direction 09-26-26, ADR-0006). A wave touching sensitive paths gets one `wave-review` run and its artifact at `docs/reviews/pr-<n>.md`. The current P0 wave map is the `## Waves` section of `docs/superpowers/plans/2026-09-25-p0-contracts.md`; it is not copied here.
-
-**Tasks.** One plan section with checkbox steps; one GitHub issue; TDD; run through `sdd-task`. The checkbox is ticked in the wave PR, and the issue closes through `Closes #n` in that PR (10.1 definition of done).
-
-**Issues.** Labels `platform`, `web`, `core`, `mobile`, `p0` to `p3`, `sensitive`, `contract`, `api-breaking`, created by `scripts/ops/gh-setup-labels.sh`. Every issue carries exactly one track label, one phase label and one milestone. Title format `<what> (<IDs>)`; body format, claim and close rules are in 5.2.
-
-**Status and decisions.**
-
-- `docs/superpowers/plans/STATUS.md`: the grid, Active sessions and Handoff notes (5.1).
-- ADRs in `docs/decisions/` for any change to spec v2 or a choice it left open (5.3).
-- Balloon guard: no new tracking file without retiring one (5.4).
-
-**Sessions.** Start, claim, build, ship and close-out protocol (master plan section 6); pause and resume with the seven-line handoff note (section 7). One session per track at a time.
-
-**Workflows.** `sdd-task` runs one task; `wave-review` runs the whole-branch review for a sensitive wave. See "Running tasks with workflows" below.
-
-**Project board.** The public GitHub Project "Query Module 2.0" (BirchDesignLab, project 1) holds every issue. One parent issue per phase (label `epic`), with P0 waves and tasks as sub-issues, so each parent shows a progress bar. Fields: Status (Todo, In Progress, In Review, Blocked, Done), Track, Phase, Wave, Size, Priority, Req IDs, Start and Finish. Carries found in review become `follow-up` issues (`decision` when the developer must choose). `scripts/ops/gh-setup-project.mjs` keeps labels, milestones, parents, links and field values in shape; `docs/project-board.md` describes the board and lists the manual steps (views, built-in workflows, repo settings). Issues and PRs are the source of truth; the board is a view over them.
-
-## Running tasks with workflows (ADR-0006)
-
-- `.claude/workflows/sdd-task.js` runs one plan task: implementer, spec and quality reviewers (plus an Opus critic on sensitive or UI tasks), a ruler, a capped fix loop with escalation, and an independent gate role (`pnpm lint`, `pnpm typecheck`, `pnpm test`, head and clean tree) before a task counts as complete. A red gate sends its problems back through the fix loop.
-- Rulings bind the rest of the run: one ruling per item is in force (the controller's over the ruler's, a later one over an earlier one), reviewers, fixers and re-reviewers see the rulings in force, a finding that contradicts one goes back to the ruler, and fixers never reverse one.
-- On sensitive tasks, and always in `wave-review`, the ruler must escalate any ruling that would weaken a security, audit, credential, delegation or dispatch invariant, change a shape frozen at a phase gate or listed as a contract file (master plan 8.2), or keep a Critical finding with stands.
-- A stopped run is answered, not redone, in both scripts: re-run with the same args (`carries` and `questions` unchanged), `resumeFromRunId`, and `answers`: a list with one entry `{ at: <the returned stopped value>, text, decisions }` per answered stop, appended across re-runs and never edited or replaced. Each entry reaches only the agent for its stop point, so earlier agent calls (including an earlier stop's continue or retry agent) replay from cache. `decisions` settle escalated items as controller rulings, which are final and never re-escalated. After an implementer stop, a continue implementer finishes on top of the existing commits. If a resumed run replays a null or failed agent, `.claude/workflows/README.md` "Fallbacks" gives the fresh-run fallback per stop; in `sdd-task`, after the implementer committed, that is a review-stages-only run (`implemented: { head }`) or a branch reset with the developer's OK, never a silent reset.
-- A precondition failure (wrong branch or HEAD, dirty tree, `base` not an ancestor) stops a run with `stopped: "precondition"`; it never becomes a finding.
-- `globalConstraints` carries product and code constraints only (runtime, TDD, purity, fixtures, logging, docs style), never process bullets such as the role plan, PR and push steps, commit trailers or branch naming, because every agent treats it as binding.
-- `.claude/workflows/wave-review.js` runs the Opus xhigh whole-branch review for a wave PR that touches sensitive paths, one ruled fix pass and one re-review, and writes `docs/reviews/pr-<n>.md` on approve.
-- `bash scripts/sdd/task-brief.sh PLAN N OUT` extracts one task's brief from a plan; `node scripts/sdd/workflow-harness.mjs` tests both scripts against mocked agents.
-- Every agent call sets model and effort explicitly, per the `CLAUDE.md` tiering; any model and effort suited to a role may be chosen.
-- The superpowers skills (brainstorming, specs, plans, subagent-driven development) are recommended, not required.
-- TDD is required for every task.
-- Arguments, roles and defaults, return shapes and the controller procedure: `.claude/workflows/README.md`.
-
-## Quality gates
-
-- TDD: a failing test first, seen failing.
-- Coverage thresholds (spec 10.5, `vitest.config.ts`): `packages/core` 95% lines and branches; `packages/client` 85% lines and branches; `packages/api` 100% branches on `audit`, `credentials`, `delegation` and `dispatch`; `packages/api` 85% lines on the rest.
-- Lint fails on warnings (`biome ci --error-on-warnings`).
-- Sensitive areas (the list in `CLAUDE.md`) need an Opus 5.5 xhigh whole-branch review, recorded in `docs/reviews/pr-<n>.md`. The CI check `sensitive-review` lands in Tasks 21 and 22.
-- Fixture policy (spec 5.4): plates `ZZ-####`, VINs failing the ISO 3779 check digit, DOBs in 1901, synthetic names, addresses on Example Ave.
-- No query data in logs (spec 5.9).
-
-## Conventions
-
-- Dates MM-DD-YY in docs, ISO in code and data.
-- No em dashes in docs.
-- Scripts live in the repo under `scripts/` and are committed.
-- Newest stable dependencies, with no sitting on known advisories.
-- Contracts are additive-only after the gate.
-
-## Provenance
-
-Most code in this repository is written by AI agents (Claude Code) under a solo developer's direction, with Opus review on sensitive areas. An independent human security review is required before handoff (spec 14).
+Most code here is written by AI agents (Claude Code) under one developer's direction, with Opus
+review on the sensitive areas. An independent human security review is required before any use
+beyond this demo (spec 14).

@@ -1,6 +1,6 @@
 # API reference
 
-The HTTP and WebSocket contract of the Query Module API, as of M1 (BR-005).
+The HTTP and WebSocket contract of the Query Module API, as of M2 P1 (BR-005).
 
 This page is written by hand. The source of truth is
 [`packages/api/openapi.json`](../packages/api/openapi.json), which is generated from the route
@@ -46,13 +46,13 @@ Access levels:
 | configEditor | `admin` or `implementer` |
 | admin | `admin` only |
 
-"X-Requested-With" is `yes` when the header is required. "M1" is the status in this milestone:
-`live` means the handler is merged and answers as listed; `planned` means the contract is merged and no handler is mounted yet, so the route answers 404 until P1/P2.
+"X-Requested-With" is `yes` when the header is required. "Status" is the route contract's status:
+`live` means the handler is merged and answers as listed; `planned` means the contract is merged and no handler is mounted yet, so the route answers 404 until its phase lands (the admin audit and admin query routes, M2 P2).
 Two rows read `planned` although their handlers are mounted since M2 P1: `GET /queries` and
 `GET /queries/{correlationId}` answer as described under "Reading queries" below. The status cell
 follows the `status` field of the route contract (`routes.ts`), which a later contract change flips.
 
-| Method | Path | Access | X-Requested-With | M1 | Responses |
+| Method | Path | Access | X-Requested-With | Status | Responses |
 |---|---|---|---|---|---|
 | GET | `/api/v1/health` | public | no | live | 200 |
 | GET | `/api/v1/meta` | public | no | live | 200 |
@@ -355,12 +355,12 @@ payload text.
 |---|---|---|
 | `validationFailed` | 400 | Malformed input or failed validation; `errors[]` lists each problem. |
 | `unauthenticated` | 401 | No live session. |
-| `stepUpRequired` | 403 | Reserved for step-up authentication; no M1 route returns it. |
-| `mfaEnrollmentRequired` | 403 | Reserved for MFA (M3); no M1 route returns it. |
+| `stepUpRequired` | 403 | Reserved for step-up authentication; no route returns it yet. |
+| `mfaEnrollmentRequired` | 403 | Reserved for MFA (M3); no route returns it yet. |
 | `forbidden` | 403 | Role not allowed, or `X-Requested-With` missing on a write. |
 | `notFound` | 404 | No such resource, or the route's feature is off for the site. |
 | `configHashMismatch` | 409 | The submit was built from an older config; `params.currentConfigHash` names the live one. |
-| `delegationCredentialsMissing` | 409 | Reserved for delegated credentials; no M1 route returns it. |
+| `delegationCredentialsMissing` | 409 | Reserved for delegated credentials; no route returns it yet. |
 | `draftConflict` | 409 | The draft or publish base is not the live version, or the live version changed during a rollback. |
 | `lastAdmin` | 409 | The change would leave the site with no enabled admin, or an admin changed their own role or account. |
 | `passwordChangeRequired` | 403 | An admin-created user must change the temporary password first. |
