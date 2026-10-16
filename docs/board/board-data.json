@@ -1881,6 +1881,45 @@
       "title": "fixture-policy: letters as run breakers and non-decimal numerals (#647 review minors)",
       "body": "Reviewer minors from the #647 fix (`fix/m2-gate-minors-2`, artifact `docs/reviews/fix-m2-gate-minors-2.md`, 10-14-26). Gate tier (`packages/core/src/config/fixture-policy.ts`); ride the next gate PR.\n\n- [ ] **M1 (:156):** a non-Latin letter now breaks a digit run (`12ж34`, `123é45é6789` were rejected before and pass now), the same way ASCII letters do since #636. Decide: pin this with a test as intended, or treat only Latin letters as run breakers.\n- [ ] **M2 (:156, :183):** non-decimal numerals that NFKC does not fold still pass (negative circled digits, Ethiopic and CJK numerals, category Lo/No). Option: count `\\p{N}`. A mock author would have to use them on purpose.\n\nMock data must never look like real records (CLAUDE.md, spec 5.4, 10.8). Refs #647.\n",
       "labels": ["platform", "p3", "follow-up"]
+    },
+    {
+      "number": 678,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "brief-shots.spec.ts: first test flakes about half the time locally",
+      "body": "`apps/web/e2e/brief-shots.spec.ts` (runs only with `BRIEF_SHOTS_DIR` set) failed on its first test, \"dispatcher shots: query panel, request status, critical card, detail table\", about half the time on Windows during the #674 re-shoot. It did not reproduce in 3 runs during #676, so the trigger is intermittent (likely timing around the sourceStatus WebSocket wait near line 113).\n\nDone when: the cause is found and fixed, and the spec passes 10 runs in a row (`--repeat-each 10`) on Windows with `E2E_PORT` set.\n\nNot in CI (skipped without `BRIEF_SHOTS_DIR`), so it only costs time at a brief re-shoot.\n",
+      "labels": ["web", "p3", "follow-up"]
+    },
+    {
+      "number": 679,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "demo-seed.ts: let the caller choose the account it seeds",
+      "body": "`scripts/dev/demo-seed.ts` always signs in as `DEMO_EMAIL = \"dispatcher@example.test\"`. Seeding history for another demo account (for example an officer, or a second dispatcher for a parallel demo) needs a code edit.\n\nAsk: an optional `DEMO_EMAIL` environment variable (default stays `dispatcher@example.test`), with the same rules as today: password from the environment only, never argv or output; refuses when that account already has requests; writes only through `POST /api/v1/queries`. Update `docs/demo.md` and `demo-seed.test.ts`.\n\nMock data only; the account must be a seeded demo account.\n",
+      "labels": ["platform", "p3", "follow-up"]
+    },
+    {
+      "number": 680,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Re-walk residual polish after #675: Which card wins wrap, 1024 entry header, ..2026 after reload, 1024 builder editor height",
+      "body": "Left open by the demo re-walk PR #675 (gaps.md \"Fix status\", Opus critic). All polish; none blocks the demo.\n\n- [ ] R17: at 1366 the builder \"Which card wins\" cells still wrap to two lines (within the G37 e2e allowance). `apps/web/src/admin`.\n- [ ] R22: at 1024, a long command such as `PRO.ZZSTOLEN1.ELECTRONICS` pushes the ACKNOWLEDGED/CRITICAL badges under the command and \"Copy reference\" onto its own line, so the request entry header is three rows. `apps/web/src/query/RequestsPane.tsx`, `apps/web/src/shell.css`.\n- [ ] N1: a request rebuilt from stored values after a reload (and the demo-seeded rows) reads the year as `..2026`, while a request typed in this session reads `..26` (R11 keeps the year as typed). `docs/demo.md` documents it; the two forms should match.\n- [ ] N2: at 1024 the builder editor pane is about 240 px tall and scrolls inside.\n\nDone when each item is fixed or ruled, with a headless shot at the named width as proof (no checks left for a person).\n",
+      "labels": ["web", "p3", "follow-up"]
     }
   ]
 }
