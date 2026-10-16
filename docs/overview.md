@@ -81,7 +81,7 @@ accounts, the demo stories and the runbook are in the [demo guide](demo.md); the
 ## Quality and size, as of 10-16-26
 
 - `pnpm verify` on Windows on 10-16-26, on this page's pull request: green, with 371 test
-  files and 5161 tests passed (3 files and 4 tests skipped on Windows; CI on Linux runs the process tests Windows skips) and
+  files and 5167 tests passed (3 files and 4 tests skipped on Windows; CI on Linux runs the process tests Windows skips) and
   156 of 156 workflow harness scenarios.
 - `pnpm audit --prod`: no new advisory (two high advisories, already reviewed, are ignored in
   `pnpm-workspace.yaml`).
