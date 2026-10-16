@@ -72,13 +72,30 @@ const anchors = (text: string): Set<string> => {
 
 const isExternal = (target: string): boolean => /^[a-z][a-z0-9+.-]*:/i.test(target);
 
+/**
+ * The absolute path a link's path part points at: from the repository root when it starts with "/"
+ * (as GitHub resolves it), otherwise from the doc's folder. Null when the escape is malformed.
+ */
+const resolveTarget = (doc: string, path: string): string | null => {
+  let decoded: string;
+  try {
+    decoded = decodeURI(path);
+  } catch {
+    return null;
+  }
+  return decoded.startsWith("/")
+    ? join(ROOT, decoded.slice(1))
+    : resolve(ROOT, dirname(doc), decoded);
+};
+
 /** Relative paths each doc links to, resolved from the repository root. */
 const linkedPaths = (doc: string): Set<string> =>
   new Set(
     links(read(doc))
       .filter((t) => !isExternal(t) && !t.startsWith("#"))
-      .map((t) => relative(ROOT, resolve(ROOT, dirname(doc), decodeURI(t.split("#")[0] as string))))
-      .map((p) => p.replaceAll("\\", "/")),
+      .map((t) => resolveTarget(doc, t.split("#")[0] as string))
+      .filter((p): p is string => p !== null)
+      .map((p) => relative(ROOT, p).replaceAll("\\", "/")),
   );
 
 const tracked = (dir: string): string[] =>
@@ -96,6 +113,19 @@ const trackedFolders = (dir: string): string[] => [
   ),
 ];
 
+describe("BR-005 reader docs: link and anchor rules", () => {
+  it("resolves a repository-root link from the root, and reports a bad escape instead of throwing", () => {
+    expect(resolveTarget("docs/README.md", "/docs/api.md")).toBe(join(ROOT, "docs/api.md"));
+    expect(resolveTarget("docs/README.md", "api.md")).toBe(join(ROOT, "docs/api.md"));
+    expect(resolveTarget("README.md", "a%2.md")).toBeNull();
+  });
+
+  it("slugs headings the way GitHub does", () => {
+    const slugs = anchors("# Review tiers (ADR-0007)\n## `code` & more\n## Intro\n## Intro\n");
+    expect([...slugs]).toEqual(["review-tiers-adr-0007", "code--more", "intro", "intro-1"]);
+  });
+});
+
 describe("BR-005 reader docs: links", () => {
   it("every reader doc exists", () => {
     expect(READER_DOCS.filter((d) => !existsSync(join(ROOT, d)))).toEqual([]);
@@ -107,7 +137,8 @@ describe("BR-005 reader docs: links", () => {
         .filter((t) => !isExternal(t))
         .flatMap((target) => {
           const [path = "", anchor] = target.split("#");
-          const file = path === "" ? join(ROOT, doc) : resolve(ROOT, dirname(doc), decodeURI(path));
+          const file = path === "" ? join(ROOT, doc) : resolveTarget(doc, path);
+          if (file === null) return [`${doc}: ${target} (bad encoding)`];
           if (!existsSync(file)) return [`${doc}: ${target} (no such path)`];
           if (anchor === undefined || anchor === "" || statSync(file).isDirectory()) return [];
           if (!file.endsWith(".md")) return [];

@@ -1,7 +1,8 @@
 # Contributing
 
 This repository is built by one developer working with AI agents (Claude Code). **It does not accept
-outside contributions**: pull requests from outside the project are closed without review. To report
+outside contributions**: pull requests, issues and feature requests from outside the project are closed without
+review. To report
 a security problem, see [SECURITY.md](SECURITY.md).
 
 The rest of this page describes how the work is planned, built, reviewed and merged, for anyone

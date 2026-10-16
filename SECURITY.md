@@ -58,9 +58,10 @@ sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 | Session limits: 30 minutes idle and 12 hours absolute by default, set per site | Built |
 | Auth rate limits: an account locks for 15 minutes after 10 failures in 15 minutes; 100 requests per IP per 15 minutes | Built |
 | A required `X-Requested-With` header on state-changing requests, a CORS origin allowlist (the sign-in routes also check Origin), and an Origin allowlist on the WebSocket upgrade | Built |
-| A strict Content Security Policy with per-request nonces, `frame-ancestors 'none'`, a 32 KiB body cap and `no-store` on every API response | Built |
+| A strict Content Security Policy with per-request nonces, `frame-ancestors 'none'`, a 32 KiB body cap (larger for admin config documents, ADR-0011) and `no-store` on every API response | Built |
 | Role-based access (user, training officer, implementer, admin) checked by a route-by-caller test matrix | Built |
-| A query's results are visible only to its owner and to admins | Built |
+| A query's results are visible only to its owner | Built |
+| Admins can read any request, and each read is audited | Planned, M2 P2 |
 | TOTP multi-factor sign-in and step-up | Planned, M3 P1 |
 | Delegation: a training officer approves a trainee's queries, with a code, fresh authentication and revocation | Planned, M3 P3 |
 | Embedded identity from a host page (signed host token, issuer, audience and key checks, frame allowlist) | Planned, M4 |

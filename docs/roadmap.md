@@ -48,7 +48,8 @@ every issue ([board guide](project-board.md)).
 - **Multi-source, nested queries, hide (P2).** A query that runs follow-on queries from an answer,
   grouped under one correlation ID, with per-source and global caps. Delete from view: the user hides
   results from their own view, the rows stay in the database, and the hide is audited. Purge by
-  crypto-shredding the per-request key. The property form.
+  crypto-shredding the per-request key. A site-narrowed property type list, where
+  required fields change with the selected type (story B7).
 - **Delegation (P3).** A training officer approves a trainee to query on the officer's behalf, with a
   code or QR, a fresh sign-in or TOTP on approval, a session binding, revocation, and an audit filter
   by actor or owner.
@@ -56,7 +57,7 @@ every issue ([board guide](project-board.md)).
 
 ## M4 Mobile and host integration
 
-- **Mobile-unit layouts (P1).** The Toughbook-class layout at 1024x768, 1366x768 and 800x600, the
+- **Toughbook-class mobile-unit layouts (P1).** Beyond the browser layout built in M1: layouts at 1024x768, 1366x768 and 800x600, the
   7:1 contrast day theme, an orientation preference, and 200% zoom with 320 px reflow.
 - **Host integration (P1).** Embedding the module in a CAD host page in an iframe, with a versioned
   postMessage protocol and the host's signed-in user passed as a signed token, tested against a host

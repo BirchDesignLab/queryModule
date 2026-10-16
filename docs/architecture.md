@@ -5,8 +5,11 @@ this page says so and names the milestone. The binding design is the
 [design spec v2](superpowers/specs/2026-09-25-query-module-2-design-v2.md) (section 3) plus the
 [decision records](decisions/README.md).
 
-This runs on mock data only and is not connected to real state or national systems. The only
-source adapter that exists is the built-in mock adapter, which answers from canned files.
+This runs on mock data only and is not connected to real state or national systems. It is still
+built to the standard a real connection and use would demand: encrypted credentials, a complete
+audit trail, and security controls rooted directly in CJIS rules.
+
+The only source adapter is the built-in mock adapter, which answers from canned files.
 
 ## Shape
 

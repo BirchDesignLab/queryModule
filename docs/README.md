@@ -2,7 +2,9 @@
 
 Every document in this repository, grouped by who reads it. Start with the [README](../README.md).
 
-This runs on mock data only and is not connected to real state or national systems.
+This runs on mock data only and is not connected to real state or national systems. It is still
+built to the standard a real connection and use would demand: encrypted credentials, a complete
+audit trail, and security controls rooted directly in CJIS rules.
 
 ## Start here
 

@@ -46,7 +46,8 @@ in 1901, synthetic names). There is no adapter for a real system.
   read-only, defaults), and a command terminal that maps typed commands to the same query.
 - Keyboard-first use: single-key, modifier and chord shortcuts, with every flow completable without
   a mouse.
-- The officer (mobile-unit) layout in the browser, and the day, night and red-shift themes.
+- The officer (mobile-unit) layout in a desktop browser, and the day, night and red-shift themes.
+  The Toughbook-class layouts are planned for M4.
 - The admin console: a visual site builder with a same-renderer preview, undo and redo, a changes
   view, publish, history, export and roll back, and user administration. Publishing reaches open
   dispatcher screens without a reload (ADR-0011).
@@ -78,8 +79,8 @@ accounts, the demo stories and the runbook are in the [demo guide](demo.md); the
 
 ## Quality and size, as of 10-16-26
 
-- `pnpm verify` on Windows, on `main` at fc26150 plus this page's pull request: green, with 371 test
-  files and 5159 tests passed (3 files and 4 tests skipped on Windows; CI on Linux runs the process tests Windows skips) and
+- `pnpm verify` on Windows on 10-16-26, on this page's pull request: green, with 371 test
+  files and 5161 tests passed (3 files and 4 tests skipped on Windows; CI on Linux runs the process tests Windows skips) and
   156 of 156 workflow harness scenarios.
 - `pnpm audit --prod`: no new advisory (two high advisories, already reviewed, are ignored in
   `pnpm-workspace.yaml`).
