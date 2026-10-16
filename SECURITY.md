@@ -1,8 +1,9 @@
 # Security
 
 > This runs on mock data only and is not connected to real state or national systems. It is still
-> built to the standard a real connection and use would demand: encrypted credentials, a complete
-> audit trail, and security controls rooted directly in CJIS rules.
+> built to the standard a real connection and use would demand: encryption in transit and at rest, a
+> complete audit trail, and security controls rooted directly in CJIS rules. Encrypted storage for
+> state-system credentials comes in M3.
 
 ## Scope
 
@@ -27,6 +28,16 @@ its milestone). The design is in the [design spec v2](docs/superpowers/specs/202
 sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 [requirements definition](Requirements%20Definition%20-%20Query%20Module%20Usability%20Enhancements.md).
 
+### Data in transit
+
+| Control | State |
+|---|---|
+| Browser to Cloudflare's edge: HTTPS only, including the WebSocket (`wss`); the app sends HSTS (one year), and the session cookie is `Secure`, `HttpOnly` and `SameSite=Lax` | Built |
+| Cloudflare's edge to the deploy host: the Cloudflare Tunnel, an outbound encrypted connection from the `cloudflared` container; the app publishes no port | Built |
+| Inside the host: `cloudflared` reaches the app over plain HTTP on the private Docker network (`http://app:3000`); this hop is not encrypted | Built, by design (single host) |
+| Backups are encrypted with `age` before they leave the host | Built |
+| The mock sources run inside the app process; no query leaves the host | Built |
+
 ### Data at rest and keys
 
 | Control | State |
@@ -36,8 +47,8 @@ sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 | Keys come from Docker secret files, never from the image, `.env` or the data volume; the server refuses to start when a secret is missing or misplaced | Built |
 | Key canaries: at startup the server proves `CREDENTIAL_KEY` and `DATA_KEY` decrypt their canary rows, or refuses to start | Built |
 | A `Secret` type keeps secret values out of logs, errors and serialized output | Built |
-| Users' own state-system credentials: entry, change and deletion, stored encrypted under `CREDENTIAL_KEY` with a key version, behind step-up authentication | Planned, M3 P1 |
-| Credential key rotation procedure | Outside this design (a key version is recorded; no rotation procedure is built) |
+| Encrypted storage for users' state-system credentials: entry, change (rotation by the user) and deletion, stored encrypted under `CREDENTIAL_KEY` with a key version, behind step-up authentication. No credential is stored today | Planned, M3 P1 |
+| A procedure to rotate `CREDENTIAL_KEY` itself | Outside this design (a key version is recorded; no rotation procedure is built) |
 | Encrypted nightly backups with an offline key, and a restore test at each milestone exit | Built ([deploying](docs/deploy.md)) |
 
 ### Audit trail

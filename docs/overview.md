@@ -4,8 +4,9 @@ Last refreshed 10-16-26, at the M2 P1 gate. This page lists only what is built a
 Planned work is on the [roadmap](roadmap.md).
 
 > This runs on mock data only and is not connected to real state or national systems. It is still
-> built to the standard a real connection and use would demand: encrypted credentials, a complete
-> audit trail, and security controls rooted directly in CJIS rules.
+> built to the standard a real connection and use would demand: encryption in transit and at rest, a
+> complete audit trail, and security controls rooted directly in CJIS rules. Encrypted storage for
+> state-system credentials comes in M3.
 
 ## What the Query Module is
 

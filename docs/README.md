@@ -3,8 +3,9 @@
 Every document in this repository, grouped by who reads it. Start with the [README](../README.md).
 
 This runs on mock data only and is not connected to real state or national systems. It is still
-built to the standard a real connection and use would demand: encrypted credentials, a complete
-audit trail, and security controls rooted directly in CJIS rules.
+built to the standard a real connection and use would demand: encryption in transit and at rest, a
+complete audit trail, and security controls rooted directly in CJIS rules. Encrypted storage for
+state-system credentials comes in M3.
 
 ## Start here
 

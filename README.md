@@ -6,8 +6,9 @@ see each source's answer as a result card inside the request. A site changes its
 commands and result cards from an admin console, without a code change or a rebuild.
 
 > This runs on mock data only and is not connected to real state or national systems. It is still
-> built to the standard a real connection and use would demand: encrypted credentials, a complete
-> audit trail, and security controls rooted directly in CJIS rules.
+> built to the standard a real connection and use would demand: encryption in transit and at rest, a
+> complete audit trail, and security controls rooted directly in CJIS rules. Encrypted storage for
+> state-system credentials comes in M3.
 
 [![ci](https://img.shields.io/github/actions/workflow/status/BirchDesignLab/queryModule/ci.yml?branch=main&label=ci)](https://github.com/BirchDesignLab/queryModule/actions/workflows/ci.yml)
 [![Project board](https://img.shields.io/badge/board-Query_Module_2.0-3E4B9E?logo=github)](https://github.com/users/BirchDesignLab/projects/1)
