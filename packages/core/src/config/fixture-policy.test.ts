@@ -417,6 +417,50 @@ describe("non-Latin decimal digits count as digits (#647)", () => {
   });
 });
 
+describe("any letter breaks a digit run, as ASCII letters do (#656 M1, Manager 7 ruling 10-17-26)", () => {
+  it.each(["12ж34", "123é45é678", "12Ω34Ω56"])(
+    "keeps %s in status and serial: no four digits in a row",
+    (value) => {
+      expect(check({ status: value, serial: value })).toEqual([]);
+    },
+  );
+
+  it("still rejects a run that a letter does not break", () => {
+    expect(check({ serial: "ж1234" })).toEqual([
+      { pointer: `${RESPOND}/serial`, key: "fixture.freeTextDigits" },
+    ]);
+  });
+});
+
+describe("non-decimal numerals count as digits (#656 M2, Manager 7 ruling 10-17-26)", () => {
+  // Negative circled digits U+2776.. (No, no NFKC fold), Ethiopic U+1369.. (No), ideographic
+  // zero U+3007 (Nl). Han numerals such as 一二三 are letters (Lo) and stay run breakers.
+  const circled = "❶❷❸❹";
+  const ethiopic = "፩፪፫፬";
+  const ideographicZero = "〇〇〇〇";
+
+  it.each([circled, ethiopic, ideographicZero, "❶❷-❸❹", "12❸❹"])(
+    "rejects %s in status, serial and licenseNumber",
+    (value) => {
+      for (const key of ["status", "serial", "licenseNumber"]) {
+        expect(check({ [key]: value }), `${key}: ${value}`).toEqual([
+          { pointer: `${RESPOND}/${key}`, key: "fixture.freeTextDigits" },
+        ]);
+      }
+    },
+  );
+
+  it.each(["REMARKS ❶", "REMARKS ፩", "REMARKS 〇"])("rejects a free text with %s", (value) => {
+    expect(check({ remarks: value })).toEqual([
+      { pointer: `${RESPOND}/remarks`, key: "fixture.freeTextDigits" },
+    ]);
+  });
+
+  it("keeps short groups of them", () => {
+    expect(check({ status: "❶❷-AB-❸", serial: "ZZ፩፪፫" })).toEqual([]);
+  });
+});
+
 describe("a driver's licence record (#602, design ruling 10)", () => {
   const dl = (licenseNumber: unknown) => ({
     status: "VALID",

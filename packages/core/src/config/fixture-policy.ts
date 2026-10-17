@@ -146,14 +146,16 @@ function is1901Date(s: string): boolean {
 
 /**
  * True when a string or number leaf carries a run of 4 or more digits. Every character that is neither a
- * letter nor a decimal digit is a separator, so 123,456,789 and 123-45-6789 count as one run (#636,
- * #638). A decimal digit is any Unicode Nd digit (Arabic-Indic, Devanagari, full-width: #647); the value
- * is NFKC-folded first so superscripts and the like count too. A number that stringifies in exponent form is treated as a violation.
+ * letter nor a digit is a separator, so 123,456,789 and 123-45-6789 count as one run (#636, #638); any
+ * letter, ASCII or not, breaks a run (#656 M1). A digit is any Unicode numeral, category N: decimal
+ * digits (Arabic-Indic, Devanagari, full-width: #647) and the others NFKC does not fold, such as
+ * negative circled and Ethiopic digits (#656 M2). The value is NFKC-folded first so superscripts and
+ * the like count too. A number that stringifies in exponent form is treated as a violation.
  */
 function hasDigitRun(value: unknown): boolean {
   const text = String(value);
   if (typeof value === "number" && /e/i.test(text)) return true;
-  return /\p{Nd}{4,}/u.test(text.normalize("NFKC").replace(/[^\p{L}\p{Nd}]/gu, ""));
+  return /\p{N}{4,}/u.test(text.normalize("NFKC").replace(/[^\p{L}\p{N}]/gu, ""));
 }
 
 function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unknown): Violation {
@@ -180,7 +182,7 @@ function checkLeaf(kind: keyof typeof FIXTURE_LEAF_KEYS, nk: string, value: unkn
         ? null
         : "fixture.nonExampleAddress";
     case "freeText":
-      return typeof value === "string" && !/\p{Nd}/u.test(value.normalize("NFKC"))
+      return typeof value === "string" && !/\p{N}/u.test(value.normalize("NFKC"))
         ? null
         : "fixture.freeTextDigits";
     case "container":
