@@ -2,7 +2,7 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { MockFile, SourcePayload } from "@querymodule/core/contracts";
 import { matchMockScenario } from "@querymodule/core/mock";
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { type KeyboardEvent, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
@@ -20,6 +20,7 @@ import { type MockResult, resultOf } from "./mock-edit.js";
 import { parseMock } from "./mock-model.js";
 import { previewConfig, useOverlayTranslator } from "./Preview.js";
 import { formMatchOf, triggerInput } from "./preview-match.js";
+import { SegChoice } from "./SegChoice.js";
 import { cardsTypeOf } from "./selection.js";
 
 /**
@@ -52,57 +53,6 @@ const NO_VALUES: Record<string, unknown> = {};
 
 const MODES = ["pick", "type"] as const;
 type Mode = (typeof MODES)[number];
-
-/**
- * The Values segmented control (mockup v5): two native radios in one segmented track, the label
- * drawing each segment (the pattern of the web-ui SegField). The browser gives one Tab stop, and
- * Left, Right, Up and Down move and select; Home and End jump to the first and last here. Focus
- * follows the selection and never moves otherwise.
- */
-function ValuesSeg({
-  label,
-  name,
-  mode,
-  onChange,
-  names,
-}: {
-  label: string;
-  name: string;
-  mode: Mode;
-  onChange(mode: Mode): void;
-  names: Readonly<Record<Mode, string>>;
-}) {
-  const refs = useRef<Partial<Record<Mode, HTMLInputElement | null>>>({});
-  const jump = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Home" && e.key !== "End") return;
-    e.preventDefault();
-    const next = (e.key === "Home" ? MODES[0] : MODES[MODES.length - 1]) ?? mode;
-    onChange(next);
-    refs.current[next]?.focus();
-  };
-  return (
-    <fieldset className="qm-preview__field">
-      <legend>{label}</legend>
-      <div className="qm-seg qm-seg--options qm-seg--values">
-        {MODES.map((m) => (
-          <label key={m} className="qm-seg__option">
-            <input
-              ref={(el) => {
-                refs.current[m] = el;
-              }}
-              type="radio"
-              name={name}
-              checked={mode === m}
-              onChange={() => onChange(m)}
-              onKeyDown={jump}
-            />
-            <span>{names[m]}</span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
 
 const NO_TYPED: Readonly<Record<string, string>> = {};
 
@@ -335,10 +285,11 @@ export function CardPreview({
                 ))}
               </select>
             </div>
-            <ValuesSeg
+            <SegChoice<Mode>
               label={t("admin.cards.preview.values")}
               name={`${uid}-mode`}
-              mode={mode}
+              value={mode}
+              options={MODES}
               onChange={setMode}
               names={{ pick: t("admin.cards.preview.pick"), type: t("admin.cards.preview.type") }}
             />

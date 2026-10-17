@@ -366,6 +366,35 @@ describe("the approved card editor items (round 1, S1)", () => {
     expect(readonly()).toBe(false);
   });
 
+  // BW3 polish (#642): "Show in" is a Summary / Detail / Both segmented control (mockup v5), the
+  // pattern of the preview's Values control: native radios in one track, one Tab stop, arrows move.
+  it("Show in is a segmented control of radios that the arrow keys move", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?Status/ }));
+    const group = within(editor()).getByRole("group", { name: "Show in" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.closest("label")?.textContent?.trim())).toEqual([
+      "Summary",
+      "Detail",
+      "Both",
+    ]);
+    expect(radios[0]?.closest(".qm-seg")).not.toBeNull();
+    const view = () =>
+      (cards(t)[0] as unknown as { elements: { view: string }[] }).elements[0]?.view;
+    // The first row starts wherever the shipped card has it; Home goes to Summary from there.
+    (radios[0] as HTMLElement).focus();
+    await t.user.keyboard("{Home}");
+    expect(view()).toBe("summary");
+    expect(radios[0]).toHaveFocus();
+    await t.user.keyboard("{ArrowRight}");
+    expect(view()).toBe("detail");
+    expect(radios[1]).toHaveFocus();
+    await t.user.keyboard("{End}");
+    expect(view()).toBe("both");
+    expect(radios[2]).toHaveFocus();
+  });
+
   it("offers Template, and a Format for each table column", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);

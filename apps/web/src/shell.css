@@ -2550,9 +2550,17 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+/* A segmented choice (Values in the preview, Show in on a card row): radios in one track. */
+.qm-segchoice {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 /* Item 3: the Values segmented control, beside Result from. Its segments are radios (one on, one
    Tab stop), 36 px, and wrap their text so both fit the column. */
-.qm-preview--builder .qm-preview__body > .qm-preview__field {
+.qm-preview--builder .qm-preview__body > .qm-segchoice {
   grid-column: auto;
   min-inline-size: 0;
   margin: 0;
@@ -2560,13 +2568,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border: 0;
 }
 
-.qm-seg--values {
+.qm-seg--fill {
   display: flex;
   box-sizing: border-box;
   inline-size: 100%;
 }
 
-.qm-seg--values .qm-seg__option {
+.qm-seg--fill .qm-seg__option {
   flex: 1 1 0;
   justify-content: center;
   min-block-size: var(--qm-control-height-dense);

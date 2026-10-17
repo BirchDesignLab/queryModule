@@ -7,6 +7,7 @@ import { newLabelKey, type PayloadPath } from "./cards-model.js";
 import { IssueMessages, isError } from "./checks.js";
 import { useDraftSetters, useLabelText } from "./controls.js";
 import type { DraftIssue } from "./issues.js";
+import { SegChoice } from "./SegChoice.js";
 import { issueWords } from "./selection.js";
 
 const VIEWS = ["summary", "detail", "both"] as const;
@@ -247,20 +248,18 @@ export function CardRow({
               />
               <IssueMessages id={`${uid}-label-issues`} issues={labelIssues} />
             </div>
-            <fieldset className="qm-mock__radios">
-              <legend>{t("admin.cards.showIn")}</legend>
-              {VIEWS.map((v) => (
-                <label key={v} className="qm-mock__radio">
-                  <input
-                    type="radio"
-                    name={`${uid}-view`}
-                    checked={el.view === v}
-                    onChange={() => onChange({ ...el, view: v })}
-                  />{" "}
-                  {t(`admin.cards.view.${v}`)}
-                </label>
-              ))}
-            </fieldset>
+            <SegChoice
+              label={t("admin.cards.showIn")}
+              name={`${uid}-view`}
+              value={el.view}
+              options={VIEWS}
+              names={{
+                summary: t("admin.cards.view.summary"),
+                detail: t("admin.cards.view.detail"),
+                both: t("admin.cards.view.both"),
+              }}
+              onChange={(view) => onChange({ ...el, view })}
+            />
             {el.kind === "value" ? (
               <div>
                 <label htmlFor={`${uid}-format`}>{t("admin.cards.formatLabel")}</label>{" "}
