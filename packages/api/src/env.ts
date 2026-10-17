@@ -25,6 +25,14 @@ export interface DeployEnv {
 export const DEV_ORIGINS: readonly string[] = ["http://localhost:5173", "http://localhost:3000"];
 
 /**
+ * The default WebSocket upgrade attempts per client IP per window (decision D-A9, spec 5.3; no
+ * FR/SEC ID covers it), defined once here (#574 G-G-m1). The deploy env may change it
+ * (WS_UPGRADE_LIMIT, WS_UPGRADE_WINDOW_MS): the e2e harness raises it, since every signed-in page
+ * opens a feed socket from one IP.
+ */
+export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
+
+/**
  * A malformed deploy env (spec 8.1). The message is fixed text naming the variable, never its
  * value, so startup's stderr line may print it (spec 5.9).
  */
@@ -103,8 +111,12 @@ export function readDeployEnv(env: NodeJS.ProcessEnv, defaults?: BundledPaths): 
     webDist: env.WEB_DIST === "" ? null : (env.WEB_DIST ?? def().webDist),
     migrationsDir: env.MIGRATIONS_DIR ?? def().migrationsDir,
     wsUpgradeLimit: {
-      limit: readPositiveInt("WS_UPGRADE_LIMIT", env.WS_UPGRADE_LIMIT, 60),
-      windowMs: readPositiveInt("WS_UPGRADE_WINDOW_MS", env.WS_UPGRADE_WINDOW_MS, 60_000),
+      limit: readPositiveInt("WS_UPGRADE_LIMIT", env.WS_UPGRADE_LIMIT, WS_UPGRADE_LIMIT.limit),
+      windowMs: readPositiveInt(
+        "WS_UPGRADE_WINDOW_MS",
+        env.WS_UPGRADE_WINDOW_MS,
+        WS_UPGRADE_LIMIT.windowMs,
+      ),
     },
   };
 }
