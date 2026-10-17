@@ -1377,7 +1377,7 @@ The laptop runs `deploy/compose.yml` with two services, each `restart: unless-st
 - `cloudflared`: tunnel token from the `TUNNEL_TOKEN` secret file, routing `querymodule.birchdesignlab.com` (HTTP and WebSocket) to `app:3000`. DNS is on Cloudflare, so the route creates the CNAME.
 - `deploy-pull.timer` (systemd user unit with lingering, `deploy/systemd/`): every five minutes runs `scripts/ops/deploy-pull.sh`, which does `docker compose pull app`, and when the digest changed, `docker compose up -d app`, waits for `/api/v1/health`, runs `smoke.sh`, and logs the result. GHCR read-packages token in the deploy user's Docker `config.json`. No third-party updater and no container holds the Docker socket.
 
-On SIGTERM the app drains per 5.2; `stop_grace_period: 30s` covers the 10 s default, and a site raising any `timeoutMs` above 20 s raises it too (stated in `docs/deploy.md`, not enforced).
+On SIGTERM the app drains per 5.2; its worst case is 2 s (in-flight HTTP) + the largest `timeoutMs` + 5 s, at most 25 s with an 18 s `timeoutMs`. `stop_grace_period: 30s` covers the 10 s default, and a site raising any `timeoutMs` above 18 s raises it too, keeping 5 s of margin (stated in `docs/deploy.md`, not enforced; #574).
 
 ### 8.4 Release tags, promote and rollback
 
