@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { AUDIT_PAGE_MAX_LIMIT } from "./admin-audit";
 import {
   LoginFailedDetailsSchema,
   LoginSucceededDetailsSchema,
@@ -102,11 +101,15 @@ export const MAX_CHANGED_POINTERS = 1000;
  * ids, a type name and the epoch ms window only. userId is the route's user filter (actor OR
  * credential owner). The route has already bounded the window (admin-audit.ts).
  */
+/** Admin audit page size cap (spec 5.1); admin-audit.ts reads it from here (no import cycle). */
+export const AUDIT_PAGE_MAX_LIMIT = 200;
+
 const AuditFiltersSchema = z
   .strictObject({
     userId: BoundedIdSchema.optional(),
     correlationId: Uuid7Schema.optional(),
-    type: BoundedIdSchema.optional(),
+    /** #690 m1: a known audit type only, never an id-shaped value an admin typed. */
+    type: AuditEventTypeSchema.optional(),
     from: EpochMsSchema,
     to: EpochMsSchema,
   })
@@ -114,9 +117,10 @@ const AuditFiltersSchema = z
 
 /**
  * The audit page cursor as audited: opaque base64url characters only, so query text never fits.
- * Same 256 cap as AdminAuditQuerySchema.cursor; the M2 P2 route issues cursors in this alphabet.
+ * AdminAuditQuerySchema.cursor uses this schema (#690 m3), so a cursor the route accepts and
+ * echoes into auditViewed always passes the audit write; the M2 P2 route issues cursors in it.
  */
-const AuditCursorSchema = z.string().regex(/^[A-Za-z0-9_-]{1,256}$/);
+export const AuditCursorSchema = z.string().regex(/^[A-Za-z0-9_-]{1,256}$/);
 
 /**
  * Details: identifiers, metadata and role:"type" values only. Never other field values,
@@ -403,6 +407,11 @@ const systemEnvelope = {
  * by the user named in targetUserId, via adminReset by an admin (#523).
  */
 const adminEnvelope = systemEnvelope;
+/**
+ * #690 m2: adminViewed names the viewed request in the envelope too, equal to details, so one
+ * correlation id search on audit_event.correlation_id finds the request's rows and its views.
+ */
+const adminViewEnvelope = { ...adminEnvelope, correlationId: Uuid7Schema };
 
 export const AuditEventSchema = z
   .discriminatedUnion("type", [
@@ -505,11 +514,11 @@ export const AuditEventSchema = z
     }),
     z.strictObject({
       type: z.literal("adminViewed"),
-      ...adminEnvelope,
+      ...adminViewEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.adminViewed,
     }),
   ])
-  .superRefine((e, ctx) => {
+  .superRefine((e, ctx): void => {
     // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they do.
     const systemRole = e.actor.role === "system";
     if (systemRole !== (e.identitySource === "system")) {
@@ -542,61 +551,19 @@ export const AuditEventSchema = z
         message: "identitySource host needs hostSubject",
       });
     }
-    // Spec 4.7 (D-A2): system types are written by the system actor only.
-    const systemType = e.type === "configLoaded" || e.type === "retentionPurged";
-    if (systemType && !systemRole) {
-      ctx.addIssue({ code: "custom", path: ["actor"], message: "written by the system actor" });
+    // SEC-010 (ADR-0011 items 6 to 8; spec 4.7, 5.2 sweeper; #690 m4): the type's actor rule.
+    const issue = actorIssueOf(e);
+    if (issue !== undefined) ctx.addIssue({ code: "custom", path: ["actor"], message: issue });
+    // #690 m2: the envelope correlation id is the viewed request's, the same as details.
+    if (e.type === "adminViewed" && e.correlationId !== e.details.correlationId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["correlationId"],
+        message: "envelope correlationId must equal details.correlationId",
+      });
     }
-    // SEC-010 (ADR-0011 items 6 to 8; spec 4.7, 5.2 sweeper): admin rows name the human who acted.
-    const actorIs = (ok: boolean, message: string) => {
-      if (!ok) ctx.addIssue({ code: "custom", path: ["actor"], message });
-    };
-    const role = e.actor.role;
-    if (e.type === "configPublished") {
-      actorIs(role === "admin" || role === "implementer", "written by an admin or implementer");
-    } else if (e.type === "userCreated" || e.type === "userDisabled") {
-      actorIs(role === "admin", "written by an admin");
-    } else if (e.type === "sessionRevoked") {
-      if (e.details.reason === "expired") {
-        actorIs(systemRole, "an expired session is revoked by the system actor");
-      } else actorIs(role === "admin", "written by an admin");
-    } else if (e.type === "roleChanged") {
-      if (e.details.via === "grant-role") {
-        actorIs(systemRole, "grant-role writes as the system actor");
-      } else actorIs(role === "admin", "the admin console role change is written by an admin");
-    } else if (e.type === "passwordChanged") {
-      // #523: a self change is written by the user whose password changed; a reset by an admin.
-      if (e.details.via === "self") {
-        actorIs(
-          !systemRole && e.actor.id === e.details.targetUserId,
-          "a self password change is written by that user",
-        );
-      } else actorIs(role === "admin", "a password reset is written by an admin");
-    } else if (e.type === "auditViewed" || e.type === "auditExported") {
-      actorIs(role === "admin", "written by an admin");
-    } else if (e.type === "adminViewed") {
-      // Spec 5.2: the admin route reads as admin; the delegating officer as credential owner.
-      if (e.details.viewerBasis === "admin") actorIs(role === "admin", "written by an admin");
-      else actorIs(!systemRole, "a credential owner view is written by that user");
-    }
-    // Auth and system types have neither envelope column; the checks below are query-only.
-    if (
-      systemType ||
-      e.type === "loginSucceeded" ||
-      e.type === "loginFailed" ||
-      e.type === "logout" ||
-      e.type === "roleChanged" ||
-      e.type === "configPublished" ||
-      e.type === "userCreated" ||
-      e.type === "userDisabled" ||
-      e.type === "sessionRevoked" ||
-      e.type === "passwordChanged" ||
-      e.type === "auditViewed" ||
-      e.type === "auditExported" ||
-      e.type === "adminViewed"
-    ) {
-      return;
-    }
+    // Non-query types carry no partId or credentialUserId; the checks below are query-only.
+    if (AUDIT_TYPE_RULES[e.type].scope !== "query") return;
     // SEC-011 (#98): one row names one credential owner; the envelope column equals details.
     if (
       "credentialOwnerUserId" in e.details &&
@@ -618,3 +585,98 @@ export const AuditEventSchema = z
     }
   });
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
+
+/** One type's actor rule: undefined when the actor may write the row, else the issue message. */
+type ActorRule<T extends AuditEventType> = (
+  e: Extract<AuditEvent, { type: T }>,
+) => string | undefined;
+/**
+ * SEC-010 (#690 m4): every audit type names its actor rule and its scope. The mapped type makes
+ * the compiler require both for each AUDIT_EVENT_TYPES entry, so a new type cannot ship without
+ * an actor rule (the if/else chain this replaces had no default and passed any actor) or fall
+ * into the wrong envelope checks. scope "query" runs the envelope-equals-details checks.
+ */
+export type AuditTypeRule<T extends AuditEventType> = {
+  readonly scope: "query" | "nonQuery";
+  readonly actor: ActorRule<T>;
+};
+const isSystem = (a: AuditActor) => a.role === "system";
+/** Query and auth rows name the principal they are about; their envelopes bind the rest. */
+const anyActor = (): undefined => undefined;
+const byAdmin = (e: { actor: AuditActor }) =>
+  e.actor.role === "admin" ? undefined : "written by an admin";
+const bySystem = (message: string) => (e: { actor: AuditActor }) =>
+  isSystem(e.actor) ? undefined : message;
+
+export const AUDIT_TYPE_RULES: { readonly [T in AuditEventType]: AuditTypeRule<T> } = {
+  submitted: { scope: "query", actor: anyActor },
+  acknowledged: { scope: "query", actor: anyActor },
+  sourceDispatched: { scope: "query", actor: anyActor },
+  sourceResponded: { scope: "query", actor: anyActor },
+  interrupted: { scope: "query", actor: anyActor },
+  partSkipped: { scope: "query", actor: anyActor },
+  loginSucceeded: { scope: "nonQuery", actor: anyActor },
+  loginFailed: { scope: "nonQuery", actor: anyActor },
+  logout: { scope: "nonQuery", actor: anyActor },
+  roleChanged: {
+    scope: "nonQuery",
+    actor: (e) =>
+      e.details.via === "grant-role"
+        ? bySystem("grant-role writes as the system actor")(e)
+        : e.actor.role === "admin"
+          ? undefined
+          : "the admin console role change is written by an admin",
+  },
+  // Spec 4.7 (D-A2): system types are written by the system actor only.
+  configLoaded: { scope: "nonQuery", actor: bySystem("written by the system actor") },
+  retentionPurged: { scope: "nonQuery", actor: bySystem("written by the system actor") },
+  configPublished: {
+    scope: "nonQuery",
+    actor: (e) =>
+      e.actor.role === "admin" || e.actor.role === "implementer"
+        ? undefined
+        : "written by an admin or implementer",
+  },
+  userCreated: { scope: "nonQuery", actor: byAdmin },
+  userDisabled: { scope: "nonQuery", actor: byAdmin },
+  // The sweeper writes reason expired as SYSTEM_ACTOR (spec 5.2); an admin writes the others.
+  sessionRevoked: {
+    scope: "nonQuery",
+    actor: (e) =>
+      e.details.reason === "expired"
+        ? bySystem("an expired session is revoked by the system actor")(e)
+        : byAdmin(e),
+  },
+  // #523: a self change is written by the user whose password changed; a reset by an admin.
+  passwordChanged: {
+    scope: "nonQuery",
+    actor: (e) =>
+      e.details.via === "self"
+        ? !isSystem(e.actor) && e.actor.id === e.details.targetUserId
+          ? undefined
+          : "a self password change is written by that user"
+        : e.actor.role === "admin"
+          ? undefined
+          : "a password reset is written by an admin",
+  },
+  auditViewed: { scope: "nonQuery", actor: byAdmin },
+  auditExported: { scope: "nonQuery", actor: byAdmin },
+  // Spec 5.2: the admin route reads as admin; the delegating officer as credential owner.
+  adminViewed: {
+    scope: "nonQuery",
+    actor: (e) =>
+      e.details.viewerBasis === "admin"
+        ? byAdmin(e)
+        : isSystem(e.actor)
+          ? "a credential owner view is written by that user"
+          : undefined,
+  },
+};
+
+/**
+ * Runs the rule for e's own type. The cast is TypeScript's correlated-union limit: indexing the
+ * mapped table by e.type yields a union of rules, which the mapped type pins to e's type.
+ */
+function actorIssueOf(e: AuditEvent): string | undefined {
+  return (AUDIT_TYPE_RULES[e.type].actor as (x: AuditEvent) => string | undefined)(e);
+}
