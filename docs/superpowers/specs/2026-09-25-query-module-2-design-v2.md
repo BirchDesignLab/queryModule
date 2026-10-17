@@ -647,7 +647,7 @@ Query events:
 | `interrupted` | `partId`, `sourceId`, `resultId`, `reason: "processRestart"` |
 | `partSkipped` | `partId`, `parentPartId`, `queryType`, `typeValues`, `reasons` (`ValidationError[]`, params limited to field keys, label keys and positions) |
 | `deletedFromView` (one per real `result_visibility` insert) | `resultId`, `partId`, `sourceId` |
-| `adminViewed` | `correlationId`, `includeHidden` (boolean), `viewerBasis` (`admin`\|`credentialOwner`); the delegating officer's reads use `credentialOwner` (5.2) |
+| `adminViewed` | `correlationId`, `includeHidden` (boolean), `viewerBasis` (`admin`\|`credentialOwner`); the delegating officer's reads use `credentialOwner` (5.2); the envelope `correlationId` is set too and equals `details.correlationId`, so one correlation id search finds a request's rows and its views (#690) |
 
 `credentialOwnerUserId` and `delegationId` are copied from the step-3 snapshot on the pending row (5.2), not resolved again.
 

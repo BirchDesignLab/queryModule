@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { AuditReadRowSchema } from "./admin-audit";
 import {
   AUDIT_DETAILS_SCHEMAS,
   AUDIT_EVENT_TYPES,
+  AUDIT_TYPE_RULES,
   AuditActorSchema,
+  AuditCursorSchema,
   AuditEventSchema,
   type AuditEventType,
   parseAuditDetails,
@@ -1179,10 +1181,11 @@ describe("SEC-010 SEC-012 M2 audit catalogue (#523, spec 4.7, 5.6)", () => {
 
   it("adminViewed: an admin views by basis admin; a credential owner by basis credentialOwner", () => {
     const owner = { ...samples.adminViewed, viewerBasis: "credentialOwner", includeHidden: false };
-    expect(ok(human("adminViewed", admin, samples.adminViewed))).toBe(true);
-    expect(ok(human("adminViewed", officer, owner))).toBe(true);
-    expect(actorIssue(human("adminViewed", officer, samples.adminViewed))).toBe(true);
-    expect(actorIssue(sys("adminViewed", owner))).toBe(true);
+    const view = (e: object) => ({ ...e, correlationId: CID });
+    expect(ok(view(human("adminViewed", admin, samples.adminViewed)))).toBe(true);
+    expect(ok(view(human("adminViewed", officer, owner)))).toBe(true);
+    expect(actorIssue(view(human("adminViewed", officer, samples.adminViewed)))).toBe(true);
+    expect(actorIssue(view(sys("adminViewed", owner)))).toBe(true);
     expect(
       AUDIT_DETAILS_SCHEMAS.adminViewed.safeParse({ ...samples.adminViewed, viewerBasis: "x" })
         .success,
@@ -1191,5 +1194,67 @@ describe("SEC-010 SEC-012 M2 audit catalogue (#523, spec 4.7, 5.6)", () => {
       AUDIT_DETAILS_SCHEMAS.adminViewed.safeParse({ ...samples.adminViewed, includeHidden: "yes" })
         .success,
     ).toBe(false);
+  });
+});
+
+describe("SEC-010 #690 m4 every audit type has an actor rule and a scope", () => {
+  it("AUDIT_TYPE_RULES has exactly one entry per type, each with an actor rule and a scope", () => {
+    expectTypeOf<keyof typeof AUDIT_TYPE_RULES>().toEqualTypeOf<AuditEventType>();
+    expect(Object.keys(AUDIT_TYPE_RULES).sort()).toEqual([...AUDIT_EVENT_TYPES].sort());
+    for (const type of AUDIT_EVENT_TYPES) {
+      const rule = AUDIT_TYPE_RULES[type];
+      expect(typeof rule.actor, type).toBe("function");
+      expect(["query", "nonQuery"], type).toContain(rule.scope);
+    }
+  });
+  it("the table and each entry are frozen, so no importer can swap a type's actor rule", () => {
+    expect(Object.isFrozen(AUDIT_TYPE_RULES)).toBe(true);
+    for (const t of AUDIT_EVENT_TYPES) expect(Object.isFrozen(AUDIT_TYPE_RULES[t]), t).toBe(true);
+  });
+  it("the query scope is exactly the six query event types", () => {
+    const query = AUDIT_EVENT_TYPES.filter((t) => AUDIT_TYPE_RULES[t].scope === "query");
+    expect(query).toEqual([...QUERY_EVENT_TYPES]);
+  });
+});
+
+describe("SEC-010 SEC-012 #690 m1 m2 m3 audit filter type, adminViewed correlation id, cursor", () => {
+  const admin = { id: "a1", email: "admin@example.test", role: "admin" };
+  const viewed = (correlationId?: string) => ({
+    type: "adminViewed",
+    ...(correlationId === undefined ? {} : { correlationId }),
+    actor: admin,
+    identitySource: "local",
+    details: samples.adminViewed,
+  });
+  it("m1: auditViewed and auditExported filters.type is a known audit type", () => {
+    const f = samples.auditViewed.filters;
+    for (const type of ["auditViewed", "auditExported"] as const) {
+      const s = AUDIT_DETAILS_SCHEMAS[type];
+      const base = samples[type];
+      expect(s.safeParse({ ...base, filters: { ...f, type: "loginFailed" } }).success, type).toBe(
+        true,
+      );
+      for (const bad of ["notAType", "ZZ-0001", "Submitted"]) {
+        expect(s.safeParse({ ...base, filters: { ...f, type: bad } }).success, bad).toBe(false);
+      }
+    }
+  });
+  it("m2: adminViewed carries the viewed correlation id in the envelope, equal to details", () => {
+    expect(AuditEventSchema.safeParse(viewed(CID)).success).toBe(true);
+    const missing = AuditEventSchema.safeParse(viewed());
+    expect(missing.success).toBe(false);
+    const other = AuditEventSchema.safeParse(viewed("0199a0b0-0000-7000-8000-000000000002"));
+    expect(other.success).toBe(false);
+    expect(other.error?.issues.map((i) => i.path.join("."))).toEqual(["correlationId"]);
+    expect(AuditEventSchema.safeParse({ ...viewed(CID), partId: 0 }).success).toBe(false);
+    expect(AuditEventSchema.safeParse({ ...viewed(CID), credentialUserId: "u1" }).success).toBe(
+      false,
+    );
+  });
+  it("m3: the audited cursor alphabet is exported for the query schema", () => {
+    expect(AuditCursorSchema.safeParse("eyJpZCI6NDJ9").success).toBe(true);
+    for (const bad of ["", "a b", "a/b", "a=b", "x".repeat(257)]) {
+      expect(AuditCursorSchema.safeParse(bad).success, bad).toBe(false);
+    }
   });
 });

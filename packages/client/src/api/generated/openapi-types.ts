@@ -2390,7 +2390,7 @@ export interface operations {
             query: {
                 user?: string;
                 correlationId?: string;
-                type?: string;
+                type?: "submitted" | "acknowledged" | "sourceDispatched" | "sourceResponded" | "interrupted" | "partSkipped" | "loginSucceeded" | "loginFailed" | "logout" | "roleChanged" | "configLoaded" | "retentionPurged" | "configPublished" | "userCreated" | "userDisabled" | "sessionRevoked" | "passwordChanged" | "auditViewed" | "auditExported" | "adminViewed";
                 from: number;
                 to: number;
                 cursor?: string;
@@ -2445,7 +2445,7 @@ export interface operations {
             query: {
                 user?: string;
                 correlationId?: string;
-                type?: string;
+                type?: "submitted" | "acknowledged" | "sourceDispatched" | "sourceResponded" | "interrupted" | "partSkipped" | "loginSucceeded" | "loginFailed" | "logout" | "roleChanged" | "configLoaded" | "retentionPurged" | "configPublished" | "userCreated" | "userDisabled" | "sessionRevoked" | "passwordChanged" | "auditViewed" | "auditExported" | "adminViewed";
                 from: number;
                 to: number;
             };
