@@ -430,16 +430,16 @@ describe("the preview beside the keywords (T11-5)", () => {
     const select = within(pane).getByRole("combobox", { name: "Query type" }) as HTMLSelectElement;
     const first = select.value;
     expect(first).not.toBe("");
-    const other = [...select.options].find((o) => o.value !== first);
-    expect(other).toBeDefined();
+    expect([...select.options].map((o) => o.value)).toContain("PRO");
     const before = JSON.stringify(configDraftStore(t.services).getState().doc);
-    await t.user.selectOptions(select, (other as HTMLOptionElement).value);
-    expect(select.value).toBe((other as HTMLOptionElement).value);
+    await t.user.selectOptions(select, "PRO");
+    expect(select.value).toBe("PRO");
     // The pane follows: typed values are now asked for the chosen type's fields, and the draft is
     // untouched.
     await t.user.click(within(pane).getByRole("radio", { name: "Type values" }));
     expect(first).toBe("VEH");
     expect(within(pane).queryByRole("textbox", { name: "Plate" })).toBeNull();
+    expect(within(pane).getByRole("textbox", { name: /^Serial/ })).toBeInTheDocument();
     expect(JSON.stringify(configDraftStore(t.services).getState().doc)).toBe(before);
   });
 

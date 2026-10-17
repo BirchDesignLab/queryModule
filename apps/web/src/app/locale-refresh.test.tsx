@@ -1,6 +1,6 @@
 import { createTranslator } from "@querymodule/client";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { HttpResponse, http } from "msw";
+import { delay, HttpResponse, http } from "msw";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { EN_BUNDLE } from "../test/en-bundle.js";
@@ -50,6 +50,24 @@ describe("useLocaleRefresh", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(onBundle).not.toHaveBeenCalled();
     expect(same.onBundle).not.toHaveBeenCalled();
+  });
+
+  it("tries again for the same config when the first fetch was cancelled before it landed", async () => {
+    server.use(
+      http.get(`${API}/api/v1/locales/en`, async () => {
+        await delay(30);
+        return HttpResponse.json(EN_BUNDLE);
+      }),
+    );
+    const { services, onBundle } = setup();
+    act(() => services.queryClient.setQueryData(["config"], CLIENT_CONFIG));
+    act(() => services.queryClient.setQueryData(["config"], NEXT));
+    // The config is gone (sign-out) before the bundle arrives, then the same config is back.
+    act(() => void services.queryClient.removeQueries({ queryKey: ["config"] }));
+    await new Promise((r) => setTimeout(r, 80));
+    expect(onBundle).not.toHaveBeenCalled();
+    act(() => services.queryClient.setQueryData(["config"], NEXT));
+    await waitFor(() => expect(onBundle).toHaveBeenCalledTimes(1));
   });
 
   it("keeps the strings it has when the fetch fails", async () => {
