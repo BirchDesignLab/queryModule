@@ -3,7 +3,7 @@ import { VisuallyHidden } from "@querymodule/web-ui";
 import { type ReactNode, useContext, useId, useMemo } from "react";
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
-import { useCardName } from "./CardsEditor.js";
+import { useCardName } from "./card-names.js";
 import {
   buildChangeGroups,
   type ChangeDeps,
