@@ -104,6 +104,8 @@ function ValuesSeg({
   );
 }
 
+const NO_TYPED: Readonly<Record<string, string>> = {};
+
 export function CardPreview({
   doc,
   labels,
@@ -141,7 +143,12 @@ export function CardPreview({
         : (typeSources[0] ?? "");
   const [mode, setMode] = useState<Mode>("pick");
   const [scenario, setScenario] = useState<string | null>(null);
-  const [typed, setTyped] = useState<Readonly<Record<string, string>>>({});
+  // Typed values belong to one query type: another type's card starts empty, and coming back to
+  // a type finds its values again (T10-Q7). Never the draft.
+  const [typedByType, setTypedByType] = useState<
+    Readonly<Record<string, Readonly<Record<string, string>>>>
+  >({});
+  const typed = typedByType[code] ?? NO_TYPED;
   const [view, setView] = useState<"summary" | "detail">("summary");
 
   const sourceName = (id: string) => {
@@ -343,7 +350,10 @@ export function CardPreview({
                       value={typed[key] ?? ""}
                       onChange={(e) => {
                         const value = e.target.value;
-                        setTyped((v) => ({ ...v, [key]: value }));
+                        setTypedByType((all) => ({
+                          ...all,
+                          [code]: { ...all[code], [key]: value },
+                        }));
                       }}
                     />
                   </div>
