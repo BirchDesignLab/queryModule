@@ -167,6 +167,12 @@ describe("minors: the Add row, a row with two issues, trigger text", () => {
       const row = await selectRow(t.user, /^Add mock response: State system/);
       expect(await screen.findByRole("button", { name: "Add mock response" })).toBeInTheDocument();
       expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+      // It is the add form that scrolled (its controls are owned by the source's add path).
+      expect(
+        scroll.mock.contexts.some(
+          (el) => (el as Element).querySelector('[data-owner$="/add"]') !== null,
+        ),
+      ).toBe(true);
       expect(row).toHaveFocus();
     } finally {
       Reflect.deleteProperty(Element.prototype, "scrollIntoView");

@@ -17,7 +17,9 @@ function bodyOf(source: string): string {
       source,
     );
   if (m === null) throw new Error("shortReference not found in the source");
-  return (m[2] as string).replaceAll(m[1] as string, "id").replace(/\s+/g, " ");
+  return (m[2] as string)
+    .replace(new RegExp(String.raw`\b${m[1]}\b`, "g"), "id")
+    .replace(/\s+/g, " ");
 }
 
 describe("the e2e shortReference mirror", () => {

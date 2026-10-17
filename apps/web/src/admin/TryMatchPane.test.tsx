@@ -215,25 +215,32 @@ describe("Try a match: the announcement is debounced", () => {
     vi.useRealTimers();
   });
 
-  it("says nothing while keystrokes keep coming, and one outcome 600 ms after the last", async () => {
+  // Each change of the outcome restarts the 600 ms wait: the timer is not a throttle and is not
+  // keyed on the first change. The values change the outcome inside the window (scenario 1, then
+  // the default), so only a restart keeps the region quiet.
+  it("says nothing while the outcome keeps changing, and the settled one 600 ms after the last change", async () => {
     const t = await openBuilder();
     const p = within(await screen.findByRole("region", { name: "Try a match" }));
-    await t.user.selectOptions(p.getByLabelText("Source"), "stateSource");
-    await t.user.selectOptions(p.getByLabelText("Query type"), "VEH");
     const live = p.getByRole("status");
-    const plate = p.getByLabelText("Plate");
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    let typed = "";
-    for (const ch of "ZZ-0001") {
-      typed += ch;
-      fireEvent.change(plate, { target: { value: typed } });
-      // Each key lands 599 ms after the last: the pause never completes.
-      act(() => void vi.advanceTimersByTime(599));
-      expect(live).toHaveTextContent("");
-    }
-    act(() => void vi.advanceTimersByTime(1));
+    const set = (label: string, value: string) =>
+      fireEvent.change(p.getByLabelText(label), { target: { value } });
+    const wait = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
+    set("Source", "stateSource");
+    set("Query type", "VEH");
+    set("Plate", "ZZ-0001");
+    wait(599);
+    expect(live).toHaveTextContent("");
+    set("Plate", "ZZ-0099");
+    wait(599);
+    expect(live).toHaveTextContent("");
+    set("Plate", "ZZ-0001");
+    wait(599);
+    expect(live).toHaveTextContent("");
+    wait(1);
     expect(live).toHaveTextContent("Returns a record. Scenario 1 of Vehicle.");
-    expect(live.textContent).not.toMatch(/ZZ-0001/);
+    expect(live.textContent).not.toMatch(/ZZ-0001|ZZ-0099/);
+    void t;
   });
 });
 
