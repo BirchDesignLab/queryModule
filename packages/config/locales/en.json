@@ -570,6 +570,7 @@
   "admin.cards.preview.title": "Card preview",
   "admin.cards.preview.empty": "Select a card to preview it.",
   "admin.cards.preview.source": "Result from",
+  "admin.cards.preview.queryType": "Query type",
   "admin.cards.preview.values": "Values",
   "admin.cards.preview.pick": "Pick a scenario",
   "admin.cards.preview.type": "Type values",

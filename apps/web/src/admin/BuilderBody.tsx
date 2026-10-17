@@ -16,6 +16,7 @@ import { configDraftStore, useDraft } from "./builder-store.js";
 import { CardPreview } from "./CardPreview.js";
 import { ChangesView } from "./ChangesView.js";
 import { ChecksContext, useDraftChecks, withServerIssues } from "./checks.js";
+import { asObjects } from "./controls.js";
 import type { JsonObject } from "./draft.js";
 import { FormTab } from "./FormTab.js";
 import { HistoryDrawer } from "./HistoryDrawer.js";
@@ -29,6 +30,7 @@ import { PublishButtons, PublishDialogs, PublishNotices } from "./PublishControl
 import { usePublishFlow } from "./PublishFlow.js";
 import { type RawState, RawTab } from "./RawTab.js";
 import {
+  cardsTypePointer,
   defaultPointer,
   editorItem,
   isRootIssue,
@@ -58,6 +60,8 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
     [localChecks, flow.serverIssues, mock],
   );
   const [tab, setTab] = useState<TabId>("form");
+  // The query type the preview beside Keywords shows them on; this pane's state, never the draft.
+  const [keywordsType, setKeywordsType] = useState<string | null>(null);
   const [raw, setRaw] = useState<RawState>(() => ({
     text: JSON.stringify(doc, null, 2),
     parseError: null,
@@ -389,8 +393,16 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
                   // The keywords have no card of their own: a card of the first type shows them.
                   selected={
                     topItem(shown.pointer) === "keywords"
-                      ? keywordsPreviewPointer(checks.doc)
+                      ? keywordsType !== null &&
+                        asObjects(checks.doc.queryTypes).some((q) => q.code === keywordsType)
+                        ? cardsTypePointer(keywordsType)
+                        : keywordsPreviewPointer(checks.doc)
                       : shown.pointer
+                  }
+                  typeChoice={
+                    topItem(shown.pointer) === "keywords"
+                      ? { onChange: setKeywordsType }
+                      : undefined
                   }
                 />
               )

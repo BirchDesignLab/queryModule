@@ -110,11 +110,17 @@ export function CardPreview({
   doc,
   labels,
   selected,
+  typeChoice,
 }: {
   /** The settled draft the checks ran on. */
   doc: JsonObject;
   labels: Readonly<Record<string, Readonly<Record<string, string>>>>;
   selected: string | null;
+  /**
+   * With Keywords selected there is no card of the editor's own to show them on: this offers the
+   * query types to preview them as (T11-5). Absent for a card or a type row.
+   */
+  typeChoice?: { onChange(code: string): void };
 }) {
   const t = useT();
   const headingId = useId();
@@ -297,6 +303,23 @@ export function CardPreview({
           <p className="qm-preview__state">{t("admin.cards.preview.empty")}</p>
         ) : (
           <>
+            {typeChoice !== undefined && (
+              <div>
+                <label htmlFor={`${uid}-type`}>{t("admin.cards.preview.queryType")}</label>{" "}
+                <select
+                  className="qm-field__input"
+                  id={`${uid}-type`}
+                  value={code}
+                  onChange={(e) => typeChoice.onChange(e.target.value)}
+                >
+                  {asObjects(doc.queryTypes).map((q) => (
+                    <option key={str(q.code)} value={str(q.code)}>
+                      {labelText(q.labelKey) || str(q.code)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label htmlFor={`${uid}-source`}>{t("admin.cards.preview.source")}</label>{" "}
               <select
