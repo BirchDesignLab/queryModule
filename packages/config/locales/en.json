@@ -606,6 +606,7 @@
   "admin.keywords.col.except": "Exceptions",
   "admin.keywords.keyword.n": "Keyword {n}",
   "admin.keywords.severity.n": "Severity of keyword {n}",
+  "admin.keywords.severity.choose": "Choose severity",
   "admin.keywords.except.n": "Exception {m} of keyword {n}",
   "admin.keywords.except.remove": "Remove",
   "admin.keywords.except.removeN": "Remove exception {m} of keyword {n}",

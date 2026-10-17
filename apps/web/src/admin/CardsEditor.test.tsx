@@ -324,6 +324,24 @@ describe("the approved card editor items (round 1, S1)", () => {
     );
   });
 
+  // T10-20 (#642; ruling pending with the manager): a new card keeps an editable key while the id is
+  // typed, even when it spells an id the live config has; the duplicate shows as a check, not a lock.
+  it("keeps a new card's key editable when its id is typed to match a live id", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
+    await t.user.click(within(editor()).getByText("Advanced settings"));
+    const key = within(editor()).getByRole("textbox", { name: "Card key" });
+    await t.user.clear(key);
+    await t.user.type(key, "veh-summary");
+    expect(cards(t).at(-1)?.id).toBe("veh-summary");
+    expect(within(editor()).getByRole("textbox", { name: "Card key" })).not.toHaveAttribute(
+      "readonly",
+    );
+    expect(within(editor()).getByRole("textbox", { name: "Card key" })).toHaveValue("veh-summary");
+  });
+
   it("offers Template, and a Format for each table column", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);

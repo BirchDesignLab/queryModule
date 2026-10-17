@@ -12,6 +12,8 @@ interface KeywordRowProps {
   n: number;
   owner: string;
   style: KeywordStyle;
+  /** The draft's severity is not one of the three: the select asks for a choice instead of showing Info. */
+  severityUnset: boolean;
   /** The keyword for the Remove button's name: its text, else "keyword n". */
   name: string;
   keywordIssues: readonly DraftIssue[] | undefined;
@@ -32,6 +34,7 @@ export function KeywordRow({
   n,
   owner,
   style,
+  severityUnset,
   name,
   keywordIssues,
   severityIssues,
@@ -91,12 +94,13 @@ export function KeywordRow({
             aria-label={t("admin.keywords.severity.n", { n })}
             aria-invalid={isError(severityIssues)}
             aria-describedby={severityIssues === undefined ? undefined : `${uid}-severity-issues`}
-            value={style.severity}
+            value={severityUnset ? "" : style.severity}
             onChange={(e) => {
               const v = e.target.value;
               if (isSeverity(v)) onSeverity(v);
             }}
           >
+            {severityUnset && <option value="">{t("admin.keywords.severity.choose")}</option>}
             {SEVERITIES.map((s) => (
               <option key={s} value={s}>
                 {t(`severity.${s}`)}

@@ -241,6 +241,7 @@ export function KeywordsEditor({ doc, idPrefix }: { doc: JsonObject; idPrefix: s
                   n={n}
                   owner={rowOwner(i)}
                   style={style}
+                  severityUnset={!isSeverity(k.severity)}
                   name={name}
                   keywordIssues={keywordIssues}
                   severityIssues={severityIssues}

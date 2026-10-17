@@ -162,7 +162,12 @@ function CardEditor({
   const info = useFieldInfo(type);
   const id = str(card.id);
   // A published card's key is what its label keys and the audit trail name: fixed from then on.
-  const locked = asObjects(server?.liveDoc.responseMappings).some((m) => str(m.id) === id);
+  // Decided once, when the live config is first known for this card (T10-20): a new card whose key
+  // is typed to a live id stays editable, and the duplicate shows as a check instead.
+  const [lockedAtOpen, setLockedAtOpen] = useState<boolean | null>(null);
+  if (lockedAtOpen === null && server !== null)
+    setLockedAtOpen(asObjects(server.liveDoc.responseMappings).some((m) => str(m.id) === id));
+  const locked = lockedAtOpen === true;
   const path = ["responseMappings", index] as const;
   const pointer = toPointer([...path]);
   const siblings = cardsByType(cardsSiteOf(doc)).get(code) ?? [];
