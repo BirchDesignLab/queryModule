@@ -395,6 +395,28 @@ describe("the approved card editor items (round 1, S1)", () => {
     expect(radios[2]).toHaveFocus();
   });
 
+  // BW3 polish (#642; ruling of 10-17-26): under about 480 px the Columns table stacks, one block
+  // per column, each cell captioned by its heading. Jsdom has no container queries: the captions are
+  // the markup half of it (the CSS half is checked in the screenshots at 1366 and 1024).
+  it("each Columns cell carries the caption its heading has, for the stacked layout", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add row" }));
+    await t.user.click(await within(editor()).findByRole("radio", { name: "Table" }));
+    const table = await within(editor()).findByRole("table", { name: "Columns" });
+    const heads = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => (h.querySelector("[aria-hidden]") ?? h).textContent?.trim());
+    const row = within(table).getAllByRole("row")[1] as HTMLElement;
+    const captions = within(row)
+      .getAllByRole("cell")
+      .map((c) => c.getAttribute("data-label"));
+    // Path, Label, Format, Mark, and the unnamed Remove cell.
+    expect(captions.slice(0, 4)).toEqual(heads.slice(0, 4));
+    expect(captions[4]).toBeNull();
+    expect(table.closest(".qm-columns")).not.toBeNull();
+  });
+
   it("offers Template, and a Format for each table column", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
