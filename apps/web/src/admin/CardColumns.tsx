@@ -86,7 +86,8 @@ export function Columns({
   issues: readonly DraftIssue[];
   cardId: string;
   takenKeys(): Set<string>;
-  onChange(el: MappingElement, coalesce?: boolean): void;
+  /** `typing` names the text control being typed in, so its keystrokes undo as one step. */
+  onChange(el: MappingElement, typing?: string): void;
 }) {
   const t = useT();
   const translator = useTranslator();
@@ -98,8 +99,8 @@ export function Columns({
     const found = issues.filter((i) => i.pointer === p);
     return found.length > 0 ? found : undefined;
   };
-  const setColumns = (columns: TableElement["columns"], coalesce = false) =>
-    onChange({ ...el, columns }, coalesce);
+  const setColumns = (columns: TableElement["columns"], typing?: string) =>
+    onChange({ ...el, columns }, typing);
   return (
     <div className="qm-mock__table-wrap">
       <table className="qm-mock__table qm-columns__table">
@@ -140,7 +141,7 @@ export function Columns({
                     onChange={(e) =>
                       setColumns(
                         el.columns.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)),
-                        true,
+                        `column${i}:path`,
                       )
                     }
                   />
@@ -163,14 +164,14 @@ export function Columns({
                     ariaLabel={t("admin.cards.column.format", { n })}
                     value={c.format}
                     templateLabel={t("admin.cards.column.template", { n })}
-                    onChange={(format, coalesce) =>
+                    onChange={(format, typing) =>
                       setColumns(
                         el.columns.map((x, j) => {
                           if (j !== i) return x;
                           const { format: _old, ...others } = x;
                           return format === undefined ? others : { ...others, format };
                         }),
-                        coalesce,
+                        typing ? `column${i}:template` : undefined,
                       )
                     }
                   />

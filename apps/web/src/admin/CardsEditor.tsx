@@ -201,7 +201,7 @@ function CardEditor({
   const owner = `${idPrefix}-card-head`;
   const rowOwner = (i: number) => `${idPrefix}-card-row-${i}`;
 
-  const setElements = (next: MappingElement[], coalesce = false) =>
+  const setElements = (next: MappingElement[], coalesce: string | false = false) =>
     applyCardsEdit(
       store,
       (site) => {
@@ -212,10 +212,11 @@ function CardEditor({
       },
       { coalesce },
     );
-  const setElement = (i: number, el: MappingElement, coalesce = false) =>
+  // Typing coalesces per control: the key names the card, the row and the control (T11-14).
+  const setElement = (i: number, el: MappingElement, typing?: string) =>
     setElements(
       elements.map((e, j) => (j === i ? el : e)),
-      coalesce,
+      typing === undefined ? false : `card${index}:row${ids[i]}:${typing}`,
     );
   const takenKeys = () => {
     const keys = new Set<string>();
@@ -450,7 +451,7 @@ function CardEditor({
                   return out;
                 })
               }
-              onChange={(next, coalesce) => setElement(i, next, coalesce)}
+              onChange={(next, typing) => setElement(i, next, typing)}
               onMove={moveRow}
               onRemove={removeRow}
             />

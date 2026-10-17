@@ -366,6 +366,26 @@ describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
     expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
   });
 
+  // T11-14 (#642): typing coalesces per control, not per path, so two rows typed in turn undo in
+  // two steps (the keywords editor already keys its typing this way).
+  it("typing in one row's path and then another's undoes as two steps", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?Status/ }));
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?State/ }));
+    const [first, second] = within(editor()).getAllByRole("combobox", { name: "Path" });
+    const paths = () =>
+      (cards(t)[0] as unknown as { elements: { path: string }[] }).elements.map((e) => e.path);
+    const before = paths();
+    await t.user.type(first as HTMLElement, "ab");
+    await t.user.type(second as HTMLElement, "cd");
+    expect(paths().filter((p, i) => p !== before[i])).toHaveLength(2);
+    undo(t);
+    expect(paths().filter((p, i) => p !== before[i])).toHaveLength(1);
+    undo(t);
+    expect(paths()).toEqual(before);
+  });
+
   it("the control that has focus keeps focus, and is the same element, across an undo", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);

@@ -25,7 +25,8 @@ export interface CardRowProps {
   cardId: string;
   takenKeys(): Set<string>;
   onToggle(): void;
-  onChange(el: MappingElement, coalesce?: boolean): void;
+  /** `typing` names the text control being typed in, so its keystrokes undo as one step. */
+  onChange(el: MappingElement, typing?: string): void;
   onMove(from: number, to: number): void;
   onRemove(index: number): void;
 }
@@ -203,7 +204,7 @@ export function CardRow({
                     .filter((x) => x !== null)
                     .join(" ") || undefined
                 }
-                onChange={(e) => onChange({ ...el, path: e.target.value }, true)}
+                onChange={(e) => onChange({ ...el, path: e.target.value }, "path")}
               />
               <IssueMessages id={`${uid}-path-issues`} issues={pathIssues} />
               <datalist id={listId}>
@@ -267,9 +268,12 @@ export function CardRow({
                   id={`${uid}-format`}
                   value={el.format}
                   templateLabel={t("admin.cards.template")}
-                  onChange={(format, coalesce) => {
+                  onChange={(format, typing) => {
                     const { format: _old, ...others } = el;
-                    onChange(format === undefined ? others : { ...others, format }, coalesce);
+                    onChange(
+                      format === undefined ? others : { ...others, format },
+                      typing ? "template" : undefined,
+                    );
                   }}
                 />
               </div>
