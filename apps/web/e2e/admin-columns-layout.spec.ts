@@ -5,10 +5,11 @@ import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
 // BW3 polish (#642; ruling of 10-17-26): a card row's Columns table stacks where the editor pane is
-// narrow (under 720 px, the toolbar breakpoint: the 1366 and 1024 layouts), and Show in is a segmented control. Measured, not
-// pictured: nothing scrolls sideways, the inputs keep a usable width, Path and Label share a line,
-// Format sits under them, and the three Show in segments share one line. Nothing is saved: the row is
-// added to the draft in the page only. With COLUMNS_SHOTS_DIR set it also writes the screenshots.
+// narrow (under 720 px, the toolbar breakpoint: the 1366 and 1024 layouts), and Show in is a
+// segmented control. Measured, not pictured: nothing scrolls sideways, the inputs keep a usable
+// width, Path and Label share a line, Format sits under them, and the three Show in segments share
+// one line. Nothing is saved: the row is added to the draft in the page only. With
+// COLUMNS_SHOTS_DIR set it also writes the screenshots.
 //   COLUMNS_SHOTS_DIR=<dir> E2E_PORT=<port> pnpm e2e admin-columns-layout.spec.ts
 
 const ADMIN = seededUser("admin@example.test");
@@ -60,7 +61,9 @@ for (const size of SIZES) {
     await form.getByRole("radio", { name: "Table" }).check();
     const table = form.getByRole("table", { name: "Columns" });
     await expect(table).toBeVisible();
-    const wrap = table.locator("xpath=ancestor::div[contains(@class,'qm-columns')][1]");
+    const wrap = form
+      .locator("div.qm-columns")
+      .filter({ has: page.getByRole("table", { name: "Columns" }) });
     await wrap.scrollIntoViewIfNeeded();
     const wrapBox = await box(wrap);
 
@@ -71,7 +74,11 @@ for (const size of SIZES) {
         path: join(DIR, `show-in-${size.width}.png`),
       });
     }
-    const stacked = wrapBox.width <= STACK_AT;
+    // Both demo sizes are narrow panes: the table must stack there. Taken from the measurement, a
+    // wider pane would quietly check the table layout and still pass.
+    expect(wrapBox.width, "the pane is under the stack width at this size").toBeLessThanOrEqual(
+      STACK_AT,
+    );
 
     // Nothing scrolls sideways, in the table's wrapper or the pane around it.
     const overflow = await wrap.evaluate((el) => {
@@ -95,17 +102,16 @@ for (const size of SIZES) {
       ["format", f],
     ] as const)
       expect(b.width, `${name} input is too narrow`).toBeGreaterThanOrEqual(110);
-    if (stacked) {
-      // Path and Label on one line, Format on the next, nothing overlapping.
-      expect(Math.abs(p.y - l.y)).toBeLessThanOrEqual(2);
-      expect(l.x).toBeGreaterThanOrEqual(p.x + p.width - 1);
-      expect(f.y).toBeGreaterThanOrEqual(p.y + p.height - 1);
-      // The caption of each cell shows above its control.
-      await expect(table.locator("tbody td").first()).toHaveAttribute("data-label", "Path");
-    } else {
-      expect(Math.abs(p.y - l.y)).toBeLessThanOrEqual(2);
-      expect(Math.abs(p.y - f.y)).toBeLessThanOrEqual(2);
-    }
+    // Path and Label on one line, Format on the next, nothing overlapping.
+    expect(Math.abs(p.y - l.y)).toBeLessThanOrEqual(2);
+    expect(l.x).toBeGreaterThanOrEqual(p.x + p.width - 1);
+    expect(f.y).toBeGreaterThanOrEqual(p.y + p.height - 1);
+    // The caption of each cell is drawn above its control: the CSS half of the markup's data-label.
+    const firstCell = table.locator("tbody td").first();
+    await expect(firstCell).toHaveAttribute("data-label", "Path");
+    expect(await firstCell.evaluate((el) => getComputedStyle(el, "::before").content)).toContain(
+      "Path",
+    );
 
     // Show in: three segments of one control on one line, inside the pane.
     const show = form.getByRole("group", { name: "Show in" });

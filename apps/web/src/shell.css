@@ -2564,11 +2564,14 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   grid-column: auto;
 }
 
-/* Inside the admin form a div that starts with a label is a column (label above control): the track of
-   segments is a row all the same, so it names the form rule it must beat. */
+/* Inside the admin form a div that starts with a label is a column with a gap and a margin
+   (.qm-admin__form :where(div):has(> label:first-child)); the track of segments is a row with
+   the track's own gap and no margin all the same, in the form and in the preview alike. */
 .qm-segchoice .qm-seg.qm-seg--fill {
   display: flex;
   flex-direction: row;
+  gap: var(--qm-space-1);
+  margin: 0;
   box-sizing: border-box;
   inline-size: 100%;
 }
@@ -2633,9 +2636,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 /* Ruling of 10-17-26: where the editor pane is narrow (under the toolbar breakpoint, which the 1366
-   and 1024 layouts are) each column stacks as a block: Path and Label on one line, Format, Mark and Remove on the next, every
-   cell captioned by its heading. The caption's text is the heading's, so the pseudo-element is given
-   an empty alternative and is not read twice. The heading row stays for assistive technology. */
+   and 1024 layouts are) each column stacks as a block: Path and Label on one line, Format, Mark and
+   Remove on the next, every cell captioned by its heading. The caption's text is the heading's, so
+   the pseudo-element is given an empty alternative and is not read twice. The heading row stays for
+   assistive technology. */
 .qm-columns {
   container: qm-columns / inline-size;
 }
@@ -2648,9 +2652,11 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
   .qm-columns__table thead {
     position: absolute;
-    inline-size: 0;
-    block-size: 0;
+    inline-size: var(--qm-border-width);
+    block-size: var(--qm-border-width);
+    margin: calc(var(--qm-border-width) * -1);
     overflow: hidden;
+    white-space: nowrap;
     clip-path: inset(50%);
   }
 
