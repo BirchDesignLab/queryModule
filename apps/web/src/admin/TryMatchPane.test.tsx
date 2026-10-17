@@ -1,6 +1,6 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   API,
   adminConfigBody,
@@ -206,6 +206,34 @@ describe("Try a match: the answer, the wait and the announcement", () => {
       expect(live).toHaveTextContent("No record. No scenario matches, the default answers."),
     );
     expect(live.textContent).not.toMatch(/ZZ-0099/);
+  });
+});
+
+// BW3 polish leftover (#642): the announcement waits for typing to pause (600 ms), on fake timers.
+describe("Try a match: the announcement is debounced", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("says nothing while keystrokes keep coming, and one outcome 600 ms after the last", async () => {
+    const t = await openBuilder();
+    const p = within(await screen.findByRole("region", { name: "Try a match" }));
+    await t.user.selectOptions(p.getByLabelText("Source"), "stateSource");
+    await t.user.selectOptions(p.getByLabelText("Query type"), "VEH");
+    const live = p.getByRole("status");
+    const plate = p.getByLabelText("Plate");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let typed = "";
+    for (const ch of "ZZ-0001") {
+      typed += ch;
+      fireEvent.change(plate, { target: { value: typed } });
+      // Each key lands 599 ms after the last: the pause never completes.
+      act(() => void vi.advanceTimersByTime(599));
+      expect(live).toHaveTextContent("");
+    }
+    act(() => void vi.advanceTimersByTime(1));
+    expect(live).toHaveTextContent("Returns a record. Scenario 1 of Vehicle.");
+    expect(live.textContent).not.toMatch(/ZZ-0001/);
   });
 });
 
