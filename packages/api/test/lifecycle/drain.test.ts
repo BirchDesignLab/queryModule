@@ -324,6 +324,39 @@ describe("a fatal error and the drain (AW4 critic 2; spec 5.2, 8.1: the fatal pa
     expect(s.t.logLines.some((l) => l.includes('"msg":"stopped"'))).toBe(false);
   }, 20_000);
 
+  it("a submit past the 503 check whose T1 commits after a fatal raises no second fatal (#574 C-C-m3)", async () => {
+    const s = await setup({ adapter: slowAdapter });
+    // hold the submit inside T1, past the 503 check
+    const record = s.t.deps.audit.record.bind(s.t.deps.audit);
+    let reached: () => void = () => {};
+    const atGate = new Promise<void>((r) => {
+      reached = r;
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    s.t.deps.audit.record = async (tx, event) => {
+      if (event.type === "submitted") {
+        reached();
+        await gate;
+      }
+      return record(tx, event);
+    };
+    const held = s.submit();
+    await atGate;
+    s.t.deps.fatal(new Error("x"));
+    release();
+    expect((await held).status).toBe(202);
+    const line = s.t.logLines.find((l) => l.includes('"msg":"dispatch refused after fatal"'));
+    expect(line).toBeDefined();
+    expect(line).not.toContain("ZZ-0001");
+    expect(s.t.logLines.some((l) => l.includes('"msg":"dispatch jobs failed"'))).toBe(false);
+    expect(s.t.fatals).toHaveLength(1);
+    // the rows stay pending for the next start's sweep
+    expect(await s.statuses()).toEqual(["pending"]);
+  }, 20_000);
+
   it("after a fatal a new submit gets 503 unavailable before T1", async () => {
     const s = await setup({ adapter: slowAdapter });
     s.t.deps.fatal(new Error("x"));
