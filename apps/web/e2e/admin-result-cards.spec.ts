@@ -245,14 +245,16 @@ test("[#605] the admin adds a card row and a warning keyword, previews, publishe
     expect(review).not.toContain("TESTERSON");
 
     // The dispatcher tab: the card already on screen is re-mapped within the refresh, no reload;
-    // focus stays where the dispatcher had it. The row is found by its value: an open tab keeps the
-    // locale bundle it loaded, so the new row's label text arrives with the next load (below).
+    // focus stays where the dispatcher had it. The row is found by its value, since its label text
+    // arrives with the locale bundle the tab fetches again when the config changes (checked below).
     const plate = dispatcher.getByLabel("Plate", { exact: true });
     await plate.focus();
     await expect(markedRow(onScreen)).toHaveCount(1, { timeout: BOUND });
     await expect(onScreen.locator(".qm-result-list__item")).toHaveCount(rowsBefore + 1);
     await expect(markedRow(onScreen).locator("mark")).toContainText("(warning)");
     await expect(plate).toBeFocused();
+    // The label published with the row reaches this open tab too: no reload (#642, locale refresh).
+    await expect(markedRow(onScreen).locator("dt")).toHaveText("Vehicle make", { timeout: BOUND });
     // The next ZZ-0001 result shows the same: two cards, both with the row and the mark.
     await runPlate(dispatcher, "ZZ-0001");
     await expect(stateCards(dispatcher)).toHaveCount(2, { timeout: 8000 });
