@@ -78,8 +78,8 @@ function inSelectionOrder<R extends { sourceId: string }>(
   rows: readonly R[],
   selectedSourceIds: unknown,
 ): R[] {
-  const rank = new Map(SourceIdsSchema.parse(selectedSourceIds).map((id, i) => [id, i]));
-  return [...rows].sort((a, b) => (rank.get(a.sourceId) ?? -1) - (rank.get(b.sourceId) ?? -1));
+  const selected = SourceIdsSchema.parse(selectedSourceIds);
+  return [...rows].sort((a, b) => selected.indexOf(a.sourceId) - selected.indexOf(b.sourceId));
 }
 
 /**
@@ -88,8 +88,14 @@ function inSelectionOrder<R extends { sourceId: string }>(
  */
 const isPurged = (sealed: boolean, keyPresent: boolean): boolean => sealed && !keyPresent;
 
-/** Rows grouped by a key, in their original order (#623 Q4: one pass, not a filter per item). */
-function groupBy<R>(rows: readonly R[], key: (r: R) => string | number): Map<string | number, R[]> {
+/**
+ * Rows grouped by a key, in their original order (#623 Q4: one pass, not a filter per item); the
+ * lookup answers an empty list for a key with no rows (a skipped part has no results).
+ */
+function groupBy<R>(
+  rows: readonly R[],
+  key: (r: R) => string | number,
+): (k: string | number) => R[] {
   const m = new Map<string | number, R[]>();
   for (const r of rows) {
     const k = key(r);
@@ -97,7 +103,7 @@ function groupBy<R>(rows: readonly R[], key: (r: R) => string | number): Map<str
     if (list) list.push(r);
     else m.set(k, [r]);
   }
-  return m;
+  return (k) => m.get(k) ?? [];
 }
 
 /**
@@ -144,10 +150,7 @@ export async function readQuery(
       configHash: head?.configHash,
       parts: parts.map((p) => {
         const sealedValues = sealedOf(p.valuesCiphertext, p.valuesIv, p.valuesTag);
-        const sources = inSelectionOrder(
-          resultsByPart.get(p.partId) ?? [],
-          p.selectedSourceIds,
-        ).map((r) => {
+        const sources = inSelectionOrder(resultsByPart(p.partId), p.selectedSourceIds).map((r) => {
           const sealedPayload = sealedOf(r.payloadCiphertext, r.payloadIv, r.payloadTag);
           const base = {
             resultId: r.resultId,
@@ -316,7 +319,7 @@ export async function listQueries(
   return QueryListResponseSchema.parse({
     nextCursor,
     requests: pageHeads.map((h) => {
-      const own = partsByRequest.get(h.correlationId) ?? [];
+      const own = partsByRequest(h.correlationId);
       const head = own.find((p) => p.partId === 0);
       return {
         correlationId: h.correlationId,
@@ -326,7 +329,7 @@ export async function listQueries(
           ...partFields(p),
           purged: isPurged(p.sealed === 1, hasKey(h.correlationId, "values")),
           sources: inSelectionOrder(
-            resultsByPart.get(`${h.correlationId}/${p.partId}`) ?? [],
+            resultsByPart(`${h.correlationId}/${p.partId}`),
             p.selectedSourceIds,
           ).map(({ correlationId: _c, partId: _p, sealed, ...r }) => ({
             ...r,
