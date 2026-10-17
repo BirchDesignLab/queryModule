@@ -189,6 +189,24 @@ describe("the keywords editor", () => {
     expect(within(mark).getByText(/warning/i)).toBeInTheDocument();
     // Typed values never reach the draft.
     expect(JSON.stringify(configDraftStore(t.services).getState().doc)).not.toContain("ZZ-0001");
+    // T11-M3 (#642): an exception that covers the line takes the mark off the card, too.
+    const kwIndex = doc(t).keywords.length;
+    await t.user.type(
+      within(editor()).getByRole("textbox", { name: `New exception for keyword ${kwIndex}` }),
+      "TESTMAKE",
+    );
+    await t.user.click(
+      within(editor()).getByRole("button", {
+        name: new RegExp(`^Add exception to keyword ${kwIndex}`),
+      }),
+    );
+    expect(doc(t).keywords.at(-1)?.except).toEqual(["TESTMAKE"]);
+    await waitFor(() =>
+      expect(
+        [...card.querySelectorAll("mark")].some((m) => (m.textContent ?? "").includes("TESTMAKE")),
+      ).toBe(false),
+    );
+    expect(card).toHaveTextContent("TESTMAKE");
   });
 
   it("an except phrase suppresses the mark in the sample line", async () => {
@@ -417,6 +435,38 @@ describe("a keyword row's half-typed exception follows its keyword (CRITIC-M2)",
     expect(box.isConnected).toBe(true);
     expect(box).toHaveFocus();
     expect(box).toHaveValue("HALF");
+  });
+});
+
+// T11-5 (#642; ruling of 10-17-26): Keywords have no query type of their own, so the preview beside
+// them offers a Preview query type select. Session-local: it is never in the draft.
+describe("the preview beside the keywords (T11-5)", () => {
+  it("offers a query type select, defaults to the first type, and previews the chosen one", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    const pane = await screen.findByRole("region", { name: "Card preview" });
+    const select = within(pane).getByRole("combobox", { name: "Query type" }) as HTMLSelectElement;
+    const first = select.value;
+    expect(first).not.toBe("");
+    expect([...select.options].map((o) => o.value)).toContain("PRO");
+    const before = JSON.stringify(configDraftStore(t.services).getState().doc);
+    await t.user.selectOptions(select, "PRO");
+    expect(select.value).toBe("PRO");
+    // The pane follows: typed values are now asked for the chosen type's fields, and the draft is
+    // untouched.
+    await t.user.click(within(pane).getByRole("radio", { name: "Type values" }));
+    expect(first).toBe("VEH");
+    expect(within(pane).queryByRole("textbox", { name: "Plate" })).toBeNull();
+    expect(within(pane).getByRole("textbox", { name: /^Serial/ })).toBeInTheDocument();
+    expect(JSON.stringify(configDraftStore(t.services).getState().doc)).toBe(before);
+  });
+
+  it("is not offered when a card or a type row is the preview's subject", async () => {
+    const t = await openBuilder();
+    const cards = await screen.findByRole("tree", { name: "Result cards" });
+    await t.user.click(within(cards).getByRole("treeitem", { name: /^Vehicle cards$/ }));
+    const pane = await screen.findByRole("region", { name: "Card preview" });
+    expect(within(pane).queryByRole("combobox", { name: "Query type" })).toBeNull();
   });
 });
 

@@ -681,7 +681,7 @@ Changes tab, Review and publish, history and roll back, and add no schema, route
 
 **Result cards** (a tree group between Query types and Site). Each query type lists its cards in
 config order, numbered and named by what narrows them ("All results", a source or persona name, or
-"when a rule matches"), with "Add card". The card editor has:
+"Only when a rule matches"), with "Add card". The card editor has:
 
 - **Applies to:** Source (any, or one of the query type's sources), Shown to (everyone, or one
   persona) and "Use this card" (always, or only when a rule matches, using the same sentence rule

@@ -201,8 +201,8 @@ describe("a new query type on a mock site", () => {
     );
     await waitFor(() =>
       expect(
-        [...document.querySelectorAll('[role="status"]')].map((e) => e.textContent).join(" "),
-      ).toMatch(/2/),
+        [...document.querySelectorAll('[role="status"]')].map((e) => e.textContent?.trim()),
+      ).toContain("Mock responses added for BOAT: 2. Default: no record."),
     );
     expect(
       within(await mockGroup()).getAllByRole("button", { name: /Open mock response/ })[0],
@@ -246,6 +246,29 @@ describe("a new query type on a mock site", () => {
       within(await mockGroup()).getByRole("button", { name: /Add mock response for State system/ }),
     );
     await waitFor(() => expect(errors()).toBe(before - 1), { timeout: 4000 });
+  });
+
+  // T12-2 (#642; ruling of 10-17-26): by design the type panel keeps showing the gap while the site
+  // config does not parse, and the badge counts exactly what the panel lists. Hiding it would
+  // hide a real error and make the two disagree.
+  it("T12-2 the type panel lists the gap the badge counts while the half-made type does not parse", async () => {
+    const t = await openBuilder();
+    await addType(t, "BOAT", ["stateSource", "nationalSource"]);
+    const errors = () =>
+      Number(
+        /(\d+) error/.exec(document.querySelector(".qm-builder__issues")?.textContent ?? "")?.[1],
+      );
+    await waitFor(() => expect(errors()).toBeGreaterThan(0));
+    const group = await mockGroup();
+    // One Missing per gap the panel lists, and the badge counts at least those.
+    const listed = within(group).getAllByText(/Missing/).length;
+    expect(listed).toBe(2);
+    const before = errors();
+    await t.user.click(
+      within(group).getByRole("button", { name: /Add a no-record response for each/ }),
+    );
+    // Both listed gaps leave the panel and the badge together.
+    await waitFor(() => expect(errors()).toBe(before - listed), { timeout: 4000 });
   });
 
   it("says what is needed while the type has no code or no source yet, and offers no button", async () => {

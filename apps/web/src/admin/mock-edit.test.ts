@@ -1,4 +1,5 @@
 import { FIXTURE_LEAF_KEYS } from "@querymodule/core/config";
+import type { SourcePayload } from "@querymodule/core/contracts";
 import { describe, expect, it } from "vitest";
 import {
   addPayloadChild,
@@ -104,6 +105,24 @@ describe("payload editing by path", () => {
     expect(addPayloadChild(payload(), ["warrants"], "group").warrants).toHaveLength(2);
     const inGroup = addPayloadChild(payload(), ["owner"], "value");
     expect(Object.keys(inGroup.owner as object)).toHaveLength(3);
+  });
+
+  // T12-Q4 (#642): a row never overwrites another, and a value has no children to add to.
+  it("addPayloadChild is a no-op on a value, and once every allowlisted key of the kind is used", () => {
+    const p = payload();
+    expect(addPayloadChild(p, ["plate"], "value")).toBe(p);
+    expect(addPayloadChild(p, ["plate"], "group")).toBe(p);
+    // Fill the group with value rows until the allowlist runs out; the next add changes nothing.
+    let full: SourcePayload = { status: "X" };
+    for (let i = 0; i < 50; i++) {
+      const next = addPayloadChild(full, [], "value");
+      if (next === full) break;
+      full = next;
+    }
+    expect(Object.keys(full).length).toBeGreaterThan(1);
+    expect(addPayloadChild(full, [], "value")).toBe(full);
+    // A group has its own allowlist: it is still free to take one.
+    expect(addPayloadChild(full, [], "group")).not.toBe(full);
   });
 
   it("never mutates its input", () => {

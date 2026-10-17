@@ -48,6 +48,15 @@ describe("useCardName (T10-Q2)", () => {
     expect(view.result.current).not.toBe(first);
   });
 
+  it("capitalizes the rule only when it stands alone", () => {
+    const view = setup(DOC);
+    const rule = { op: "notEmpty", field: "plate" };
+    expect(view.result.current({ when: rule })).toBe("Only when a rule matches");
+    expect(view.result.current({ sourceId: "state", when: rule })).toBe(
+      "state, when a rule matches",
+    );
+  });
+
   it("still names a card by its narrowing", () => {
     const view = setup(DOC);
     expect(view.result.current({})).toBe("All results");

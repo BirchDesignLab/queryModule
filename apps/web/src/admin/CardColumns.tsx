@@ -99,10 +99,17 @@ export function Columns({
     const found = issues.filter((i) => i.pointer === p);
     return found.length > 0 ? found : undefined;
   };
+  // The headings, repeated as captions on each cell for the stacked layout (CSS draws them).
+  const captions = {
+    path: t("admin.cards.path"),
+    label: t("admin.cards.label"),
+    format: t("admin.cards.formatLabel"),
+    mark: t("admin.cards.column.markShort"),
+  };
   const setColumns = (columns: TableElement["columns"], typing?: string) =>
     onChange({ ...el, columns }, typing);
   return (
-    <div className="qm-mock__table-wrap">
+    <div className="qm-mock__table-wrap qm-columns">
       <table className="qm-mock__table qm-columns__table">
         <caption>{t("admin.cards.columns")}</caption>
         <thead>
@@ -130,7 +137,7 @@ export function Columns({
             return (
               // biome-ignore lint/suspicious/noArrayIndexKey: columns have no identity
               <tr key={i}>
-                <td>
+                <td data-label={captions.path}>
                   <input
                     type="text"
                     className="qm-field__input qm-mock__mono"
@@ -147,7 +154,7 @@ export function Columns({
                   />
                   <IssueMessages id={pathId} issues={pathIssues} />
                 </td>
-                <td>
+                <td data-label={captions.label}>
                   <input
                     type="text"
                     className="qm-field__input"
@@ -159,7 +166,7 @@ export function Columns({
                   />
                   <IssueMessages id={labelId} issues={labelIssues} />
                 </td>
-                <td>
+                <td data-label={captions.format}>
                   <FormatPicker
                     ariaLabel={t("admin.cards.column.format", { n })}
                     value={c.format}
@@ -176,7 +183,7 @@ export function Columns({
                     }
                   />
                 </td>
-                <td>
+                <td data-label={captions.mark}>
                   <input
                     type="checkbox"
                     aria-label={t("admin.cards.column.mark", { n })}

@@ -80,7 +80,7 @@ describe("the Result cards group", () => {
   it("opens the card editor with its key, position and the camel-cased label key prefix", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    expect(within(editor()).getByText("1 of 1 Vehicle cards")).toBeInTheDocument();
+    expect(within(editor()).getByText("Card 1 of 1 for Vehicle")).toBeInTheDocument();
     expect(within(editor()).getByText("mapping.vehSummary.*")).toBeInTheDocument();
   });
 });
@@ -366,6 +366,57 @@ describe("the approved card editor items (round 1, S1)", () => {
     expect(readonly()).toBe(false);
   });
 
+  // BW3 polish (#642): "Show in" is a Summary / Detail / Both segmented control (mockup v5), the
+  // pattern of the preview's Values control: native radios in one track, one Tab stop, arrows move.
+  it("Show in is a segmented control of radios that the arrow keys move", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?Status/ }));
+    const group = within(editor()).getByRole("group", { name: "Show in" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.closest("label")?.textContent?.trim())).toEqual([
+      "Summary",
+      "Detail",
+      "Both",
+    ]);
+    expect(radios[0]?.closest(".qm-seg")).not.toBeNull();
+    const view = () =>
+      (cards(t)[0] as unknown as { elements: { view: string }[] }).elements[0]?.view;
+    // The first row starts wherever the shipped card has it; Home goes to Summary from there.
+    (radios[0] as HTMLElement).focus();
+    await t.user.keyboard("{Home}");
+    expect(view()).toBe("summary");
+    expect(radios[0]).toHaveFocus();
+    await t.user.keyboard("{ArrowRight}");
+    expect(view()).toBe("detail");
+    expect(radios[1]).toHaveFocus();
+    await t.user.keyboard("{End}");
+    expect(view()).toBe("both");
+    expect(radios[2]).toHaveFocus();
+  });
+
+  // BW3 polish (#642; ruling of 10-17-26): under 720 px the Columns table stacks, one block
+  // per column, each cell captioned by its heading. Jsdom has no container queries: the captions are
+  // the markup half of it (the CSS half is checked in the screenshots at 1366 and 1024).
+  it("each Columns cell carries the caption its heading has, for the stacked layout", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add row" }));
+    await t.user.click(await within(editor()).findByRole("radio", { name: "Table" }));
+    const table = await within(editor()).findByRole("table", { name: "Columns" });
+    const heads = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => (h.querySelector("[aria-hidden]") ?? h).textContent?.trim());
+    const row = within(table).getAllByRole("row")[1] as HTMLElement;
+    const captions = within(row)
+      .getAllByRole("cell")
+      .map((c) => c.getAttribute("data-label"));
+    // Path, Label, Format, Mark, and the unnamed Remove cell.
+    expect(captions.slice(0, 4)).toEqual(heads.slice(0, 4));
+    expect(captions[4]).toBeNull();
+    expect(table.closest(".qm-columns")).not.toBeNull();
+  });
+
   it("offers Template, and a Format for each table column", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
@@ -554,6 +605,18 @@ describe("the card editor: Applies to", () => {
     );
     expect(rule).toBeChecked();
     expect(always).not.toBeChecked();
+    // T10-Q6 (#642): the card is named like the choice, capitalized, in the tree and the heading.
+    expect(
+      await within(cardsTree()).findByRole("treeitem", {
+        name: /^1\. Only when a rule matches veh-summary/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(editor()).getByRole("heading", {
+        level: 3,
+        name: /^Vehicle: Only when a rule matches/,
+      }),
+    ).toBeInTheDocument();
   });
 });
 

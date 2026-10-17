@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   API,
   adminConfigBody,
@@ -146,6 +146,79 @@ describe("scenarios and the tree", () => {
     await selectRow(t.user, /^Add mock response: State system/);
     expect(await screen.findByRole("button", { name: "Add mock response" })).toBeInTheDocument();
     expect(screen.getByLabelText("Shortest wait")).toBeInTheDocument();
+  });
+});
+
+// T12-Q4 (#642): gaps left from #571 and #577.
+describe("minors: the Add row, a row with two issues, trigger text", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("the Add mock response row scrolls the form into view and leaves focus where it was", async () => {
+    const t = await openBuilder();
+    const scroll = vi.fn();
+    // jsdom has no scrollIntoView: the component calls it when present.
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scroll,
+    });
+    try {
+      const row = await selectRow(t.user, /^Add mock response: State system/);
+      expect(await screen.findByRole("button", { name: "Add mock response" })).toBeInTheDocument();
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+      // It is the add form that scrolled (its controls are owned by the source's add path).
+      expect(
+        scroll.mock.contexts.some(
+          (el) => (el as Element).querySelector('[data-owner$="/add"]') !== null,
+        ),
+      ).toBe(true);
+      expect(row).toHaveFocus();
+    } finally {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
+
+  it("a row with two issues says both in its name", async () => {
+    const t = await openBuilder();
+    editMock(t, (m) => {
+      const sources = m.sources as Record<
+        string,
+        { responses: { queryType: string; scenarios: { when: Record<string, string> }[] }[] }
+      >;
+      const first = sources.stateSource?.responses[0];
+      if (first === undefined) return;
+      // An unknown type (a warning) and a blank trigger beside a filled one (a second warning).
+      first.queryType = "ZZOLD";
+      const scenario = first.scenarios[0];
+      if (scenario !== undefined) scenario.when = { ...scenario.when, other: "" };
+    });
+    const row = within(await mockTree()).getAllByRole("treeitem", {
+      name: /^Mock response: ZZOLD/,
+    })[0] as HTMLElement;
+    expect(row).toHaveAccessibleName(/, 2 warnings$/);
+  });
+
+  it("a number trigger keeps its dot while typing: 1901. on the way to 1901.5", async () => {
+    const t = await openBuilder();
+    editMock(t, (m) => {
+      const sources = m.sources as Record<
+        string,
+        { responses: { scenarios: { when: unknown }[] }[] }
+      >;
+      const scenario = sources.stateSource?.responses[0]?.scenarios[0];
+      if (scenario !== undefined) scenario.when = { year: 1902 };
+    });
+    await selectRow(t.user, /^Mock response: Vehicle, State system VEH/);
+    await t.user.click(await screen.findByRole("button", { name: "Edit scenario 1" }));
+    const input = within(scenarioCard(1)).getByLabelText("Value for trigger field 1");
+    await t.user.clear(input);
+    await t.user.type(input, "1901.");
+    expect(input).toHaveValue("1901.");
+    await t.user.type(input, "5");
+    expect(input).toHaveValue("1901.5");
+    const when = draftMock(t).sources.stateSource?.responses[0]?.scenarios[0]?.when;
+    expect(when).toEqual({ year: 1901.5 });
   });
 });
 

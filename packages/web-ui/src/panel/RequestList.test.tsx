@@ -300,7 +300,7 @@ describe("failed-row retry (the list only shows the button; the owner sends)", (
       {
         ...ACKED,
         summary: "SECRETCMD",
-        name: "Vehicle 0198a1b2",
+        name: "Vehicle ZZ-0003",
         parts: [{ key: "p", lines: [] }],
       },
       { ...RETRYABLE, summary: "SECRETCMD", name: "Vehicle ZZ-0002" },
@@ -308,10 +308,10 @@ describe("failed-row retry (the list only shows the button; the owner sends)", (
     render(<RequestList {...base} rows={rows} onRetry={() => undefined} />);
     expect(screen.getByRole("button", { name: "Retry Vehicle ZZ-0002" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Copy reference 2e3f4a5b for Vehicle 0198a1b2" }),
+      screen.getByRole("button", { name: "Copy reference 2e3f4a5b for Vehicle ZZ-0003" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("group", { name: "Source status for Vehicle 0198a1b2" }),
+      screen.getByRole("group", { name: "Source status for Vehicle ZZ-0003" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /SECRETCMD/ })).toBeNull();
     expect(screen.queryByRole("group", { name: /SECRETCMD/ })).toBeNull();
