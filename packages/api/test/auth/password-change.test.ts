@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { PASSWORD_MIN_LENGTH } from "@querymodule/core/config";
 import { CreateUserResponseSchema } from "@querymodule/core/contracts";
 import { describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -251,18 +252,8 @@ describe("SEC-010 passwordChanged audit (#523, spec 4.7, 5.6)", () => {
     expect(await flagOf(a, user.id)).toBe(1);
   });
 
-  it("an audit write failure ends the caller's session, logs ids only and answers 500", async () => {
+  it("#690: an audit write failure rolls the change back: old password works, flag set, ids-only log", async () => {
     const { a, user, temporaryPassword, cookie } = await createdUser();
-    const sid = String(
-      (
-        await a.t.deps.db.$client.execute({
-          sql: "SELECT id FROM session WHERE user_id = ?",
-          args: [user.id],
-        })
-      ).rows[0]?.id,
-    );
-    const ended = vi.fn();
-    a.t.deps.eventBus.onSessionEnded(sid, ended);
     const record = a.t.deps.audit.record.bind(a.t.deps.audit);
     vi.spyOn(a.t.deps.audit, "record").mockImplementation((tx, e) =>
       e.type === "passwordChanged" ? Promise.reject(new Error("audit down")) : record(tx, e),
@@ -274,18 +265,101 @@ describe("SEC-010 passwordChanged audit (#523, spec 4.7, 5.6)", () => {
     expect(r.status).toBe(500);
     expect((await errorOf(r)).code).toBe("internal");
     expect(await a.t.auditRows("passwordChanged")).toHaveLength(0);
-    const left = await a.t.deps.db.$client.execute({
-      sql: "SELECT id FROM session WHERE id = ?",
-      args: [sid],
-    });
-    expect(left.rows).toHaveLength(0);
-    expect(ended).toHaveBeenCalledTimes(1);
-    expect((await a.t.request("/api/v1/config", { headers: { cookie } })).status).toBe(401);
-    const failed = a.t.logLines.filter((l) => l.includes("audit write failed"));
+    // One transaction: the password, the flag and the row commit together or not at all.
+    expect(await flagOf(a, user.id)).toBe(1);
+    expect((await a.t.signIn("fresh@example.test", NEW_PW)).status).toBe(401);
+    expect((await a.t.signIn("fresh@example.test", temporaryPassword)).status).toBe(200);
+    // Nothing changed, so the session stays (still gated by the forced change).
+    expect((await a.t.request("/api/v1/config", { headers: { cookie } })).status).toBe(403);
+    const failed = a.t.logLines.filter((l) => l.includes("password change failed"));
     expect(failed).toHaveLength(1);
-    expect(failed[0]).toContain(sid);
     expect(failed[0]).toContain(user.id);
     const text = `${a.t.logLines.join(" ")} ${await auditText(a)}`;
     expect(text.includes(NEW_PW) || text.includes(temporaryPassword)).toBe(false);
+  });
+
+  it("#690: a success writes exactly one row, and the new hash is one Better Auth's sign-in accepts", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    const r = await changePassword(a, cookie, {
+      currentPassword: temporaryPassword,
+      newPassword: NEW_PW,
+    });
+    expect(r.status).toBe(200);
+    expect(await a.t.auditRows("passwordChanged")).toHaveLength(1);
+    expect(await flagOf(a, user.id)).toBe(0);
+    expect((await a.t.signIn("fresh@example.test", NEW_PW)).status).toBe(200);
+  });
+
+  it("#690: refusals keep Better Auth's codes the client reads, and change nothing", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    const cases: [Record<string, unknown>, string][] = [
+      [{ currentPassword: "not-the-temporary-password", newPassword: NEW_PW }, "INVALID_PASSWORD"],
+      [{ currentPassword: temporaryPassword, newPassword: "short" }, "PASSWORD_TOO_SHORT"],
+      [{ currentPassword: temporaryPassword, newPassword: "x".repeat(129) }, "PASSWORD_TOO_LONG"],
+      [{ currentPassword: "y".repeat(129), newPassword: NEW_PW }, "PASSWORD_TOO_LONG"],
+    ];
+    for (const [body, code] of cases) {
+      const r = await changePassword(a, cookie, body);
+      expect(r.status, code).toBe(400);
+      expect(((await r.json()) as { code?: string }).code, code).toBe(code);
+    }
+    for (const bad of [{ newPassword: NEW_PW }, { currentPassword: 1, newPassword: NEW_PW }]) {
+      const r = await changePassword(a, cookie, bad);
+      expect(r.status).toBe(400);
+      expect((await errorOf(r)).code).toBe("validationFailed");
+    }
+    expect(await a.t.auditRows("passwordChanged")).toHaveLength(0);
+    expect(await flagOf(a, user.id)).toBe(1);
+    expect((await a.t.signIn("fresh@example.test", temporaryPassword)).status).toBe(200);
+  });
+
+  it("#690: no credential account is CREDENTIAL_ACCOUNT_NOT_FOUND; a GET never changes anything", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    const get = await a.t.request("/api/v1/auth/change-password", { headers: { cookie } });
+    expect(get.ok).toBe(false);
+    expect(await flagOf(a, user.id)).toBe(1);
+    await a.t.deps.db.$client.execute({
+      sql: "DELETE FROM account WHERE user_id = ?",
+      args: [user.id],
+    });
+    const r = await changePassword(a, cookie, {
+      currentPassword: temporaryPassword,
+      newPassword: NEW_PW,
+    });
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { code?: string }).code).toBe("CREDENTIAL_ACCOUNT_NOT_FOUND");
+    expect(await a.t.auditRows("passwordChanged")).toHaveLength(0);
+    expect(await flagOf(a, user.id)).toBe(1);
+  });
+
+  it("#690 pin: Better Auth still exposes $context.password and the credential account shape", async () => {
+    const { a, user, temporaryPassword } = await createdUser();
+    const ctx = await a.t.deps.auth.$context;
+    expect(typeof ctx.password.hash).toBe("function");
+    expect(typeof ctx.password.verify).toBe("function");
+    expect(ctx.password.config.minPasswordLength).toBe(PASSWORD_MIN_LENGTH);
+    expect(ctx.password.config.maxPasswordLength).toBe(128);
+    const rows = await a.t.deps.db.$client.execute({
+      sql: "SELECT provider_id AS p, password AS h FROM account WHERE user_id = ?",
+      args: [user.id],
+    });
+    expect(rows.rows.map((r) => r.p)).toEqual(["credential"]);
+    const hash = String(rows.rows[0]?.h);
+    expect(await ctx.password.verify({ hash, password: temporaryPassword })).toBe(true);
+    expect(
+      await ctx.password.verify({ hash: await ctx.password.hash(NEW_PW), password: NEW_PW }),
+    ).toBe(true);
+  });
+
+  it("#690: no other Better Auth route can set a password around this one", async () => {
+    const { a, cookie } = await createdUser();
+    for (const path of ["set-password", "reset-password", "update-user", "change-email"]) {
+      const r = await a.t.request(`/api/v1/auth/${path}`, {
+        method: "POST",
+        headers: { ...H, cookie },
+        body: JSON.stringify({ newPassword: NEW_PW, token: "x" }),
+      });
+      expect(r.status, path).toBe(404);
+    }
   });
 });
