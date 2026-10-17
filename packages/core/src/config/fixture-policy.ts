@@ -25,8 +25,8 @@ export interface FixtureDiagnostic {
  * `container` keys must hold an object or array (recursed); a scalar there is a violation.
  * `other` holds descriptive vehicle, property, warrant and licence leaf keys; its strings and numbers may
  * not carry a run of 4 or more digits, counted across separators (every character that is not a letter
- * or a decimal digit is one, and a digit is a digit of any script; a `year` of 1901 to 1999 is the one
- * exception). `status` follows the same run rule. A number in exponent form (1e21) is rejected in both
+ * or a numeral is one, a digit is any Unicode numeral, category N, and any letter breaks a run: #656;
+ * a `year` of 1901 to 1999 is the one exception). `status` follows the same run rule. A number in exponent form (1e21) is rejected in both
  * kinds.
  */
 export const FIXTURE_LEAF_KEYS: {
