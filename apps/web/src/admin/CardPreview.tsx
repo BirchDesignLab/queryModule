@@ -13,7 +13,7 @@ import {
   RenderedCard,
   useRenderedCard,
 } from "./CardAnswer.js";
-import { cardIndexOf, useCardName } from "./CardsEditor.js";
+import { cardIndexOf, useCardName } from "./card-names.js";
 import { asObjects, str, useLabelText } from "./controls.js";
 import type { JsonObject } from "./draft.js";
 import { type MockResult, resultOf } from "./mock-edit.js";

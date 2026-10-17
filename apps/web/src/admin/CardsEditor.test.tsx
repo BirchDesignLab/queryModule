@@ -324,6 +324,48 @@ describe("the approved card editor items (round 1, S1)", () => {
     );
   });
 
+  // T10-20 (#642; ruling pending with the manager): a new card keeps an editable key while the id is
+  // typed, even when it spells an id the live config has; the duplicate shows as a check, not a lock.
+  it("keeps a new card's key editable when its id is typed to match a live id", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
+    await t.user.click(within(editor()).getByText("Advanced settings"));
+    const key = within(editor()).getByRole("textbox", { name: "Card key" });
+    await t.user.clear(key);
+    await t.user.type(key, "veh-summary");
+    expect(cards(t).at(-1)?.id).toBe("veh-summary");
+    expect(within(editor()).getByRole("textbox", { name: "Card key" })).not.toHaveAttribute(
+      "readonly",
+    );
+    expect(within(editor()).getByRole("textbox", { name: "Card key" })).toHaveValue("veh-summary");
+  });
+
+  // Critic of PR1: the lock follows the live config, not only the first look. A card published
+  // while its editor is open locks; a rolled-back one unlocks.
+  it("locks the key when the card goes live and unlocks it when the live config drops it", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
+    await t.user.click(within(editor()).getByText("Advanced settings"));
+    const readonly = () =>
+      within(editor()).getByRole("textbox", { name: "Card key" }).hasAttribute("readonly");
+    expect(readonly()).toBe(false);
+    const store = configDraftStore(t.services);
+    const liveDoc = store.getState().server?.liveDoc as { responseMappings: { id: string }[] };
+    const added = cards(t).at(-1) as { id: string };
+    act(() =>
+      store
+        .getState()
+        .setLive({ ...liveDoc, responseMappings: [...liveDoc.responseMappings, added] }, {}),
+    );
+    expect(readonly()).toBe(true);
+    act(() => store.getState().setLive(liveDoc, {}));
+    expect(readonly()).toBe(false);
+  });
+
   it("offers Template, and a Format for each table column", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
@@ -364,6 +406,26 @@ describe("undo keeps the open rows with their rows (CRITIC-M2)", () => {
     act(() => void configDraftStore(t.services).getState().redo());
     expect(within(editor()).queryByRole("button", { name: /^Edit\s?Remarks/ })).toBeNull();
     expect(within(editor()).getByRole("button", { name: /^Close\s?State/ })).toBeInTheDocument();
+  });
+
+  // T11-14 (#642): typing coalesces per control, not per path, so two rows typed in turn undo in
+  // two steps (the keywords editor already keys its typing this way).
+  it("typing in one row's path and then another's undoes as two steps", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?Status/ }));
+    await t.user.click(within(editor()).getByRole("button", { name: /^Edit\s?State/ }));
+    const [first, second] = within(editor()).getAllByRole("combobox", { name: "Path" });
+    const paths = () =>
+      (cards(t)[0] as unknown as { elements: { path: string }[] }).elements.map((e) => e.path);
+    const before = paths();
+    await t.user.type(first as HTMLElement, "ab");
+    await t.user.type(second as HTMLElement, "cd");
+    expect(paths().filter((p, i) => p !== before[i])).toHaveLength(2);
+    undo(t);
+    expect(paths().filter((p, i) => p !== before[i])).toHaveLength(1);
+    undo(t);
+    expect(paths()).toEqual(before);
   });
 
   it("the control that has focus keeps focus, and is the same element, across an undo", async () => {
