@@ -400,13 +400,14 @@ const systemEnvelope = {
 /**
  * Admin console types (ADR-0011 item 7): no request, part or state credential, like the system
  * types, except adminViewed, whose envelope correlationId is required and equals details (#690
- * m2, adminViewEnvelope below). The actor is bound to the type (AuditEventSchema superRefine; ADR-0011 items 6 to 8):
- * configPublished by an admin or implementer; userCreated and userDisabled by an admin;
- * sessionRevoked expired by SYSTEM_ACTOR only (the spec 5.2 sweeper) and any other reason by an
- * admin; roleChanged via grant-role by SYSTEM_ACTOR and via adminConsole by an admin;
- * auditViewed and auditExported by an admin; adminViewed by an admin (viewerBasis admin) or by the
- * credential owner (viewerBasis credentialOwner). passwordChanged uses the auth envelope: via self
- * by the user named in targetUserId, via adminReset by an admin (#523).
+ * m2, adminViewEnvelope below). The actor is bound to the type (AuditEventSchema superRefine;
+ * ADR-0011 items 6 to 8; AUDIT_TYPE_RULES): configPublished by an admin or implementer;
+ * userCreated and userDisabled by an admin; sessionRevoked expired by SYSTEM_ACTOR only (the
+ * spec 5.2 sweeper) and any other reason by an admin; roleChanged via grant-role by SYSTEM_ACTOR
+ * and via adminConsole by an admin; auditViewed and auditExported by an admin; adminViewed by an
+ * admin (viewerBasis admin) or by the credential owner (viewerBasis credentialOwner).
+ * passwordChanged uses the auth envelope: via self by the user named in targetUserId, via
+ * adminReset by an admin (#523).
  */
 const adminEnvelope = systemEnvelope;
 /**
