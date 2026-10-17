@@ -342,6 +342,30 @@ describe("the approved card editor items (round 1, S1)", () => {
     expect(within(editor()).getByRole("textbox", { name: "Card key" })).toHaveValue("veh-summary");
   });
 
+  // Critic of PR1: the lock follows the live config, not only the first look. A card published
+  // while its editor is open locks; a rolled-back one unlocks.
+  it("locks the key when the card goes live and unlocks it when the live config drops it", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
+    await t.user.click(within(editor()).getByText("Advanced settings"));
+    const readonly = () =>
+      within(editor()).getByRole("textbox", { name: "Card key" }).hasAttribute("readonly");
+    expect(readonly()).toBe(false);
+    const store = configDraftStore(t.services);
+    const liveDoc = store.getState().server?.liveDoc as { responseMappings: { id: string }[] };
+    const added = cards(t).at(-1) as { id: string };
+    act(() =>
+      store
+        .getState()
+        .setLive({ ...liveDoc, responseMappings: [...liveDoc.responseMappings, added] }, {}),
+    );
+    expect(readonly()).toBe(true);
+    act(() => store.getState().setLive(liveDoc, {}));
+    expect(readonly()).toBe(false);
+  });
+
   it("offers Template, and a Format for each table column", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
