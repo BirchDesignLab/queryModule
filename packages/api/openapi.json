@@ -599,7 +599,7 @@
     "/api/v1/admin/config/publish": {
       "post": {
         "operationId": "publishAdminConfig",
-        "summary": "Publish the draft and activate it; refused on any validation error",
+        "summary": "Publish the draft and activate it; refused on any validation error. The optional change note is accepted and ignored until M2 P2 stores it",
         "x-feature": "adminConfig",
         "requestBody": {
           "required": true,
@@ -1291,16 +1291,6 @@
               }
             }
           },
-          "400": {
-            "description": "Malformed correlation id (validationFailed)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
           "401": {
             "description": "No session",
             "content": {
@@ -1322,7 +1312,7 @@
             }
           },
           "404": {
-            "description": "No such request, or not visible to the caller (notFound)",
+            "description": "No such request, not visible to the caller, or a malformed id (notFound)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3749,6 +3739,17 @@
                   }
                 ]
               },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "^[^\\p{Cc}]*$"
+              },
+              "publishedByName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
               "document": {
                 "type": "object",
                 "properties": {
@@ -3893,6 +3894,17 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^[^\\p{Cc}]*$"
+                  },
+                  "publishedByName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
                   },
                   "document": {
                     "type": "object",
@@ -4049,6 +4061,17 @@
                 "type": "null"
               }
             ]
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\p{Cc}]*$"
+          },
+          "publishedByName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
           }
         },
         "required": [
@@ -4353,6 +4376,17 @@
                 "type": "null"
               }
             ]
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\p{Cc}]*$"
+          },
+          "publishedByName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
           }
         },
         "required": [
@@ -4376,6 +4410,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\p{Cc}]*$"
           }
         },
         "required": [
@@ -4475,6 +4515,17 @@
                       "type": "null"
                     }
                   ]
+                },
+                "note": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "^[^\\p{Cc}]*$"
+                },
+                "publishedByName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
                 }
               },
               "required": [
@@ -4584,6 +4635,17 @@
                 "type": "null"
               }
             ]
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\p{Cc}]*$"
+          },
+          "publishedByName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
           }
         },
         "required": [

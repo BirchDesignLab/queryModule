@@ -68,12 +68,6 @@ const OPERATIONS: Operation[] = Object.entries(openapi.paths)
 type Who = Caller | "mustChangePassword";
 type Expected = { status: number; code?: ApiErrorCode } | "ok";
 
-/**
- * Planned in the frozen contract but mounted in M2 P1 (#561): the contract's status flips when
- * the contracts next change; until then the matrix calls them like any live route.
- */
-const MOUNTED_PLANNED = new Set(["getQuery", "listQueries"]);
-
 /** Session-access routes the config-only implementer may call (checker ruling 09-29-26). */
 const IMPLEMENTER_SESSION_ROUTES = new Set(["getConfig"]);
 
@@ -324,7 +318,7 @@ describe("spec 10.3 route by caller matrix (D-A30, admin routes from openapi.jso
 
   it("the contract-only list is exactly the planned routes, each in openapi.json", () => {
     expect([...CONTRACT_ONLY.keys()].sort()).toEqual(
-      ROUTES.filter((r: RouteDef) => r.status === "planned" && !MOUNTED_PLANNED.has(r.id))
+      ROUTES.filter((r: RouteDef) => r.status === "planned")
         .map((r: RouteDef) => r.id)
         .sort(),
     );
