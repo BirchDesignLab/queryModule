@@ -2598,9 +2598,6 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   box-sizing: border-box;
   inline-size: 100%;
   min-inline-size: 0;
-}
-
-.qm-columns__table :where(input[type="text"], select) {
   padding-inline: var(--qm-space-2);
 }
 
@@ -2617,7 +2614,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-columns__table th:nth-child(4) {
-  inline-size: 11%;
+  inline-size: 12%;
 }
 
 .qm-columns__table th:nth-child(5) {
