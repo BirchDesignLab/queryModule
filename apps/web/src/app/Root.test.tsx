@@ -1,8 +1,9 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { SIGN_OUT_PENDING_KEY } from "../platform/sign-out-marker.js";
-import { API, META, server, TEST_USER } from "../test/msw-server.js";
+import { EN_BUNDLE } from "../test/en-bundle.js";
+import { API, CLIENT_CONFIG, META, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
 
 describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
@@ -102,5 +103,26 @@ describe("BR-002 boot, auth gate and chrome (spec 5.1, 6.1, 6.5)", () => {
     );
     expect(screen.getByRole("button", { name: "Retry sign-out" })).toBeInTheDocument();
     expect(localStorage.getItem(SIGN_OUT_PENDING_KEY)).toBe("1");
+  });
+});
+
+describe("the strings follow the config refresh (BW3 platform gap, #642)", () => {
+  it("a new config brings the locale bundle again, and the app uses it without a reload", async () => {
+    const t = renderRoot();
+    await screen.findByRole("heading", { name: "Sign in" });
+    expect(document.title).toBe("Query Module");
+    server.use(
+      http.get(`${API}/api/v1/locales/en`, () =>
+        HttpResponse.json({ ...EN_BUNDLE, "app.title": "Query Module (published)" }),
+      ),
+    );
+    act(() => t.services.queryClient.setQueryData(["config"], CLIENT_CONFIG));
+    act(() =>
+      t.services.queryClient.setQueryData(["config"], {
+        ...CLIENT_CONFIG,
+        configHash: "c".repeat(64),
+      }),
+    );
+    await waitFor(() => expect(document.title).toBe("Query Module (published)"));
   });
 });

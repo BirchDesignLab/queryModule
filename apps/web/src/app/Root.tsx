@@ -1,11 +1,12 @@
-import { QueryClientProvider } from "@querymodule/client";
+import { createTranslator, type LocaleBundle, QueryClientProvider } from "@querymodule/client";
 import { LiveAnnouncer } from "@querymodule/web-ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserRouter, type RouteObject, RouterProvider } from "react-router";
 import { AppChrome } from "./AppChrome.js";
 import { type BootState, bootstrap } from "./bootstrap.js";
 import { ClientSupportProvider } from "./client-support-context.js";
 import { I18nProvider } from "./i18n-context.js";
+import { useLocaleRefresh } from "./locale-refresh.js";
 import { appRoutes } from "./routes.js";
 import type { Services } from "./services.js";
 import { ServicesProvider, useServices } from "./services-context.js";
@@ -57,6 +58,17 @@ function BootGate({
       live = false;
     };
   }, [services, clientVersion]);
+  // A label published from the builder reaches this tab with the config refresh, not a reload.
+  const takeBundle = useCallback(
+    (bundle: LocaleBundle) =>
+      setBoot((prev) =>
+        prev?.status === "ready"
+          ? { ...prev, translator: createTranslator(prev.translator.locale, bundle) }
+          : prev,
+      ),
+    [],
+  );
+  useLocaleRefresh(boot?.translator.locale ?? "en", boot?.status === "ready", takeBundle);
   useEffect(() => {
     if (boot !== null) {
       document.title = boot.translator.t("app.title");
