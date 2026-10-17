@@ -224,6 +224,10 @@ export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): ()
     const latest = deps.dispatcher.maxDeadline() ?? now;
     await deps.dispatcher.drain(Math.max(0, latest - now) + DRAIN_SLACK_MS);
     endIfFailed();
+    // Past the bound (#574 closeDb, Manager 7 ruling 10-17-26): drop what is left, so no adapter
+    // answer starts a T2 against the closing DB. abortAll writes no rows; they stay pending for
+    // the next start's sweep. A T2 already open is cut off by closeDb and only warns (outcome.ts).
+    deps.dispatcher.abortAll();
     await ws.close();
     endIfFailed();
     closeDb(deps);

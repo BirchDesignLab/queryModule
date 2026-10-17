@@ -1,14 +1,18 @@
 import { once } from "node:events";
+import { copyFileSync, existsSync } from "node:fs";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { dirname } from "node:path";
 import { serve } from "@hono/node-server";
 import { type SourcePayload, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import WebSocket from "ws";
 import type { SourceAdapter } from "../../src/adapters/types";
 import { createDispatcher } from "../../src/dispatch/dispatcher";
+import { sweepPending } from "../../src/dispatch/sweep";
 import { createDrainStop, DRAIN_SLACK_MS, HTTP_DRAIN_MS } from "../../src/startup";
 import { attachWebSocket } from "../../src/ws/server";
+import { tempDbFile } from "../helpers/db";
 import { manualTime, settle } from "../helpers/manual-time";
 import { createTestApp } from "../helpers/test-app";
 
@@ -24,7 +28,12 @@ const PAYLOAD = { status: "NO RECORD" } as unknown as SourcePayload;
 
 type Time = ReturnType<typeof manualTime>;
 
-async function setup(o: { adapter: (time: Time) => SourceAdapter; hungOutcome?: boolean }) {
+async function setup(o: {
+  adapter: (time: Time) => SourceAdapter;
+  hungOutcome?: boolean;
+  /** stop() really closes the DB (#574 closeDb); the rows can then be read only by reopening it. */
+  realClose?: boolean;
+}) {
   const time = manualTime();
   const t = await createTestApp({
     clock: time.clock,
@@ -62,9 +71,11 @@ async function setup(o: { adapter: (time: Time) => SourceAdapter; hungOutcome?: 
   // stop()'s DB close is recorded, not done, so the rows can be read after it; the real close
   // runs when the test finishes.
   const dbClosed: { inFlight: number }[] = [];
-  vi.spyOn(t.deps.db.$client, "close").mockImplementationOnce(() => {
-    dbClosed.push({ inFlight: t.deps.dispatcher.inFlight() });
-  });
+  if (!o.realClose) {
+    vi.spyOn(t.deps.db.$client, "close").mockImplementationOnce(() => {
+      dbClosed.push({ inFlight: t.deps.dispatcher.inFlight() });
+    });
+  }
   const stop = createDrainStop(t.deps, server, ws);
   let stopped = false;
   const startStop = () =>
@@ -278,6 +289,107 @@ describe("SIGTERM drain (spec 5.2, NFR-003)", () => {
     expect(line).not.toContain("ZZ-0001");
     expect(s.t.fatals).toEqual([]);
     expect(await s.statuses()).toEqual(["pending"]);
+  }, 20_000);
+});
+
+/** Holds every sourceResponded audit write, so the outcome's T2 stays open, until released. */
+function holdOutcomeWrites(t: Awaited<ReturnType<typeof setup>>["t"]) {
+  const record = t.deps.audit.record.bind(t.deps.audit);
+  let reached: () => void = () => {};
+  const atGate = new Promise<void>((r) => {
+    reached = r;
+  });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  t.deps.audit.record = async (tx, event) => {
+    if (event.type === "sourceResponded") {
+      reached();
+      await gate;
+    }
+    return record(tx, event);
+  };
+  return { atGate, release };
+}
+
+describe("an outcome write still open at the drain bound (#574 closeDb, Manager 7 ruling 10-17-26)", () => {
+  it("the drain aborts dispatch, closes the DB, logs stopped; the cut-off T2 warns, never fatal; the next start's sweep settles the row", async () => {
+    const s = await setup({ adapter: slowAdapter, realClose: true });
+    const held = holdOutcomeWrites(s.t);
+    const abortAll = vi.spyOn(s.t.deps.dispatcher, "abortAll");
+    const r = await s.submit();
+    expect(r.status).toBe(202);
+    const ack = SubmitQueryResponseSchema.parse(await r.json());
+    // the adapter answers at 2 s; its T2 then holds at the audit write
+    await s.time.run(LATENCY_MS);
+    await held.atGate;
+    const stopping = s.startStop();
+    // bound = (deadline - now) + 5 s from the stop
+    await s.time.run(TIMEOUT_MS + DRAIN_SLACK_MS);
+    await vi.waitFor(() => expect(s.stopped()).toBe(true));
+    await stopping;
+    expect(abortAll).toHaveBeenCalledTimes(1);
+    expect(s.t.deps.db.$client.closed).toBe(true);
+    expect(s.t.logLines.some((l) => l.includes('"msg":"stopped"'))).toBe(true);
+    // the held T2 resumes on a closed client
+    held.release();
+    await vi.waitFor(() =>
+      expect(
+        s.t.logLines.some((l) => l.includes('"msg":"dispatch outcome cut off by drain"')),
+      ).toBe(true),
+    );
+    const line = s.t.logLines.find((l) => l.includes('"msg":"dispatch outcome cut off by drain"'));
+    expect(line).toContain(ack.correlationId);
+    expect(line).not.toContain("ZZ-0001");
+    expect(line).not.toContain("NO RECORD");
+    expect(s.t.fatals).toEqual([]);
+    expect(s.t.logLines.some((l) => l.includes('"msg":"dispatch outcome write failed"'))).toBe(
+      false,
+    );
+
+    // The next start, on a copy of the database files: libsql keeps the cut-off transaction's
+    // write lock until the process exits (it does, right after the drain), so in-process the
+    // copy stands in for the restart. Its sweep settles the row with its audit, as always.
+    const nextFile = tempDbFile();
+    for (const suffix of ["", "-wal"])
+      if (existsSync(`${s.t.env.dbFile}${suffix}`))
+        copyFileSync(`${s.t.env.dbFile}${suffix}`, `${nextFile}${suffix}`);
+    const next = await createTestApp({ env: { DATA_DIR: dirname(nextFile) } });
+    expect((await sweepPending(next.deps)).interrupted).toBe(1);
+    const rows = await next.deps.db.$client.execute("SELECT status FROM source_result");
+    expect(rows.rows.map((x) => String(x.status))).toEqual(["interrupted"]);
+    const audit = await next.deps.db.$client.execute(
+      "SELECT correlation_id FROM audit_event WHERE type = 'interrupted'",
+    );
+    expect(audit.rows.map((x) => String(x.correlation_id))).toEqual([ack.correlationId]);
+    const responded = await next.deps.db.$client.execute(
+      "SELECT count(*) AS n FROM audit_event WHERE type = 'sourceResponded'",
+    );
+    expect(Number(responded.rows[0]?.n)).toBe(0);
+  }, 20_000);
+
+  it("an outcome write that fails during the drain with the DB still open still fails closed", async () => {
+    const s = await setup({ adapter: slowAdapter });
+    const record = s.t.deps.audit.record.bind(s.t.deps.audit);
+    s.t.deps.audit.record = async (tx, event) => {
+      if (event.type === "sourceResponded") throw new Error("audit broken");
+      return record(tx, event);
+    };
+    expect((await s.submit()).status).toBe(202);
+    const stopping = s.startStop().then(
+      () => "resolved",
+      (e: unknown) => (e as Error).name,
+    );
+    await s.time.run(LATENCY_MS);
+    await vi.waitFor(() => expect(s.t.fatals).toHaveLength(1));
+    expect(await stopping).toBe("DrainAbortedError");
+    expect(s.t.logLines.some((l) => l.includes('"msg":"dispatch outcome write failed"'))).toBe(
+      true,
+    );
+    expect(s.t.logLines.some((l) => l.includes('"msg":"dispatch outcome cut off by drain"'))).toBe(
+      false,
+    );
   }, 20_000);
 });
 
