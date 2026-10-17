@@ -110,6 +110,16 @@ describe("NFR-003 heartbeat probe (spec 4.7, 5.3, 6.8)", () => {
     t.socket.receive({ v: 1, type: "welcome", latestSeq: -1 });
     expect(await result).toEqual({ ok: false, reason: "protocol" });
   });
+  it("fails a binary frame and a JSON object with no type as protocol", async () => {
+    const binary = setup();
+    const first = runHeartbeatProbe(binary.options);
+    binary.socket.onmessage?.({ data: new ArrayBuffer(4) });
+    expect(await first).toEqual({ ok: false, reason: "protocol" });
+    const typeless = setup();
+    const second = runHeartbeatProbe(typeless.options);
+    typeless.socket.receive({ v: 1, latestSeq: 7 });
+    expect(await second).toEqual({ ok: false, reason: "protocol" });
+  });
   it("rejects messages that fail the WS schema", async () => {
     const t = setup();
     const result = runHeartbeatProbe(t.options);
