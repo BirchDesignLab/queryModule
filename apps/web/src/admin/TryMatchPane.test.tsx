@@ -1,6 +1,6 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   API,
   adminConfigBody,
@@ -206,6 +206,41 @@ describe("Try a match: the answer, the wait and the announcement", () => {
       expect(live).toHaveTextContent("No record. No scenario matches, the default answers."),
     );
     expect(live.textContent).not.toMatch(/ZZ-0099/);
+  });
+});
+
+// BW3 polish leftover (#642): the announcement waits for typing to pause (600 ms), on fake timers.
+describe("Try a match: the announcement is debounced", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Each change of the outcome restarts the 600 ms wait: the timer is not a throttle and is not
+  // keyed on the first change. The values change the outcome inside the window (scenario 1, then
+  // the default), so only a restart keeps the region quiet.
+  it("says nothing while the outcome keeps changing, and the settled one 600 ms after the last change", async () => {
+    const t = await openBuilder();
+    const p = within(await screen.findByRole("region", { name: "Try a match" }));
+    const live = p.getByRole("status");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const set = (label: string, value: string) =>
+      fireEvent.change(p.getByLabelText(label), { target: { value } });
+    const wait = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
+    set("Source", "stateSource");
+    set("Query type", "VEH");
+    set("Plate", "ZZ-0001");
+    wait(599);
+    expect(live).toHaveTextContent("");
+    set("Plate", "ZZ-0099");
+    wait(599);
+    expect(live).toHaveTextContent("");
+    set("Plate", "ZZ-0001");
+    wait(599);
+    expect(live).toHaveTextContent("");
+    wait(1);
+    expect(live).toHaveTextContent("Returns a record. Scenario 1 of Vehicle.");
+    expect(live.textContent).not.toMatch(/ZZ-0001|ZZ-0099/);
+    void t;
   });
 });
 

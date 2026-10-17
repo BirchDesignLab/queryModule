@@ -119,10 +119,10 @@ describe("B1: a setting's name is its words; the config path is a hidden descrip
     expect(input).toHaveAccessibleDescription(/enter a number/i);
   });
 
-  it("I1: a setting named path keeps its own id and name (the hint ids cannot collide with a key)", async () => {
+  it("I1: every id in a section is unique (hint ids cannot collide with a key) and a setting's label points at it", async () => {
     const t = await openBuilder();
-    // The result cards (the setting named path) moved to their own editor in Task 10, whose test
-    // covers its Path control; a generic setting keeps the unique-id check here.
+    // The setting named path left for the result cards editor in Task 10, whose test covers its
+    // Path control (T10-Q4, #642): this keeps the unique-id and label checks for a generic setting.
     await openSection(t, "delegation");
     const input = await findSetting("delegation.maxDurationMinutes");
     const ids = [...document.querySelectorAll("[id]")].map((el) => el.id);

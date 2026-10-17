@@ -201,8 +201,8 @@ describe("a new query type on a mock site", () => {
     );
     await waitFor(() =>
       expect(
-        [...document.querySelectorAll('[role="status"]')].map((e) => e.textContent).join(" "),
-      ).toMatch(/2/),
+        [...document.querySelectorAll('[role="status"]')].map((e) => e.textContent?.trim()),
+      ).toContain("Mock responses added for BOAT: 2. Default: no record."),
     );
     expect(
       within(await mockGroup()).getAllByRole("button", { name: /Open mock response/ })[0],

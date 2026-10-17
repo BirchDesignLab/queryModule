@@ -87,6 +87,30 @@ async function selectRow(page: Page, name: RegExp): Promise<Locator> {
   return item;
 }
 
+/**
+ * Presses Tab until `target` has focus, so the control is proven reachable in the page's own tab
+ * order (T13-Q2, #642): `focus()` would pass for a control no keyboard user can get to. Starts from
+ * wherever focus is now and fails after `max` presses.
+ */
+async function tabTo(page: Page, target: Locator, max = 60): Promise<void> {
+  for (let i = 0; i < max; i++) {
+    if (await target.evaluate((el) => el === document.activeElement)) return;
+    await page.keyboard.press("Tab");
+  }
+  await expect(target, `Tab reaches it within ${max} presses`).toBeFocused();
+}
+
+/** The live Vehicle card's rows as the server holds them: what a rollback must put back exactly. */
+async function liveVehicleRows(page: Page): Promise<unknown[]> {
+  const res = await page.context().request.get(`${new URL(page.url()).origin}/api/v1/admin/config`);
+  const body = (await res.json()) as {
+    live: { document: { siteConfig: { responseMappings: { id: string; elements: unknown[] }[] } } };
+  };
+  const card = body.live.document.siteConfig.responseMappings.find((m) => m.id === "veh-summary");
+  expect(card, "the live config has the veh-summary card").toBeDefined();
+  return card?.elements ?? [];
+}
+
 const VEHICLE_CARD = /^1\. All results veh-summary/;
 
 /** The Vehicle query type's first card: its row opens by keyboard (Right), then the card is selected. */
@@ -156,6 +180,7 @@ test("[#605] the admin adds a card row and a warning keyword, previews, publishe
   try {
     const admin = await context.newPage();
     const base = await openBuilder(admin);
+    const rowsAtStart = await liveVehicleRows(admin);
 
     // The Vehicle card: add a row by keyboard. The new row opens on its path.
     await selectVehicleCard(admin);
@@ -170,14 +195,17 @@ test("[#605] the admin adds a card row and a warning keyword, previews, publishe
     await expect(path).toHaveValue("vehicle.make");
     // A path the mock answers have: no "no mock answer" warning.
     await expect(form.getByText(/No mock answer has this path/)).toHaveCount(0);
+    // Tab from the path to the label and type it (T13-Q1): a keyboard user's way, not fill().
     const label = form.getByLabel("Label shown to users");
-    await label.fill("Vehicle make");
+    await tabTo(admin, label);
+    await admin.keyboard.type("Vehicle make");
+    await expect(label).toHaveValue("Vehicle make");
     await expect(admin.getByTestId("draft-summary")).toContainText(/Draft checks: 0 errors/);
 
     // A warning keyword by keyboard: the new keyword box keeps focus for the next one.
     await selectRow(admin, /^Keywords and severity/);
     const word = form.getByRole("textbox", { name: "New keyword" });
-    await word.focus();
+    await tabTo(admin, word, 120);
     await admin.keyboard.type("TESTMAKE");
     await admin.keyboard.press("Enter");
     await expect(word).toBeFocused();
@@ -196,7 +224,7 @@ test("[#605] the admin adds a card row and a warning keyword, previews, publishe
     await pane.getByRole("radio", { name: "Type values" }).press("Space");
     await expect(pane.getByRole("radio", { name: "Type values" })).toBeChecked();
     const typed = pane.getByLabel("Plate", { exact: true });
-    await typed.focus();
+    await tabTo(admin, typed, 250);
     await admin.keyboard.type("ZZ-0001");
     const previewCard = pane.getByRole("region", { name: "State system: returned" });
     await expect(previewCard).toBeVisible();
@@ -271,6 +299,8 @@ test("[#605] the admin adds a card row and a warning keyword, previews, publishe
     };
     const veh = body.live.document.siteConfig.responseMappings.find((m) => m.id === "veh-summary");
     expect(veh?.elements.filter((e) => e.path === "vehicle.make")).toHaveLength(1);
+    // The whole card is back as it was (T13-Q5), not just one row of it.
+    expect(await liveVehicleRows(admin)).toEqual(rowsAtStart);
     expect(body.live.document.siteConfig.keywords.map((k) => k.keyword)).not.toContain("TESTMAKE");
     await expect(markedRow(stateCards(dispatcher))).toHaveCount(0, { timeout: BOUND });
     await expect(stateCards(dispatcher).locator(".qm-result-list__item")).toHaveCount(rowsBefore);
@@ -307,7 +337,7 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   await expect(source).toHaveValue("stateSource");
   await expect(type).toHaveValue("VEH");
   const plate = pane.getByLabel("Plate", { exact: true });
-  await plate.focus();
+  await tabTo(page, plate, 150);
   await page.keyboard.type("ZZ-0001");
   const outcome = pane.getByTestId("outcome-head");
   await expect(outcome).toContainText("Scenario 1 matches");

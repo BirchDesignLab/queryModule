@@ -189,6 +189,24 @@ describe("the keywords editor", () => {
     expect(within(mark).getByText(/warning/i)).toBeInTheDocument();
     // Typed values never reach the draft.
     expect(JSON.stringify(configDraftStore(t.services).getState().doc)).not.toContain("ZZ-0001");
+    // T11-M3 (#642): an exception that covers the line takes the mark off the card, too.
+    const kwIndex = doc(t).keywords.length;
+    await t.user.type(
+      within(editor()).getByRole("textbox", { name: `New exception for keyword ${kwIndex}` }),
+      "TESTMAKE",
+    );
+    await t.user.click(
+      within(editor()).getByRole("button", {
+        name: new RegExp(`^Add exception to keyword ${kwIndex}`),
+      }),
+    );
+    expect(doc(t).keywords.at(-1)?.except).toEqual(["TESTMAKE"]);
+    await waitFor(() =>
+      expect(
+        [...card.querySelectorAll("mark")].some((m) => (m.textContent ?? "").includes("TESTMAKE")),
+      ).toBe(false),
+    );
+    expect(card).toHaveTextContent("TESTMAKE");
   });
 
   it("an except phrase suppresses the mark in the sample line", async () => {
