@@ -57,7 +57,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Last green: main 66a35d2 (demo re-walk fixes #675); `pnpm verify` green on the branch
 - Next step: the developer merges the overview PDF PR, then promotes (`promote.yml` with the merge sha, no milestone tag) and runs `bash scripts/ops/smoke.sh https://querymodule.birchdesignlab.com` on the host (output on #606)
 - Blocked by: none
-- Latest handoff: none in [docs/handoffs/](../../handoffs/) yet; the next Track A handoff goes there (CLAUDE.md, "Where records go")
+- Latest handoff: [10-17-26-m2-debt-3.md](../../handoffs/10-17-26-m2-debt-3.md) (DEBT-3, #642 closed via #695 #696 #697; next: #698 visual comparison)
 - Notes: manager "M2 Manager 4" (its push approvals count as the developer's for Track A); open follow-ups #574, #572, #558, #610, #620, #622, #623, #645, #647.
 
 ### Track B
