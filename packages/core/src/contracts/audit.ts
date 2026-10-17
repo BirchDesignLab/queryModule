@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { AUDIT_PAGE_MAX_LIMIT } from "./admin-audit";
 import {
   LoginFailedDetailsSchema,
   LoginSucceededDetailsSchema,
   LogoutDetailsSchema,
+  PasswordChangedDetailsSchema,
   RoleChangedDetailsSchema,
   SessionRevokedDetailsSchema,
 } from "./audit-auth";
@@ -57,6 +59,10 @@ export const AUDIT_EVENT_TYPES = [
   "userCreated",
   "userDisabled",
   "sessionRevoked",
+  "passwordChanged",
+  "auditViewed",
+  "auditExported",
+  "adminViewed",
 ] as const;
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
@@ -90,6 +96,27 @@ const ConfigPointerSchema = z
   .max(256)
   .regex(/^(\/([A-Za-z0-9_.$-]|~[01])*)*$/);
 export const MAX_CHANGED_POINTERS = 1000;
+
+/**
+ * The admin audit read filters as audited (spec 4.7 auditViewed and auditExported; spec 5.1):
+ * ids, a type name and the epoch ms window only. userId is the route's user filter (actor OR
+ * credential owner). The route has already bounded the window (admin-audit.ts).
+ */
+const AuditFiltersSchema = z
+  .strictObject({
+    userId: BoundedIdSchema.optional(),
+    correlationId: Uuid7Schema.optional(),
+    type: BoundedIdSchema.optional(),
+    from: EpochMsSchema,
+    to: EpochMsSchema,
+  })
+  .refine((f) => f.from <= f.to, { path: ["to"], message: "to is not before from" });
+
+/**
+ * The audit page cursor as audited: opaque base64url characters only, so query text never fits.
+ * Same 256 cap as AdminAuditQuerySchema.cursor; the M2 P2 route issues cursors in this alphabet.
+ */
+const AuditCursorSchema = z.string().regex(/^[A-Za-z0-9_-]{1,256}$/);
 
 /**
  * Details: identifiers, metadata and role:"type" values only. Never other field values,
@@ -275,6 +302,29 @@ export const AUDIT_DETAILS_SCHEMAS = {
     credentialsDeleted: z.int().min(0),
   }),
   sessionRevoked: SessionRevokedDetailsSchema,
+  passwordChanged: PasswordChangedDetailsSchema,
+  /** Spec 4.7, 5.1 (SEC-012): one admin audit page read; writer in M2 P2. */
+  auditViewed: z.strictObject({
+    filters: AuditFiltersSchema,
+    cursor: AuditCursorSchema.optional(),
+    rowCount: z.int().min(0).max(AUDIT_PAGE_MAX_LIMIT),
+  }),
+  /** Spec 4.7, 5.1 (SEC-012): one admin audit NDJSON export; writer in M2 P2. */
+  auditExported: z.strictObject({
+    filters: AuditFiltersSchema,
+    format: z.literal("ndjson"),
+    rowCount: z.int().min(0),
+  }),
+  /**
+   * Spec 4.7, 5.2 (FR-063): a request read by an admin through the admin route (viewerBasis
+   * admin) or by the delegating officer as credential owner; writer in M2 P2. correlationId is
+   * in details as the spec table names it; the envelope column stays empty like other admin rows.
+   */
+  adminViewed: z.strictObject({
+    correlationId: Uuid7Schema,
+    viewerBasis: z.enum(["admin", "credentialOwner"]),
+    includeHidden: z.boolean(),
+  }),
 } as const;
 
 export type AuditDetails<T extends AuditEventType> = z.infer<(typeof AUDIT_DETAILS_SCHEMAS)[T]>;
@@ -347,7 +397,10 @@ const systemEnvelope = {
  * types. The actor is bound to the type (AuditEventSchema superRefine; ADR-0011 items 6 to 8):
  * configPublished by an admin or implementer; userCreated and userDisabled by an admin;
  * sessionRevoked expired by SYSTEM_ACTOR only (the spec 5.2 sweeper) and any other reason by an
- * admin; roleChanged via grant-role by SYSTEM_ACTOR and via adminConsole by an admin.
+ * admin; roleChanged via grant-role by SYSTEM_ACTOR and via adminConsole by an admin;
+ * auditViewed and auditExported by an admin; adminViewed by an admin (viewerBasis admin) or by the
+ * credential owner (viewerBasis credentialOwner). passwordChanged uses the auth envelope: via self
+ * by the user named in targetUserId, via adminReset by an admin (#523).
  */
 const adminEnvelope = systemEnvelope;
 
@@ -435,6 +488,26 @@ export const AuditEventSchema = z
       ...adminEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.sessionRevoked,
     }),
+    z.strictObject({
+      type: z.literal("passwordChanged"),
+      ...authEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.passwordChanged,
+    }),
+    z.strictObject({
+      type: z.literal("auditViewed"),
+      ...adminEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.auditViewed,
+    }),
+    z.strictObject({
+      type: z.literal("auditExported"),
+      ...adminEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.auditExported,
+    }),
+    z.strictObject({
+      type: z.literal("adminViewed"),
+      ...adminEnvelope,
+      details: AUDIT_DETAILS_SCHEMAS.adminViewed,
+    }),
   ])
   .superRefine((e, ctx) => {
     // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they do.
@@ -491,6 +564,20 @@ export const AuditEventSchema = z
       if (e.details.via === "grant-role") {
         actorIs(systemRole, "grant-role writes as the system actor");
       } else actorIs(role === "admin", "the admin console role change is written by an admin");
+    } else if (e.type === "passwordChanged") {
+      // #523: a self change is written by the user whose password changed; a reset by an admin.
+      if (e.details.via === "self") {
+        actorIs(
+          !systemRole && e.actor.id === e.details.targetUserId,
+          "a self password change is written by that user",
+        );
+      } else actorIs(role === "admin", "a password reset is written by an admin");
+    } else if (e.type === "auditViewed" || e.type === "auditExported") {
+      actorIs(role === "admin", "written by an admin");
+    } else if (e.type === "adminViewed") {
+      // Spec 5.2: the admin route reads as admin; the delegating officer as credential owner.
+      if (e.details.viewerBasis === "admin") actorIs(role === "admin", "written by an admin");
+      else actorIs(!systemRole, "a credential owner view is written by that user");
     }
     // Auth and system types have neither envelope column; the checks below are query-only.
     if (
@@ -502,7 +589,11 @@ export const AuditEventSchema = z
       e.type === "configPublished" ||
       e.type === "userCreated" ||
       e.type === "userDisabled" ||
-      e.type === "sessionRevoked"
+      e.type === "sessionRevoked" ||
+      e.type === "passwordChanged" ||
+      e.type === "auditViewed" ||
+      e.type === "auditExported" ||
+      e.type === "adminViewed"
     ) {
       return;
     }

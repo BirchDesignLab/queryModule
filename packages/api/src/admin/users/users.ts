@@ -262,6 +262,7 @@ export async function setUserRole(
       details: {
         targetUserId: id,
         role: role === "user" ? target.role : role,
+        fromRole: target.role,
         change: role === "user" ? "revoked" : "granted",
         via: "adminConsole",
       },
@@ -304,7 +305,8 @@ export async function listUserSessions(
 export type RevokeResult = { ok: true } | { ok: false; code: "notFound" | "forbidden" };
 
 /**
- * Deletes one session and writes sessionRevoked reason admin in one transaction, then ends it.
+ * Deletes one session and writes sessionRevoked reason admin, naming the session owner as
+ * targetUserId (#523), in one transaction, then ends it.
  * Inside the transaction the actor must still be an enabled admin (AUD-3), else forbidden.
  */
 export async function revokeSession(
@@ -317,14 +319,15 @@ export async function revokeSession(
     const deleted = await tx
       .delete(session)
       .where(eq(session.id, sessionId))
-      .returning({ id: session.id });
-    if (deleted.length === 0) return false;
+      .returning({ id: session.id, userId: session.userId });
+    const owner = deleted[0];
+    if (!owner) return false;
     await d.audit.record(tx, {
       type: "sessionRevoked",
       actor: actorOf(actor),
       ...(actor.hostSubject ? { hostSubject: actor.hostSubject } : {}),
       identitySource: actor.identitySource,
-      details: { sessionId, reason: "admin" },
+      details: { sessionId, targetUserId: owner.userId, reason: "admin" },
     });
     return true;
   });

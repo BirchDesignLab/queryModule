@@ -180,3 +180,51 @@ describe("ADR-0011 admin routes (items 5, 6, 8)", () => {
       expect(findRoute(id).responses[409]?.description).toContain("lastAdmin");
   });
 });
+
+describe("D-M2P0-4 publish change note and publisher name (#525, #507)", () => {
+  it("publish takes an optional note: trimmed, 1 to 200 characters, no control characters", () => {
+    expect(PublishConfigBodySchema.parse({ draftVersion: 2 })).toEqual({ draftVersion: 2 });
+    expect(PublishConfigBodySchema.parse({ draftVersion: 2, note: "  Add plate field  " })).toEqual(
+      {
+        draftVersion: 2,
+        note: "Add plate field",
+      },
+    );
+    expect(
+      PublishConfigBodySchema.safeParse({ draftVersion: 2, note: "x".repeat(200) }).success,
+    ).toBe(true);
+    for (const bad of [
+      "",
+      "   ",
+      "x".repeat(201),
+      "line\nbreak",
+      "tab\there",
+      "nul\u0000",
+      "del\u007f",
+    ]) {
+      expect(PublishConfigBodySchema.safeParse({ draftVersion: 2, note: bad }).success).toBe(false);
+    }
+  });
+  it("a config version may carry its note and the publisher's display name (optional until M2 P2)", () => {
+    expect(ConfigVersionSchema.parse(version)).toEqual(version);
+    const published = {
+      ...version,
+      status: "published",
+      configHash: HASH,
+      publishedBy: "impl1",
+      publishedAt: 1_790_000_000_001,
+      note: "Add plate field",
+      publishedByName: "Demo Implementer",
+    };
+    expect(ConfigVersionSchema.parse(published)).toEqual(published);
+    expect(ConfigVersionSchema.safeParse({ ...published, note: "x".repeat(201) }).success).toBe(
+      false,
+    );
+    expect(ConfigVersionSchema.safeParse({ ...published, publishedByName: "" }).success).toBe(
+      false,
+    );
+    expect(
+      ConfigVersionSchema.safeParse({ ...published, publishedByName: "x".repeat(129) }).success,
+    ).toBe(false);
+  });
+});

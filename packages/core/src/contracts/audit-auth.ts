@@ -47,17 +47,41 @@ export const LogoutDetailsSchema = z.strictObject({ sessionId: SessionIdSchema }
 
 /**
  * SEC-010: roles change through the grant-role ops script (spec 5.6) or an admin in the admin
- * console (ADR-0011 item 8).
+ * console (ADR-0011 item 8). fromRole (M2, #523 G-m3) is the role held before the change, so a
+ * demotion of an admin to another role reads as such. Required for writers; rows stored before M2
+ * lack it and are read through the tolerant AuditReadRowSchema (admin-audit.ts). A grant moves
+ * away from fromRole; a revoke removes the role held (fromRole equals role).
  */
-export const RoleChangedDetailsSchema = z.strictObject({
-  targetUserId: BoundedIdSchema,
-  role: RoleSchema,
-  change: z.enum(["granted", "revoked"]),
-  via: z.enum(["grant-role", "adminConsole"]),
-});
+export const RoleChangedDetailsSchema = z
+  .strictObject({
+    targetUserId: BoundedIdSchema,
+    role: RoleSchema,
+    fromRole: RoleSchema,
+    change: z.enum(["granted", "revoked"]),
+    via: z.enum(["grant-role", "adminConsole"]),
+  })
+  .refine((d) => (d.change === "granted") === (d.fromRole !== d.role), {
+    path: ["fromRole"],
+    message: "a grant changes the role held; a revoke removes the role held",
+  });
 
-/** SEC-010: a session ended by an admin, by a user disable, or by the sweeper on expiry (spec 4.7). */
+/**
+ * SEC-010: a session ended by an admin, by a user disable, or by the sweeper on expiry (spec 4.7).
+ * targetUserId (M2, #523) is the session owner. Required for writers; rows stored before M2 lack
+ * it and are read through the tolerant AuditReadRowSchema (admin-audit.ts).
+ */
 export const SessionRevokedDetailsSchema = z.strictObject({
   sessionId: SessionIdSchema,
+  targetUserId: BoundedIdSchema,
   reason: z.enum(["userDisabled", "admin", "expired"]),
+});
+
+/**
+ * SEC-010 (M2, #523, spec 4.7): a password changed. via self is the user's own change through
+ * change-password, written by that user; adminReset is reserved for an admin reset route (none
+ * yet), written by the admin. No password material and no hash, ever.
+ */
+export const PasswordChangedDetailsSchema = z.strictObject({
+  targetUserId: BoundedIdSchema,
+  via: z.enum(["self", "adminReset"]),
 });

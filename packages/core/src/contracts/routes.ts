@@ -287,7 +287,8 @@ const ROUTE_DEFS = [
     id: "publishAdminConfig",
     method: "post",
     path: `${API_BASE_PATH}/admin/config/publish`,
-    summary: "Publish the draft and activate it; refused on any validation error",
+    summary:
+      "Publish the draft and activate it; refused on any validation error. The optional change note is accepted and ignored until M2 P2 stores it",
     access: "configEditor",
     since: "m1",
     status: "live",
@@ -477,7 +478,7 @@ const ROUTE_DEFS = [
     summary: "The caller's requests, newest first, cursor-paged; hidden results excluded",
     access: "sessionOwn",
     since: "m2",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: false,
     request: { query: ListQueriesQuerySchema },
     responses: {
@@ -498,15 +499,15 @@ const ROUTE_DEFS = [
       "One request with parts, per-source status and payloads; hidden results excluded; a shredded part or result answers purged: true",
     access: "policy",
     since: "m2",
-    status: "planned",
+    status: "live",
     requiresRequestedWith: false,
     request: { params: QueryParamsSchema },
     responses: {
       200: { description: "The request", schema: QueryDetailSchema },
-      400: error("Malformed correlation id (validationFailed)"),
       401: error("No session"),
       403: error(`Read policy refused the caller (forbidden); or ${PASSWORD_CHANGE}`),
-      404: error("No such request, or not visible to the caller (notFound)"),
+      // #622: a malformed id gets the same 404 as an unknown one, so its shape is no oracle.
+      404: error("No such request, not visible to the caller, or a malformed id (notFound)"),
     },
   },
   {

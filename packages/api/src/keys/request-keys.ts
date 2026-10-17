@@ -10,6 +10,13 @@ export type RequestKeyScope = (typeof REQUEST_KEY_SCOPES)[number];
 /**
  * The DATA_KEY version (the data key canary's) that wraps new rows, so a rotation can tell
  * which DATA_KEY wrapped a row from its key_version (#311).
+ *
+ * Intended alias, not a separate format version (D-M2P0-3, ruled by the developer 10-16-26,
+ * option A, #524 and #511): request_key.key_version records the version of the DATA_KEY that
+ * wrapped the DEK, and that version is bound into the wrap AAD (requestKeyAad), so a row relabeled
+ * with another version fails to open. The data key canary and the request keys therefore move
+ * together on a rotation, which re-wraps rows by key_version. A separate row format version is
+ * added only if the AAD or wrap format changes. Full key rotation is planned separately (#685).
  */
 export const REQUEST_KEY_VERSION = CURRENT_KEY_VERSION;
 const DEK_BYTES = 32;

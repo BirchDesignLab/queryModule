@@ -103,8 +103,8 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["setAdminUserRole", "put", "/api/v1/admin/users/{id}/role", "admin", "m1", "live"],
       ["listAdminUserSessions", "get", "/api/v1/admin/users/{id}/sessions", "admin", "m1", "live"],
       ["revokeAdminSession", "delete", "/api/v1/admin/sessions/{sessionId}", "admin", "m1", "live"],
-      ["listQueries", "get", "/api/v1/queries", "sessionOwn", "m2", "planned"],
-      ["getQuery", "get", "/api/v1/queries/{correlationId}", "policy", "m2", "planned"],
+      ["listQueries", "get", "/api/v1/queries", "sessionOwn", "m2", "live"],
+      ["getQuery", "get", "/api/v1/queries/{correlationId}", "policy", "m2", "live"],
       ["listAdminAudit", "get", "/api/v1/admin/audit", "admin", "m2", "planned"],
       ["exportAdminAudit", "get", "/api/v1/admin/audit/export", "admin", "m2", "planned"],
       ["getAdminQuery", "get", "/api/v1/admin/queries/{correlationId}", "admin", "m2", "planned"],
@@ -156,7 +156,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     expect(findRoute("getHealth").status).toBe("live");
   });
 
-  it("FR-062, FR-063, SEC-012 (spec 5.1): the M2 read routes are contract only until mounted", () => {
+  it("FR-062, FR-063, SEC-012 (spec 5.1): the M2 read routes; the admin ones contract only until mounted", () => {
     const ids = [
       "listQueries",
       "getQuery",
@@ -164,9 +164,10 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       "exportAdminAudit",
       "getAdminQuery",
     ] as const;
+    const mounted = new Set(["listQueries", "getQuery"]);
     for (const id of ids) {
       const r = findRoute(id);
-      expect(r.status, id).toBe("planned");
+      expect(r.status, id).toBe(mounted.has(id) ? "live" : "planned");
       expect(r.method, id).toBe("get");
       expect(r.requiresRequestedWith, id).toBe(false);
       expect(r.responses[401]?.schema, id).toBe(ApiErrorSchema);
@@ -175,6 +176,10 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     expect(findRoute("listQueries").responses[200]?.schema).toBe(QueryListResponseSchema);
     expect(findRoute("getQuery").request?.params).toBe(QueryParamsSchema);
     expect(findRoute("getQuery").responses[200]?.schema).toBe(QueryDetailSchema);
+    // #622: a malformed id answers the same 404 as an unknown one (the access policy denies it),
+    // so the id's shape is no oracle; the contract lists no 400.
+    expect(findRoute("getQuery").responses[400]).toBeUndefined();
+    expect(findRoute("getQuery").responses[404]?.description).toMatch(/malformed/i);
     expect(findRoute("getAdminQuery").request?.query).toBe(AdminQueryQuerySchema);
     expect(findRoute("getAdminQuery").responses[200]?.schema).toBe(AdminQueryDetailSchema);
     expect(findRoute("listAdminAudit").request?.query).toBe(AdminAuditQuerySchema);
@@ -220,8 +225,10 @@ describe("BR-007 route contracts (spec 5.1)", () => {
   });
 
   it("every route that validates request input declares a 400 ApiError response", () => {
+    // getQuery's only input is the path id; a malformed one answers 404 like an unknown id (#622).
+    const pathIdOnly = new Set(["getQuery"]);
     for (const r of ROUTES) {
-      if (!r.request) continue;
+      if (!r.request || pathIdOnly.has(r.id)) continue;
       expect(r.responses[400]?.schema, r.id).toBe(ApiErrorSchema);
     }
     expect(findRoute("getLocale").responses[400]?.schema).toBe(ApiErrorSchema);

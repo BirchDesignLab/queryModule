@@ -179,6 +179,21 @@ describe("SEC-006 request-keys hardening (#311 Task 11)", () => {
     const { rows } = createRequestKeys(dataKey, cid, 0);
     expect(rows.every((r) => r.keyVersion === CURRENT_KEY_VERSION)).toBe(true);
   });
+  it("D-M2P0-3 (#524): key_version is the data key canary version and is bound into the wrap AAD", () => {
+    const { rows, deks } = createRequestKeys(dataKey, cid, 0);
+    for (const row of rows) {
+      expect(row.keyVersion).toBe(CURRENT_KEY_VERSION);
+      const sealed = { ciphertext: row.wrappedDek, iv: row.iv, tag: row.authTag };
+      const aad = `request_key|${cid}|${row.scope}|${CURRENT_KEY_VERSION}`;
+      expect(requestKeyAad(cid, row.scope, row.keyVersion)).toBe(aad);
+      expect(open(dataKey, sealed, aad).equals(deks[row.scope])).toBe(true);
+      const relabeled = `request_key|${cid}|${row.scope}|${CURRENT_KEY_VERSION + 1}`;
+      expect(() => open(dataKey, sealed, relabeled)).toThrow(AeadError);
+      expect(() =>
+        unwrapRequestKey(dataKey, { ...row, keyVersion: CURRENT_KEY_VERSION + 1 }),
+      ).toThrow(AeadError);
+    }
+  });
   it("rows and part values sealed by the pre-#311 code still open (fixed vector)", () => {
     const key = Buffer.alloc(32, 0x11);
     const dek = Buffer.alloc(32, 0x22);

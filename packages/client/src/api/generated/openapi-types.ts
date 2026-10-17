@@ -164,7 +164,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish the draft and activate it; refused on any validation error */
+        /** Publish the draft and activate it; refused on any validation error. The optional change note is accepted and ignored until M2 P2 stores it */
         post: operations["publishAdminConfig"];
         delete?: never;
         options?: never;
@@ -822,6 +822,8 @@ export interface components {
                 publishedBy: string | null;
                 publishedAt: number | null;
                 rollbackOf: number | null;
+                note?: string;
+                publishedByName?: string;
                 document: {
                     siteConfig: {
                         [key: string]: unknown;
@@ -848,6 +850,8 @@ export interface components {
                 publishedBy: string | null;
                 publishedAt: number | null;
                 rollbackOf: number | null;
+                note?: string;
+                publishedByName?: string;
                 document: {
                     siteConfig: {
                         [key: string]: unknown;
@@ -875,6 +879,8 @@ export interface components {
             publishedBy: string | null;
             publishedAt: number | null;
             rollbackOf: number | null;
+            note?: string;
+            publishedByName?: string;
         };
         putAdminConfigDraftBody: {
             baseVersion: number;
@@ -939,9 +945,12 @@ export interface components {
             publishedBy: string | null;
             publishedAt: number | null;
             rollbackOf: number | null;
+            note?: string;
+            publishedByName?: string;
         };
         publishAdminConfigBody: {
             draftVersion: number;
+            note?: string;
         };
         listAdminConfigVersions200: {
             versions: {
@@ -956,6 +965,8 @@ export interface components {
                 publishedBy: string | null;
                 publishedAt: number | null;
                 rollbackOf: number | null;
+                note?: string;
+                publishedByName?: string;
             }[];
         };
         rollbackAdminConfig200: {
@@ -970,6 +981,8 @@ export interface components {
             publishedBy: string | null;
             publishedAt: number | null;
             rollbackOf: number | null;
+            note?: string;
+            publishedByName?: string;
         };
         exportAdminConfigVersion200: {
             siteConfig: {
@@ -2343,15 +2356,6 @@ export interface operations {
                     "application/json": components["schemas"]["getQuery200"];
                 };
             };
-            /** @description Malformed correlation id (validationFailed) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
             /** @description No session */
             401: {
                 headers: {
@@ -2370,7 +2374,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
-            /** @description No such request, or not visible to the caller (notFound) */
+            /** @description No such request, not visible to the caller, or a malformed id (notFound) */
             404: {
                 headers: {
                     [name: string]: unknown;

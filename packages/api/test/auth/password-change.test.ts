@@ -208,3 +208,84 @@ describe("forced password change (D-A26)", () => {
     expect(r.status).toBe(200);
   });
 });
+
+describe("SEC-010 passwordChanged audit (#523, spec 4.7, 5.6)", () => {
+  const flagOf = async (a: Awaited<ReturnType<typeof createdUser>>["a"], id: string) =>
+    Number(
+      (
+        await a.t.deps.db.$client.execute({
+          sql: "SELECT must_change_password AS m FROM user WHERE id = ?",
+          args: [id],
+        })
+      ).rows[0]?.m,
+    );
+  const auditText = async (a: Awaited<ReturnType<typeof createdUser>>["a"]) =>
+    (await a.t.deps.db.$client.execute("SELECT details FROM audit_event")).rows
+      .map((r) => String(r.details))
+      .join(" ");
+
+  it("a self change writes one passwordChanged row by the user, and the cleared flag agrees", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    const r = await changePassword(a, cookie, {
+      currentPassword: temporaryPassword,
+      newPassword: NEW_PW,
+    });
+    expect(r.status).toBe(200);
+    const rows = await a.t.auditRows("passwordChanged");
+    expect(rows).toEqual([
+      { id: rows[0]?.id, actorUserId: user.id, details: { targetUserId: user.id, via: "self" } },
+    ]);
+    expect(await flagOf(a, user.id)).toBe(0);
+    const text = `${a.t.logLines.join(" ")} ${await auditText(a)}`;
+    expect(text.includes(NEW_PW) || text.includes(temporaryPassword)).toBe(false);
+  });
+
+  it("a failed change (wrong current password) writes no row and keeps the flag", async () => {
+    const { a, user, cookie } = await createdUser();
+    const r = await changePassword(a, cookie, {
+      currentPassword: "not-the-temporary-password",
+      newPassword: NEW_PW,
+    });
+    expect(r.ok).toBe(false);
+    expect(await a.t.auditRows("passwordChanged")).toHaveLength(0);
+    expect(await flagOf(a, user.id)).toBe(1);
+  });
+
+  it("an audit write failure ends the caller's session, logs ids only and answers 500", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    const sid = String(
+      (
+        await a.t.deps.db.$client.execute({
+          sql: "SELECT id FROM session WHERE user_id = ?",
+          args: [user.id],
+        })
+      ).rows[0]?.id,
+    );
+    const ended = vi.fn();
+    a.t.deps.eventBus.onSessionEnded(sid, ended);
+    const record = a.t.deps.audit.record.bind(a.t.deps.audit);
+    vi.spyOn(a.t.deps.audit, "record").mockImplementation((tx, e) =>
+      e.type === "passwordChanged" ? Promise.reject(new Error("audit down")) : record(tx, e),
+    );
+    const r = await changePassword(a, cookie, {
+      currentPassword: temporaryPassword,
+      newPassword: NEW_PW,
+    });
+    expect(r.status).toBe(500);
+    expect((await errorOf(r)).code).toBe("internal");
+    expect(await a.t.auditRows("passwordChanged")).toHaveLength(0);
+    const left = await a.t.deps.db.$client.execute({
+      sql: "SELECT id FROM session WHERE id = ?",
+      args: [sid],
+    });
+    expect(left.rows).toHaveLength(0);
+    expect(ended).toHaveBeenCalledTimes(1);
+    expect((await a.t.request("/api/v1/config", { headers: { cookie } })).status).toBe(401);
+    const failed = a.t.logLines.filter((l) => l.includes("audit write failed"));
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toContain(sid);
+    expect(failed[0]).toContain(user.id);
+    const text = `${a.t.logLines.join(" ")} ${await auditText(a)}`;
+    expect(text.includes(NEW_PW) || text.includes(temporaryPassword)).toBe(false);
+  });
+});

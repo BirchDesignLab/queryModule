@@ -48,9 +48,7 @@ Access levels:
 
 "X-Requested-With" is `yes` when the header is required. "Status" is the route contract's status:
 `live` means the handler is merged and answers as listed; `planned` means the contract is merged and no handler is mounted yet, so the route answers 404 until its phase lands (the admin audit and admin query routes, M2 P2).
-Two rows read `planned` although their handlers are mounted since M2 P1: `GET /queries` and
-`GET /queries/{correlationId}` answer as described under "Reading queries" below. The status cell
-follows the `status` field of the route contract (`routes.ts`), which a later contract change flips.
+The status cell follows the `status` field of the route contract (`routes.ts`).
 
 | Method | Path | Access | X-Requested-With | Status | Responses |
 |---|---|---|---|---|---|
@@ -61,8 +59,8 @@ follows the `status` field of the route contract (`routes.ts`), which a later co
 | GET | `/api/v1/me/preferences` | sessionOwn | no | live | 200, 401, 403 |
 | PUT | `/api/v1/me/preferences` | sessionOwn | yes | live | 200, 400, 401, 403 |
 | POST | `/api/v1/queries` | session | yes | live | 202, 400, 401, 403, 409, 413, 429, 500, 503 |
-| GET | `/api/v1/queries` | sessionOwn | no | planned | 200, 400, 401, 403 |
-| GET | `/api/v1/queries/{correlationId}` | policy | no | planned | 200, 400, 401, 403, 404 |
+| GET | `/api/v1/queries` | sessionOwn | no | live | 200, 400, 401, 403 |
+| GET | `/api/v1/queries/{correlationId}` | policy | no | live | 200, 401, 403, 404 |
 | GET | `/api/v1/admin/audit` | admin | no | planned | 200, 400, 401, 403 |
 | GET | `/api/v1/admin/audit/export` | admin | no | planned | 200, 400, 401, 403 |
 | GET | `/api/v1/admin/queries/{correlationId}` | admin | no | planned | 200, 400, 401, 403, 404 |
@@ -89,7 +87,7 @@ What each route does:
 | `GET /locales/{locale}` | A locale bundle of UI strings. `400 validationFailed` for a malformed locale, `404 notFound` for a well-formed locale the site does not list. |
 | `GET /config` | The `ClientSiteConfig` allowlist. Never carries `Source.server`, `auth`, `retention`, `extends` or mock data. |
 | `GET /queries` | The caller's own requests, newest first, `cursor` and `limit` (default 25, at most 100); parts nested with per-source status and no values or payloads. See "Reading queries". |
-| `GET /queries/{correlationId}` | One of the caller's requests with its submitted values and, for each `returned` source, its payload; anyone else's request, or an unknown id, is `404 notFound`; a shredded part or result answers `purged: true` with no values or payload. See "Reading queries". |
+| `GET /queries/{correlationId}` | One of the caller's requests with its submitted values and, for each `returned` source, its payload; anyone else's request, an unknown id, or a malformed id is `404 notFound` (the id's shape is no oracle); a shredded part or result answers `purged: true` with no values or payload. See "Reading queries". |
 | `GET /admin/audit` | Planned, admin. Filters `user` (actor or credential owner), `correlationId`, `type`; `from` and `to` required, at most 31 days apart; `cursor`; `limit` at most 200. Rows go through a tolerant read schema so rows written before later fields still parse. |
 | `GET /admin/audit/export` | Planned, admin. The same filters as NDJSON, one audit row per line. |
 | `GET /admin/queries/{correlationId}` | Planned, admin. A request with payloads; `includeHidden=true` adds hidden results. |

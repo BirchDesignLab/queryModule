@@ -318,6 +318,7 @@ describe("change role", () => {
       details: {
         targetUserId: u.id,
         role: "trainingOfficer",
+        fromRole: "user",
         change: "granted",
         via: "adminConsole",
       },
@@ -334,9 +335,34 @@ describe("change role", () => {
     expect(rows.at(-1)?.details).toEqual({
       targetUserId: u.id,
       role: "implementer",
+      fromRole: "implementer",
       change: "revoked",
       via: "adminConsole",
     });
+  });
+
+  it("G-m3: demoting an admin records fromRole admin", async () => {
+    const { a } = await setup();
+    const u = await plainUser(a, "second-admin@example.test");
+    await a.call("admin", "PUT", `${API}/${u.id}/role`, { role: "admin" });
+    const r = await a.call("admin", "PUT", `${API}/${u.id}/role`, { role: "implementer" });
+    expect(r.status).toBe(200);
+    expect((await consoleRoleRows(a)).map((x) => x.details)).toEqual([
+      {
+        targetUserId: u.id,
+        role: "admin",
+        fromRole: "user",
+        change: "granted",
+        via: "adminConsole",
+      },
+      {
+        targetUserId: u.id,
+        role: "implementer",
+        fromRole: "admin",
+        change: "granted",
+        via: "adminConsole",
+      },
+    ]);
   });
 
   it("the same role is a no-op with no audit row", async () => {
@@ -415,7 +441,7 @@ describe("sessions", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       actorUserId: adminId,
-      details: { sessionId, reason: "admin" },
+      details: { sessionId, targetUserId: u.id, reason: "admin" },
     });
     const left = await a.t.request("/api/v1/me/preferences", { headers: { cookie: u.cookie } });
     expect(left.status).toBe(401);
