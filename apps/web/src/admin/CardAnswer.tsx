@@ -2,7 +2,7 @@ import type { Translator } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { SourcePayload } from "@querymodule/core/contracts";
 import { assessResult, mapResponse } from "@querymodule/core/response";
-import { ResultCard } from "@querymodule/web-ui";
+import { ResultCard, SourceLine } from "@querymodule/web-ui";
 import { useMemo } from "react";
 import { useT } from "../app/i18n-context.js";
 import type { MockResult } from "./mock-edit.js";
@@ -101,17 +101,13 @@ export function BehaviorLine({
   translator: Translator;
 }) {
   return (
-    <div className="qm-source qm-source--problem">
-      <span aria-hidden="true" className="qm-source__icon">
-        !
-      </span>
-      <span>
-        {translator.t("sourceStatus.line", {
-          source,
-          status: translator.t(`sourceStatus.status.${status}`),
-        })}
-      </span>
-    </div>
+    <SourceLine
+      tone="problem"
+      text={translator.t("sourceStatus.line", {
+        source,
+        status: translator.t(`sourceStatus.status.${status}`),
+      })}
+    />
   );
 }
 

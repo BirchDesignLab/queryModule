@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useShortcutAction } from "../shortcuts/ShortcutProvider.js";
+import { SourceLine } from "./SourceLine.js";
 
 /** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
 export interface SourceLineView {
@@ -130,9 +131,6 @@ export function formatAckTime(epochMs: number): string {
   const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("month")}-${get("day")}-${get("year")} ${pad(Number(get("hour")))}:${get("minute")}:${get("second")}`;
 }
-
-/** Decorative: the line's text says the status (aria-hidden at the use site). */
-const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!", notRun: "–" } as const;
 
 const BADGE_CLASS = {
   sending: "qm-badge qm-badge--status",
@@ -401,18 +399,12 @@ export function RequestList({
                           <div className="qm-request__sources">
                             {part.lines.map((line) =>
                               line.card === undefined ? (
-                                <div key={line.key} className={`qm-source qm-source--${line.tone}`}>
-                                  <span aria-hidden="true" className="qm-source__icon">
-                                    {SOURCE_ICON[line.tone]}
-                                  </span>
-                                  <span>{line.text}</span>
-                                  {line.why === undefined ? null : (
-                                    <>
-                                      {/* A space for assistive technology; a flex row drops it visually. */}{" "}
-                                      <span className="qm-source__why">{line.why}</span>
-                                    </>
-                                  )}
-                                </div>
+                                <SourceLine
+                                  key={line.key}
+                                  tone={line.tone}
+                                  text={line.text}
+                                  why={line.why}
+                                />
                               ) : (
                                 <div key={line.key} className="qm-request__card">
                                   {line.card}

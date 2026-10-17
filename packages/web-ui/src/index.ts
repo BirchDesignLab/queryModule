@@ -36,6 +36,8 @@ export type {
 export { formatAckTime, RequestList, shortReference } from "./panel/RequestList.js";
 export type { SourceCheckboxesProps } from "./panel/SourceCheckboxes.js";
 export { SourceCheckboxes } from "./panel/SourceCheckboxes.js";
+export type { SourceLineTone } from "./panel/SourceLine.js";
+export { SourceLine } from "./panel/SourceLine.js";
 export type { SubmitBlockReason, SubmitButtonProps } from "./panel/SubmitButton.js";
 export { SubmitButton } from "./panel/SubmitButton.js";
 export type { TypeFieldBarProps } from "./panel/TypeFieldBar.js";
