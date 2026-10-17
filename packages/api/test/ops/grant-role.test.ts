@@ -30,6 +30,7 @@ describe("SEC-010 grant-role", () => {
         details: {
           targetUserId: id,
           role: "trainingOfficer",
+          fromRole: "user",
           change: "granted",
           via: "grant-role",
         },
@@ -48,7 +49,11 @@ describe("SEC-010 grant-role", () => {
       (await grantRole(t.deps, { email: "admin@example.test", role: "admin", change: "revoked" }))
         .role,
     ).toBe("user");
-    expect(await t.auditRows("roleChanged")).toHaveLength(2);
+    const rows = await t.auditRows("roleChanged");
+    expect(rows.map((r) => [r.details.change, r.details.role, r.details.fromRole])).toEqual([
+      ["granted", "admin", "user"],
+      ["revoked", "admin", "admin"],
+    ]);
   });
   it("rejects an unknown email, a revoke of a role not held and a grant of user, writing nothing", async () => {
     const t = await createTestApp();

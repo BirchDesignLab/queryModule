@@ -75,7 +75,13 @@ export function grantRole(
       type: "roleChanged",
       actor: SYSTEM_ACTOR,
       identitySource: "system",
-      details: { targetUserId: u.id, role: o.role, change: o.change, via: "grant-role" },
+      details: {
+        targetUserId: u.id,
+        role: o.role,
+        fromRole: u.role,
+        change: o.change,
+        via: "grant-role",
+      },
     });
     return { userId: u.id, role: next, changed: true };
   });

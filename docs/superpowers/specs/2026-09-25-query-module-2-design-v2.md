@@ -634,7 +634,7 @@ SourceStatus = "pending" | "returned" | "failed" | "timedOut" | "interrupted"
 
 **Audit events.** `AuditEventType` is a closed union. Each type has a Zod schema for `details`, validated on every write by `AuditService.record(tx, event)` (5.5). The envelope columns (5.5) carry id (integer ordering), `type`, `at` (epoch ms UTC), `correlation_id?`, `part_id?`, the actor snapshot `{ id, email, role }`, `credential_user_id?`, `identity_source` (`local`\|`host`\|`system`) and host subject for embedded mode (6.9). `details` repeat none of these. Rows written with no user (the startup sweep, the sweeper, `configLoaded`, `purge.ts`, `lost-key.ts`, `lost-data-key.ts`, `delegationExpired`) carry the actor snapshot `{ id: "system", email: null, role: "system" }` and `identity_source` `system`.
 
-Rule for every `details` schema: identifiers, metadata and `role: "type"` field values only. Never other field values, payload text, credentials, secrets, error message text from adapters, or free text typed by a user. Durations come from a monotonic clock. Schemas are additive-only across versions: a field may be added as optional, never removed or retyped.
+Rule for every `details` schema: identifiers, metadata and `role: "type"` field values only. Never other field values, payload text, credentials, secrets, error message text from adapters, or free text typed by a user. Durations come from a monotonic clock. Schemas are additive-only across versions: a field may be added as optional, never removed or retyped. The one exception (M2, #523): `roleChanged.fromRole` and `sessionRevoked.targetUserId` are required of every writer from M2 on; rows stored before M2 lack them, so readers of stored rows (the admin audit viewer and export, 5.1) parse with the tolerant read schema, never the writer schema.
 
 Query events:
 
@@ -658,7 +658,8 @@ Auth events (Better Auth hooks, the session service, the sweeper and the admin c
 | `loginSucceeded` | `method` (`password`\|`totp`\|`hostJwt`), `sessionId`, `clientIp` |
 | `loginFailed` | `targetUserId` (nullable), `reason` (`badPassword`\|`unknownAccount`\|`mfaFailed`\|`lockedOut`\|`hostJwtInvalid`\|`accountDisabled`), `clientIp`, `lockoutUntil?` (set when this failure starts a lockout). `accountDisabled` (AC2 review C-I1, 10-03-26): a sign-in to a disabled account, refused whatever the password (Better Auth checks it as for any account and any session it creates is discarded, rr:N-I1); it counts toward the lockout like a bad password |
 | `logout` | `sessionId` |
-| `sessionRevoked` | `sessionId`, `reason` (`userDisabled`\|`admin`\|`expired`); `expired` is written by the sweeper (system actor) for idle or absolute expiry (5.2); `admin` is written by an admin who revokes one session in the admin console (ADR-0011 item 8) |
+| `sessionRevoked` | `sessionId`, `targetUserId` (the session owner; M2, #523), `reason` (`userDisabled`\|`admin`\|`expired`); `expired` is written by the sweeper (system actor) for idle or absolute expiry (5.2); `admin` is written by an admin who revokes one session in the admin console (ADR-0011 item 8) |
+| `passwordChanged` | `targetUserId`, `via` (`self`\|`adminReset`); `self` is written by the user after a successful change-password (a failed change writes none; if the row cannot be written the caller's session is ended, 5.6); `adminReset` is reserved until an admin reset route exists and is written by the admin. Never password material or a hash (M2, #523) |
 | `mfaEnrolled` | `method: "totp"` |
 | `mfaDisabled` | `method: "totp"`, `byUserId` |
 
@@ -686,11 +687,11 @@ Admin and ops events:
 
 | Type | Required `details` |
 |---|---|
-| `roleChanged` | `targetUserId`, `role`, `change` (`granted`\|`revoked`), `via` (`grant-role`\|`adminConsole`); `grant-role` rows are written by the system actor, `adminConsole` rows by the admin who changed the role (5.6, ADR-0011 item 8) |
+| `roleChanged` | `targetUserId`, `role`, `fromRole` (the role held before the change; M2, #523), `change` (`granted`\|`revoked`), `via` (`grant-role`\|`adminConsole`); `grant-role` rows are written by the system actor, `adminConsole` rows by the admin who changed the role (5.6, ADR-0011 item 8) |
 | `configPublished` | `siteId`, `versionId`, `version`, `configHash`, `previousConfigHash`, `changedPointers` (JSON pointers only, never values), `rollbackOf?`; one row per publish or rollback, written by the admin or implementer who acted (ADR-0011 item 7) |
 | `userCreated` | `targetUserId`, `role`; written by the admin who created the user; the one-time password is never audited (ADR-0011 item 8) |
-| `auditViewed` | `filters` (`userId?`, `correlationId?`, `type?`, `from`, `to`), `cursor?`, `rowCount` |
-| `auditExported` | `filters`, `rowCount`, `format: "ndjson"` |
+| `auditViewed` | `filters` (`userId?`, `correlationId?`, `type?`, `from`, `to`), `cursor?`, `rowCount`; written by the admin who read the page |
+| `auditExported` | `filters`, `rowCount`, `format: "ndjson"`; written by the admin who exported |
 | `configLoaded` | `siteId`, `configHash`, `configSchemaVersion`, `coreVersion`, `extendsChain` (site ids) |
 | `retentionPurged` | `scope` (`payload`\|`values`), `reason` (`retention`\|`keyLost`), `olderThan` (epoch ms, null for `keyLost`), `requestCount`, `keysDeleted` |
 | `userDisabled` | `targetUserId`, `sessionsRevoked`, `delegationsRevoked`, `credentialsDeleted` (counts) |

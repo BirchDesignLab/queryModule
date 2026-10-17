@@ -96,9 +96,9 @@ async function internalSignInFailure(
 }
 
 /**
- * AUD-2: drops a session whose loginSucceeded row failed to commit, and returns the delete
- * error's name, or null. A failed delete still answers 500: the cookie was never sent, and the
- * row expires on its own limits.
+ * AUD-2: drops a session whose loginSucceeded (or, #523, passwordChanged) row failed to commit,
+ * and returns the delete error's name, or null. A failed delete still answers 500: for sign-in
+ * the cookie was never sent, and the row expires on its own limits.
  */
 async function deleteUnauditedSession(d: AppDeps, sessionId: string): Promise<string | null> {
   try {
@@ -218,9 +218,16 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
  * (G-I4): it would clear the forced-change flag while the admin-issued password stays valid.
  * Every other body goes to Better Auth, which verifies the current password and clears
  * must_change_password through the hook in auth.ts.
+ *
+ * #523 (SEC-010, spec 4.7): a change that succeeded writes passwordChanged via self, by the user.
+ * Better Auth has already committed the new password, so an audit failure cannot roll it back:
+ * as for sign-in (AUD-2), the caller's session is deleted and ended, and the answer is 500. A
+ * failed change writes no row. Only ids and error names are logged, never the body (spec 5.9).
  */
 async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
-  if (!(await d.identity.resolveGated(c.req.raw))) return apiError(c, "unauthenticated");
+  const gated = await d.identity.resolveGated(c.req.raw);
+  if (!gated) return apiError(c, "unauthenticated");
+  const p = gated.principal;
   const body = (await c.req.raw
     .clone()
     .json()
@@ -233,7 +240,32 @@ async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response>
     return apiError(c, "validationFailed");
   if (typeof body.newPassword === "string" && body.newPassword === body.currentPassword)
     return apiError(c, "validationFailed");
-  return d.auth.handler(c.req.raw);
+  const res = await d.auth.handler(c.req.raw);
+  if (!res.ok) return res;
+  try {
+    await withTransaction(d.db, (tx) =>
+      d.audit.record(tx, {
+        type: "passwordChanged",
+        actor: actorOf(p),
+        ...(p.hostSubject ? { hostSubject: p.hostSubject } : {}),
+        identitySource: p.identitySource,
+        details: { targetUserId: p.userId, via: "self" },
+      }),
+    );
+  } catch (e) {
+    const errorName = e instanceof Error ? e.name : typeof e;
+    const deleteErrorName = await deleteUnauditedSession(d, p.sessionId);
+    if (deleteErrorName === null) d.eventBus.endSession(p.sessionId);
+    d.logger.error("password change audit write failed", {
+      userId: p.userId,
+      sessionId: p.sessionId,
+      errorName,
+      sessionDeleted: deleteErrorName === null,
+      ...(deleteErrorName === null ? {} : { deleteErrorName }),
+    });
+    return apiError(c, "internal");
+  }
+  return res;
 }
 
 type SignOutOutcome = "deleted" | "alreadyGone" | "rowSurvived";

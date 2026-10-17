@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { AuditReadRowSchema } from "./admin-audit";
 import {
   AUDIT_DETAILS_SCHEMAS,
   AUDIT_EVENT_TYPES,
@@ -73,7 +74,13 @@ const samples = {
     lockoutUntil: 1,
   },
   logout: { sessionId: "0199a0b0-0000-7000-8000-0000000000e1" },
-  roleChanged: { targetUserId: "u1", role: "admin", change: "granted", via: "grant-role" },
+  roleChanged: {
+    targetUserId: "u1",
+    role: "admin",
+    fromRole: "user",
+    change: "granted",
+    via: "grant-role",
+  },
   configLoaded: {
     siteId: "example-ok",
     configHash: HASH,
@@ -104,7 +111,19 @@ const samples = {
     delegationsRevoked: 0,
     credentialsDeleted: 0,
   },
-  sessionRevoked: { sessionId: RID, reason: "admin" },
+  sessionRevoked: { sessionId: RID, targetUserId: "u2", reason: "admin" },
+  passwordChanged: { targetUserId: "u1", via: "self" },
+  auditViewed: {
+    filters: { userId: "u1", type: "roleChanged", from: 1_790_000_000_000, to: 1_790_086_400_000 },
+    cursor: "eyJpZCI6NDJ9",
+    rowCount: 50,
+  },
+  auditExported: {
+    filters: { correlationId: CID, from: 1_790_000_000_000, to: 1_790_086_400_000 },
+    format: "ndjson",
+    rowCount: 1200,
+  },
+  adminViewed: { correlationId: CID, viewerBasis: "admin", includeHidden: true },
 } as const;
 
 /** The six query types frozen in M0 P0; the auth types (M0 P1) have their own envelope. */
@@ -119,7 +138,7 @@ const QUERY_EVENT_TYPES = [
 type QueryEventType = (typeof QUERY_EVENT_TYPES)[number];
 
 describe("SEC-010 audit catalogue (spec 4.7 query events, spec 5.6 auth events)", () => {
-  it("lists the six query event types frozen in M0 P0, the four M0 P1 auth types, the two M1 P2 system types (D-A2), then the four M1 P3 admin types (ADR-0011)", () => {
+  it("lists the six query event types frozen in M0 P0, the four M0 P1 auth types, the two M1 P2 system types (D-A2), the four M1 P3 admin types (ADR-0011), then the four M2 types (#523)", () => {
     expect([...AUDIT_EVENT_TYPES]).toEqual([
       ...QUERY_EVENT_TYPES,
       "loginSucceeded",
@@ -132,6 +151,10 @@ describe("SEC-010 audit catalogue (spec 4.7 query events, spec 5.6 auth events)"
       "userCreated",
       "userDisabled",
       "sessionRevoked",
+      "passwordChanged",
+      "auditViewed",
+      "auditExported",
+      "adminViewed",
     ]);
     expect(Object.keys(AUDIT_DETAILS_SCHEMAS).sort()).toEqual([...AUDIT_EVENT_TYPES].sort());
   });
@@ -844,7 +867,7 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
       type: "sessionRevoked",
       actor: SYSTEM_ACTOR,
       identitySource: "system",
-      details: { sessionId: RID, reason: "expired" },
+      details: { sessionId: RID, targetUserId: "u2", reason: "expired" },
     };
     expect(AuditEventSchema.safeParse(e).success).toBe(true);
   });
@@ -876,14 +899,18 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
       "an unknown session revoke reason",
       {
         ...row("sessionRevoked", admin),
-        details: { sessionId: RID, reason: "because" },
+        details: { sessionId: RID, targetUserId: "u2", reason: "because" },
       },
     ],
     [
       "a session token in place of the session row id",
       {
         ...row("sessionRevoked", admin),
-        details: { sessionId: "Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z", reason: "admin" },
+        details: {
+          sessionId: "Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+          targetUserId: "u2",
+          reason: "admin",
+        },
       },
     ],
     [
@@ -908,6 +935,7 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
   const roleChange = (via: "grant-role" | "adminConsole") => ({
     targetUserId: "u2",
     role: "trainingOfficer",
+    fromRole: "user",
     change: "granted",
     via,
   });
@@ -921,11 +949,11 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
     ["sessionRevoked admin by the system actor", sys("sessionRevoked", samples.sessionRevoked)],
     [
       "sessionRevoked userDisabled by the system actor",
-      sys("sessionRevoked", { sessionId: RID, reason: "userDisabled" }),
+      sys("sessionRevoked", { sessionId: RID, targetUserId: "u2", reason: "userDisabled" }),
     ],
     [
       "sessionRevoked expired by an admin",
-      human("sessionRevoked", admin, { sessionId: RID, reason: "expired" }),
+      human("sessionRevoked", admin, { sessionId: RID, targetUserId: "u2", reason: "expired" }),
     ],
     [
       "sessionRevoked admin by an implementer",
@@ -956,11 +984,15 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
     ["sessionRevoked admin by an admin", human("sessionRevoked", admin, samples.sessionRevoked)],
     [
       "sessionRevoked userDisabled by an admin",
-      human("sessionRevoked", admin, { sessionId: RID, reason: "userDisabled" }),
+      human("sessionRevoked", admin, {
+        sessionId: RID,
+        targetUserId: "u2",
+        reason: "userDisabled",
+      }),
     ],
     [
       "sessionRevoked expired by the system actor",
-      sys("sessionRevoked", { sessionId: RID, reason: "expired" }),
+      sys("sessionRevoked", { sessionId: RID, targetUserId: "u2", reason: "expired" }),
     ],
     ["roleChanged grant-role by the system actor", sys("roleChanged", roleChange("grant-role"))],
     [
@@ -992,6 +1024,172 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
         ...samples.configPublished,
         changedPointers: many,
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe("SEC-010 SEC-012 M2 audit catalogue (#523, spec 4.7, 5.6)", () => {
+  const admin = { id: "admin1", email: "admin@example.test", role: "admin" } as const;
+  const officer = { id: "u1", email: "officer@example.test", role: "trainingOfficer" } as const;
+  const human = (type: AuditEventType, actor: object, details: object) => ({
+    type,
+    actor,
+    identitySource: "local",
+    details,
+  });
+  const sys = (type: AuditEventType, details: object) => ({
+    type,
+    actor: SYSTEM_ACTOR,
+    identitySource: "system",
+    details,
+  });
+  const ok = (e: object) => AuditEventSchema.safeParse(e).success;
+  const actorIssue = (e: object) =>
+    AuditEventSchema.safeParse(e).error?.issues.some((i) => i.path[0] === "actor") ?? false;
+
+  it("G-m3: roleChanged requires fromRole in the writer schema", () => {
+    const { fromRole: _f, ...old } = samples.roleChanged;
+    expect(AUDIT_DETAILS_SCHEMAS.roleChanged.safeParse(old).success).toBe(false);
+    expect(
+      AUDIT_DETAILS_SCHEMAS.roleChanged.safeParse({ ...samples.roleChanged, fromRole: "root" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("G-m3: a demotion of an admin records fromRole admin; a grant moves away from fromRole", () => {
+    const s = AUDIT_DETAILS_SCHEMAS.roleChanged;
+    const demote = {
+      targetUserId: "u2",
+      role: "implementer",
+      fromRole: "admin",
+      change: "granted",
+      via: "adminConsole",
+    };
+    expect(s.safeParse(demote).success).toBe(true);
+    // A grant of the role already held, and a revoke of a role not held, are not changes.
+    expect(s.safeParse({ ...demote, fromRole: "implementer" }).success).toBe(false);
+    expect(
+      s.safeParse({ ...demote, role: "admin", fromRole: "implementer", change: "revoked" }).success,
+    ).toBe(false);
+    expect(
+      s.safeParse({ ...demote, role: "admin", fromRole: "admin", change: "revoked" }).success,
+    ).toBe(true);
+  });
+
+  it("sessionRevoked requires targetUserId (the session owner) in the writer schema", () => {
+    const { targetUserId: _t, ...old } = samples.sessionRevoked;
+    expect(AUDIT_DETAILS_SCHEMAS.sessionRevoked.safeParse(old).success).toBe(false);
+    expect(
+      AUDIT_DETAILS_SCHEMAS.sessionRevoked.safeParse({
+        ...samples.sessionRevoked,
+        targetUserId: "has space",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("the tolerant read schema accepts stored roleChanged and sessionRevoked rows written before M2", () => {
+    const stored = (id: number, type: string, actor: object, details: object) => ({
+      id,
+      type,
+      at: 1_790_000_000_000,
+      actor,
+      identitySource: actor === SYSTEM_ACTOR ? "system" : "local",
+      details,
+    });
+    const rows = [
+      stored(1, "roleChanged", SYSTEM_ACTOR, {
+        targetUserId: "u1",
+        role: "admin",
+        change: "granted",
+        via: "grant-role",
+      }),
+      stored(2, "sessionRevoked", admin, { sessionId: RID, reason: "admin" }),
+    ];
+    for (const r of rows) {
+      expect(AuditReadRowSchema.parse(r)).toEqual(r);
+      // The same stored details are refused by the writer schema, which only new rows meet.
+      const { id: _i, at: _a, ...event } = r;
+      const r2 = AuditEventSchema.safeParse(event);
+      expect(r2.success).toBe(false);
+      expect(r2.error?.issues.map((i) => i.path.join("."))).toEqual([
+        r.type === "roleChanged" ? "details.fromRole" : "details.targetUserId",
+      ]);
+    }
+  });
+
+  it("passwordChanged carries the target and how, never password material", () => {
+    const s = AUDIT_DETAILS_SCHEMAS.passwordChanged;
+    expect(s.safeParse({ targetUserId: "u1", via: "adminReset" }).success).toBe(true);
+    expect(s.safeParse({ targetUserId: "u1", via: "email" }).success).toBe(false);
+    expect(s.safeParse({ targetUserId: "u1" }).success).toBe(false);
+    for (const extra of ["password", "newPassword", "currentPassword", "passwordHash", "hash"]) {
+      expect(s.safeParse({ ...samples.passwordChanged, [extra]: "x" }).success, extra).toBe(false);
+    }
+  });
+
+  it("passwordChanged via self is written by the user whose password changed", () => {
+    const self = human("passwordChanged", officer, samples.passwordChanged);
+    expect(ok(self)).toBe(true);
+    expect(actorIssue(human("passwordChanged", admin, samples.passwordChanged))).toBe(true);
+    expect(actorIssue(sys("passwordChanged", samples.passwordChanged))).toBe(true);
+    expect(ok({ ...self, correlationId: CID })).toBe(true);
+    expect(ok({ ...self, partId: 0 })).toBe(false);
+    expect(ok({ ...self, credentialUserId: "u1" })).toBe(false);
+  });
+
+  it("passwordChanged via adminReset (reserved) is written by an admin", () => {
+    const reset = { targetUserId: "u1", via: "adminReset" };
+    expect(ok(human("passwordChanged", admin, reset))).toBe(true);
+    expect(actorIssue(human("passwordChanged", officer, reset))).toBe(true);
+    expect(actorIssue(sys("passwordChanged", reset))).toBe(true);
+  });
+
+  it("auditViewed and auditExported are written by an admin, with no envelope request columns", () => {
+    for (const type of ["auditViewed", "auditExported"] as const) {
+      const e = human(type, admin, samples[type]);
+      expect(ok(e), type).toBe(true);
+      expect(actorIssue(human(type, officer, samples[type])), type).toBe(true);
+      expect(actorIssue(sys(type, samples[type])), type).toBe(true);
+      expect(ok({ ...e, correlationId: CID }), type).toBe(false);
+      expect(ok({ ...e, partId: 0 }), type).toBe(false);
+      expect(ok({ ...e, credentialUserId: "u1" }), type).toBe(false);
+    }
+  });
+
+  it("auditViewed and auditExported filters hold ids and a window only", () => {
+    const v = AUDIT_DETAILS_SCHEMAS.auditViewed;
+    const x = AUDIT_DETAILS_SCHEMAS.auditExported;
+    const f = samples.auditViewed.filters;
+    expect(v.safeParse({ filters: { from: 1, to: 2 }, rowCount: 0 }).success).toBe(true);
+    expect(v.safeParse({ ...samples.auditViewed, filters: { ...f, q: "ZZ-0001" } }).success).toBe(
+      false,
+    );
+    expect(v.safeParse({ ...samples.auditViewed, filters: { ...f, to: 0 } }).success).toBe(false);
+    expect(v.safeParse({ ...samples.auditViewed, filters: { to: 2 } }).success).toBe(false);
+    expect(v.safeParse({ ...samples.auditViewed, rowCount: -1 }).success).toBe(false);
+    expect(v.safeParse({ ...samples.auditViewed, rowCount: 201 }).success).toBe(false);
+    expect(v.safeParse({ ...samples.auditViewed, cursor: "a b=c" }).success).toBe(false);
+    expect(
+      v.safeParse({ ...samples.auditViewed, filters: { ...f, correlationId: "not-a-uuid" } })
+        .success,
+    ).toBe(false);
+    expect(x.safeParse({ ...samples.auditExported, format: "csv" }).success).toBe(false);
+    expect(x.safeParse({ ...samples.auditExported, cursor: "eyJpZCI6NDJ9" }).success).toBe(false);
+  });
+
+  it("adminViewed: an admin views by basis admin; a credential owner by basis credentialOwner", () => {
+    const owner = { ...samples.adminViewed, viewerBasis: "credentialOwner", includeHidden: false };
+    expect(ok(human("adminViewed", admin, samples.adminViewed))).toBe(true);
+    expect(ok(human("adminViewed", officer, owner))).toBe(true);
+    expect(actorIssue(human("adminViewed", officer, samples.adminViewed))).toBe(true);
+    expect(actorIssue(sys("adminViewed", owner))).toBe(true);
+    expect(
+      AUDIT_DETAILS_SCHEMAS.adminViewed.safeParse({ ...samples.adminViewed, viewerBasis: "x" })
+        .success,
+    ).toBe(false);
+    expect(
+      AUDIT_DETAILS_SCHEMAS.adminViewed.safeParse({ ...samples.adminViewed, includeHidden: "yes" })
+        .success,
     ).toBe(false);
   });
 });

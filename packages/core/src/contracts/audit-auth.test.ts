@@ -48,23 +48,40 @@ describe("SEC-010 auth audit details", () => {
   it("roleChanged pins via to grant-role or the admin console (ADR-0011 item 8)", () => {
     const s = AUDIT_DETAILS_SCHEMAS.roleChanged;
     expect(
-      s.safeParse({ targetUserId: "u", role: "admin", change: "granted", via: "grant-role" })
-        .success,
+      s.safeParse({
+        targetUserId: "u",
+        role: "admin",
+        fromRole: "user",
+        change: "granted",
+        via: "grant-role",
+      }).success,
     ).toBe(true);
     expect(
       s.safeParse({
         targetUserId: "u",
         role: "implementer",
+        fromRole: "user",
         change: "granted",
         via: "adminConsole",
       }).success,
     ).toBe(true);
     expect(
-      s.safeParse({ targetUserId: "u", role: "admin", change: "granted", via: "api" }).success,
+      s.safeParse({
+        targetUserId: "u",
+        role: "admin",
+        fromRole: "user",
+        change: "granted",
+        via: "api",
+      }).success,
     ).toBe(false);
     expect(
-      s.safeParse({ targetUserId: "u", role: "root", change: "granted", via: "grant-role" })
-        .success,
+      s.safeParse({
+        targetUserId: "u",
+        role: "root",
+        fromRole: "user",
+        change: "granted",
+        via: "grant-role",
+      }).success,
     ).toBe(false);
   });
 });
@@ -96,6 +113,7 @@ describe("SEC-010 ADR-0005 auth audit ids, times and client IP are bounded", () 
       AUDIT_DETAILS_SCHEMAS.roleChanged.safeParse({
         targetUserId: long,
         role: "admin",
+        fromRole: "admin",
         change: "revoked",
         via: "grant-role",
       }).success,
@@ -162,6 +180,7 @@ describe("SEC-005 SEC-012 auth rows parse through AuditEventSchema (AuditService
       details: {
         targetUserId: "u2",
         role: "trainingOfficer",
+        fromRole: "user",
         change: "granted",
         via: "grant-role",
       },
@@ -214,7 +233,13 @@ describe("SEC-005 SEC-012 auth rows parse through AuditEventSchema (AuditService
       type: "roleChanged",
       actor: SYSTEM_ACTOR,
       identitySource: "local",
-      details: { targetUserId: "u2", role: "admin", change: "granted", via: "grant-role" },
+      details: {
+        targetUserId: "u2",
+        role: "admin",
+        fromRole: "user",
+        change: "granted",
+        via: "grant-role",
+      },
     };
     expect(AuditEventSchema.safeParse(e).success).toBe(false);
   });
