@@ -45,10 +45,10 @@ export interface VersionedConfig extends LoadedConfig {
   versionId: string;
 }
 
-/** Re-exported from the leaf module so config:validate imports stay unchanged (spec 5.4). */
 /**
- * Token lookups for the core contrast checks (spec 4.1, UX-011): the tokens package's one copy,
- * shared with the web builder (#644), re-exported so config:validate imports stay unchanged.
+ * Re-exported so config:validate imports stay unchanged: BUILTIN_ADAPTER_KINDS from its leaf
+ * module (spec 5.4), and tokensContrast, the token lookups for the core contrast checks (spec 4.1,
+ * UX-011), the tokens package's one copy shared with the web builder (#644).
  */
 export { BUILTIN_ADAPTER_KINDS, tokensContrast };
 
@@ -90,7 +90,7 @@ export function preResolvedChecks(
 }
 
 /**
- * A known token that is not a colour (a scale token) cannot be contrast-checked (UX-011). Run
+ * A known token that is not a color (a scale token) cannot be contrast-checked (UX-011). Run
  * after validateResolved reports no errors (unknown tokens are its config.unknownToken).
  */
 export function colourTokenChecks(config: SiteConfig): Diagnostic[] {
@@ -185,7 +185,7 @@ interface ChainSource {
 
 /**
  * Spec 5.8 steps 1 to 6 on one source: migrate, merge any base, strict parse, locale bundles,
- * validateSiteConfig, contrast and colour checks, mock coverage, then the config hash. Stops at
+ * validateSiteConfig, contrast and color checks, mock coverage, then the config hash. Stops at
  * the first step with errors and answers all of that step's diagnostics (keys, pointers and
  * params; the caller decides what leaves the process). An unreadable file still throws.
  */

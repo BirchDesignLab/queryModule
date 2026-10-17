@@ -184,8 +184,9 @@ function trackRequests(server: Server): { idle(): Promise<void>; open(): number 
  * requests up to HTTP_DRAIN_MS (a submit already past the 503 check finishes T1 and enqueues),
  * then cut every connection still open, stop dispatch intake (anything later stays pending for
  * the next start's sweep; the route logs a refused enqueue during the drain without d.fatal),
- * wait for in-flight dispatch up to max(0, maxDeadline - now) + DRAIN_SLACK_MS, then close the
- * sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this drain: once
+ * wait for in-flight dispatch up to max(0, maxDeadline - now) + DRAIN_SLACK_MS, then abort what
+ * is left (abortAll: no row written, no T2 started; the rows stay pending for the sweep, #574),
+ * close the sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this drain: once
  * lifecycle.failed is set, at the start or after any wait, the drain logs "drain ended by fatal
  * error", never "stopped", and rejects with DrainAbortedError, leaving the sockets and the DB to
  * the fatal close (main.ts exits 1). Call right after the server listens.

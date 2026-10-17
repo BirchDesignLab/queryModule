@@ -17,8 +17,8 @@ import type { Principal } from "../seams";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
-/** The default upgrade limit per client IP per window (D-A9); defined in env.ts (#574 G-G-m1). */
-export { WS_UPGRADE_LIMIT } from "../env";
+/** The default upgrade limit per client IP per window (D-A9); defined in ws/limits.ts. */
+export { WS_UPGRADE_LIMIT } from "./limits";
 /**
  * Server-local close codes, RFC 6455 or local, outside the contract (WS_CLOSE_CODES): any close
  * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: the welcome.latestSeq or
