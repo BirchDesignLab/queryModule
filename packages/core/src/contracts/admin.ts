@@ -26,6 +26,18 @@ export type ConfigDocument = z.infer<typeof ConfigDocumentSchema>;
 
 export const CONFIG_VERSION_STATUSES = ["draft", "published", "superseded"] as const;
 
+/**
+ * D-M2P0-4 (#525, #507): a publisher's change note. Plain text, trimmed, 1 to 200 characters, no
+ * control characters (so no line breaks). It describes the change and never holds query values.
+ */
+export const PUBLISH_NOTE_MAX = 200;
+export const PublishNoteSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(PUBLISH_NOTE_MAX)
+  .regex(/^[^\p{Cc}]*$/u);
+
 /** ADR-0011 item 1: a site_config_version row without its document. */
 export const ConfigVersionSchema = z.strictObject({
   id: Uuid7Schema,
@@ -39,6 +51,10 @@ export const ConfigVersionSchema = z.strictObject({
   publishedBy: BoundedIdSchema.nullable(),
   publishedAt: EpochMsSchema.nullable(),
   rollbackOf: z.int().min(1).nullable(),
+  /** D-M2P0-4: optional until M2 P2 persists them (the store does not write them yet). */
+  note: PublishNoteSchema.optional(),
+  /** The publisher's display name, beside the publishedBy id (D-M2P0-4). */
+  publishedByName: z.string().min(1).max(128).optional(),
 });
 export type ConfigVersion = z.infer<typeof ConfigVersionSchema>;
 
@@ -76,7 +92,11 @@ export const ValidateConfigResponseSchema = z.strictObject({
  * and its path, never a value); the builder validates first and shows the full diagnostics at
  * their controls (Task 33).
  */
-export const PublishConfigBodySchema = z.strictObject({ draftVersion: z.int().min(1) });
+export const PublishConfigBodySchema = z.strictObject({
+  draftVersion: z.int().min(1),
+  /** D-M2P0-4: accepted and ignored until M2 P2 persists it. */
+  note: PublishNoteSchema.optional(),
+});
 
 /**
  * Rollback publishes an older document as a new version and leaves the draft as it is; its base
