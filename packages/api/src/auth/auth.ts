@@ -10,6 +10,22 @@ import { uuidv7 } from "../ids";
 import type { Logger } from "../log/logger";
 
 /**
+ * The lowest password minimum the server will run with (SEC-005; #574 AW5 C-C-m1, Manager 7
+ * ruling 10-17-26). PASSWORD_MIN_LENGTH lives in core config, which ordinary paths reach, so this
+ * gate-tier module refuses to load below the floor instead of starting with a weaker minimum.
+ */
+export const PASSWORD_FLOOR = 12;
+
+/** Throws fixed text when the minimum is below PASSWORD_FLOOR. */
+export function assertPasswordFloor(min: number): void {
+  if (!(min >= PASSWORD_FLOOR)) {
+    throw new Error(`PASSWORD_MIN_LENGTH is below the floor of ${PASSWORD_FLOOR} (SEC-005)`);
+  }
+}
+
+assertPasswordFloor(PASSWORD_MIN_LENGTH);
+
+/**
  * bearer()'s own `after` hook (better-auth/dist/plugins/bearer/index.mjs) always copies the
  * session cookie into a JS-readable `set-auth-token` header and exposes it via
  * `Access-Control-Expose-Headers` on every sign-in, regardless of Origin. That defeats the

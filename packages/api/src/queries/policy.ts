@@ -16,7 +16,7 @@ export type Access =
 const DENY: Access = { ok: false };
 
 /**
- * The one query access policy (spec 5.2, SEC-014). Reads query_request part 0 and
+ * The one query access policy (spec 5.2). Reads query_request part 0 and
  * source_result only; writes nothing. The admin route audits adminViewed itself (M2 P2).
  */
 export async function authorizeQueryAccess(

@@ -44,8 +44,70 @@ function sealedOf(c: Buffer | null, iv: Buffer | null, tag: Buffer | null): Seal
   return { ciphertext: c, iv, tag };
 }
 
+/** The query_request columns both reads map the same way (#623 Q1). */
+interface PartRow {
+  partId: number;
+  parentPartId: number | null;
+  origin: string;
+  queryType: string;
+  typeValues: unknown;
+  plateOnly: number;
+  skippedReason: unknown;
+  droppedSourceIds: unknown;
+}
+
 /**
- * The owner's read of one request (spec 5.1, 5.2, 5.5; FR-062 read half, SEC-014): null unless
+ * One part's fields shared by the detail read and the list (#623 Q1), so the two cannot drift: a
+ * skipped part carries its skipReasons, an unskipped one an empty list.
+ */
+function partFields(p: PartRow) {
+  return {
+    partId: p.partId,
+    parentPartId: p.parentPartId,
+    origin: p.origin,
+    queryType: p.queryType,
+    typeValues: p.typeValues,
+    plateOnly: p.plateOnly === 1,
+    skipReasons: p.skippedReason === null ? [] : SkipReasonsSchema.parse(p.skippedReason),
+    droppedSourceIds: SourceIdsSchema.parse(p.droppedSourceIds),
+  };
+}
+
+/** A part's results in selection order, as the 202 lists them (spec 5.2). */
+function inSelectionOrder<R extends { sourceId: string }>(
+  rows: readonly R[],
+  selectedSourceIds: unknown,
+): R[] {
+  const selected = SourceIdsSchema.parse(selectedSourceIds);
+  return [...rows].sort((a, b) => selected.indexOf(a.sourceId) - selected.indexOf(b.sourceId));
+}
+
+/**
+ * The one purged rule (spec 5.1), shared by both reads: a part or result that holds sealed data
+ * whose request_key scope is gone (shredded by ops/lost-key.ts).
+ */
+const isPurged = (sealed: boolean, keyPresent: boolean): boolean => sealed && !keyPresent;
+
+/**
+ * Rows grouped by a key, in their original order (#623 Q4: one pass, not a filter per item); the
+ * lookup answers an empty list for a key with no rows (a skipped part has no results).
+ */
+function groupBy<R>(
+  rows: readonly R[],
+  key: (r: R) => string | number,
+): (k: string | number) => R[] {
+  const m = new Map<string | number, R[]>();
+  for (const r of rows) {
+    const k = key(r);
+    const list = m.get(k);
+    if (list) list.push(r);
+    else m.set(k, [r]);
+  }
+  return (k) => m.get(k) ?? [];
+}
+
+/**
+ * The owner's read of one request (spec 5.1, 5.2, 5.5; FR-062 read half): null unless
  * the access policy answers basis "owner", so another user, an admin on this route and an unknown
  * or malformed id all get the same 404 (never 403). Parts in plan order, each part's sources in
  * selection order (as the 202 lists them), values opened under the values DEK and each returned
@@ -79,6 +141,7 @@ export async function readQuery(
   // the policy found part 0, so head is there; were it not, the schema refuses the body (500)
   const head = parts[0];
   const deks: Partial<Record<RequestKeyScope, Buffer>> = {};
+  const resultsByPart = groupBy(results, (r) => r.partId);
   try {
     for (const row of keys) deks[row.scope] = unwrapRequestKey(d.dataKey, row);
     return QueryDetailSchema.parse({
@@ -87,44 +150,35 @@ export async function readQuery(
       configHash: head?.configHash,
       parts: parts.map((p) => {
         const sealedValues = sealedOf(p.valuesCiphertext, p.valuesIv, p.valuesTag);
-        const selected = SourceIdsSchema.parse(p.selectedSourceIds);
-        const sources = results
-          .filter((r) => r.partId === p.partId)
-          .sort((a, b) => selected.indexOf(a.sourceId) - selected.indexOf(b.sourceId))
-          .map((r) => {
-            const sealedPayload = sealedOf(r.payloadCiphertext, r.payloadIv, r.payloadTag);
-            const base = {
-              resultId: r.resultId,
-              sourceId: r.sourceId,
-              status: r.status,
-              adapterKind: r.adapterKind,
-              errorCode: r.errorCode,
-              createdAt: r.createdAt,
-              receivedAt: r.receivedAt,
-              timedOutAt: r.timedOutAt,
-            };
-            if (sealedPayload === null) return { ...base, purged: false };
-            if (!deks.payload) return { ...base, purged: true };
+        const sources = inSelectionOrder(resultsByPart(p.partId), p.selectedSourceIds).map((r) => {
+          const sealedPayload = sealedOf(r.payloadCiphertext, r.payloadIv, r.payloadTag);
+          const base = {
+            resultId: r.resultId,
+            sourceId: r.sourceId,
+            status: r.status,
+            adapterKind: r.adapterKind,
+            errorCode: r.errorCode,
+            createdAt: r.createdAt,
+            receivedAt: r.receivedAt,
+            timedOutAt: r.timedOutAt,
+          };
+          if (sealedPayload === null || !deks.payload) {
             return {
               ...base,
-              purged: false,
-              payload: openPayload(deks.payload, r.resultId, sealedPayload),
+              purged: isPurged(sealedPayload !== null, deks.payload !== undefined),
             };
-          });
-        const base = {
-          partId: p.partId,
-          parentPartId: p.parentPartId,
-          origin: p.origin,
-          queryType: p.queryType,
-          typeValues: p.typeValues,
-          plateOnly: p.plateOnly === 1,
-          skipReasons: p.skippedReason === null ? [] : SkipReasonsSchema.parse(p.skippedReason),
-          droppedSourceIds: SourceIdsSchema.parse(p.droppedSourceIds),
-          sources,
-        };
+          }
+          return {
+            ...base,
+            purged: false,
+            payload: openPayload(deks.payload, r.resultId, sealedPayload),
+          };
+        });
+        const base = { ...partFields(p), sources };
         // a skipped part has no values ciphertext (acknowledge.ts), so nothing to open or purge
-        if (sealedValues === null) return { ...base, purged: false };
-        if (!deks.values) return { ...base, purged: true };
+        if (sealedValues === null || !deks.values) {
+          return { ...base, purged: isPurged(sealedValues !== null, deks.values !== undefined) };
+        }
         return {
           ...base,
           purged: false,
@@ -257,38 +311,31 @@ export async function listQueries(
     .select({ correlationId: requestKey.correlationId, scope: requestKey.scope })
     .from(requestKey)
     .where(inArray(requestKey.correlationId, ids));
+  const keySet = new Set(keys.map((k) => `${k.correlationId}/${k.scope}`));
   const hasKey = (correlationId: string, scope: RequestKeyScope) =>
-    keys.some((k) => k.correlationId === correlationId && k.scope === scope);
+    keySet.has(`${correlationId}/${scope}`);
+  const partsByRequest = groupBy(parts, (p) => p.correlationId);
+  const resultsByPart = groupBy(results, (r) => `${r.correlationId}/${r.partId}`);
   return QueryListResponseSchema.parse({
     nextCursor,
     requests: pageHeads.map((h) => {
-      const own = parts.filter((p) => p.correlationId === h.correlationId);
+      const own = partsByRequest(h.correlationId);
       const head = own.find((p) => p.partId === 0);
       return {
         correlationId: h.correlationId,
         submittedAt: h.submittedAt,
         configHash: head?.configHash,
-        parts: own.map((p) => {
-          const selected = SourceIdsSchema.parse(p.selectedSourceIds);
-          return {
-            partId: p.partId,
-            parentPartId: p.parentPartId,
-            origin: p.origin,
-            queryType: p.queryType,
-            typeValues: p.typeValues,
-            plateOnly: p.plateOnly === 1,
-            skipReasons: p.skippedReason === null ? [] : SkipReasonsSchema.parse(p.skippedReason),
-            droppedSourceIds: SourceIdsSchema.parse(p.droppedSourceIds),
-            purged: p.sealed === 1 && !hasKey(h.correlationId, "values"),
-            sources: results
-              .filter((r) => r.correlationId === h.correlationId && r.partId === p.partId)
-              .sort((a, b) => selected.indexOf(a.sourceId) - selected.indexOf(b.sourceId))
-              .map(({ correlationId: _c, partId: _p, sealed, ...r }) => ({
-                ...r,
-                purged: sealed === 1 && !hasKey(h.correlationId, "payload"),
-              })),
-          };
-        }),
+        parts: own.map((p) => ({
+          ...partFields(p),
+          purged: isPurged(p.sealed === 1, hasKey(h.correlationId, "values")),
+          sources: inSelectionOrder(
+            resultsByPart(`${h.correlationId}/${p.partId}`),
+            p.selectedSourceIds,
+          ).map(({ correlationId: _c, partId: _p, sealed, ...r }) => ({
+            ...r,
+            purged: isPurged(sealed === 1, hasKey(h.correlationId, "payload")),
+          })),
+        })),
       };
     }),
   });

@@ -124,10 +124,11 @@ export function bindJobs(
  * fails closed (d.fatal), so committed rows are never silently left undispatched. The 202 never
  * waits on dispatch (spec 5.2 step 5). A lost idempotency race replays the winner and enqueues
  * nothing: the winner enqueued its own rows. While the server drains (spec 5.2) or fails closed
- * (spec 8.1) a new submit gets 503 unavailable before T1; a replay of an acknowledged one still gets its stored 202. A refused
- * enqueue after T1 takes the same backstop, except during the drain, where only a request the
- * drain cut off past its HTTP bound reaches it: that one logs a warning and leaves its rows
- * pending for the next start's sweep.
+ * (spec 8.1) a new submit gets 503 unavailable before T1; a replay of an acknowledged one still
+ * gets its stored 202. A refused enqueue after T1 takes the same backstop, except during the
+ * drain, where only a request the drain cut off past its HTTP bound reaches it, and after a
+ * fatal, where a submit already past the 503 check reaches it (#574 C-C-m3): either one logs a
+ * warning and leaves its rows pending for the next start's sweep, so no second d.fatal is raised.
  */
 export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
   app.post("/api/v1/queries", requireSession(d.identity), async (c) => {
@@ -158,11 +159,19 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       const jobs = bindJobs(templates, ack, acknowledgedMonoMs);
       // a lost race replays the winner and has nothing to enqueue (critic Q2)
       if (jobs.length > 0 && !d.dispatcher.enqueue(jobs)) {
-        if (!d.lifecycle.draining) throw new DispatchRefusedError();
-        // The drain cut this request off past its HTTP bound (critic C1) and stopped intake: the
-        // rows stay pending for the next start's sweep, and the drain still exits 0 (spec 5.2).
-        // Its 202 below is never delivered (the socket is gone); a retry with the key replays it.
-        d.logger.warn("dispatch refused during drain", { correlationId: ack.body.correlationId });
+        if (d.lifecycle.failed) {
+          // A fatal aborted dispatch while this request was in T1 (#574 C-C-m3): the process is
+          // already failing closed, so the rows stay pending for the next start's sweep.
+          d.logger.warn("dispatch refused after fatal", { correlationId: ack.body.correlationId });
+        } else if (d.lifecycle.draining) {
+          // The drain cut this request off past its HTTP bound (critic C1) and stopped intake:
+          // the rows stay pending for the next start's sweep, and the drain still exits 0 (spec
+          // 5.2). Its 202 below is never delivered (the socket is gone); a retry with the key
+          // replays it.
+          d.logger.warn("dispatch refused during drain", { correlationId: ack.body.correlationId });
+        } else {
+          throw new DispatchRefusedError();
+        }
       }
     } catch (e) {
       // Backstop (AW3 critic b): T1 committed, so the 202 stands; the process fails closed and the

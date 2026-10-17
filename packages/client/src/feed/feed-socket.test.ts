@@ -135,11 +135,20 @@ describe("FR-065 feed socket: connect and dedup (spec 4.7, ADR-0013)", () => {
     const t = setup();
     t.feed.open();
     const socket = t.connect(0);
-    socket.receive(sourceStatus(1, { status: "notAStatus" }));
+    socket.receive(sourceStatus(1, { status: 7 }));
     expect(t.events).toHaveLength(0);
     expect(t.onInvalid).toHaveBeenCalledExactlyOnceWith("sourceStatus");
     expect(socket.closed).toBe(false);
     expect(t.feed.state()).toBe("open");
+  });
+
+  it("a status it does not know reaches the handlers as unknown (#650)", () => {
+    const t = setup();
+    t.feed.open();
+    const socket = t.connect(0);
+    socket.receive(sourceStatus(1, { status: "notAStatusYet" }));
+    expect(t.events).toMatchObject([{ seq: 1, status: "unknown" }]);
+    expect(t.onInvalid).not.toHaveBeenCalled();
   });
 
   it("ignores binary frames and malformed json", () => {
@@ -565,13 +574,23 @@ describe("FR-065 feed socket: replay cursor (spec 4.7, 5.3, ADR-0013)", () => {
     expect(seen).toHaveLength(1);
   });
 
+  it("a resync with a reason it does not know still reaches onResync (#650: refetch anyway)", () => {
+    const t = setup();
+    const seen: unknown[] = [];
+    t.feed.onResync((r) => seen.push(r));
+    t.feed.open();
+    const socket = t.connect(5);
+    socket.receive({ v: 1, type: "resync", reason: "somethingNew", latestSeq: 9 });
+    expect(seen).toMatchObject([{ reason: "unknown", latestSeq: 9 }]);
+  });
+
   it("a malformed resync is dropped and counted, and moves nothing", () => {
     const t = setup();
     const seen: unknown[] = [];
     t.feed.onResync((r) => seen.push(r));
     t.feed.open();
     const socket = t.connect(5);
-    socket.receive({ v: 1, type: "resync", reason: "someDay", latestSeq: 0 });
+    socket.receive({ v: 1, type: "resync", reason: 3, latestSeq: 0 });
     expect(seen).toHaveLength(0);
     expect(t.onInvalid).toHaveBeenCalledExactlyOnceWith("resync");
     socket.receive(sourceStatus(6));

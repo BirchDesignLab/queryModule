@@ -104,6 +104,20 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     services.feed.close();
   });
 
+  it("#650 a status this app does not know shows as unknown, in words, with a neutral mark", () => {
+    const { driver, services } = setup();
+    services.feed.open();
+    act(() => driver.status("stateSource", "someLaterStatus"));
+    const list = sourceList();
+    const line = within(list).getByText("State system: unknown").closest(".qm-source");
+    expect(line).toHaveClass("qm-source--unknown");
+    expect(
+      within(list).getByText("this version of the app does not know this status"),
+    ).toBeInTheDocument();
+    expect(within(list).queryByText(/someLaterStatus/)).not.toBeInTheDocument();
+    services.feed.close();
+  });
+
   it("a focused control inside the row keeps focus when an event arrives", async () => {
     const { driver, services, user } = setup();
     services.feed.open();

@@ -584,9 +584,9 @@ each violation by JSON pointer and key (`fixture.realPlate`, `fixture.validVin`,
 | `name` | `last`, `first`, `middle`, `name`, `lastname`, `firstname`, `middlename`, `surname`, `ownername`, `registeredowner` | every word in `SYNTHETIC_NAMES` |
 | `address` | `address`, `street`, `addressline1` | one to four digits and `Example Ave` |
 | `status` | `status` | a scalar with no run of 4 or more digits, counted across separators as for `other`; an exponent-form number (`1e21`) is rejected |
-| `freeText` | `remarks`, `note`, `caution`, `description`, `offense` | text with no digits at all |
+| `freeText` | `remarks`, `note`, `caution`, `description`, `offense` | text with no digits at all (no Unicode numeral of any kind) |
 | `container` | `vehicle`, `owner`, `owners`, `subject`, `warrant`, `warrants` | an object or array, checked in turn |
-| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency`, `licensenumber` | a scalar with no run of 4 or more digits, counted across separators, where every character that is not a letter or a decimal digit is one, and a digit is a digit of any script (so `123-45-678` and `123,456,789` are rejected); an exponent-form number (`1e21`) is rejected; `year` may be 1901 to 1999 |
+| `other` | `make`, `model`, `year`, `type`, `state`, `serial`, `propertytype`, `agency`, `licensenumber` | a scalar with no run of 4 or more digits, counted across separators, where every character that is not a letter or a numeral is one, a digit is any Unicode numeral (category N: decimal digits of any script, and others such as circled or Ethiopic digits), and any letter breaks a run (so `123-45-678` and `123,456,789` are rejected, `12ж34` is not); an exponent-form number (`1e21`) is rejected; `year` may be 1901 to 1999 |
 
 `SYNTHETIC_NAMES` is `TESTERSON`, `SAMPLEWORTH`, `EXAMPLESON`, `SAMPLE`, `TEST`, `TESTER` and
 `EXAMPLE` (compared upper-cased).

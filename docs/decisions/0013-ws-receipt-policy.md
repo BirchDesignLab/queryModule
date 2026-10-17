@@ -37,3 +37,7 @@ Option 2, ruled by the developer 10-05-26 (D-M2P0-1 in the M2 P0 contracts plan)
 - The client half is built in M2 P0.5 Track B Task 5 (feed socket parser); the heartbeat probe and `ApiError` receipt parser follow in #66 (M2 P1 Track B).
 - Spec 4.7 carries `Overridden by ADR-0013.` under its heading (only the sentence "the client validates on receipt", which now means tolerant receipt).
 - Master plan 8 contract changes for WebSocket messages state additive or breaking against this rule.
+
+## Amendments
+
+- Amended 10-14-26 (#650, developer ruling; built 10-16-26): a known message type that carries an enum value the client does not know is kept, not dropped. The value must still be a string of 1 to 64 characters (`WS_ENUM_MAX_LENGTH`); it is read as `RECEIPT_FALLBACK` (`"unknown"`). An unknown `sourceStatus.status` shows as a neutral "unknown" status until a fetched detail names it; an unknown `resync.reason` still triggers the refetch and moves the high-water mark to `latestSeq`. Any other schema failure (a non-string, empty or overlong value, a missing field) is still dropped and counted. The server stays strict: `WsServerMessageSchema` refuses an unknown value on send. Clients parse with `WsServerReceiptSchema` (`packages/core/src/contracts/ws.ts`), published as `$defs.WsServerReceipt` in `packages/core/contracts/ws-events.schema.json`. A new value in an existing WebSocket enum is therefore additive (no `MIN_CLIENT_VERSION` bump); a changed meaning of an existing value is still breaking.

@@ -288,3 +288,16 @@ describe("spec 5.8, 5.9 startup faults are ConfigLoadError with no config value"
     expect(e.message).not.toContain("SECRETVALUE");
   });
 });
+
+describe("the loader's contrast lookups (#644: one copy, @querymodule/tokens)", () => {
+  it("is the tokens package's tokensContrast, so server and builder compute contrast the same way", async () => {
+    const tokens = await import("@querymodule/tokens");
+    const { tokensContrast } = await import("../src/config/load");
+    expect(tokensContrast).toBe(tokens.tokensContrast);
+  });
+
+  it("skips a theme override that is not #rrggbb instead of throwing in the contrast maths", async () => {
+    const { tokensContrast } = await import("../src/config/load");
+    expect(() => tokensContrast.failures("day", { "color.surface.base": "red" })).not.toThrow();
+  });
+});
