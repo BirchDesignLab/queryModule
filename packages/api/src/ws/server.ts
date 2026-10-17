@@ -147,7 +147,7 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
         floor = seq;
         send({ v, type: "welcome", latestSeq: seq });
       } else {
-        // Owner rows only (SEC-014): the socket's session user, never a client-named one.
+        // Owner rows only (spec 5.3): the socket's session user, never a client-named one.
         let r: Awaited<ReturnType<typeof eventsSince>>;
         try {
           r = await eventsSince(d.db, p.userId, lastSeq, d.clock.now());
