@@ -13,8 +13,11 @@ import { useShortcutAction } from "../shortcuts/ShortcutProvider.js";
 export interface SourceLineView {
   /** Stable across updates (correlation ID, part, source), so a line is never rebuilt. */
   key: string;
-  /** Picks the icon and its weight; never the only carrier of the status. `notRun`: dropped before dispatch. */
-  tone: "pending" | "ok" | "problem" | "notRun";
+  /**
+   * Picks the icon and its weight; never the only carrier of the status. `notRun`: dropped before
+   * dispatch. `unknown`: a status this app does not know (#650), shown neutrally.
+   */
+  tone: "pending" | "ok" | "problem" | "notRun" | "unknown";
   /** Already in words, for example "State source: timed out". */
   text: string;
   /** Why the source did not return, in words ("no answer in 10 s"); absent when it did or is pending. */
@@ -132,7 +135,7 @@ export function formatAckTime(epochMs: number): string {
 }
 
 /** Decorative: the line's text says the status (aria-hidden at the use site). */
-const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!", notRun: "–" } as const;
+const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!", notRun: "–", unknown: "?" } as const;
 
 const BADGE_CLASS = {
   sending: "qm-badge qm-badge--status",

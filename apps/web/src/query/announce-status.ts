@@ -12,6 +12,7 @@ const ORDER = [
   "interrupted",
   "credentialsMissing",
   "credentialsRejected",
+  "unknown",
   "pending",
 ] as const;
 
