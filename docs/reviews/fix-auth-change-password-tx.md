@@ -1,32 +1,31 @@
 ---
 reviewer: "opus-5.5"
 effort: "medium"
-reviewedSha: "906008e02004bbe68b152fc77b6edb62edb5ecc0"
+reviewedSha: "690471aa6b38e8ab4192f8258c1e054cb8355f58"
 verdict: "approve"
 ---
 
 # Review: fix/auth-change-password-tx
 
-Date: 10-17-26. Gate slice, Opus 5.5 medium.
+Date: 10-17-26. Gate slice, Opus 5.5 medium (re-review after minors fix).
 
 ## Scope
-Branch fix/auth-change-password-tx, range 5132459360d95e32a204be4d4d87ecedcdeb7989..906008e02004bbe68b152fc77b6edb62edb5ecc0 (906008e, #690 PR-2). The app performs change-password itself: verify and hash through Better Auth's $context.password, then the account.password update, the must_change_password clear and the passwordChanged row commit in one transaction. The clear-must-change-password plugin is removed. Gate files: packages/api/src/auth/auth.ts, packages/api/src/auth/routes.ts.
+
+Branch fix/auth-change-password-tx, range 5132459360d95e32a204be4d4d87ecedcdeb7989..690471aa6b38e8ab4192f8258c1e054cb8355f58. Gate files packages/api/src/auth/auth.ts and packages/api/src/auth/routes.ts. The wave moves change-password into the app (#690, Ruling on #690 option A): verify and hash through Better Auth's $context.password, then update account.password, clear mustChangePassword and record passwordChanged in one transaction; removes the clear-must-change-password plugin. 690471a fixes the first pass's three minors.
 
 ## Findings summary
-Critical 0, important 0, minor 3. Ruling on #690 (option A, conditions a to f) kept as stands; the plan Rulings line "passwordChanged audit failure" is marked closed by this PR. No controller rulings needed.
+
+Critical 0, important 0, minor 0. First-pass minors G-m1, G-m2, G-m3 fixed in 690471a. Ruling on #690 (option A) stands as applied.
 
 ## Cross-cutting checks
-1. packages/api/src/db/tx.ts: withTransaction awaits the async callback and rolls back on throw, so the three writes are atomic.
-2. packages/api/src: no server-side auth.api.changePassword caller relied on the removed plugin to clear the flag.
-3. Better Auth update-user.mjs: /change-password is POST only, so non-POST requests forwarded to Better Auth cannot change a password; refusal codes match.
 
-## Answers
-1. Atomicity: one withTransaction (routes.ts:288-305) holds all three writes; the hash is computed before it but stored only inside. The audit failure test proves the old password works, the flag stays set and no row is written.
-2. Guards and parity: IP limiter (routes.ts:35-41), resolveGated (250), revokeOtherSessions and same-password refusals (257, 262), Better Auth codes and order (265-278) kept; a missing or non-string field is 400 validationFailed (259-260).
-3. Secrets: the log has ids and errorName only, audit details targetUserId and via, the response { token: null }; hash and verify only via $context.password with its config bounds.
-4. Plugin removal: /change-password was its only matcher; other Better Auth password paths are 404 (tested) and non-POST hits a POST-only endpoint. The pin test catches loss of $context.password hash or verify, changed length config, or a credential row not keyed providerId "credential".
+- New tests pass and leave the tree clean: password-change.test.ts at head, 19/19 passed; git status clean after.
+
+## Answers to the controller's questions
+
+1. Yes. G-m1 auth.ts:212-213; G-m2 routes.ts:258-259; G-m3 password-change.test.ts:299 and 316-333. 690471a changes only comment lines in the two gate files, so route behavior is unchanged.
+2. Yes. One transaction (routes.ts:281-297), guards and limiter unchanged (routes.ts:35-44, 248-262), refusal codes match Better Auth (routes.ts:219-226), log carries ids and error name only (routes.ts:300-304), plugin removed (auth.ts:226) with pin test passing.
 
 ## Remaining Minors
-- auth.ts:212 comment still points at the removed plugin.
-- routes.ts:259-260 a malformed body maps to the client's samePassword message.
-- Tests lack CREDENTIAL_ACCOUNT_NOT_FOUND, over-long currentPassword and non-POST /change-password cases.
+
+None.
