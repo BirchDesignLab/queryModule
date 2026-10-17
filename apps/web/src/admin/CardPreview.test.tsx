@@ -133,6 +133,21 @@ describe("the card preview", () => {
     expect(within(pane()).queryByText(/a different card/)).toBeNull();
   });
 
+  // BW3 polish (#642, T10-Q7): typed values belong to the query type they were typed for.
+  it("typed values stay with their query type across card switches", async () => {
+    const t = await openVehicleCard();
+    await screen.findByRole("region", { name: "Card preview" });
+    await t.user.click(within(pane()).getByRole("radio", { name: "Type values" }));
+    await t.user.type(within(pane()).getByRole("textbox", { name: "State" }), "TX");
+    const nav = screen.getByRole("navigation", { name: "Configuration items" });
+    const tree = within(nav).getByRole("tree", { name: "Result cards" });
+    // Property has a State field too: it does not inherit the Vehicle one.
+    await t.user.click(within(tree).getByRole("treeitem", { name: /^Property cards$/ }));
+    expect(await within(pane()).findByRole("textbox", { name: "State" })).toHaveValue("");
+    await t.user.click(within(tree).getByRole("treeitem", { name: /^Vehicle cards$/ }));
+    expect(await within(pane()).findByRole("textbox", { name: "State" })).toHaveValue("TX");
+  });
+
   // BW3 polish (#642, T10-C3): a card narrowed by a rule wins in pick mode for the scenario whose
   // own trigger satisfies the rule, and not for the default answer.
   it("a rule-narrowed card wins in pick mode for the scenario that triggers its rule, not the default", async () => {

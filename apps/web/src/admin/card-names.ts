@@ -35,7 +35,9 @@ export function useCardName(doc: JsonObject | null): (mapping: unknown) => strin
         const p = personas.find((x) => str(x.key) === m.persona);
         parts.push(labelText(p?.labelKey) || m.persona);
       }
-      if (m.when !== undefined) parts.push(t("admin.cards.name.rule"));
+      // "Only when a rule matches" alone; after a source or persona it joins lowercase.
+      if (m.when !== undefined)
+        parts.push(t(parts.length === 0 ? "admin.cards.name.rule" : "admin.cards.name.ruleAlso"));
       return parts.length === 0 ? t("admin.cards.name.all") : parts.join(", ");
     },
     [t, labelText, sources, personas],

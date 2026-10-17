@@ -493,7 +493,12 @@ export function buildChangeGroups(
       continue;
     }
 
-    const g = group(`site:${top}`, deps.itemName(top), top);
+    // The keywords and the look of each severity are one item in the editor (Keywords and severity),
+    // so Review lists them as one group too (T11-4).
+    const g =
+      top === "keywords" || top === "keywordSeverityStyles"
+        ? group("site:keywords", t("admin.cards.keywordsRow"), "keywords")
+        : group(`site:${top}`, deps.itemName(top), top);
     const rest = p.slice(1);
     if (top === "keywords" && p.length >= 2) {
       // One plain sentence per keyword ("Keyword TESTMAKE added as a warning."), not its JSON.
@@ -567,7 +572,10 @@ export function buildChangeGroups(
       change.kind === "moved" && change.by === VALUE_IDENTITY
         ? { before: listText(before(p.length)), after: listText(after(segments.length)) }
         : {};
-    section(g, "own", null).entries.push({
+    (top === "keywordSeverityStyles"
+      ? section(g, "styles", t("admin.keywords.styles.title"))
+      : section(g, "own", null)
+    ).entries.push({
       ...entry(what, p.map(segText).join(" "), !reordered),
       ...quick,
       ...Object.fromEntries(Object.entries(order).filter(([, v]) => v !== undefined)),

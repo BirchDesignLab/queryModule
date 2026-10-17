@@ -2,7 +2,7 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { MockFile, SourcePayload } from "@querymodule/core/contracts";
 import { matchMockScenario } from "@querymodule/core/mock";
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { type KeyboardEvent, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useDraft } from "./builder-store.js";
 import {
@@ -20,6 +20,7 @@ import { type MockResult, resultOf } from "./mock-edit.js";
 import { parseMock } from "./mock-model.js";
 import { previewConfig, useOverlayTranslator } from "./Preview.js";
 import { formMatchOf, triggerInput } from "./preview-match.js";
+import { SegChoice } from "./SegChoice.js";
 import { cardsTypeOf } from "./selection.js";
 
 /**
@@ -53,66 +54,23 @@ const NO_VALUES: Record<string, unknown> = {};
 const MODES = ["pick", "type"] as const;
 type Mode = (typeof MODES)[number];
 
-/**
- * The Values segmented control (mockup v5): two native radios in one segmented track, the label
- * drawing each segment (the pattern of the web-ui SegField). The browser gives one Tab stop, and
- * Left, Right, Up and Down move and select; Home and End jump to the first and last here. Focus
- * follows the selection and never moves otherwise.
- */
-function ValuesSeg({
-  label,
-  name,
-  mode,
-  onChange,
-  names,
-}: {
-  label: string;
-  name: string;
-  mode: Mode;
-  onChange(mode: Mode): void;
-  names: Readonly<Record<Mode, string>>;
-}) {
-  const refs = useRef<Partial<Record<Mode, HTMLInputElement | null>>>({});
-  const jump = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Home" && e.key !== "End") return;
-    e.preventDefault();
-    const next = (e.key === "Home" ? MODES[0] : MODES[MODES.length - 1]) ?? mode;
-    onChange(next);
-    refs.current[next]?.focus();
-  };
-  return (
-    <fieldset className="qm-preview__field">
-      <legend>{label}</legend>
-      <div className="qm-seg qm-seg--options qm-seg--values">
-        {MODES.map((m) => (
-          <label key={m} className="qm-seg__option">
-            <input
-              ref={(el) => {
-                refs.current[m] = el;
-              }}
-              type="radio"
-              name={name}
-              checked={mode === m}
-              onChange={() => onChange(m)}
-              onKeyDown={jump}
-            />
-            <span>{names[m]}</span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
+const NO_TYPED: Readonly<Record<string, string>> = {};
 
 export function CardPreview({
   doc,
   labels,
   selected,
+  typeChoice,
 }: {
   /** The settled draft the checks ran on. */
   doc: JsonObject;
   labels: Readonly<Record<string, Readonly<Record<string, string>>>>;
   selected: string | null;
+  /**
+   * With Keywords selected there is no card of the editor's own to show them on: this offers the
+   * query types to preview them as (T11-5). Absent for a card or a type row.
+   */
+  typeChoice?: { onChange(code: string): void };
 }) {
   const t = useT();
   const headingId = useId();
@@ -141,7 +99,12 @@ export function CardPreview({
         : (typeSources[0] ?? "");
   const [mode, setMode] = useState<Mode>("pick");
   const [scenario, setScenario] = useState<string | null>(null);
-  const [typed, setTyped] = useState<Readonly<Record<string, string>>>({});
+  // Typed values belong to one query type: another type's card starts empty, and coming back to
+  // a type finds its values again (T10-Q7). Never the draft.
+  const [typedByType, setTypedByType] = useState<
+    Readonly<Record<string, Readonly<Record<string, string>>>>
+  >({});
+  const typed = typedByType[code] ?? NO_TYPED;
   const [view, setView] = useState<"summary" | "detail">("summary");
 
   const sourceName = (id: string) => {
@@ -290,6 +253,23 @@ export function CardPreview({
           <p className="qm-preview__state">{t("admin.cards.preview.empty")}</p>
         ) : (
           <>
+            {typeChoice !== undefined && (
+              <div>
+                <label htmlFor={`${uid}-type`}>{t("admin.cards.preview.queryType")}</label>{" "}
+                <select
+                  className="qm-field__input"
+                  id={`${uid}-type`}
+                  value={code}
+                  onChange={(e) => typeChoice.onChange(e.target.value)}
+                >
+                  {asObjects(doc.queryTypes).map((q) => (
+                    <option key={str(q.code)} value={str(q.code)}>
+                      {labelText(q.labelKey) || str(q.code)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label htmlFor={`${uid}-source`}>{t("admin.cards.preview.source")}</label>{" "}
               <select
@@ -305,10 +285,11 @@ export function CardPreview({
                 ))}
               </select>
             </div>
-            <ValuesSeg
+            <SegChoice<Mode>
               label={t("admin.cards.preview.values")}
               name={`${uid}-mode`}
-              mode={mode}
+              value={mode}
+              options={MODES}
               onChange={setMode}
               names={{ pick: t("admin.cards.preview.pick"), type: t("admin.cards.preview.type") }}
             />
@@ -343,7 +324,10 @@ export function CardPreview({
                       value={typed[key] ?? ""}
                       onChange={(e) => {
                         const value = e.target.value;
-                        setTyped((v) => ({ ...v, [key]: value }));
+                        setTypedByType((all) => ({
+                          ...all,
+                          [code]: { ...all[code], [key]: value },
+                        }));
                       }}
                     />
                   </div>

@@ -420,6 +420,38 @@ describe("a keyword row's half-typed exception follows its keyword (CRITIC-M2)",
   });
 });
 
+// T11-5 (#642; ruling of 10-17-26): Keywords have no query type of their own, so the preview beside
+// them offers a Preview query type select. Session-local: it is never in the draft.
+describe("the preview beside the keywords (T11-5)", () => {
+  it("offers a query type select, defaults to the first type, and previews the chosen one", async () => {
+    const t = await openBuilder();
+    await openKeywords(t);
+    const pane = await screen.findByRole("region", { name: "Card preview" });
+    const select = within(pane).getByRole("combobox", { name: "Query type" }) as HTMLSelectElement;
+    const first = select.value;
+    expect(first).not.toBe("");
+    expect([...select.options].map((o) => o.value)).toContain("PRO");
+    const before = JSON.stringify(configDraftStore(t.services).getState().doc);
+    await t.user.selectOptions(select, "PRO");
+    expect(select.value).toBe("PRO");
+    // The pane follows: typed values are now asked for the chosen type's fields, and the draft is
+    // untouched.
+    await t.user.click(within(pane).getByRole("radio", { name: "Type values" }));
+    expect(first).toBe("VEH");
+    expect(within(pane).queryByRole("textbox", { name: "Plate" })).toBeNull();
+    expect(within(pane).getByRole("textbox", { name: /^Serial/ })).toBeInTheDocument();
+    expect(JSON.stringify(configDraftStore(t.services).getState().doc)).toBe(before);
+  });
+
+  it("is not offered when a card or a type row is the preview's subject", async () => {
+    const t = await openBuilder();
+    const cards = await screen.findByRole("tree", { name: "Result cards" });
+    await t.user.click(within(cards).getByRole("treeitem", { name: /^Vehicle cards$/ }));
+    const pane = await screen.findByRole("region", { name: "Card preview" });
+    expect(within(pane).queryByRole("combobox", { name: "Query type" })).toBeNull();
+  });
+});
+
 // T11-M2 (#642): a keyword whose severity is not one of the three showed as Info, so choosing Info
 // fired no change and the keyword stayed invalid. It now shows a "Choose severity" entry instead.
 describe("a keyword with an unknown severity (T11-M2)", () => {
