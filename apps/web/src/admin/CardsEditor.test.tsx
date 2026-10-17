@@ -80,7 +80,7 @@ describe("the Result cards group", () => {
   it("opens the card editor with its key, position and the camel-cased label key prefix", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    expect(within(editor()).getByText("1 of 1 Vehicle cards")).toBeInTheDocument();
+    expect(within(editor()).getByText("Card 1 of 1 for Vehicle")).toBeInTheDocument();
     expect(within(editor()).getByText("mapping.vehSummary.*")).toBeInTheDocument();
   });
 });
@@ -492,6 +492,18 @@ describe("the card editor: Applies to", () => {
     );
     expect(rule).toBeChecked();
     expect(always).not.toBeChecked();
+    // T10-Q6 (#642): the card is named like the choice, capitalized, in the tree and the heading.
+    expect(
+      await within(cardsTree()).findByRole("treeitem", {
+        name: /^1\. Only when a rule matches veh-summary/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(editor()).getByRole("heading", {
+        level: 3,
+        name: /^Vehicle: Only when a rule matches/,
+      }),
+    ).toBeInTheDocument();
   });
 });
 
