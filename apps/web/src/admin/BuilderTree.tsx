@@ -17,7 +17,7 @@ import {
 import { useT, useTranslator } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { cardsSiteOf, configDraftStore, useDraft } from "./builder-store.js";
-import { useCardName } from "./CardsEditor.js";
+import { useCardName } from "./card-names.js";
 import { cardsByType } from "./cards-model.js";
 import { ChecksContext } from "./checks.js";
 import { asObjects, str, useLabelText } from "./controls.js";

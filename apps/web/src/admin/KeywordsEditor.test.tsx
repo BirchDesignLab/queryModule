@@ -437,3 +437,24 @@ describe("a keyword row's half-typed exception follows its keyword (CRITIC-M2)",
     expect(box).toHaveValue("HALF");
   });
 });
+
+// T11-M2 (#642): a keyword whose severity is not one of the three showed as Info, so choosing Info
+// fired no change and the keyword stayed invalid. It now shows a "Choose severity" entry instead.
+describe("a keyword with an unknown severity (T11-M2)", () => {
+  it("shows Choose severity, and choosing Info writes it", async () => {
+    const t = await openBuilder();
+    act(() =>
+      configDraftStore(t.services).getState().setPath(["keywords", 0, "severity"], "bogus"),
+    );
+    await openKeywords(t);
+    const select = within(editor()).getByRole("combobox", {
+      name: "Severity of keyword 1",
+    }) as HTMLSelectElement;
+    expect(select.selectedOptions[0]?.textContent).toBe("Choose severity");
+    await t.user.selectOptions(select, "Info");
+    expect(doc(t).keywords[0]?.severity).toBe("info");
+    expect((select as HTMLSelectElement).selectedOptions[0]?.textContent).toBe("Info");
+    // The choose entry is gone once a severity is set.
+    expect(within(select).queryByRole("option", { name: "Choose severity" })).toBeNull();
+  });
+});
