@@ -11,6 +11,7 @@ import {
   ReplayIntegrityError,
   replayResponse,
 } from "../../src/queries/admission";
+import { SubmitTransactionError } from "../../src/queries/errors";
 import type { TestClock } from "../helpers/fixture";
 import { createTestApp, type TestApp } from "../helpers/test-app";
 
@@ -379,6 +380,34 @@ describe("FR-064 SEC-014 replayResponse", () => {
       expect(String((err as Error).stack)).not.toContain("ZZSECRET");
     },
   );
+
+  it("#317 C-m1: a driver error during replay surfaces only the sanitized fixed text", async () => {
+    const userId = "replay-user-01";
+    // drizzle's wrapper quotes every param; the driver error under it carries the result code.
+    const driver = Object.assign(new Error(`SQLITE_BUSY: database is locked (${userId})`), {
+      code: "SQLITE_BUSY",
+    });
+    const wrapped = new Error(`Failed query: select ... params: ${userId},${KEY}`, {
+      cause: driver,
+    });
+    const throwingDb = new Proxy(
+      {},
+      {
+        get: () => () => {
+          throw wrapped;
+        },
+      },
+    ) as unknown as Db;
+    const err = await replayResponse(throwingDb, userId, KEY).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SubmitTransactionError);
+    const e = err as Error;
+    expect([e.name, e.message, e.cause]).toEqual([
+      "SubmitTransactionError",
+      "submit replay failed (SQLITE_BUSY)",
+      undefined,
+    ]);
+    for (const leak of [userId, KEY]) expect(`${e.message}\n${e.stack}`).not.toContain(leak);
+  });
 
   it("answers the original 202 on a repeated key, through the per-user limiter", async () => {
     const { t, userId, post } = await stubApp();

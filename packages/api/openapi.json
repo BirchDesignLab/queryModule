@@ -1353,7 +1353,28 @@
             "required": false,
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              "enum": [
+                "submitted",
+                "acknowledged",
+                "sourceDispatched",
+                "sourceResponded",
+                "interrupted",
+                "partSkipped",
+                "loginSucceeded",
+                "loginFailed",
+                "logout",
+                "roleChanged",
+                "configLoaded",
+                "retentionPurged",
+                "configPublished",
+                "userCreated",
+                "userDisabled",
+                "sessionRevoked",
+                "passwordChanged",
+                "auditViewed",
+                "auditExported",
+                "adminViewed"
+              ]
             }
           },
           {
@@ -1382,8 +1403,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 256
+              "pattern": "^[A-Za-z0-9_-]{1,256}$"
             }
           },
           {
@@ -1470,7 +1490,28 @@
             "required": false,
             "schema": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              "enum": [
+                "submitted",
+                "acknowledged",
+                "sourceDispatched",
+                "sourceResponded",
+                "interrupted",
+                "partSkipped",
+                "loginSucceeded",
+                "loginFailed",
+                "logout",
+                "roleChanged",
+                "configLoaded",
+                "retentionPurged",
+                "configPublished",
+                "userCreated",
+                "userDisabled",
+                "sessionRevoked",
+                "passwordChanged",
+                "auditViewed",
+                "auditExported",
+                "adminViewed"
+              ]
             }
           },
           {

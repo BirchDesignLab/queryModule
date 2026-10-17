@@ -39,6 +39,27 @@ describe("SEC-012 admin audit filters (spec 5.1)", () => {
     );
     expect(AdminAuditQuerySchema.safeParse({ ...win(DAY), extra: "1" }).success).toBe(false);
   });
+  it("#690 m1: the type filter is a known audit type, so an unknown one is a 400 before auditing", () => {
+    expect(AdminAuditQuerySchema.safeParse({ ...win(DAY), type: "adminViewed" }).success).toBe(
+      true,
+    );
+    for (const bad of ["notAType", "ZZ-0001"]) {
+      expect(AdminAuditQuerySchema.safeParse({ ...win(DAY), type: bad }).success, bad).toBe(false);
+      expect(AdminAuditExportQuerySchema.safeParse({ ...win(DAY), type: bad }).success, bad).toBe(
+        false,
+      );
+    }
+  });
+  it("#690 m3: the cursor uses the audited alphabet, so an echoed cursor cannot fail the audit write", () => {
+    expect(AdminAuditQuerySchema.safeParse({ ...win(DAY), cursor: "eyJpZCI6NDJ9" }).success).toBe(
+      true,
+    );
+    for (const bad of ["a b", "a/b+c=", "x".repeat(257)]) {
+      expect(AdminAuditQuerySchema.safeParse({ ...win(DAY), cursor: bad }).success, bad).toBe(
+        false,
+      );
+    }
+  });
   it("export takes the same filters without paging", () => {
     expect(AdminAuditExportQuerySchema.safeParse(win(DAY)).success).toBe(true);
     expect(AdminAuditExportQuerySchema.safeParse({ ...win(DAY), limit: "5" }).success).toBe(false);
