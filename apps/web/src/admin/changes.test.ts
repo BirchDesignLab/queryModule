@@ -418,6 +418,27 @@ describe("plain sentences for keywords and result cards (demo dry run G18)", () 
     expect(entry?.sentence).toContain("severity.word.critical");
   });
 
+  // T11-4 (#642): the editor has one item for both, so Review has one group for both.
+  it("keyword changes and severity style changes share one Keywords and severity group", () => {
+    const style = (color: string) => ({
+      critical: { color, background: "color.bg", bold: true, icon: "alert-octagon", marker: "!" },
+    });
+    const l = { ...live(), keywords: [] as unknown[], keywordSeverityStyles: style("color.a") };
+    const d = {
+      ...live(),
+      keywords: [{ keyword: "TESTMAKE", severity: "warning" }],
+      keywordSeverityStyles: style("color.b"),
+    };
+    const groups = buildChangeGroups(diffConfig(l, d), l, d, deps);
+    const kw = groups.filter((g) => g.id === "site:keywords");
+    expect(kw).toHaveLength(1);
+    expect(groups.some((g) => g.id === "site:keywordSeverityStyles")).toBe(false);
+    expect(kw[0]?.title).toBe("admin.cards.keywordsRow");
+    expect(kw[0]?.sections.map((x) => x.id)).toEqual(["own", "styles"]);
+    expect(kw[0]?.sections[1]?.title).toBe("admin.keywords.styles.title");
+    expect(kw[0]?.sections[1]?.entries.length).toBeGreaterThan(0);
+  });
+
   it("a row moved from detail to summary reads 'moves to the summary', with no path in the sentence", () => {
     const [group] = cardGroups([card("detail")], [card("summary")]);
     const entries = group?.sections.flatMap((s) => s.entries) ?? [];
