@@ -1,24 +1,22 @@
 import type { MappingElement, ResponseMapping } from "@querymodule/core/config";
 import { VisuallyHidden } from "@querymodule/web-ui";
-import { useCallback, useContext, useId, useMemo, useRef, useState } from "react";
-import { useT, useTranslator } from "../app/i18n-context.js";
+import { useContext, useMemo, useState } from "react";
+import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { applyCardsEdit, cardsSiteOf, configDraftStore, useDraft } from "./builder-store.js";
+import { CardRow } from "./CardRow.js";
+import { cardIndexOf, useCardName, useTypeName } from "./card-names.js";
 import {
   addCard,
-  type CardsSite,
-  type CardWin,
   cardsByType,
-  cardWins,
   labelKeyPrefix,
   moveCard,
   newLabelKey,
-  type PayloadPath,
   payloadPaths,
   removeCard,
   updateCard,
 } from "./cards-model.js";
-import { ChecksContext, IssueMessages, isError } from "./checks.js";
+import { ChecksContext, IssueMessages } from "./checks.js";
 import {
   Advanced,
   asObjects,
@@ -33,11 +31,11 @@ import {
 } from "./controls.js";
 import { type JsonObject, toPointer } from "./draft.js";
 import { EditorSection } from "./GenericForm.js";
-import type { DraftIssue } from "./issues.js";
 import { parseMock } from "./mock-model.js";
 import { ConditionEditor, useFieldInfo } from "./RulesEditor.js";
 import { useRowIds } from "./row-ids.js";
-import { cardsTypeOf, cardsTypePointer, issueWords, SelectionContext } from "./selection.js";
+import { cardsTypeOf, cardsTypePointer, SelectionContext } from "./selection.js";
+import { WinsTable } from "./WinsTable.js";
 
 /**
  * The Result cards editor (Task 10, #603; FR-060, UX-015, UX-016; spec 4.5; design note
@@ -47,42 +45,7 @@ import { cardsTypeOf, cardsTypePointer, issueWords, SelectionContext } from "./s
  * path picker reads key names from the draft's mock payloads only; no payload value is shown here.
  */
 
-const CARD_POINTER = /^\/responseMappings\/([0-9]+)(\/|$)/;
 const ROW_POINTER = /^\/responseMappings\/([0-9]+)\/elements\/([0-9]+)(\/|$)/;
-
-/** The card index a pointer is in or at, else null. */
-export function cardIndexOf(pointer: string | null): number | null {
-  const m = pointer === null ? null : CARD_POINTER.exec(pointer);
-  return m === null ? null : Number(m[1]);
-}
-
-/**
- * A card named by its narrowing (design: "All results", "National system", "Mobile unit", "Only
- * when a rule matches"), for the tree, the editor heading and the preview.
- */
-export function useCardName(doc: JsonObject | null): (mapping: unknown) => string {
-  const t = useT();
-  const labelText = useLabelText();
-  const sources = asObjects(doc?.sources);
-  const personas = asObjects(doc?.personas);
-  return useCallback(
-    (mapping: unknown) => {
-      const m = (typeof mapping === "object" && mapping !== null ? mapping : {}) as Obj;
-      const parts: string[] = [];
-      if (typeof m.sourceId === "string") {
-        const s = sources.find((x) => str(x.id) === m.sourceId);
-        parts.push(labelText(s?.labelKey) || m.sourceId);
-      }
-      if (typeof m.persona === "string") {
-        const p = personas.find((x) => str(x.key) === m.persona);
-        parts.push(labelText(p?.labelKey) || m.persona);
-      }
-      if (m.when !== undefined) parts.push(t("admin.cards.name.rule"));
-      return parts.length === 0 ? t("admin.cards.name.all") : parts.join(", ");
-    },
-    [t, labelText, sources, personas],
-  );
-}
 
 /** What makes two cards the same for the server's `config.duplicateMapping`. */
 const narrowing = (m: Obj): string =>
@@ -120,14 +83,6 @@ interface Shared {
   idPrefix: string;
   focus: Focus;
   select: ((pointer: string) => void) | undefined;
-}
-
-function useTypeName(doc: JsonObject): (code: string) => string {
-  const labelText = useLabelText();
-  return (code) => {
-    const type = asObjects(doc.queryTypes).find((q) => str(q.code) === code);
-    return labelText(type?.labelKey) || code;
-  };
 }
 
 function useAddCard(shared: Pick<Shared, "idPrefix" | "focus" | "select">) {
@@ -185,9 +140,6 @@ function TypeCards({ doc, code, idPrefix, focus, select }: Shared & { code: stri
   );
 }
 
-const VIEWS = ["summary", "detail", "both"] as const;
-const FORMATS = ["text", "upper", "phone", "date", "template"] as const;
-
 function CardEditor({
   doc,
   index,
@@ -210,7 +162,17 @@ function CardEditor({
   const info = useFieldInfo(type);
   const id = str(card.id);
   // A published card's key is what its label keys and the audit trail name: fixed from then on.
-  const locked = asObjects(server?.liveDoc.responseMappings).some((m) => str(m.id) === id);
+  // Decided when the live config is first known and again whenever the live version changes (a
+  // publish, a rollback), never while the key is typed (T10-20): a new card whose key is typed to a
+  // live id stays editable, and the duplicate shows as a check instead.
+  const isLive = (live: JsonObject) =>
+    asObjects(live.responseMappings).some((m) => str(m.id) === id);
+  const [lock, setLock] = useState<{ live: JsonObject; locked: boolean } | null>(() =>
+    server === null ? null : { live: server.liveDoc, locked: isLive(server.liveDoc) },
+  );
+  if (server !== null && lock?.live !== server.liveDoc)
+    setLock({ live: server.liveDoc, locked: isLive(server.liveDoc) });
+  const locked = lock?.locked === true;
   const path = ["responseMappings", index] as const;
   const pointer = toPointer([...path]);
   const siblings = cardsByType(cardsSiteOf(doc)).get(code) ?? [];
@@ -249,7 +211,7 @@ function CardEditor({
   const owner = `${idPrefix}-card-head`;
   const rowOwner = (i: number) => `${idPrefix}-card-row-${i}`;
 
-  const setElements = (next: MappingElement[], coalesce = false) =>
+  const setElements = (next: MappingElement[], coalesce: string | false = false) =>
     applyCardsEdit(
       store,
       (site) => {
@@ -260,10 +222,11 @@ function CardEditor({
       },
       { coalesce },
     );
-  const setElement = (i: number, el: MappingElement, coalesce = false) =>
+  // Typing coalesces per control: the key names the card, the row and the control (T11-14).
+  const setElement = (i: number, el: MappingElement, typing?: string) =>
     setElements(
       elements.map((e, j) => (j === i ? el : e)),
-      coalesce,
+      typing === undefined ? false : `card${index}:row${ids[i]}:${typing}`,
     );
   const takenKeys = () => {
     const keys = new Set<string>();
@@ -498,7 +461,7 @@ function CardEditor({
                   return out;
                 })
               }
-              onChange={(next, coalesce) => setElement(i, next, coalesce)}
+              onChange={(next, typing) => setElement(i, next, typing)}
               onMove={moveRow}
               onRemove={removeRow}
             />
@@ -542,652 +505,5 @@ function CardEditor({
         </p>
       </Advanced>
     </EditorSection>
-  );
-}
-
-const WINS_PERSONAS = ["dispatch", "mobileUnit"] as const;
-
-/** Values that make one leaf of a card's rule hold, so the table can show a rule's effect. */
-function ruleValues(when: unknown): Record<string, string> | null {
-  const c = (typeof when === "object" && when !== null ? when : {}) as Obj;
-  if (typeof c.field !== "string") return null;
-  const v = c.value;
-  const literal = Array.isArray(v) ? v[0] : v;
-  if (c.op === "eq" || c.op === "in")
-    return typeof literal === "string" ||
-      typeof literal === "number" ||
-      typeof literal === "boolean"
-      ? { [c.field]: String(literal) }
-      : null;
-  return c.op === "notEmpty" ? { [c.field]: "ZZ" } : null;
-}
-
-/**
- * "Which card wins" (design, Card editor): for each source and persona, and for each value that
- * makes a card's rule hold, the winning card by mapResponse's own rule, its score and why. The rows
- * this card wins carry a "This card" tag. Configuration only: no payload content.
- */
-function WinsTable({
-  doc,
-  index,
-  numbered,
-}: {
-  doc: JsonObject;
-  index: number;
-  numbered: (i: number) => string;
-}) {
-  const t = useT();
-  const labelText = useLabelText();
-  const mapping = asObjects(doc.responseMappings)[index];
-  const code = str(mapping?.queryType);
-  const type = asObjects(doc.queryTypes).find((q) => str(q.code) === code);
-  const rows = useMemo(() => {
-    const sources = asObjects(type?.sources).map((s) => str(s.sourceId));
-    const personaKeys = asObjects(doc.personas).map((p) => str(p.key));
-    const personas = WINS_PERSONAS.filter((k) => personaKeys.includes(k));
-    const site = {
-      responseMappings: doc.responseMappings,
-      queryTypes: doc.queryTypes,
-      keywords: doc.keywords,
-      defaults: doc.defaults,
-      picklists: doc.picklists,
-      locales: doc.locales,
-    } as unknown as CardsSite;
-    const sets = new Map<string, Record<string, string>>([["", {}]]);
-    for (const m of asObjects(doc.responseMappings)) {
-      const values = m.queryType === code && m.when !== undefined ? ruleValues(m.when) : null;
-      if (values !== null && sets.size < 5) sets.set(JSON.stringify(values), values);
-    }
-    const now = Date.now();
-    const out: { key: string; source: string; persona: string; values: string; win: CardWin }[] =
-      [];
-    try {
-      for (const [key, values] of sets)
-        for (const source of sources.length > 0 ? sources : [""])
-          for (const persona of personas)
-            out.push({
-              key: `${key}|${source}|${persona}`,
-              source,
-              persona,
-              values: Object.entries(values)
-                .map(([k, v]) => `${k} ${v}`)
-                .join(", "),
-              win: cardWins(
-                site,
-                { queryType: code, partValues: values, sourceId: source, persona },
-                now,
-              ),
-            });
-    } catch {
-      // A draft the rule compiler cannot read yet (a half-edited rule): no table until it can.
-      return [];
-    }
-    return out;
-  }, [doc, code, type]);
-  if (rows.length === 0) return null;
-  const sourceName = (id: string) =>
-    labelText(asObjects(doc.sources).find((x) => str(x.id) === id)?.labelKey) || id;
-  const personaName = (key: string) =>
-    labelText(asObjects(doc.personas).find((x) => str(x.key) === key)?.labelKey) || key;
-  const why = (w: CardWin): string => {
-    const parts: string[] = w.reasons.map((r) => t(`admin.cards.wins.why.${r}`));
-    if (w.byOrder || (parts.length === 0 && w.fitting > 1))
-      parts.push(t("admin.cards.wins.why.order"));
-    if (parts.length === 0) parts.push(t("admin.cards.wins.why.only"));
-    return t("admin.cards.wins.score", { score: w.score, why: parts.join(", ") });
-  };
-  return (
-    <Sect wide title={t("admin.cards.wins.title")} hint={t("admin.cards.wins.hint")}>
-      <div className="qm-wins">
-        <table className="qm-mock__table qm-wins__table" aria-label={t("admin.cards.wins.title")}>
-          <thead>
-            <tr>
-              <th scope="col">{t("admin.cards.wins.source")}</th>
-              <th scope="col">{t("admin.cards.wins.persona")}</th>
-              <th scope="col">{t("admin.cards.wins.card")}</th>
-              <th scope="col">{t("admin.cards.wins.reason")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key}>
-                <td>
-                  {sourceName(r.source)}
-                  {r.values !== "" && (
-                    <>
-                      {" "}
-                      <span className="qm-sect__hint">
-                        {t("admin.cards.wins.values", { values: r.values })}
-                      </span>
-                    </>
-                  )}
-                </td>
-                <td>{personaName(r.persona)}</td>
-                <td>
-                  {r.win.winner === null ? t("admin.cards.wins.none") : numbered(r.win.winner)}
-                  {r.win.winner === index && (
-                    <>
-                      {" "}
-                      <strong className="qm-tag">{t("admin.cards.wins.thisCard")}</strong>
-                    </>
-                  )}
-                </td>
-                <td>{r.win.winner === null ? "" : why(r.win)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Sect>
-  );
-}
-
-interface CardRowProps {
-  el: MappingElement;
-  /** The row's pointer, "/responseMappings/<card>/elements/<row>". */
-  pointer: string;
-  /** Every issue at or inside the row. */
-  issues: readonly DraftIssue[];
-  index: number;
-  count: number;
-  owner: string;
-  open: boolean;
-  paths: readonly PayloadPath[];
-  cardId: string;
-  takenKeys(): Set<string>;
-  onToggle(): void;
-  onChange(el: MappingElement, coalesce?: boolean): void;
-  onMove(from: number, to: number): void;
-  onRemove(index: number): void;
-}
-
-/** One row of a card: a bordered item as the mock editor's scenarios, body behind Edit. */
-function CardRow({
-  el,
-  pointer,
-  issues,
-  index,
-  count,
-  owner,
-  open,
-  paths,
-  cardId,
-  takenKeys,
-  onToggle,
-  onChange,
-  onMove,
-  onRemove,
-}: CardRowProps) {
-  const t = useT();
-  const translator = useTranslator();
-  const labelText = useLabelText();
-  const { setLabel } = useDraftSetters();
-  const uid = useId();
-  const label = labelText(el.labelKey);
-  const shownName = label || el.path || t("admin.cards.row.unnamed");
-  const headId = `${uid}-head`;
-  const bodyId = `${uid}-body`;
-  const kindWord = t(el.kind === "table" ? "admin.cards.kind.table" : "admin.cards.kind.value");
-  const viewWord = t(`admin.cards.viewShown.${el.view}`);
-  const marked = el.highlight !== false;
-  const wanted = el.kind === "table" ? "array" : "leaf";
-  const found = paths.filter((p) => p.kind === wanted);
-  const unresolved = el.path !== "" && !paths.some((p) => p.path === el.path);
-  const warnId = `${uid}-warn`;
-  const listId = `${uid}-paths`;
-  // Each control shows the issues at its own pointer; the rest of the row's show under the row.
-  const claimed = new Set([
-    `${pointer}/path`,
-    `${pointer}/labelKey`,
-    ...(el.kind === "table"
-      ? el.columns.flatMap((_, j) => [
-          `${pointer}/columns/${j}/path`,
-          `${pointer}/columns/${j}/labelKey`,
-        ])
-      : []),
-  ]);
-  const at = (p: string) => {
-    const found = issues.filter((i) => i.pointer === p);
-    return found.length > 0 ? found : undefined;
-  };
-  const pathIssues = at(`${pointer}/path`);
-  const labelIssues = at(`${pointer}/labelKey`);
-  const rest = issues.filter((i) => !claimed.has(i.pointer));
-  const restId = `${uid}-row-issues`;
-  const words = issueWords(
-    t,
-    issues.filter((i) => i.level === "error").length,
-    issues.filter((i) => i.level !== "error").length,
-  );
-  const setKind = (kind: "value" | "table") => {
-    if (kind === el.kind) return;
-    const { path, labelKey, view, highlight } = el;
-    const base = { path, labelKey, view, ...(highlight === undefined ? {} : { highlight }) };
-    onChange(
-      (kind === "value"
-        ? { kind, ...base }
-        : {
-            kind,
-            ...base,
-            columns: [{ path: "", labelKey: newLabelKey(cardId, takenKeys()) }],
-          }) as MappingElement,
-    );
-  };
-  return (
-    <li className="qm-mock__scenario">
-      <fieldset
-        aria-labelledby={headId}
-        aria-describedby={open && rest.length > 0 ? restId : undefined}
-        className="qm-mock__scenario-box"
-      >
-        <div className="qm-mock__scenario-head">
-          <h5 id={headId}>{shownName}</h5>
-          <p className="qm-mock__summary">
-            <code>{el.path}</code> {kindWord}, {viewWord}
-            {marked ? "" : `, ${t("admin.cards.notMarked")}`}
-            {words === "" ? "" : `, ${words}`}
-          </p>
-          <div className="qm-mock__scenario-tools qm-mock__scenario-tools--row">
-            <button
-              type="button"
-              className="qm-button"
-              aria-expanded={open}
-              aria-controls={open ? bodyId : undefined}
-              data-owner={owner}
-              data-role="toggle"
-              onClick={onToggle}
-            >
-              {t(open ? "admin.cards.row.close" : "admin.cards.row.edit")}
-              <VisuallyHidden> {shownName}</VisuallyHidden>
-            </button>
-            {(["up", "down"] as const).map((kind) => {
-              const target = kind === "up" ? index - 1 : index + 1;
-              const blocked = target < 0 || target >= count;
-              return (
-                <button
-                  key={kind}
-                  type="button"
-                  className="qm-button qm-button--ghost qm-mock__icon"
-                  aria-disabled={blocked ? "true" : undefined}
-                  aria-label={t(
-                    kind === "up" ? "admin.cards.row.moveUp" : "admin.cards.row.moveDown",
-                    {
-                      name: shownName,
-                    },
-                  )}
-                  data-owner={owner}
-                  data-role={kind}
-                  onClick={() => {
-                    if (!blocked) onMove?.(index, target);
-                  }}
-                >
-                  <span aria-hidden="true">{kind === "up" ? "↑" : "↓"}</span>
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              className="qm-button qm-button--ghost qm-mock__icon"
-              aria-label={t("admin.cards.row.remove", { name: shownName })}
-              data-owner={owner}
-              data-role="remove"
-              onClick={() => onRemove(index)}
-            >
-              <span aria-hidden="true" className="qm-icon-x">
-                ×
-              </span>
-            </button>
-          </div>
-        </div>
-        {open && (
-          <div id={bodyId} className="qm-mock__scenario-body">
-            <fieldset className="qm-mock__radios">
-              <legend>{t("admin.cards.kindLegend")}</legend>
-              {(["value", "table"] as const).map((k) => (
-                <label key={k} className="qm-mock__radio">
-                  <input
-                    type="radio"
-                    name={`${uid}-kind`}
-                    checked={el.kind === k}
-                    onChange={() => setKind(k)}
-                  />{" "}
-                  {t(`admin.cards.kind.${k}`)}
-                </label>
-              ))}
-            </fieldset>
-            <div>
-              <label htmlFor={`${uid}-path`}>{t("admin.cards.path")}</label>{" "}
-              <input
-                id={`${uid}-path`}
-                type="text"
-                className="qm-field__input qm-mock__mono"
-                list={listId}
-                data-owner={owner}
-                data-role="path"
-                value={el.path}
-                aria-invalid={isError(pathIssues)}
-                aria-describedby={
-                  [
-                    pathIssues === undefined ? null : `${uid}-path-issues`,
-                    unresolved ? warnId : null,
-                  ]
-                    .filter((x) => x !== null)
-                    .join(" ") || undefined
-                }
-                onChange={(e) => onChange({ ...el, path: e.target.value }, true)}
-              />
-              <IssueMessages id={`${uid}-path-issues`} issues={pathIssues} />
-              <datalist id={listId}>
-                {found.map((p) => (
-                  <option key={p.path} value={p.path} />
-                ))}
-              </datalist>
-              {unresolved && (
-                <p id={warnId} className="qm-admin__issue qm-admin__issue--warning">
-                  {t("admin.config.level.warning")} {t("admin.cards.unresolved")}
-                </p>
-              )}
-              {found.length > 0 && (
-                <fieldset className="qm-mock__scenario-box" aria-label={t("admin.cards.pickPaths")}>
-                  {found.map((p) => (
-                    <button
-                      key={p.path}
-                      type="button"
-                      className="qm-button qm-button--ghost qm-mock__mono"
-                      aria-pressed={el.path === p.path}
-                      onClick={() => onChange({ ...el, path: p.path })}
-                    >
-                      {p.path}
-                    </button>
-                  ))}
-                </fieldset>
-              )}
-            </div>
-            <div>
-              <label htmlFor={`${uid}-label`}>{t("admin.cards.label")}</label>{" "}
-              <input
-                id={`${uid}-label`}
-                type="text"
-                className="qm-field__input"
-                value={label}
-                disabled={el.labelKey === ""}
-                aria-invalid={isError(labelIssues)}
-                aria-describedby={labelIssues === undefined ? undefined : `${uid}-label-issues`}
-                onChange={(e) => setLabel(translator.locale, el.labelKey, e.target.value)}
-              />
-              <IssueMessages id={`${uid}-label-issues`} issues={labelIssues} />
-            </div>
-            <fieldset className="qm-mock__radios">
-              <legend>{t("admin.cards.showIn")}</legend>
-              {VIEWS.map((v) => (
-                <label key={v} className="qm-mock__radio">
-                  <input
-                    type="radio"
-                    name={`${uid}-view`}
-                    checked={el.view === v}
-                    onChange={() => onChange({ ...el, view: v })}
-                  />{" "}
-                  {t(`admin.cards.view.${v}`)}
-                </label>
-              ))}
-            </fieldset>
-            {el.kind === "value" ? (
-              <div>
-                <label htmlFor={`${uid}-format`}>{t("admin.cards.formatLabel")}</label>{" "}
-                <FormatPicker
-                  id={`${uid}-format`}
-                  value={el.format}
-                  templateLabel={t("admin.cards.template")}
-                  onChange={(format, coalesce) => {
-                    const { format: _old, ...others } = el;
-                    onChange(format === undefined ? others : { ...others, format }, coalesce);
-                  }}
-                />
-              </div>
-            ) : (
-              <Columns
-                el={el}
-                pointer={pointer}
-                issues={issues}
-                cardId={cardId}
-                takenKeys={takenKeys}
-                onChange={onChange}
-              />
-            )}
-            <IssueMessages id={restId} issues={rest.length > 0 ? rest : undefined} />
-            <div>
-              <input
-                id={`${uid}-mark`}
-                type="checkbox"
-                checked={marked}
-                aria-describedby={`${uid}-mark-hint`}
-                onChange={(e) => onChange({ ...el, highlight: e.target.checked })}
-              />{" "}
-              <label htmlFor={`${uid}-mark`}>{t("admin.cards.mark")}</label>
-              <p id={`${uid}-mark-hint`} className="qm-sect__hint">
-                {t("admin.cards.markHint")}
-              </p>
-            </div>
-          </div>
-        )}
-      </fieldset>
-    </li>
-  );
-}
-
-type Format = NonNullable<Extract<MappingElement, { kind: "value" }>["format"]>;
-
-/**
- * A format control: As sent, Upper case, Phone number, Date MM-DD-YY or Template (text with
- * {value} where the value goes). As sent is no format at all (the key is removed). The caller
- * names the select (label or aria-label); the Template text has its own name.
- */
-function FormatPicker({
-  id,
-  ariaLabel,
-  value,
-  templateLabel,
-  onChange,
-}: {
-  id?: string;
-  ariaLabel?: string;
-  value: Format | undefined;
-  templateLabel: string;
-  onChange(format: Format | undefined, coalesce?: boolean): void;
-}) {
-  const t = useT();
-  const type = value?.type ?? "text";
-  const formats: readonly string[] = FORMATS.includes(type as (typeof FORMATS)[number])
-    ? FORMATS
-    : [...FORMATS, type];
-  return (
-    <>
-      <select
-        id={id}
-        aria-label={ariaLabel}
-        value={type}
-        onChange={(e) => {
-          const f = e.target.value;
-          if (f === "text") onChange(undefined);
-          else if (f === "date") onChange({ type: "date", pattern: "MM-DD-YY" });
-          else if (f === "template") onChange({ type: "template", template: "{value}" });
-          else if (f === "upper" || f === "phone") onChange({ type: f });
-        }}
-      >
-        {formats.map((f) => (
-          <option key={f} value={f}>
-            {FORMATS.includes(f as (typeof FORMATS)[number]) ? t(`admin.cards.format.${f}`) : f}
-          </option>
-        ))}
-      </select>
-      {value?.type === "template" && (
-        <>
-          {" "}
-          <input
-            type="text"
-            className="qm-field__input qm-mock__mono"
-            aria-label={templateLabel}
-            value={value.template}
-            onChange={(e) => onChange({ type: "template", template: e.target.value }, true)}
-          />
-        </>
-      )}
-    </>
-  );
-}
-
-type TableElement = Extract<MappingElement, { kind: "table" }>;
-
-/** A table row's columns: path relative to one entry, label, mark, remove; Add column. */
-function Columns({
-  el,
-  pointer,
-  issues,
-  cardId,
-  takenKeys,
-  onChange,
-}: {
-  el: TableElement;
-  pointer: string;
-  issues: readonly DraftIssue[];
-  cardId: string;
-  takenKeys(): Set<string>;
-  onChange(el: MappingElement, coalesce?: boolean): void;
-}) {
-  const t = useT();
-  const translator = useTranslator();
-  const labelText = useLabelText();
-  const { setLabel } = useDraftSetters();
-  const addRef = useRef<HTMLButtonElement>(null);
-  const uid = useId();
-  const at = (p: string) => {
-    const found = issues.filter((i) => i.pointer === p);
-    return found.length > 0 ? found : undefined;
-  };
-  const setColumns = (columns: TableElement["columns"], coalesce = false) =>
-    onChange({ ...el, columns }, coalesce);
-  return (
-    <div className="qm-mock__table-wrap">
-      <table className="qm-mock__table qm-columns__table">
-        <caption>{t("admin.cards.columns")}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t("admin.cards.path")}</th>
-            <th scope="col">{t("admin.cards.label")}</th>
-            <th scope="col">{t("admin.cards.formatLabel")}</th>
-            <th scope="col">
-              <span aria-hidden="true">{t("admin.cards.column.markShort")}</span>
-              <VisuallyHidden>{t("admin.cards.mark")}</VisuallyHidden>
-            </th>
-            <th scope="col">
-              <VisuallyHidden>{t("admin.cards.column.remove")}</VisuallyHidden>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {el.columns.map((c, i) => {
-            const n = i + 1;
-            const name = labelText(c.labelKey) || c.path || t("admin.cards.column.n", { n });
-            const pathIssues = at(`${pointer}/columns/${i}/path`);
-            const labelIssues = at(`${pointer}/columns/${i}/labelKey`);
-            const pathId = `${uid}-c${i}-path-issues`;
-            const labelId = `${uid}-c${i}-label-issues`;
-            return (
-              // biome-ignore lint/suspicious/noArrayIndexKey: columns have no identity
-              <tr key={i}>
-                <td>
-                  <input
-                    type="text"
-                    className="qm-field__input qm-mock__mono"
-                    aria-label={t("admin.cards.column.path", { n })}
-                    aria-invalid={isError(pathIssues)}
-                    aria-describedby={pathIssues === undefined ? undefined : pathId}
-                    value={c.path}
-                    onChange={(e) =>
-                      setColumns(
-                        el.columns.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)),
-                        true,
-                      )
-                    }
-                  />
-                  <IssueMessages id={pathId} issues={pathIssues} />
-                </td>
-                <td>
-                  <input
-                    type="text"
-                    className="qm-field__input"
-                    aria-label={t("admin.cards.column.label", { n })}
-                    aria-invalid={isError(labelIssues)}
-                    aria-describedby={labelIssues === undefined ? undefined : labelId}
-                    value={labelText(c.labelKey)}
-                    onChange={(e) => setLabel(translator.locale, c.labelKey, e.target.value)}
-                  />
-                  <IssueMessages id={labelId} issues={labelIssues} />
-                </td>
-                <td>
-                  <FormatPicker
-                    ariaLabel={t("admin.cards.column.format", { n })}
-                    value={c.format}
-                    templateLabel={t("admin.cards.column.template", { n })}
-                    onChange={(format, coalesce) =>
-                      setColumns(
-                        el.columns.map((x, j) => {
-                          if (j !== i) return x;
-                          const { format: _old, ...others } = x;
-                          return format === undefined ? others : { ...others, format };
-                        }),
-                        coalesce,
-                      )
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    type="checkbox"
-                    aria-label={t("admin.cards.column.mark", { n })}
-                    checked={c.highlight !== false}
-                    onChange={(e) =>
-                      setColumns(
-                        el.columns.map((x, j) =>
-                          j === i ? { ...x, highlight: e.target.checked } : x,
-                        ),
-                      )
-                    }
-                  />
-                </td>
-                <td>
-                  {el.columns.length > 1 && (
-                    <button
-                      type="button"
-                      className="qm-button qm-columns__remove"
-                      onClick={() => {
-                        setColumns(el.columns.filter((_, j) => j !== i));
-                        // The button goes with its column: focus moves to Add column, never body.
-                        addRef.current?.focus();
-                      }}
-                    >
-                      <span aria-hidden="true">{"×"}</span>
-                      <VisuallyHidden>
-                        {t("admin.cards.column.remove")} {name}
-                      </VisuallyHidden>
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <button
-        ref={addRef}
-        type="button"
-        className="qm-button"
-        onClick={() =>
-          setColumns([...el.columns, { path: "", labelKey: newLabelKey(cardId, takenKeys()) }])
-        }
-      >
-        {t("admin.cards.column.add")}
-      </button>
-    </div>
   );
 }
