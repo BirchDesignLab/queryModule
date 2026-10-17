@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
   type ClientSiteConfig,
-  type ContrastContext,
   checkMockCoverage,
   type Diagnostic,
   extendsOf,
@@ -20,13 +19,7 @@ import {
   type MockFile,
   MockFileSchema,
 } from "@querymodule/core/contracts";
-import {
-  contrastFailures,
-  contrastRatio,
-  TOKEN_NAMES,
-  type TokenName,
-  tokenValue,
-} from "@querymodule/tokens";
+import { TOKEN_NAMES, tokensContrast } from "@querymodule/tokens";
 import { BUILTIN_ADAPTER_KINDS } from "../adapters/kinds";
 
 export interface LoadedConfig {
@@ -53,30 +46,14 @@ export interface VersionedConfig extends LoadedConfig {
 }
 
 /** Re-exported from the leaf module so config:validate imports stay unchanged (spec 5.4). */
-export { BUILTIN_ADAPTER_KINDS };
+/**
+ * Token lookups for the core contrast checks (spec 4.1, UX-011): the tokens package's one copy,
+ * shared with the web builder (#644), re-exported so config:validate imports stay unchanged.
+ */
+export { BUILTIN_ADAPTER_KINDS, tokensContrast };
 
+/** A theme token override is #rrggbb (spec 4.1). */
 const HEX = /^#[0-9a-fA-F]{6}$/;
-
-/** Token lookups for the core contrast checks (spec 4.1, UX-011). */
-export const tokensContrast: ContrastContext = {
-  value: (token, mode, overrides) => {
-    const v = Object.hasOwn(overrides, token)
-      ? overrides[token]
-      : (TOKEN_NAMES as readonly string[]).includes(token)
-        ? tokenValue(token as TokenName, mode)
-        : undefined;
-    // Non-colour values (scale tokens, bad overrides) are skipped, never thrown on.
-    return typeof v === "string" && HEX.test(v) ? v : undefined;
-  },
-  ratio: contrastRatio,
-  failures: (mode, overrides) =>
-    contrastFailures(mode, overrides).map((f) => ({
-      fg: f.pair.fg,
-      bg: f.pair.bg,
-      min: f.pair.min,
-      ratio: f.ratio,
-    })),
-};
 /**
  * Checks validateResolved relies on, run by the loader and config:validate alike (spec 4.1, 5.9):
  * each locale bundle read is a JSON object, and every theme override is #rrggbb (the contrast

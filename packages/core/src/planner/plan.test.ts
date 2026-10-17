@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { type SiteConfig, SiteConfigSchema } from "../config/schema";
 import { MAX_PAIRS_PER_SUBMIT, MAX_SOURCES_PER_SUBMIT } from "../config/validate-rules";
+import type { FormState } from "../rules/types";
+import { typeValuesOf } from "./index";
 import { auditReason, isPlanError, type Plan, planRequest } from "./plan";
 
 const config = SiteConfigSchema.parse(
@@ -409,5 +411,25 @@ describe("FR-042 skip reasons are audit-safe (spec 4.7, 5.9)", () => {
       key: "k.a",
     });
     expect(auditReason({ key: "k.a" })).toEqual({ key: "k.a" });
+  });
+});
+
+describe("typeValuesOf (#644: one copy for the planner and the builder previews)", () => {
+  it("keeps the visible type-role fields with a string effective value, keyed by field key", () => {
+    const field = (key: string, role: string, visible: boolean, effectiveValue: unknown) => ({
+      key,
+      role,
+      visible,
+      effectiveValue,
+    });
+    const state = {
+      fields: [
+        field("make", "type", true, "ZZCAR"),
+        field("hiddenType", "type", false, "ZZBOAT"),
+        field("plate", "value", true, "ZZ-0001"),
+        field("blankType", "type", true, undefined),
+      ],
+    } as unknown as FormState;
+    expect(typeValuesOf(state)).toEqual({ make: "ZZCAR" });
   });
 });
