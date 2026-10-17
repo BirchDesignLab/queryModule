@@ -82,6 +82,44 @@ describe("NFR-003 heartbeat probe (spec 4.7, 5.3, 6.8)", () => {
     t.socket.onerror?.();
     expect(await result).toEqual({ ok: false, reason: "error" });
   });
+  it("ignores a message type or a status it does not know before the pong (ADR-0013, #650)", async () => {
+    const t = setup();
+    const result = runHeartbeatProbe(t.options);
+    t.socket.onopen?.();
+    t.socket.receive({ v: 1, type: "welcome", latestSeq: 7 });
+    t.socket.receive({ v: 1, type: "somethingNew", seq: 8 });
+    t.socket.receive({
+      v: 1,
+      type: "sourceStatus",
+      seq: 8,
+      at: 1,
+      correlationId: "01923abc-4def-7123-8abc-0123456789ab",
+      partId: 0,
+      sourceId: "state",
+      resultId: "01923abc-4def-7123-8abc-0123456789ac",
+      status: "someLaterStatus",
+    });
+    t.advance(5);
+    t.socket.receive({ v: 1, type: "pong", nonce: "nonce-1", serverTime: 1 });
+    expect(await result).toEqual({ ok: true, latestSeq: 7, rttMs: 5 });
+  });
+  it("still fails a known type that breaks its schema as protocol", async () => {
+    const t = setup();
+    const result = runHeartbeatProbe(t.options);
+    t.socket.onopen?.();
+    t.socket.receive({ v: 1, type: "welcome", latestSeq: -1 });
+    expect(await result).toEqual({ ok: false, reason: "protocol" });
+  });
+  it("fails a binary frame and a JSON object with no type as protocol", async () => {
+    const binary = setup();
+    const first = runHeartbeatProbe(binary.options);
+    binary.socket.onmessage?.({ data: new ArrayBuffer(4) });
+    expect(await first).toEqual({ ok: false, reason: "protocol" });
+    const typeless = setup();
+    const second = runHeartbeatProbe(typeless.options);
+    typeless.socket.receive({ v: 1, latestSeq: 7 });
+    expect(await second).toEqual({ ok: false, reason: "protocol" });
+  });
   it("rejects messages that fail the WS schema", async () => {
     const t = setup();
     const result = runHeartbeatProbe(t.options);

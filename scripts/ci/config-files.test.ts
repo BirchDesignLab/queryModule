@@ -330,6 +330,14 @@ describe("config:validate mock drift (#531, spec 10.8)", () => {
       "mock directory unreadable: mock/ (restore packages/config/mock)",
     ]);
   });
+  it("#574 G-G-m2: a mock path that exists but cannot be listed is one line, not one per site", () => {
+    // a file where the directory should be: it exists, and readdir fails (ENOTDIR on every OS)
+    const d = join(tmp(), "mock");
+    writeFileSync(d, "not a directory");
+    expect(mockDriftErrors(d)).toEqual([
+      "mock directory unreadable: mock/ (restore packages/config/mock)",
+    ]);
+  });
 });
 
 describe("config:validate contrast and unreadable files (Task 9)", () => {

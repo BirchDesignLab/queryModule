@@ -845,7 +845,8 @@ h1 {
 }
 
 .qm-source--pending,
-.qm-source--notRun {
+.qm-source--notRun,
+.qm-source--unknown {
   color: var(--qm-color-text-muted);
 }
 
@@ -992,6 +993,7 @@ h1 {
 .qm-layout--mobile-unit .qm-chip__meta,
 .qm-layout--mobile-unit .qm-source--pending,
 .qm-layout--mobile-unit .qm-source--notRun,
+.qm-layout--mobile-unit .qm-source--unknown,
 .qm-layout--mobile-unit .qm-source__why,
 .qm-layout--mobile-unit .qm-request__part-label {
   color: var(--qm-color-text-body);

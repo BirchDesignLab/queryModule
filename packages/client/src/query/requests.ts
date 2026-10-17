@@ -1,4 +1,4 @@
-import type { SourceStatus } from "@querymodule/core/contracts";
+import { RECEIPT_FALLBACK, type SourceStatus } from "@querymodule/core/contracts";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { components } from "../api/generated/openapi-types.js";
 import type { SourceStatusEvent, Timers } from "../feed/feed-socket.js";
@@ -52,9 +52,16 @@ interface RequestBase {
  * One source a part went to and where it stands. `result` is the source's payload once fetched:
  * regulated client data (spec 6.7), memory only, gone with the row on a reset.
  */
+/**
+ * A source's status as this client holds it: the contract's, or "unknown" for a status a newer
+ * server sent that this client does not know (#650, ADR-0013 amendment), shown neutrally until
+ * a fetched detail names it.
+ */
+export type HeldSourceStatus = SourceStatus | typeof RECEIPT_FALLBACK;
+
 export interface RequestSource {
   sourceId: string;
-  status: SourceStatus;
+  status: HeldSourceStatus;
   result?: { payload: Record<string, unknown> };
 }
 
@@ -75,7 +82,7 @@ export interface StatusSummary {
   /** Every (part, source) pair the request was dispatched to. */
   total: number;
   /** Only the statuses present. */
-  byStatus: Partial<Record<SourceStatus, number>>;
+  byStatus: Partial<Record<HeldSourceStatus, number>>;
   /** Sources a dispatched part dropped before dispatch (plate-only mode); not part of `total` (#587). */
   notRun: number;
 }
@@ -176,7 +183,7 @@ const MAX_HELD_EVENTS = 200;
 export function statusSummary(
   entry: Extract<RequestEntry, { status: "acknowledged" }>,
 ): StatusSummary {
-  const byStatus: Partial<Record<SourceStatus, number>> = {};
+  const byStatus: Partial<Record<HeldSourceStatus, number>> = {};
   let done = 0;
   let total = 0;
   let notRun = 0;
@@ -236,7 +243,11 @@ function mergeDetail(
       const remote = fetched.sources.find((r) => r.sourceId === local.sourceId);
       if (remote === undefined) return local;
       let status = local.status;
-      if (local.status === "pending" && remote.status !== "pending") {
+      // pending or unknown (#650) moves forward to the server's named status
+      if (
+        (local.status === "pending" || local.status === RECEIPT_FALLBACK) &&
+        remote.status !== "pending"
+      ) {
         status = remote.status;
         moved = true;
         changed = true;

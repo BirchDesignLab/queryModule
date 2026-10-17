@@ -70,7 +70,10 @@ export interface Dispatcher {
   stopIntake(): void;
   /** Resolves when inFlight() is 0, or at the bound. */
   drain(boundMs: number): Promise<void>;
-  /** Fatal path: aborts every running signal, drops the queue and refuses further adapter calls. */
+  /**
+   * The fatal path, and the SIGTERM drain past its bound (#574): aborts every running signal, drops
+   * the queue and refuses further adapter calls. Reports no outcome, so it writes no row.
+   */
   abortAll(): void;
 }
 
@@ -159,7 +162,7 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
         finish(outcome);
         return;
       }
-      // abortAll dropped the job: the process is failing closed, so nothing more is said.
+      // abortAll dropped the job (fatal path, or the drain past its bound): nothing more is said.
       if (aborted) return;
       // An AbortError after our own abort is the adapter honouring it, not a late answer (AW3
       // critic c).

@@ -174,7 +174,9 @@ export const RequestsPane = memo(function RequestsPane({
                     ? "pending"
                     : source.status === "returned"
                       ? "ok"
-                      : "problem",
+                      : source.status === "unknown"
+                        ? "unknown"
+                        : "problem",
                 ...(whyText === undefined ? {} : { why: whyText }),
                 text: loading
                   ? t("sourceStatus.loadingResult", { source: sourceLabel(source.sourceId) })

@@ -1,9 +1,10 @@
 import type { JSX } from "react";
 
-export type SourceLineTone = "pending" | "ok" | "problem" | "notRun";
+/** `notRun`: dropped before dispatch. `unknown`: a status this app does not know (#650), neutral. */
+export type SourceLineTone = "pending" | "ok" | "problem" | "notRun" | "unknown";
 
 /** Decorative: the line's text says the status (aria-hidden at the use site). */
-const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!", notRun: "–" } as const;
+const SOURCE_ICON = { pending: "…", ok: "✓", problem: "!", notRun: "–", unknown: "?" } as const;
 
 /**
  * One source's status line: an icon that only repeats the status, the text that carries it, and

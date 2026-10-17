@@ -1,6 +1,7 @@
 import type { SiteConfig } from "@querymodule/core/config";
 import {
   ApiErrorSchema,
+  QueryDetailSchema,
   type QueryListResponse,
   QueryListResponseSchema,
   SubmitQueryResponseSchema,
@@ -206,6 +207,34 @@ describe("GET /api/v1/queries, the caller's list (spec 5.1; #561, #589)", () => 
     for (const src of byId(oldest)?.sources ?? []) expect(src.purged).toBe(true);
     expect(byId(middle)?.purged).toBe(true);
     for (const src of byId(middle)?.sources ?? []) expect(src.purged).toBe(false);
+  });
+
+  it("each item's parts match the detail read without values and payloads (#623 Q1: one mapper)", async () => {
+    const { t, a, b, list, get } = await seeded();
+    const [oldest, middle] = a;
+    if (oldest === undefined || middle === undefined) throw new Error("seed");
+    await t.deps.db.$client.execute({
+      sql: "DELETE FROM request_key WHERE correlation_id = ? AND scope = 'payload'",
+      args: [oldest],
+    });
+    await t.deps.db.$client.execute({
+      sql: "DELETE FROM request_key WHERE correlation_id = ? AND scope = 'values'",
+      args: [middle],
+    });
+    const items = (await list()).requests;
+    expect(items.map((i) => i.correlationId)).not.toContain(b);
+    for (const item of items) {
+      const r = await get(`/${item.correlationId}`);
+      expect(r.status).toBe(200);
+      const detail = QueryDetailSchema.parse(await r.json());
+      const stripped = detail.parts.map(({ values: _v, sources, ...p }) => ({
+        ...p,
+        sources: sources.map(({ payload: _p, ...src }) => src),
+      }));
+      expect(item.parts).toEqual(stripped);
+      expect(item.configHash).toBe(detail.configHash);
+      expect(item.submittedAt).toBe(detail.submittedAt);
+    }
   });
 
   it("limit defaults to 25 and limit=100 is accepted (AW2 review C-m3)", async () => {

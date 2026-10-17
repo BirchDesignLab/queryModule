@@ -4,16 +4,20 @@ import {
   HelloMessageSchema,
   PingMessageSchema,
   PongMessageSchema,
+  RECEIPT_FALLBACK,
   RESYNC_REASONS,
   ResultHiddenEventSchema,
   ResyncMessageSchema,
+  ResyncReceiptSchema,
   SourceStatusEventSchema,
+  SourceStatusReceiptSchema,
   WelcomeMessageSchema,
   WS_CLOSE_CODES,
   WS_NONCE_MAX_LENGTH,
   WsClientMessageSchema,
   WsEventSchema,
   WsServerMessageSchema,
+  WsServerReceiptSchema,
 } from "./ws";
 
 /** Synthetic UUIDv7 fixtures (ADR-0005). */
@@ -191,5 +195,43 @@ describe("SEC-014 FR-043 WebSocket messages (spec 4.7)", () => {
       expect(WsClientMessageSchema.safeParse(resultHidden).success).toBe(false);
       expect(WsClientMessageSchema.safeParse(resync).success).toBe(false);
     });
+  });
+});
+
+describe("#650 receipt schemas: a known type with an unknown enum value (ADR-0013 amendment)", () => {
+  it("the server union stays strict: an unknown status or reason is refused", () => {
+    expect(WsServerMessageSchema.safeParse({ ...sourceStatus, status: "later" }).success).toBe(
+      false,
+    );
+    expect(WsServerMessageSchema.safeParse({ ...resync, reason: "later" }).success).toBe(false);
+    expect(WsEventSchema.safeParse({ ...sourceStatus, status: "later" }).success).toBe(false);
+  });
+
+  it("receipt maps an unknown status or reason to the fallback and keeps known values", () => {
+    expect(RECEIPT_FALLBACK).toBe("unknown");
+    expect(SourceStatusReceiptSchema.parse({ ...sourceStatus, status: "later" })).toEqual({
+      ...sourceStatus,
+      status: "unknown",
+    });
+    expect(SourceStatusReceiptSchema.parse(sourceStatus)).toEqual(sourceStatus);
+    expect(ResyncReceiptSchema.parse({ ...resync, reason: "later" })).toEqual({
+      ...resync,
+      reason: "unknown",
+    });
+    for (const reason of RESYNC_REASONS)
+      expect(ResyncReceiptSchema.parse({ ...resync, reason })).toEqual({ ...resync, reason });
+  });
+
+  it("receipt still refuses a non-string, empty or overlong enum value", () => {
+    for (const status of [7, null, "", "x".repeat(65)])
+      expect(SourceStatusReceiptSchema.safeParse({ ...sourceStatus, status }).success).toBe(false);
+    for (const reason of [7, null, "", "x".repeat(65)])
+      expect(ResyncReceiptSchema.safeParse({ ...resync, reason }).success).toBe(false);
+  });
+
+  it("the receipt union carries every server message type and nothing else changes", () => {
+    for (const m of [welcome, pong, sourceStatus, resultHidden, resync])
+      expect(WsServerReceiptSchema.parse(m)).toEqual(m);
+    expect(WsServerReceiptSchema.safeParse(hello).success).toBe(false);
   });
 });

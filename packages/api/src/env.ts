@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type BundledPaths, bundledPaths } from "./paths";
+import { WS_UPGRADE_LIMIT } from "./ws/limits";
 
 export type IdentityMode = "standalone" | "embedded";
 export interface DeployEnv {
@@ -103,8 +104,12 @@ export function readDeployEnv(env: NodeJS.ProcessEnv, defaults?: BundledPaths): 
     webDist: env.WEB_DIST === "" ? null : (env.WEB_DIST ?? def().webDist),
     migrationsDir: env.MIGRATIONS_DIR ?? def().migrationsDir,
     wsUpgradeLimit: {
-      limit: readPositiveInt("WS_UPGRADE_LIMIT", env.WS_UPGRADE_LIMIT, 60),
-      windowMs: readPositiveInt("WS_UPGRADE_WINDOW_MS", env.WS_UPGRADE_WINDOW_MS, 60_000),
+      limit: readPositiveInt("WS_UPGRADE_LIMIT", env.WS_UPGRADE_LIMIT, WS_UPGRADE_LIMIT.limit),
+      windowMs: readPositiveInt(
+        "WS_UPGRADE_WINDOW_MS",
+        env.WS_UPGRADE_WINDOW_MS,
+        WS_UPGRADE_LIMIT.windowMs,
+      ),
     },
   };
 }

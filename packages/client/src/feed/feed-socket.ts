@@ -2,16 +2,16 @@ import {
   WS_CLOSE_CODES,
   WS_PING_INTERVAL_MS,
   WS_PROTOCOL_VERSION,
-  type WsServerMessage,
+  type WsServerReceipt,
 } from "@querymodule/core/contracts";
 import type { SocketLike } from "../heartbeat/heartbeat-probe.js";
 import { parseServerMessage } from "./parse-server-message.js";
 
 /** A per-source status change pushed by the server (`sourceStatus`, spec 4.7). */
-export type SourceStatusEvent = Extract<WsServerMessage, { type: "sourceStatus" }>;
+export type SourceStatusEvent = Extract<WsServerReceipt, { type: "sourceStatus" }>;
 
 /** Replay was refused (spec 4.7, ADR-0013): the client refetches over HTTP; the mark is already set. */
-export type ResyncEvent = Extract<WsServerMessage, { type: "resync" }>;
+export type ResyncEvent = Extract<WsServerReceipt, { type: "resync" }>;
 
 /** The injected timer seam, as `createConfigRefresh` takes it; tests drive it with fake timers. */
 export interface Timers {

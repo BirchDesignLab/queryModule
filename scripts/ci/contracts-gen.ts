@@ -2,7 +2,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SiteConfigSchema } from "@querymodule/core/config";
-import { ROUTES, WsClientMessageSchema, WsServerMessageSchema } from "@querymodule/core/contracts";
+import {
+  ROUTES,
+  WsClientMessageSchema,
+  WsServerMessageSchema,
+  WsServerReceiptSchema,
+} from "@querymodule/core/contracts";
 import { z } from "zod";
 import { buildOpenApiDocument, toJsonSchema } from "./openapi";
 
@@ -23,6 +28,9 @@ write("packages/core/contracts/ws-events.schema.json", {
   $defs: {
     WsClientMessage: toJsonSchema(WsClientMessageSchema, "input"),
     WsServerMessage: toJsonSchema(WsServerMessageSchema),
+    // What a client accepts (ADR-0013 amendment, #650): an unknown status or resync reason is a
+    // bounded string read as "unknown", so this is the input shape.
+    WsServerReceipt: toJsonSchema(WsServerReceiptSchema, "input"),
   },
 });
 

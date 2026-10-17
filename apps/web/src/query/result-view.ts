@@ -96,7 +96,11 @@ export function sourceWhy(
       ? t("sourceStatus.why.timedOutNoLimit")
       : t("sourceStatus.why.timedOut", { seconds: Math.round(ms / 1000) });
   }
-  if (["failed", "interrupted", "credentialsMissing", "credentialsRejected"].includes(status))
+  if (
+    ["failed", "interrupted", "credentialsMissing", "credentialsRejected", "unknown"].includes(
+      status,
+    )
+  )
     return t(`sourceStatus.why.${status}`);
   return undefined;
 }

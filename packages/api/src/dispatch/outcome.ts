@@ -75,7 +75,8 @@ function flush(bus: EventBus, q: Slot[]): void {
  * the credential owner, and a sourceStatus event_log row. Zero rows updated: nothing else is
  * written. The event is published only after the commit, in seq order. Any throw rolls everything
  * back, leaves the row pending for the startup sweep, logs ids and the error class only, and calls
- * d.fatal (fail closed). The DEK and the plaintext payload buffer are zeroed in finally; the JSON
+ * d.fatal (fail closed), except a T2 the SIGTERM drain cut off by closing the DB past its bound,
+ * which only warns (#574). The DEK and the plaintext payload buffer are zeroed in finally; the JSON
  * string the buffer is made from is a JS string and cannot be zeroed (AW3 critic m3).
  */
 export async function recordOutcome(
@@ -177,6 +178,13 @@ export async function recordOutcome(
       flush(d.eventBus, q);
     }
     const name = errorFields(e).name;
+    if (d.lifecycle.draining && !d.lifecycle.failed && d.db.$client.closed) {
+      // The SIGTERM drain closed the DB under this T2 past its bound (#574 closeDb, Manager 7
+      // ruling 10-17-26): the transaction rolled back, the row stays pending for the next start's
+      // sweep (interrupted, with audit), and the drain still exits 0. Ids and class only (5.9).
+      d.logger.warn("dispatch outcome cut off by drain", { ...ids, error: { name } });
+      return;
+    }
     d.logger.error("dispatch outcome write failed", { ...ids, error: { name } });
     d.fatal(new OutcomeWriteError(ids, name));
   }

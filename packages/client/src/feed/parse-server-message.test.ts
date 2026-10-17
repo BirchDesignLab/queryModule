@@ -60,9 +60,47 @@ describe("ADR-0013 tolerant receipt parser (FR-065, NFR-003)", () => {
 
   it("drops a known type that fails its schema and counts it by type only", () => {
     const onInvalid = vi.fn();
-    const broken = { ...sourceStatus, status: "notAStatus" };
+    const broken = { ...sourceStatus, status: 7 };
     expect(parseServerMessage(JSON.stringify(broken), onInvalid)).toBeNull();
     expect(onInvalid).toHaveBeenCalledExactlyOnceWith("sourceStatus");
+  });
+
+  it("keeps a sourceStatus with a status it does not know, as unknown (#650, ADR-0013 amendment)", () => {
+    const onInvalid = vi.fn();
+    const later = { ...sourceStatus, status: "notAStatusYet" };
+    expect(parseServerMessage(JSON.stringify(later), onInvalid)).toEqual({
+      ...sourceStatus,
+      status: "unknown",
+    });
+    expect(onInvalid).not.toHaveBeenCalled();
+  });
+
+  it("keeps a resync with a reason it does not know, as unknown, so the client still refetches (#650)", () => {
+    const onInvalid = vi.fn();
+    expect(
+      parseServerMessage(
+        JSON.stringify({ v: 1, type: "resync", reason: "somethingNew", latestSeq: 12 }),
+        onInvalid,
+      ),
+    ).toEqual({ v: 1, type: "resync", reason: "unknown", latestSeq: 12 });
+    expect(onInvalid).not.toHaveBeenCalled();
+  });
+
+  it("still drops an empty or overlong enum value (#650: only a bounded string falls back)", () => {
+    const onInvalid = vi.fn();
+    expect(
+      parseServerMessage(JSON.stringify({ ...sourceStatus, status: "" }), onInvalid),
+    ).toBeNull();
+    expect(
+      parseServerMessage(JSON.stringify({ ...sourceStatus, status: "x".repeat(65) }), onInvalid),
+    ).toBeNull();
+    expect(
+      parseServerMessage(
+        JSON.stringify({ v: 1, type: "resync", reason: null, latestSeq: 1 }),
+        onInvalid,
+      ),
+    ).toBeNull();
+    expect(onInvalid).toHaveBeenCalledTimes(3);
   });
 
   it("drops a known type with a missing field", () => {

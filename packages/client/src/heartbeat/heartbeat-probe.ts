@@ -1,4 +1,5 @@
-import { WS_PROTOCOL_VERSION, WsServerMessageSchema } from "@querymodule/core/contracts";
+import { WS_PROTOCOL_VERSION } from "@querymodule/core/contracts";
+import { parseServerMessage } from "../feed/parse-server-message.js";
 
 export interface SocketLike {
   send(data: string): void;
@@ -22,12 +23,18 @@ export interface HeartbeatProbeOptions {
   setTimer(fn: () => void, ms: number): () => void;
 }
 
-function parseJson(data: unknown): unknown {
-  if (typeof data !== "string") return undefined;
+/** A JSON object with a string `type`: a server message, known to this client or not. */
+function isTypedMessage(data: string): boolean {
   try {
-    return JSON.parse(data);
+    const json: unknown = JSON.parse(data);
+    return (
+      typeof json === "object" &&
+      json !== null &&
+      !Array.isArray(json) &&
+      typeof (json as { type?: unknown }).type === "string"
+    );
   } catch {
-    return undefined;
+    return false;
   }
 }
 
@@ -57,12 +64,20 @@ export function runHeartbeatProbe(options: HeartbeatProbeOptions): Promise<Heart
     socket.onopen = () =>
       socket.send(JSON.stringify({ v: WS_PROTOCOL_VERSION, type: "hello", lastSeq: null }));
     socket.onmessage = (event) => {
-      const parsed = WsServerMessageSchema.safeParse(parseJson(event.data));
-      if (!parsed.success) {
+      // Tolerant receipt (ADR-0013 and its #650 amendment): a type or an enum value this client
+      // does not know is skipped; a frame that is not a message, or a known type that breaks its
+      // schema, fails the probe.
+      let invalid = typeof event.data !== "string";
+      const message = invalid
+        ? null
+        : parseServerMessage(event.data as string, () => {
+            invalid = true;
+          });
+      if (invalid || (message === null && !isTypedMessage(event.data as string))) {
         finish({ ok: false, reason: "protocol" });
         return;
       }
-      const message = parsed.data;
+      if (message === null) return;
       if (message.type === "welcome") {
         latestSeq = message.latestSeq;
         pingSentAt = options.now();

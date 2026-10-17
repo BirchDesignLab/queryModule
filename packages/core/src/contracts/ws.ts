@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BoundedIdSchema, EpochMsSchema, PartIdSchema, Uuid7Schema } from "./primitives";
-import { SourceStatusSchema } from "./source-status";
+import { SOURCE_STATUSES, SourceStatusSchema } from "./source-status";
 import { WS_PROTOCOL_VERSION } from "./version";
 
 const v = z.literal(WS_PROTOCOL_VERSION);
@@ -75,7 +75,7 @@ export const WsClientMessageSchema = z.discriminatedUnion("type", [
 ]);
 export type WsClientMessage = z.infer<typeof WsClientMessageSchema>;
 
-/** Strict on the server. Clients parse receipt tolerantly (ADR-0013): unknown types dropped, unknown keys stripped. */
+/** Strict on the server. Clients parse receipt tolerantly (ADR-0013): unknown types dropped, unknown keys stripped, unknown enum values read through WsServerReceiptSchema (#650). */
 export const WsServerMessageSchema = z.discriminatedUnion("type", [
   WelcomeMessageSchema,
   PongMessageSchema,
@@ -84,6 +84,51 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
   ResyncMessageSchema,
 ]);
 export type WsServerMessage = z.infer<typeof WsServerMessageSchema>;
+
+/**
+ * What a client shows for an enum value it does not know (#650, ADR-0013 amendment): a neutral
+ * "unknown" status, and a resync it still acts on (it refetches whatever the reason).
+ */
+export const RECEIPT_FALLBACK = "unknown" as const;
+/** An enum value a newer server may send: a bounded, non-empty string, never another type. */
+export const WS_ENUM_MAX_LENGTH = 64;
+
+/** A known value, or a bounded string a later server added, read as the fallback (#650). */
+function tolerantEnum<const T extends readonly [string, ...string[]]>(values: T) {
+  return z.union([
+    z.enum(values),
+    z
+      .string()
+      .min(1)
+      .max(WS_ENUM_MAX_LENGTH)
+      .transform((): typeof RECEIPT_FALLBACK => RECEIPT_FALLBACK),
+  ]);
+}
+
+/**
+ * Client receipt of sourceStatus (ADR-0013 amendment, #650): an unknown status is kept as
+ * "unknown" instead of dropping the message. The server never sends this shape.
+ */
+export const SourceStatusReceiptSchema = SourceStatusEventSchema.extend({
+  status: tolerantEnum(SOURCE_STATUSES),
+});
+/** Client receipt of resync (#650): an unknown reason is kept as "unknown"; the refetch runs. */
+export const ResyncReceiptSchema = ResyncMessageSchema.extend({
+  reason: tolerantEnum(RESYNC_REASONS),
+});
+
+/**
+ * The server union as clients receive it (ADR-0013 and its #650 amendment): the server's strict
+ * schemas, except that sourceStatus and resync read an unknown enum value as RECEIPT_FALLBACK.
+ */
+export const WsServerReceiptSchema = z.discriminatedUnion("type", [
+  WelcomeMessageSchema,
+  PongMessageSchema,
+  SourceStatusReceiptSchema,
+  ResultHiddenEventSchema,
+  ResyncReceiptSchema,
+]);
+export type WsServerReceipt = z.infer<typeof WsServerReceiptSchema>;
 
 /** State-changing server events: carry seq, stored in event_log, pushed by EventBus.publish. */
 export const WsEventSchema = z.discriminatedUnion("type", [

@@ -81,7 +81,7 @@ export type ReplayResult = { latestSeq: number } & (
 );
 
 /**
- * The owner's missed events after lastSeq (spec 4.7, 5.3; FR-043, FR-065, SEC-014), read in one
+ * The owner's missed events after lastSeq (spec 4.7, 5.3; FR-043, FR-065), read in one
  * transaction so latestSeq and the rows agree. Owner rows only (user_id = userId), in seq order,
  * each re-validated with WsEventSchema (server strict, ADR-0013); a row that fails throws.
  * lastSeq above latestSeq: unknownCursor. Equal: nothing due, even when the newest row is older

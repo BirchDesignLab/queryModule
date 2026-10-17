@@ -61,7 +61,12 @@ export function isPlanError(r: Plan | PlanError): r is PlanError {
   return "errors" in r;
 }
 
-function typeValuesOf(s: FormState): Record<string, string> {
+/**
+ * The values of the visible type-role fields with a string effective value, keyed by field key:
+ * a part's typeValues (spec 4.6). Exported so the builder's mock previews match on exactly what
+ * the plan sends (#644).
+ */
+export function typeValuesOf(s: FormState): Record<string, string> {
   const out: Record<string, string> = {};
   for (const f of s.fields)
     if (f.role === "type" && f.visible && typeof f.effectiveValue === "string")

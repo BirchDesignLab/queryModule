@@ -17,12 +17,8 @@ import type { Principal } from "../seams";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
-/**
- * The default upgrade attempts per client IP per window (decision D-A9, spec 5.3; no FR/SEC ID
- * covers it). The deploy env may change it (WS_UPGRADE_LIMIT, WS_UPGRADE_WINDOW_MS): the e2e
- * harness raises it, since every signed-in page opens a feed socket from one IP.
- */
-export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
+/** The default upgrade limit per client IP per window (D-A9); defined in ws/limits.ts. */
+export { WS_UPGRADE_LIMIT } from "./limits";
 /**
  * Server-local close codes, RFC 6455 or local, outside the contract (WS_CLOSE_CODES): any close
  * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: the welcome.latestSeq or
@@ -147,7 +143,7 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
         floor = seq;
         send({ v, type: "welcome", latestSeq: seq });
       } else {
-        // Owner rows only (SEC-014): the socket's session user, never a client-named one.
+        // Owner rows only (spec 5.3): the socket's session user, never a client-named one.
         let r: Awaited<ReturnType<typeof eventsSince>>;
         try {
           r = await eventsSince(d.db, p.userId, lastSeq, d.clock.now());

@@ -132,6 +132,52 @@ describe("FR-043 per-source status in the requests store (spec 6.6, 6.7)", () =>
     expect(entry().parts[0]?.sources[0]?.status).toBe("returned");
   });
 
+  it("#650 a status this client does not know shows as unknown, and a fetched detail replaces it", () => {
+    const { store, entry } = setup();
+    store.getState().applyEvent(event(1, "state", "unknown"));
+    expect(entry().parts[0]?.sources[0]?.status).toBe("unknown");
+    expect(statusSummary(entry())).toMatchObject({
+      done: 1,
+      total: 2,
+      byStatus: { unknown: 1, pending: 1 },
+    });
+    // a later status event cannot move it (written once), but the server's detail can name it
+    store.getState().applyEvent(event(2, "state", "failed"));
+    expect(entry().parts[0]?.sources[0]?.status).toBe("unknown");
+    store.getState().applyDetail({
+      correlationId: CORRELATION,
+      submittedAt: 1_780_000_000_000,
+      configHash: "h1",
+      parts: [
+        {
+          partId: 1,
+          parentPartId: null,
+          origin: "primary",
+          queryType: "VEH",
+          typeValues: {},
+          plateOnly: false,
+          skipReasons: [],
+          droppedSourceIds: [],
+          purged: false,
+          sources: [
+            {
+              resultId: RESULT,
+              sourceId: "state",
+              status: "failed",
+              adapterKind: "mock",
+              errorCode: "failed",
+              createdAt: 1_780_000_000_000,
+              receivedAt: 1_780_000_000_000,
+              timedOutAt: null,
+              purged: false,
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<ReturnType<typeof store.getState>["applyDetail"]>[0]);
+    expect(entry().parts[0]?.sources[0]?.status).toBe("failed");
+  });
+
   it("an event for an unknown part or source changes nothing", () => {
     const { store, entry } = setup();
     store.getState().applyEvent(event(1, "elsewhere", "returned"));

@@ -8,14 +8,17 @@ import {
   useState,
 } from "react";
 import { useShortcutAction } from "../shortcuts/ShortcutProvider.js";
-import { SourceLine } from "./SourceLine.js";
+import { SourceLine, type SourceLineTone } from "./SourceLine.js";
 
 /** One source of a part and where it stands: the text carries the status, the icon only repeats it. */
 export interface SourceLineView {
   /** Stable across updates (correlation ID, part, source), so a line is never rebuilt. */
   key: string;
-  /** Picks the icon and its weight; never the only carrier of the status. `notRun`: dropped before dispatch. */
-  tone: "pending" | "ok" | "problem" | "notRun";
+  /**
+   * Picks the icon and its weight; never the only carrier of the status. `notRun`: dropped before
+   * dispatch. `unknown`: a status this app does not know (#650), shown neutrally.
+   */
+  tone: SourceLineTone;
   /** Already in words, for example "State source: timed out". */
   text: string;
   /** Why the source did not return, in words ("no answer in 10 s"); absent when it did or is pending. */
