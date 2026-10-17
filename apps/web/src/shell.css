@@ -2562,19 +2562,18 @@ body:has(.qm-app-header--compact) .qm-skip-link {
    Tab stop), 36 px, and wrap their text so both fit the column. */
 .qm-preview--builder .qm-preview__body > .qm-segchoice {
   grid-column: auto;
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
 }
 
-.qm-seg--fill {
+/* Inside the admin form a div that starts with a label is a column (label above control): the track of
+   segments is a row all the same, so it names the form rule it must beat. */
+.qm-segchoice .qm-seg.qm-seg--fill {
   display: flex;
+  flex-direction: row;
   box-sizing: border-box;
   inline-size: 100%;
 }
 
-.qm-seg--fill .qm-seg__option {
+.qm-segchoice .qm-seg--fill .qm-seg__option {
   flex: 1 1 0;
   justify-content: center;
   min-block-size: var(--qm-control-height-dense);
@@ -2633,15 +2632,15 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   padding-inline: calc(var(--qm-space-1) / 2);
 }
 
-/* Ruling of 10-17-26: where the editor pane is narrow (about 480 px, the 1366 and 1024 layouts) each
-   column stacks as a block: Path and Label on one line, Format, Mark and Remove on the next, every
+/* Ruling of 10-17-26: where the editor pane is narrow (under the toolbar breakpoint, which the 1366
+   and 1024 layouts are) each column stacks as a block: Path and Label on one line, Format, Mark and Remove on the next, every
    cell captioned by its heading. The caption's text is the heading's, so the pseudo-element is given
    an empty alternative and is not read twice. The heading row stays for assistive technology. */
 .qm-columns {
   container: qm-columns / inline-size;
 }
 
-@container qm-columns (max-width: 480px) {
+@container qm-columns (max-width: 720px) {
   .qm-columns__table,
   .qm-columns__table tbody {
     display: block;
@@ -2649,31 +2648,40 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
   .qm-columns__table thead {
     position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
+    inline-size: 0;
+    block-size: 0;
     overflow: hidden;
     clip-path: inset(50%);
   }
 
-  .qm-columns__table tr {
+  .qm-columns__table tbody tr {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: var(--qm-space-1) var(--qm-space-2);
-    align-items: end;
+    align-items: start;
     padding-block: var(--qm-space-2);
     border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
   }
 
-  .qm-columns__table td {
+  /* The cell rules of .qm-mock__table (a rule and padding under each cell) and the narrower padding
+     of the last columns give way: the row draws one rule, the grid the spacing. */
+  .qm-columns__table td:nth-child(n) {
     display: block;
-    padding-inline: 0;
+    padding: 0;
+    border-block-end: 0;
   }
 
   .qm-columns__table td[data-label]::before {
-    content: attr(data-label) / "";
+    content: attr(data-label);
     display: block;
     font-size: var(--qm-type-size-sm);
     color: var(--qm-color-text-muted);
+  }
+
+  @supports (content: "x" / "") {
+    .qm-columns__table td[data-label]::before {
+      content: attr(data-label) / "";
+    }
   }
 
   .qm-columns__table td:nth-child(1) {
@@ -2694,9 +2702,11 @@ body:has(.qm-app-header--compact) .qm-skip-link {
     grid-row: 2;
   }
 
+  /* Remove has no caption: it lines up with the controls under the captions. */
   .qm-columns__table td:nth-child(5) {
     grid-column: 6 / 7;
     grid-row: 2;
+    align-self: end;
   }
 }
 

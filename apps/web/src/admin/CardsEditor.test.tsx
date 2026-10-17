@@ -395,7 +395,7 @@ describe("the approved card editor items (round 1, S1)", () => {
     expect(radios[2]).toHaveFocus();
   });
 
-  // BW3 polish (#642; ruling of 10-17-26): under about 480 px the Columns table stacks, one block
+  // BW3 polish (#642; ruling of 10-17-26): under 720 px the Columns table stacks, one block
   // per column, each cell captioned by its heading. Jsdom has no container queries: the captions are
   // the markup half of it (the CSS half is checked in the screenshots at 1366 and 1024).
   it("each Columns cell carries the caption its heading has, for the stacked layout", async () => {
