@@ -96,14 +96,14 @@ const ConfigPointerSchema = z
   .regex(/^(\/([A-Za-z0-9_.$-]|~[01])*)*$/);
 export const MAX_CHANGED_POINTERS = 1000;
 
+/** Admin audit page size cap (spec 5.1); admin-audit.ts reads it from here (no import cycle). */
+export const AUDIT_PAGE_MAX_LIMIT = 200;
+
 /**
  * The admin audit read filters as audited (spec 4.7 auditViewed and auditExported; spec 5.1):
  * ids, a type name and the epoch ms window only. userId is the route's user filter (actor OR
  * credential owner). The route has already bounded the window (admin-audit.ts).
  */
-/** Admin audit page size cap (spec 5.1); admin-audit.ts reads it from here (no import cycle). */
-export const AUDIT_PAGE_MAX_LIMIT = 200;
-
 const AuditFiltersSchema = z
   .strictObject({
     userId: BoundedIdSchema.optional(),
@@ -322,7 +322,8 @@ export const AUDIT_DETAILS_SCHEMAS = {
   /**
    * Spec 4.7, 5.2 (FR-063): a request read by an admin through the admin route (viewerBasis
    * admin) or by the delegating officer as credential owner; writer in M2 P2. correlationId is
-   * in details as the spec table names it; the envelope column stays empty like other admin rows.
+   * in details as the spec table names it, and the envelope correlationId is required and equal
+   * to it (#690 m2, adminViewEnvelope), so one correlation id search finds the views.
    */
   adminViewed: z.strictObject({
     correlationId: Uuid7Schema,
@@ -398,7 +399,8 @@ const systemEnvelope = {
 
 /**
  * Admin console types (ADR-0011 item 7): no request, part or state credential, like the system
- * types. The actor is bound to the type (AuditEventSchema superRefine; ADR-0011 items 6 to 8):
+ * types, except adminViewed, whose envelope correlationId is required and equals details (#690
+ * m2, adminViewEnvelope below). The actor is bound to the type (AuditEventSchema superRefine; ADR-0011 items 6 to 8):
  * configPublished by an admin or implementer; userCreated and userDisabled by an admin;
  * sessionRevoked expired by SYSTEM_ACTOR only (the spec 5.2 sweeper) and any other reason by an
  * admin; roleChanged via grant-role by SYSTEM_ACTOR and via adminConsole by an admin;
@@ -672,6 +674,9 @@ export const AUDIT_TYPE_RULES: { readonly [T in AuditEventType]: AuditTypeRule<T
           : undefined,
   },
 };
+// #690 C-m-3: frozen, so no importer can replace a type's actor rule at run time.
+for (const rule of Object.values(AUDIT_TYPE_RULES)) Object.freeze(rule);
+Object.freeze(AUDIT_TYPE_RULES);
 
 /**
  * Runs the rule for e's own type. The cast is TypeScript's correlated-union limit: indexing the

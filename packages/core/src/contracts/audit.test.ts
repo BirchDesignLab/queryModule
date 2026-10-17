@@ -1207,6 +1207,10 @@ describe("SEC-010 #690 m4 every audit type has an actor rule and a scope", () =>
       expect(["query", "nonQuery"], type).toContain(rule.scope);
     }
   });
+  it("the table and each entry are frozen, so no importer can swap a type's actor rule", () => {
+    expect(Object.isFrozen(AUDIT_TYPE_RULES)).toBe(true);
+    for (const t of AUDIT_EVENT_TYPES) expect(Object.isFrozen(AUDIT_TYPE_RULES[t]), t).toBe(true);
+  });
   it("the query scope is exactly the six query event types", () => {
     const query = AUDIT_EVENT_TYPES.filter((t) => AUDIT_TYPE_RULES[t].scope === "query");
     expect(query).toEqual([...QUERY_EVENT_TYPES]);
