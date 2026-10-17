@@ -209,7 +209,8 @@ export function createAuth(o: {
       additionalFields: {
         role: { type: "string", defaultValue: "user", input: false },
         identitySource: { type: "string", defaultValue: "local", input: false },
-        // D-A26: set for an admin-created user; cleared by change-password (see above).
+        // D-A26: set for an admin-created user; cleared by the app's change-password route
+        // (routes.ts changePassword, in the same transaction as the new hash, #690).
         mustChangePassword: { type: "boolean", defaultValue: false, input: false },
       },
     },

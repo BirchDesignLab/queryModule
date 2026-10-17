@@ -255,6 +255,8 @@ async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response>
   if (body === null || typeof body !== "object" || body.revokeOtherSessions !== undefined)
     return apiError(c, "validationFailed");
   const { currentPassword, newPassword } = body;
+  // A malformed body shares validationFailed with the same-password refusal below, which the
+  // client reads as samePassword; only a client that sends a malformed body sees that wording.
   if (typeof currentPassword !== "string" || typeof newPassword !== "string")
     return apiError(c, "validationFailed");
   if (newPassword === currentPassword) return apiError(c, "validationFailed");

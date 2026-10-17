@@ -296,6 +296,7 @@ describe("SEC-010 passwordChanged audit (#523, spec 4.7, 5.6)", () => {
       [{ currentPassword: "not-the-temporary-password", newPassword: NEW_PW }, "INVALID_PASSWORD"],
       [{ currentPassword: temporaryPassword, newPassword: "short" }, "PASSWORD_TOO_SHORT"],
       [{ currentPassword: temporaryPassword, newPassword: "x".repeat(129) }, "PASSWORD_TOO_LONG"],
+      [{ currentPassword: "y".repeat(129), newPassword: NEW_PW }, "PASSWORD_TOO_LONG"],
     ];
     for (const [body, code] of cases) {
       const r = await changePassword(a, cookie, body);
@@ -310,6 +311,25 @@ describe("SEC-010 passwordChanged audit (#523, spec 4.7, 5.6)", () => {
     expect(await a.t.auditRows("passwordChanged")).toHaveLength(0);
     expect(await flagOf(a, user.id)).toBe(1);
     expect((await a.t.signIn("fresh@example.test", temporaryPassword)).status).toBe(200);
+  });
+
+  it("#690: no credential account is CREDENTIAL_ACCOUNT_NOT_FOUND; a GET never changes anything", async () => {
+    const { a, user, temporaryPassword, cookie } = await createdUser();
+    const get = await a.t.request("/api/v1/auth/change-password", { headers: { cookie } });
+    expect(get.ok).toBe(false);
+    expect(await flagOf(a, user.id)).toBe(1);
+    await a.t.deps.db.$client.execute({
+      sql: "DELETE FROM account WHERE user_id = ?",
+      args: [user.id],
+    });
+    const r = await changePassword(a, cookie, {
+      currentPassword: temporaryPassword,
+      newPassword: NEW_PW,
+    });
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { code?: string }).code).toBe("CREDENTIAL_ACCOUNT_NOT_FOUND");
+    expect(await a.t.auditRows("passwordChanged")).toHaveLength(0);
+    expect(await flagOf(a, user.id)).toBe(1);
   });
 
   it("#690 pin: Better Auth still exposes $context.password and the credential account shape", async () => {
