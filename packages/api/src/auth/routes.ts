@@ -1,7 +1,7 @@
 import { type AuditActor, type Role, SYSTEM_ACTOR } from "@querymodule/core/contracts";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import { session, user } from "../db/schema";
+import { account, session, user } from "../db/schema";
 import { withTransaction } from "../db/tx";
 import type { AppDeps } from "../deps";
 import { apiError, rateLimited } from "../http/errors";
@@ -18,7 +18,8 @@ type LoginFailReason = "badPassword" | "unknownAccount" | "lockedOut" | "account
 // end or change a session with no sessionRevoked/logout audit row and no eventBus.endSession,
 // breaking spec 5.6/4.7/SEC-010. Add a path here only once it has its own audit and
 // eventBus.endSession wiring, like sign-in/email and sign-out below. change-password (D-A26)
-// ends no session: changePassword() refuses revokeOtherSessions, the one option that would.
+// ends no session: changePassword() refuses revokeOtherSessions, the one option that would, and
+// since #690 performs the change itself, so a POST never reaches Better Auth's handler.
 const ALLOWED_AUTH_PATHS = new Set([
   "/api/v1/auth/sign-in/email",
   "/api/v1/auth/sign-out",
@@ -96,7 +97,7 @@ async function internalSignInFailure(
 }
 
 /**
- * AUD-2: drops a session whose loginSucceeded (or, #523, passwordChanged) row failed to commit,
+ * AUD-2: drops a session whose loginSucceeded row failed to commit,
  * and returns the delete error's name, or null. A failed delete still answers 500: for sign-in
  * the cookie was never sent, and the row expires on its own limits.
  */
@@ -211,18 +212,33 @@ async function signIn(c: Context<AppEnv>, d: AppDeps, ip: string): Promise<Respo
 }
 
 /**
- * D-A26: Better Auth's change-password with revokeOtherSessions would delete the user's other
- * sessions with no sessionRevoked row and no eventBus.endSession (SEC-010), so that option is
- * refused. The session must be live by the app's own limits, idle clock included (G-m2: Better
- * Auth checks only the absolute limit). A new password equal to the current one is refused
- * (G-I4): it would clear the forced-change flag while the admin-issued password stays valid.
- * Every other body goes to Better Auth, which verifies the current password and clears
- * must_change_password through the hook in auth.ts.
+ * Better Auth's own change-password refusal codes and messages (better-auth 1.7
+ * api/routes/update-user.mjs), so the client's code mapping (auth-api.ts readChangeFailure) is
+ * unchanged now that the app performs the change itself (#690).
+ */
+const PASSWORD_REFUSALS = {
+  PASSWORD_TOO_SHORT: "Password too short",
+  PASSWORD_TOO_LONG: "Password too long",
+  CREDENTIAL_ACCOUNT_NOT_FOUND: "Credential account not found",
+  INVALID_PASSWORD: "Invalid password",
+} as const;
+const passwordRefusal = (c: Context<AppEnv>, code: keyof typeof PASSWORD_REFUSALS) =>
+  c.json({ code, message: PASSWORD_REFUSALS[code] }, 400);
+
+/**
+ * D-A26: change-password for the signed-in user. revokeOtherSessions is refused: it would delete
+ * the user's other sessions with no sessionRevoked row and no eventBus.endSession (SEC-010). The
+ * session must be live by the app's own limits, idle clock included (G-m2). A new password equal
+ * to the current one is refused (G-I4): it would clear the forced-change flag while the
+ * admin-issued password stays valid.
  *
- * #523 (SEC-010, spec 4.7): a change that succeeded writes passwordChanged via self, by the user.
- * Better Auth has already committed the new password, so an audit failure cannot roll it back:
- * as for sign-in (AUD-2), the caller's session is deleted and ended, and the answer is 500. A
- * failed change writes no row. Only ids and error names are logged, never the body (spec 5.9).
+ * #690 (Ruling on #690, option A; SEC-010, spec 4.7, 5.6): the app performs the change itself, so
+ * that the new hash, the must_change_password clear and the passwordChanged row commit in one
+ * transaction, or none of them do. Better Auth's own handler stored the hash outside any
+ * transaction of ours, which left a changed password with no row when the audit write failed.
+ * Hash, verify and the length bounds come only from Better Auth's $context.password (the same
+ * hasher and config its sign-in uses; minPasswordLength is PASSWORD_MIN_LENGTH). Only ids and
+ * error names are logged, never the body or a hash (spec 5.9).
  */
 async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response> {
   const gated = await d.identity.resolveGated(c.req.raw);
@@ -238,34 +254,55 @@ async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response>
   } | null;
   if (body === null || typeof body !== "object" || body.revokeOtherSessions !== undefined)
     return apiError(c, "validationFailed");
-  if (typeof body.newPassword === "string" && body.newPassword === body.currentPassword)
+  const { currentPassword, newPassword } = body;
+  if (typeof currentPassword !== "string" || typeof newPassword !== "string")
     return apiError(c, "validationFailed");
-  const res = await d.auth.handler(c.req.raw);
-  if (!res.ok) return res;
+  if (newPassword === currentPassword) return apiError(c, "validationFailed");
+  const pw = (await d.auth.$context).password;
+  if (newPassword.length < pw.config.minPasswordLength)
+    return passwordRefusal(c, "PASSWORD_TOO_SHORT");
+  if (
+    newPassword.length > pw.config.maxPasswordLength ||
+    currentPassword.length > pw.config.maxPasswordLength
+  )
+    return passwordRefusal(c, "PASSWORD_TOO_LONG");
+  const [credential] = await d.db
+    .select({ id: account.id, hash: account.password })
+    .from(account)
+    .where(and(eq(account.userId, p.userId), eq(account.providerId, "credential")));
+  if (!credential?.hash) return passwordRefusal(c, "CREDENTIAL_ACCOUNT_NOT_FOUND");
+  if (!(await pw.verify({ hash: credential.hash, password: currentPassword })))
+    return passwordRefusal(c, "INVALID_PASSWORD");
+  const hash = await pw.hash(newPassword);
+  const now = new Date(d.clock.now());
   try {
-    await withTransaction(d.db, (tx) =>
-      d.audit.record(tx, {
+    await withTransaction(d.db, async (tx) => {
+      await tx
+        .update(account)
+        .set({ password: hash, updatedAt: now })
+        .where(eq(account.id, credential.id));
+      await tx
+        .update(user)
+        .set({ mustChangePassword: false, updatedAt: now })
+        .where(eq(user.id, p.userId));
+      await d.audit.record(tx, {
         type: "passwordChanged",
         actor: actorOf(p),
         ...(p.hostSubject ? { hostSubject: p.hostSubject } : {}),
         identitySource: p.identitySource,
         details: { targetUserId: p.userId, via: "self" },
-      }),
-    );
+      });
+    });
   } catch (e) {
-    const errorName = e instanceof Error ? e.name : typeof e;
-    const deleteErrorName = await deleteUnauditedSession(d, p.sessionId);
-    if (deleteErrorName === null) d.eventBus.endSession(p.sessionId);
-    d.logger.error("password change audit write failed", {
+    // Rolled back: the old password, the flag and the session stand as they were.
+    d.logger.error("password change failed; nothing changed", {
       userId: p.userId,
       sessionId: p.sessionId,
-      errorName,
-      sessionDeleted: deleteErrorName === null,
-      ...(deleteErrorName === null ? {} : { deleteErrorName }),
+      errorName: e instanceof Error ? e.name : typeof e,
     });
     return apiError(c, "internal");
   }
-  return res;
+  return c.json({ token: null }, 200);
 }
 
 type SignOutOutcome = "deleted" | "alreadyGone" | "rowSurvived";
