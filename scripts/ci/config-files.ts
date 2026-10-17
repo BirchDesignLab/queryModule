@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -190,7 +190,14 @@ export function mockDriftErrors(
   gen: (siteId: string) => string = generate,
 ): string[] {
   const unreadable = "mock directory unreadable: mock/ (restore packages/config/mock)";
-  if (!existsSync(mockDir)) return [unreadable]; // one line for one cause (AW3 review G-G-m1)
+  // One line for one cause: a missing directory (AW3 review G-G-m1) or one that cannot be listed
+  // (#574 G-G-m2), never a drift line per site on top.
+  let names: string[];
+  try {
+    names = readdirSync(mockDir).sort();
+  } catch {
+    return [unreadable];
+  }
   const out: string[] = [];
   for (const { siteId, state } of mockFileStates(mockDir, gen)) {
     if (state === "generatorFailed") {
@@ -202,13 +209,6 @@ export function mockDriftErrors(
     }
   }
   const owned = new Set(MOCK_SITE_IDS.map((id) => `${id}.json`));
-  let names: string[];
-  try {
-    names = readdirSync(mockDir).sort();
-  } catch {
-    out.push(unreadable);
-    return out;
-  }
   for (const name of names) {
     if (name.endsWith(".json") && !owned.has(name)) {
       out.push(
