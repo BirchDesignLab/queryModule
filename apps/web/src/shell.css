@@ -3235,6 +3235,11 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-weight: 600;
 }
 
+/* Dispatcher controls are 36 px: the segments of this choice, not the 28 px segment default. */
+.qm-account__terminal .qm-seg > button {
+  min-height: var(--qm-control-height-dense);
+}
+
 .qm-account__hint {
   margin: 0;
   max-inline-size: 36ch;

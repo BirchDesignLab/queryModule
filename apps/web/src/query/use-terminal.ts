@@ -108,6 +108,42 @@ export function useTerminal(
     else firstField(panel.formContainerRef.current)?.focus();
   }, [focusTick, mode]);
 
+  // Focus is never lost (spec 6.6): crossing the pane width (a resize, a zoom, the layout choice)
+  // unmounts the control that has focus, the pane's input on narrowing or the panel's command input
+  // on widening. The render that sees the change notes whether the command input held focus; the
+  // layout effect after the commit hands focus to the equivalent control: the pane's input when the
+  // pane appears, the form's first field when it goes. Focus anywhere else is left alone.
+  const shownPane = useRef(pane);
+  const paneFocusTarget = useRef<FocusTarget | null>(null);
+  if (
+    shownPane.current !== pane &&
+    typeof document !== "undefined" &&
+    inputRef.current !== null &&
+    inputRef.current === document.activeElement
+  )
+    paneFocusTarget.current = pane ? "input" : "form";
+  // Every commit: the pane's input mounts one commit after the flag (it is portaled into a slot
+  // the layout hands up), so the request waits until its control exists; focus that moved to a
+  // control meanwhile ends the request.
+  useLayoutEffect(() => {
+    shownPane.current = pane;
+    const target = paneFocusTarget.current;
+    if (target === null) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) {
+      paneFocusTarget.current = null;
+      return;
+    }
+    if (target === "input") {
+      if (inputRef.current === null) return;
+      paneFocusTarget.current = null;
+      inputRef.current.focus();
+    } else {
+      paneFocusTarget.current = null;
+      firstField(panel.formContainerRef.current)?.focus();
+    }
+  });
+
   const derive = useCallback(
     (queryType: string): void => {
       const values = drafts.getState().drafts[queryType]?.values ?? {};

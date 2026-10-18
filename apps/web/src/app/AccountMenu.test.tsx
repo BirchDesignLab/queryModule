@@ -125,6 +125,17 @@ describe("UX-014 the terminal layout control under Theme (FR-050, spec 6.2)", ()
     );
   });
 
+  it("a failed save that leaves the layout on Beside results says so (S2)", async () => {
+    const { panel } = await open({
+      terminal: "pane",
+      onTerminalChange: vi.fn(),
+      terminalSaveFailed: true,
+    });
+    expect(within(panel).getByRole("alert")).toHaveTextContent(
+      "Could not save the layout. It stays on Beside results.",
+    );
+  });
+
   it("shows no alert when the save did not fail", async () => {
     const { panel } = await open({ terminal: "toggle", onTerminalChange: vi.fn() });
     expect(within(panel).queryByRole("alert")).toBeNull();

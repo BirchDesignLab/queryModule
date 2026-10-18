@@ -254,6 +254,31 @@ describe("FR-050 terminal beside the results (layout.terminal pane, spec 6.2)", 
     expect(modeToggle()).toBeNull();
   });
 
+  it("narrowing with focus in the pane input moves focus to the form's first field (C1, spec 6.6)", async () => {
+    const { user, win } = await openPanel({ wide: true, terminal: "pane" });
+    await user.click(command());
+    expect(command()).toHaveFocus();
+    win.resize(false);
+    await waitFor(() => expect(plate()).toHaveFocus());
+  });
+
+  it("widening with focus in the panel's command input moves focus to the pane input (C1, spec 6.6)", async () => {
+    const { user, win } = await openPanel({ wide: false, terminal: "pane" });
+    await user.click(screen.getByRole("button", { name: "Terminal mode" }));
+    await user.click(screen.getByRole("textbox", { name: "Command" }));
+    expect(screen.getByRole("textbox", { name: "Command" })).toHaveFocus();
+    win.resize(true);
+    await waitFor(() => expect(command()).toHaveFocus());
+  });
+
+  it("a resize leaves focus alone when it was not in the command input (C1)", async () => {
+    const { user, win } = await openPanel({ wide: true, terminal: "pane" });
+    await user.click(plate());
+    win.resize(false);
+    await waitFor(() => expect(modeToggle()).toBeVisible());
+    expect(plate()).toHaveFocus();
+  });
+
   it("an acknowledged run starts the draft over and the command with it", async () => {
     const { user } = await openPanel({ wide: true, terminal: "pane" });
     await typeCommand(user, "VEH.ZZ-0012{Enter}");

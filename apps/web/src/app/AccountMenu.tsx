@@ -152,7 +152,11 @@ export function AccountMenu({
               </p>
               {terminalSaveFailed ? (
                 <p role="alert" className="qm-form-error">
-                  {t("account.terminal.saveFailed")}
+                  {t(
+                    terminal === "pane"
+                      ? "account.terminal.saveFailedPane"
+                      : "account.terminal.saveFailed",
+                  )}
                 </p>
               ) : null}
             </fieldset>

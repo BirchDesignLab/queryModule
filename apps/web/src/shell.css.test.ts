@@ -80,6 +80,13 @@ describe("terminal beside the results (FR-050, D-M2P2-B2)", () => {
   });
 });
 
+describe("account menu terminal choice (CV1)", () => {
+  it("its segments are dispatcher controls, 36 px (control-height-dense), not the 28 px segment default", () => {
+    const rule = /\.qm-account__terminal \.qm-seg > button\s*\{([^}]*)\}/.exec(shellCss)?.[1] ?? "";
+    expect(rule).toContain("min-height: var(--qm-control-height-dense)");
+  });
+});
+
 describe("admin warnings (BW3 polish, T12-14)", () => {
   it("a mock warning uses the severity warning token pair, apart from the error style", () => {
     const start = shellCss.indexOf(".qm-mock__warning {");
