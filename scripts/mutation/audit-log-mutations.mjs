@@ -57,7 +57,7 @@ const MUTATIONS = [
   {
     name: "a disabled end has no reason",
     file: LOG,
-    from: "aria-describedby={atOldest ? pagesWhy : undefined}",
+    from: "aria-describedby={atNewest ? newestWhy : undefined}",
     to: "aria-describedby={undefined}",
   },
   {
@@ -79,10 +79,10 @@ const MUTATIONS = [
     to: "onChange={(patch) => store.set({ form: { ...form, ...patch }, applied: validateAuditForm({ ...form, ...patch }).filters })}",
   },
   {
-    name: "a server 403 shows the generic error",
+    name: "a server 404 shows nothing special",
     file: LOG,
-    from: 'failure === "forbidden" ? "admin.audit.noAccess.title" : "admin.audit.notOn.title"',
-    to: '"admin.audit.failed.title"',
+    from: 'if (failure === "notFound") return <AuditNoAccess kind="off" />;',
+    to: "void 0;",
   },
   {
     name: "export is not blocked by a filter error",
@@ -174,15 +174,15 @@ const MUTATIONS = [
   {
     name: "Include hidden results is live",
     file: VIEW,
-    from: 'aria-disabled="true"\n            aria-describedby="qm-request-hidden-why"',
-    to: 'aria-describedby="qm-request-hidden-why"',
+    from: 'aria-disabled="true"',
+    to: 'data-live="true"',
     test: VIEW_TEST,
   },
   {
     name: "not found is an alert",
     file: VIEW,
-    from: '<StateBox\n            title={t("admin.request.notFound.title")}',
-    to: '<StateBox\n            alert\n            title={t("admin.request.notFound.title")}',
+    from: 'title={t("admin.request.notFound.title")}',
+    to: 'alert title={t("admin.request.notFound.title")}',
     test: VIEW_TEST,
   },
   {
