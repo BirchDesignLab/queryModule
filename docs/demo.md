@@ -55,8 +55,9 @@ failure, a server 400) keeps what was typed. Every settled row, acknowledged or 
 as new query": it loads that row's values into the form, moves focus to the first field, shows the
 "Values loaded from the earlier request" line (read out, not shown) and names anything the current
 configuration no longer has; nothing is sent. A row listed after a reload offers it once the request's
-details arrive. Use it in the demo to re-run a query with one change, for example the same plate with
-a year added. The form and the command line share one draft; switching between them is not what
+details arrive. It replaces the whole draft of that query type, so text half-typed in terminal mode is replaced too
+(it is not merged into the loaded values), and the "Shown" tags start over. Use it in the demo to
+re-run a query with one change, for example the same plate with a year added. The form and the command line share one draft; switching between them is not what
 clears it. A row listed after a reload, and a seeded row, rebuilds its command from the values the
 server stored, where a two-digit year is kept in its four-digit form, so `VEH.ZZ-0001..26` reads
 `VEH.ZZ-0001..2026` there; the same row read `..26` while it was fresh.

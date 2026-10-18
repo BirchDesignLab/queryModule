@@ -113,6 +113,19 @@ export function planEditAsNew(config: ClientSiteConfig, submitted: SubmittedQuer
 }
 
 /**
+ * A key as words, for a dropped field the new config has no label for ("plateColor" reads "plate
+ * color", "owner.last" "owner last"). Runs of capitals (VIN) are kept whole.
+ */
+export function humanizeKey(key: string): string {
+  if (key === key.toUpperCase()) return key;
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
  * The sentence naming what was dropped, or null when nothing was. Names only: a field's label, a
  * type's label, never a value. `fieldName` and `typeName` turn a key into words; a field the
  * config no longer has falls back to its conventional label, else the key.
@@ -124,7 +137,9 @@ export function editAsNewNote(
   typeName: (code: string) => string,
 ): string | null {
   if (dropped.length === 0) return null;
-  // Several sources the config lost read as one item: the ids are not words a dispatcher knows.
+  // Source ids are not words a dispatcher knows, so sources the config lost are one item: named
+  // "a source" for one, counted for several.
+  const sourceCount = dropped.filter((d) => d.kind === "source").length;
   const named = dropped.filter(
     (item, index) =>
       item.kind !== "source" || dropped.findIndex((d) => d.kind === "source") === index,
@@ -138,7 +153,9 @@ export function editAsNewNote(
       case "type":
         return t("editAsNew.item.type", { type: typeName(item.key) });
       default:
-        return t("editAsNew.item.source");
+        return sourceCount > 1
+          ? t("editAsNew.item.sources", { count: sourceCount })
+          : t("editAsNew.item.source");
     }
   });
   return t("editAsNew.dropped", { items: items.join(", ") });

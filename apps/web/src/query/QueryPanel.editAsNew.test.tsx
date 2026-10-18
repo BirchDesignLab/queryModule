@@ -245,6 +245,24 @@ describe("G32 Edit as new query on every request row", () => {
     expect(services.requests.getState().items).toHaveLength(1);
   });
 
+  it("loading a row shows no Shown tags, for the fields its values reveal either (#651 F5)", async () => {
+    const { user } = await openPanel();
+    await user.selectOptions(screen.getByLabelText("State"), "OK");
+    const plateType = await screen.findByLabelText(/Plate type/);
+    await user.selectOptions(plateType, (plateType as HTMLSelectElement).options[1]?.value ?? "");
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    const edit = await within(region).findByRole("button", { name: /^Edit as new query/ });
+    await waitFor(() => expect(screen.getByLabelText("Plate")).toHaveValue(""));
+    await user.click(edit);
+    // The loaded values show Plate type again; it is part of the loaded form, not a rule's reveal.
+    expect(await screen.findByLabelText(/Plate type/)).toHaveValue(
+      (plateType as HTMLSelectElement).options[1]?.value,
+    );
+    expect(document.querySelector(".qm-tag--shown")).toBeNull();
+    expect(screen.getByTestId("announcer-polite")).not.toHaveTextContent("is now shown");
+  });
+
   it("from terminal mode it lands in the form", async () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");

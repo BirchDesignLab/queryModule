@@ -133,6 +133,7 @@
   "editAsNew.item.choice": "{label} (that choice is no longer offered)",
   "editAsNew.item.type": "all values, because the {type} query type is no longer available",
   "editAsNew.item.source": "a source that is no longer available",
+  "editAsNew.item.sources": "{count} sources that are no longer available",
   "sourceStatus.summary.one": "{queryType} {reference}: {done} of {count} source done. {details}.",
   "sourceStatus.summary.other": "{queryType} {reference}: {done} of {count} sources done. {details}.",
   "sourceStatus.summaryBare.one": "{queryType} {reference}: {done} of {count} source done.",
