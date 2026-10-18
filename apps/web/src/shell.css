@@ -2013,19 +2013,19 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 /* The Why column carries the longest text (the score and its reason), so it gets the most. */
 .qm-wins__table th:nth-child(1) {
-  inline-size: 22%;
+  inline-size: 25%;
 }
 
 .qm-wins__table th:nth-child(2) {
-  inline-size: 17%;
+  inline-size: 21%;
 }
 
 .qm-wins__table th:nth-child(3) {
-  inline-size: 31%;
+  inline-size: 26%;
 }
 
 .qm-wins__table th:nth-child(4) {
-  inline-size: 30%;
+  inline-size: 28%;
 }
 
 /* Try a match: the answer is one bordered panel (outcome row, toggle, result, #698 (h)); the answer toggle is a dense control (36 px); a long payload line wraps inside the

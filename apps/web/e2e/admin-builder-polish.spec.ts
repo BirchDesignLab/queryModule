@@ -66,8 +66,12 @@ for (const size of SIZES) {
       await openCard(page, /^Vehicle cards/);
       const table = page.getByRole("table", { name: "Which card wins" });
       await table.scrollIntoViewIfNeeded();
-      for (const th of await table.locator("thead th").all())
+      for (const th of await table.locator("thead th").all()) {
         expect(await lines(th), `heading "${await th.innerText()}"`).toBe(1);
+        // One line is not enough: a heading wider than its column runs into the next one.
+        const spill = await th.evaluate((el) => el.scrollWidth - el.clientWidth);
+        expect(spill, `heading "${await th.innerText()}" runs past its column`).toBeLessThanOrEqual(1);
+      }
       // The new heading style adds no sideways scroll to the table or the pane around it.
       const overflow = await table.evaluate((el) => {
         const pane = el.closest(".qm-builder__editor") ?? el;
