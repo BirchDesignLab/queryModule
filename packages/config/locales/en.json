@@ -913,6 +913,7 @@
   "admin.config.field.inputType": "Input type",
   "admin.config.field.required": "Required",
   "admin.config.field.shown": "Shown on the form",
+  "admin.config.field.mono": "Show values in the data typeface",
   "admin.config.field.defaultValue": "Default value",
   "admin.config.field.choices": "Choices come from",
   "admin.config.field.transform": "Letter case",

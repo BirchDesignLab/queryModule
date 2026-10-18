@@ -6,7 +6,7 @@ type Field = (typeof CLIENT_CONFIG.queryTypes)[number]["fields"][number];
 const base = CLIENT_CONFIG.queryTypes[0]?.fields.find((f) => f.dataType === "string") as Field;
 
 describe("read-back data is monospace, from field properties only (design: plates, VINs, IDs)", () => {
-  it("the default site: code-like strings (plate, VIN, serial, licence number), years and dates; names, make, model, caliber, agency and free text stay sans", () => {
+  it("the default site flags its code-like strings (plate, VIN, serial, license number), years and dates; names, make, model, caliber, agency and free text stay sans", () => {
     const mono = CLIENT_CONFIG.queryTypes.flatMap((q) =>
       q.fields.filter(isDataField).map((f) => `${q.code}.${f.key}`),
     );
@@ -22,21 +22,18 @@ describe("read-back data is monospace, from field properties only (design: plate
     ]);
   });
 
-  it("a string is code-like with a pattern or the ASCII-only charset; upper case alone is not; any key", () => {
-    const text = {
-      ...base,
-      key: "plate",
-      pattern: undefined,
-      transform: "none",
-      charset: "printable",
-    } as Field;
+  it("only the config flag decides: not the data type, the pattern, the charset or the key (#476)", () => {
+    const text = { ...base, key: "plate", mono: false } as Field;
     expect(isDataField(text)).toBe(false);
-    expect(isDataField({ ...text, pattern: "[A-Z]+" } as Field)).toBe(true);
-    expect(isDataField({ ...text, transform: "upper" } as Field)).toBe(false);
-    expect(isDataField({ ...text, charset: "printableAscii" } as Field)).toBe(true);
-    expect(isDataField({ ...text, key: "anything", dataType: "year" } as Field)).toBe(true);
-    expect(isDataField({ ...text, dataType: "date" } as Field)).toBe(true);
-    expect(isDataField({ ...text, dataType: "boolean" } as Field)).toBe(false);
-    expect(isDataField({ ...text, dataType: "number" } as Field)).toBe(false);
+    expect(isDataField({ ...text, mono: true } as Field)).toBe(true);
+    // What used to read as code-like no longer does without the flag.
+    expect(isDataField({ ...text, pattern: "[A-Z]+" } as Field)).toBe(false);
+    expect(isDataField({ ...text, charset: "printableAscii" } as Field)).toBe(false);
+    expect(isDataField({ ...text, dataType: "year" } as Field)).toBe(false);
+    expect(isDataField({ ...text, dataType: "date" } as Field)).toBe(false);
+    // A flag on any type of field is honored, whatever its key.
+    expect(isDataField({ ...text, key: "anything", dataType: "number", mono: true } as Field)).toBe(
+      true,
+    );
   });
 });

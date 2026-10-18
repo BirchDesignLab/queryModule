@@ -117,6 +117,7 @@
       "fields": [
         {
           "key": "plate",
+          "mono": true,
           "labelKey": "field.plate",
           "dataType": "string",
           "maxLength": 10,
@@ -124,9 +125,10 @@
           "pattern": "[A-Z0-9-]+"
         },
         { "key": "state", "labelKey": "field.state", "dataType": "picklist", "picklist": "state" },
-        { "key": "year", "labelKey": "field.year", "dataType": "year" },
+        { "key": "year", "mono": true, "labelKey": "field.year", "dataType": "year" },
         {
           "key": "vin",
+          "mono": true,
           "labelKey": "field.vin",
           "dataType": "string",
           "maxLength": 17,
@@ -196,6 +198,7 @@
         },
         {
           "key": "dob",
+          "mono": true,
           "labelKey": "field.dob",
           "dataType": "date",
           "century": "past",
@@ -228,7 +231,13 @@
         { "key": "expanded", "labelKey": "section.expanded" }
       ],
       "fields": [
-        { "key": "serial", "labelKey": "field.serial", "dataType": "string", "transform": "upper" },
+        {
+          "key": "serial",
+          "mono": true,
+          "labelKey": "field.serial",
+          "dataType": "string",
+          "transform": "upper"
+        },
         {
           "key": "propertyType",
           "labelKey": "field.propertyType",
@@ -354,6 +363,7 @@
         },
         {
           "key": "dob",
+          "mono": true,
           "labelKey": "field.dob",
           "dataType": "date",
           "century": "past",
@@ -370,6 +380,7 @@
       "fields": [
         {
           "key": "licenseNumber",
+          "mono": true,
           "labelKey": "field.licenseNumber",
           "dataType": "string",
           "maxLength": 20,
@@ -393,6 +404,7 @@
         },
         {
           "key": "dob",
+          "mono": true,
           "labelKey": "field.dob",
           "dataType": "date",
           "century": "past",

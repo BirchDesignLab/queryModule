@@ -9,13 +9,7 @@ import { mkdtempSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import {
-  e2eTarget,
-  probeHealth,
-  runSeed,
-  smokeCredentials,
-  waitForReady,
-} from "../dev/e2e-lib.ts";
+import { e2eTarget, probeHealth, runSeed, smokeCredentials, waitForReady } from "../dev/e2e-lib.ts";
 import { ensureDevSecrets } from "../dev/secrets.ts";
 
 const root = resolve(import.meta.dirname, "../..");

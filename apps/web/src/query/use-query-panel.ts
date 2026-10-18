@@ -245,12 +245,15 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   // ref holds the value the effects of one flush are building on (#478).
   const revealedNow = useRef(revealed);
   revealedNow.current = revealed;
-  const updateRevealed = (change: (prev: ReadonlySet<string>) => ReadonlySet<string>): void => {
-    const next = change(revealedNow.current);
-    if (next === revealedNow.current) return;
-    revealedNow.current = next;
-    setRevealed(next);
-  };
+  const updateRevealed = useCallback(
+    (change: (prev: ReadonlySet<string>) => ReadonlySet<string>): void => {
+      const next = change(revealedNow.current);
+      if (next === revealedNow.current) return;
+      revealedNow.current = next;
+      setRevealed(next);
+    },
+    [],
+  );
   const dismissRevealed = useCallback(
     (key: string): void =>
       setRevealed((prev) => {
@@ -347,7 +350,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       const edited = [...prev].filter((key) => before?.[key] !== values?.[key]);
       return edited.length === 0 ? prev : new Set([...prev].filter((k) => !edited.includes(k)));
     });
-  }, [values]);
+  }, [values, updateRevealed]);
 
   // Server validation errors describe the request that was sent (values and sources); any edit, a
   // source change or a type change drops them.
@@ -425,7 +428,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       if (messages.length > 0 && !loaded) announcer.announce(messages.join(" "));
     }
     seen.current = { queryType: formState.queryType, visible, values: current };
-  }, [formState, config.configHash, announcer, t, preview, values, loadSeq]);
+  }, [formState, config.configHash, announcer, t, preview, values, loadSeq, updateRevealed]);
 
   // Errors render on the commit that follows a blocked submit, so focus moves after it.
   useEffect(() => {

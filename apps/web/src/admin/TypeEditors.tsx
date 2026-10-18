@@ -42,6 +42,7 @@ const FIELD_KEYS = new Set([
   "dataType",
   "required",
   "visible",
+  "mono",
   "defaultValue",
   "picklist",
   "transform",
@@ -55,6 +56,8 @@ const newField = (section: string): Obj => ({
   key: "",
   labelKey: "",
   dataType: "string",
+  // The schema default (ASCII only) would also be narrower than free text needs.
+  charset: "printable",
   required: false,
   visible: true,
   section,
@@ -621,6 +624,12 @@ function FieldControls({
         path={[...path, "visible"]}
         label={t("admin.config.field.shown")}
         value={field.visible}
+      />
+      <CheckControl
+        idPrefix={idPrefix}
+        path={[...path, "mono"]}
+        label={t("admin.config.field.mono")}
+        value={field.mono}
       />
       {kind === "number" ? (
         <NumberControl

@@ -495,6 +495,8 @@ export interface components {
                     section: string;
                     /** @default false */
                     custom: boolean;
+                    /** @default false */
+                    mono: boolean;
                     minLength?: number;
                     /** @default 64 */
                     maxLength: number;

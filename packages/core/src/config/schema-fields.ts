@@ -80,6 +80,8 @@ export function makeFieldSchemas(mode: SchemaMode) {
     formOnly: z.boolean().default(false),
     section: Key.default("base"),
     custom: z.boolean().default(false),
+    // Read-back values of this field are set in the data typeface (plates, VINs, IDs, dates).
+    mono: z.boolean().default(false),
     minLength: z.int().min(0).optional(),
     maxLength: z.int().min(1).default(64),
     pattern: z.string().min(1).optional(),
