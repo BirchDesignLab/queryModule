@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, posix, relative, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ConfigChange, type DiffPath, diffConfig } from "@querymodule/core/config";
 import { isMainModule, toPosixRel } from "./cli-io";
@@ -86,13 +86,27 @@ export function tagIo(tag: string, root: string, show: ShowFile): ConfigIo {
   };
 }
 
-/** `git show` through execFile with an argument array: the spec is never seen by a shell. */
-export function gitShow(root: string): ShowFile {
+/**
+ * True when a posix-style `relative(root, file)` result leaves the repo: a parent step, or an
+ * absolute path (another drive or a UNC share on Windows, where `relative` cannot reach it).
+ */
+export function outsideRepo(rel: string): boolean {
+  return rel === ".." || rel.startsWith("../") || win32.isAbsolute(rel) || posix.isAbsolute(rel);
+}
+
+type Exec = (file: string, args: readonly string[], options: object) => string;
+
+/**
+ * `git show` through execFile with an argument array: the spec is never seen by a shell. The C
+ * locale keeps git's "does not exist in" text in English, which the absent-path check reads.
+ */
+export function gitShow(root: string, exec: Exec = execFileSync as Exec): ShowFile {
   return (spec) => {
     try {
-      return execFileSync("git", ["show", spec], {
+      return exec("git", ["show", spec], {
         cwd: root,
         encoding: "utf8",
+        env: { ...process.env, LC_ALL: "C", LANGUAGE: "C" },
         stdio: ["ignore", "pipe", "pipe"],
         maxBuffer: 64 * 1024 * 1024,
       });
@@ -145,7 +159,7 @@ export function diffLines(
   const old = tagIo(tag, root, show);
   for (const file of targets) {
     const rel = toPosixRel(relative(root, file));
-    if (rel === ".." || rel.startsWith("../")) {
+    if (outsideRepo(rel)) {
       out.push(`ERROR ${rel} / config.targetOutsideRepo {}`);
       continue;
     }
