@@ -1,9 +1,17 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ConfigUnreadableError } from "./config-files";
-import { configIo, parseValidateArgs, toPosixRel, VALIDATE_USAGE } from "./config-validate";
+import {
+  configIo,
+  diffLines,
+  parseValidateArgs,
+  tagIo,
+  toPosixRel,
+  VALIDATE_USAGE,
+} from "./config-validate";
 
 describe("config:validate argument parsing (item 1)", () => {
   it("accepts --resolved and bare file arguments", () => {
@@ -67,5 +75,86 @@ describe("config:validate io: only ENOENT reads as missing (wave review G-M1, Ta
       expect(() => configIo(errno(code)).readJson("x.json")).toThrow(ConfigUnreadableError);
     // A path existsSync reports false for without ENOENT (invalid argument) is unreadable too.
     expect(() => configIo().readJson("bad\u0000name.json")).toThrow(ConfigUnreadableError);
+  });
+});
+
+describe("config:validate --diff <tag> (spec 7, 9.5, D-M2P2-8)", () => {
+  const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const site = join(repo, "packages/config/sites/default.json");
+
+  it("parses a tag after --diff", () => {
+    expect(parseValidateArgs(["--diff", "m1"])).toEqual({
+      ok: true,
+      resolved: false,
+      files: [],
+      diff: "m1",
+    });
+    expect(parseValidateArgs(["--diff", "release/v1.2_rc-1", "a.json"])).toMatchObject({
+      ok: true,
+      diff: "release/v1.2_rc-1",
+      files: ["a.json"],
+    });
+  });
+
+  it("rejects a missing tag, a bad tag and an option-like tag before any git call", () => {
+    for (const args of [
+      ["--diff"],
+      ["--diff", "a b"],
+      ["--diff", "v1;rm"],
+      ["--diff", "$(x)"],
+      ["--diff", "-p"],
+      ["--diff", "--resolved"],
+      ["--diff", "x".repeat(101)],
+    ]) {
+      const r = parseValidateArgs(args);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.message).toContain(VALIDATE_USAGE);
+    }
+  });
+
+  // A fake git reader: the tag's copy of default.json has one feature on and a longer session.
+  const show = (spec: string): string | undefined => {
+    const rel = spec.slice(spec.indexOf(":") + 1);
+    const text = readFileSync(join(repo, rel), "utf8");
+    if (!rel.endsWith("sites/default.json")) return text;
+    const j = JSON.parse(text);
+    delete j.features.adminAudit;
+    j.auth.session.idleMinutes = 45;
+    return JSON.stringify(j);
+  };
+
+  it("tagIo reads <tag>:<repo-relative posix path> and maps a missing file to undefined", () => {
+    const asked: string[] = [];
+    const io = tagIo("m1", repo, (spec) => {
+      asked.push(spec);
+      return spec.endsWith("nope.json") ? undefined : '{"x":1}';
+    });
+    expect(io.readJson(join(repo, "packages", "config", "sites", "a.json"))).toEqual({ x: 1 });
+    expect(io.readJson(join(repo, "nope.json"))).toBeUndefined();
+    expect(asked[0]).toBe("m1:packages/config/sites/a.json");
+  });
+
+  it("prints the added feature key and the changed session limit", () => {
+    const lines = diffLines("m1", [site], repo, show);
+    const text = lines.join("\n");
+    expect(lines.some((l) => l.startsWith("+ ") && l.includes("/features/adminAudit"))).toBe(true);
+    expect(lines.some((l) => l.startsWith("~ ") && l.includes("/auth/session/idleMinutes"))).toBe(
+      true,
+    );
+    expect(text).toContain("45");
+    expect(text).toContain("30");
+  });
+
+  it("prints 'new file' for a target absent at the tag and nothing else for it", () => {
+    const lines = diffLines("m1", [site], repo, () => undefined);
+    expect(lines).toEqual(["packages/config/sites/default.json: new file"]);
+  });
+
+  it("prints no changes when both sides are equal", () => {
+    const same = (spec: string) =>
+      readFileSync(join(repo, spec.slice(spec.indexOf(":") + 1)), "utf8");
+    expect(diffLines("m1", [site], repo, same)).toEqual([
+      "packages/config/sites/default.json: no changes",
+    ]);
   });
 });
