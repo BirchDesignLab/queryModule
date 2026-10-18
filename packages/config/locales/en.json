@@ -1122,7 +1122,7 @@
   "admin.mock.try.waitRange": "Answers after {min} to {max} ms.",
   "admin.mock.try.noType": "No type chosen",
   "admin.mock.try.announceScenario": "{result}. Scenario {n} of {type}.",
-  "admin.mock.try.announceDefault": "{result}. No scenario matches, the default answers.",
+  "admin.mock.try.announceDefault": "{result}. Default of {type}.",
   "admin.mock.try.none": "{source} has no {type} response. The coverage grid shows it as Missing or Not asked.",
   "admin.mock.try.paused": "Fix the site's errors to try a match.",
   "admin.mock.try.empty": "This site has no mock source to try.",

@@ -203,7 +203,7 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     await t.user.clear(p.getByLabelText("Plate"));
     await t.user.type(p.getByLabelText("Plate"), "ZZ-0099");
     await waitFor(() =>
-      expect(live).toHaveTextContent("No record. No scenario matches, the default answers."),
+      expect(live).toHaveTextContent("No record. Default of Vehicle."),
     );
     expect(live.textContent).not.toMatch(/ZZ-0099/);
   });
@@ -382,7 +382,7 @@ describe("Try a match: the head note and the outcome row", () => {
     ).toBeInTheDocument();
   });
 
-  it("the default answer says no scenario matches", async () => {
+  it("the default answer reads Default of the type", async () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0099");
     const head = within(pane()).getByTestId("outcome-head");

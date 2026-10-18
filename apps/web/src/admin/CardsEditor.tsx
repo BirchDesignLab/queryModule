@@ -330,6 +330,7 @@ function CardEditor({
                 className="qm-button qm-button--ghost qm-mock__icon"
                 aria-disabled={target === undefined ? "true" : undefined}
                 aria-label={t(kind === "up" ? "admin.cards.moveUp" : "admin.cards.moveDown")}
+                title={t(kind === "up" ? "admin.cards.moveUp" : "admin.cards.moveDown")}
                 data-owner={owner}
                 data-role={kind}
                 onClick={() => {

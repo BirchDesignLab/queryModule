@@ -244,6 +244,18 @@ describe("a card's order and the tree's Add row (#698 (a))", () => {
       "aria-disabled",
       "true",
     );
+    // Up was enabled on the second card; after the move focus is still on that card's Up button.
+    expect(ed.getByRole("button", { name: "Move card up" })).toHaveFocus();
+    expect(ed.getByRole("button", { name: "Move card down" })).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("the tree finds a type's cards by its code too", async () => {
+    const t = await openBuilder();
+    await screen.findByRole("tree", { name: "Result cards" });
+    await t.user.type(within(nav()).getByRole("searchbox"), "veh");
+    expect(
+      within(cardsTree()).getByRole("treeitem", { name: /^Vehicle cards$/ }),
+    ).toBeInTheDocument();
   });
 
   it("the card editor has no Add button of its own: the tree's row is the one place", async () => {

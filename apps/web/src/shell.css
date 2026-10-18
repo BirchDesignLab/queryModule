@@ -1088,7 +1088,7 @@ main[tabindex="-1"]:focus {
 
 /* The row's own text: label, key and issue count share one line when they fit. When the pane is
    narrow the key drops under the label and a long label wraps: nothing ends in an ellipsis that
-   hides what the row is (#698 (g); the full key is also the key's title). */
+   hides what the row is (builder ruling (g); the full key is also the key's title). */
 .qm-tree__name {
   display: flex;
   flex: 1 1 auto;
@@ -1120,6 +1120,12 @@ main[tabindex="-1"]:focus {
   margin-inline-start: 0;
 }
 
+/* The count at the row's end stays on the row: only the label and the key wrap. */
+.qm-tree__key--end {
+  flex: none;
+  white-space: nowrap;
+}
+
 /* The "+ Add <Type> card" row: accent text and a plus in the toggle's column. */
 .qm-tree [role="treeitem"].qm-tree__row--add {
   color: var(--qm-color-accent);
@@ -1148,7 +1154,7 @@ main[tabindex="-1"]:focus {
   min-inline-size: var(--qm-space-5);
   min-block-size: var(--qm-space-5);
   padding: 0 var(--qm-space-1);
-  border-radius: var(--qm-space-8);
+  border-radius: var(--qm-radius-panel);
   letter-spacing: 0;
   text-align: center;
 }
@@ -1980,7 +1986,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 /* Cells are set in the small size and the columns share the narrow editor (about 345 px at 1366) so
-   no cell of the shipped site needs more than two lines (re-walk R17, #698). */
+   no cell of the shipped site needs more than two lines (re-walk R17). */
 .qm-wins__table :where(th, td) {
   min-inline-size: 0;
   padding-inline: var(--qm-space-1);
@@ -2021,7 +2027,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   inline-size: 28%;
 }
 
-/* Try a match: the answer is one bordered panel (outcome row, toggle, result, #698 (h)); the answer toggle is a dense control (36 px); a long payload line wraps inside the
+/* Try a match: the answer is one bordered panel (outcome row, toggle, result, builder ruling (h)); the answer toggle is a dense control (36 px); a long payload line wraps inside the
    pane instead of scrolling it sideways (T12-7). */
 .qm-try__outcome {
   display: flex;
@@ -2246,6 +2252,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   gap: var(--qm-space-1);
 }
 
+/* An arrow at the end of the list is still focusable (it says why by its place), but reads as off. */
+.qm-card-head__tools [aria-disabled="true"] {
+  color: var(--qm-color-text-muted);
+  cursor: default;
+}
+
 .qm-mock__scenario-body {
   display: flex;
   flex-direction: column;
@@ -2261,7 +2273,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 /* Undo and Redo are icon buttons, as narrow as they are tall, so the controls fit one row in the
-   1024 px section (#698 (d)). */
+   1024 px section (builder ruling (d)). */
 .qm-builder__toolbar .qm-mock__icon {
   inline-size: var(--qm-control-height-dense);
   padding-inline: 0;

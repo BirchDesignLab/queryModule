@@ -347,7 +347,7 @@ function TreeLabel({
       )}
       {node.decor !== undefined && (
         <span
-          className={`qm-tree__key${node.decor.near === true ? " qm-tree__key--near" : ""}`}
+          className={`qm-tree__key ${node.decor.near === true ? "qm-tree__key--near" : "qm-tree__key--end"}`}
           aria-hidden="true"
         >
           {node.decor.text}
@@ -362,7 +362,9 @@ function filterNodes(nodes: TreeNode[], q: string, text: LabelText): TreeNode[] 
   if (q === "") return nodes;
   const out: TreeNode[] = [];
   for (const n of nodes) {
-    const hit = `${text(n)} ${n.key ?? ""}`.toLowerCase().includes(q);
+    const hit = `${text(n)} ${n.key ?? ""} ${n.decor?.near === true ? n.decor.text : ""}`
+      .toLowerCase()
+      .includes(q);
     if (hit) out.push(n);
     else {
       const children = filterNodes(n.children, q, text);
@@ -821,7 +823,7 @@ const TreeRows = memo(
                   data-pointer={n.pointer}
                   tabIndex={n.pointer === tabStop ? 0 : -1}
                   aria-level={level}
-                  aria-selected={n.pointer === selected}
+                  aria-selected={n.add === true ? undefined : n.pointer === selected}
                   aria-expanded={n.children.length > 0 ? open : undefined}
                   aria-owns={open ? groupId : undefined}
                   aria-labelledby={`${id}-name`}

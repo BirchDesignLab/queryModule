@@ -153,7 +153,10 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
       : answer === null || response === undefined || result === undefined
         ? t("admin.mock.try.none", { source: sourceName(sourceId), type: typeName(code ?? "") })
         : answer.scenarioIndex === null
-          ? t("admin.mock.try.announceDefault", { result: resultWord })
+          ? t("admin.mock.try.announceDefault", {
+              result: resultWord,
+              type: typeName(response.queryType),
+            })
           : t("admin.mock.try.announceScenario", {
               result: resultWord,
               n: answer.scenarioIndex + 1,

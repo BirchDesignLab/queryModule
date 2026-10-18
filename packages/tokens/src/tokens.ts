@@ -88,7 +88,7 @@ export const LAYOUT_CONSTANTS = {
   "layout.wide": "1024px",
   /** At or above this width the admin rail sits beside the section; below it the rail is stacked above it. */
   "layout.stack": "864px",
-  /** At or above this section width the builder's heading and toolbar share a row; below it the toolbar sits under the heading. */
+  /** The width below which a Columns table stacks its cells. */
   "layout.toolbar": "720px",
   /** At or above this section width the builder's heading shares a row with its toolbar; below it the toolbar has the whole width, so its controls stay on one row. */
   "layout.toolbarRow": "920px",
