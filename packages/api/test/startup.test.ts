@@ -595,7 +595,6 @@ describe("spec 5.2 startup sweep: pending results become interrupted before the 
 // before the database closes on every path: the drain, the fatal close and a listen failure. A
 // refused startup never starts it. Time is manual; mock data only (spec 5.4, 10.8).
 describe("spec 5.2 the sweeper runs from startup and stops before the DB closes (#717)", () => {
-
   async function startManual(env: NodeJS.ProcessEnv) {
     const time = manualTime();
     const lines: string[] = [];
