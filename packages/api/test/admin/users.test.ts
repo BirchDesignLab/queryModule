@@ -409,17 +409,69 @@ describe("sessions", () => {
     expect(own.sessions.filter((s) => s.current)).toHaveLength(1);
   });
 
-  it("lists no sessions past their absolute expiry", async () => {
+  // AUD-1 (D-M2P2-2): the list reads the live limits, not Better Auth's fixed ceiling expiry.
+  async function listed(a: App, userId: string) {
+    return AdminUserSessionListSchema.parse(
+      await (await a.call("admin", "GET", `${API}/${userId}/sessions`)).json(),
+    ).sessions;
+  }
+  async function setTimes(a: App, userId: string, createdAt: number, updatedAt: number) {
+    await a.t.deps.db.$client.execute({
+      sql: "UPDATE session SET created_at = ?, updated_at = ? WHERE user_id = ?",
+      args: [createdAt, updatedAt, userId],
+    });
+  }
+  const MIN = 60_000;
+
+  it("AUD-1: expiresAt is min(createdAt + absolute, updatedAt + idle) from the live limits", async () => {
+    const { a } = await setup();
+    const u = await plainUser(a, "live@example.test");
+    const now = a.t.clock.now();
+    const { absoluteMinutes, idleMinutes } = a.t.deps.config.current().siteConfig.auth.session;
+    // Idle bound first: used 5 minutes ago, created an hour ago.
+    await setTimes(a, u.id, now - 60 * MIN, now - 5 * MIN);
+    expect((await listed(a, u.id)).map((x) => x.expiresAt)).toEqual([
+      Math.min(now - 60 * MIN + absoluteMinutes * MIN, now - 5 * MIN + idleMinutes * MIN),
+    ]);
+    // Absolute bound first: created just under the absolute limit ago, used a minute ago.
+    const created = now - (absoluteMinutes - 1) * MIN;
+    await setTimes(a, u.id, created, now - MIN);
+    expect((await listed(a, u.id)).map((x) => x.expiresAt)).toEqual([
+      created + absoluteMinutes * MIN,
+    ]);
+  });
+
+  it("AUD-1: lists no session past either live limit, though Better Auth's expiry is later", async () => {
     const { a } = await setup();
     const u = await plainUser(a, "old@example.test");
-    await a.t.deps.db.$client.execute({
-      sql: "UPDATE session SET expires_at = 1 WHERE user_id = ?",
+    const now = a.t.clock.now();
+    const { absoluteMinutes, idleMinutes } = a.t.deps.config.current().siteConfig.auth.session;
+    await setTimes(a, u.id, now - 60 * MIN, now - (idleMinutes + 1) * MIN);
+    expect(await listed(a, u.id)).toEqual([]);
+    await setTimes(a, u.id, now - (absoluteMinutes + 1) * MIN, now - MIN);
+    expect(await listed(a, u.id)).toEqual([]);
+    // The row is still there for the sweeper (spec 5.2), with Better Auth's later expiry.
+    const rows = await a.t.deps.db.$client.execute({
+      sql: "SELECT expires_at FROM session WHERE user_id = ?",
       args: [u.id],
     });
-    const list = AdminUserSessionListSchema.parse(
-      await (await a.call("admin", "GET", `${API}/${u.id}/sessions`)).json(),
-    );
-    expect(list.sessions).toHaveLength(0);
+    expect(rows.rows).toHaveLength(1);
+    expect(Number(rows.rows[0]?.expires_at)).toBeGreaterThan(now);
+  });
+
+  it("AUD-1: a published change to the limits changes the listed expiresAt at once", async () => {
+    const { a } = await setup();
+    const u = await plainUser(a, "swap@example.test");
+    const now = a.t.clock.now();
+    await setTimes(a, u.id, now - 60 * MIN, now - 5 * MIN);
+    const current = a.t.deps.config.current();
+    const siteConfig = structuredClone(current.siteConfig);
+    siteConfig.auth.session = { absoluteMinutes: 120, idleMinutes: 10 };
+    a.t.deps.config.swap({ ...current, siteConfig });
+    expect((await listed(a, u.id)).map((x) => x.expiresAt)).toEqual([now - 5 * MIN + 10 * MIN]);
+    siteConfig.auth.session = { absoluteMinutes: 120, idleMinutes: 4 };
+    a.t.deps.config.swap({ ...current, siteConfig: structuredClone(siteConfig) });
+    expect(await listed(a, u.id)).toEqual([]);
   });
 
   it("answers 404 listing sessions of an unknown user", async () => {

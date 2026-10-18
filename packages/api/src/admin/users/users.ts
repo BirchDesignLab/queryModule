@@ -274,7 +274,12 @@ export async function setUserRole(
   return { ok: true, user: toAdminUser(changed, await statsOf(d, id)) };
 }
 
-/** A user's live sessions (not past their absolute expiry), newest first; null if no such user. */
+/**
+ * A user's live sessions, newest first; null if no such user. AUD-1 (D-M2P2-2): a session's
+ * expiry is the earlier of createdAt + absolute and updatedAt + idle under the live limits, as
+ * identity enforces them; Better Auth's stored expiresAt is a later fixed ceiling, so it is not
+ * read here. A session past either limit is not listed (the sweeper removes it, spec 5.2).
+ */
 export async function listUserSessions(
   d: AppDeps,
   actor: Principal,
@@ -282,21 +287,32 @@ export async function listUserSessions(
 ): Promise<AdminUserSessionRow[] | null> {
   const exists = await d.db.select({ id: user.id }).from(user).where(eq(user.id, id));
   if (exists.length === 0) return null;
+  const { absoluteMinutes, idleMinutes } = d.config.current().siteConfig.auth.session;
+  const now = d.clock.now();
   const rows = await d.db
     .select({
       id: session.id,
       createdAt: session.createdAt,
-      expiresAt: session.expiresAt,
+      updatedAt: session.updatedAt,
       userAgent: session.userAgent,
     })
     .from(session)
-    .where(and(eq(session.userId, id), gt(session.expiresAt, new Date(d.clock.now()))))
+    .where(
+      and(
+        eq(session.userId, id),
+        gt(session.createdAt, new Date(now - absoluteMinutes * 60_000)),
+        gt(session.updatedAt, new Date(now - idleMinutes * 60_000)),
+      ),
+    )
     .orderBy(desc(session.createdAt))
     .limit(100);
   return rows.map((r) => ({
     id: r.id,
     createdAt: r.createdAt.getTime(),
-    expiresAt: r.expiresAt.getTime(),
+    expiresAt: Math.min(
+      r.createdAt.getTime() + absoluteMinutes * 60_000,
+      r.updatedAt.getTime() + idleMinutes * 60_000,
+    ),
     userAgent: r.userAgent === null ? null : r.userAgent.slice(0, 256),
     current: r.id === actor.sessionId,
   }));
