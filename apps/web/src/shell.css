@@ -878,29 +878,13 @@ main[tabindex="-1"]:focus {
     .qm-builder__panes {
       display: grid;
       grid-template-columns: calc(var(--qm-space-12) * 4.25) minmax(0, 1fr);
-      /* The editor is where the work happens: it takes the larger share, and the panes keep a floor
-         so it never shrinks to a strip (re-walk N2, 240 px). The page scrolls instead. */
+      /* The editor is where the work happens: it takes the larger share of the column, the preview
+         keeps enough for a card. The page does not scroll here (the panes area does): the split is
+         ratios inside the height the section has (re-walk N2, the editor was 240 px). */
       grid-template-rows:
-        minmax(calc(var(--qm-space-12) * 6.5), 1.5fr)
-        minmax(calc(var(--qm-space-12) * 4.5), 1fr);
+        minmax(calc(var(--qm-space-12) * 5), 1.6fr)
+        minmax(calc(var(--qm-space-12) * 3.5), 1fr);
       align-items: stretch;
-      min-block-size: calc(var(--qm-space-12) * 11.5);
-    }
-
-    /* The builder stays a definite height (the panes scroll inside it), with a floor high enough for
-       the heading, the toolbar and the panes' own floor: a short window scrolls the page. */
-    .qm-builder {
-      block-size: max(
-        calc(
-          100dvh -
-          var(--qm-control-height-dense) -
-          var(--qm-space-2) *
-          2 -
-          var(--qm-space-4) *
-          2
-        ),
-        calc(var(--qm-space-12) * 16)
-      );
     }
 
     .qm-builder__panes > .qm-tree {

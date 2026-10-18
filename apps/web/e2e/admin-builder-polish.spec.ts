@@ -123,24 +123,34 @@ for (const size of SIZES) {
   });
 }
 
-test("[#680 N2] at 1024 the editor keeps a usable height, scrolls inside, and the preview stays in view", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1024, height: 768 });
-  await signIn(page, ADMIN);
-  await page.goto("/admin/config");
-  await expect(page.getByTestId("draft-status")).toContainText("Draft, based on version");
-  await openCard(page, /^Vehicle cards/);
-  const editorEl = page.locator(".qm-builder__editor");
-  const editor = await box(editorEl);
-  expect(editor.height, "editor height").toBeGreaterThanOrEqual(300);
-  // The pane is a bounded scroll area (a card's rows are longer than it): not grown to its content.
-  const scroll = await editorEl.evaluate((el) => ({
-    content: el.scrollHeight,
-    shown: el.clientHeight,
-  }));
-  expect(scroll.content, "the editor scrolls inside its pane").toBeGreaterThan(scroll.shown);
-  // The preview sits under the editor, with its top in the first screen (re-walk R15).
-  const preview = await box(page.getByRole("region", { name: "Card preview" }));
-  expect(preview.y, "preview top").toBeLessThan(768);
-});
+for (const viewport of [
+  { width: 1100, height: 800 },
+  { width: 1024, height: 768 },
+]) {
+  test(`[#680 N2] at ${viewport.width}x${viewport.height} the editor keeps a usable height inside the section`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await signIn(page, ADMIN);
+    await page.goto("/admin/config");
+    await expect(page.getByTestId("draft-status")).toContainText("Draft, based on version");
+    await openCard(page, /^Vehicle cards/);
+    const editorEl = page.locator(".qm-builder__editor");
+    const editor = await box(editorEl);
+    expect(editor.height, "editor height").toBeGreaterThanOrEqual(300);
+    // The page does not scroll (the panes area does), and the editor is a bounded scroll area.
+    const page_ = await page.evaluate(() => {
+      const root = document.scrollingElement as Element;
+      return root.scrollHeight - root.clientHeight;
+    });
+    expect(page_, "page scroll").toBeLessThanOrEqual(0);
+    const scroll = await editorEl.evaluate((el) => ({
+      content: el.scrollHeight,
+      shown: el.clientHeight,
+    }));
+    expect(scroll.content, "the editor scrolls inside its pane").toBeGreaterThan(scroll.shown);
+    // The preview sits under the editor, in the first screen (re-walk R15).
+    const preview = await box(page.getByRole("region", { name: "Card preview" }));
+    expect(preview.y, "preview top").toBeLessThan(viewport.height);
+  });
+}
