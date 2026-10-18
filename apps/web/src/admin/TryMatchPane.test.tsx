@@ -202,9 +202,7 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     expect(live.textContent).not.toMatch(/ZZ-0001|STOLEN/);
     await t.user.clear(p.getByLabelText("Plate"));
     await t.user.type(p.getByLabelText("Plate"), "ZZ-0099");
-    await waitFor(() =>
-      expect(live).toHaveTextContent("No record. Default of Vehicle."),
-    );
+    await waitFor(() => expect(live).toHaveTextContent("No record. Default of Vehicle."));
     expect(live.textContent).not.toMatch(/ZZ-0099/);
   });
 });
