@@ -1102,6 +1102,7 @@ main[tabindex="-1"]:focus {
    box instead. */
 .qm-tree__name:has(> .qm-tree__key--end) {
   flex-wrap: nowrap;
+  align-items: first baseline;
 }
 
 .qm-tree__label {

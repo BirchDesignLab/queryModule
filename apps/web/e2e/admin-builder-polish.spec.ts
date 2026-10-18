@@ -171,7 +171,14 @@ for (const size of SIZES) {
       const row = tree(page).getByRole("treeitem", { name: /^Keywords and severity/ });
       const label = await box(row.locator(".qm-tree__label"));
       const count = await box(row.locator(".qm-tree__key--end"));
-      expect(count.y, "the count's top against the label's").toBeLessThan(label.y + label.height);
+      // On the label's first line, not centered against a label that wrapped to two.
+      const firstLine = await row
+        .locator(".qm-tree__label")
+        .evaluate((el) => Number.parseFloat(getComputedStyle(el).lineHeight));
+      expect(
+        Math.abs(count.y + count.height / 2 - (label.y + firstLine / 2)),
+        "the count's center against the label's first line",
+      ).toBeLessThanOrEqual(4);
     });
 
     test("[#698 (g)] Keywords: no sample badge is clipped by the sample panel", async ({
