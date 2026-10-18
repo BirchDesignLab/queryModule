@@ -99,6 +99,8 @@ packages/api/src/deps.ts
 packages/api/src/events/**
 # SEC-005 password minimum: Better Auth minPasswordLength reads it (AW5 review 2 G-I1)
 packages/core/src/config/password.ts
+# SEC-005 AUD-1 session ceiling: Better Auth expiresIn reads it (M2 P2 Task 2, D-M2P2-2)
+packages/core/src/config/session-limits.ts
 # Admin console floor (ADR-0011 Consequences): admin/users is auth; anything new under
 # admin/ is at least gate
 packages/api/src/admin/**

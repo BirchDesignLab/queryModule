@@ -1074,7 +1074,7 @@
       "size": "S",
       "priority": "High",
       "reqIds": "FR-064",
-      "body": "Deferred items from wave A5 (#282 to #286, submit route), artifact `docs/reviews/feat-a-p2-wave-5.md` (reviewed 26043ec). Tier: critical (`packages/api/src/queries/**`). Items 1 and 2 are scheduled for later milestones; keep them here until those plans pick them up.\n\n- [ ] C-m1 (review, next critical touch): `replayResponse` runs outside `sanitizeSubmitError`; a DB error message could quote the userId and Idempotency-Key into the error log (`route.ts:229`, `admission.ts:66`). Route it through the sanitiser (spec 5.9 log redaction).\n- [ ] Wave critic M1 (M3 P1, delegation): the policy's delegated branch matches only `credential_user_id`; own-credential self reads pass as credentialOwner once the snapshot is filled. Add `delegation_id IS NOT NULL` plus a test.\n- [ ] Wave critic M2 (M2 P1): `ackLatencyMs` starts after `requireSession` and stops before COMMIT, so NFR-004 is under-reported; measure with Server-Timing.\n- [ ] Replay does not filter `result_visibility`: fine for M1 (the 202 carries source ids, no results; hide route not landed). Revisit when the hide route lands (M2); document that `resultIds` are unfiltered.\n- [ ] Task 17 tests: policy tests open a fresh migrated DB per case (Windows flake risk); no own-credential seed row.\n\n**Source:** A5 push request, checker 09-29-26.\n"
+      "body": "Deferred items from wave A5 (#282 to #286, submit route), artifact `docs/reviews/feat-a-p2-wave-5.md` (reviewed 26043ec). Tier: critical (`packages/api/src/queries/**`). Items 1 and 2 are scheduled for later milestones; keep them here until those plans pick them up.\n\n- [x] C-m1 (review, next critical touch): `replayResponse` runs outside `sanitizeSubmitError`; a DB error message could quote the userId and Idempotency-Key into the error log (`route.ts:229`, `admission.ts:66`). Route it through the sanitiser (spec 5.9 log redaction).\n- [ ] Wave critic M1 (M3 P1, delegation): the policy's delegated branch matches only `credential_user_id`; own-credential self reads pass as credentialOwner once the snapshot is filled. Add `delegation_id IS NOT NULL` plus a test.\n- [ ] Wave critic M2 (M2 P1): `ackLatencyMs` starts after `requireSession` and stops before COMMIT, so NFR-004 is under-reported; measure with Server-Timing.\n- [ ] Replay does not filter `result_visibility`: fine for M1 (the 202 carries source ids, no results; hide route not landed). Revisit when the hide route lands (M2); document that `resultIds` are unfiltered.\n- [ ] Task 17 tests: policy tests open a fresh migrated DB per case (Windows flake risk); no own-credential seed row.\n\n**Source:** A5 push request, checker 09-29-26."
     },
     {
       "number": 319,
@@ -1542,7 +1542,7 @@
       "reqIds": "SEC-010",
       "labels": ["platform", "p2", "follow-up", "sensitive", "decision"],
       "title": "M1 carry-overs: WS receipt policy, key versioning, audit catalogue, admin UI",
-      "body": "Boxes carried out of issues that stay in M1, in the M1 triage (10-03-26, developer-approved). Each is a design decision or M2-only work; its source box is ticked \"moved to #N\" so the source issue can close at the M1 exit.\n\n**Contracts and keys (critical)**\n- [x] (from #98) C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8. Done in #559: ADR-0013 tolerant client receipt (drop unknown types, strip unknown keys; additive WS changes need no MIN_CLIENT_VERSION bump); master plan 8.4 row.\n- [ ] (from #311) `REQUEST_KEY_VERSION` independent of DATA_KEY/canary version (rotation cannot tell rows apart).\n\n**Audit catalogue and auth (M2 P2)**\n- [ ] (from #505) G-m3 (critical, `contracts/audit.ts`): demoting an admin audits only \"granted implementer\"; add `fromRole` to roleChanged.\n- [ ] (from #505) A password change writes no audit row (spec 4.7 has no event); decide with the M2 audit catalogue.\n- [ ] (from #505) revokeSession's `sessionRevoked` row carries no target user id; decide with the M2 audit catalogue.\n- [ ] (from #505) Change-password has no per-account lockout on wrong currentPassword guesses (IP limiter only); decide with SEC-005 hardening (gate).\n- [ ] (from #505) G-m4 (gate): listUsers caps at 1000 rows (documented); add paging when the user list can exceed it.\n\n**M2 P0.5 and real adapters**\n- [ ] (from #505) T27 IC1 carry: the fixture-policy task runs `checkFixturePolicy` on `document.mock` in admin config validate, publish and rollback (`admin/config/**`), findings as validationFailed diagnostics with pointers, tested.\n- [ ] (from #505) T27 critic CV1 carry: re-check changedPointers for map keys that can hold query values once any non-mock free-form map enters ConfigDocument (ADR-0011 item 7).\n\n**Admin UI and demo prep**\n- [ ] (from #507) Publish change note and \"who\" in the history drawer: the contract has no note field and carries user ids only (controller ruling 10-03-26: omitted in M1). Decide with the M2 audit viewer (contract change, `admin.ts` ordinary, audit link critical).\n- [x] (from #507) C/M1: `visual.spec.ts` admin look checks were loosened for the Task 33/34 toolbar wrapping to two rows at 1366 (toolbar height bound 90 -> 130, reasons \"inside the toolbar\", overflowY checks removed). Developer to look at the 1366 builder toolbar; tighten the checks once the layout is settled. Done in #566 (#546): developer ruled the two-row layout (controls row 1, status and reasons row 2); checks tightened (height 130 -> 105, controls one row, reasons below the controls).\n\n**Watch**\n- [ ] (from #483) If anything else becomes sticky, the action-bar clearance needs a second source (#432).\n- [ ] (from the #515 review) `packages/api/src/auth/routes.ts` orphan-row comment lists two sources; a sign-in racing the disable is a third (identity still refuses it). Reword at the next touch: \"a sign-in made after or racing the disable\".\n- [ ] (from #507, gate) `apps/web/src/app/ChangePasswordPage.tsx` hard-codes MIN_LENGTH 12, a copy of the server's minimum: expose the minimum through the client config or the change-password error (`packages/api/src/auth`, gate), then read it in the page (WM4 found neither source carries it today).\n\n**From the M1 whole-phase review (docs/reviews/m1-phase-review.md, 10-04-26)**\n- [ ] AUD-1 with AC-3/CFG-7 (gate and critical, M2 P2 with the session sweeper): Better Auth's getSession deletes absolute-expired sessions with no sessionRevoked row and no endSession, and Better Auth's expiresIn is fixed at boot while published session limits are promised live (ADR-0011). Give Better Auth a fixed ceiling, enforce the live limit in identity, derive the admin list's expiresAt from createdAt plus the live limit, and let the sweeper own expiry with its audit row.\n- [x] CFG-3 (critical, M2 P0.5, before any config schema change): admin/config/store.ts boot hash compare refuses every stored row once an additive schema default is added. Hash the stored document as stored, or migrate stored rows with the schema version. Done in #559 (prototype shortcut D-M2P0-2: document_hash verifies the stored document as stored); proper fix #558.\n- [ ] CFG-4 (gate, M2 P0.5): on a seeded deploy, changes to the image's site config and mock file are ignored and there is no import path. Decide an import or merge step for image config changes.\n- [ ] CFG-2 (ordinary, M2 P0.5, design): on a mock-source site the builder cannot publish a new query type or source (config.missingMockResponse). Decide how mock coverage is authored from the builder.\n- [ ] CFG-1 (ordinary, M2 P1): label-only changes never reach open clients: the config hash covers siteConfig only and the translator is built once at boot.\n- [ ] (from X2 IC2, ordinary or gate, M2) a server endpoint for shipped-only label keys, so the builder's browser label check matches the server in every locale (today exact for English only; server Review is authoritative).\n\n**From the M1 exit PR review (docs/reviews/fix-m1-exit.md, 10-04-26; ride the next critical PR)**\n- [ ] C-M-1 (critical, `packages/api/src/startup.ts` bootstrap catch): the `configLoaded audit write failed` log line drops the error, so SQLITE_FULL, SQLITE_READONLY, SQLITE_BUSY and a trigger abort look the same to an operator. Catch it and add `error: errorFields(e)` (name and code token only); keep throwing the fixed StartupRefusedError with no cause.\n- [ ] C-M-2 (critical, `packages/api/src/startup.ts` FIXED_TEXT_STARTUP_ERRORS comment): say \"app-built fixed text, never a value\" (as error-fields.ts does) and warn that a class added to the list must never embed a runtime value, since its message reaches stderr.\n\n**Source:** `scripts/board/m1-triage-2026-10-03.mjs`, session \"M1 finish 3\".\n\n"
+      "body": "Boxes carried out of issues that stay in M1, in the M1 triage (10-03-26, developer-approved). Each is a design decision or M2-only work; its source box is ticked \"moved to #N\" so the source issue can close at the M1 exit.\n\n**Contracts and keys (critical)**\n- [x] (from #98) C-M4 `ws.ts:136-185`: strict server-to-client messages in a closed union mean additive WS changes (M2 resultHidden, resync; M3 delegationChanged) break a lagging native client. Decide a client receipt policy (drop unknown types, strip unknown keys) or bump `MIN_CLIENT_VERSION` per additive change; record it through master plan 8. Done in #559: ADR-0013 tolerant client receipt (drop unknown types, strip unknown keys; additive WS changes need no MIN_CLIENT_VERSION bump); master plan 8.4 row.\n- [x] (from #311) `REQUEST_KEY_VERSION` independent of DATA_KEY/canary version (rotation cannot tell rows apart). Done: ruled option A (D-M2P0-3, developer 10-16-26), Ruling comment on this issue; full rotation is #685.\n\n**Audit catalogue and auth (M2 P2)**\n- [x] (from #505) G-m3 (critical, `contracts/audit.ts`): demoting an admin audits only \"granted implementer\"; add `fromRole` to roleChanged. Done in #688 (#523): `roleChanged.details.fromRole`.\n- [x] (from #505) A password change writes no audit row (spec 4.7 has no event); decide with the M2 audit catalogue. Done in #688 (#523): `passwordChanged`; one transaction since #694 (#690 PR-2).\n- [x] (from #505) revokeSession's `sessionRevoked` row carries no target user id; decide with the M2 audit catalogue. Done in #688 (#523): `sessionRevoked.details.targetUserId`.\n- [x] (from #505) Change-password has no per-account lockout on wrong currentPassword guesses (IP limiter only); decide with SEC-005 hardening (gate). Moved to #46 (D-M2P2-7, developer 10-18-26).\n- [x] (from #505) G-m4 (gate): listUsers caps at 1000 rows (documented); add paging when the user list can exceed it. Moved to #46 (D-M2P2-7, developer 10-18-26).\n\n**M2 P0.5 and real adapters**\n- [x] (from #505) T27 IC1 carry: the fixture-policy task runs `checkFixturePolicy` on `document.mock` in admin config validate, publish and rollback (`admin/config/**`), findings as validationFailed diagnostics with pointers, tested. Done on main: `packages/api/src/admin/config/draft.ts` runs `checkFixturePolicy` on the mock (validate, publish, rollback).\n- [x] (from #505) T27 critic CV1 carry: re-check changedPointers for map keys that can hold query values once any non-mock free-form map enters ConfigDocument (ADR-0011 item 7). Moved to #46 (D-M2P2-7, developer 10-18-26).\n\n**Admin UI and demo prep**\n- [ ] (from #507) Publish change note and \"who\" in the history drawer: the contract has no note field and carries user ids only (controller ruling 10-03-26: omitted in M1). Decide with the M2 audit viewer (contract change, `admin.ts` ordinary, audit link critical). Planned: M2 P2, docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 10 and docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 5.\n- [x] (from #507) C/M1: `visual.spec.ts` admin look checks were loosened for the Task 33/34 toolbar wrapping to two rows at 1366 (toolbar height bound 90 -> 130, reasons \"inside the toolbar\", overflowY checks removed). Developer to look at the 1366 builder toolbar; tighten the checks once the layout is settled. Done in #566 (#546): developer ruled the two-row layout (controls row 1, status and reasons row 2); checks tightened (height 130 -> 105, controls one row, reasons below the controls).\n\n**Watch**\n- [x] (from #483) If anything else becomes sticky, the action-bar clearance needs a second source (#432). Moved to #46 (D-M2P2-7, developer 10-18-26).\n- [ ] (from the #515 review) `packages/api/src/auth/routes.ts` orphan-row comment lists two sources; a sign-in racing the disable is a third (identity still refuses it). Reword at the next touch: \"a sign-in made after or racing the disable\". Planned: M2 P2, docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 8.\n- [x] (from #507, gate) `apps/web/src/app/ChangePasswordPage.tsx` hard-codes MIN_LENGTH 12, a copy of the server's minimum: expose the minimum through the client config or the change-password error (`packages/api/src/auth`, gate), then read it in the page (WM4 found neither source carries it today). Done on main: the page reads core's `PASSWORD_MIN_LENGTH` (`packages/core/src/config/password.ts`).\n\n**From the M1 whole-phase review (docs/reviews/m1-phase-review.md, 10-04-26)**\n- [ ] AUD-1 with AC-3/CFG-7 (gate and critical, M2 P2 with the session sweeper): Better Auth's getSession deletes absolute-expired sessions with no sessionRevoked row and no endSession, and Better Auth's expiresIn is fixed at boot while published session limits are promised live (ADR-0011). Give Better Auth a fixed ceiling, enforce the live limit in identity, derive the admin list's expiresAt from createdAt plus the live limit, and let the sweeper own expiry with its audit row. Planned: M2 P2, docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Tasks 2, 7, 8 and 9.\n- [x] CFG-3 (critical, M2 P0.5, before any config schema change): admin/config/store.ts boot hash compare refuses every stored row once an additive schema default is added. Hash the stored document as stored, or migrate stored rows with the schema version. Done in #559 (prototype shortcut D-M2P0-2: document_hash verifies the stored document as stored); proper fix #558.\n- [x] CFG-4 (gate, M2 P0.5): on a seeded deploy, changes to the image's site config and mock file are ignored and there is no import path. Decide an import or merge step for image config changes. Moved to #46 (D-M2P2-7, developer 10-18-26).\n- [x] CFG-2 (ordinary, M2 P0.5, design): on a mock-source site the builder cannot publish a new query type or source (config.missingMockResponse). Decide how mock coverage is authored from the builder. Done in M2 P0.5: the mock responses editor (#548 to #551).\n- [x] CFG-1 (ordinary, M2 P1): label-only changes never reach open clients: the config hash covers siteConfig only and the translator is built once at boot. Moved to #46 (D-M2P2-7, developer 10-18-26).\n- [x] (from X2 IC2, ordinary or gate, M2) a server endpoint for shipped-only label keys, so the builder's browser label check matches the server in every locale (today exact for English only; server Review is authoritative). Moved to #46 (D-M2P2-7, developer 10-18-26).\n\n**From the M1 exit PR review (docs/reviews/fix-m1-exit.md, 10-04-26; ride the next critical PR)**\n- [x] C-M-1 (critical, `packages/api/src/startup.ts` bootstrap catch): the `configLoaded audit write failed` log line drops the error, so SQLITE_FULL, SQLITE_READONLY, SQLITE_BUSY and a trigger abort look the same to an operator. Catch it and add `error: errorFields(e)` (name and code token only); keep throwing the fixed StartupRefusedError with no cause. Done on main: `refuse()` in `startup.ts` logs `error: errorFields(e)` and throws the fixed `StartupRefusedError`.\n- [x] C-M-2 (critical, `packages/api/src/startup.ts` FIXED_TEXT_STARTUP_ERRORS comment): say \"app-built fixed text, never a value\" (as error-fields.ts does) and warn that a class added to the list must never embed a runtime value, since its message reaches stderr. Done on main: the `FIXED_TEXT_STARTUP_ERRORS` comment says app-built fixed text, never a value, and warns about new classes.\n\n**Source:** `scripts/board/m1-triage-2026-10-03.mjs`, session \"M1 finish 3\".\n\n"
     },
     {
       "number": 560,
@@ -1568,7 +1568,7 @@
       "priority": "Medium",
       "reqIds": "none",
       "title": "M2 P0 route contracts: carry-forwards for M2 P1 and P2 handlers",
-      "body": "From M2 P0-W2 Task 7 (#526), ledger of the B lane, 10-05-26. The five new routes are contract-only (`CONTRACT_ONLY` in `packages/api/test/security/route-matrix.test.ts`). Whoever plans and mounts them (M2 P1 queries, M2 P2 audit) takes these:\r\n\r\n- [ ] The task that mounts `GET /api/v1/queries` (and each other contract-only route) removes it from `CONTRACT_ONLY` and adds user and admin cases to the route matrix. (`getQuery` and `listQueries` done in #618; `getAdminQuery` and the audit routes remain, M2 P2)\r\n- [x] Q2: `z.coerce` turns empty `from=` / `limit=` into `0`; the handler must reject it, or the contract tightens (contract change, master plan 8). (handler rejects, #618)\r\n- [ ] Q4: the new admin routes (`/admin/audit`, `/admin/audit/export`, `/admin/queries/:correlationId`) have no feature key, while the route matrix requires `admin(Config|Users)` on `/admin/` operations; pick the key (likely a new `adminAudit`) before mounting.\r\n- [ ] NDJSON export has no OpenAPI body schema (`AuditExportLineSchema` is exported for the handler); document or add it when the handler lands.\r\n- [x] List page cap 100 is an implementer choice (spec 5.1 silent); confirm or change in M2 P1 planning. (confirmed: default 25, cap 100, #618)\r\n\r\nRefs #511, #526.\r\n"
+      "body": "From M2 P0-W2 Task 7 (#526), ledger of the B lane, 10-05-26. The five new routes are contract-only (`CONTRACT_ONLY` in `packages/api/test/security/route-matrix.test.ts`). Whoever plans and mounts them (M2 P1 queries, M2 P2 audit) takes these:\r\n\r\n- [ ] The task that mounts `GET /api/v1/queries` (and each other contract-only route) removes it from `CONTRACT_ONLY` and adds user and admin cases to the route matrix. (`getQuery` and `listQueries` done in #618; `getAdminQuery` and the audit routes remain, M2 P2)\r\n- [x] Q2: `z.coerce` turns empty `from=` / `limit=` into `0`; the handler must reject it, or the contract tightens (contract change, master plan 8). (handler rejects, #618)\r\n- [ ] Q4: the new admin routes (`/admin/audit`, `/admin/audit/export`, `/admin/queries/:correlationId`) have no feature key, while the route matrix requires `admin(Config|Users)` on `/admin/` operations; pick the key (likely a new `adminAudit`) before mounting.\r\n- [ ] NDJSON export has no OpenAPI body schema (`AuditExportLineSchema` is exported for the handler); document or add it when the handler lands.\r\n- [x] List page cap 100 is an implementer choice (spec 5.1 silent); confirm or change in M2 P1 planning. (confirmed: default 25, cap 100, #618)\r\n\r\nRefs #511, #526.\n\nAdded 10-17-26 (M2 Manager 7, from the #690 PR-1 critical re-review, declined as out of scope there):\n- [ ] adminViewed writer (M2 P2): when `viewerBasis` is `credentialOwner`, bind the actor to the credential owner of the viewed request (the contract rule in `audit.ts` only enforces non-system, because details carry no owner id). Test that a different user cannot write a credentialOwner view.\n- [ ] Same touch of `packages/core/src/contracts/audit.ts`: rewrap the two pre-existing comment lines over 100 columns (about lines 441 and 525).\n"
     },
     {
       "number": 565,
@@ -1607,7 +1607,7 @@
       "priority": "Medium",
       "reqIds": "SEC-005",
       "title": "AW4 minors: failed-state 503, closeDb under hung T2, WS default single source, drain spec line",
-      "body": "AW4 (M2 P0.5 Track A wave 4, Tasks 11-13) wave-review minors and critic carry, none blocking the demo. Mixed tier: route.ts, main.ts, startup/drain are critical; ws/server.ts, env-vs-server defaults and scripts/ci are gate. Artifact `docs/reviews/feat-m2-a-p05-wave-4.md`.\r\n\r\nCritical:\r\n- [ ] C-C-m3 failed-but-not-draining: a submit already past the 503 check whose T1 commits after a fatal gets refused enqueue and raises a second `d.fatal` (data-safe, exit 1 either way). Fix: treat `failed` like `draining` at `packages/api/src/queries/route.ts:160`\r\n- [ ] closeDb under a hung T2 at the drain bound: spurious fatal on shutdown (AW4 critic ruling, deferred)\r\n- [ ] C-C-m1 `route.ts:126` 127 columns; `main.ts:25` reflow\r\n\r\nGate:\r\n- [ ] G-G-m1 WS upgrade default 60 / 60000 defined twice (`ws/server.ts` const and `env.ts` literals): one source\r\n- [ ] G-G-m2 `scripts/ci/config-files.ts`: an unreadable mock dir emits one line per site; emit once\r\n\r\nOrdinary (docs):\r\n- [ ] G-G-m3 / C-C-m2 spec line ~1362 says drain ceiling 20 s; AW4 set `timeoutMs` ceiling 18 s, HTTP drain 2 s, worst case 25 s: update the spec line\r\n\r\nRefs #538, #539, #540.\r\n\r\n\r\nPaths:\r\n- [x] `packages/core/src/config/password.ts` under `[gate]` in `.github/sensitive-paths` and the CLAUDE.md gate list: landed in AW5 (developer-approved)\r\n- [ ] C-C-m1 (AW5 RR-M1): the gated minimum is reachable through ordinary `packages/core/src/config/index.ts` and the `packages/core/package.json` exports; add a gate-tier test under `packages/api/src/auth/` importing `PASSWORD_MIN_LENGTH` via `@querymodule/core/config`, asserting >= 12 (or refusing 11 characters unmocked)\r\n"
+      "body": "AW4 (M2 P0.5 Track A wave 4, Tasks 11-13) wave-review minors and critic carry, none blocking the demo. Mixed tier: route.ts, main.ts, startup/drain are critical; ws/server.ts, env-vs-server defaults and scripts/ci are gate. Artifact `docs/reviews/feat-m2-a-p05-wave-4.md`.\r\r\n\r\r\nCritical:\r\r\n- [x] C-C-m3 failed-but-not-draining: a submit already past the 503 check whose T1 commits after a fatal gets refused enqueue and raises a second `d.fatal` (data-safe, exit 1 either way). Fix: treat `failed` like `draining` at `packages/api/src/queries/route.ts:160`\r (done in #700)\r\n- [x] closeDb under a hung T2 at the drain bound: spurious fatal on shutdown (AW4 critic ruling, deferred)\r (done in #700)\r\n- [x] C-C-m1 `route.ts:126` 127 columns; `main.ts:25` reflow\r (done in #700)\r\n\r\r\nGate:\r\r\n- [x] G-G-m1 WS upgrade default 60 / 60000 defined twice (`ws/server.ts` const and `env.ts` literals): one source\r (done in #700)\r\n- [x] G-G-m2 `scripts/ci/config-files.ts`: an unreadable mock dir emits one line per site; emit once\r (done in #700)\r\n\r\r\nOrdinary (docs):\r\r\n- [x] G-G-m3 / C-C-m2 spec line ~1362 says drain ceiling 20 s; AW4 set `timeoutMs` ceiling 18 s, HTTP drain 2 s, worst case 25 s: update the spec line\r (done in #700)\r\n\r\r\nRefs #538, #539, #540.\r\r\n\r\r\n\r\r\nPaths:\r\r\n- [x] `packages/core/src/config/password.ts` under `[gate]` in `.github/sensitive-paths` and the CLAUDE.md gate list: landed in AW5 (developer-approved)\r\r\n- [x] C-C-m1 (AW5 RR-M1): the gated minimum is reachable through ordinary `packages/core/src/config/index.ts` and the `packages/core/package.json` exports; add a gate-tier test under `packages/api/src/auth/` importing `PASSWORD_MIN_LENGTH` via `@querymodule/core/config`, asserting >= 12 (or refusing 11 characters unmocked)\r (done in #700)\r\n"
     },
     {
       "number": 576,
@@ -1711,7 +1711,7 @@
       "priority": "Low",
       "reqIds": "none",
       "title": "M2 P1 Track A review minors (AW1 to AW3): gen:check client drift, read mapper, tests, traceability",
-      "body": "Review minors from M2 P1 Track A (AW1 to AW3, 10-13-26) that no PR or issue tracks yet. None blocked a review. Tiers per item; split by tier when picked up.\n\n**Tooling (gate)**\n- [x] AW1 T1 Q2: `pnpm gen:check` does not cover `packages/client/src/api/generated/*`, so client type drift from `openapi.json` goes unnoticed. Add the client generator to the drift check. (done: packages/client/src/api/generated/openapi-types.ts is in scripts/ci/generated.ts GENERATED_FILES; checked 10-14-26)\n\n**Read routes (critical, `packages/api/src/queries/read.ts`)**\n- [ ] AW2 T4 Q1: the list's part mapping (partId to droppedSourceIds, skipReasons parse, selection-order sort, `purged` rule) is a near copy of `readQuery`; the two `purged` rules can drift. Share one mapper.\n- [ ] AW2 T4 Q3: `query_request_user_submitted_idx` is `(user_id, submitted_at)`; the `part_id = 0` filter and the `correlation_id` tie-break are not in the index, so ties may add a sort step. Fine at prototype scale; revisit with real volumes.\n- [ ] AW2 T4 Q4: per-item `parts.filter` / `results.filter` / `keys.some` are O(n*m) over at most 100 items; a Map by correlationId is cleaner.\n\n**Tests (ordinary)**\n- [x] AW3 T6 C1: the P1 gate test (`test/dispatch/replay-mid-dispatch.test.ts`) alone does not catch a missing owner filter (B's seqs sit at or below A's cursor); the `ws-events.test.ts` owner row does. Make the gate test catch it too (cursor below B's seqs). (done, #624/#625; checked 10-14-26)\n- [x] AW3 T6 Q1/Q2: `open`, `rowsOf` and setup helpers are duplicated across `replay-mid-dispatch.test.ts`, `ws-events.test.ts` and `test/ws/replay.test.ts`; fixed 20 ms and 50 ms sleeps after the barrier add wall time. Share a helper; drop the sleeps. (done, #624/#625; checked 10-14-26)\n\n**Docs and traceability (ordinary; can ride AW4)**\n- [x] AW3 T6 S1: owner-only replay rows are tagged SEC-014, but SEC-014 is the correlation identifier requirement. Retag with the right requirement ID (or spec section) in `ws-events.test.ts` and `replay-mid-dispatch.test.ts`. (done: no SEC-014 left in the replay tests; checked 10-14-26)\n- [x] AW3 T6 S2: spec 10.4 names `packages/api/test/feed/replay.test.ts`; the gate test lives at `packages/api/test/dispatch/replay-mid-dispatch.test.ts` (accepted by the AW3 wave-review). Update spec 10.4. (done, #624/#625; checked 10-14-26)\n- [x] AW1 T1 Q3: the Track A P1 plan's Step 1.2 names `pnpm gen`, which does not exist (`pnpm contracts:gen` plus client `gen:api`). Fix the wording. (done, #624/#625; checked 10-14-26)\n\n- [ ] Follow-on to the SEC-014 retag (fix/m2-a-p1-minors-2 retagged tests to spec 5.3): source comments still cite SEC-014 for owner-only rows in `packages/api/src/dispatch/event-log.ts`, `packages/api/src/ws/server.ts`, `packages/api/src/queries/policy.ts` and `read.ts` (critical and gate files: retag when those files are next touched); the master plan P1 row still names `packages/api/test/feed/replay.test.ts` (ordinary, AW4).\n\n- [x] From the fix/m2-a-p1-minors-2 review (fast, ordinary-sized, gate file): M1 `scripts/ci/check-generated.test.ts:69-70` stub stdout template literal spans a raw newline instead of ` (checked 10-14-26: both already fixed on main)\n` (cosmetic); M2 the \"flags a stale generated client file\" test duplicates the generic drift test (the real guard is the GENERATED_FILES membership test): drop or sharpen it.\n\nRelated: #620 (AW3 wave-review minors), contract minors issue (M2 P0-W3).\n\n\n\n\n\n"
+      "body": "Review minors from M2 P1 Track A (AW1 to AW3, 10-13-26) that no PR or issue tracks yet. None blocked a review. Tiers per item; split by tier when picked up.\r\n\r\n**Tooling (gate)**\r\n- [x] AW1 T1 Q2: `pnpm gen:check` does not cover `packages/client/src/api/generated/*`, so client type drift from `openapi.json` goes unnoticed. Add the client generator to the drift check. (done: packages/client/src/api/generated/openapi-types.ts is in scripts/ci/generated.ts GENERATED_FILES; checked 10-14-26)\r\n\r\n**Read routes (critical, `packages/api/src/queries/read.ts`)**\r\n- [x] AW2 T4 Q1: the list's part mapping (partId to droppedSourceIds, skipReasons parse, selection-order sort, `purged` rule) is a near copy of `readQuery`; the two `purged` rules can drift. Share one mapper. (done in #700)\r\n- [ ] AW2 T4 Q3: `query_request_user_submitted_idx` is `(user_id, submitted_at)`; the `part_id = 0` filter and the `correlation_id` tie-break are not in the index, so ties may add a sort step. Fine at prototype scale; revisit with real volumes.\r\n- [x] AW2 T4 Q4: per-item `parts.filter` / `results.filter` / `keys.some` are O(n*m) over at most 100 items; a Map by correlationId is cleaner. (done in #700)\r\n\r\n**Tests (ordinary)**\r\n- [x] AW3 T6 C1: the P1 gate test (`test/dispatch/replay-mid-dispatch.test.ts`) alone does not catch a missing owner filter (B's seqs sit at or below A's cursor); the `ws-events.test.ts` owner row does. Make the gate test catch it too (cursor below B's seqs). (done, #624/#625; checked 10-14-26)\r\n- [x] AW3 T6 Q1/Q2: `open`, `rowsOf` and setup helpers are duplicated across `replay-mid-dispatch.test.ts`, `ws-events.test.ts` and `test/ws/replay.test.ts`; fixed 20 ms and 50 ms sleeps after the barrier add wall time. Share a helper; drop the sleeps. (done, #624/#625; checked 10-14-26)\r\n\r\n**Docs and traceability (ordinary; can ride AW4)**\r\n- [x] AW3 T6 S1: owner-only replay rows are tagged SEC-014, but SEC-014 is the correlation identifier requirement. Retag with the right requirement ID (or spec section) in `ws-events.test.ts` and `replay-mid-dispatch.test.ts`. (done: no SEC-014 left in the replay tests; checked 10-14-26)\r\n- [x] AW3 T6 S2: spec 10.4 names `packages/api/test/feed/replay.test.ts`; the gate test lives at `packages/api/test/dispatch/replay-mid-dispatch.test.ts` (accepted by the AW3 wave-review). Update spec 10.4. (done, #624/#625; checked 10-14-26)\r\n- [x] AW1 T1 Q3: the Track A P1 plan's Step 1.2 names `pnpm gen`, which does not exist (`pnpm contracts:gen` plus client `gen:api`). Fix the wording. (done, #624/#625; checked 10-14-26)\r\n\r\n- [ ] Follow-on to the SEC-014 retag (fix/m2-a-p1-minors-2 retagged tests to spec 5.3): source comments still cite SEC-014 for owner-only rows in `packages/api/src/dispatch/event-log.ts`, `packages/api/src/ws/server.ts`, `packages/api/src/queries/policy.ts` and `read.ts` (critical and gate files: retag when those files are next touched); the master plan P1 row still names `packages/api/test/feed/replay.test.ts` (ordinary, AW4).\r\n\r\n- [x] From the fix/m2-a-p1-minors-2 review (fast, ordinary-sized, gate file): M1 `scripts/ci/check-generated.test.ts:69-70` stub stdout template literal spans a raw newline instead of ` (checked 10-14-26: both already fixed on main)\r\n` (cosmetic); M2 the \"flags a stale generated client file\" test duplicates the generic drift test (the real guard is the GENERATED_FILES membership test): drop or sharpen it.\r\n\r\nRelated: #620 (AW3 wave-review minors), contract minors issue (M2 P0-W3).\r\n\r\n\r\n\r\n\r\n\r\n"
     },
     {
       "number": 626,
@@ -1789,7 +1789,7 @@
       "priority": "Medium",
       "reqIds": "none",
       "title": "BW3 follow-ups: cards, keywords and Try a match minors (critic M1-M4, task minors, wins table, e2e)",
-      "body": "Findings from M2 P1 Track B wave BW3 (PR #641, head 18e7ae5, 10-14-26) that the sdd-task rounds and the wave critic left open. None blocked the wave. All ordinary tier (`apps/web`, `packages/config`, e2e). Source list: `bw3-followups.md` in the B lane's sdd folder (IDs below are its Tn-k / critic IDs).\n\n**Wave critic minors**\n- [ ] **CRITIC-M1** `apps/web/src/admin/CardPreview.tsx:163-172`: with no card selected (type row, Keywords and severity) `cardIndex` is null, so the preview reads \"Card used: All results (veh-summary). Another card.\" Use a neutral string when `cardIndex === null` (FR-060).\n- [ ] **CRITIC-M2** `CardsEditor.tsx:237-314`, `KeywordsEditor.tsx:116,151,265`: the open-row set and `gen` follow remove/move but not Ctrl+Z; after undo the wrong row is open and half-typed except text sits at the old index (spec 6.2). Reset on a doc change from outside the editor, or on undo/redo count change.\n- [ ] **CRITIC-M3** `TryMatchPane.tsx:165-203`: missing design items from \"Try a match (refines v4)\": Result card / Payload toggle (reuse CardPreview), latency wait line, polite debounced announcement of the outcome kind, never values (FR-043, FR-044, spec 5.4).\n- [ ] **CRITIC-M4** `CardsEditor.tsx:633-676`: Which card wins has no score (rule +4, source +2, persona +1); add a Score column or put the sum in Why.\n\n**Cards editor (Task 10)**\n- [ ] T10-C3 `CardPreview.tsx:124-131`: pick mode passes empty `partValues` to `mapResponse`, so a rule-narrowed card never wins and the preview can misreport the card used.\n- [ ] T10-Q2 `CardsEditor.tsx:58-80`: `useCardName` rebuilds sources/personas each render; callback never stable, so `useTreeNodes` rebuilds every node every render.\n- [ ] T10-Q3 `CardPreview.tsx:279-290`: behaviour status line copies RequestList markup (hard-coded `!` icon and tone); share the production component.\n- [ ] T10-Q5 `CardsEditor.tsx` is 818 lines with four components; split.\n- [ ] T10-Q6 `packages/config/locales/en.json`: `admin.cards.name.rule` is lowercase (\"1. when a rule matches\"); position reads \"1 of 1 Vehicle cards\".\n- [ ] T10-Q7 `CardPreview.tsx:133-135`: typed values keep keys from other query types across card switches and reach `evaluateForm`.\n- [ ] T10-20: a card key turns read-only when the live config has the same id, so a new card whose id is typed to match a live id flips to read-only mid-edit.\n- [ ] T10-2: design items not built: Template format (offered only when a row already has one) and per-column Format.\n- [ ] T10-3: type rows read \"<Type> cards\" without the code in mono (tests match on a code at the row end; adjust them with the change).\n- [ ] T10-Q4 `GenericForm.test.tsx:120-130`: test I1 keeps its name but now only asserts a label exists; the named behaviour (path setting keeps its own id and name) is untested.\n- [ ] T13-1 `CardPreview.tsx`: the \"Result from\" and scenario selects lack `qm-field__input` and are 19 px tall at desktop (others 36 px+). One-line class fix plus a height assert.\n\n**Which card wins table**\n- [ ] 672 px wide in a 369 px (1366) / 485 px (1024) pane; the whole editor tabpanel scrolls sideways, has no tabindex, and keyboard scrolling is unverified (T10-18 dropped the focusable wrapper for biome a11y; T13-Q3 proves reach only with programmatic `scrollLeft`). Fit the table (stack or fewer columns at narrow widths) or make the region keyboard-scrollable within lint rules. Developer to judge against mockup v5.\n\n**Keywords and severity editor (Task 11)**\n- [ ] T11-M1 `BuilderTree.tsx:223-228`: issues at the bare `/keywordSeverityStyles` pointer show at no control in KeywordsEditor (its only route needs `keywords` in the doc).\n- [ ] T11-M2 `KeywordsEditor.tsx:908`: a keyword with an invalid severity shows as Info, so choosing Info fires no change.\n- [ ] T11-M3 `KeywordsEditor.test.tsx:508-527`: except suppression asserted on the sample line only, not in the card preview the brief names.\n- [ ] T11-M4 `KeywordsEditor.tsx:806,921`: removing a keyword bumps `gen`, remounting every row and discarding half-typed new-exception text in other rows.\n- [ ] T11-M5 `KeywordsEditor.tsx` already 589 lines; split.\n- [ ] T11-4: Review lists keyword changes under the generic Keywords group and style changes under Keyword styles; group them like the editor.\n- [ ] T11-5: the preview beside the keywords always shows the first card's type; no per-keyword preview target.\n- [ ] T11-14: CardsEditor still passes boolean `coalesce` to `applyCardsEdit` (cross-row coalescing per path); align with the keywords fix.\n\n**Try a match and mock editor (Task 12)**\n- [ ] T12-C2 `TryMatchPane.tsx:55`: once Source or Query type is touched, the pane ignores later tree selection; opening another response leaves it on the old source and type.\n- [ ] T12-C3 `TryMatchPane.tsx:49`: offers every source with mock data, including sources whose site kind is not mock (the server never answers those from the mock).\n- [ ] T12-C4 `TryMatchPane.tsx:150`: type-role picklist fields are free text; admin must type raw codes (FIREARM). Use the picklist.\n- [ ] T12-Q2 `TryMatchPane.tsx:197`: `qm-try__answer` and `qm-try__payload` have no CSS; long payload lines rely on implicit pane scroll.\n- [ ] T12-14: the blank-trigger warning reuses `qm-mock__error`, so it looks like an error; give it warning styling.\n- [ ] T12-2: while the site config does not parse, the type panel shows a coverage gap (badge now matches); decide whether the panel should hide it.\n- [ ] T12-Q3 `MockFlows.test.tsx:205`: `toMatch(/2/)` accepts any \"2\" in any live region; assert the exact message.\n- [ ] T12-Q4 `MockMinors.test.tsx:144`: gaps: box 9 \"scrolled into view, focus unchanged\"; box 6 two-issue row; DraftText on trigger values; `addPayloadChild` no-op for the value kind.\n\n**e2e (Task 13, `apps/web/e2e/admin-result-cards.spec.ts`)**\n- [ ] T13-Q1 :188 `label.fill` is not keyboard input in a keyboard-only scenario.\n- [ ] T13-Q2 :98 `locator.focus()` replaces Tab throughout; tab order and reach are not exercised.\n- [ ] T13-Q4 :480 \"Scenario 4\" hard-codes three shipped scenarios; a mock-data change gives an opaque timeout.\n- [ ] T13-Q5 :286-287 rollback check asserts one `vehicle.make` element only.\n- [ ] T9-4: the a8 e2e depends on the shipped `default.json` card rows (3 summary items, \"8 more items\" on the state VEH card); derive from config or note it beside the rows.\n\n**Platform gaps (track here, file separately if picked up)**\n- [ ] Config refresh does not refetch the locale bundle (`bootstrap.ts`), so labels added in the builder reach open tabs only after a reload.\n- [ ] Visual comparison of the cards builder, keywords pane and Try a match against mockup v5 / v4 at 1366 and 1024 (CV1-CV3): developer, at merge of #641 or the M2 demo pass.\n\nRefs #602, #603, #604, #605, #565, #572, #641.\n\n\n**From the BW3 polish PR (feat/m2-b-p1-bw3-polish, 10-14-26): visual differences from mockup v5 found by the screenshot comparison (screens in the B lane sdd folder, bw3-polish/shots)**\n- [ ] \"Applies to\" keeps the label column beside its controls; the Always / Only-when-rule choice is a plain radio stack, not two cards; Source and Shown to stack instead of sitting side by side (`apps/web/src/admin/CardsEditor.tsx`, shared Sect).\n- [ ] No \"RETURNS A RECORD\" outcome badge row in the card preview and Try a match; three text lines instead of the badge row plus wait (`CardAnswer.tsx`, `CardPreview.tsx`, `TryMatchPane.tsx`).\n- [ ] Preview Answer is a radio group (Pick a scenario / Type values); the mockup shows a \"Values\" segmented control beside Result from (`CardPreview.tsx`; tests and e2e rely on the radios).\n- [ ] The row editor's Columns table (Path, Label, Format, Mark) is wider than the pane at 1366 and 1024 and scrolls in its own wrapper (`CardsEditor.tsx`, `qm-mock__table-wrap`).\n- [ ] Try a match head lacks the \"Nothing is sent\" note; the mock editor Query type select is clipped to \"Vehicle (\" at 1366 (`TryMatchPane.tsx`). Shot framing: the officer 1024 shot scrolls the persona toggle out and misses Show detail (`apps/web/e2e/visual-shots.spec.ts`).\n\n**Polish PR test leftovers**\n- [ ] Try a match debounce \"not announced per keystroke\" is no longer asserted (two timing asserts dropped as flaky); add a fake-timer test (`apps/web/src/admin/TryMatchPane.test.tsx` ~195).\n- [ ] `row-ids.ts` unit tests were written after the helper (component tests carry the RED evidence) (`apps/web/src/admin/row-ids.test.ts`).\n- [ ] The e2e `shortReference` helper duplicates the web-ui rule and can drift (`apps/web/e2e/helpers.ts:193-195`; the e2e tsconfig has no jsx, so it cannot import the web-ui barrel).\n- [ ] Stale test label \"Vehicle 0198a1b2\" under the new short-reference rule (`packages/web-ui/src/panel/RequestList.test.tsx:226-237`, test data only).\n\n\n**From the mockup-gaps PR (feat/m2-b-p1-mockup-gaps, 10-14-26), still differing from mockup v5 or minor**\n- [ ] At 1366 the Columns table inputs are narrow (pane ~319 px): path and Format text truncate (\"As se\"); a stacked layout would read better (`apps/web/src/shell.css:2344-2370`, CardsEditor Columns).\n- [ ] The Values segments wrap (\"Pick a / scenario\") in the ~420 px preview pane (the mockup wraps too) (`CardPreview.tsx`, `shell.css`).\n- [ ] \"Show in\" is stacked radios; the mockup shows a Summary / Detail / Both segmented control (`CardsEditor.tsx` row editor).\n- [ ] Selector `.qm-columns__table :where(input[type=\"text\"], select)` declared twice (`apps/web/src/shell.css:2344-2352`).\n- [ ] Columns widths sum to 99% (column 4 is 11%, report says 12%) (`apps/web/src/shell.css:~2366`).\n- [ ] The visual-shots officer shot forces overflow visible / height auto on panes, so app-officer-1024 shows a layout no user sees at 1024x768 (`apps/web/e2e/visual-shots.spec.ts:136-145`).\n- [ ] Remove column button shows only an aria-hidden \"x\": the accessible name is complete, but sighted mouse users get no word or tooltip (matches the mockup) (`CardsEditor.tsx:~1142`).\n- Not a defect: the mockup header (search field, History / Publish placement) differs from the real admin shell by design (design-lead frame).\n"
+      "body": "Findings from M2 P1 Track B wave BW3 (PR #641, head 18e7ae5, 10-14-26) that the sdd-task rounds and the wave critic left open. None blocked the wave. All ordinary tier (`apps/web`, `packages/config`, e2e). Source list: `bw3-followups.md` in the B lane's sdd folder (IDs below are its Tn-k / critic IDs).\n\n**Wave critic minors**\n- [x] **CRITIC-M1** `apps/web/src/admin/CardPreview.tsx:163-172`: with no card selected (type row, Keywords and severity) `cardIndex` is null, so the preview reads \"Card used: All results (veh-summary). Another card.\" Use a neutral string when `cardIndex === null` (FR-060).\n- [x] **CRITIC-M2** `CardsEditor.tsx:237-314`, `KeywordsEditor.tsx:116,151,265`: the open-row set and `gen` follow remove/move but not Ctrl+Z; after undo the wrong row is open and half-typed except text sits at the old index (spec 6.2). Reset on a doc change from outside the editor, or on undo/redo count change.\n- [x] **CRITIC-M3** `TryMatchPane.tsx:165-203`: missing design items from \"Try a match (refines v4)\": Result card / Payload toggle (reuse CardPreview), latency wait line, polite debounced announcement of the outcome kind, never values (FR-043, FR-044, spec 5.4).\n- [x] **CRITIC-M4** `CardsEditor.tsx:633-676`: Which card wins has no score (rule +4, source +2, persona +1); add a Score column or put the sum in Why.\n\n**Cards editor (Task 10)**\n- [x] T10-C3 `CardPreview.tsx:124-131`: pick mode passes empty `partValues` to `mapResponse`, so a rule-narrowed card never wins and the preview can misreport the card used.\n- [x] T10-Q2 `CardsEditor.tsx:58-80`: `useCardName` rebuilds sources/personas each render; callback never stable, so `useTreeNodes` rebuilds every node every render.\n- [x] T10-Q3 `CardPreview.tsx:279-290`: behaviour status line copies RequestList markup (hard-coded `!` icon and tone); share the production component.\n- [x] T10-Q5 `CardsEditor.tsx` is 818 lines with four components; split.\n- [x] T10-Q6 `packages/config/locales/en.json`: `admin.cards.name.rule` is lowercase (\"1. when a rule matches\"); position reads \"1 of 1 Vehicle cards\".\n- [x] T10-Q7 `CardPreview.tsx:133-135`: typed values keep keys from other query types across card switches and reach `evaluateForm`.\n- [x] T10-20: a card key turns read-only when the live config has the same id, so a new card whose id is typed to match a live id flips to read-only mid-edit.\n- [x] T10-2: design items not built: Template format (offered only when a row already has one) and per-column Format.\n- [x] T10-3: type rows read \"<Type> cards\" without the code in mono (tests match on a code at the row end; adjust them with the change).\n- [x] T10-Q4 `GenericForm.test.tsx:120-130`: test I1 keeps its name but now only asserts a label exists; the named behaviour (path setting keeps its own id and name) is untested.\n- [x] T13-1 `CardPreview.tsx`: the \"Result from\" and scenario selects lack `qm-field__input` and are 19 px tall at desktop (others 36 px+). One-line class fix plus a height assert.\n\n**Which card wins table**\n- [x] 672 px wide in a 369 px (1366) / 485 px (1024) pane; the whole editor tabpanel scrolls sideways, has no tabindex, and keyboard scrolling is unverified (T10-18 dropped the focusable wrapper for biome a11y; T13-Q3 proves reach only with programmatic `scrollLeft`). Fit the table (stack or fewer columns at narrow widths) or make the region keyboard-scrollable within lint rules. Developer to judge against mockup v5.\n\n**Keywords and severity editor (Task 11)**\n- [x] T11-M1 `BuilderTree.tsx:223-228`: issues at the bare `/keywordSeverityStyles` pointer show at no control in KeywordsEditor (its only route needs `keywords` in the doc).\n- [x] T11-M2 `KeywordsEditor.tsx:908`: a keyword with an invalid severity shows as Info, so choosing Info fires no change.\n- [x] T11-M3 `KeywordsEditor.test.tsx:508-527`: except suppression asserted on the sample line only, not in the card preview the brief names.\n- [x] T11-M4 `KeywordsEditor.tsx:806,921`: removing a keyword bumps `gen`, remounting every row and discarding half-typed new-exception text in other rows.\n- [x] T11-M5 `KeywordsEditor.tsx` already 589 lines; split.\n- [x] T11-4: Review lists keyword changes under the generic Keywords group and style changes under Keyword styles; group them like the editor.\n- [x] T11-5: the preview beside the keywords always shows the first card's type; no per-keyword preview target.\n- [x] T11-14: CardsEditor still passes boolean `coalesce` to `applyCardsEdit` (cross-row coalescing per path); align with the keywords fix.\n\n**Try a match and mock editor (Task 12)**\n- [x] T12-C2 `TryMatchPane.tsx:55`: once Source or Query type is touched, the pane ignores later tree selection; opening another response leaves it on the old source and type.\n- [x] T12-C3 `TryMatchPane.tsx:49`: offers every source with mock data, including sources whose site kind is not mock (the server never answers those from the mock).\n- [x] T12-C4 `TryMatchPane.tsx:150`: type-role picklist fields are free text; admin must type raw codes (FIREARM). Use the picklist.\n- [x] T12-Q2 `TryMatchPane.tsx:197`: `qm-try__answer` and `qm-try__payload` have no CSS; long payload lines rely on implicit pane scroll.\n- [x] T12-14: the blank-trigger warning reuses `qm-mock__error`, so it looks like an error; give it warning styling.\n- [x] T12-2: while the site config does not parse, the type panel shows a coverage gap (badge now matches); decide whether the panel should hide it.\n- [x] T12-Q3 `MockFlows.test.tsx:205`: `toMatch(/2/)` accepts any \"2\" in any live region; assert the exact message.\n- [x] T12-Q4 `MockMinors.test.tsx:144`: gaps: box 9 \"scrolled into view, focus unchanged\"; box 6 two-issue row; DraftText on trigger values; `addPayloadChild` no-op for the value kind.\n\n**e2e (Task 13, `apps/web/e2e/admin-result-cards.spec.ts`)**\n- [x] T13-Q1 :188 `label.fill` is not keyboard input in a keyboard-only scenario.\n- [x] T13-Q2 :98 `locator.focus()` replaces Tab throughout; tab order and reach are not exercised.\n- [x] T13-Q4 :480 \"Scenario 4\" hard-codes three shipped scenarios; a mock-data change gives an opaque timeout.\n- [x] T13-Q5 :286-287 rollback check asserts one `vehicle.make` element only.\n- [x] T9-4: the a8 e2e depends on the shipped `default.json` card rows (3 summary items, \"8 more items\" on the state VEH card); derive from config or note it beside the rows.\n\n**Platform gaps (track here, file separately if picked up)**\n- [x] Config refresh does not refetch the locale bundle (`bootstrap.ts`), so labels added in the builder reach open tabs only after a reload.\n- [x] Visual comparison (CV1-CV3): moved to #698 as agent work (M2 Manager 7, 10-17-26).\n\nRefs #602, #603, #604, #605, #565, #572, #641.\n\n\n**From the BW3 polish PR (feat/m2-b-p1-bw3-polish, 10-14-26): visual differences from mockup v5 found by the screenshot comparison (screens in the B lane sdd folder, bw3-polish/shots)**\n- [x] \"Applies to\" keeps the label column beside its controls; the Always / Only-when-rule choice is a plain radio stack, not two cards; Source and Shown to stack instead of sitting side by side (`apps/web/src/admin/CardsEditor.tsx`, shared Sect).\n- [x] No \"RETURNS A RECORD\" outcome badge row in the card preview and Try a match; three text lines instead of the badge row plus wait (`CardAnswer.tsx`, `CardPreview.tsx`, `TryMatchPane.tsx`).\n- [x] Preview Answer is a radio group (Pick a scenario / Type values); the mockup shows a \"Values\" segmented control beside Result from (`CardPreview.tsx`; tests and e2e rely on the radios).\n- [x] The row editor's Columns table (Path, Label, Format, Mark) is wider than the pane at 1366 and 1024 and scrolls in its own wrapper (`CardsEditor.tsx`, `qm-mock__table-wrap`).\n- [x] Try a match head lacks the \"Nothing is sent\" note; the mock editor Query type select is clipped to \"Vehicle (\" at 1366 (`TryMatchPane.tsx`). Shot framing: the officer 1024 shot scrolls the persona toggle out and misses Show detail (`apps/web/e2e/visual-shots.spec.ts`).\n\n**Polish PR test leftovers**\n- [x] Try a match debounce \"not announced per keystroke\" is no longer asserted (two timing asserts dropped as flaky); add a fake-timer test (`apps/web/src/admin/TryMatchPane.test.tsx` ~195).\n- [x] `row-ids.ts` unit tests were written after the helper (component tests carry the RED evidence) (`apps/web/src/admin/row-ids.test.ts`).\n- [x] The e2e `shortReference` helper duplicates the web-ui rule and can drift (`apps/web/e2e/helpers.ts:193-195`; the e2e tsconfig has no jsx, so it cannot import the web-ui barrel).\n- [x] Stale test label \"Vehicle 0198a1b2\" under the new short-reference rule (`packages/web-ui/src/panel/RequestList.test.tsx:226-237`, test data only).\n\n\n**From the mockup-gaps PR (feat/m2-b-p1-mockup-gaps, 10-14-26), still differing from mockup v5 or minor**\n- [x] At 1366 the Columns table inputs are narrow (pane ~319 px): path and Format text truncate (\"As se\"); a stacked layout would read better (`apps/web/src/shell.css:2344-2370`, CardsEditor Columns).\n- [x] The Values segments wrap (\"Pick a / scenario\") in the ~420 px preview pane (the mockup wraps too) (`CardPreview.tsx`, `shell.css`).\n- [x] \"Show in\" is stacked radios; the mockup shows a Summary / Detail / Both segmented control (`CardsEditor.tsx` row editor).\n- [x] Selector `.qm-columns__table :where(input[type=\"text\"], select)` declared twice (`apps/web/src/shell.css:2344-2352`).\n- [x] Columns widths sum to 99% (column 4 is 11%, report says 12%) (`apps/web/src/shell.css:~2366`).\n- [x] The visual-shots officer shot forces overflow visible / height auto on panes, so app-officer-1024 shows a layout no user sees at 1024x768 (`apps/web/e2e/visual-shots.spec.ts:136-145`).\n- [x] Remove column button shows only an aria-hidden \"x\": the accessible name is complete, but sighted mouse users get no word or tooltip (matches the mockup) (`CardsEditor.tsx:~1142`).\n- Not a defect: the mockup header (search field, History / Publish placement) differs from the real admin shell by design (design-lead frame)."
     },
     {
       "number": 643,
@@ -1815,7 +1815,7 @@
       "priority": "Low",
       "reqIds": "none",
       "title": "Share server logic the web builder copies: tokensContrast in config/load.ts, planner typeValuesOf; axe in web unit suite",
-      "body": "Duplicated logic that BW3 (PR #641, 10-14-26) had to copy into ordinary-tier web files because the source lives in critical- or gate-tier files. Each copy can drift from the server.\n\n**Critical**\n- [ ] `packages/api/src/config/load.ts` has its own `tokensContrast` copy without the hex-only guard on theme overrides. Switch it to the `@querymodule/tokens` `tokensContrast` export (added in BW3 with the guard), so server and builder compute contrast the same way (T11-2, T11-13, T11-16). Critical tier (`packages/api/src/config/**`).\n- [ ] `typeValuesOf` (`packages/core/src/planner/plan.ts:64-70`) is copied line for line into `apps/web/src/admin/CardPreview.tsx:136-139` and `apps/web/src/admin/TryMatchPane.tsx:77` (T10-Q1, T12-Q1). Export it from the planner (critical, `packages/core/src/planner/**`) and import it in both web files. The BW3 critic checked parity today.\n\n**Gate**\n- [ ] axe in the web unit suite: `axe-core` is only an e2e dependency, so the builder's unit tests cannot run axe (T10-1, T11-1). Adding it to `apps/web/package.json` is gate tier. Optional; e2e axe covers the builder today.\n\nSplit by tier when picked up: one critical PR (Opus high review) for the first two, the axe item rides the next gate PR.\n"
+      "body": "Duplicated logic that BW3 (PR #641, 10-14-26) had to copy into ordinary-tier web files because the source lives in critical- or gate-tier files. Each copy can drift from the server.\r\n\r\n**Critical**\r\n- [x] `packages/api/src/config/load.ts` has its own `tokensContrast` copy without the hex-only guard on theme overrides. Switch it to the `@querymodule/tokens` `tokensContrast` export (added in BW3 with the guard), so server and builder compute contrast the same way (T11-2, T11-13, T11-16). Critical tier (`packages/api/src/config/**`). (done in #700)\r\n- [x] `typeValuesOf` (`packages/core/src/planner/plan.ts:64-70`) is copied line for line into `apps/web/src/admin/CardPreview.tsx:136-139` and `apps/web/src/admin/TryMatchPane.tsx:77` (T10-Q1, T12-Q1). Export it from the planner (critical, `packages/core/src/planner/**`) and import it in both web files. The BW3 critic checked parity today. (done in #700)\r\n\r\n**Gate**\r\n- [x] axe in the web unit suite: `axe-core` is only an e2e dependency, so the builder's unit tests cannot run axe (T10-1, T11-1). Adding it to `apps/web/package.json` is gate tier. Optional; e2e axe covers the builder today. (done in #700)\r\n\r\nSplit by tier when picked up: one critical PR (Opus high review) for the first two, the axe item rides the next gate PR.\r\n"
     },
     {
       "number": 645,
@@ -1867,7 +1867,7 @@
       "priority": "Low",
       "reqIds": "none",
       "title": "Demo minors follow-ups: officer cue color check, e2e repeat rate limit, ::before in accessible names",
-      "body": "Follow-ups from the M2 demo minors PR (`fix/m2-demo-minors`, 10-14-26). Ordinary tier (tests, web-ui).\n\n- [ ] **Officer cue color not covered:** the #479 \"fields shown\" cue on a closed More details toggle has a numeric color/contrast check for the dispatcher layout only (`visual.spec.ts`); add the officer layout (`qm-layout--mobile-unit`) in all three themes.\n- [ ] **e2e rate limit on repeats:** repeating officer e2e more than about 30 times a minute trips the 30/min submit rate limit (429). Document it in the e2e README or give `--repeat-each` runs a limiter reset, so flake hunts do not mistake 429s for flakes.\n- [ ] **Accessible names include CSS `::before` text:** Playwright reads \"+ More details\" for the toggle. Note in the e2e conventions: never anchor role names with `^More details`; match on the stable part.\n\nRefs #479, #645.\n\n\n**From AW4b (feat/m2-a-p1-wave-4b, 10-14-26)**\n- [ ] `apps/web/e2e/visual-shots.spec.ts` and `brief-shots.spec.ts` share about 60 lines of builder helpers (selectRow, openBuilder, tree and editor locators); move them to a shared e2e helper.\n- [ ] Design brief SVG frames (query panel, builder) in `docs/briefs/query-module-2-design-brief-m2p1.html` still show mockup values (version 7, \"2 unpublished changes\", Texas (TX)); captions say \"Redrawn from the design\". Align with shipped values at the next brief refresh.\n- [ ] Result card Remarks row renders the badge and \"VEHICLE\" on one line and wraps at dispatcher width (`packages/web-ui` result card; `docs/briefs/shots/card-critical.png`). Cosmetic.\n\n\n**Moved from #572 (10-14-26)**\n- [ ] e2e fixtures reuse existing labels: `apps/web/e2e/admin-mock-editor.spec.ts:86-99` `addBoatType` clones VEH and keeps the Vehicle name (line 197); lines 213-218 add `countySource` with `labelKey: \"source.stateSource\"`. Ruling: an e2e-only label overlay so BOAT and the county source get their own names (no new shipped strings); update the expectations at ~148-198.\n\n\n**From \"Edit as new query\" (#477, feat/m2-b-p1-edit-as-new, 10-14-26)**\n- [ ] F2: the e2e simulates the 409 publish with `page.route` (config-refresh.spec pattern), not a real admin publish on the shared server (`apps/web/e2e/edit-as-new.spec.ts`).\n- [ ] F3: a removed field's name in the \"dropped\" note comes from the `field.<key>` label convention and falls back to the raw key, since the new config has no labelKey for it (`edit-as-new.ts`, `QueryPanelView.tsx` nameOf).\n- [ ] F4: in terminal mode the action switches to form mode; half-typed terminal text is not merged first (`QueryPanelView.tsx` editAsNewRef).\n- [ ] F5: loading replaces the current draft of that type (intended), but \"Shown\" tags (the revealed set) are not reset (`QueryPanelView.tsx`).\n- [ ] F6: several dropped sources read as one generic item because source ids are not words (`edit-as-new.ts` editAsNewNote).\n"
+      "body": "Follow-ups from the M2 demo minors PR (`fix/m2-demo-minors`, 10-14-26). Ordinary tier (tests, web-ui).\n\n- [x] **Officer cue color not covered:** the #479 \"fields shown\" cue on a closed More details toggle has a numeric color/contrast check for the dispatcher layout only (`visual.spec.ts`); add the officer layout (`qm-layout--mobile-unit`) in all three themes. (done in #708)\n- [x] **e2e rate limit on repeats:** repeating officer e2e more than about 30 times a minute trips the 30/min submit rate limit (429). Document it in the e2e README or give `--repeat-each` runs a limiter reset, so flake hunts do not mistake 429s for flakes. (done in #708)\n- [x] **Accessible names include CSS `::before` text:** Playwright reads \"+ More details\" for the toggle. Note in the e2e conventions: never anchor role names with `^More details`; match on the stable part. (done in #708)\n\nRefs #479, #645.\n\n\n**From AW4b (feat/m2-a-p1-wave-4b, 10-14-26)**\n- [x] `apps/web/e2e/visual-shots.spec.ts` and `brief-shots.spec.ts` share about 60 lines of builder helpers (selectRow, openBuilder, tree and editor locators); move them to a shared e2e helper. (done in #708)\n- [ ] Design brief SVG frames (query panel, builder) in `docs/briefs/query-module-2-design-brief-m2p1.html` still show mockup values (version 7, \"2 unpublished changes\", Texas (TX)); captions say \"Redrawn from the design\". Align with shipped values at the next brief refresh.\n- [x] Result card Remarks row renders the badge and \"VEHICLE\" on one line and wraps at dispatcher width (`packages/web-ui` result card; `docs/briefs/shots/card-critical.png`). Cosmetic. (done in #708)\n\n\n**Moved from #572 (10-14-26)**\n- [x] e2e fixtures reuse existing labels: `apps/web/e2e/admin-mock-editor.spec.ts:86-99` `addBoatType` clones VEH and keeps the Vehicle name (line 197); lines 213-218 add `countySource` with `labelKey: \"source.stateSource\"`. Ruling: an e2e-only label overlay so BOAT and the county source get their own names (no new shipped strings); update the expectations at ~148-198. (done in #708)\n\n\n**From \"Edit as new query\" (#477, feat/m2-b-p1-edit-as-new, 10-14-26)**\n- [x] F2: the e2e simulates the 409 publish with `page.route` (config-refresh.spec pattern), not a real admin publish on the shared server (`apps/web/e2e/edit-as-new.spec.ts`). (left as intended, ruled 10-18-26: a real publish on the shared e2e server disturbs other specs; PR #708)\n- [x] F3: a removed field's name in the \"dropped\" note comes from the `field.<key>` label convention and falls back to the raw key, since the new config has no labelKey for it (`edit-as-new.ts`, `QueryPanelView.tsx` nameOf). (done in #708)\n- [x] F4: in terminal mode the action switches to form mode; half-typed terminal text is not merged first (`QueryPanelView.tsx` editAsNewRef). (done in #708)\n- [x] F5: loading replaces the current draft of that type (intended), but \"Shown\" tags (the revealed set) are not reset (`QueryPanelView.tsx`). (done in #708)\n- [x] F6: several dropped sources read as one generic item because source ids are not words (`edit-as-new.ts` editAsNewNote). (done in #708)\n\n"
     },
     {
       "number": 656,
@@ -1879,7 +1879,7 @@
       "priority": "Low",
       "reqIds": "none",
       "title": "fixture-policy: letters as run breakers and non-decimal numerals (#647 review minors)",
-      "body": "Reviewer minors from the #647 fix (`fix/m2-gate-minors-2`, artifact `docs/reviews/fix-m2-gate-minors-2.md`, 10-14-26). Gate tier (`packages/core/src/config/fixture-policy.ts`); ride the next gate PR.\n\n- [ ] **M1 (:156):** a non-Latin letter now breaks a digit run (`12ж34`, `123é45é6789` were rejected before and pass now), the same way ASCII letters do since #636. Decide: pin this with a test as intended, or treat only Latin letters as run breakers.\n- [ ] **M2 (:156, :183):** non-decimal numerals that NFKC does not fold still pass (negative circled digits, Ethiopic and CJK numerals, category Lo/No). Option: count `\\p{N}`. A mock author would have to use them on purpose.\n\nMock data must never look like real records (CLAUDE.md, spec 5.4, 10.8). Refs #647.\n",
+      "body": "Reviewer minors from the #647 fix (`fix/m2-gate-minors-2`, artifact `docs/reviews/fix-m2-gate-minors-2.md`, 10-14-26). Gate tier (`packages/core/src/config/fixture-policy.ts`); ride the next gate PR.\r\n\r\n- [x] **M1 (:156):** a non-Latin letter now breaks a digit run (`12ж34`, `123é45é6789` were rejected before and pass now), the same way ASCII letters do since #636. Decide: pin this with a test as intended, or treat only Latin letters as run breakers. (done in #700)\r\n- [x] **M2 (:156, :183):** non-decimal numerals that NFKC does not fold still pass (negative circled digits, Ethiopic and CJK numerals, category Lo/No). Option: count `\\p{N}`. A mock author would have to use them on purpose. (done in #700)\r\n\r\nMock data must never look like real records (CLAUDE.md, spec 5.4, 10.8). Refs #647.\r\n",
       "labels": ["platform", "p3", "follow-up"]
     },
     {
@@ -1918,7 +1918,7 @@
       "priority": "Low",
       "reqIds": "none",
       "title": "Re-walk residual polish after #675: Which card wins wrap, 1024 entry header, ..2026 after reload, 1024 builder editor height",
-      "body": "Left open by the demo re-walk PR #675 (gaps.md \"Fix status\", Opus critic). All polish; none blocks the demo.\n\n- [ ] R17: at 1366 the builder \"Which card wins\" cells still wrap to two lines (within the G37 e2e allowance). `apps/web/src/admin`.\n- [ ] R22: at 1024, a long command such as `PRO.ZZSTOLEN1.ELECTRONICS` pushes the ACKNOWLEDGED/CRITICAL badges under the command and \"Copy reference\" onto its own line, so the request entry header is three rows. `apps/web/src/query/RequestsPane.tsx`, `apps/web/src/shell.css`.\n- [ ] N1: a request rebuilt from stored values after a reload (and the demo-seeded rows) reads the year as `..2026`, while a request typed in this session reads `..26` (R11 keeps the year as typed). `docs/demo.md` documents it; the two forms should match.\n- [ ] N2: at 1024 the builder editor pane is about 240 px tall and scrolls inside.\n\nDone when each item is fixed or ruled, with a headless shot at the named width as proof (no checks left for a person).\n",
+      "body": "Left open by the demo re-walk PR #675 (gaps.md \"Fix status\", Opus critic). All polish; none blocks the demo.\n\n- [ ] R17: at 1366 the builder \"Which card wins\" cells still wrap to two lines (within the G37 e2e allowance). `apps/web/src/admin`.\n- [x] R22: at 1024, a long command such as `PRO.ZZSTOLEN1.ELECTRONICS` pushes the ACKNOWLEDGED/CRITICAL badges under the command and \"Copy reference\" onto its own line, so the request entry header is three rows. `apps/web/src/query/RequestsPane.tsx`, `apps/web/src/shell.css`. (done in #708)\n- [x] N1: a request rebuilt from stored values after a reload (and the demo-seeded rows) reads the year as `..2026`, while a request typed in this session reads `..26` (R11 keeps the year as typed). `docs/demo.md` documents it; the two forms should match. (done in #708)\n- [x] N2: at 1024 the builder editor pane is about 240 px tall and scrolls inside. (done in #703)\n\nDone when each item is fixed or ruled, with a headless shot at the named width as proof (no checks left for a person).\n\n",
       "labels": ["web", "p3", "follow-up"]
     },
     {
@@ -1933,6 +1933,409 @@
       "title": "Key rotation for DATA_KEY and CREDENTIAL_KEY: ruling and ADR (M3 planning)",
       "body": "**Goal (developer, 10-16-26):** the module ends up with full key rotation for both `DATA_KEY` and `CREDENTIAL_KEY`. The ruling and an ADR are made in the M3 planning session; M3 P1 (encrypted credential storage) is the recommended home, so both keys share one rotation design and one critical review.\n\n**Where it stands**\n- M2 P0-W3 (#524) rules option A: `request_key.key_version` records the wrapping `DATA_KEY` version (`REQUEST_KEY_VERSION = CURRENT_KEY_VERSION`, `packages/api/src/keys/request-keys.ts`), bound into the wrap AAD. That is the prerequisite for rotation; no rotation procedure exists.\n- Spec v2 section 2 lists \"credential key rotation (a `key_version` column is recorded, no rotation procedure is built)\" as a non-goal. `DATA_KEY` rotation is not designed. `SECURITY.md` states both.\n\n**For the ADR to decide**\n- Rotation procedure for each key: re-wrap job (`request_key` rows; `state_credential` rows from M3 P1), batching, resumability, and what happens to rows written mid-rotation.\n- Coexisting key versions during a rotation: how the old and new keys are supplied (Docker secrets), canaries for each version, fail-closed boot rules, and when the old key may be removed.\n- Whether a separate row format version is needed (option B from #524) or the key version stays the only version.\n- Audit events for a rotation (who, when, key, versions, row counts), and the runbook in `docs/deploy.md`.\n- Backups taken under the old key: retention window (spec 8.6) and restore after rotation.\n- Amending the spec non-goal; updating `SECURITY.md` built and planned lines.\n\nRefs #524, #511, #311.\n",
       "labels": ["platform", "sensitive", "decision"]
+    },
+    {
+      "number": 690,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "M2 P0-W3 review minors: audit filter type, adminViewed correlation id, cursor alphabet, schema chain, passwordChanged hardening",
+      "body": "Minors from the M2 P0-W3 wave-review (PR #688, artifact `docs/reviews/feat-m2-p0-wave-3.md`, verdict approve, 0 critical, 0 important), plus the residual the P0 plan's Rulings section hands to M2 P2. Each lands with the M2 P2 writers and routes it touches. Tier: critical (`packages/core/src/contracts/audit.ts`, `packages/api/src/audit/**`, auth writers are gate).\n\n- [ ] m1: `auditViewed` and `auditExported` `filters.type` is a free BoundedId (`audit.ts:109`), so an id-shaped value an admin types could land in an audit row. Validate it as `AuditEventTypeSchema` and reject an unknown type with 400 before auditing.\n- [ ] m2: `adminViewed` keeps `correlationId` in details only, because the admin envelope forbids the envelope column (`audit.ts:323-327`). A correlation id search on the envelope column will miss admin views. Either allow the envelope `correlationId` (equal to details) for `adminViewed`, or have the audit filter match details.\n- [ ] m3: the audited cursor accepts base64url only (`audit.ts:119`), while `AdminAuditQuerySchema.cursor` accepts any string. A P2 route that echoes a client cursor would fail closed with a 500. Validate the cursor alphabet when the query is parsed.\n- [ ] m4: the non-query early-return chain in `AuditEventSchema` (`audit.ts:583-597`) has 13 clauses. A positive check of the query types would be shorter and fail safe on new types.\n- [ ] Auth audit hardening: cover `passwordChanged` together with `loginSucceeded` so a failed audit write cannot leave a changed password with a live session and no row (double-failure residual, ruled \"stands for P0\" in `docs/superpowers/plans/2026-10-05-m2-p0-contracts.md` Rulings; SEC-010).\n\nSource: #511 comment https://github.com/BirchDesignLab/queryModule/issues/511#issuecomment-6227599738. The M2 P2 planning session places each box in a wave.\n",
+      "labels": ["follow-up"]
+    },
+    {
+      "number": 698,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Builder visual comparison against mockup v5 at 1366 and 1024 (cards, keywords, Try a match)",
+      "body": "Split from #642 (CV1-CV3), 10-17-26, M2 Manager 7. This is agent work, not a developer check: the developer is never handed a visual comparison an agent can run.\n\n- [ ] Compare the cards builder, the keywords and severity pane, and Try a match against the approved mockup (v5, v4 where v5 has no frame) at 1366 and 1024, after #695, #696 and #697 have merged. Method: headless Playwright screenshots read as files, plus one Opus 5.5 medium critic that sets each screenshot side by side with the mockup frame and lists the differences.\n- [ ] Fix the differences that are clear defects in the same PR (ordinary tier). List the ones that are design choices in the PR body for a manager ruling, not for the developer to check.\n\nRefs #642, #641.\n",
+      "labels": ["web", "follow-up"]
+    },
+    {
+      "number": 699,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Critical comment nits from the DEBT-2 final review: startup.ts line width, dispatcher.ts spelling",
+      "body": "From the third and final wave-review of fix/m2-debt-2-backend (10-17-26; stop rule: no fourth review, minors filed). Both are comment-only in critical files; fix on the next critical touch of either file.\n\n- [ ] `packages/api/src/startup.ts:189`: a 107-character comment line; rewrap within 100.\n- [ ] `packages/api/src/dispatch/dispatcher.ts:167`: \"honouring\" -> \"honoring\" in a comment (American English).\n\nRefs #574.",
+      "labels": ["follow-up"]
+    },
+    {
+      "number": 709,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Admin audit routes take the adminAudit feature key (spec 5.1, 5.8)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 1\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\nCarries part of: #561",
+      "labels": ["platform", "p2"]
+    },
+    {
+      "number": 710,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "Session ceiling for Better Auth and its validate rule (AUD-1, spec 5.6)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 2\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #511",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 711,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "GET /api/v1/admin/audit with auditViewed, cursor paged (spec 5.1, 4.7)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 3\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #561\n\nBlocked by #709",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 712,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "GET /api/v1/admin/audit/export NDJSON with auditExported (spec 5.1, 4.7)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 4\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #561\n\nBlocked by #711",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 713,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "FR-063",
+      "title": "GET /api/v1/admin/queries/:correlationId with adminViewed (FR-063, spec 5.1)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 5\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #561\n\nBlocked by #709",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 714,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "Story A9: query audit rows field by field (spec 10.2)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 6\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\n\nBlocked by #711",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 715,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "Sweeper: session expiry with sessionRevoked, hourly event_log prune (spec 5.2)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 7\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #511\n\nBlocked by #713\nBlocked by #714",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 716,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "AUD-1: Better Auth ceiling and live expiresAt in the users list (spec 5.6)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 8\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #511\n\nBlocked by #710\nBlocked by #715",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 717,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "Start the sweeper at startup and stop it in the drain (spec 5.2, 8.1)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 9\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nStarts after the DEBT-4 critical PR (#560, #699: startup.ts) merges.\n\nBlocked by #715",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 718,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "Persist the publish note and serve the publisher's name (D-M2P0-4)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 10\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #511\n\nBlocked by #717",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 719,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "NFR-004",
+      "title": "Server-Timing on the 202; ack latency from request receipt (NFR-004)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 11\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\nCarries part of: #317\n\nBlocked by #717",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 720,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "NFR-004",
+      "title": "ackReceipt metric and ack-stats summary (NFR-004)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 12\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\n\nBlocked by #717",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 721,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Docs: M2 P2 admin audit, sweeper, metrics",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 13\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #718\nBlocked by #719\nBlocked by #720",
+      "labels": ["platform", "p2"]
+    },
+    {
+      "number": 722,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Core",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "Core: config:validate resolves mapping paths against mock payloads (spec 4.5)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 15\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes",
+      "labels": ["platform", "core", "p2", "sensitive"]
+    },
+    {
+      "number": 723,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "bearer.test.ts: bearer auth on REST and the WebSocket upgrade (spec 10.7)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 17\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes\n\nBlocked by #722",
+      "labels": ["platform", "p2", "sensitive"]
+    },
+    {
+      "number": 724,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Design: audit log, admin request view, note, purged, terminal pane (mockup v6)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 1\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 725,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Web: admin audit API helpers and MSW handlers",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 2\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #724\nBlocked by #709",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 726,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Web: admin audit log page and rail entry (spec 6.2)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 3\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #725",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 727,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "FR-063",
+      "title": "Web: admin request view, read-only and recorded (FR-063)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 4\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #726\nBlocked by #713",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 728,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Client: send ackReceipt on each 202 (spec 6.7)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 7\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #727",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 729,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "FR-050",
+      "title": "Web: terminal beside the results, chosen in the account menu (FR-050)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 8\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\nStarts after DEBT-4's #478 and #476 merge.\n\nBlocked by #728",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 730,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "E2E: admin audit, history note, terminal pane; v6 comparison shots",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 9\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #729\nBlocked by #712\nBlocked by #718",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 731,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Docs: M2 P2 audit log, request view, terminal pane",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 10\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #730",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 732,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "M2 P2 release note, phase gate docs refresh, gate and promote",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 14\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #721\nBlocked by #723\nBlocked by #730\nBlocked by #731",
+      "labels": ["platform", "p2"]
+    },
+    {
+      "number": 733,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Core",
+      "phase": "P2",
+      "size": "M",
+      "priority": "High",
+      "reqIds": "none",
+      "title": "config:validate --diff <tag> for release notes (spec 7, 9.5)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-a-p2.md Task 16\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: yes",
+      "labels": ["platform", "core", "p2", "sensitive"]
+    },
+    {
+      "number": 734,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Web: publish note and publisher name in the history drawer (D-M2P0-4)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 5\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #727\nBlocked by #718",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 735,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Web (B)",
+      "phase": "P2",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Web: purged results and values show Purged under retention (spec 5.5)",
+      "body": "Plan: docs/superpowers/plans/2026-10-18-m2-track-b-p2.md Task 6\nIDs: see title and plan task\nTests first: the task's first step\nSensitive: no\n\nBlocked by #727",
+      "labels": ["web", "p2"]
+    },
+    {
+      "number": 743,
+      "milestone": "M2 Results and audit",
+      "parent": 45,
+      "track": "Platform (A)",
+      "phase": "P2",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Board script: keep added text below a phase parent's generated body (#46 checklists)",
+      "body": "**Problem (M2 Manager 8 board batch, 10-18-26).** `scripts/ops/gh-setup-project.mjs` builds each phase parent's body from `docs/board/board-data.json` (`phases`) and `--apply` rewrites any body that differs. Phase parents now carry hand-added checklists: #46 holds the #511 carry (D-M2P2-7) and two Manager 7 minors. Every `--apply` would wipe them. The 10-18-26 batch saved #46's body, applied, and put it back by hand.\n\n**Fix (gate tier, `scripts/ops/**`).** Keep the generated part and leave anything below it alone. For example: compare and write only the generated prefix, and keep the text after it as it is on GitHub. A dry run then plans no body update for #46. Add a test in `gh-setup-project.test.ts`.\n\n**Until it lands:** before each board `--apply`, save the bodies of phase parents with added text (#46 today), and restore them right after.\n\nRide the next gate wave PR (CLAUDE.md \"Split small fixes by tier\").\n",
+      "labels": ["platform", "p2", "follow-up"]
     }
   ]
 }

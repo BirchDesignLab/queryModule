@@ -186,6 +186,10 @@ Designed 10-13-26 (BW1 Task 1, #596; FR-060, UX-010, UX-011, UX-015, UX-016; spe
 11. Results keyboard joins M2 P1 (BW2 Task 7b): ArrowUp and ArrowDown select, Enter toggles detail (spec 6.4). Delete from view stays in M3.
 12. Announcements and the fieldset, Copy and Retry accessible names carry the query type and the primary typed field (the short correlation ID when it is empty), never payload content. This replaces the 10-08-26 Q4 ruling; spec 6.6's example already uses the plate.
 
+### Audit console, request view, publish note, purged results and terminal pane (Track B, M2 P2; v6 draft 10-18-26)
+
+Designed 10-18-26 (BW1 Task 1, #724; FR-050, FR-062, FR-063, FR-064, UX-004, UX-014, SEC-012, SEC-021). Mockup tabs "v6 draft: Audit log", "Request view", "Note and history", "Purged" and "Terminal pane"; decisions, states and open questions are in `docs/design/2026-10-18-audit-console.md`. Pending developer approval; the rulings go in a list here once made.
+
 ## Revision 2 (design critic, 09-29-26)
 
 One Opus 5.5 medium critic read the mockup and this document (25 findings: 1 blocker, 12 important, 12 minor; fixtures clean). Changes, which also bind the implementation tasks:

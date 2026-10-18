@@ -187,6 +187,23 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     expect(findRoute("exportAdminAudit").request?.query).toBe(AdminAuditExportQuerySchema);
     // NDJSON has no JSON body schema: the OpenAPI generator only emits application/json.
     expect(findRoute("exportAdminAudit").responses[200]?.schema).toBeUndefined();
+    expect(findRoute("exportAdminAudit").responses[200]?.description).toMatch(
+      /AuditExportLineSchema.*docs\/api\.md/,
+    );
+  });
+
+  it("SEC-012, D-M2P2-1: the admin audit and admin query routes sit behind the adminAudit feature", () => {
+    const audit = ROUTES.filter(
+      (r) =>
+        r.path.startsWith("/api/v1/admin/audit") || r.path.startsWith("/api/v1/admin/queries/"),
+    );
+    expect(audit.map((r) => r.id).sort()).toEqual(
+      ["exportAdminAudit", "getAdminQuery", "listAdminAudit"].sort(),
+    );
+    for (const r of audit) {
+      expect(r.feature, r.id).toBe("adminAudit");
+      expect(r.access, r.id).toBe("admin");
+    }
   });
 
   it("meta body per spec 5.1", () => {
