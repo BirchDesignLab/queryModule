@@ -263,6 +263,34 @@ describe("G32 Edit as new query on every request row", () => {
     expect(screen.getByTestId("announcer-polite")).not.toHaveTextContent("is now shown");
   });
 
+  it("loading a row drops a Shown tag the replaced draft carried (#651 F5)", async () => {
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json(
+          { error: { code: "configHashMismatch", currentConfigHash: "x" } },
+          { status: 409 },
+        ),
+      ),
+    );
+    const { user, services } = await openPanel();
+    act(() => services.drafts.getState().setValue("state", "OK"));
+    const plateType = (await screen.findByLabelText(/Plate type/)) as HTMLSelectElement;
+    const code = plateType.options[1]?.value ?? "";
+    act(() => services.drafts.getState().setValue("plateType", code));
+    await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");
+    const region = screen.getByRole("region", { name: "Requests this shift" });
+    const edit = await within(region).findByRole("button", { name: /^Edit as new query/ });
+    // Hide and reveal Plate type again: the field carries a Shown tag and its value is unchanged.
+    act(() => services.drafts.getState().setValue("state", "TX"));
+    await waitFor(() => expect(screen.queryByLabelText(/Plate type/)).toBeNull());
+    act(() => services.drafts.getState().setValue("state", "OK"));
+    await waitFor(() => expect(document.querySelector(".qm-tag--shown")).not.toBeNull());
+    await user.click(edit);
+    expect(screen.getByLabelText("Plate")).toHaveValue("ZZ-0001");
+    expect(screen.getByLabelText(/Plate type/)).toBeInTheDocument();
+    expect(document.querySelector(".qm-tag--shown")).toBeNull();
+  });
+
   it("from terminal mode it lands in the form", async () => {
     const { user } = await openPanel();
     await user.type(screen.getByLabelText("Plate"), "ZZ-0001{Enter}");

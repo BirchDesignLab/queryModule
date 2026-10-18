@@ -93,7 +93,10 @@ export interface CheckedRequest {
   values: Readonly<Record<string, DraftValue>>;
   sourceIds: readonly string[];
   state: FormState;
-  /** The command as typed (terminal mode): the list shows it as typed, so NAM stays NAM (G31). */
+  /**
+   * The command as typed (terminal mode): the entry's fallback when the type has no command. The
+   * list shows the canonical command, so NAM reads PER there (#680 ruling B; G31 is the input's).
+   */
   typed?: string;
   /**
    * Shows a server 400's errors where the request came from. The terminal lists them under its
