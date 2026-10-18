@@ -7,12 +7,15 @@ import {
   WsClientMessageSchema,
   type WsEvent,
 } from "@querymodule/core/contracts";
+import { and, eq } from "drizzle-orm";
 import { WebSocket, WebSocketServer } from "ws";
 import { BACKGROUND_HEADER } from "../auth/identity";
 import { trustedClientIp } from "../auth/rate-limit";
+import { auditEvent } from "../db/schema";
 import type { AppDeps } from "../deps";
 import { eventsSince, latestSeq } from "../dispatch/event-log";
 import { DEV_ORIGINS } from "../env";
+import { authorizeQueryAccess } from "../queries/policy";
 import type { Principal } from "../seams";
 
 export const WS_PATH = "/api/v1/ws";
@@ -30,6 +33,8 @@ export const WS_LOCAL_CLOSE = {
   shutdown: 1001,
   internal: 1011,
 } as const;
+/** Correlation ids already counted as an ackReceipt metric in this process; oldest out. */
+const ACK_COUNTED_MAX = 1000;
 export interface WsHandle {
   stopAccepting(): void;
   close(): Promise<void>;
@@ -87,6 +92,7 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
   ]);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
   let accepting = true;
+  const counted = new Set<string>();
 
   function bind(ws: WebSocket, p: Principal): void {
     const send = (m: unknown) => {
@@ -166,6 +172,33 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
       held = null;
       for (const e of due) if (e.seq > floor) send(e);
     }
+    async function recordReceipt(correlationId: string): Promise<void> {
+      if (counted.has(correlationId)) return;
+      try {
+        const access = await authorizeQueryAccess(d.db, p, correlationId, "read", "own");
+        if (!access.ok) return;
+        const [row] = await d.db
+          .select({ at: auditEvent.at })
+          .from(auditEvent)
+          .where(
+            and(eq(auditEvent.correlationId, correlationId), eq(auditEvent.type, "acknowledged")),
+          )
+          .limit(1);
+        if (!row) return;
+        // Check and add with no await between them, so two frames cannot both count.
+        if (counted.has(correlationId)) return;
+        counted.add(correlationId);
+        if (counted.size > ACK_COUNTED_MAX) {
+          const oldest = counted.values().next().value;
+          if (oldest !== undefined) counted.delete(oldest);
+        }
+        d.logger.info("metric ackReceipt", { correlationId, e2eMs: d.clock.now() - row.at });
+      } catch (err: unknown) {
+        d.logger.error("ws ackReceipt failed", {
+          errorName: err instanceof Error ? err.name : typeof err,
+        });
+      }
+    }
     ws.on("message", async (raw) => {
       const m = WsClientMessageSchema.safeParse(parse(String(raw)));
       if (!m.success) return ws.close(WS_LOCAL_CLOSE.badMessage, "bad message");
@@ -203,7 +236,9 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
           serverTime: d.clock.now(),
         });
       }
-      // ackReceipt is accepted and ignored until M2 P1 records the metric.
+      // ackReceipt is a metric, not audit (spec 4.7, D-M2P2-4): anything not owned, not yet
+      // counted or sent before hello is ignored silently, with no frame and no log of the payload.
+      if (m.data.type === "ackReceipt" && helloSeen) await recordReceipt(m.data.correlationId);
     });
     ws.on("close", () => {
       clearTimeout(idle);
