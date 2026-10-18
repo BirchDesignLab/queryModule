@@ -67,7 +67,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Last green: `pnpm verify` and CI on main 3e85c2b (P0.5 promoted)
 - Next step: M2 P1 Track B plan (`2026-10-07-m2-track-b-p1.md`), BW1 design and CW core first; #572, #576 (client half), #565 (Try a match, built in P1 per D-M2P1-4), #586, #587 folded in
 - Blocked by: none
-- Latest handoff: [10-17-26-m2-debt-1.md](../../handoffs/10-17-26-m2-debt-1.md) (DEBT-1, #690: PR-1 #693 merged, PR-2 change-password in one transaction; next: DEBT-2 and M2 P2 planning in fresh sessions)
+- Latest handoff: [10-17-26-m2-debt-2.md](../../handoffs/10-17-26-m2-debt-2.md) (DEBT-2, #700 merged: #574 #644 #650 #656 closed, #623 Q1/Q4; open #699, #623 Q3, #560; next: M2 P2 planning)
 - Notes: no local B session; the cloud sessions are done.
 
 
