@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 const signInBody = (email: string) => JSON.stringify({ email, password: PW });
-/** A native sign-in: no Origin header. */
+/** A native sign-in: an empty Origin header, which the app treats as absent (t.request always sets one). */
 const nativeSignIn = (t: TestApp, email: string) =>
   t.request("/api/v1/auth/sign-in/email", {
     method: "POST",
@@ -40,11 +40,11 @@ const bearer = (t: TestApp, path: string, token: string, init: RequestInit = {})
     },
   });
 
-async function setup(o: { idleMs?: number } = {}) {
+async function setup() {
   const t = await createTestApp();
   const userId = await t.createUser(EMAIL, PW);
   const token = await nativeToken(t, EMAIL);
-  const s = await startTestServer(t, o);
+  const s = await startTestServer(t);
   closers.push(s.close);
   return { t, s, token, userId };
 }
@@ -56,10 +56,21 @@ const open = (url: string, headers: Record<string, string>) =>
     ws.once("unexpected-response", (_q, r) => rej(new Error(`HTTP ${r.statusCode}`)));
     ws.once("error", rej);
   });
+/** Fails with the step's name instead of a bare vitest timeout. */
+const within = <T>(step: string, p: Promise<T>, ms = 3000) =>
+  Promise.race([
+    p,
+    new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error(`timed out waiting for ${step}`)), ms),
+    ),
+  ]);
 const closeCode = (ws: WebSocket) =>
-  new Promise<number>((r) => ws.once("close", (code) => r(code)));
+  within("socket close", new Promise<number>((r) => ws.once("close", (code) => r(code))));
 const nextMsg = (ws: WebSocket) =>
-  new Promise<unknown>((r) => ws.once("message", (d) => r(JSON.parse(String(d)))));
+  within(
+    "socket message",
+    new Promise<unknown>((r) => ws.once("message", (d) => r(JSON.parse(String(d))))),
+  );
 const hello = { v: 1, type: "hello", lastSeq: null };
 
 describe("bearer token issue (spec 5.6, 10.7)", () => {
@@ -133,6 +144,17 @@ describe("bearer on REST (spec 10.3, 10.7; SEC-005, SEC-014)", () => {
     // A browser page on a foreign Origin cannot read the response: no allow-origin is granted.
     const r = await bearer(t, "/api/v1/queries", token, { headers: { origin: FOREIGN } });
     expect(r.headers.get("access-control-allow-origin")).toBeNull();
+    // Authorization makes a cross-origin request non-simple, so a browser sends a preflight first:
+    // with no allow-origin for a foreign Origin the browser refuses to send the real request.
+    const pre = await t.request("/api/v1/queries", {
+      method: "OPTIONS",
+      headers: {
+        origin: FOREIGN,
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization",
+      },
+    });
+    expect(pre.headers.get("access-control-allow-origin")).toBeNull();
     // A sign-in that carries any Origin is a web sign-in: no token is issued to it.
     const si = await t.request("/api/v1/auth/sign-in/email", {
       method: "POST",
@@ -234,9 +256,8 @@ describe("bearer sign-out and isolation (spec 5.3, 5.6)", () => {
 
   it("no event crosses users on a bearer socket", async () => {
     const { t, s, token } = await setup();
-    await t.createUser(OTHER, PW);
+    const otherUser = await t.createUser(OTHER, PW);
     const otherToken = await nativeToken(t, OTHER);
-    const otherUser = (await t.auditRows("loginSucceeded")).at(-1)?.actorUserId ?? "";
     const a = await open(s.wsUrl, { authorization: `Bearer ${token}` });
     const b = await open(s.wsUrl, { authorization: `Bearer ${otherToken}` });
     for (const x of [a, b]) {
