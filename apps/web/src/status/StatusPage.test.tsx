@@ -2,6 +2,7 @@ import type { SocketLike } from "@querymodule/client";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it, vi } from "vitest";
+import { APP_VERSION } from "../app/version.js";
 import { autoHeartbeatSocket, FakeSocket } from "../test/fake-socket.js";
 import { API, CLIENT_CONFIG, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
 import { renderRoot } from "../test/render-root.js";
@@ -94,7 +95,7 @@ async function statusReady() {
   await waitFor(() => expect(tile("Configuration").getByText("Loaded")).toBeInTheDocument());
 }
 
-describe("the status page: Connection, Configuration and Session tiles", () => {
+describe("the status page: Connection, Configuration, Session and App tiles", () => {
   it("focuses the h1 on navigation and lays out three ruled sections with their own h2", async () => {
     await openStatus(autoHeartbeatSocket());
     const h1 = await screen.findByRole("heading", { level: 1, name: "Status" });
@@ -104,7 +105,15 @@ describe("the status page: Connection, Configuration and Session tiles", () => {
       "Connection",
       "Configuration",
       "Session",
+      "App",
     ]);
+  });
+
+  it("App: the web app's build version (#481)", async () => {
+    await openStatus(autoHeartbeatSocket());
+    await statusReady();
+    const app = tile("App");
+    expect(app.getByText("Version").closest("div")).toHaveTextContent(APP_VERSION);
   });
 
   it("Connection: a Checking chip, then Connected with the last-checked time", async () => {
