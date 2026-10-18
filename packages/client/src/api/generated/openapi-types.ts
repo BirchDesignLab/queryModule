@@ -2457,7 +2457,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description application/x-ndjson, one AuditExportLineSchema row per line */
+            /** @description application/x-ndjson; each line is one AuditExportLineSchema row (docs/api.md) */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -519,6 +519,7 @@ const ROUTE_DEFS = [
     access: "admin",
     since: "m2",
     status: "planned",
+    feature: "adminAudit",
     requiresRequestedWith: false,
     request: { query: AdminAuditQuerySchema },
     responses: {
@@ -535,10 +536,14 @@ const ROUTE_DEFS = [
     access: "admin",
     since: "m2",
     status: "planned",
+    feature: "adminAudit",
     requiresRequestedWith: false,
     request: { query: AdminAuditExportQuerySchema },
     responses: {
-      200: { description: "application/x-ndjson, one AuditExportLineSchema row per line" },
+      200: {
+        description:
+          "application/x-ndjson; each line is one AuditExportLineSchema row (docs/api.md)",
+      },
       400: error("Malformed filters, or a window over 31 days (validationFailed)"),
       ...adminErrors,
     },
@@ -552,6 +557,7 @@ const ROUTE_DEFS = [
     access: "admin",
     since: "m2",
     status: "planned",
+    feature: "adminAudit",
     requiresRequestedWith: false,
     request: { params: QueryParamsSchema, query: AdminQueryQuerySchema },
     responses: {

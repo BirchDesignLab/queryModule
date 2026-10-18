@@ -313,7 +313,17 @@ describe("spec 10.3 route by caller matrix (D-A30, admin routes from openapi.jso
     expect(OPERATIONS.map((o) => o.id).sort()).toEqual(live.map((r: RouteDef) => r.id).sort());
     // Every admin route carries its feature flag, so the flags-off run covers all of them.
     for (const o of OPERATIONS.filter((x) => x.path.startsWith("/api/v1/admin/")))
-      expect(o.feature, o.id).toMatch(/^admin(Config|Users)$/);
+      expect(o.feature, o.id).toMatch(/^admin(Config|Users|Audit)$/);
+  });
+
+  it("D-M2P2-1: the contract-only admin routes already carry the adminAudit feature", () => {
+    const features = Object.values(openapi.paths).flatMap((ms) =>
+      Object.values(ms)
+        .filter((op) => CONTRACT_ONLY.has(op.operationId))
+        .map((op) => [op.operationId, op["x-feature"]]),
+    );
+    expect(features.length).toBe(CONTRACT_ONLY.size);
+    for (const [id, feature] of features) expect(feature, id).toBe("adminAudit");
   });
 
   it("the contract-only list is exactly the planned routes, each in openapi.json", () => {
