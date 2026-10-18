@@ -701,13 +701,6 @@ main[tabindex="-1"]:focus {
   margin-inline-start: auto;
 }
 
-/* Undo and Redo are icon buttons, as narrow as they are tall, so the controls fit one row in the
-   1024 px section (#698 (d)). */
-.qm-builder__toolbar .qm-mock__icon {
-  inline-size: var(--qm-control-height-dense);
-  padding-inline: 0;
-}
-
 /* Form or JSON: WAI-ARIA tabs drawn as the segmented control (design lead 09-29-26). */
 .qm-builder__views > button[aria-selected="true"] {
   border-color: var(--qm-color-accent);
@@ -2265,6 +2258,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   min-inline-size: var(--qm-control-height-dense);
   min-block-size: var(--qm-control-height-dense);
   padding-inline: var(--qm-space-2);
+}
+
+/* Undo and Redo are icon buttons, as narrow as they are tall, so the controls fit one row in the
+   1024 px section (#698 (d)). */
+.qm-builder__toolbar .qm-mock__icon {
+  inline-size: var(--qm-control-height-dense);
+  padding-inline: 0;
 }
 
 .qm-mock__trigger {

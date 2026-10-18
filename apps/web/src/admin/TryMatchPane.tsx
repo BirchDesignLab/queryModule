@@ -258,7 +258,10 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
               <p className="qm-preview__state">{t("admin.mock.try.paused")}</p>
             ) : answer === null || response === undefined || result === undefined ? (
               <p className="qm-preview__state">
-                {t("admin.mock.try.none", { source: sourceName(sourceId), type: typeName(code ?? "") })}
+                {t("admin.mock.try.none", {
+                  source: sourceName(sourceId),
+                  type: typeName(code ?? ""),
+                })}
               </p>
             ) : (
               <div className="qm-try__outcome" data-testid="try-outcome">

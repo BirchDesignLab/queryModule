@@ -70,7 +70,9 @@ for (const size of SIZES) {
         expect(await lines(th), `heading "${await th.innerText()}"`).toBe(1);
         // One line is not enough: a heading wider than its column runs into the next one.
         const spill = await th.evaluate((el) => el.scrollWidth - el.clientWidth);
-        expect(spill, `heading "${await th.innerText()}" runs past its column`).toBeLessThanOrEqual(1);
+        expect(spill, `heading "${await th.innerText()}" runs past its column`).toBeLessThanOrEqual(
+          1,
+        );
       }
       // The new heading style adds no sideways scroll to the table or the pane around it.
       const overflow = await table.evaluate((el) => {
@@ -128,7 +130,9 @@ for (const size of SIZES) {
         `control centers ${centers}`,
       ).toBeLessThanOrEqual(4);
       // Nothing to publish yet: the line under the buttons says so. The version line is in a unit test.
-      await expect(bar.getByRole("button", { name: "Review and publish" })).toHaveAccessibleDescription(
+      await expect(
+        bar.getByRole("button", { name: "Review and publish" }),
+      ).toHaveAccessibleDescription(
         /^(Nothing to publish|Publishes version \d+ to every open screen)/,
       );
     });
@@ -141,20 +145,23 @@ for (const size of SIZES) {
     ] as const)
       test(`[#698 (g)] no text is cut off by an ellipsis: ${label}`, async ({ page }) => {
         await open(page);
-        const cut = await page.locator(".qm-builder__scope, .qm-builder").first().evaluate((root) => {
-          const out: string[] = [];
-          for (const el of root.querySelectorAll<HTMLElement>("*")) {
-            const style = getComputedStyle(el);
-            // A visually hidden or clipped-away helper (the skip links, the words for a screen
-            // reader) is one pixel wide on purpose.
-            if (style.display === "none" || el.clientWidth <= 2) continue;
-            const clips = style.textOverflow === "ellipsis" || style.overflow === "hidden";
-            if (!clips || el.scrollWidth <= el.clientWidth + 1) continue;
-            const text = (el.textContent ?? "").trim();
-            if (text !== "") out.push(`${el.className || el.tagName}: ${text.slice(0, 40)}`);
-          }
-          return out;
-        });
+        const cut = await page
+          .locator(".qm-builder__scope, .qm-builder")
+          .first()
+          .evaluate((root) => {
+            const out: string[] = [];
+            for (const el of root.querySelectorAll<HTMLElement>("*")) {
+              const style = getComputedStyle(el);
+              // A visually hidden or clipped-away helper (the skip links, the words for a screen
+              // reader) is one pixel wide on purpose.
+              if (style.display === "none" || el.clientWidth <= 2) continue;
+              const clips = style.textOverflow === "ellipsis" || style.overflow === "hidden";
+              if (!clips || el.scrollWidth <= el.clientWidth + 1) continue;
+              const text = (el.textContent ?? "").trim();
+              if (text !== "") out.push(`${el.className || el.tagName}: ${text.slice(0, 40)}`);
+            }
+            return out;
+          });
         expect(cut, "cut off").toEqual([]);
       });
 

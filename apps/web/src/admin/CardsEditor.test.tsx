@@ -189,7 +189,10 @@ describe("a card's order and the tree's Add row (#698 (a))", () => {
     act(() => row.focus());
     await t.user.keyboard("{Enter}");
     expect(cards(t).map((c) => c.id)).toContain("veh-card");
-    await within(editor()).findByRole("heading", { level: 3, name: /^Vehicle: All results veh-card/ });
+    await within(editor()).findByRole("heading", {
+      level: 3,
+      name: /^Vehicle: All results veh-card/,
+    });
     expect(within(cardsTree()).getByRole("treeitem", { name: "Add Vehicle card" })).toHaveFocus();
     expect(within(cardsTree()).getByRole("treeitem", { name: /^2\. All results/ })).toHaveAttribute(
       "aria-selected",
@@ -228,7 +231,11 @@ describe("a card's order and the tree's Add row (#698 (a))", () => {
       "true",
     );
     await t.user.click(ed.getByRole("button", { name: "Move card up" }));
-    expect(cards(t).map((c) => c.id).slice(0, 2)).toEqual(["veh-card", "veh-summary"]);
+    expect(
+      cards(t)
+        .map((c) => c.id)
+        .slice(0, 2),
+    ).toEqual(["veh-card", "veh-summary"]);
     // The moved card is first now and the selection followed it: it wins every row.
     await ed.findByText(/^Card veh-card, 1 of 2 Vehicle cards\./);
     await waitFor(() => expect(thisCard()).toBeGreaterThanOrEqual(2));

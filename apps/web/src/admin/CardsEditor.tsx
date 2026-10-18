@@ -340,7 +340,11 @@ function CardEditor({
               </button>
             );
           })}
-          <button type="button" className="qm-button qm-button--ghost qm-button--danger" onClick={remove}>
+          <button
+            type="button"
+            className="qm-button qm-button--ghost qm-button--danger"
+            onClick={remove}
+          >
             {t("admin.cards.remove")}
             <VisuallyHidden> {name}</VisuallyHidden>
           </button>
