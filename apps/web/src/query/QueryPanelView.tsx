@@ -21,6 +21,7 @@ import {
   useShortcutAction,
 } from "@querymodule/web-ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
@@ -31,6 +32,7 @@ import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
 import { sheetBindings } from "./sheet-bindings.js";
+import { TerminalPane, terminalPaneTitleId } from "./TerminalPane.js";
 import { terminalExample } from "./terminal-example.js";
 import { useActionBarClearance } from "./use-action-bar-clearance.js";
 import { type PanelViewMode, type ReadyQueryPanel, useQueryPanel } from "./use-query-panel.js";
@@ -65,6 +67,8 @@ function ReadyPanel({
   selectTypeSeq,
   editNote,
   onDismissNote,
+  terminalPane = false,
+  paneSlot = null,
 }: {
   panel: ReadyQueryPanel;
   idPrefix: string;
@@ -73,11 +77,15 @@ function ReadyPanel({
   /** What "Edit as new query" left out, in words (#477); shown until the form is cleared or run. */
   editNote?: string | undefined;
   onDismissNote?: (() => void) | undefined;
+  /** The terminal sits in its own pane beside the results (FR-050): the toggle is not offered. */
+  terminalPane?: boolean;
+  /** The element of that pane; the terminal renders into it once it exists. */
+  paneSlot?: HTMLElement | null;
 }) {
   const preview = panel.mode === "preview";
   const t = useT();
   const { config, formState, queryType } = panel;
-  const terminal = useTerminal(panel);
+  const terminal = useTerminal(panel, { pane: terminalPane });
   // The host's pick (code and seq), applied through the panel's own path until the panel shows it;
   // only then is it settled, so the user's own clicks in the preview win until the host picks again
   // (a new code or a new seq). Not settled while unknown (the config may gain the type) or while the
@@ -238,13 +246,15 @@ function ReadyPanel({
       )}
       <div className="qm-panel-head">
         <h2>{t("panel.title", { type: labelOfType(headingType) })}</h2>
-        <ModeSeg
-          legend={t("mode.label")}
-          formLabel={t("mode.form")}
-          terminalLabel={t("mode.terminal")}
-          terminal={terminal.mode === "terminal"}
-          onSelect={() => terminal.toggle()}
-        />
+        {terminalPane ? null : (
+          <ModeSeg
+            legend={t("mode.label")}
+            formLabel={t("mode.form")}
+            terminalLabel={t("mode.terminal")}
+            terminal={terminal.mode === "terminal"}
+            onSelect={() => terminal.toggle()}
+          />
+        )}
       </div>
       <QuickAccessBar
         codes={quickCodes}
@@ -338,8 +348,10 @@ function ReadyPanel({
             <CommandEcho
               text={echo}
               label={t("echo.label")}
-              actionLabel={t("echo.edit")}
-              onEdit={() => terminal.toggle({ focus: true })}
+              actionLabel={terminalPane ? t("terminalPane.editInPane") : t("echo.edit")}
+              onEdit={() =>
+                terminalPane ? terminal.focusTerminal() : terminal.toggle({ focus: true })
+              }
             />
             <QueryForm
               key={queryType}
@@ -389,6 +401,12 @@ function ReadyPanel({
           </>
         )}
       </div>
+      {terminalPane && paneSlot !== null
+        ? createPortal(
+            <TerminalPane idPrefix={idPrefix} config={config} terminal={terminal} />,
+            paneSlot,
+          )
+        : null}
     </>
   );
 }
@@ -427,6 +445,12 @@ export interface QueryPanelViewProps {
    * panel already shows that type.
    */
   selectTypeSeq?: number;
+  /**
+   * Live with the requests list only: the terminal sits in its own pane beside the results
+   * (layout.terminal "pane" at a window wide enough, FR-050). The owner decides; the view lays the
+   * three panes out.
+   */
+  terminalPane?: boolean;
 }
 
 /** The one renderer of the query panel, from config alone (BR-001; ADR-0011 core loop). */
@@ -439,8 +463,12 @@ export function QueryPanelView({
   requests,
   selectType,
   selectTypeSeq,
+  terminalPane,
 }: QueryPanelViewProps) {
   const panel = useQueryPanel({ config, drafts, mode, onConfigChanged });
+  const pane = terminalPane === true && mode === "live" && requests === "list";
+  // The pane's element, held in state so the terminal renders into it as soon as it exists.
+  const [paneSlot, setPaneSlot] = useState<HTMLElement | null>(null);
   const t = useT();
   const { announcer, requests: requestsStore } = useServices();
   // Edit as new query (#477): what the current config left out of the loaded values, in words, and
@@ -518,11 +546,13 @@ export function QueryPanelView({
       selectTypeSeq={mode === "preview" ? selectTypeSeq : undefined}
       editNote={editNote?.queryType === panel.queryType ? editNote.text : undefined}
       onDismissNote={() => setEditNote(null)}
+      terminalPane={pane}
+      paneSlot={pane ? paneSlot : null}
     />
   );
   if (requests === undefined) return ready;
   return (
-    <div className="qm-panes">
+    <div className={pane ? "qm-panes qm-panes--terminal" : "qm-panes"}>
       <div className="qm-panes__panel">{ready}</div>
       <RequestsPane
         config={panel.config}
@@ -530,6 +560,13 @@ export function QueryPanelView({
         onEditAsNew={onEditAsNew}
         onRetried={onRetried}
       />
+      {pane ? (
+        <aside
+          ref={setPaneSlot}
+          className="qm-terminal-pane"
+          aria-labelledby={terminalPaneTitleId(idPrefix)}
+        />
+      ) : null}
     </div>
   );
 }

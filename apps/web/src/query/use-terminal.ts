@@ -9,7 +9,7 @@ import {
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { ValidationError } from "@querymodule/core/contracts";
 import { checkTerminalSubmit, mergeDraft, tokenize } from "@querymodule/core/terminal";
-import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { firstField } from "./first-field.js";
@@ -60,29 +60,51 @@ export interface TerminalModel {
   inputRef: RefObject<HTMLInputElement | null>;
 }
 
+export interface TerminalOptions {
+  /**
+   * The terminal sits in its own pane beside the results (layout.terminal "pane", FR-050): the form
+   * is always the panel's body and the draft is one, so a value typed in either shows in the other
+   * (spec 6.7). The Form and Terminal mode is not used; the stored mode is "form" meanwhile.
+   */
+  pane?: boolean;
+}
+
+/** Where the next focus request lands: the mode's own control, the pane's input, or the form. */
+type FocusTarget = "mode" | "input" | "form";
+
 /** Terminal mode of the query panel (FR-050 to FR-056, spec 4.4, 6.2, 6.4). */
-export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
+export function useTerminal(
+  panel: ReadyQueryPanel,
+  terminalOptions: TerminalOptions = {},
+): TerminalModel {
   const { announcer } = useServices();
   const t = useT();
   const { config, drafts } = panel;
-  const mode = useStore(drafts, (s) => s.mode);
+  const pane = terminalOptions.pane === true;
+  const storedMode = useStore(drafts, (s) => s.mode);
+  const mode = pane ? "form" : storedMode;
   const text = useStore(drafts, (s) => s.terminalText);
   // Kept as keys and params, never as text: the wording follows the translator and the site's
   // delimiter at render (#382 T8).
   const [problems, setProblems] = useState<readonly ValidationError[]>([]);
   const [unshown, setUnshown] = useState(0);
   const [focusTick, setFocusTick] = useState(0);
-  const wantFocus = useRef(false);
+  const wantFocus = useRef<FocusTarget | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Pane only: the draft values the pane's own text produced, so the effect that writes the form's
+  // values back into the text does not rewrite what the user is typing (a half-typed command, a
+  // value it normalizes). Compared by identity: any other change of the draft is the form's.
+  const written = useRef<{ queryType: string; values: Values | undefined } | null>(null);
 
   // Focus follows the commit that shows the target control. A layout effect, so it runs in that
   // commit: a passive mount-time run could otherwise consume wantFocus with a stale mode when a
   // shortcut fires right after the panel first paints (#382).
   // biome-ignore lint/correctness/useExhaustiveDependencies: focusTick and mode are the triggers
   useLayoutEffect(() => {
-    if (!wantFocus.current) return;
-    wantFocus.current = false;
-    if (mode === "terminal") inputRef.current?.focus();
+    const target = wantFocus.current;
+    if (target === null) return;
+    wantFocus.current = null;
+    if (target === "input" || (target === "mode" && mode === "terminal")) inputRef.current?.focus();
     else firstField(panel.formContainerRef.current)?.focus();
   }, [focusTick, mode]);
 
@@ -119,10 +141,44 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     inputRef.current?.focus();
   };
 
-  const requestFocus = (): void => {
-    wantFocus.current = true;
+  const requestFocus = (target: FocusTarget = "mode"): void => {
+    wantFocus.current = target;
     setFocusTick((n) => n + 1);
   };
+
+  /** Pane only: notes that the draft of `queryType` now holds what the pane's text produced. */
+  const markWritten = (queryType: string): void => {
+    written.current = { queryType, values: drafts.getState().drafts[queryType]?.values };
+  };
+
+  // Pane only: a command left in the panel's terminal mode (the window was narrower, or the pane
+  // was chosen meanwhile) goes into the form, so nothing typed is lost (spec 4.4), and the stored
+  // mode is the form's.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pane and storedMode are the triggers
+  useLayoutEffect(() => {
+    if (!pane || storedMode !== "terminal") return;
+    const merged = mergeText();
+    if (merged !== null) {
+      panel.selectQueryType(merged.queryType);
+      markWritten(merged.queryType);
+    }
+    drafts.getState().setMode("form");
+  }, [pane, storedMode]);
+
+  // Pane only: a change of the form (a typed value, a picked type, Clear, a finished run) writes
+  // the command into the pane. The text the pane itself produced is not written back.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the type, its values and the mode are the triggers
+  useEffect(() => {
+    if (!pane) {
+      written.current = null;
+      return;
+    }
+    // The command of a terminal mode left behind is merged first (the effect above).
+    if (storedMode === "terminal") return;
+    const own = written.current;
+    if (own !== null && own.queryType === panel.queryType && own.values === panel.values) return;
+    derive(panel.queryType);
+  }, [pane, storedMode, panel.queryType, panel.values]);
 
   const errors = problems.map((e) =>
     terminalErrorText(e, { t, delimiter: config.terminal.delimiter }),
@@ -137,6 +193,15 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     setText(next) {
       drafts.getState().setTerminalText(next);
       setProblems([]);
+      if (pane) {
+        // One draft (spec 6.7): what the command reads goes into the form as it is typed.
+        const merged = terminalToForm(config, next, valuesByType(drafts.getState().drafts));
+        if (merged !== null) {
+          drafts.getState().replaceValues(merged.queryType, merged.values);
+          if (merged.queryType !== panel.queryType) panel.selectQueryType(merged.queryType);
+          markWritten(merged.queryType);
+        }
+      }
       // The count belongs to the draft of the query type the command names, so it follows the
       // type as it is typed (#382 W3); a command that names none has nothing to count.
       const typed = tokenize(config, next).queryType;
@@ -152,6 +217,12 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       );
     },
     toggle(options) {
+      if (pane) {
+        // No mode to switch: the shortcut moves between the form and the pane's input.
+        if (options?.focus === true)
+          requestFocus(document.activeElement === inputRef.current ? "form" : "input");
+        return;
+      }
       if (mode === "form") {
         enterTerminal();
       } else {
@@ -164,10 +235,14 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
     },
     clear() {
       panel.clearValues();
-      if (mode === "terminal") derive(panel.queryType);
+      if (mode === "terminal" || pane) derive(panel.queryType);
       requestFocus();
     },
     focusTerminal() {
+      if (pane) {
+        requestFocus("input");
+        return;
+      }
       if (mode === "form") enterTerminal();
       requestFocus();
     },
@@ -200,6 +275,8 @@ export function useTerminal(panel: ReadyQueryPanel): TerminalModel {
       const values = fromCoreDraft(merged);
       state.replaceValues(queryType, values);
       panel.selectQueryType(queryType);
+      // The pane keeps the command as typed: the run's normalized values are not written back.
+      if (pane) markWritten(queryType);
       // A run that goes out keeps focus in the command line (a click on Run brings it back).
       inputRef.current?.focus();
       const sourceIds = resolveCheckedSources(formState, state.drafts[queryType]?.sources ?? null);

@@ -232,6 +232,7 @@ describe("inert opacity, scrim and layout constant (cloud3 item 1)", () => {
       "layout.stack": "864px",
       "layout.toolbar": "720px",
       "layout.toolbarRow": "920px",
+      "layout.terminalPane": "1280px",
     });
     // px like the tokens they guard: a media-query rem follows the browser's default font size,
     // which the px tokens ignore (#484).

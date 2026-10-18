@@ -15,6 +15,12 @@ export interface AccountMenuProps {
   showTheme?: boolean;
   /** Opens the page's keyboard shortcut sheet; omitted where the page has none (no item). */
   onShowShortcuts?(): void;
+  /** Where the terminal sits (UX-014 layout.terminal); an unset layout reads "toggle". */
+  terminal?: "toggle" | "pane";
+  /** Omitted where the layout has no terminal pane (the officer bar): no control. */
+  onTerminalChange?(terminal: "toggle" | "pane"): void;
+  /** The last save of the terminal layout failed: an alert says so and the control is reverted. */
+  terminalSaveFailed?: boolean;
 }
 
 /**
@@ -31,9 +37,13 @@ export function AccountMenu({
   onSignOut,
   showTheme = true,
   onShowShortcuts,
+  terminal = "toggle",
+  onTerminalChange,
+  terminalSaveFailed = false,
 }: AccountMenuProps) {
   const t = useT();
   const panelId = useId();
+  const terminalHintId = useId();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -119,6 +129,34 @@ export function AccountMenu({
             </p>
           )}
           {showTheme ? <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} /> : null}
+          {onTerminalChange === undefined ? null : (
+            <fieldset className="qm-account__terminal">
+              <legend className="qm-account__terminal-label">{t("account.terminal.label")}</legend>
+              <div className="qm-seg">
+                {(["toggle", "pane"] as const).map((choice) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    aria-pressed={terminal === choice}
+                    aria-describedby={terminalHintId}
+                    onClick={() => {
+                      if (terminal !== choice) onTerminalChange(choice);
+                    }}
+                  >
+                    {t(`account.terminal.${choice}`)}
+                  </button>
+                ))}
+              </div>
+              <p id={terminalHintId} className="qm-account__hint">
+                {t("account.terminal.hint")}
+              </p>
+              {terminalSaveFailed ? (
+                <p role="alert" className="qm-form-error">
+                  {t("account.terminal.saveFailed")}
+                </p>
+              ) : null}
+            </fieldset>
+          )}
           {onShowShortcuts === undefined ? null : (
             <button
               ref={shortcutsRef}

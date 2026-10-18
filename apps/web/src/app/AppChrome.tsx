@@ -1,5 +1,6 @@
 import {
   clientConfigQuery,
+  type PreferenceLayout,
   savePreferences,
   THEME_PREFERENCES,
   type ThemeModePreference,
@@ -23,6 +24,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { NavLink, Outlet, useLocation, useNavigationType } from "react-router";
 import { AdminLink } from "../admin/AdminLink.js";
@@ -164,6 +166,25 @@ export function AppHeader() {
     preferences.getState().setThemeMode(mode);
     void savePreferences(api, { themeMode: mode }).catch(() => false);
   };
+  // The terminal layout (UX-014, FR-050): the first pick on an unset layout stores the default
+  // orientation with it (the contract wants both fields); a failed save puts the control back and
+  // says so in the menu.
+  const terminalLayout = useStore(preferences, (s) => s.layout?.terminal ?? "toggle");
+  const [terminalSaveFailed, setTerminalSaveFailed] = useState(false);
+  const changeTerminal = (terminal: PreferenceLayout["terminal"]) => {
+    const before = preferences.getState().layout;
+    const next: PreferenceLayout = { orientation: before?.orientation ?? "horizontal", terminal };
+    setTerminalSaveFailed(false);
+    preferences.getState().setLayout(next);
+    const revert = () => {
+      // Only if nothing newer replaced this pick while the save was in flight.
+      if (preferences.getState().layout === next) preferences.getState().setLayout(before);
+      setTerminalSaveFailed(true);
+    };
+    void savePreferences(api, { layout: next }).then((saved) => {
+      if (!saved) revert();
+    }, revert);
+  };
   const doSignOut = () => {
     void signOut();
   };
@@ -208,6 +229,10 @@ export function AppHeader() {
           onSignOut={doSignOut}
           showTheme={!compact}
           onShowShortcuts={shortcutSheet.open ?? undefined}
+          terminal={terminalLayout}
+          // The officer layout has no terminal pane, so its bar offers no choice.
+          onTerminalChange={compact ? undefined : changeTerminal}
+          terminalSaveFailed={terminalSaveFailed}
         />
       </div>
     </header>
