@@ -518,7 +518,7 @@ const ROUTE_DEFS = [
       "Audit rows by user (actor or credential owner), correlation id and type; window at most 31 days; writes auditViewed",
     access: "admin",
     since: "m2",
-    status: "planned",
+    status: "live",
     feature: "adminAudit",
     requiresRequestedWith: false,
     request: { query: AdminAuditQuerySchema },

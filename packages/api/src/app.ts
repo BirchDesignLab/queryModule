@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { ADMIN_CONFIG_LARGE_BODY_PATHS, mountAdminConfigRoutes } from "./admin/config/routes";
 import { mountAdminUserRoutes } from "./admin/users/routes";
+import { mountAdminAuditRoutes } from "./audit/routes";
 import { mountAuthRoutes } from "./auth/routes";
 import type { AppDeps } from "./deps";
 import { apiError } from "./http/errors";
@@ -66,6 +67,7 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   // D-A26: adminGuard answers 403 passwordChangeRequired after its feature check (#505 N-m1).
   mountAdminConfigRoutes(app, d);
   mountAdminUserRoutes(app, d);
+  mountAdminAuditRoutes(app, d);
   mountWeb(app, d);
   app.notFound((c) => apiError(c, "notFound"));
   // LS-1 (spec 5.9): a query error's message carries its params, so an unhandled error logs its

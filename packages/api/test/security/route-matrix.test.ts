@@ -43,7 +43,6 @@ const openapi = JSON.parse(
  * asserts each answers 404. A route leaves this list when its handler mounts and gets a CALLS row.
  */
 const CONTRACT_ONLY: ReadonlyMap<string, string> = new Map([
-  ["listAdminAudit", "GET /api/v1/admin/audit"],
   ["exportAdminAudit", "GET /api/v1/admin/audit/export"],
   ["getAdminQuery", "GET /api/v1/admin/queries/{correlationId}"],
 ]);
@@ -118,6 +117,8 @@ interface Call {
   params?: Record<string, string>;
   body?: (f: Fixture) => unknown;
   headers?: Record<string, string>;
+  /** A query string the request carries, built at call time (an audit window ends now). */
+  query?: () => Record<string, string>;
   /** The status an allowed caller gets, in the table's order on one fresh app. */
   ok: number;
   /** The error code an allowed caller's non-2xx ok status must carry (#505 T29 Q1). */
@@ -162,6 +163,11 @@ const CALLS: Record<string, Call> = {
   disableAdminUser: { params: { id: "target" }, ok: 200 },
   getQuery: { params: { correlationId: "ownQuery" }, ok: 200 },
   listQueries: { ok: 200 },
+  // #711: a one-hour window ending now; an allowed caller gets a page and writes auditViewed.
+  listAdminAudit: {
+    query: () => ({ from: String(Date.now() - 3_600_000), to: String(Date.now()) }),
+    ok: 200,
+  },
 };
 
 /**
@@ -188,7 +194,8 @@ async function seedQuery(db: Db, userId: string): Promise<string> {
 }
 
 function pathOf(op: Operation, call: Call, f: Fixture): string {
-  return op.path.replace(/\{([A-Za-z]+)\}/g, (_m, name: string) => {
+  const query = call.query ? `?${new URLSearchParams(call.query())}` : "";
+  return `${op.path.replace(/\{([A-Za-z]+)\}/g, (_m, name: string) => {
     const v = call.params?.[name];
     if (v === "target") return f.targetId;
     if (v === "targetSession") return f.targetSessionId;
@@ -196,7 +203,7 @@ function pathOf(op: Operation, call: Call, f: Fixture): string {
     if (v === "targetQuery") return f.targetQueryId;
     if (v === undefined) throw new Error(`no ${name} for ${op.id}`);
     return v;
-  });
+  })}${query}`;
 }
 
 const ROLE_CALLERS = ["anonymous", "user", "trainingOfficer", "implementer", "admin"] as const;

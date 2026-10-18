@@ -62,7 +62,7 @@ The status cell follows the `status` field of the route contract (`routes.ts`).
 | POST | `/api/v1/queries` | session | yes | live | 202, 400, 401, 403, 409, 413, 429, 500, 503 |
 | GET | `/api/v1/queries` | sessionOwn | no | live | 200, 400, 401, 403 |
 | GET | `/api/v1/queries/{correlationId}` | policy | no | live | 200, 401, 403, 404 |
-| GET | `/api/v1/admin/audit` | admin | no | planned | 200, 400, 401, 403 |
+| GET | `/api/v1/admin/audit` | admin | no | live | 200, 400, 401, 403 |
 | GET | `/api/v1/admin/audit/export` | admin | no | planned | 200, 400, 401, 403 |
 | GET | `/api/v1/admin/queries/{correlationId}` | admin | no | planned | 200, 400, 401, 403, 404 |
 | GET | `/api/v1/admin/config` | configEditor | no | live | 200, 401, 403 |
@@ -89,7 +89,7 @@ What each route does:
 | `GET /config` | The `ClientSiteConfig` allowlist. Never carries `Source.server`, `auth`, `retention`, `extends` or mock data. |
 | `GET /queries` | The caller's own requests, newest first, `cursor` and `limit` (default 25, at most 100); parts nested with per-source status and no values or payloads. See "Reading queries". |
 | `GET /queries/{correlationId}` | One of the caller's requests with its submitted values and, for each `returned` source, its payload; anyone else's request, an unknown id, or a malformed id is `404 notFound` (the id's shape is no oracle); a shredded part or result answers `purged: true` with no values or payload. See "Reading queries". |
-| `GET /admin/audit` | Planned, admin. Filters `user` (actor or credential owner), `correlationId`, `type`; `from` and `to` required, at most 31 days apart; `cursor`; `limit` at most 200. Rows go through a tolerant read schema so rows written before later fields still parse. |
+| `GET /admin/audit` | Admin, behind the `adminAudit` feature. Filters `user` (actor or credential owner), `correlationId`, `type`; `from` and `to` required (epoch ms, inclusive), at most 31 days apart; `cursor` (the previous page's `nextCursor`); `limit` (default 50, at most 200). Newest first. Each page writes one `auditViewed` row (filters, cursor, row count) after the read; an audit write failure answers `500 internal` with no rows. Rows go through a tolerant read schema so rows written before later fields still parse. |
 | `GET /admin/audit/export` | Planned, admin. The same filters as NDJSON (`application/x-ndjson`), one audit row per line. Each line is one JSON object in the `AuditExportLineSchema` shape, the same tolerant row the page returns: `id`, `type`, `at` (epoch ms), optional `correlationId` and `partId`, `actor { id, email, role }`, optional `credentialUserId`, `identitySource`, optional `hostSubject`, and `details` (identifiers and metadata only). |
 | `GET /admin/queries/{correlationId}` | Planned, admin. A request with payloads; `includeHidden=true` adds hidden results. |
 | `GET /me/preferences` | The caller's own preference row: `themeMode`, `personaOverride`, `layout`. Each is `null` when unset. |
