@@ -1986,10 +1986,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   table-layout: fixed;
 }
 
+/* Cells are set in the small size and the columns share the narrow editor (about 345 px at 1366) so
+   no cell of the shipped site needs more than two lines (re-walk R17, #698). */
 .qm-wins__table :where(th, td) {
   min-inline-size: 0;
-  padding-inline: var(--qm-space-2);
-  font-size: var(--qm-type-size-sm);
+  padding-inline: var(--qm-space-1);
+  font-size: var(--qm-type-size-xs);
   overflow-wrap: anywhere;
 }
 
@@ -2011,23 +2013,33 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 /* The Why column carries the longest text (the score and its reason), so it gets the most. */
 .qm-wins__table th:nth-child(1) {
-  inline-size: 25%;
+  inline-size: 22%;
 }
 
 .qm-wins__table th:nth-child(2) {
-  inline-size: 21%;
+  inline-size: 17%;
 }
 
 .qm-wins__table th:nth-child(3) {
-  inline-size: 26%;
+  inline-size: 31%;
 }
 
 .qm-wins__table th:nth-child(4) {
-  inline-size: 28%;
+  inline-size: 30%;
 }
 
-/* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
+/* Try a match: the answer is one bordered panel (outcome row, toggle, result, #698 (h)); the answer toggle is a dense control (36 px); a long payload line wraps inside the
    pane instead of scrolling it sideways (T12-7). */
+.qm-try__outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  padding: var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
 .qm-try__toggle {
   align-self: flex-start;
 }

@@ -151,7 +151,7 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
     sourceId === undefined || config === null
       ? ""
       : answer === null || response === undefined || result === undefined
-        ? t("admin.mock.try.none")
+        ? t("admin.mock.try.none", { source: sourceName(sourceId), type: typeName(code ?? "") })
         : answer.scenarioIndex === null
           ? t("admin.mock.try.announceDefault", { result: resultWord })
           : t("admin.mock.try.announceScenario", {
@@ -257,9 +257,11 @@ export function TryMatchPane({ doc, selected }: { doc: JsonObject; selected: str
             {config === null ? (
               <p className="qm-preview__state">{t("admin.mock.try.paused")}</p>
             ) : answer === null || response === undefined || result === undefined ? (
-              <p className="qm-preview__state">{t("admin.mock.try.none")}</p>
+              <p className="qm-preview__state">
+                {t("admin.mock.try.none", { source: sourceName(sourceId), type: typeName(code ?? "") })}
+              </p>
             ) : (
-              <div className="qm-try__answer">
+              <div className="qm-try__outcome" data-testid="try-outcome">
                 {sameType > 1 && (
                   <p>{t("admin.mock.try.response", { n: answer.responseIndex + 1 })}</p>
                 )}
