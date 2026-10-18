@@ -80,7 +80,8 @@ key is a validation error. A feature that is off hides its UI and its routes ans
 | `adminUsers` | The admin user routes and the Users page | Live. On in the shipped default site. |
 
 A flag that gates unfinished work stays off in every shipped site until its acceptance tests pass
-on `main`.
+on `main`. One exception: `adminAudit` ships on during M2 P2 (D-M2P2-1), and its routes answer
+`404` until they mount.
 
 ## Example: the vehicle plate query
 
