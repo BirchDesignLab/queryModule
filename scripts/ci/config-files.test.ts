@@ -45,12 +45,7 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
       expect(r.errors).toEqual([]);
       // The shipped sites mark their form-only fields formOnly (VEH plateType and plateColor, PRO
       // make, caliber and description), so no required-without-position warning remains.
-      // example-ok keeps a thin mock (it demos fewer scenarios), so its card paths that no mock
-      // answer carries warn (spec 4.5); the other shipped sites resolve every path.
-      const own = r.warnings.filter(
-        (w) => !(rel === "sites/example-ok.json" && w.key === "config.mappingPathUnresolved"),
-      );
-      expect(own).toEqual([]);
+      expect(r.warnings).toEqual([]);
     });
   }
 

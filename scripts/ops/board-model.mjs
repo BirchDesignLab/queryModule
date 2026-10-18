@@ -199,6 +199,36 @@ export function bodyUpdate(existing, desired) {
   return normalise(existing) === normalise(desired) ? null : desired;
 }
 
+/** The last line of a phase parent's generated body; text below it is added by hand. */
+const PHASE_BODY_TRAILER = "Grid and handoffs:";
+
+/**
+ * #743: like bodyUpdate, but for a phase parent that carries hand-added text (checklists) below
+ * its generated body. Returns null when the existing body is the generated text, with or without
+ * added text after it. When the generated part changed, returns the new generated body followed
+ * by the old added text, cut at the end of the existing trailer line. An existing body with no
+ * trailer line has no known cut, so it is replaced whole.
+ * @param {string} existing
+ * @param {string} desired
+ * @returns {string | null}
+ */
+export function phaseBodyUpdate(existing, desired) {
+  const normalise = (s) =>
+    s
+      .replace(/\r\n/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/[ \t]+$/, ""))
+      .join("\n");
+  const have = normalise(existing);
+  const want = normalise(desired);
+  if (have === want || have.startsWith(`${want}\n`)) return null;
+  const at = have.indexOf(PHASE_BODY_TRAILER);
+  if (at === -1) return desired;
+  const lineEnd = have.indexOf("\n", at);
+  const tail = lineEnd === -1 ? "" : have.slice(lineEnd);
+  return `${want}${tail}`;
+}
+
 /**
  * #96 G-M4, refined by the #193 checker ruling: a follow-up number in the board
  * data may only adopt a live issue whose `follow-up` label agrees with the

@@ -637,7 +637,9 @@ sides and prints one line per change from the tag to the working tree: `+` added
 changed or reordered, each with its path and the values as the diff module renders them. A target
 absent at the tag prints `new file`; an unchanged one prints `no changes`. It exits 0 when both
 sides validate, 1 when one does not, and 2 for a tag that is missing, malformed or unknown. Use it
-to write release notes (spec 12.7).
+to write release notes (spec 12.7). Limits: a file removed since the tag is not listed (targets come from
+the working tree), and the tag's copy is validated with the current code and clock, so a config that
+was valid at the tag can report an error today (exit 1).
 
 `config:migrate` applies the migration steps in order and writes the file in place, printing one
 `migrated <file>: <from> -> <to>` line per step. With nothing to do it says the file is already at

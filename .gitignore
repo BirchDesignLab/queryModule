@@ -13,3 +13,5 @@ licences.json
 .smoke/
 # Local workflow scratch (ledgers, review working files); handoffs and other reusable records go in docs/
 /.superpowers/
+# Vitest reporter output (for example --reporter=json); never committed
+.vitest/
