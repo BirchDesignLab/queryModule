@@ -4,7 +4,7 @@ import {
   AuditReadRowSchema,
   EpochMsSchema,
 } from "@querymodule/core/contracts";
-import { and, desc, eq, gte, lt, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, lt, lte, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db/client";
 import { auditEvent } from "../db/schema";
@@ -12,6 +12,15 @@ import type { Tx } from "../db/tx";
 
 /** The admin audit page size when the request names none (spec 5.1); the contract caps it at 200. */
 export const AUDIT_PAGE_DEFAULT_LIMIT = 50;
+
+/**
+ * The export row cap (spec 5.1 is silent; a planner default): a filtered set above it answers 400
+ * audit.exportTooLarge before anything is audited or streamed, so the admin narrows the window.
+ */
+export const AUDIT_EXPORT_MAX_ROWS = 100_000;
+
+/** Rows per export read; each batch is one query and one stream chunk. */
+export const AUDIT_EXPORT_BATCH = 500;
 
 /** The page filters (spec 5.1): `user` is the actor OR the credential owner; window inclusive. */
 export type AuditFilter = {
@@ -75,6 +84,19 @@ function toReadRow(r: Row): AuditReadRow {
   return parsed.data;
 }
 
+/** The filter conditions the page and the export share: window inclusive, user actor OR owner. */
+function filterWhere(f: AuditFilter): SQL | undefined {
+  return and(
+    gte(auditEvent.at, f.from),
+    lte(auditEvent.at, f.to),
+    f.user === undefined
+      ? undefined
+      : or(eq(auditEvent.actorUserId, f.user), eq(auditEvent.credentialUserId, f.user)),
+    f.correlationId === undefined ? undefined : eq(auditEvent.correlationId, f.correlationId),
+    f.type === undefined ? undefined : eq(auditEvent.type, f.type),
+  );
+}
+
 /**
  * One admin audit page (spec 5.1; SEC-012): newest first by (at DESC, id DESC), `at` within
  * [from, to] inclusive. `user` matches actor_user_id OR credential_user_id (two index scans over
@@ -94,13 +116,7 @@ export async function readAuditPage(
     .from(auditEvent)
     .where(
       and(
-        gte(auditEvent.at, f.from),
-        lte(auditEvent.at, f.to),
-        f.user === undefined
-          ? undefined
-          : or(eq(auditEvent.actorUserId, f.user), eq(auditEvent.credentialUserId, f.user)),
-        f.correlationId === undefined ? undefined : eq(auditEvent.correlationId, f.correlationId),
-        f.type === undefined ? undefined : eq(auditEvent.type, f.type),
+        filterWhere(f),
         cursor === null
           ? undefined
           : or(
@@ -116,4 +132,44 @@ export async function readAuditPage(
   const nextCursor =
     rows.length > limit && last ? encodeAuditCursor({ at: last.at, id: last.id }) : null;
   return { events: page.map(toReadRow), nextCursor };
+}
+
+/**
+ * The export bound (spec 5.1, 4.7; SEC-012): in one statement, `maxId` is the highest id in the
+ * table now (0 when empty) and `count` the filtered rows. One statement reads one snapshot, so
+ * every counted row has id <= maxId. Rows are append-only and ids only increase (triggers 0001),
+ * so the rows later streamed with id <= maxId are exactly the `count` the route audits.
+ */
+export async function countAuditExport(
+  db: Db | Tx,
+  f: AuditFilter,
+): Promise<{ maxId: number; count: number }> {
+  // An aggregate without GROUP BY answers exactly one row, so the tuple type is exact.
+  const [row] = (await db
+    .select({
+      count: count(),
+      maxId: sql<number>`coalesce((SELECT max(${auditEvent.id}) FROM ${auditEvent}), 0)`,
+    })
+    .from(auditEvent)
+    .where(filterWhere(f))) as [{ count: number; maxId: number }];
+  return { maxId: Number(row.maxId), count: row.count };
+}
+
+/**
+ * One export batch: the filtered rows with afterId < id <= maxId, oldest first by id, at most
+ * `limit`. Each row parses with the tolerant read schema (AuditExportLineSchema is the same
+ * schema); a refused row throws AuditRowReadError naming its id only.
+ */
+export async function readAuditExportBatch(
+  db: Db | Tx,
+  f: AuditFilter,
+  at: { afterId: number; maxId: number; limit: number },
+): Promise<AuditReadRow[]> {
+  const rows = await db
+    .select()
+    .from(auditEvent)
+    .where(and(filterWhere(f), gt(auditEvent.id, at.afterId), lte(auditEvent.id, at.maxId)))
+    .orderBy(asc(auditEvent.id))
+    .limit(at.limit);
+  return rows.map(toReadRow);
 }

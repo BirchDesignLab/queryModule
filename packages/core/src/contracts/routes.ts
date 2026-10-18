@@ -535,7 +535,7 @@ const ROUTE_DEFS = [
     summary: "The same filters as a NDJSON stream, one audit row per line; writes auditExported",
     access: "admin",
     since: "m2",
-    status: "planned",
+    status: "live",
     feature: "adminAudit",
     requiresRequestedWith: false,
     request: { query: AdminAuditExportQuerySchema },

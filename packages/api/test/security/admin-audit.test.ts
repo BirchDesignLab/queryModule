@@ -60,11 +60,15 @@ async function seeded(o: { siteConfig?: string } = {}) {
     await record(a, logout(TRAINEE, "user")),
     await record(a, logout(TRAINEE, "user")),
   ];
-  const get = (q: Record<string, string | number>, who: Parameters<typeof a.call>[0] = "admin") =>
+  const get = (
+    q: Record<string, string | number>,
+    who: Parameters<typeof a.call>[0] = "admin",
+    path = PATH,
+  ) =>
     a.call(
       who,
       "GET",
-      `${PATH}?${new URLSearchParams(Object.entries(q).map(([k, v]): [string, string] => [k, String(v)]))}`,
+      `${path}?${new URLSearchParams(Object.entries(q).map(([k, v]): [string, string] => [k, String(v)]))}`,
     );
   const page = async (q: Record<string, string | number>) => {
     const r = await get(q);
@@ -72,7 +76,20 @@ async function seeded(o: { siteConfig?: string } = {}) {
     return AdminAuditPageSchema.parse(await r.json());
   };
   const viewed = () => a.t.auditRows("auditViewed");
-  return { a, window, correlationId, officerLogout, dispatched, traineeLogouts, get, page, viewed };
+  /** Both read audit types: a refused page or export writes neither. */
+  const readAudits = async () => [...(await viewed()), ...(await a.t.auditRows("auditExported"))];
+  return {
+    a,
+    window,
+    correlationId,
+    officerLogout,
+    dispatched,
+    traineeLogouts,
+    get,
+    page,
+    viewed,
+    readAudits,
+  };
 }
 
 describe("spec 5.1 GET /api/v1/admin/audit filters", () => {
@@ -310,7 +327,8 @@ describe("spec 5.1 GET /api/v1/admin/audit refusals (#561 Q2, #690 m1 m3)", () =
   });
 });
 
-describe("ADR-0011 item 6 GET /api/v1/admin/audit access", () => {
+// #712: the export answers the same guard as the page.
+describe.each([PATH, `${PATH}/export`])("ADR-0011 item 6 GET %s access", (path) => {
   it("implementer, trainingOfficer and user 403 forbidden; anonymous 401; no auditViewed", async () => {
     const s = await seeded();
     const want = {
@@ -320,12 +338,12 @@ describe("ADR-0011 item 6 GET /api/v1/admin/audit access", () => {
       anonymous: [401, "unauthenticated"],
     } as const;
     for (const [who, [status, code]] of Object.entries(want)) {
-      const r = await s.get(s.window, who as keyof typeof want);
+      const r = await s.get(s.window, who as keyof typeof want, path);
       expect(r.status, who).toBe(status);
       expect(r.headers.get("cache-control"), who).toBe("no-store");
       expect((await errorOf(r)).code, who).toBe(code);
     }
-    expect(await s.viewed()).toEqual([]);
+    expect(await s.readAudits()).toEqual([]);
   }, 30_000);
 
   it("a user who still holds a temporary password gets 403 passwordChangeRequired", async () => {
@@ -338,28 +356,29 @@ describe("ADR-0011 item 6 GET /api/v1/admin/audit access", () => {
     const { temporaryPassword } = CreateUserResponseSchema.parse(await created.json());
     const cookie = await s.a.t.cookieFor("fresh-audit@example.test", temporaryPassword);
     const r = await s.a.t.request(
-      `${PATH}?${new URLSearchParams({ from: String(s.window.from), to: String(s.window.to) })}`,
+      `${path}?${new URLSearchParams({ from: String(s.window.from), to: String(s.window.to) })}`,
       { headers: { cookie } },
     );
     expect(r.status).toBe(403);
     expect((await errorOf(r)).code).toBe("passwordChangeRequired");
-    expect(await s.viewed()).toEqual([]);
+    expect(await s.readAudits()).toEqual([]);
   });
 
   it("adminAudit off: an admin and anonymous get 404 notFound", async () => {
     const s = await seeded({ siteConfig: FLAGS_OFF });
     for (const who of ["admin", "anonymous"] as const) {
-      const r = await s.get(s.window, who);
+      const r = await s.get(s.window, who, path);
       expect(r.status, who).toBe(404);
       expect((await errorOf(r)).code, who).toBe("notFound");
     }
-    expect(await s.viewed()).toEqual([]);
+    expect(await s.readAudits()).toEqual([]);
   });
 
   it("a 200 carries Cache-Control: no-store", async () => {
     const s = await seeded();
-    const r = await s.get(s.window);
+    const r = await s.get(s.window, "admin", path);
     expect(r.status).toBe(200);
     expect(r.headers.get("cache-control")).toBe("no-store");
+    await r.text();
   });
 });

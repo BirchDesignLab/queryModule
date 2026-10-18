@@ -43,7 +43,6 @@ const openapi = JSON.parse(
  * asserts each answers 404. A route leaves this list when its handler mounts and gets a CALLS row.
  */
 const CONTRACT_ONLY: ReadonlyMap<string, string> = new Map([
-  ["exportAdminAudit", "GET /api/v1/admin/audit/export"],
   ["getAdminQuery", "GET /api/v1/admin/queries/{correlationId}"],
 ]);
 
@@ -165,6 +164,11 @@ const CALLS: Record<string, Call> = {
   listQueries: { ok: 200 },
   // #711: a one-hour window ending now; an allowed caller gets a page and writes auditViewed.
   listAdminAudit: {
+    query: () => ({ from: String(Date.now() - 3_600_000), to: String(Date.now()) }),
+    ok: 200,
+  },
+  // #712: the same window; an allowed caller gets an NDJSON stream and writes auditExported.
+  exportAdminAudit: {
     query: () => ({ from: String(Date.now() - 3_600_000), to: String(Date.now()) }),
     ok: 200,
   },
