@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   type AuditEvent,
@@ -223,6 +224,12 @@ describe("spec 5.1 GET /api/v1/admin/audit/export refusals", () => {
       { from: to, to: from },
       { from: "", to },
       { from, to: "" },
+      // Only plain digits: whitespace, hex and exponent forms coerce to numbers (AW2 critic W1).
+      // Each pair alone would pass the window rule once coerced.
+      { from: " ", to: " " },
+      { from: "0x10", to: "0x20" },
+      { from: "1e3", to: "2e3" },
+      { from: " 1000", to: "2000" },
       { to },
       { from, to, type: "zzNotAType" },
       { from, to, user: "zz bad user" },
@@ -390,5 +397,14 @@ describe("spec 5.1 audit export reader", () => {
     expect(await ids(4, 6, 4)).toEqual([5, 6]);
     expect(await ids(2, 4, 10)).toEqual([3, 4]);
     expect(await ids(6, 6, 4)).toEqual([]);
+  });
+});
+
+describe("NFR-001 the export refusal key has an en string (AW2 review T4)", () => {
+  it("audit.exportTooLarge is in packages/config/locales/en.json", () => {
+    const en = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, "../../../config/locales/en.json"), "utf8"),
+    ) as Record<string, string>;
+    expect(en["audit.exportTooLarge"]).toMatch(/\S/);
   });
 });

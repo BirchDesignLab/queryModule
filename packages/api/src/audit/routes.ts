@@ -54,9 +54,15 @@ const fieldError = (field: string): ValidationError[] => [
   { key: "validation.invalidBody", params: { field } },
 ];
 
-/** An empty from= or to= is 400: the epoch coercion would read it as 0 (#561 Q2). */
-function emptyWindowField(raw: Record<string, string>): "from" | "to" | null {
-  for (const field of ["from", "to"] as const) if (raw[field] === "") return field;
+/**
+ * A present from= or to= that is not plain digits is 400: the epoch coercion would read an empty
+ * or blank value as 0 and accept hex or exponent forms (#561 Q2, AW2 critic W1).
+ */
+function badWindowField(raw: Record<string, string>): "from" | "to" | null {
+  for (const field of ["from", "to"] as const) {
+    const v = raw[field];
+    if (v !== undefined && !/^\d+$/.test(v)) return field;
+  }
   return null;
 }
 
@@ -137,8 +143,8 @@ export function mountAdminAuditRoutes(app: Hono<AppEnv>, d: AppDeps): void {
 
   app.get(PATH, guard, async (c) => {
     const raw = c.req.query();
-    const empty = emptyWindowField(raw);
-    if (empty) return apiError(c, "validationFailed", undefined, fieldError(empty));
+    const badWindow = badWindowField(raw);
+    if (badWindow) return apiError(c, "validationFailed", undefined, fieldError(badWindow));
     const q = AdminAuditQuerySchema.safeParse(raw);
     if (!q.success) return apiError(c, "validationFailed", undefined, queryErrors(q.error.issues));
     const cursor = q.data.cursor === undefined ? null : decodeAuditCursor(q.data.cursor);
@@ -209,8 +215,8 @@ export function mountAdminAuditRoutes(app: Hono<AppEnv>, d: AppDeps): void {
 
   app.get(EXPORT_PATH, guard, async (c) => {
     const raw = c.req.query();
-    const empty = emptyWindowField(raw);
-    if (empty) return apiError(c, "validationFailed", undefined, fieldError(empty));
+    const badWindow = badWindowField(raw);
+    if (badWindow) return apiError(c, "validationFailed", undefined, fieldError(badWindow));
     const q = AdminAuditExportQuerySchema.safeParse(raw);
     if (!q.success) return apiError(c, "validationFailed", undefined, queryErrors(q.error.issues));
     const filter = filterOf(q.data);

@@ -544,7 +544,9 @@ const ROUTE_DEFS = [
         description:
           "application/x-ndjson; each line is one AuditExportLineSchema row (docs/api.md)",
       },
-      400: error("Malformed filters, or a window over 31 days (validationFailed)"),
+      400: error(
+        "Malformed filters, a window over 31 days, or over 100,000 rows (validationFailed; audit.exportTooLarge)",
+      ),
       ...adminErrors,
     },
   },

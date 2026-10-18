@@ -196,6 +196,10 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     expect(findRoute("exportAdminAudit").responses[200]?.description).toMatch(
       /AuditExportLineSchema.*docs\/api\.md/,
     );
+    // The over-cap refusal is named in the contract, not only in docs/api.md (AW2 review T4 S1).
+    expect(findRoute("exportAdminAudit").responses[400]?.description).toMatch(
+      /audit\.exportTooLarge/,
+    );
   });
 
   it("SEC-012, D-M2P2-1: the admin audit and admin query routes sit behind the adminAudit feature", () => {

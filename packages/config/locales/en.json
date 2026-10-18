@@ -69,6 +69,7 @@
   "validation.unknownField": "The field {field} does not exist for this query type.",
   "validation.unknownQueryType": "This query type does not exist.",
   "validation.invalidBody": "The request could not be read.",
+  "audit.exportTooLarge": "Too many audit rows to export. Narrow the date range.",
   "validation.idempotencyKey": "The request is missing its submit key.",
   "validation.modeMismatch": "The form changed while submitting. Check it and submit again.",
   "terminal.emptyInput": "Type a command.",

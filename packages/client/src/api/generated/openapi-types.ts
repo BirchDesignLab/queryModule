@@ -2464,7 +2464,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Malformed filters, or a window over 31 days (validationFailed) */
+            /** @description Malformed filters, a window over 31 days, or over 100,000 rows (validationFailed; audit.exportTooLarge) */
             400: {
                 headers: {
                     [name: string]: unknown;

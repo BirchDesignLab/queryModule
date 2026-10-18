@@ -3,7 +3,7 @@ import { AUDIT_PAGE_MAX_LIMIT, AuditCursorSchema, AuditEventTypeSchema } from ".
 import { BoundedIdSchema, EpochMsSchema, Uuid7Schema } from "./primitives";
 
 /**
- * Admin audit read routes (spec 5.1; SEC-012). Contract only until the handlers mount.
+ * Admin audit read routes (spec 5.1; SEC-012), live since M2 P2 AW2 (#711, #712).
  * Stored rows written before M2 lack later fields, so responses use a tolerant read schema
  * (a strict response parse would 500 on an old row). Details hold identifiers and metadata
  * only, never query values or payloads (spec 5.5).
