@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { useT } from "../app/i18n-context.js";
 import type { CardsSite, CardWin } from "./cards-model.js";
 import { cardWins } from "./cards-model.js";
@@ -89,12 +89,18 @@ export function WinsTable({
     labelText(asObjects(doc.sources).find((x) => str(x.id) === id)?.labelKey) || id;
   const personaName = (key: string) =>
     labelText(asObjects(doc.personas).find((x) => str(x.key) === key)?.labelKey) || key;
-  const why = (w: CardWin): string => {
+  // The score is a value, so it is set in the data face; the reason after it is plain words.
+  const why = (w: CardWin): ReactNode => {
     const parts: string[] = w.reasons.map((r) => t(`admin.cards.wins.why.${r}`));
     if (w.byOrder || (parts.length === 0 && w.fitting > 1))
       parts.push(t("admin.cards.wins.why.order"));
     if (parts.length === 0) parts.push(t("admin.cards.wins.why.only"));
-    return t("admin.cards.wins.score", { score: w.score, why: parts.join(", ") });
+    return (
+      <>
+        <span className="qm-wins__score">{t("admin.cards.wins.score", { score: w.score })}</span>
+        {t("admin.cards.wins.scoreWhy", { why: parts.join(", ") })}
+      </>
+    );
   };
   return (
     <Sect wide title={t("admin.cards.wins.title")} hint={t("admin.cards.wins.hint")}>
