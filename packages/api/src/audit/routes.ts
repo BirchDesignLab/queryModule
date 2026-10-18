@@ -55,11 +55,15 @@ const fieldError = (field: string): ValidationError[] => [
 ];
 
 /**
- * A present from= or to= that is not plain digits is 400: the epoch coercion would read an empty
- * or blank value as 0 and accept hex or exponent forms (#561 Q2, AW2 critic W1).
+ * A present numeric parameter (from=, to=, and the page's limit=) that is not plain digits is
+ * 400: the number coercion would read an empty or blank value as 0 and accept hex or exponent
+ * forms (#561 Q2, AW2 critic W1, #755).
  */
-function badWindowField(raw: Record<string, string>): "from" | "to" | null {
-  for (const field of ["from", "to"] as const) {
+function badNumberField<F extends string>(
+  raw: Record<string, string>,
+  fields: readonly F[],
+): F | null {
+  for (const field of fields) {
     const v = raw[field];
     if (v !== undefined && !/^\d+$/.test(v)) return field;
   }
@@ -143,8 +147,8 @@ export function mountAdminAuditRoutes(app: Hono<AppEnv>, d: AppDeps): void {
 
   app.get(PATH, guard, async (c) => {
     const raw = c.req.query();
-    const badWindow = badWindowField(raw);
-    if (badWindow) return apiError(c, "validationFailed", undefined, fieldError(badWindow));
+    const badNumber = badNumberField(raw, ["from", "to", "limit"] as const);
+    if (badNumber) return apiError(c, "validationFailed", undefined, fieldError(badNumber));
     const q = AdminAuditQuerySchema.safeParse(raw);
     if (!q.success) return apiError(c, "validationFailed", undefined, queryErrors(q.error.issues));
     const cursor = q.data.cursor === undefined ? null : decodeAuditCursor(q.data.cursor);
@@ -215,8 +219,8 @@ export function mountAdminAuditRoutes(app: Hono<AppEnv>, d: AppDeps): void {
 
   app.get(EXPORT_PATH, guard, async (c) => {
     const raw = c.req.query();
-    const badWindow = badWindowField(raw);
-    if (badWindow) return apiError(c, "validationFailed", undefined, fieldError(badWindow));
+    const badNumber = badNumberField(raw, ["from", "to"] as const);
+    if (badNumber) return apiError(c, "validationFailed", undefined, fieldError(badNumber));
     const q = AdminAuditExportQuerySchema.safeParse(raw);
     if (!q.success) return apiError(c, "validationFailed", undefined, queryErrors(q.error.issues));
     const filter = filterOf(q.data);

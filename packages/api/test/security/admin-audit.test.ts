@@ -198,6 +198,10 @@ describe("spec 5.1 GET /api/v1/admin/audit refusals (#561 Q2, #690 m1 m3)", () =
       { from, to, limit: "" },
       { from, to, limit: 0 },
       { from, to, limit: 201 },
+      // limit takes plain digits too: hex and exponent forms coerce to numbers (#755).
+      { from, to, limit: "0x10" },
+      { from, to, limit: "1e1" },
+      { from, to, limit: " 10" },
       { from, to, type: "zzNotAType" },
       { from, to, user: "zz bad user" },
       { from, to, correlationId: "zz-not-a-uuid" },
