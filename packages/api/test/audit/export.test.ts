@@ -217,7 +217,8 @@ describe("spec 5.1 GET /api/v1/admin/audit/export refusals", () => {
   });
 
   it("over the cap answers 400 exportTooLarge and writes nothing; at the cap it streams", async () => {
-    capState.cap = 50;
+    // One full batch: the stream at the cap ends on an empty batch, which audit/** coverage needs.
+    capState.cap = AUDIT_EXPORT_BATCH;
     onTestFinished(() => {
       capState.cap = undefined;
     });
