@@ -63,6 +63,11 @@ export interface RequestSource {
   sourceId: string;
   status: HeldSourceStatus;
   result?: { payload: Record<string, unknown> };
+  /**
+   * Retention removed this source's payload (spec 5.5): it returned, and no payload will come. Set
+   * from a fetched detail only; absent otherwise.
+   */
+  purged?: true;
 }
 
 /** A part of the 202 with its sources: every dispatched pair starts pending, a skipped part has none. */
@@ -74,6 +79,12 @@ export type RequestPart = SubmitQueryResponse["parts"][number] & {
    * client data like the payloads: memory only, never logged or announced, gone with the row.
    */
   values?: Readonly<Record<string, unknown>>;
+  /**
+   * Retention removed this part's values (spec 5.5, set from a fetched detail only). Its type
+   * values (role `type`, such as the property type) are all that is left of what was typed.
+   */
+  purged?: true;
+  typeValues?: Readonly<Record<string, string>>;
 };
 
 export interface StatusSummary {
@@ -252,14 +263,24 @@ function mergeDetail(
         moved = true;
         changed = true;
       }
+      // Retention took this payload (spec 5.5): the mark is all the client holds of it.
+      const gainsPurged = remote.purged && local.purged !== true;
+      const purgedMark = gainsPurged ? { purged: true as const } : {};
+      if (gainsPurged) changed = true;
       if (local.result === undefined && remote.payload !== undefined && status === "returned") {
         changed = true;
-        return { ...local, status, result: { payload: remote.payload } };
+        return { ...local, status, ...purgedMark, result: { payload: remote.payload } };
       }
-      return status === local.status ? local : { ...local, status };
+      return status === local.status && !gainsPurged ? local : { ...local, status, ...purgedMark };
     });
     const gainsValues = part.values === undefined && fetched.values !== undefined;
     if (gainsValues) changed = true;
+    // Values purged: what is left is the type values.
+    const gainsPurgedPart = fetched.purged && part.purged !== true;
+    if (gainsPurgedPart) changed = true;
+    const purgedPart = gainsPurgedPart
+      ? { purged: true as const, typeValues: fetched.typeValues }
+      : {};
     const same =
       part.origin === fetched.origin &&
       part.parentPartId === fetched.parentPartId &&
@@ -267,10 +288,11 @@ function mergeDetail(
     if (!same) changed = true;
     const values = gainsValues && fetched.values !== undefined ? { values: fetched.values } : {};
     return same
-      ? { ...part, ...values, sources }
+      ? { ...part, ...values, ...purgedPart, sources }
       : {
           ...part,
           ...values,
+          ...purgedPart,
           origin: fetched.origin,
           parentPartId: fetched.parentPartId,
           skipReasons: fetched.skipReasons,
@@ -292,9 +314,11 @@ function placeholderParts(detail: QueryDetail): RequestPart[] {
     droppedSourceIds: part.droppedSourceIds,
     skipReasons: part.skipReasons,
     ...(part.values === undefined ? {} : { values: part.values }),
+    ...(part.purged ? { purged: true as const, typeValues: part.typeValues } : {}),
     sources: part.sources.map((source) => ({
       sourceId: source.sourceId,
       status: source.status,
+      ...(source.purged ? { purged: true as const } : {}),
       ...(source.status === "returned" && source.payload !== undefined
         ? { result: { payload: source.payload } }
         : {}),
@@ -314,13 +338,21 @@ function overlay(
     return {
       ...part,
       ...(part.values === undefined && known.values !== undefined ? { values: known.values } : {}),
+      ...(known.purged === true
+        ? { purged: true as const, ...(known.typeValues ? { typeValues: known.typeValues } : {}) }
+        : {}),
       sources: part.sources.map((local) => {
         const other = known.sources.find((s) => s.sourceId === local.sourceId);
         if (other === undefined) return local;
         const status = local.status === "pending" ? other.status : local.status;
         if (status !== local.status) moved = true;
         const result = local.result ?? (status === "returned" ? other.result : undefined);
-        return { ...local, status, ...(result === undefined ? {} : { result }) };
+        return {
+          ...local,
+          status,
+          ...(result === undefined ? {} : { result }),
+          ...(other.purged === true ? { purged: true as const } : {}),
+        };
       }),
     };
   });

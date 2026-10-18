@@ -715,8 +715,26 @@ h1 {
 }
 
 .qm-request__type {
+  margin: 0;
   color: var(--qm-color-accent);
+  font-size: inherit;
   font-weight: 600;
+}
+
+/* A request whose values were purged (spec 5.5): the kept type values sit in the summary, and this
+   pill words the rest. The dashed edge and the words carry it, so it needs no colour. */
+.qm-request__purged {
+  padding-inline: var(--qm-space-2);
+  border: var(--qm-border-width) dashed var(--qm-color-border);
+  border-radius: var(--qm-radius-control);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* The reason an action is off, in text beside it (D-M2P2-B4). */
+.qm-request__why {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
 }
 
 .qm-request__badges {
@@ -1449,6 +1467,21 @@ h1 {
 .qm-card__note {
   margin: 0;
   color: var(--qm-color-text-muted);
+}
+
+/* A purged result (spec 5.5): a dashed edge in the border colour, so it shows in Day and Red shift,
+   and the words "Purged under retention"; no severity edge, no badge. */
+.qm-card--purged {
+  border-style: dashed;
+  background: var(--qm-color-surface-base);
+}
+
+.qm-card__purged {
+  display: flex;
+  align-items: center;
+  gap: var(--qm-space-2);
+  margin: 0;
+  font-weight: 600;
 }
 
 .qm-card__detail {
