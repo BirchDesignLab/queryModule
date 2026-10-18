@@ -73,6 +73,12 @@ export interface SubmitControllerOptions {
   random?: () => number;
   /** When it reports offline the controller goes noConnection. */
   online?: PlatformSignal;
+  /**
+   * Called once for each 202, a replayed one included (the server counts the first receipt only,
+   * NFR-004): the composition root sends `ackReceipt` from it. A throw in it never changes the
+   * outcome. Gets the response; the caller must not keep or log it.
+   */
+  onAcknowledged?: (response: SubmitQueryResponse) => void;
 }
 
 const HEALTH_BASE_MS = 1000;
@@ -264,6 +270,11 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
       let outcome: SubmitOutcome;
       if (status === 202 && isSubmitResponse(data)) {
         outcome = { kind: "acknowledged", response: data, queryType: req.queryType };
+        try {
+          options.onAcknowledged?.(data);
+        } catch {
+          // A receipt is a metric: it never changes what the user sees.
+        }
       } else if (status === 400) {
         const errors = validationErrorsOf(error);
         outcome = errors === undefined ? { kind: "failed" } : { kind: "invalid", errors };

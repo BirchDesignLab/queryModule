@@ -3,7 +3,7 @@ import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { heartbeatUrl } from "../status/use-status-checks.js";
 import { FakeSocket } from "../test/fake-socket.js";
-import { API, detail202, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
+import { ACK_202, API, detail202, server, TEST_PASSWORD, TEST_USER } from "../test/msw-server.js";
 import { testServices } from "../test/render-routes.js";
 
 describe("SEC-006 sign-out clears query cache, announcer and preferences (spec 6.7)", () => {
@@ -421,5 +421,65 @@ describe("FR-065 replay cursor, resync and the list load in the composition root
     release();
     await pass(50);
     expect(services.requests.getState().items).toEqual([]);
+  });
+});
+
+describe("NFR-004 the composition root sends ackReceipt when a 202 lands (spec 6.7)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function openFeed() {
+    const sockets: FakeSocket[] = [];
+    const services = testServices({
+      createSocket: (): SocketLike => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    return { services, sockets };
+  }
+  const receipts = (socket: FakeSocket) =>
+    socket.sent
+      .map((frame) => JSON.parse(frame) as { type: string; correlationId?: string })
+      .filter((m) => m.type === "ackReceipt");
+  const REQUEST = {
+    queryType: "VEH",
+    values: { plate: "ZZ-0001" },
+    sourceIds: ["stateSource"],
+    mode: "normal" as const,
+    configHash: "h1",
+  };
+
+  it("a 202 sends one receipt over the open feed; a refused submit sends none", async () => {
+    const { services, sockets } = openFeed();
+    services.feed.open();
+    const socket = sockets[0] as FakeSocket;
+    socket.onopen?.();
+    socket.onmessage?.({ data: JSON.stringify({ v: 1, type: "welcome", latestSeq: 0 }) });
+    server.use(
+      http.post(`${API}/api/v1/queries`, () => HttpResponse.json(ACK_202, { status: 202 })),
+    );
+    await services.submit.getState().submit(REQUEST);
+    expect(receipts(socket)).toEqual([
+      expect.objectContaining({ correlationId: ACK_202.correlationId }),
+    ]);
+    server.use(
+      http.post(`${API}/api/v1/queries`, () =>
+        HttpResponse.json({ error: { code: "forbidden", requestId: "r" } }, { status: 403 }),
+      ),
+    );
+    await services.submit.getState().submit(REQUEST);
+    expect(receipts(socket)).toHaveLength(1);
+    services.reset.resetAll();
+  });
+
+  it("a 202 with the feed closed sends nothing and changes nothing for the user", async () => {
+    const { services, sockets } = openFeed();
+    server.use(
+      http.post(`${API}/api/v1/queries`, () => HttpResponse.json(ACK_202, { status: 202 })),
+    );
+    const outcome = await services.submit.getState().submit(REQUEST);
+    expect(outcome.kind).toBe("acknowledged");
+    expect(sockets).toHaveLength(0);
   });
 });

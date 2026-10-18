@@ -88,7 +88,13 @@ export function createServices(options: ServicesOptions): Services {
   const announcer = createAnnouncer();
   const preferences = createPreferencesStore();
   const drafts = createDraftStore();
-  const submit = createSubmitController({ api, queryClient, online: options.platform.online });
+  // `feed` is built below: the hook runs only after a 202, long after construction.
+  const submit = createSubmitController({
+    api,
+    queryClient,
+    online: options.platform.online,
+    onAcknowledged: (response) => feed.sendAckReceipt(response.correlationId),
+  });
   // One timer seam for the feed and the requests store (the store's coalescing windows).
   const timers = {
     setTimeout: (fn: () => void, ms: number) => globalThis.setTimeout(fn, ms),
