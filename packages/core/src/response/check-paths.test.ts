@@ -59,7 +59,7 @@ describe("checkMappingPaths (spec 4.5)", () => {
         level: "warning",
         path: "/responseMappings/0/elements/0",
         key: "config.mappingPathUnresolved",
-        params: { sourceId: "stateSource", queryType: "DL", scenario: "default" },
+        params: { sourceId: "stateSource", queryType: "DL" },
       },
     ]);
   });
@@ -139,7 +139,7 @@ describe("checkMappingPaths (spec 4.5)", () => {
     ]);
   });
 
-  it("a generic mapping only needs each path to resolve for some source (accepted relaxation, spec 4.5 per-pair wording relaxed)", () => {
+  it("a generic mapping only needs each path to resolve for some source (ruled relaxation of spec 4.5 per-pair wording, #722)", () => {
     const mock: MockFile = {
       siteId: "default",
       sources: {
@@ -159,6 +159,27 @@ describe("checkMappingPaths (spec 4.5)", () => {
       responseMappings: [{ queryType: "DL", elements: [value("x"), value("y")] }],
     } as unknown as SiteConfig;
     expect(checkMappingPaths(generic, mock)).toEqual([]);
+  });
+
+  it("a generic mapping's warning names no single source", () => {
+    const mock: MockFile = {
+      siteId: "default",
+      sources: {
+        a: {
+          latencyMs: [0, 0],
+          responses: [{ queryType: "DL", default: { x: "1" }, scenarios: [] }],
+        },
+      },
+    };
+    const generic = {
+      queryTypes: [],
+      keywords: [],
+      responseMappings: [{ queryType: "DL", elements: [value("nope")] }],
+    } as unknown as SiteConfig;
+    expect(checkMappingPaths(generic, mock)[0]?.params).toEqual({
+      sourceId: "any source",
+      queryType: "DL",
+    });
   });
 
   it("a source-specific mapping is checked against its own source only", () => {
@@ -182,6 +203,6 @@ describe("checkMappingPaths (spec 4.5)", () => {
     } as unknown as SiteConfig;
     const out = checkMappingPaths(specific, mock);
     expect(out).toHaveLength(1);
-    expect(out[0]?.params).toEqual({ sourceId: "b", queryType: "DL", scenario: "default" });
+    expect(out[0]?.params).toEqual({ sourceId: "b", queryType: "DL" });
   });
 });

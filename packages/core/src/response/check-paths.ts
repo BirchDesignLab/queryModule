@@ -35,10 +35,10 @@ type Tally = { sourceId: string; queryType: string; mapping: number; seen: Map<n
 export function checkMappingPaths(config: SiteConfig, mock: MockFile): Diagnostic[] {
   const mapConfig: MapResponseConfig = config;
   // A mapping with a sourceId is checked per source; one without serves every source, so its
-  // paths only need to resolve for some source (the sources send different shapes). Accepted
-  // relaxation of the per-pair wording of spec 4.5 (review S1, round 2): checking each generic
-  // mapping per source flags 18 shipped nationalSource shape differences (VEH, PER, DL) that the
-  // generic mappings tolerate by design. docs/site-config.md describes this behavior.
+  // paths only need to resolve for some source (the sources send different shapes). Ruled
+  // relaxation of the per-pair wording of spec 4.5 (#722, M2 Manager 8, 10-18-26): checking each
+  // generic mapping per source flags 18 shipped nationalSource shape differences (VEH, PER, DL).
+  // docs/site-config.md describes this behavior.
   // Selection runs once with no persona and once per configured persona, so persona mappings are
   // checked too. A mapping no mock pair selects is reported, never skipped silently (review S2).
   const personas: (string | undefined)[] = [
@@ -95,7 +95,10 @@ export function checkMappingPaths(config: SiteConfig, mock: MockFile): Diagnosti
         level: "warning",
         path: pointer("responseMappings", t.mapping, "elements", j),
         key: "config.mappingPathUnresolved",
-        params: { sourceId: t.sourceId, queryType: t.queryType, scenario: "default" },
+        params: {
+          sourceId: config.responseMappings[t.mapping]?.sourceId ?? "any source",
+          queryType: t.queryType,
+        },
       });
     }
   }

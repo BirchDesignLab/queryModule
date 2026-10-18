@@ -772,7 +772,7 @@
   "fixture.freeTextDigits": "This mock text holds digits the fixture policy does not allow.",
   "config.mockSiteMismatch": "The mock data file belongs to site {siteId}.",
   "config.missingMock": "Source {sourceId} has no mock data.",
-  "config.mappingPathUnresolved": "No mock answer for {sourceId} {queryType} has this mapping path ({scenario}). A real source may still send it.",
+  "config.mappingPathUnresolved": "No mock answer for {queryType} from {sourceId} resolves this mapping path. A real source may still send it.",
   "config.mappingNotExercised": "No mock answer selects this {queryType} response mapping (source, persona or when condition never matches), so its paths are unchecked.",
   "config.missingMockResponse": "Source {sourceId} has no mock response for query type {queryType}.",
   "config.severityContrast": "The {severity} keyword style lacks enough contrast in {mode} mode.",

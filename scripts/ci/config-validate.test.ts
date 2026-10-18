@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -156,5 +156,40 @@ describe("config:validate --diff <tag> (spec 7, 9.5, D-M2P2-8)", () => {
     expect(diffLines("m1", [site], repo, same)).toEqual([
       "packages/config/sites/default.json: no changes",
     ]);
+  });
+
+  it("--resolved with --diff is a usage error (it would be ignored)", () => {
+    const r = parseValidateArgs(["--resolved", "--diff", "m1"]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("--resolved");
+  });
+
+  it("a target that is invalid JSON at the tag reports config.invalidJson, not a throw", () => {
+    const lines = diffLines("m1", [site], repo, () => "{ not json");
+    expect(lines.some((l) => l.startsWith("ERROR ") && l.includes("config.invalidJson"))).toBe(
+      true,
+    );
+    expect(lines.join("\n")).not.toContain("not json");
+  });
+
+  it("a new file is still validated on the head side", () => {
+    const dir = mkdtempSync(join(tmpdir(), "qm-cfgdiff-"));
+    try {
+      mkdirSync(join(dir, "sites"));
+      const bad = join(dir, "sites", "bad.json");
+      writeFileSync(bad, "{}");
+      const lines = diffLines("m1", [bad], dir, () => undefined);
+      expect(lines.some((l) => l.endsWith(": new file"))).toBe(true);
+      expect(lines.some((l) => l.startsWith("ERROR ") && l.includes(" head "))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a target outside the repo is an error line, never 'new file'", () => {
+    const outside = join(repo, "..", "elsewhere.json");
+    const lines = diffLines("m1", [outside], repo, () => undefined);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^ERROR .*config.targetOutsideRepo/);
   });
 });

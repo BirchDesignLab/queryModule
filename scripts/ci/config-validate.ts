@@ -63,7 +63,14 @@ ${VALIDATE_USAGE}`,
       };
     files.push(a);
   }
-  return diff === undefined ? { ok: true, resolved, files } : { ok: true, resolved, files, diff };
+  if (diff === undefined) return { ok: true, resolved, files };
+  if (resolved)
+    return {
+      ok: false,
+      message: `--resolved has no effect with --diff
+${VALIDATE_USAGE}`,
+    };
+  return { ok: true, resolved, files, diff };
 }
 
 /** Reads `<tag>:<path>` (a git object spec) as text; undefined when the file is absent at the tag. */
@@ -86,11 +93,14 @@ export function gitShow(root: string): ShowFile {
       return execFileSync("git", ["show", spec], {
         cwd: root,
         encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
+        stdio: ["ignore", "pipe", "pipe"],
         maxBuffer: 64 * 1024 * 1024,
       });
-    } catch {
-      return undefined;
+    } catch (e) {
+      // Only "the path is not in that commit" reads as absent; any other git failure is unreadable.
+      const stderr = String((e as { stderr?: unknown }).stderr ?? "");
+      if (/does not exist in|exists on disk, but not in/.test(stderr)) return undefined;
+      throw new ConfigUnreadableError();
     }
   };
 }
@@ -135,8 +145,20 @@ export function diffLines(
   const old = tagIo(tag, root, show);
   for (const file of targets) {
     const rel = toPosixRel(relative(root, file));
-    if (old.readJson(file) === undefined) {
+    if (rel === ".." || rel.startsWith("../")) {
+      out.push(`ERROR ${rel} / config.targetOutsideRepo {}`);
+      continue;
+    }
+    let atTag = true;
+    try {
+      atTag = old.readJson(file) !== undefined;
+    } catch {
+      // Present but unreadable or invalid at the tag: checkConfigFile reports it below.
+    }
+    if (!atTag) {
       out.push(`${rel}: new file`);
+      for (const d of checkConfigFile(file, headIo).errors)
+        out.push(`ERROR ${rel} head ${d.path || "/"} ${d.key} ${JSON.stringify(d.params)}`);
       continue;
     }
     const before = checkConfigFile(file, old);
