@@ -878,10 +878,28 @@ main[tabindex="-1"]:focus {
     .qm-builder__panes {
       display: grid;
       grid-template-columns: calc(var(--qm-space-12) * 4.25) minmax(0, 1fr);
+      /* The editor is where the work happens: it takes the larger share, and the panes keep a floor
+         so it never shrinks to a strip (re-walk N2, 240 px). The page scrolls instead. */
       grid-template-rows:
-        minmax(calc(var(--qm-space-12) * 5), 1fr)
-        minmax(calc(var(--qm-space-12) * 5), 1.25fr);
+        minmax(calc(var(--qm-space-12) * 6.5), 1.5fr)
+        minmax(calc(var(--qm-space-12) * 4.5), 1fr);
       align-items: stretch;
+      min-block-size: calc(var(--qm-space-12) * 11.5);
+    }
+
+    .qm-builder {
+      block-size: auto;
+      min-block-size: max(
+        calc(
+          100dvh -
+          var(--qm-control-height-dense) -
+          var(--qm-space-2) *
+          2 -
+          var(--qm-space-4) *
+          2
+        ),
+        calc(var(--qm-space-12) * 10)
+      );
     }
 
     .qm-builder__panes > .qm-tree {
@@ -1884,7 +1902,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-weight: 500;
 }
 
-.qm-mock__mono {
+/* The two-class selector wins over .qm-field__input's own face, which a single class loses to
+   whichever sheet loads last: an input marked mono (a path, a trigger) shows in the data face. */
+.qm-mock__mono,
+.qm-builder__editor .qm-mock__mono {
   font-family: var(--qm-type-family-data);
 }
 
@@ -1947,8 +1968,16 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
 }
 
+/* Headings are short labels: one line each, in the small caps style of the design's table heads. */
 .qm-wins__table thead th {
   overflow-wrap: normal;
+  white-space: nowrap;
+  font-size: var(--qm-type-size-xs);
+  text-transform: uppercase;
+}
+
+.qm-wins__score {
+  font-family: var(--qm-type-family-data);
 }
 
 .qm-wins__table .qm-tag {
@@ -1957,19 +1986,19 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 /* The Why column carries the longest text (the score and its reason), so it gets the most. */
 .qm-wins__table th:nth-child(1) {
-  inline-size: 20%;
+  inline-size: 25%;
 }
 
 .qm-wins__table th:nth-child(2) {
-  inline-size: 19%;
+  inline-size: 21%;
 }
 
 .qm-wins__table th:nth-child(3) {
-  inline-size: 29%;
+  inline-size: 26%;
 }
 
 .qm-wins__table th:nth-child(4) {
-  inline-size: 32%;
+  inline-size: 28%;
 }
 
 /* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
@@ -2414,6 +2443,11 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border: 0;
 }
 
+/* A badge is one word or phrase: it never breaks inside itself, the sample wraps between badges. */
+.qm-kw__sample .qm-mark {
+  white-space: nowrap;
+}
+
 .qm-kw__sample {
   padding: var(--qm-space-3);
   border: var(--qm-border-width) solid var(--qm-color-border-subtle);
@@ -2706,6 +2740,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   .qm-columns__table td:nth-child(4) {
     grid-column: 4 / 6;
     grid-row: 2;
+  }
+
+  /* Mark is a checkbox, shorter than the controls beside it: it centers on their line, not the top
+     of the cell under its caption. */
+  .qm-columns__table td:nth-child(4) input[type="checkbox"] {
+    margin-block: calc((var(--qm-control-height-dense) - var(--qm-space-4)) / 2);
   }
 
   /* Remove has no caption: it lines up with the controls under the captions. */
