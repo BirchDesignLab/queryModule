@@ -20,7 +20,7 @@ async function setup(email = "dispatcher@example.test") {
   const env = testEnv();
   const db = await migratedDb(env);
   const limits = { absoluteMinutes: 720, idleMinutes: 30 };
-  const auth = createAuth({ db, env, secret: TEST_SECRETS.betterAuthSecret, session: limits });
+  const auth = createAuth({ db, env, secret: TEST_SECRETS.betterAuthSecret });
   const { id } = await createLocalUser(auth, {
     email,
     name: "Demo Dispatcher",
@@ -62,6 +62,19 @@ describe("SEC-005 session limits", () => {
     const { identity, req, clock } = await setup();
     clock.advance(31 * MIN);
     expect(await identity.resolve(req())).toBeNull();
+  });
+  it("AUD-1: past the live absolute limit but under the ceiling: refused, row kept for the sweeper", async () => {
+    const { db, identity, req, clock, limits } = await setup();
+    // Keep the idle clock fresh so only the absolute limit applies.
+    for (let used = 0; used + 20 < limits.absoluteMinutes; used += 20) {
+      clock.advance(20 * MIN);
+      expect(await identity.resolve(req())).not.toBeNull();
+    }
+    clock.advance(20 * MIN);
+    expect(await identity.resolve(req())).toBeNull();
+    // Better Auth's getSession did not delete it: the sweeper writes its sessionRevoked row.
+    const rows = await db.$client.execute("SELECT id FROM session");
+    expect(rows.rows).toHaveLength(1);
   });
   it("user activity refreshes the idle clock", async () => {
     const { identity, req, clock } = await setup();

@@ -144,12 +144,11 @@ export async function buildDeps(o: {
       { adapters, clock, monotonic, timers, logger },
       (job, out, ms) => recordOutcome(deps, job, out, ms),
     );
-    // Better Auth's own expiry is fixed at boot; the app limits below are read at use.
+    // Better Auth's own expiry is a fixed ceiling (AUD-1); the app limits below are read at use.
     const auth = createAuth({
       db,
       env: o.env,
       secret: s.betterAuthSecret,
-      session: config.siteConfig.auth.session,
       log: logger,
     });
     const onFatal =

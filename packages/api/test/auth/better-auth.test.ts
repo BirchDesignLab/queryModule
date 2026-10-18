@@ -1,7 +1,9 @@
+import { SESSION_CEILING_MINUTES } from "@querymodule/core/config";
 import { BoundedIdSchema, Uuid7Schema } from "@querymodule/core/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuth, sessionCookieName } from "../../src/auth/auth";
 import { createLocalUser } from "../../src/auth/users";
+import { SWEEP_INTERVAL_MS } from "../../src/dispatch/sweeper";
 import { migratedDb, TEST_SECRETS, testEnv } from "../helpers/fixture";
 
 async function setup() {
@@ -11,7 +13,6 @@ async function setup() {
     db,
     env,
     secret: TEST_SECRETS.betterAuthSecret,
-    session: { absoluteMinutes: 720, idleMinutes: 30 },
   });
   await createLocalUser(auth, {
     email: "Dispatcher@Example.test",
@@ -69,12 +70,17 @@ describe("SEC-005 Better Auth", () => {
     expect(r.status).not.toBe(200);
   });
 
-  it("sets session expiry to the absolute limit and stores UUIDv7 ids", async () => {
+  it("AUD-1: sets session expiry one sweep after the fixed ceiling and stores UUIDv7 ids", async () => {
     const { signIn, db } = await setup();
     await signIn("correct-horse-battery-1");
     const row = (await db.$client.execute("SELECT id, created_at, expires_at FROM session"))
       .rows[0];
-    expect(Number(row?.expires_at) - Number(row?.created_at)).toBeCloseTo(720 * 60_000, -4);
+    // Strictly later than every allowed absolute limit (D-M2P2-2, #716 ruling): the live limits
+    // and the sweeper always end a session first, with its sessionRevoked row.
+    expect(Number(row?.expires_at) - Number(row?.created_at)).toBeCloseTo(
+      SESSION_CEILING_MINUTES * 60_000 + SWEEP_INTERVAL_MS,
+      -4,
+    );
     expect(String(row?.id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
   });
 
@@ -85,7 +91,6 @@ describe("SEC-005 Better Auth", () => {
       db,
       env,
       secret: TEST_SECRETS.betterAuthSecret,
-      session: { absoluteMinutes: 720, idleMinutes: 30 },
     });
     const { id } = await createLocalUser(auth, {
       email: "bounded@example.test",
@@ -117,7 +122,6 @@ describe("SEC-005 Better Auth", () => {
           db,
           env,
           secret: TEST_SECRETS.betterAuthSecret,
-          session: { absoluteMinutes: 720, idleMinutes: 30 },
         }),
       ).toThrow(/BETTER_AUTH_TELEMETRY/);
     });
