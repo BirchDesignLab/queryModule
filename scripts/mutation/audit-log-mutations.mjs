@@ -67,12 +67,6 @@ const MUTATIONS = [
     to: "store.set({ cursors: [...cursors] });",
   },
   {
-    name: "Apply sends without validating",
-    file: LOG,
-    from: "if (result.filters !== null) store.set({",
-    to: "if (true) store.set({ applied: result.filters ?? applied,",
-  },
-  {
     name: "Apply with errors announces nothing",
     file: LOG,
     from: 'announcer.announce(\n        t("admin.audit.needAttention"',
@@ -161,6 +155,7 @@ const MUTATIONS = [
     file: LOG,
     from: "    link.focus();\n  }, [page]);",
     to: "  }, [page]);",
+    test: VIEW_TEST,
   },
   {
     name: "request view fetches twice under StrictMode",

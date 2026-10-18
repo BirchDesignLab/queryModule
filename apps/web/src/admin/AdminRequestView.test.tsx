@@ -87,7 +87,8 @@ describe("a settled request", () => {
     );
     const entry = document.querySelector("li.qm-request") as HTMLElement;
     expect(entry.querySelector(".qm-request__summary")).toHaveTextContent("ZZ-0001");
-    expect(within(entry).getAllByText("Critical").length).toBeGreaterThan(0);
+    // The entry head carries the request's highest severity, apart from each card's own badge.
+    expect(entry.querySelector(".qm-request__severity")).toHaveTextContent("Critical");
     expect(within(entry).getByText("2e3f4a5b")).toBeVisible();
     expect(within(entry).getByRole("button", { name: /^Copy reference/ })).toBeVisible();
     expect(screen.getByText("Vehicle query as it was sent and answered. Read only.")).toBeVisible();

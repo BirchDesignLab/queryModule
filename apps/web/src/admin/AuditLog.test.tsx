@@ -8,6 +8,8 @@ import { API, auditPage, CLIENT_CONFIG, server, TEST_USER } from "../test/msw-se
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
 import { testServices } from "../test/render-routes.js";
+import { validateAuditForm } from "./audit-model.js";
+import { auditStore } from "./audit-store.js";
 
 beforeAll(preloadAdminRoutes);
 afterEach(() => vi.restoreAllMocks());
@@ -351,10 +353,21 @@ describe("StrictMode", () => {
         return HttpResponse.json(auditPage(1, null));
       }),
     );
+    // Back from a request view mounts the page with its filters already applied: that is the open
+    // a StrictMode effect pass would send twice.
+    const services = testServices();
+    const form = {
+      user: "",
+      correlationId: "",
+      type: "",
+      from: "10-17-26 00:00",
+      to: "10-18-26 00:00",
+    };
+    auditStore(services).set({ form, applied: validateAuditForm(form).filters });
     render(
       <StrictMode>
         <Root
-          services={testServices()}
+          services={services}
           clientVersion="0.1.0"
           createRouter={(routes) =>
             createMemoryRouter(routes, { initialEntries: ["/admin/audit"] })
