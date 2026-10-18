@@ -61,7 +61,7 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
     );
   });
 
-  it("the rail leads with Back to queries, then the sections; no audit log entry until there is a page", async () => {
+  it("the rail leads with Back to queries, then the sections, ending with Oversight (D-M2P2-B1)", async () => {
     const t = await openAs("admin", "/admin/config");
     await screen.findByRole("heading", { name: "Site configuration", level: 2 });
     const nav = screen.getByRole("navigation", { name: "Admin sections" });
@@ -70,9 +70,11 @@ describe("ADR-0011 admin shell (Task 30, BR-001, FR-060)", () => {
       "Back to queries",
       "Site configuration",
       "Users and roles",
+      "Audit log",
     ]);
     expect(within(nav).getByText("Configure")).toBeInTheDocument();
     expect(within(nav).getByText("People")).toBeInTheDocument();
+    expect(within(nav).getByText("Oversight")).toBeInTheDocument();
     expect(within(nav).queryByText(/Arrives in M2/)).toBeNull();
     await t.user.click(within(nav).getByRole("link", { name: "Back to queries" }));
     expect(await screen.findByRole("heading", { name: /^Query Module$/ })).toBeInTheDocument();

@@ -1910,6 +1910,122 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   gap: var(--qm-space-2);
 }
 
+/* Audit log (Task 3, D-M2P2-B3): filters, one table in a scroll region, paging. Below the admin
+   section width layout.toolbarRow (920) the Credential owner column folds under the Actor, so the
+   table never scrolls sideways. Event and status are words, never colour alone. */
+.qm-audit {
+  display: grid;
+  gap: var(--qm-space-3);
+}
+
+.qm-audit__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 4), 1fr));
+  gap: var(--qm-space-3);
+  align-items: start;
+}
+
+.qm-audit__filter-actions,
+.qm-audit__export,
+.qm-audit__paging {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-3);
+  align-items: center;
+}
+
+.qm-audit__export .qm-diff__note {
+  margin: 0;
+}
+
+.qm-audit__scroll {
+  overflow-x: auto;
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-audit__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__caption {
+  padding: var(--qm-space-2) var(--qm-space-3);
+  color: var(--qm-color-text-muted);
+  text-align: start;
+}
+
+.qm-audit__cell {
+  padding: var(--qm-space-2) var(--qm-space-3);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  text-align: start;
+  vertical-align: top;
+}
+
+.qm-audit__head {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qm-audit__time,
+.qm-audit__request,
+.qm-audit__owner {
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-audit__time {
+  white-space: nowrap;
+}
+
+.qm-audit__owner {
+  display: none;
+}
+
+.qm-audit__fold {
+  display: block;
+  color: var(--qm-color-text-muted);
+}
+
+@container (min-width: 920px) {
+  .qm-audit__owner {
+    display: table-cell;
+  }
+
+  .qm-audit__fold {
+    display: none;
+  }
+}
+
+.qm-audit__list {
+  margin: var(--qm-space-2) 0 0;
+}
+
+.qm-audit__key {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-audit__value {
+  margin: 0 0 var(--qm-space-1);
+  font-family: var(--qm-type-family-data);
+  overflow-wrap: anywhere;
+}
+
+.qm-audit__empty {
+  display: grid;
+  gap: var(--qm-space-2);
+  justify-items: start;
+}
+
+.qm-audit__page-size {
+  margin-inline-start: auto;
+}
+
 /* The one-time password: set in the data face and selectable, so it can be copied by hand. */
 .qm-users__password {
   margin: 0 0 var(--qm-space-4);

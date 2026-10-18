@@ -5,4 +5,5 @@
  */
 export async function preloadAdminRoutes(): Promise<void> {
   await import("../admin/AdminLayout.js");
+  await import("../admin/AuditLog.js");
 }

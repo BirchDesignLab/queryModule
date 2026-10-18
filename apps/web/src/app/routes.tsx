@@ -36,6 +36,12 @@ export function appRoutes(clientSupported: boolean): RouteObject[] {
                     Component: (await import("../admin/AdminLayout.js")).AdminUsersPage,
                   }),
                 },
+                {
+                  path: "audit",
+                  lazy: async () => ({
+                    Component: (await import("../admin/AuditLog.js")).AuditLogPage,
+                  }),
+                },
               ],
             },
           ],
