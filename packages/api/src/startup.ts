@@ -186,10 +186,10 @@ function trackRequests(server: Server): { idle(): Promise<void>; open(): number 
  * the next start's sweep; the route logs a refused enqueue during the drain without d.fatal),
  * wait for in-flight dispatch up to max(0, maxDeadline - now) + DRAIN_SLACK_MS, then abort what
  * is left (abortAll: no row written, no T2 started; the rows stay pending for the sweep, #574),
- * close the sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this drain: once
- * lifecycle.failed is set, at the start or after any wait, the drain logs "drain ended by fatal
- * error", never "stopped", and rejects with DrainAbortedError, leaving the sockets and the DB to
- * the fatal close (main.ts exits 1). Call right after the server listens.
+ * close the sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this
+ * drain: once lifecycle.failed is set, at the start or after any wait, the drain logs "drain ended
+ * by fatal error", never "stopped", and rejects with DrainAbortedError, leaving the sockets and the
+ * DB to the fatal close (main.ts exits 1). Call right after the server listens.
  */
 export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): () => Promise<void> {
   const requests = trackRequests(server);
