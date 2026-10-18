@@ -6,7 +6,7 @@ import {
   type AuditReadRow,
   MAX_AUDIT_WINDOW_MS,
 } from "@querymodule/core/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   AUDIT_EXPORT_BATCH,
   AUDIT_EXPORT_MAX_ROWS,
@@ -19,6 +19,20 @@ import { withTransaction } from "../../src/db/tx";
 import { uuidv7 } from "../../src/ids";
 import { type AdminConfigApp, adminConfigApp, errorOf } from "../helpers/admin-config";
 import { openTempDatabase } from "../helpers/db";
+
+// The route reads the row cap from audit/read through a live binding. The cap test lowers it here
+// so it inserts a few rows, not 100_000 (heavy on Windows, #755 T4 Q3); every other test runs with
+// the real value, and the real value is pinned below.
+const capState = vi.hoisted(() => ({ cap: undefined as number | undefined }));
+vi.mock("../../src/audit/read", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../../src/audit/read")>();
+  return {
+    ...real,
+    get AUDIT_EXPORT_MAX_ROWS() {
+      return capState.cap ?? real.AUDIT_EXPORT_MAX_ROWS;
+    },
+  };
+});
 
 /*
  * GET /api/v1/admin/audit/export (spec 5.1, 4.7; SEC-010, SEC-012; #712, #561 NDJSON box): the
@@ -197,12 +211,20 @@ describe("spec 5.1 GET /api/v1/admin/audit/export stream", () => {
 });
 
 describe("spec 5.1 GET /api/v1/admin/audit/export refusals", () => {
-  it(`over ${AUDIT_EXPORT_MAX_ROWS} rows answers 400 exportTooLarge and writes nothing; at the cap it streams`, async () => {
+  it("the shipped row cap is 100_000 and a batch is 500", () => {
     expect(AUDIT_EXPORT_MAX_ROWS).toBe(100_000);
     expect(AUDIT_EXPORT_BATCH).toBe(500);
+  });
+
+  it("over the cap answers 400 exportTooLarge and writes nothing; at the cap it streams", async () => {
+    capState.cap = 50;
+    onTestFinished(() => {
+      capState.cap = undefined;
+    });
+    const cap = AUDIT_EXPORT_MAX_ROWS;
     const s = await seeded();
-    // 100_000 bulk rows plus the trainee's dispatch and logout: the trainee filter is the cap.
-    await bulk(s.a.t.deps.db, AUDIT_EXPORT_MAX_ROWS - 2, TRAINEE, s.now);
+    // The bulk rows plus the trainee's dispatch and logout: the trainee filter is the cap.
+    await bulk(s.a.t.deps.db, cap - 2, TRAINEE, s.now);
     const over = await s.get(s.window);
     expect(over.status).toBe(400);
     expect(over.headers.get("cache-control")).toBe("no-store");
@@ -212,9 +234,9 @@ describe("spec 5.1 GET /api/v1/admin/audit/export refusals", () => {
     expect(await s.exported()).toEqual([]);
     const at = await s.get({ ...s.window, user: TRAINEE });
     expect(at.status).toBe(200);
-    expect(lines(await at.text())).toHaveLength(AUDIT_EXPORT_MAX_ROWS);
-    expect((await s.exported()).map((x) => x.details.rowCount)).toEqual([AUDIT_EXPORT_MAX_ROWS]);
-  }, 120_000);
+    expect(lines(await at.text())).toHaveLength(cap);
+    expect((await s.exported()).map((x) => x.details.rowCount)).toEqual([cap]);
+  });
 
   it("malformed filters answer 400 naming the parameter only and write no auditExported", async () => {
     const s = await seeded();
