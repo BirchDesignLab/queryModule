@@ -420,7 +420,7 @@ for that type.
 
 **Checks.** `config:validate` and the builder check a mapping's query type, source, persona and
 `when` references, its label keys in every listed locale and `config.duplicateMapping`. Resolving
-mapping `path` values against the mock payloads in `config:validate` is M2 P2.
+mapping `path` values against the mock payloads is a `config:validate` warning.
 
 The builder edits all of this without JSON: see "Result cards, keywords and Try a match" under the
 admin builder below. Design: the [design note](design/2026-10-07-result-card-config.md) and "Result
@@ -614,6 +614,7 @@ regenerating, not by hand.
 pnpm config:validate                     # every file in packages/config/sites and packages/config/test
 pnpm config:validate <file> [<file> ...] # named files
 pnpm config:validate --resolved          # also print each file's merged (extends applied) config
+pnpm config:validate --diff <tag>        # what changed since a git tag or sha, one line per change
 pnpm config:migrate <file>               # bring an older config up to the current schemaVersion
 ```
 
@@ -628,7 +629,14 @@ against the mock answers, and prints a `WARN` `config.mappingPathUnresolved` for
 answer resolves (a path may resolve in only some answers, since a no-record answer lacks fields).
 A mapping with a `sourceId` is checked against that source's answers; a mapping without one only
 needs each path to resolve for some source. Persona mappings are checked too, and a mapping no mock
-answer selects prints `WARN` `config.mappingNotExercised`. Warnings never fail the command. `--diff <tag>` is refused until M2 P2.
+answer selects prints `WARN` `config.mappingNotExercised`. Warnings never fail the command.
+
+`--diff <tag>` reads each target as it was at the tag (`git show`, never a shell), resolves both
+sides and prints one line per change from the tag to the working tree: `+` added, `-` removed, `~`
+changed or reordered, each with its path and the values as the diff module renders them. A target
+absent at the tag prints `new file`; an unchanged one prints `no changes`. It exits 0 when both
+sides validate, 1 when one does not, and 2 for a tag that is missing, malformed or unknown. Use it
+to write release notes (spec 12.7).
 
 `config:migrate` applies the migration steps in order and writes the file in place, printing one
 `migrated <file>: <from> -> <to>` line per step. With nothing to do it says the file is already at
@@ -739,7 +747,5 @@ bundle.
 
 | Topic | Where it lands |
 |---|---|
-| Mapping paths resolved against mock payloads in `config:validate` | M2 P2 |
 | Credentials, delegation, delete from view (`credentials`, `delegation`, `resultHide`) | M3 |
 | Audit viewer (`adminAudit`) | M2 P2 |
-| `pnpm config:validate --diff <tag>` | M2 P2 |
