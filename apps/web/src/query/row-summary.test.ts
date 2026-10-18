@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLIENT_CONFIG } from "../test/msw-server.js";
-import { rowSummary } from "./row-summary.js";
+import { formToTerminal } from "./form-to-terminal.js";
+import { rowSummary, savedEntryCommand } from "./row-summary.js";
 
 const NOW = Date.UTC(2026, 9, 14);
 
@@ -53,5 +54,21 @@ describe("polish 8: a rebuilt command never adds a default the user did not type
       NOW,
     );
     expect(text).toBe("DL.ZZDLTEST");
+  });
+});
+
+describe("#680 N1: one canonical form in the saved entry", () => {
+  it("a fresh entry typed with 26 and the same request rebuilt after a reload read the same", () => {
+    const typed = { plate: "ZZ-0001", year: "26" };
+    const fresh = savedEntryCommand(CLIENT_CONFIG, "VEH", typed, NOW);
+    const reloaded = rowSummary(CLIENT_CONFIG, "VEH", "", { plate: "ZZ-0001", year: "2026" }, NOW);
+    expect(fresh).toBe(reloaded);
+    expect(fresh).toContain("..2026");
+  });
+
+  it("the command echo of the form still keeps the year as typed (R11, input only)", () => {
+    expect(
+      formToTerminal(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", year: "26" }, NOW).text,
+    ).toContain("..26");
   });
 });

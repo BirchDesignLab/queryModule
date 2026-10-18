@@ -29,8 +29,8 @@ import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
 import { firstField } from "./first-field.js";
-import { formToTerminal } from "./form-to-terminal.js";
 import { revealLastInvalid } from "./reveal-invalid.js";
+import { savedEntryCommand } from "./row-summary.js";
 import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
@@ -545,9 +545,18 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       ? null
       : requests.getState().begin({
           queryType: request.queryType,
+          // The saved entry says the canonical command (a four-digit year), the one a reload
+          // rebuilds; what was typed stays in the input (#680 N1). The typed text is the fallback
+          // for a type with no command.
           summary:
-            request.typed?.trim() ||
-            formToTerminal(config, request.queryType, request.values, Date.now()).text,
+            savedEntryCommand(
+              config,
+              request.queryType,
+              request.values,
+              Date.now(),
+              request.typed,
+            ) ||
+            (request.typed?.trim() ?? ""),
           submitted,
           idempotencyKey,
         });

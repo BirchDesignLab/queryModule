@@ -10,20 +10,23 @@ export function formToTerminal(
   queryType: string,
   values: Values,
   now: number,
+  /** False writes the canonical year: the saved request entry, not the input (#680 N1). */
+  keepTyped = true,
 ): { text: string; unshown: number } {
   const draft = toCoreDraft(values);
   const cmd = selectCommand(config, queryType, draft, { now });
   if (cmd === undefined) return { text: "", unshown: 0 };
   const formatted = formatCommand(config, cmd.code, draft, { now });
   return {
-    text: keepTypedYears(config, cmd, values, formatted.text),
+    text: keepTyped ? keepTypedYears(config, cmd, values, formatted.text) : formatted.text,
     unshown: formatted.unshownCount,
   };
 }
 
 /**
  * The core formatter writes a year in its four-digit canonical form, so "26" reads back as "2026"
- * in the command echo, while the form and the request row say "26" (R11). A year field whose draft
+ * in the saved request entry. The input (the form and the command echo) keeps what was typed (R11,
+ * narrowed to the input by the 10-18-26 ruling on #680 N1). A year field whose draft
  * is exactly two digits is written as typed: the terminal reads "26" the same way. Only the token
  * at that field's position changes; a non-rest token never holds the delimiter.
  */

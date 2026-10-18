@@ -58,9 +58,10 @@ configuration no longer has; nothing is sent. A row listed after a reload offers
 details arrive. It replaces the whole draft of that query type, so text half-typed in terminal mode is replaced too
 (it is not merged into the loaded values), and the "Shown" tags start over. Use it in the demo to
 re-run a query with one change, for example the same plate with a year added. The form and the command line share one draft; switching between them is not what
-clears it. A row listed after a reload, and a seeded row, rebuilds its command from the values the
-server stored, where a two-digit year is kept in its four-digit form, so `VEH.ZZ-0001..26` reads
-`VEH.ZZ-0001..2026` there; the same row read `..26` while it was fresh.
+clears it. A request entry shows one canonical command: a two-digit year is written in its four-digit form, so
+`VEH.ZZ-0001..26` reads `VEH.ZZ-0001..2026` in the list, fresh or after a reload (a reloaded or seeded
+row rebuilds its command from the values the server stored). The form and the command line keep
+exactly what is typed.
 
 **A database that already ran keeps its published settings.** The site file only seeds an empty
 store (version 1). A demo database that published a version before the four-digit birth and warrant
