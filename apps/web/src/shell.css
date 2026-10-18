@@ -340,9 +340,10 @@ main[tabindex="-1"]:focus {
 .qm-admin__rail {
   flex: 0 0 auto;
   /* Beside the section it is one column; stacked above it (narrow window, 200% zoom) the way back
-     and each group sit side by side instead of taking the whole screen. */
+     and each group sit side by side instead of taking the whole screen: four items (back and three
+     groups, Oversight included) fit one row at 683 px. */
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3.5), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3), 1fr));
   align-content: start;
   gap: var(--qm-space-1) var(--qm-space-4);
   padding: var(--qm-space-4) var(--qm-space-3);

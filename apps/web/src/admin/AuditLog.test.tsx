@@ -189,6 +189,26 @@ describe("paging", () => {
   });
 });
 
+describe("paging reset", () => {
+  it("Rows per page on a later page returns to the first page", async () => {
+    const { seen, t } = await openAudit("admin", {
+      pages: (url) =>
+        HttpResponse.json(
+          url.searchParams.get("cursor") === null
+            ? auditPage(2, "c-2", 10)
+            : auditPage(2, null, 20),
+        ),
+    });
+    await screen.findByRole("table", {}, MAX_WAIT);
+    await t.user.click(screen.getByRole("button", { name: "Older" }));
+    await screen.findByText("Page 2");
+    await t.user.selectOptions(screen.getByRole("combobox", { name: "Rows per page" }), "25");
+    await screen.findByText("Page 1");
+    expect(seen.at(-1)?.searchParams.get("limit")).toBe("25");
+    expect(seen.at(-1)?.searchParams.has("cursor")).toBe(false);
+  });
+});
+
 describe("rows", () => {
   it("shows the event in words, an unknown type raw, and the stored details", async () => {
     await openAudit("admin", {
