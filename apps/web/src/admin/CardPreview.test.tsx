@@ -66,7 +66,7 @@ describe("the card preview", () => {
   // show until Scenario 1 was picked. It now opens on the first scenario that answers with a record.
   it("opens on the first scenario that answers with a record, not on the default answer", async () => {
     await openVehicleCard();
-    expect(await within(pane()).findByText("Scenario 1 matches")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Scenario 1 of Vehicle")).toBeInTheDocument();
     expect(within(pane()).getByRole("combobox", { name: "Scenario" })).toHaveValue("0:0");
     expect(
       await within(pane()).findByRole("region", { name: "State system: returned" }),
@@ -78,10 +78,10 @@ describe("the card preview", () => {
     const t = await openVehicleCard();
     await screen.findByRole("region", { name: "Card preview" });
     await typeValues(t, "ZZ-0001");
-    expect(await within(pane()).findByText("Scenario 1 matches")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Scenario 1 of Vehicle")).toBeInTheDocument();
     expect(within(pane()).getAllByText("STOLEN").length).toBeGreaterThan(0);
     await typeValues(t, "ABC123");
-    expect(await within(pane()).findByText("Scenario 2 matches")).toBeInTheDocument();
+    expect(await within(pane()).findByText("Scenario 2 of Vehicle")).toBeInTheDocument();
     expect(within(pane()).getByText("NO RECORD")).toBeInTheDocument();
     // Typed values never reach the draft.
     expect(JSON.stringify(configDraftStore(t.services).getState().doc)).not.toContain("ABC123");
@@ -287,7 +287,7 @@ describe("the card preview: the Values segmented control and the outcome row", (
     await typeValues(t, "ZZ-0001");
     const head = await within(pane()).findByTestId("outcome-head");
     expect(head).toHaveTextContent("Returns a record");
-    expect(head).toHaveTextContent("Scenario 1 matches");
+    expect(head).toHaveTextContent("Scenario 1 of Vehicle");
     expect(head.querySelector(".qm-badge")).toHaveTextContent("Returns a record");
     await typeValues(t, "ABC123");
     expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent("No record");
@@ -303,7 +303,7 @@ describe("the card preview: the Values segmented control and the outcome row", (
     await screen.findByRole("region", { name: "Card preview" });
     await t.user.selectOptions(within(pane()).getByRole("combobox", { name: "Scenario" }), "0:d");
     expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent(
-      "No scenario matches, so the default answers",
+      "Vehicle default response",
     );
   });
 });

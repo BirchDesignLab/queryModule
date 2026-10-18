@@ -418,7 +418,7 @@ main[tabindex="-1"]:focus {
 }
 
 /* The section is a size container: the builder's heading and toolbar share a row by the section's
-   own width (layout.toolbar), whichever way the rail sits. */
+   own width (layout.toolbarRow), whichever way the rail sits. */
 .qm-admin__main {
   container-type: inline-size;
   flex: 1 1 auto;
@@ -624,7 +624,8 @@ main[tabindex="-1"]:focus {
 /* Admin config builder (Task 32): the builder and the dispatcher preview side by side when there
    is room, stacked otherwise. */
 /* Builder (A2): the section h2 and the toolbar share the first row once the section is
-   layout.toolbar wide, else the toolbar sits under the heading; the panes take the rest.
+   layout.toolbarRow wide, else the toolbar sits under the heading and keeps its controls on one
+   row; the panes take the rest.
    From layout.wide up the section is as tall as the window under the app bar (never under
    a floor, so a short window scrolls the page instead of collapsing the panes); below it the page
    flows as one column (design lead). */
@@ -642,7 +643,7 @@ main[tabindex="-1"]:focus {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
-@container (min-width: 720px) {
+@container (min-width: 920px) {
   .qm-builder {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
@@ -1085,42 +1086,83 @@ main[tabindex="-1"]:focus {
   font-weight: 600;
 }
 
-/* The row's own text: label, key and issue count share one line (they name the row together) and
-   stay on it: when the pane is narrow the key gives way first and ends in an ellipsis, then the
-   label does (re-walk R17: keys no longer drop to a second line). */
+/* The row's own text: label, key and issue count share one line when they fit. When the pane is
+   narrow the key drops under the label and a long label wraps: nothing ends in an ellipsis that
+   hides what the row is (builder ruling (g); the full key is also the key's title). */
 .qm-tree__name {
   display: flex;
   flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--qm-space-2);
   min-inline-size: 0;
 }
 
+/* A row with a count at its end keeps the count on the label's line: the label wraps inside its own
+   box instead. */
+.qm-tree__name:has(> .qm-tree__key--end) {
+  flex-wrap: nowrap;
+  align-items: first baseline;
+}
+
 .qm-tree__label {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   max-inline-size: 100%;
   min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .qm-tree__key {
   flex: 0 1 auto;
   min-inline-size: 0;
   margin-inline-start: auto;
-  overflow: hidden;
   color: var(--qm-color-text-muted);
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-xs);
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+/* A type's code sits next to its name, small and in mono (mockup v5); the keyword count stays at the end. */
+.qm-tree__key--near {
+  margin-inline-start: 0;
+}
+
+/* The count at the row's end stays on the row: only the label and the key wrap. */
+.qm-tree__key--end {
+  flex: none;
   white-space: nowrap;
 }
 
-/* Issue count per row: the number is visual only; the words are visually hidden in the row name. */
+/* The "+ Add <Type> card" row: accent text and a plus in the toggle's column. */
+.qm-tree [role="treeitem"].qm-tree__row--add {
+  color: var(--qm-color-accent);
+}
+
+.qm-tree__plus {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--qm-space-4);
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-tree__plus::before {
+  content: "+";
+}
+
+/* Issue count per row, drawn as a dot (mockup v5): the number is visual only; the words are visually hidden in the row name. */
 .qm-tree__issues {
   flex: none;
-  min-inline-size: var(--qm-space-4);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--qm-space-5);
+  min-block-size: var(--qm-space-5);
+  padding: 0 var(--qm-space-1);
+  border-radius: var(--qm-radius-panel);
+  letter-spacing: 0;
   text-align: center;
 }
 
@@ -1950,10 +1992,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   table-layout: fixed;
 }
 
+/* Cells are set in the small size and the columns share the narrow editor (about 345 px at 1366) so
+   no cell of the shipped site needs more than two lines (re-walk R17). */
 .qm-wins__table :where(th, td) {
   min-inline-size: 0;
-  padding-inline: var(--qm-space-2);
-  font-size: var(--qm-type-size-sm);
+  padding-inline: var(--qm-space-1);
+  font-size: var(--qm-type-size-xs);
   overflow-wrap: anywhere;
 }
 
@@ -1990,8 +2034,18 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   inline-size: 28%;
 }
 
-/* Try a match: the answer toggle is a dense control (36 px); a long payload line wraps inside the
+/* Try a match: the answer is one bordered panel (outcome row, toggle, result, builder ruling (h)); the answer toggle is a dense control (36 px); a long payload line wraps inside the
    pane instead of scrolling it sideways (T12-7). */
+.qm-try__outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  padding: var(--qm-space-3);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
 .qm-try__toggle {
   align-self: flex-start;
 }
@@ -2184,6 +2238,34 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   grid-column: 4;
 }
 
+/* A card's header (mockup v5): the sentence that says where it sits and what it is for, then its
+   order arrows and Remove on a line of their own. */
+.qm-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  margin-block-end: var(--qm-space-3);
+}
+
+.qm-card-head > p {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+}
+
+.qm-card-head__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1);
+}
+
+/* An arrow at the end of the list is still focusable (it says why by its place), but reads as off. */
+.qm-card-head__tools [aria-disabled="true"] {
+  border-color: transparent;
+  color: var(--qm-color-text-muted);
+  cursor: default;
+}
+
 .qm-mock__scenario-body {
   display: flex;
   flex-direction: column;
@@ -2196,6 +2278,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   min-inline-size: var(--qm-control-height-dense);
   min-block-size: var(--qm-control-height-dense);
   padding-inline: var(--qm-space-2);
+}
+
+/* Undo and Redo are icon buttons, as narrow as they are tall, so the controls fit one row in the
+   1024 px section (builder ruling (d)). */
+.qm-builder__toolbar .qm-mock__icon {
+  inline-size: var(--qm-control-height-dense);
+  padding-inline: 0;
 }
 
 .qm-mock__trigger {
@@ -2432,10 +2521,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border: 0;
 }
 
-/* A badge is one word or phrase: it never breaks inside itself, the sample wraps between badges. */
+/* The sample wraps between badges. A badge breaks inside itself only when it is wider than the
+   panel, and then between its words: nothing is clipped. */
 .qm-kw__sample .qm-mark {
-  white-space: nowrap;
-  overflow-x: clip;
+  white-space: normal;
 }
 
 .qm-kw__sample {

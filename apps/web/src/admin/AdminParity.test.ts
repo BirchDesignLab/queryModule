@@ -60,7 +60,7 @@ describe("admin parity: surfaces", () => {
     // The heading and toolbar share a row by the section's width; the window caps the section from
     // layout.wide up.
     expect(css).toMatch(
-      /@container \(min-width: 720px\) \{\s*\.qm-builder \{[^}]*auto minmax\(0, 1fr\)/,
+      /@container \(min-width: 920px\) \{\s*\.qm-builder \{[^}]*auto minmax\(0, 1fr\)/,
     );
     expect(css).toMatch(/@media \(min-width: 1024px\) \{\s*\.qm-builder \{\s*block-size:/);
     expect(decls(".qm-builder__body")).toMatch(/flex-direction:\s*column/);

@@ -27,13 +27,22 @@ async function selectRow(page: Page, name: RegExp): Promise<void> {
   await expect(item).toHaveAttribute("aria-selected", "true");
 }
 
-/** Lines of text a block shows: the distinct line tops of the text inside it. */
+/**
+ * Lines of text a block shows: the distinct line centers of its text. Only text is measured: the
+ * box of an inline tag (padding, a smaller font) sits a few pixels off the text beside it and is
+ * not a line of its own.
+ */
 async function lines(target: Locator): Promise<number> {
   return target.evaluate((el) => {
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top / 4)));
-    return tops.size;
+    const centers = new Set<number>();
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if ((node.textContent ?? "").trim() === "") continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const r of range.getClientRects()) centers.add(Math.round((r.top + r.bottom) / 2 / 8));
+    }
+    return centers.size;
   });
 }
 
@@ -57,9 +66,10 @@ for (const size of SIZES) {
           .getByRole("treeitem", { name: /^Vehicle cards/ })
           .press("ArrowRight");
       await selectRow(page, /^1\. All results/);
-      // "1. All results", "Keywords and severity", "Training delegation" read on one line each:
-      // the key drops under the label when both do not fit.
-      for (const name of [/^1\. All results/, /^Keywords and severity/, /^Training delegation/]) {
+      // "1. All results" and "Training delegation" read on one line each: the key drops under the
+      // label when both do not fit. The Keywords row keeps its count on its first line instead, so
+      // its label may wrap (admin-builder-polish.spec.ts, "keeps its count").
+      for (const name of [/^1\. All results/, /^Training delegation/]) {
         const label = tree(page).getByRole("treeitem", { name }).first().locator(".qm-tree__label");
         await label.scrollIntoViewIfNeeded();
         expect(await lines(label), `${name} on one line`).toBe(1);
@@ -169,7 +179,8 @@ for (const size of SIZES) {
       expect(section).toBeLessThan(title);
     });
 
-    test("[G37] the Which card wins cells stay within three lines", async ({ page }) => {
+    // R17 (#698): the shipped site's rows read in at most two lines per cell at both sizes.
+    test("[G37] the Which card wins cells stay within two lines", async ({ page }) => {
       await selectRow(page, /^Vehicle cards/);
       const card = tree(page).getByRole("treeitem", { name: /^1\. All results/ });
       if ((await card.count()) === 0)
@@ -186,7 +197,7 @@ for (const size of SIZES) {
         expect(
           await lines(cells.nth(i)),
           `cell ${i}: ${await cells.nth(i).innerText()}`,
-        ).toBeLessThanOrEqual(3);
+        ).toBeLessThanOrEqual(2);
       }
     });
 

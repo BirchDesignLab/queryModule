@@ -51,6 +51,11 @@ async function openVehicleCard(t: Opened) {
   return within(editor()).findByRole("heading", { level: 3, name: /^Vehicle: All results/ });
 }
 
+// "+ Add <Type> card" is a row of the Result cards tree under its type (#698 ruling (a)).
+async function addVehicleCard(t: Opened) {
+  await t.user.click(within(cardsTree()).getByRole("treeitem", { name: "Add Vehicle card" }));
+}
+
 async function addMakeRow(t: Opened) {
   await t.user.click(within(editor()).getByRole("button", { name: "Add row" }));
   const path = await within(editor()).findByRole("combobox", { name: "Path" });
@@ -70,7 +75,7 @@ describe("the Result cards group", () => {
       .map((b) => b.textContent);
     expect(headers.slice(0, 3)).toEqual(["Query types", "Result cards", "Site"]);
     expect(
-      within(cardsTree()).getByRole("treeitem", { name: /^Keywords and severity keywords/ }),
+      within(cardsTree()).getByRole("treeitem", { name: /^Keywords and severity$/ }),
     ).toBeInTheDocument();
     // The cards left the Site group.
     const site = within(nav()).getByRole("tree", { name: "Site" });
@@ -80,7 +85,11 @@ describe("the Result cards group", () => {
   it("opens the card editor with its key, position and the camel-cased label key prefix", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    expect(within(editor()).getByText("Card 1 of 1 for Vehicle")).toBeInTheDocument();
+    expect(
+      within(editor()).getByText(
+        "Card veh-summary, 1 of 1 Vehicle cards. Shown inside each Vehicle request for the results it fits best.",
+      ),
+    ).toBeInTheDocument();
     expect(within(editor()).getByText("mapping.vehSummary.*")).toBeInTheDocument();
   });
 });
@@ -117,7 +126,7 @@ describe("the card editor", () => {
   it("a second card with the same narrowing shows config.duplicateMapping inline", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await addVehicleCard(t);
     await within(editor()).findByRole("heading", {
       level: 3,
       name: /^Vehicle: All results veh-card/,
@@ -136,7 +145,7 @@ describe("the card editor", () => {
   it("removes a card and focus goes to its type's heading, never body", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await addVehicleCard(t);
     await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
     await t.user.click(within(editor()).getByRole("button", { name: /^Remove card/ }));
     const heading = await within(editor()).findByRole("heading", {
@@ -163,6 +172,110 @@ describe("the card editor", () => {
     expect(await within(editor()).findByRole("combobox", { name: "Path" })).toHaveFocus();
     await t.user.keyboard("vehicle.make");
     expect(within(editor()).getByRole("combobox", { name: "Path" })).toHaveValue("vehicle.make");
+  });
+});
+
+// #698 ruling (a): the card header sentence, order arrows that decide which card wins, and the
+// "+ Add <Type> card" row under the type in the tree.
+describe("a card's order and the tree's Add row (#698 (a))", () => {
+  it("each type in the tree ends in an Add row; it adds a card, selects it and keeps focus on the row", async () => {
+    const t = await openBuilder();
+    await screen.findByRole("tree", { name: "Result cards" });
+    // A type's cards open with its row; the Add row is the last of them.
+    await t.user.click(within(cardsTree()).getByRole("treeitem", { name: /^Person cards$/ }));
+    expect(within(cardsTree()).getByRole("treeitem", { name: "Add Person card" })).toBeVisible();
+    await t.user.click(within(cardsTree()).getByRole("treeitem", { name: /^Vehicle cards$/ }));
+    const row = within(cardsTree()).getByRole("treeitem", { name: "Add Vehicle card" });
+    act(() => row.focus());
+    await t.user.keyboard("{Enter}");
+    expect(cards(t).map((c) => c.id)).toContain("veh-card");
+    await within(editor()).findByRole("heading", {
+      level: 3,
+      name: /^Vehicle: All results veh-card/,
+    });
+    expect(within(cardsTree()).getByRole("treeitem", { name: "Add Vehicle card" })).toHaveFocus();
+    expect(within(cardsTree()).getByRole("treeitem", { name: /^2\. All results/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("the arrows name their card, so several cards are not 'Move up, Move up'", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await addVehicleCard(t);
+    const ed = within(editor());
+    await ed.findByRole("heading", { level: 3, name: /veh-card/ });
+    const up = ed.getByRole("button", { name: "Move All results (veh-card) up" });
+    expect(up).toHaveAttribute("title", "Move All results (veh-card) up");
+    expect(
+      ed.getByRole("button", { name: "Move All results (veh-card) down" }),
+    ).toBeInTheDocument();
+  });
+
+  it("the card's up and down arrows are icon buttons, aria-disabled at the ends", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    const ed = within(editor());
+    const up = ed.getByRole("button", { name: /^Move All results \(veh-summary\) up$/ });
+    const down = ed.getByRole("button", { name: /^Move All results \(veh-summary\) down$/ });
+    expect(up.textContent).toBe("\u2191");
+    expect(down.textContent).toBe("\u2193");
+    expect(up).toHaveAttribute("aria-disabled", "true");
+    expect(down).toHaveAttribute("aria-disabled", "true");
+    const before = cards(t).map((c) => c.id);
+    await t.user.click(up);
+    await t.user.click(down);
+    expect(cards(t).map((c) => c.id)).toEqual(before);
+  });
+
+  it("moving a card up makes it win the tie, and Which card wins follows", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await addVehicleCard(t);
+    const ed = within(editor());
+    await ed.findByRole("heading", { level: 3, name: /veh-card/ });
+    // Two cards that fit everything: the earlier one (veh-card) wins every row.
+    const table = () => ed.getByRole("table", { name: "Which card wins" });
+    const thisCard = () => within(table()).queryAllByText("This card").length;
+    expect(thisCard()).toBe(0);
+    expect(
+      ed.getByRole("button", { name: /^Move All results \(veh-card\) down$/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await t.user.click(ed.getByRole("button", { name: /^Move All results \(veh-card\) up$/ }));
+    expect(
+      cards(t)
+        .map((c) => c.id)
+        .slice(0, 2),
+    ).toEqual(["veh-card", "veh-summary"]);
+    // The moved card is first now and the selection followed it: it wins every row.
+    await ed.findByText(/^Card veh-card, 1 of 2 Vehicle cards\./);
+    await waitFor(() => expect(thisCard()).toBeGreaterThanOrEqual(2));
+    expect(within(table()).getAllByText(/earlier in the list/).length).toBeGreaterThanOrEqual(2);
+    expect(ed.getByRole("button", { name: /^Move All results \(veh-card\) up$/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    // Up was enabled on the second card; after the move focus is still on that card's Up button.
+    expect(ed.getByRole("button", { name: /^Move All results \(veh-card\) up$/ })).toHaveFocus();
+    expect(
+      ed.getByRole("button", { name: /^Move All results \(veh-card\) down$/ }),
+    ).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("the tree finds a type's cards by its code too", async () => {
+    const t = await openBuilder();
+    await screen.findByRole("tree", { name: "Result cards" });
+    await t.user.type(within(nav()).getByRole("searchbox"), "veh");
+    expect(
+      within(cardsTree()).getByRole("treeitem", { name: /^Vehicle cards$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("the card editor has no Add button of its own: the tree's row is the one place", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    expect(within(editor()).queryByRole("button", { name: /^Add Vehicle card/ })).toBeNull();
   });
 });
 
@@ -227,7 +340,7 @@ describe("a selection the cards no longer have (round 1, C2)", () => {
   it("shows the type's cards after Add card is undone, never a blank editor", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await addVehicleCard(t);
     await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
     await t.user.click(screen.getByRole("button", { name: /^Undo/ }));
     expect(
@@ -256,7 +369,7 @@ describe("the approved card editor items (round 1, S1)", () => {
   it("names the score when a second card narrows by source", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await addVehicleCard(t);
     await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
     const source = within(editor()).getByRole("combobox", { name: "Source" });
     const first = within(source).getAllByRole("option")[1] as HTMLOptionElement;
@@ -316,7 +429,7 @@ describe("the approved card editor items (round 1, S1)", () => {
       .getByText("Advanced settings")
       .closest("details") as HTMLElement;
     expect(within(advanced).getByText("/responseMappings/0")).toBeInTheDocument();
-    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await addVehicleCard(t);
     await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
     await t.user.click(within(editor()).getByText("Advanced settings"));
     expect(within(editor()).getByRole("textbox", { name: "Card key" })).not.toHaveAttribute(
@@ -329,7 +442,7 @@ describe("the approved card editor items (round 1, S1)", () => {
   it("keeps a new card's key editable when its id is typed to match a live id", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await addVehicleCard(t);
     await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
     await t.user.click(within(editor()).getByText("Advanced settings"));
     const key = within(editor()).getByRole("textbox", { name: "Card key" });
@@ -347,7 +460,7 @@ describe("the approved card editor items (round 1, S1)", () => {
   it("locks the key when the card goes live and unlocks it when the live config drops it", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
-    await t.user.click(within(editor()).getByRole("button", { name: "Add Vehicle card" }));
+    await addVehicleCard(t);
     await within(editor()).findByRole("heading", { level: 3, name: /veh-card/ });
     await t.user.click(within(editor()).getByText("Advanced settings"));
     const readonly = () =>

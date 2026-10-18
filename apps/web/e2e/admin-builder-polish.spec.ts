@@ -66,8 +66,14 @@ for (const size of SIZES) {
       await openCard(page, /^Vehicle cards/);
       const table = page.getByRole("table", { name: "Which card wins" });
       await table.scrollIntoViewIfNeeded();
-      for (const th of await table.locator("thead th").all())
+      for (const th of await table.locator("thead th").all()) {
         expect(await lines(th), `heading "${await th.innerText()}"`).toBe(1);
+        // One line is not enough: a heading wider than its column runs into the next one.
+        const spill = await th.evaluate((el) => el.scrollWidth - el.clientWidth);
+        expect(spill, `heading "${await th.innerText()}" runs past its column`).toBeLessThanOrEqual(
+          1,
+        );
+      }
       // The new heading style adds no sideways scroll to the table or the pane around it.
       const overflow = await table.evaluate((el) => {
         const pane = el.closest(".qm-builder__editor") ?? el;
@@ -105,20 +111,94 @@ for (const size of SIZES) {
       ).toBeLessThanOrEqual(4);
     });
 
-    test("[#698] Keywords: each sample badge stays on one line", async ({ page }) => {
+    // (d): the controls of the toolbar are one row, as the mockup draws them; wrapping is a defect.
+    test("[#698 (d)] the toolbar's controls share one row, and it names the version it publishes", async ({
+      page,
+    }) => {
+      const bar = page.locator(".qm-builder__toolbar");
+      const centers = await bar.evaluate((el) =>
+        [...el.children]
+          .filter((c) => c.matches("button, [role=tablist]") && c.getClientRects().length > 0)
+          .map((c) => {
+            const r = c.getBoundingClientRect();
+            return Math.round(r.top + r.height / 2);
+          }),
+      );
+      expect(centers.length, "toolbar controls").toBeGreaterThanOrEqual(6);
+      expect(
+        Math.max(...centers) - Math.min(...centers),
+        `control centers ${centers}`,
+      ).toBeLessThanOrEqual(4);
+      // Nothing to publish yet: the line under the buttons says so. The version line is in a unit test.
+      await expect(
+        bar.getByRole("button", { name: "Review and publish" }),
+      ).toHaveAccessibleDescription(
+        /^(Nothing to publish|Publishes version \d+ to every open screen)/,
+      );
+    });
+
+    // (g): nothing in the builder is cut off by an ellipsis (or clipped), at the two demo sizes.
+    for (const [label, open] of [
+      ["a card", (page: Page) => openCard(page, /^Wanted check cards/)],
+      ["the keywords", (page: Page) => selectRow(page, /^Keywords and severity/)],
+      ["a mock response", (page: Page) => selectRow(page, /^Vehicle VEH|^Mock response: Vehicle/)],
+    ] as const)
+      test(`[#698 (g)] no text is cut off by an ellipsis: ${label}`, async ({ page }) => {
+        await open(page);
+        const cut = await page
+          .locator(".qm-builder__scope, .qm-builder")
+          .first()
+          .evaluate((root) => {
+            const out: string[] = [];
+            for (const el of root.querySelectorAll<HTMLElement>("*")) {
+              const style = getComputedStyle(el);
+              // A visually hidden or clipped-away helper (the skip links, the words for a screen
+              // reader) is one pixel wide on purpose.
+              if (style.display === "none" || el.clientWidth <= 2) continue;
+              const clips = style.textOverflow === "ellipsis" || style.overflow === "hidden";
+              if (!clips || el.scrollWidth <= el.clientWidth + 1) continue;
+              const text = (el.textContent ?? "").trim();
+              if (text !== "") out.push(`${el.className || el.tagName}: ${text.slice(0, 40)}`);
+            }
+            return out;
+          });
+        expect(cut, "cut off").toEqual([]);
+      });
+
+    // (b): the keyword count is on the Keywords row's own line, not dropped under the label.
+    test("[#698 (b)] the Keywords row keeps its count on the label's line", async ({ page }) => {
+      await selectRow(page, /^Keywords and severity/);
+      const row = tree(page).getByRole("treeitem", { name: /^Keywords and severity/ });
+      const label = await box(row.locator(".qm-tree__label"));
+      const count = await box(row.locator(".qm-tree__key--end"));
+      // On the label's first line, not centered against a label that wrapped to two.
+      const firstLine = await row
+        .locator(".qm-tree__label")
+        .evaluate((el) => Number.parseFloat(getComputedStyle(el).lineHeight));
+      expect(
+        Math.abs(count.y + count.height / 2 - (label.y + firstLine / 2)),
+        "the count's center against the label's first line",
+      ).toBeLessThanOrEqual(4);
+    });
+
+    test("[#698 (g)] Keywords: no sample badge is clipped by the sample panel", async ({
+      page,
+    }) => {
       await selectRow(page, /^Keywords and severity/);
       const sample = page.locator(".qm-kw__sample");
       await sample.scrollIntoViewIfNeeded();
-      const marks = sample.locator("mark");
-      expect(await marks.count()).toBeGreaterThan(3);
-      // A badge that wraps inside itself is taller than one that does not.
-      const heights = await marks.evaluateAll((els) =>
-        els.map((el) => el.getBoundingClientRect().height),
+      const panel = await box(sample);
+      const marks = await sample.locator("mark").evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          return { right: r.right, spill: el.scrollWidth - el.clientWidth };
+        }),
       );
-      expect(
-        Math.max(...heights) - Math.min(...heights),
-        `badge heights ${heights}`,
-      ).toBeLessThanOrEqual(2);
+      expect(marks.length).toBeGreaterThan(3);
+      for (const m of marks) {
+        expect(m.spill, "a badge's text runs past its box").toBeLessThanOrEqual(1);
+        expect(m.right, "a badge ends inside the panel").toBeLessThanOrEqual(panel.x + panel.width);
+      }
     });
   });
 }

@@ -54,7 +54,7 @@ test("the keywords editor has no serious axe violations, and a low-contrast styl
   await openBuilder(page);
   const nav = page.getByRole("navigation", { name: "Configuration items" });
   const cards = nav.getByRole("tree", { name: "Result cards" });
-  await cards.getByRole("treeitem", { name: /^Keywords and severity keywords/ }).click();
+  await cards.getByRole("treeitem", { name: /^Keywords and severity$/ }).click();
   const editor = page.getByTestId("form-tab");
   await expect(
     editor.getByRole("heading", { level: 3, name: /^Keywords and severity/ }),

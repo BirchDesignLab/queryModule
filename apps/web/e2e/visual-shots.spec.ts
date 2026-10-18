@@ -116,19 +116,12 @@ test("[#642] shots of the card preview as Officer at 1024", async ({ page }) => 
   );
   await expect(preview(page).getByRole("region", { name: "State system: returned" })).toBeVisible();
   // The preview from its head (the persona toggle) to the card's Show detail toggle. At 1024x768 the
-  // preview scrolls inside a pane shorter than itself, and the page top would cut it, so for this one
-  // frame the pane and the preview are let grow to their content and the preview is shot by itself.
+  // preview scrolls inside a pane shorter than itself, so for this one frame the window is made tall
+  // enough for the whole preview (the width, which decides the layout, stays 1024) and the preview
+  // is shot by itself.
   const detail = preview(page).getByRole("button", { name: / detail/ });
+  await page.setViewportSize({ width: 1024, height: 1500 });
   await show(detail);
-  await page.evaluate(() => {
-    for (const el of document.querySelectorAll<HTMLElement>(
-      ".qm-builder__panes, .qm-admin__preview",
-    )) {
-      el.style.overflow = "visible";
-      el.style.height = "auto";
-      el.style.maxHeight = "none";
-    }
-  });
   const pane = await preview(page).boundingBox();
   const head = await preview(page).getByRole("button", { name: "Officer" }).boundingBox();
   const toggle = await detail.boundingBox();

@@ -31,10 +31,17 @@ export function PublishButtons({
       : flow.changeCount === 0 && !flow.unsaved
         ? t("admin.config.reviewNone")
         : null;
+  // With something to publish the line names the version that goes live: the saved draft always
+  // follows the live version (the server writes it as the next one).
+  const publishes =
+    reviewReason === null && flow.version !== null
+      ? t("admin.config.reviewPublishes", { version: flow.version + 1 })
+      : null;
   const saveBlocked = saveReason !== null;
   // Both buttons wait on the same save and check: one line says so, and both point at it (R16).
   const sharedReason = saveReason !== null && saveReason === reviewReason;
   const reviewReasonId = sharedReason ? `${uid}-save` : `${uid}-review`;
+  const reviewNote = reviewReason ?? publishes;
   return (
     <>
       <button
@@ -50,7 +57,7 @@ export function PublishButtons({
         type="button"
         className="qm-button"
         aria-disabled={reviewReason !== null ? "true" : undefined}
-        aria-describedby={reviewReason !== null ? reviewReasonId : undefined}
+        aria-describedby={reviewNote !== null ? reviewReasonId : undefined}
         onClick={reviewReason !== null ? undefined : flow.review}
       >
         {t("admin.config.review")}
@@ -60,9 +67,9 @@ export function PublishButtons({
           {saveReason}
         </p>
       )}
-      {reviewReason !== null && !sharedReason && (
+      {reviewNote !== null && !sharedReason && (
         <p className="qm-builder__reason" id={reviewReasonId}>
-          {reviewReason}
+          {reviewNote}
         </p>
       )}
     </>

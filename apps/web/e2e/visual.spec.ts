@@ -1827,18 +1827,18 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
     });
   });
 
-  // The heading and toolbar share a row once the section is layout.toolbar wide. The section is the
-  // window minus its padding (stacked rail) or minus the rail and its padding (rail beside).
+  // The heading and toolbar share a row once the section is layout.toolbarRow wide. The section is the
+  // window minus the rail and its padding (the rail is beside from layout.stack up).
   // The section's horizontal padding and the rail's outer width (content, padding, border). The
   // cases are 4 px either side of a threshold and assume no classic scrollbar, which headless
   // Chromium hides by default: the builder page does not scroll at this height.
   const PAD = 40;
   const RAIL = 241;
+  // layout.toolbarRow (920) is wider than the window at which the rail moves beside the section
+  // (layout.stack, 864), so only the rail-beside pair of cases exists.
   for (const [width, shared] of [
-    [px("layout.toolbar") + PAD - 4, false],
-    [px("layout.toolbar") + PAD + 4, true],
-    [px("layout.toolbar") + PAD + RAIL - 4, false],
-    [px("layout.toolbar") + PAD + RAIL + 4, true],
+    [px("layout.toolbarRow") + PAD + RAIL - 4, false],
+    [px("layout.toolbarRow") + PAD + RAIL + 4, true],
   ] as const) {
     test(`${width}x768: the toolbar is ${shared ? "beside" : "under"} the heading`, async ({
       page,
@@ -1901,7 +1901,10 @@ test.describe("Loose ends (cloud3)", () => {
 
   for (const viewport of [
     { width: 683, height: 600, loaded: 3 },
-    { width: 1024, height: 768, loaded: 2 },
+    // Heading above the toolbar (the section is narrower than layout.toolbarRow): three rows.
+    { width: 1024, height: 768, loaded: 3 },
+    // Heading beside the toolbar: the heading and toolbar share a row, so two.
+    { width: 1280, height: 768, loaded: 2 },
   ]) {
     test(`${viewport.width}x${viewport.height}: the loading state has no empty grid row`, async ({
       page,
