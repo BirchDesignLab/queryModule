@@ -80,9 +80,11 @@ export const documentHashOf = (document: unknown): string => sha256(document);
  * #511 CFG-3: the one-time document_hash of a published row from before migration 0009. The row
  * is accepted only if its config_hash is the hash of its stored siteConfig (seed and publish store
  * the resolved siteConfig) or today's rule (`resolvedHash`, the defaults-applied resolve); else it
- * was altered outside the app and startup refuses (fail closed).
+ * was altered outside the app and startup refuses (fail closed). C-m1: the UPDATE must change
+ * exactly the one row; any other count (the row moved or gained a hash since the read) refuses
+ * the same way, so a boot never goes on to serve a row it did not verify.
  */
-async function backfillDocumentHash(
+export async function backfillDocumentHash(
   db: Db,
   row: typeof siteConfigVersion.$inferSelect,
   document: unknown,
@@ -93,10 +95,12 @@ async function backfillDocumentHash(
   if (row.configHash !== sha256(siteConfig) && row.configHash !== resolvedHash)
     throw new ConfigLoadError(label, "", "config.hashMismatch");
   await withTransaction(db, async (tx) => {
-    await tx
+    const changed = await tx
       .update(siteConfigVersion)
       .set({ documentHash: documentHashOf(document) })
-      .where(and(eq(siteConfigVersion.id, row.id), isNull(siteConfigVersion.documentHash)));
+      .where(and(eq(siteConfigVersion.id, row.id), isNull(siteConfigVersion.documentHash)))
+      .returning({ id: siteConfigVersion.id });
+    if (changed.length !== 1) throw new ConfigLoadError(label, "", "config.hashMismatch");
   });
 }
 
@@ -133,6 +137,7 @@ export async function loadLiveConfig(db: Db, bootstrap: ConfigBootstrap): Promis
       publishedBy: SYSTEM_ACTOR.id,
       publishedAt: now,
       rollbackOf: null,
+      note: null,
     };
     await withTransaction(db, async (tx) => {
       await tx.insert(siteConfigVersion).values(row);

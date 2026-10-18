@@ -158,12 +158,13 @@ export const CONFIG_VERSION_TRIGGERS = [
 /**
  * The statement of each trigger as migration 0007 creates it, whitespace collapsed; migration 0008
  * recreates site_config_version_frozen so a superseded row also never leaves superseded (#497 C-m1),
- * and migration 0009 so a set document_hash never changes nor returns to NULL (#511 CFG-3).
+ * migration 0009 so a set document_hash never changes nor returns to NULL (#511 CFG-3), and
+ * migration 0011 so a published or superseded row's note never changes (D-M2P0-4, #718).
  */
 export const CONFIG_VERSION_TRIGGER_SQL: Record<(typeof CONFIG_VERSION_TRIGGERS)[number], string> =
   {
     site_config_version_frozen:
-      "CREATE TRIGGER site_config_version_frozen BEFORE UPDATE ON site_config_version WHEN (OLD.status <> 'draft' AND (NEW.document IS NOT OLD.document OR NEW.config_hash IS NOT OLD.config_hash OR NEW.status = 'draft' OR NEW.created_by IS NOT OLD.created_by OR NEW.created_at IS NOT OLD.created_at OR NEW.published_by IS NOT OLD.published_by OR NEW.published_at IS NOT OLD.published_at OR NEW.base_version IS NOT OLD.base_version OR NEW.rollback_of IS NOT OLD.rollback_of)) OR (OLD.document_hash IS NOT NULL AND NEW.document_hash IS NOT OLD.document_hash) OR (OLD.status = 'superseded' AND NEW.status <> 'superseded') OR NEW.id IS NOT OLD.id OR NEW.site_id IS NOT OLD.site_id OR NEW.version IS NOT OLD.version OR NEW.rowid IS NOT OLD.rowid OR (NEW.status = 'published' AND OLD.status <> 'published' AND EXISTS (SELECT 1 FROM site_config_version WHERE site_id = NEW.site_id AND status = 'published')) BEGIN SELECT RAISE(ABORT, 'site_config_version history is never rewritten'); END",
+      "CREATE TRIGGER site_config_version_frozen BEFORE UPDATE ON site_config_version WHEN (OLD.status <> 'draft' AND (NEW.document IS NOT OLD.document OR NEW.config_hash IS NOT OLD.config_hash OR NEW.status = 'draft' OR NEW.created_by IS NOT OLD.created_by OR NEW.created_at IS NOT OLD.created_at OR NEW.published_by IS NOT OLD.published_by OR NEW.published_at IS NOT OLD.published_at OR NEW.base_version IS NOT OLD.base_version OR NEW.rollback_of IS NOT OLD.rollback_of OR NEW.note IS NOT OLD.note)) OR (OLD.document_hash IS NOT NULL AND NEW.document_hash IS NOT OLD.document_hash) OR (OLD.status = 'superseded' AND NEW.status <> 'superseded') OR NEW.id IS NOT OLD.id OR NEW.site_id IS NOT OLD.site_id OR NEW.version IS NOT OLD.version OR NEW.rowid IS NOT OLD.rowid OR (NEW.status = 'published' AND OLD.status <> 'published' AND EXISTS (SELECT 1 FROM site_config_version WHERE site_id = NEW.site_id AND status = 'published')) BEGIN SELECT RAISE(ABORT, 'site_config_version history is never rewritten'); END",
     site_config_version_no_delete:
       "CREATE TRIGGER site_config_version_no_delete BEFORE DELETE ON site_config_version WHEN OLD.status <> 'draft' BEGIN SELECT RAISE(ABORT, 'site_config_version history is never deleted'); END",
     site_config_version_no_replace:

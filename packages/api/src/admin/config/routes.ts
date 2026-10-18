@@ -8,11 +8,9 @@ import {
   ValidateConfigResponseSchema,
   VersionParamsSchema,
 } from "@querymodule/core/contracts";
-import { desc, eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { z } from "zod";
-import { siteConfigVersion } from "../../db/schema";
 import type { AppDeps } from "../../deps";
 import { apiError } from "../../http/errors";
 import type { AppEnv } from "../../http/types";
@@ -20,11 +18,13 @@ import { adminGuard, CONFIG_EDITOR_ROLES } from "../access";
 import {
   documentOf,
   liveRow,
+  namedVersion,
   saveDraft,
   sharedDraft,
   siteIdOf,
   toConfigVersion,
   validateDocument,
+  versionHistory,
   versionRow,
 } from "./draft";
 import { type PublishResult, publishDraft, rollbackTo } from "./publish";
@@ -76,7 +76,7 @@ export function mountAdminConfigRoutes(app: Hono<AppEnv>, d: AppDeps): void {
     return c.json(
       AdminConfigResponseSchema.parse({
         siteId,
-        live: { ...toConfigVersion(live), document: documentOf(live) },
+        live: { ...(await namedVersion(d.db, live)), document: documentOf(live) },
         draft: draft ? { ...toConfigVersion(draft), document: documentOf(draft) } : null,
       }),
     );
@@ -109,17 +109,13 @@ export function mountAdminConfigRoutes(app: Hono<AppEnv>, d: AppDeps): void {
   app.post(`${BASE}/publish`, guard, async (c) => {
     const body = await bodyOf(c, PublishConfigBodySchema);
     if (!body.success) return apiError(c, "validationFailed");
-    return answer(c, await publishDraft(d, c.get("principal"), body.data.draftVersion));
+    const { draftVersion, note } = body.data;
+    return answer(c, await publishDraft(d, c.get("principal"), draftVersion, note));
   });
 
   app.get(`${BASE}/versions`, guard, async (c) => {
-    const rows = await d.db
-      .select()
-      .from(siteConfigVersion)
-      .where(eq(siteConfigVersion.siteId, siteIdOf(d)))
-      .orderBy(desc(siteConfigVersion.version))
-      .limit(1000);
-    return c.json(ConfigVersionListSchema.parse({ versions: rows.map(toConfigVersion) }));
+    const versions = await versionHistory(d.db, siteIdOf(d));
+    return c.json(ConfigVersionListSchema.parse({ versions }));
   });
 
   app.post(`${BASE}/versions/:version/rollback`, guard, async (c) => {

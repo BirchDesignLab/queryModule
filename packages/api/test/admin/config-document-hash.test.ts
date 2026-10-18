@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { ConfigVersionSchema } from "@querymodule/core/contracts";
 import { describe, expect, it } from "vitest";
+import { backfillDocumentHash } from "../../src/admin/config/store";
 import {
   bootstrapDocument,
   ConfigLoadError,
@@ -10,6 +11,7 @@ import {
 } from "../../src/config/load";
 import type { Db } from "../../src/db/client";
 import { CONFIG_VERSION_TRIGGER_SQL, checkConfigVersionTriggers } from "../../src/db/migrate";
+import { siteConfigVersion } from "../../src/db/schema";
 import { buildDeps } from "../../src/deps";
 import type { DeployEnv } from "../../src/env";
 import { uuidv7 } from "../../src/ids";
@@ -215,5 +217,29 @@ describe("#511 CFG-3 one-time backfill of 0008-era published rows", () => {
     expect(String((err as Error).message)).toMatch(/site default version 1.*config.hashMismatch/);
     const db = await migratedDb(env);
     expect((await hashes(db))[0]?.documentHash).toBeNull();
+  });
+});
+
+describe("#511 C-m1 the backfill asserts it wrote exactly one row", () => {
+  it("throws config.hashMismatch when its UPDATE changes no row", async () => {
+    const doc = await docWithoutDefault();
+    const env = await storeWith(doc, sha256(doc.siteConfig));
+    const db = await migratedDb(env);
+    const [row] = await db.select().from(siteConfigVersion);
+    if (!row) throw new Error("no row");
+    expect(row.documentHash).toBeNull();
+    // Another writer set the hash between the read and the backfill: the UPDATE matches nothing.
+    await db.$client.execute(`UPDATE site_config_version SET document_hash = '${"2".repeat(64)}'`);
+    const err = await backfillDocumentHash(
+      db,
+      row,
+      doc,
+      "0".repeat(64),
+      "store site default version 1",
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConfigLoadError);
+    expect((err as ConfigLoadError).reason).toBe("config.hashMismatch");
+    expect((await hashes(db))[0]?.documentHash).toBe("2".repeat(64));
+    db.$client.close();
   });
 });

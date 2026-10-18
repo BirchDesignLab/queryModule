@@ -301,8 +301,12 @@ The stored version is the live config (ADR-0011). One shared draft exists per si
 
 A version row (`ConfigVersion`) has `id`, `version`, `status` (`draft`, `published` or
 `superseded`), `configHash` (set at publish), `baseVersion`, `createdBy`, `createdAt`,
-`publishedBy`, `publishedAt` and `rollbackOf`. A publish takes effect for open dispatcher forms
-within 15 seconds: clients refetch `GET /config` on that interval and on window focus.
+`publishedBy`, `publishedAt` and `rollbackOf`, and two optional fields: `note`, the publisher's
+change note (`POST /admin/config/publish` takes an optional `note`, 1 to 200 characters, stored
+trimmed; a rollback has none), and `publishedByName`, the publisher's display name (absent for the
+system seed or once that user row is gone). The note is never written to the audit row. A publish
+takes effect for open dispatcher forms within 15 seconds: clients refetch `GET /config` on that
+interval and on window focus.
 
 A validation diagnostic is `{ level, path, key, params }`. `path` is a JSON pointer into the
 document, `key` is a message key, and `params` never carries a value from the document.

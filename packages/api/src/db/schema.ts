@@ -274,6 +274,10 @@ export const siteConfigVersion = sqliteTable(
     publishedBy: text(),
     publishedAt: integer(),
     rollbackOf: integer(),
+    // D-M2P0-4: the publisher's change note as PublishNoteSchema parsed it (trimmed), written in
+    // the publish transaction; null when none was given and on a rollback. Frozen once the row
+    // leaves draft (0011). Free text: never in an audit row or a log line (spec 4.7, 5.9).
+    note: text(),
   },
   (t) => [
     uniqueIndex("site_config_version_site_version_uq").on(t.siteId, t.version),

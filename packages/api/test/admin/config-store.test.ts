@@ -1,4 +1,5 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { ConfigDocumentSchema, SYSTEM_ACTOR } from "@querymodule/core/contracts";
@@ -513,6 +514,50 @@ describe("ADR-0011 item 1: published history is never rewritten (migration 0007)
     await exec(db, `UPDATE site_config_version SET document = '{"a":1}' WHERE id = 'd'`);
     await exec(db, "DELETE FROM site_config_version WHERE id = 'd'");
     expect((await rows(db)).map((r) => r.version)).toEqual([1]);
+  });
+  it("D-M2P0-4: check-audit-migrations and check-schema-writes pass with 0011_config_note", () => {
+    const ci = resolve(import.meta.dirname, "../../../../scripts/ci");
+    const drizzle = resolve(import.meta.dirname, "../../drizzle");
+    const run = (script: string, ...args: string[]) =>
+      execFileSync(process.execPath, [join(ci, script), ...args], { encoding: "utf8" });
+    expect(readdirSync(drizzle)).toContain("0011_config_note.sql");
+    expect(run("check-audit-migrations.ts", drizzle)).toMatch(/audit_event migrations ok/);
+    expect(run("check-schema-writes.ts")).toContain("no schema-table writes");
+  }, 20_000);
+  it("D-M2P0-4: a draft's note is writable; a published or superseded note never changes (0011)", async () => {
+    const db = await seeded();
+    await exec(
+      db,
+      "INSERT INTO site_config_version (id, site_id, version, status, document, created_by, created_at) VALUES ('d', 'default', 2, 'draft', '{}', 'u', 1)",
+    );
+    await exec(db, "UPDATE site_config_version SET note = 'first' WHERE id = 'd'");
+    await exec(db, "UPDATE site_config_version SET note = 'second' WHERE id = 'd'");
+    await exec(db, "UPDATE site_config_version SET note = NULL WHERE id = 'd'");
+    await exec(db, "DELETE FROM site_config_version WHERE id = 'd'");
+    await expect(
+      exec(db, "UPDATE site_config_version SET note = 'x' WHERE version = 1"),
+    ).rejects.toThrow(/never rewritten/);
+    await exec(db, "UPDATE site_config_version SET status = 'superseded'");
+    await expect(
+      exec(db, "UPDATE site_config_version SET note = 'x' WHERE version = 1"),
+    ).rejects.toThrow(/never rewritten/);
+    // A row published with a note keeps it: changing or clearing it aborts too.
+    await exec(
+      db,
+      "INSERT INTO site_config_version (id, site_id, version, status, document, created_by, created_at, note) VALUES ('p', 'default', 3, 'draft', '{}', 'u', 1, 'kept')",
+    );
+    await exec(db, "UPDATE site_config_version SET status = 'published' WHERE id = 'p'");
+    for (const set of ["note = 'other'", "note = NULL"])
+      await expect(
+        exec(db, `UPDATE site_config_version SET ${set} WHERE id = 'p'`),
+      ).rejects.toThrow(/never rewritten/);
+    const r = await db.$client.execute(
+      "SELECT version, note FROM site_config_version ORDER BY version",
+    );
+    expect(r.rows.map((x) => [Number(x.version), x.note])).toEqual([
+      [1, null],
+      [3, "kept"],
+    ]);
   });
   it("status is draft, published or superseded, and (site, version) is unique", async () => {
     const db = await seeded();
