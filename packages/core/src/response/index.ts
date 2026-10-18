@@ -1,4 +1,5 @@
 export { assessResult } from "./assess";
+export { checkMappingPaths } from "./check-paths";
 export { formatValue } from "./format";
 export { highlight } from "./highlight";
 export type { MapResponseConfig } from "./map";

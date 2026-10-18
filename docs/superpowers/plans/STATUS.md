@@ -22,7 +22,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | M2 | P0 contracts | n/a | n/a | n/a | done · P0-W1 #559, P0-W2 #562, P0-W3 #688 merged (Tasks 4, 5, 6 and #622) · [plan](2026-10-05-m2-p0-contracts.md), run in the B lane · [issues][m2-p0] | done · demo-path gate 10-05-26; full gate 10-16-26 (#528): contracts frozen, 8.4 log rows for every P0 contract change, oasdiff 0 ERR (info only), verify green · [all][m2-p0] |
 | M2 | P0.5 dispatch (ADR-0012) | done · [plan](2026-10-05-m2-track-a-p0-5.md); AW1 #563 to AW6 #581 and the release note #582 merged · [issues][m2-p05-a] | done · [plan](2026-10-05-m2-track-b-p0-5.md); BW0 #566 to BW3 #579 merged · [issues][m2-p05-b] | n/a | n/a | done · A4 clean no-record; smoke 1 to 5 ok on the host 10-07-26; `:release` promoted at 3e85c2b (#583, no milestone tag; fe47c0f is the release note merge) · [all][m2-p05] |
 | M2 | P1 feed | done, awaiting promote · [plan](2026-10-07-m2-track-a-p1.md): AW1 #611, AW2 #618, AW3 #621, AW4a #646, AW4b #655 (release note, gate, design brief PDF) and follow-ups merged (#576 contract, shared mock matcher, GET queries, replay, replay gate test, smoke step 4); since #655: fixture policy non-Latin digits #657, demo scenario pack and seed #661, keyboard-only dry run #663, demo docs fixes #664, brief refreshes #662 #666, and the overview PDF refresh (docs/m2-overview-pdf) · [issues][m2-p1-a] | done · [plan](2026-10-07-m2-track-b-p1.md): BW0 #619, BW2 #634, #635, BW3 #641 and the polish PR #654 merged (result cards, builder card and keyword editors, Try a match, replay cursor); since #655: Edit as new query #658 and on every row #672, mockup gaps #659, admin demo gaps #665 #667, query screen demo gaps #668 #669 #670, demo polish with the 7:1 Day focus ring #673, demo re-walk fixes #675 · [issues][m2-p1-b] | n/a | done · CW #612 (mapper, `assessResult`, highlighter) · [issues][m2-p1-c] | gate run 10-14-26 (`docs/releases/m2-p1.md`): verify, audit, CI and local smoke 1 to 5 green; re-checked on main 66a35d2 (#675) 10-15-26: verify green (370 test files, 5151 tests, 156/156 scenarios), audit unchanged; release note carries a "Since the first draft" section; promote (no milestone tag) is the developer's step; demo is a decision point; P2 and P3 follow without a pause · [all][m2-p1] |
-| M2 | P2 audit | active (lane A, AW1) · [plan](2026-10-18-m2-track-a-p2.md): AW1 contract, AW2 admin audit read, export, admin query and A9, AW3 sweeper and AUD-1, AW4 publish note, `Server-Timing`, `ackReceipt`, AW5 release note; decisions D-M2P2-1 to -9 with the developer · [issues][m2-p2-a] | planned · [plan](2026-10-18-m2-track-b-p2.md): BW1 design (mockup v6), BW2 audit log and admin request view, BW3 note, purged, client `ackReceipt`, BW4 terminal pane, BW5 e2e · [issues][m2-p2-b] | n/a | planned · in A plan (lane C: mapping paths, `--diff`, bearer tests) · [issues][m2-p2-c] | planned · A7 to A9 (A9 test is Track A Task 6) · [all][m2-p2] |
+| M2 | P2 audit | active (lane A, AW1) · [plan](2026-10-18-m2-track-a-p2.md): AW1 contract, AW2 admin audit read, export, admin query and A9, AW3 sweeper and AUD-1, AW4 publish note, `Server-Timing`, `ackReceipt`, AW5 release note; decisions D-M2P2-1 to -9 with the developer · [issues][m2-p2-a] | planned · [plan](2026-10-18-m2-track-b-p2.md): BW1 design (mockup v6), BW2 audit log and admin request view, BW3 note, purged, client `ackReceipt`, BW4 terminal pane, BW5 e2e · [issues][m2-p2-b] | n/a | active · in A plan (lane C, CW1 `feat/m2-c-p2-wave-1`: mapping paths, `--diff`; CW2 bearer tests) · [issues][m2-p2-c] | planned · A7 to A9 (A9 test is Track A Task 6) · [all][m2-p2] |
 | M2 | P3 hardening | planned · `<date>-m2-track-a-p3.md` · [issues][m2-p3-a] | planned · `<date>-m2-track-b-p3.md` · [issues][m2-p3-b] | n/a | n/a | planned · M2 exit · [all][m2-p3] |
 | M3 | P0 contracts | n/a | n/a | n/a | planned · `<date>-m3-p0-contracts.md` · [issues][m3-p0] | planned · Contracts frozen; flags off · [all][m3-p0] |
 | M3 | P1 credentials and MFA | planned · `<date>-m3-track-a-p1.md` · [issues][m3-p1-a] | planned · `<date>-m3-track-b-p1.md` · [issues][m3-p1-b] | n/a | n/a | planned · B4; raw-bytes and log-capture · [all][m3-p1] |
@@ -40,11 +40,12 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
 | Windows 11 | A (`C:\git\queryModule-a3`, "M2P1 Track A 3") | M2 P1 feed | active (`docs/m2-overview-pdf`: design brief PDF re-shot on main 607e7df, release note "Since the first draft", this STATUS update; AW4b #655 merged) | 10-15-26 |
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A") | M2 P2 audit | active (`feat/m2-a-p2-wave-1`: AW1 Tasks 1, 2, #709, #710) | 10-18-26 |
-| Windows 11 | B (`C:\git\queryModule`, "M2 P0-W3") | M2 P0 contracts | done (P0-W3 #688 merged 6c59963; M2 P0 closed; [handoff](../../handoffs/10-17-26-m2-p0-w3.md)) | 10-17-26 |
+| Windows 11 | B (`C:\git\queryModule`, "M2 P2 Lane B") | M2 P2 audit | BW1 design done (mockup v6 approved 10-18-26, merged in #745); idle until BW2 ([handoff](../../handoffs/10-18-26-m2-p2-lane-b.md)) | 10-18-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
 | Windows 11 | Planning (`C:\git\queryModule-plan`, "M2 P1 planning") | M2 P1 plans | done (#588 merged; issues #589 to #606) | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-b2`, "M2 P2 planning") | M2 P2 plans | active (`docs/m2-p2-plans`; issues by `scripts/pm/gh-create-m2-p2-issues.mjs` after merge) | 10-18-26 |
+| Windows 11 | Core lane C (`C:\git\queryModule-a3`, "M2 P2 Lane C") | M2 P2 audit | active (CW1: Tasks 15, 16; then CW2: Task 17; manager "M2 Manager 8") | 10-18-26 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 
@@ -64,13 +65,13 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track B
 
-- Issue: none open; M2 P0.5 Track B closed (Tasks 1 to 8, #548 to #556)
-- Branch / PR: none; BW0 #566, BW2 #568 #571 #577, BW3 #570 #579 merged
+- Issue: #724 (BW1 design; closes with the rulings PR); BW2 to BW5 open (#725 to #731, #734, #735)
+- Branch / PR: #745 merged (mockup v6 design note and scripts); `feat/b-p2-bw1-rulings` (rulings D-M2P2-B1 to B8, handoff)
 - Last green: `pnpm verify` and CI on main 3e85c2b (P0.5 promoted)
-- Next step: M2 P1 Track B plan (`2026-10-07-m2-track-b-p1.md`), BW1 design and CW core first; #572, #576 (client half), #565 (Try a match, built in P1 per D-M2P1-4), #586, #587 folded in
+- Next step: a fresh Lane B session starts BW2 (audit API helpers, audit log page, request view) once the rulings PR has merged (Track A AW1 #744 is merged); BW2 merges after AW2
 - Blocked by: none
-- Latest handoff: [10-17-26-m2-debt-2.md](../../handoffs/10-17-26-m2-debt-2.md) (DEBT-2, #700 merged: #574 #644 #650 #656 closed, #623 Q1/Q4; open #699, #623 Q3, #560; next: M2 P2 planning)
-- Notes: no local B session; the cloud sessions are done.
+- Latest handoff: [10-18-26-m2-p2-lane-b.md](../../handoffs/10-18-26-m2-p2-lane-b.md) (M2 P2 Lane B: BW1 design done, mockup v6 approved, rulings D-M2P2-B1 to B8 recorded; next: BW2)
+- Notes: manager "M2 Manager 8"; Lane B is local in `C:\git\queryModule`, `E2E_PORT=3200`.
 
 
 ### Track D

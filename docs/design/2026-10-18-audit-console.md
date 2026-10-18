@@ -2,6 +2,8 @@
 
 Date: 10-18-26 (Track B lane, BW1 Task 1, #724). Scope: the screens M2 P2 Track B builds. Plan: `docs/superpowers/plans/2026-10-18-m2-track-b-p2.md` (D-M2P2-5 design first, D-M2P2-6 terminal pane in P2). Spec: 4.7, 5.1, 5.5, 5.6, 6.2, 6.4, 6.6, 6.7, 10.6, 12.3; FR-050, FR-062, FR-063, FR-064, UX-004, UX-014, SEC-012, SEC-021, BR-001.
 
+Status: approved by the developer 10-18-26, all eight open questions ruled as recommended (see "Rulings" at the end).
+
 Mockup: Artifact "Query Module Redesign", tabs "v6 draft: Audit log", "v6 draft: Request view", "v6 draft: Note and history", "v6 draft: Purged" and "v6 draft: Terminal pane" (link in the PR and on #724). Every v4 and v5 tab is unchanged, except the three builder rulings from #698 (below). Each tab has frames, a theme switch (Day, Night, Red shift), and keyboard, screen reader and rules notes under the frame. Mock data only: `example.test` addresses, synthetic ids and names, ZZ- plates, 1901 dates.
 
 ## Reused, not redesigned
@@ -41,7 +43,7 @@ Retention purges the payload first, then the values. A purged result is a dashed
 
 Developer 10-18-26 (comment on #698): `layout.toolbarRow` = 920 px; only the selected type expanded in the Result cards tree; the default answer reads "<Type> default response" (for example "Vehicle default response") in Try a match and the card preview, "Scenario n of <Type>" unchanged. The mockup's builder tabs now match. Differences from the mockup that the manager accepted as the app's: tree type rows keep their +/- toggles; card rows read "1. All results"; the order arrows are text glyphs; the "Which card wins" hint keeps the app's wording; the "This card" chip stays a chip.
 
-## Open questions for the developer
+## Open questions, ruled 10-18-26 (all as recommended)
 
 1. **Rail group.** Audit log under a new "Oversight" group (this design) or under People?
 2. **Terminal pane width.** A new `layout.terminalPane` = 1280 px, with the toggle below it (this design), or no constant and the pane at any width that fits?
@@ -51,3 +53,16 @@ Developer 10-18-26 (comment on #698): `layout.toolbarRow` = 920 px; only the sel
 6. **Note field.** A wrapping text area with control characters turned into spaces (this design) rather than a one-line input?
 7. **Audit of the note (Track A).** The v4 and v5 publish dialogs say the audit log records the change note, but `configPublished` has no note key. Add one (`PublishNoteSchema`, an additive details change), or drop that sentence from the existing dialogs?
 8. **Client address in the disclosure.** `loginSucceeded` stores `sessionId` and `clientIp`. Show them to an admin as stored (this mockup), or mask the last part of the address (GDPR)?
+
+## Rulings
+
+Developer 10-18-26, via the M2 manager ("i'll take your recs"), on the eight open questions of `docs/design/2026-10-18-audit-console.md`; mockup v6 approved the same day (the developer also likes the terminal pane).
+
+- **D-M2P2-B1.** Audit log sits under a new "Oversight" rail group below People (admin only, `features.adminAudit` on).
+- **D-M2P2-B2.** New layout constant `layout.terminalPane` = 1280 px: the terminal pane shows from that width, below it the Form and Terminal toggle returns and the draft is kept. Documented in the visual system and written literally in `shell.css` with the `shell.css.test.ts` rule, as `layout.toolbarRow` was (BW4).
+- **D-M2P2-B3.** The audit table folds Credential owner under Actor below an admin section width of 920 px (1024 viewport), reusing the value of `layout.toolbarRow`; no new constant.
+- **D-M2P2-B4.** Edit as new query on a request with purged values is disabled (`aria-disabled`, focusable) with the reason in text; no partial prefill.
+- **D-M2P2-B5.** A rollback has no note field; the system writes "Rolled back to version N" (from `rollbackOf`), shown with a Rollback tag apart from typed notes.
+- **D-M2P2-B6.** The publish note is a wrapping text area; control characters (Enter, tab, pasted line breaks) become spaces as typed; the count follows zod (UTF-16 units).
+- **D-M2P2-B7.** `configPublished` gets no note key (frozen critical audit contract). BW3 drops the sentence "The audit log records ... your note" from the existing publish dialogs (v4, v5 builder, mock responses) and uses the history-only hint.
+- **D-M2P2-B8.** `loginSucceeded` `clientIp` and `sessionId` show to admins as stored in the audit details disclosure (admin only; every view is audited by `auditViewed`; CJIS investigation need).

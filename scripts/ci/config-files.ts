@@ -12,6 +12,7 @@ import {
   validateResolved,
 } from "@querymodule/core/config";
 import { MockFileSchema } from "@querymodule/core/contracts";
+import { checkMappingPaths } from "@querymodule/core/response";
 import { TOKEN_NAMES } from "@querymodule/tokens";
 import {
   BUILTIN_ADAPTER_KINDS,
@@ -145,6 +146,7 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
     result.errors.push(...colourTokenChecks(config));
 
   let mockErrors: Diagnostic[] = [];
+  const pathWarnings: Diagnostic[] = [];
   if (config.sources.some((s) => s.kind === "mock")) {
     const mockPath = resolve(configDir, "mock", `${config.site.id}.json`);
     // The mock file's repo-relative posix path rides in every mock diagnostic's params: the
@@ -167,12 +169,14 @@ function check(file: string, io: ConfigIo, options: CheckOptions): FileReport {
           params: { file: mockFile },
         });
       }
+      // Mapping paths against the mock payloads (spec 4.5, 14): warnings never fail the build.
+      pathWarnings.push(...checkMappingPaths(config, parsed.data));
     }
   }
   return {
     file,
     errors: [...result.errors, ...mockErrors],
-    warnings: result.warnings,
+    warnings: [...result.warnings, ...pathWarnings],
     resolved: shape.merged,
   };
 }

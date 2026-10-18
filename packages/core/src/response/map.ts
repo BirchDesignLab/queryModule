@@ -68,7 +68,11 @@ function whenHolds(
 }
 
 /** Highest score wins; equal scores go to the earlier mapping in config order. */
-function selectMapping(config: MapResponseConfig, ctx: MapContext, now: number): number | null {
+export function selectMapping(
+  config: MapResponseConfig,
+  ctx: MapContext,
+  now: number,
+): number | null {
   let best: number | null = null;
   let bestScore = -1;
   for (const [index, mapping] of config.responseMappings.entries()) {
