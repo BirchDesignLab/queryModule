@@ -58,7 +58,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Last green: main 66a35d2 (demo re-walk fixes #675); `pnpm verify` green on the branch
 - Next step: the developer merges the overview PDF PR, then promotes (`promote.yml` with the merge sha, no milestone tag) and runs `bash scripts/ops/smoke.sh https://querymodule.birchdesignlab.com` on the host (output on #606)
 - Blocked by: none
-- Latest handoff: [10-18-26-m2-debt-5.md](../../handoffs/10-18-26-m2-debt-5.md) (DEBT-5, #708 merged, #737 (#476 and #478) open; next: M2 DEBT-6 takes PR B, the #698 build-out, #680 R17 and the officer 1024 shot; the brief is in the handoff)
+- Latest handoff: [10-18-26-m2-debt-6.md](../../handoffs/10-18-26-m2-debt-6.md) (DEBT-6, PR B #740 open, ready: the #698 build-out, #680 R17 and the officer 1024 shot; the developer merges; next: M2 P2 planning)
 - Notes: manager "M2 Manager 4" (its push approvals count as the developer's for Track A); open follow-ups #574, #572, #558, #610, #620, #622, #623, #645, #647.
 
 ### Track B
