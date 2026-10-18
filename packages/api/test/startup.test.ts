@@ -4,14 +4,17 @@ import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { CONFIG_SCHEMA_VERSION, CORE_VERSION } from "@querymodule/core/contracts";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type * as auditService from "../src/audit/service";
 import { ConfigLoadError } from "../src/config/load";
 import type * as dbClient from "../src/db/client";
 import { readPragmas } from "../src/db/client";
-import { sourceResult } from "../src/db/schema";
+import { auditEvent, session, sourceResult, user } from "../src/db/schema";
+import type * as sweeperModule from "../src/dispatch/sweeper";
+import { SWEEP_INTERVAL_MS } from "../src/dispatch/sweeper";
 import { readDeployEnv } from "../src/env";
+import { uuidv7 } from "../src/ids";
 import { KeyCanaryError } from "../src/keys/canary";
 import { SecretConfigError } from "../src/secrets";
 import {
@@ -22,6 +25,7 @@ import {
   startServer,
   startupErrorFields,
 } from "../src/startup";
+import { manualTime } from "./helpers/manual-time";
 import { seedResult } from "./helpers/results";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
@@ -72,6 +76,34 @@ vi.mock("../src/db/client", async (importOriginal) => {
       return db;
     },
   };
+});
+
+// Records the sweeper's start and stop calls (and stop's end) in order, so a test can show the
+// sweeper stopped before the database closed on every path (spec 5.2, 8.1; #717).
+const sweeperCalls = vi.hoisted(() => [] as string[]);
+vi.mock("../src/dispatch/sweeper", async (importOriginal) => {
+  const real = await importOriginal<typeof sweeperModule>();
+  return {
+    ...real,
+    createSweeper: (...a: Parameters<typeof real.createSweeper>) => {
+      const sw = real.createSweeper(...a);
+      return {
+        start() {
+          sweeperCalls.push("start");
+          sw.start();
+        },
+        async stop() {
+          sweeperCalls.push("stop");
+          await sw.stop();
+          sweeperCalls.push("stopped");
+        },
+        tick: sw.tick,
+      };
+    },
+  };
+});
+afterEach(() => {
+  sweeperCalls.length = 0;
 });
 
 const PREFIXES = ["qm-data-", "qm-sec-", "qm-cfg-"];
@@ -555,6 +587,103 @@ describe("spec 5.2 startup sweep: pending results become interrupted before the 
     deps.db.$client.close();
     expect(Object.values(status)).toEqual(["pending", "pending"]);
     expect(audited).toBe(0);
+  });
+});
+
+// Spec 5.2 (NFR-003), 8.1 (drain), #717: the sweeper starts after the WebSocket attaches and stops
+// before the database closes on every path: the drain, the fatal close and a listen failure. A
+// refused startup never starts it. Time is manual; mock data only (spec 5.4, 10.8).
+describe("spec 5.2 the sweeper runs from startup and stops before the DB closes (#717)", () => {
+  const DAY = 24 * 60 * 60_000;
+
+  async function startManual(env: NodeJS.ProcessEnv) {
+    const time = manualTime();
+    const lines: string[] = [];
+    const s = await startServer(env, {
+      clock: time.clock,
+      timers: time.timers,
+      logSink: (l) => lines.push(l),
+    });
+    const close = s.deps.db.$client.close.bind(s.deps.db.$client);
+    vi.spyOn(s.deps.db.$client, "close").mockImplementation(() => {
+      sweeperCalls.push("closeDb");
+      close();
+    });
+    const userId = uuidv7(time.clock.now());
+    await s.deps.db.insert(user).values({
+      id: userId,
+      name: "Sweeper Test",
+      email: "sweeper-start@example.test",
+      createdAt: new Date(time.clock.now()),
+      updatedAt: new Date(time.clock.now()),
+    });
+    /** A session older than the 7-day ceiling: the next tick expires it. */
+    const expiredSession = async () => {
+      const at = time.clock.now() - 8 * DAY;
+      const id = uuidv7(at);
+      await s.deps.db.insert(session).values({
+        id,
+        userId,
+        token: uuidv7(at),
+        expiresAt: new Date(time.clock.now() + DAY),
+        createdAt: new Date(at),
+        updatedAt: new Date(at),
+      });
+      return id;
+    };
+    const present = async (id: string) =>
+      (await s.deps.db.select().from(session).where(eq(session.id, id))).length === 1;
+    return { s, time, lines, expiredSession, present };
+  }
+
+  it("a 60 s advance runs one tick; the drain stops the sweeper before the DB closes", async () => {
+    const m = await startManual(await envWith());
+    expect(sweeperCalls).toEqual(["start"]);
+    const first = await m.expiredSession();
+    await m.time.run(SWEEP_INTERVAL_MS - 1);
+    expect(await m.present(first)).toBe(true);
+    await m.time.run(1);
+    await vi.waitFor(async () => expect(await m.present(first)).toBe(false));
+    const revoked = await m.s.deps.db
+      .select()
+      .from(auditEvent)
+      .where(eq(auditEvent.type, "sessionRevoked"));
+    expect(revoked).toHaveLength(1);
+    // one tick per interval: a session expired now waits for the next one
+    const second = await m.expiredSession();
+    await m.time.run(SWEEP_INTERVAL_MS - 1);
+    expect(await m.present(second)).toBe(true);
+    await stop(m.s);
+    expect(sweeperCalls).toEqual(["start", "stop", "stopped", "closeDb"]);
+    await m.time.run(3 * SWEEP_INTERVAL_MS);
+    expect(m.lines.some((l) => l.includes("sweeper tick failed"))).toBe(false);
+  });
+
+  it("the fatal close() stops the sweeper before the DB closes; no tick runs after", async () => {
+    const m = await startManual(await envWith());
+    await m.s.close();
+    expect(sweeperCalls).toEqual(["start", "stop", "stopped", "closeDb"]);
+    await m.time.run(3 * SWEEP_INTERVAL_MS);
+    expect(m.lines.some((l) => l.includes("sweeper tick failed"))).toBe(false);
+  });
+
+  it("a listen failure never starts the sweeper and stops it before the DB closes", async () => {
+    const env = await envWith();
+    const taken = createServer();
+    await new Promise<void>((r) => taken.listen(Number(env.PORT), "0.0.0.0", r));
+    try {
+      await expect(startServer(env, { logSink: () => {} })).rejects.toThrow(/EADDRINUSE/);
+    } finally {
+      await new Promise<void>((r) => taken.close(() => r()));
+    }
+    expect(sweeperCalls).toEqual(["stop", "stopped"]);
+    expect(opened.at(-1)?.$client.closed).toBe(true);
+  });
+
+  it("a refused startup never starts the sweeper", async () => {
+    const env = { ...(await envWith()), SITE_CONFIG: siteConfigWithMfa(true) };
+    await expect(startServer(env, { logSink: () => {} })).rejects.toThrow(/mfaRequired/);
+    expect(sweeperCalls).not.toContain("start");
   });
 });
 

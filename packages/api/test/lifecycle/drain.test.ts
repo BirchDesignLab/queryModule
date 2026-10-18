@@ -5,11 +5,15 @@ import type { AddressInfo } from "node:net";
 import { dirname } from "node:path";
 import { serve } from "@hono/node-server";
 import { type SourcePayload, SubmitQueryResponseSchema } from "@querymodule/core/contracts";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import WebSocket from "ws";
 import type { SourceAdapter } from "../../src/adapters/types";
+import { auditEvent, session } from "../../src/db/schema";
 import { createDispatcher } from "../../src/dispatch/dispatcher";
 import { sweepPending } from "../../src/dispatch/sweep";
+import { createSweeper, SWEEP_INTERVAL_MS } from "../../src/dispatch/sweeper";
+import { uuidv7 } from "../../src/ids";
 import { createDrainStop, DRAIN_SLACK_MS, HTTP_DRAIN_MS } from "../../src/startup";
 import { attachWebSocket } from "../../src/ws/server";
 import { tempDbFile } from "../helpers/db";
@@ -41,7 +45,7 @@ async function setup(o: {
     monotonic: time.monotonic,
     random: () => 0,
   });
-  await t.createUser(EMAIL, PW);
+  const userId = await t.createUser(EMAIL, PW);
   const cookie = await t.cookieFor(EMAIL, PW);
   const { configHash } = t.deps.config.current();
   vi.spyOn(t.deps.adapters, "get").mockReturnValue(o.adapter(time));
@@ -76,7 +80,11 @@ async function setup(o: {
       dbClosed.push({ inFlight: t.deps.dispatcher.inFlight() });
     });
   }
-  const stop = createDrainStop(t.deps, server, ws);
+  // started as startServer starts it, after the WebSocket attaches (spec 5.2)
+  const sweeper = createSweeper(t.deps);
+  sweeper.start();
+  onTestFinished(() => sweeper.stop());
+  const stop = createDrainStop(t.deps, server, ws, sweeper);
   let stopped = false;
   const startStop = () =>
     stop().then(() => {
@@ -130,6 +138,7 @@ async function setup(o: {
     startStop,
     stopped: () => stopped,
     dbClosed,
+    userId,
   };
 }
 
@@ -477,6 +486,67 @@ describe("a fatal error and the drain (AW4 critic 2; spec 5.2, 8.1: the fatal pa
     expect(((await r.json()) as { error: { code: string } }).error.code).toBe("unavailable");
     expect(await s.requestRows()).toBe(0);
     expect(s.t.fatals).toHaveLength(1);
+  }, 20_000);
+});
+
+/** A session past every live limit (older than the 7-day ceiling), so the next tick expires it. */
+async function insertExpiredSession(t: Awaited<ReturnType<typeof createTestApp>>, userId: string) {
+  const at = t.deps.clock.now() - 8 * 24 * 60 * 60_000;
+  const id = uuidv7(at);
+  await t.deps.db.insert(session).values({
+    id,
+    userId,
+    token: uuidv7(at),
+    expiresAt: new Date(t.deps.clock.now() + 60 * 60_000),
+    createdAt: new Date(at),
+    updatedAt: new Date(at),
+  });
+  return id;
+}
+
+describe("the sweeper and the drain (spec 5.2, 8.1; NFR-003; #717)", () => {
+  it("a drain during a tick waits for it before the DB closes, and no tick runs after", async () => {
+    const s = await setup({ adapter: slowAdapter });
+    const first = await insertExpiredSession(s.t, s.userId);
+    // hold the tick inside its transaction, at the sessionRevoked write
+    const record = s.t.deps.audit.record.bind(s.t.deps.audit);
+    let reached: () => void = () => {};
+    const atGate = new Promise<void>((r) => {
+      reached = r;
+    });
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    s.t.deps.audit.record = async (tx, event) => {
+      if (event.type === "sessionRevoked") {
+        reached();
+        await gate;
+      }
+      return record(tx, event);
+    };
+    await s.time.run(SWEEP_INTERVAL_MS);
+    await atGate;
+    const stopping = s.startStop();
+    for (let i = 0; i < 5; i += 1) await settle();
+    expect(s.stopped()).toBe(false);
+    expect(s.dbClosed).toEqual([]);
+    release();
+    await stopping;
+    expect(s.dbClosed).toHaveLength(1);
+    // the tick in flight committed: its session is gone with one sessionRevoked row
+    expect(await s.t.deps.db.select().from(session).where(eq(session.id, first))).toEqual([]);
+    const revoked = await s.t.deps.db
+      .select()
+      .from(auditEvent)
+      .where(eq(auditEvent.type, "sessionRevoked"));
+    expect(revoked).toHaveLength(1);
+    // no tick after the drain: a session expired now stays
+    const second = await insertExpiredSession(s.t, s.userId);
+    await s.time.run(3 * SWEEP_INTERVAL_MS);
+    expect(await s.t.deps.db.select().from(session).where(eq(session.id, second))).toHaveLength(1);
+    expect(s.t.logLines.some((l) => l.includes("sweeper tick failed"))).toBe(false);
+    expect(s.t.fatals).toEqual([]);
   }, 20_000);
 });
 
