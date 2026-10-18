@@ -44,8 +44,8 @@ export function AdminRequestPage() {
   const t = useT();
   // Nothing is fetched until the site config says the feature is on: each open is an audit row.
   if (features === undefined) return <SectionHeading>{t("admin.audit.title")}</SectionHeading>;
-  if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;
   if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;
+  if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;
   return <AdminRequestView />;
 }
 
@@ -230,6 +230,18 @@ function AdminRequestView() {
   const typeKey = config?.queryTypes.find((q) => q.code === primaryType)?.labelKey;
   const typeName = typeKey === undefined ? primaryType : t(typeKey);
 
+  // A request that is missing or not visible writes nothing, so the page says nothing about being
+  // recorded and offers only the way back (design v6).
+  const missing =
+    load.status === "error" &&
+    (load.kind === "notFound" || load.kind === "validation" || load.kind === "forbidden");
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const retry = () => {
+    setAttempt((n) => n + 1);
+    // The retry button leaves with the error: focus goes to the results region.
+    queueMicrotask(() => resultsRef.current?.focus());
+  };
+
   const back = (
     <Link className="qm-button qm-button--secondary" to="/admin/audit">
       {t("admin.request.back")}
@@ -248,78 +260,84 @@ function AdminRequestView() {
           <p className="qm-diff__note">{t("admin.request.intro", { type: typeName })}</p>
         )}
       </div>
-      <div className="qm-request-view__banner" role="note">
-        <b>{t("admin.request.recorded")}</b>
-        <span className="qm-diff__note">{t("admin.request.recordedHint")}</span>
-      </div>
-      <div className="qm-request-view__bar">
-        {back}
-        <span className="qm-diff__note">{t("admin.request.filtersKept")}</span>
-        {/* Hide arrives in M3: the control is shown so the gap is explained, not hidden. */}
-        <label className="qm-request-view__hidden">
-          <input
-            type="checkbox"
-            checked={false}
-            readOnly
-            aria-disabled="true"
-            aria-describedby="qm-request-hidden-why"
-            onClick={(e) => e.preventDefault()}
-            onKeyDown={(e) => {
-              if (e.key === " ") e.preventDefault();
+      {!missing && (
+        <>
+          <div className="qm-request-view__banner" role="note">
+            <b>{t("admin.request.recorded")}</b>
+            <span className="qm-diff__note">{t("admin.request.recordedHint")}</span>
+          </div>
+          <div className="qm-request-view__bar">
+            {back}
+            <span className="qm-diff__note">{t("admin.request.filtersKept")}</span>
+            {/* Hide arrives in M3: the control is shown so the gap is explained, not hidden. */}
+            <label className="qm-request-view__hidden">
+              <input
+                type="checkbox"
+                checked={false}
+                readOnly
+                aria-disabled="true"
+                aria-describedby="qm-request-hidden-why"
+                onClick={(e) => e.preventDefault()}
+                onKeyDown={(e) => {
+                  if (e.key === " ") e.preventDefault();
+                }}
+              />
+              {t("admin.request.hidden")}
+            </label>
+            <span id="qm-request-hidden-why" className="qm-diff__note">
+              {t("admin.request.hiddenReason")}
+            </span>
+          </div>
+        </>
+      )}
+      <div ref={resultsRef} tabIndex={-1} className="qm-request-view__results">
+        {load.status === "loading" && (
+          <p className="qm-diff__note" aria-busy="true" role="status">
+            {t("admin.request.loading")}
+          </p>
+        )}
+        {load.status === "error" &&
+          (load.kind === "notFound" || load.kind === "validation" ? (
+            <StateBox
+              title={t("admin.request.notFound.title")}
+              body={t("admin.request.notFound.body")}
+            >
+              {back}
+            </StateBox>
+          ) : load.kind === "forbidden" ? (
+            <StateBox
+              alert
+              title={t("admin.audit.noAccess.title")}
+              body={t("admin.audit.noAccess.body")}
+            />
+          ) : (
+            <StateBox
+              alert
+              title={t("admin.request.failed.title")}
+              body={t("admin.request.failed.body")}
+            >
+              <button type="button" className="qm-button" onClick={retry}>
+                {t("admin.audit.retry")}
+              </button>
+            </StateBox>
+          ))}
+        {row !== null && (
+          <RequestList
+            rows={[row]}
+            heading={t("admin.request.list")}
+            headingLevel={3}
+            emptyText=""
+            t={t}
+            onCopy={(id) => {
+              // A failed copy stays silent: the ID is on screen.
+              void navigator.clipboard?.writeText(id).then(
+                () => announcer.announce(t("submit.referenceCopied")),
+                () => undefined,
+              );
             }}
           />
-          {t("admin.request.hidden")}
-        </label>
-        <span id="qm-request-hidden-why" className="qm-diff__note">
-          {t("admin.request.hiddenReason")}
-        </span>
+        )}
       </div>
-      {load.status === "loading" && (
-        <p className="qm-diff__note" aria-busy="true" role="status">
-          {t("admin.request.loading")}
-        </p>
-      )}
-      {load.status === "error" &&
-        (load.kind === "notFound" || load.kind === "validation" ? (
-          <StateBox
-            title={t("admin.request.notFound.title")}
-            body={t("admin.request.notFound.body")}
-          >
-            {back}
-          </StateBox>
-        ) : load.kind === "forbidden" ? (
-          <StateBox
-            alert
-            title={t("admin.audit.noAccess.title")}
-            body={t("admin.audit.noAccess.body")}
-          />
-        ) : (
-          <StateBox
-            alert
-            title={t("admin.request.failed.title")}
-            body={t("admin.request.failed.body")}
-          >
-            <button type="button" className="qm-button" onClick={() => setAttempt((n) => n + 1)}>
-              {t("admin.audit.retry")}
-            </button>
-          </StateBox>
-        ))}
-      {row !== null && (
-        <RequestList
-          rows={[row]}
-          heading={t("admin.request.list")}
-          headingLevel={3}
-          emptyText=""
-          t={t}
-          onCopy={(id) => {
-            // A failed copy stays silent: the ID is on screen.
-            void navigator.clipboard?.writeText(id).then(
-              () => announcer.announce(t("submit.referenceCopied")),
-              () => undefined,
-            );
-          }}
-        />
-      )}
     </section>
   );
 }

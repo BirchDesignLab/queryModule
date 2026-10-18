@@ -40,8 +40,8 @@ export function AuditLogPage() {
   const t = useT();
   // Nothing is fetched until the site config says the feature is on: a fetch is an audit row.
   if (features === undefined) return <SectionHeading>{t("admin.audit.title")}</SectionHeading>;
-  if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;
   if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;
+  if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;
   return (
     <section className="qm-audit">
       <AuditLog usersPicker={!adminUsersOff(features)} />
@@ -157,6 +157,8 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
   }, [page]);
 
   if (form === null) return <SectionHeading>{t("admin.audit.title")}</SectionHeading>;
+  if (failure === "forbidden") return <AuditNoAccess kind="forbidden" />;
+  if (failure === "notFound") return <AuditNoAccess kind="off" />;
 
   const apply = () => {
     const result = validateAuditForm(form);
@@ -217,10 +219,10 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
   };
 
   const exportId = `${uid}-export`;
-  const pagesWhy = `${uid}-why`;
+  const newestWhy = `${uid}-newest`;
+  const oldestWhy = `${uid}-oldest`;
   const atNewest = cursors.length < 2;
   const atOldest = page?.nextCursor == null;
-  const fatal = failure === "forbidden" || failure === "notFound";
   return (
     <>
       <div className="qm-audit__toolbar">
@@ -259,17 +261,7 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
         </p>
       )}
       <div ref={resultsRef} className="qm-audit__body" tabIndex={-1}>
-        {fatal ? (
-          <StateBox
-            alert={failure === "forbidden"}
-            title={t(
-              failure === "forbidden" ? "admin.audit.noAccess.title" : "admin.audit.notOn.title",
-            )}
-            body={t(
-              failure === "forbidden" ? "admin.audit.noAccess.body" : "admin.audit.notOn.body",
-            )}
-          />
-        ) : failure === "validation" ? (
+        {failure === "validation" ? (
           <StateBox
             alert
             title={t("admin.audit.failed.title")}
@@ -294,7 +286,7 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
             </p>
           </>
         )}
-        {!fatal && page !== null && applied !== null && (
+        {failure === null && page !== null && applied !== null && (
           <>
             {page.events.length === 0 ? (
               <StateBox title={t("admin.audit.empty.title")} body={t("admin.audit.empty.body")}>
@@ -317,53 +309,54 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
                 })}
               />
             )}
-            <nav className="qm-audit__pager" aria-label={t("admin.audit.pages")}>
-              <span className="qm-audit__hint">
-                {t("admin.audit.count", { count: page.events.length })}
-              </span>
-              <div className="qm-field qm-audit__page-size">
-                <label htmlFor={`${uid}-size`} className="qm-field__label">
-                  {t("admin.audit.field.pageSize")}
-                </label>
-                <select
-                  id={`${uid}-size`}
-                  className="qm-select"
-                  value={pageSize}
-                  onChange={(e) =>
-                    store.set({ pageSize: Number(e.currentTarget.value), cursors: [undefined] })
-                  }
-                >
-                  {AUDIT_PAGE_SIZES.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="button"
-                className="qm-button qm-button--secondary"
-                aria-disabled={loading || atNewest ? "true" : undefined}
-                aria-describedby={atNewest ? pagesWhy : undefined}
-                onClick={newer}
-              >
-                {t("admin.audit.newer")}
-              </button>
-              <button
-                type="button"
-                className="qm-button qm-button--secondary"
-                aria-disabled={loading || atOldest ? "true" : undefined}
-                aria-describedby={atOldest ? pagesWhy : undefined}
-                onClick={older}
-              >
-                {t("admin.audit.older")}
-              </button>
-              <VisuallyHidden>
-                <span id={pagesWhy}>
-                  {t(atNewest ? "admin.audit.newestPage" : "admin.audit.oldestPage")}
+            {(page.events.length > 0 || !atNewest) && (
+              <nav className="qm-audit__pager" aria-label={t("admin.audit.pages")}>
+                <span className="qm-audit__hint">
+                  {t("admin.audit.count", { count: page.events.length })}
                 </span>
-              </VisuallyHidden>
-            </nav>
+                <div className="qm-field qm-audit__page-size">
+                  <label htmlFor={`${uid}-size`} className="qm-field__label">
+                    {t("admin.audit.field.pageSize")}
+                  </label>
+                  <select
+                    id={`${uid}-size`}
+                    className="qm-select"
+                    value={pageSize}
+                    onChange={(e) =>
+                      store.set({ pageSize: Number(e.currentTarget.value), cursors: [undefined] })
+                    }
+                  >
+                    {AUDIT_PAGE_SIZES.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="qm-button qm-button--secondary"
+                  aria-disabled={loading || atNewest ? "true" : undefined}
+                  aria-describedby={atNewest ? newestWhy : undefined}
+                  onClick={newer}
+                >
+                  {t("admin.audit.newer")}
+                </button>
+                <button
+                  type="button"
+                  className="qm-button qm-button--secondary"
+                  aria-disabled={loading || atOldest ? "true" : undefined}
+                  aria-describedby={atOldest ? oldestWhy : undefined}
+                  onClick={older}
+                >
+                  {t("admin.audit.older")}
+                </button>
+                <VisuallyHidden>
+                  <span id={newestWhy}>{t("admin.audit.newestPage")}</span>
+                  <span id={oldestWhy}>{t("admin.audit.oldestPage")}</span>
+                </VisuallyHidden>
+              </nav>
+            )}
           </>
         )}
       </div>

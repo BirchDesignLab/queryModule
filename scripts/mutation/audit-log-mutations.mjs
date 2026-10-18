@@ -193,6 +193,52 @@ const MUTATIONS = [
     test: VIEW_TEST,
   },
   {
+    name: "earlier rows stay under a failure",
+    file: LOG,
+    from: "{failure === null && page !== null && applied !== null && (",
+    to: "{page !== null && applied !== null && (",
+  },
+  {
+    name: "an empty first page keeps its pager",
+    file: LOG,
+    from: "{(page.events.length > 0 || !atNewest) && (",
+    to: "{(true as boolean) && (",
+  },
+  {
+    name: "both ends share one reason",
+    file: LOG,
+    from: "aria-describedby={atOldest ? oldestWhy : undefined}",
+    to: "aria-describedby={atOldest ? newestWhy : undefined}",
+  },
+  {
+    name: "a server 403 mid-session keeps the filter form",
+    file: LOG,
+    from: 'if (failure === "forbidden") return <AuditNoAccess kind="forbidden" />;',
+    to: "void 0;",
+  },
+  {
+    name: "feature check runs before the role check",
+    file: LOG,
+    from: 'if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;
+  if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;',
+    to: 'if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;
+  if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;',
+  },
+  {
+    name: "a missing request still says it was recorded",
+    file: VIEW,
+    from: "{!missing && (",
+    to: "{(true as boolean) && (",
+    test: VIEW_TEST,
+  },
+  {
+    name: "request Try again does not move focus",
+    file: VIEW,
+    from: "queueMicrotask(() => resultsRef.current?.focus());",
+    to: "void resultsRef;",
+    test: VIEW_TEST,
+  },
+  {
     name: "severity badge is dropped from the entry head",
     file: VIEW,
     from: "...(highest === null",

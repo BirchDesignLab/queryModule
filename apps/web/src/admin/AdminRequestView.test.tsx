@@ -136,6 +136,9 @@ describe("other states", () => {
       ).toBeVisible();
       expect(screen.queryByRole("region", { name: /returned$/ })).toBeNull();
       expect(screen.getAllByRole("link", { name: "Back to audit log" }).length).toBeGreaterThan(0);
+      // Nothing was recorded for a request that is not there, so the page does not say it was.
+      expect(screen.queryByText("This view is recorded in the audit log.")).toBeNull();
+      expect(screen.queryByRole("checkbox", { name: "Include hidden results" })).toBeNull();
     },
   );
 
@@ -160,6 +163,8 @@ describe("other states", () => {
       }),
     );
     await waitFor(() => expect(seen).toHaveLength(2));
+    // The button left with the error: focus goes to the results region.
+    expect(document.querySelector(".qm-request-view__results")).toHaveFocus();
   });
 
   it("an implementer typing the URL gets the full-page 403 state and fetches nothing", async () => {

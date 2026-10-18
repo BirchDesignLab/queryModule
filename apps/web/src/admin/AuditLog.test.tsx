@@ -98,6 +98,12 @@ describe("rail entry", () => {
     expect(seen).toHaveLength(0);
   });
 
+  it("an implementer on a site with the audit log off gets the 403 state, not a way back to queries", async () => {
+    await openAudit("implementer", { flags: { adminAudit: false } });
+    expect(await screen.findByText("You can't read the audit log", {}, MAX_WAIT)).toBeVisible();
+    expect(screen.queryByText("The audit log is not turned on")).toBeNull();
+  });
+
   it("a typed URL with the feature off shows the full-page 404 state and fetches nothing", async () => {
     const { seen } = await openAudit("admin", { flags: { adminAudit: false } });
     expect(await screen.findByText("The audit log is not turned on", {}, MAX_WAIT)).toBeVisible();
@@ -336,6 +342,56 @@ describe("export", () => {
     expect(exported[0]?.searchParams.get("from")).toBe(seen[0]?.searchParams.get("from"));
     expect(exported[0]?.searchParams.get("to")).toBe(seen[0]?.searchParams.get("to"));
     expect(exported[0]?.searchParams.has("cursor")).toBe(false);
+  });
+});
+
+describe("after a failed fetch", () => {
+  it("never shows the earlier rows under the new window's caption", async () => {
+    let calls = 0;
+    const { t } = await openAudit("admin", {
+      pages: () =>
+        ++calls === 1
+          ? HttpResponse.json(auditPage(2, null))
+          : HttpResponse.json({}, { status: 500 }),
+    });
+    await screen.findByRole("table", {}, MAX_WAIT);
+    await t.user.click(screen.getByRole("button", { name: "Apply filters" }));
+    await screen.findByText("The audit log did not load", {}, MAX_WAIT);
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Audit pages" })).toBeNull();
+  });
+
+  it("a server 403 after the page opened is the full-page state, with no filter form", async () => {
+    let calls = 0;
+    const { t } = await openAudit("admin", {
+      pages: () =>
+        ++calls === 1
+          ? HttpResponse.json(auditPage(1, null))
+          : HttpResponse.json({}, { status: 403 }),
+    });
+    await screen.findByRole("table", {}, MAX_WAIT);
+    await t.user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("You can't read the audit log", {}, MAX_WAIT)).toBeVisible();
+    expect(screen.queryByRole("form", { name: "Audit filters" })).toBeNull();
+  });
+});
+
+describe("pager details", () => {
+  it("an empty first page has no pager", async () => {
+    await openAudit("admin", { pages: () => HttpResponse.json(auditPage(0, null)) });
+    await screen.findByText("No audit events match", {}, MAX_WAIT);
+    expect(screen.queryByRole("navigation", { name: "Audit pages" })).toBeNull();
+  });
+
+  it("on a single page each end names its own reason", async () => {
+    await openAudit();
+    await screen.findByRole("table", {}, MAX_WAIT);
+    expect(screen.getByRole("button", { name: "Newer" })).toHaveAccessibleDescription(
+      "This is the newest page.",
+    );
+    expect(screen.getByRole("button", { name: "Older" })).toHaveAccessibleDescription(
+      "There are no older events in this window.",
+    );
   });
 });
 
