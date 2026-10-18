@@ -200,12 +200,25 @@ describe("a card's order and the tree's Add row (#698 (a))", () => {
     );
   });
 
+  it("the arrows name their card, so several cards are not 'Move up, Move up'", async () => {
+    const t = await openBuilder();
+    await openVehicleCard(t);
+    await addVehicleCard(t);
+    const ed = within(editor());
+    await ed.findByRole("heading", { level: 3, name: /veh-card/ });
+    const up = ed.getByRole("button", { name: "Move All results (veh-card) up" });
+    expect(up).toHaveAttribute("title", "Move All results (veh-card) up");
+    expect(
+      ed.getByRole("button", { name: "Move All results (veh-card) down" }),
+    ).toBeInTheDocument();
+  });
+
   it("the card's up and down arrows are icon buttons, aria-disabled at the ends", async () => {
     const t = await openBuilder();
     await openVehicleCard(t);
     const ed = within(editor());
-    const up = ed.getByRole("button", { name: "Move card up" });
-    const down = ed.getByRole("button", { name: "Move card down" });
+    const up = ed.getByRole("button", { name: /^Move All results \(veh-summary\) up$/ });
+    const down = ed.getByRole("button", { name: /^Move All results \(veh-summary\) down$/ });
     expect(up.textContent).toBe("\u2191");
     expect(down.textContent).toBe("\u2193");
     expect(up).toHaveAttribute("aria-disabled", "true");
@@ -222,15 +235,14 @@ describe("a card's order and the tree's Add row (#698 (a))", () => {
     await addVehicleCard(t);
     const ed = within(editor());
     await ed.findByRole("heading", { level: 3, name: /veh-card/ });
-    // Two cards that fit everything: the earlier one (veh-summary) wins every row.
+    // Two cards that fit everything: the earlier one (veh-card) wins every row.
     const table = () => ed.getByRole("table", { name: "Which card wins" });
     const thisCard = () => within(table()).queryAllByText("This card").length;
     expect(thisCard()).toBe(0);
-    expect(ed.getByRole("button", { name: "Move card down" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
-    await t.user.click(ed.getByRole("button", { name: "Move card up" }));
+    expect(
+      ed.getByRole("button", { name: /^Move All results \(veh-card\) down$/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await t.user.click(ed.getByRole("button", { name: /^Move All results \(veh-card\) up$/ }));
     expect(
       cards(t)
         .map((c) => c.id)
@@ -240,13 +252,15 @@ describe("a card's order and the tree's Add row (#698 (a))", () => {
     await ed.findByText(/^Card veh-card, 1 of 2 Vehicle cards\./);
     await waitFor(() => expect(thisCard()).toBeGreaterThanOrEqual(2));
     expect(within(table()).getAllByText(/earlier in the list/).length).toBeGreaterThanOrEqual(2);
-    expect(ed.getByRole("button", { name: "Move card up" })).toHaveAttribute(
+    expect(ed.getByRole("button", { name: /^Move All results \(veh-card\) up$/ })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
     // Up was enabled on the second card; after the move focus is still on that card's Up button.
-    expect(ed.getByRole("button", { name: "Move card up" })).toHaveFocus();
-    expect(ed.getByRole("button", { name: "Move card down" })).not.toHaveAttribute("aria-disabled");
+    expect(ed.getByRole("button", { name: /^Move All results \(veh-card\) up$/ })).toHaveFocus();
+    expect(
+      ed.getByRole("button", { name: /^Move All results \(veh-card\) down$/ }),
+    ).not.toHaveAttribute("aria-disabled");
   });
 
   it("the tree finds a type's cards by its code too", async () => {

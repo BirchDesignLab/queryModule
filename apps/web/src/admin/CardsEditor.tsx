@@ -323,14 +323,19 @@ function CardEditor({
         <div className="qm-card-head__tools">
           {(["up", "down"] as const).map((kind) => {
             const target = siblings[kind === "up" ? position - 1 : position + 1]?.index;
+            // Named with the card, so a list of cards is not "Move up, Move up": the card name and its key.
+            const moveName = t(kind === "up" ? "admin.cards.moveUp" : "admin.cards.moveDown", {
+              name,
+              id,
+            });
             return (
               <button
                 key={kind}
                 type="button"
                 className="qm-button qm-button--ghost qm-mock__icon"
                 aria-disabled={target === undefined ? "true" : undefined}
-                aria-label={t(kind === "up" ? "admin.cards.moveUp" : "admin.cards.moveDown")}
-                title={t(kind === "up" ? "admin.cards.moveUp" : "admin.cards.moveDown")}
+                aria-label={moveName}
+                title={moveName}
                 data-owner={owner}
                 data-role={kind}
                 onClick={() => {
