@@ -44,7 +44,7 @@ A site config has these top-level keys. Unknown keys are errors.
 | `locales` | The site's locales. The first is the default. Default `["en"]`. |
 | `features` | Feature flags. See "Features". |
 | `personas` | Layout choices: each has a `key`, a `labelKey` and a `layout` (`dispatch`, `mobileUnit` or `mobile`). |
-| `auth` | Session limits (`absoluteMinutes` 720 and `idleMinutes` 30 by default), `mfaRequired`, embedded role claims. Server only. |
+| `auth` | Session limits (`absoluteMinutes` 720 and `idleMinutes` 30 by default), `mfaRequired`, embedded role claims. Server only. `absoluteMinutes` may not exceed 10080 (7 days, the fixed Better Auth ceiling; `config.sessionCeilingExceeded`) and `idleMinutes` may not exceed `absoluteMinutes` (`config.sessionIdleOverAbsolute`). |
 | `delegation` | Delegated credentials: `maxDurationMinutes` and `purposes`. Used when the `delegation` feature is built (M3). |
 | `retention` | `payloadDays` and `valuesDays`; `null` keeps data. The prototype ships `null`. Server only. |
 | `terminal` | `delimiter`, one printable non-alphanumeric ASCII character, default `.`. |
@@ -75,12 +75,13 @@ key is a validation error. A feature that is off hides its UI and its routes ans
 | `credentials` | State-system credential entry | Not built yet; keep off. |
 | `delegation` | Delegated credentials | Not built yet; keep off. |
 | `resultHide` | Delete from view | Not built yet; keep off. |
-| `adminAudit` | The admin audit viewer | Not built yet (M2 P2); keep off. |
+| `adminAudit` | The admin audit log, its export and the admin request view | On in the shipped default site (D-M2P2-1). The routes mount and the viewer ships during M2 P2; until then the routes answer `404`. |
 | `adminConfig` | The admin config routes and the builder | Live. On in the shipped default site. |
 | `adminUsers` | The admin user routes and the Users page | Live. On in the shipped default site. |
 
 A flag that gates unfinished work stays off in every shipped site until its acceptance tests pass
-on `main`.
+on `main`. One exception: `adminAudit` ships on during M2 P2 (D-M2P2-1), and its routes answer
+`404` until they mount.
 
 ## Example: the vehicle plate query
 

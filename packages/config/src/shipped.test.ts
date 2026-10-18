@@ -65,8 +65,9 @@ describe("BR-001 shipped sites validate (spec 7)", () => {
       ["nationalSource", "national", "mock"],
     ]);
     // The admin console is on in the shipped site (ADR-0011: off only until its tests pass; ADR-0012
-    // puts the admin persona in the M1 demo). Every other flag stays off.
-    const on = ["adminConfig", "adminUsers"];
+    // puts the admin persona in the M1 demo). The audit console joins it in M2 P2 (D-M2P2-1). Every
+    // other flag stays off.
+    const on = ["adminConfig", "adminUsers", "adminAudit"];
     for (const [flag, value] of Object.entries(c.features))
       expect(value, flag).toBe(on.includes(flag));
   });

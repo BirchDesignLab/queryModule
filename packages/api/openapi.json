@@ -1328,6 +1328,7 @@
       "get": {
         "operationId": "listAdminAudit",
         "summary": "Audit rows by user (actor or credential owner), correlation id and type; window at most 31 days; writes auditViewed",
+        "x-feature": "adminAudit",
         "parameters": [
           {
             "name": "user",
@@ -1465,6 +1466,7 @@
       "get": {
         "operationId": "exportAdminAudit",
         "summary": "The same filters as a NDJSON stream, one audit row per line; writes auditExported",
+        "x-feature": "adminAudit",
         "parameters": [
           {
             "name": "user",
@@ -1537,7 +1539,7 @@
         ],
         "responses": {
           "200": {
-            "description": "application/x-ndjson, one AuditExportLineSchema row per line"
+            "description": "application/x-ndjson; each line is one AuditExportLineSchema row (docs/api.md)"
           },
           "400": {
             "description": "Malformed filters, or a window over 31 days (validationFailed)",
@@ -1576,6 +1578,7 @@
       "get": {
         "operationId": "getAdminQuery",
         "summary": "A request with payloads; includeHidden=true adds hidden results; writes adminViewed with viewerBasis admin",
+        "x-feature": "adminAudit",
         "parameters": [
           {
             "name": "correlationId",

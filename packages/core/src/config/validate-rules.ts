@@ -4,6 +4,7 @@ import { configuredDefault } from "./defaults";
 import { type DiagnosticSink, pointer } from "./diagnostic";
 import type { SiteConfig } from "./schema";
 import { MAX_ALSO_RUN, MAX_VALUE_LENGTH } from "./schema-fields";
+import { SESSION_CEILING_MINUTES } from "./session-limits";
 import { EDITING_COMBOS, resolveShortcuts, strokesCollide, usLayoutChar } from "./shortcuts";
 
 export const MAX_SOURCES_PER_SUBMIT = 8;
@@ -281,6 +282,17 @@ export function checkLimits(config: SiteConfig, out: DiagnosticSink): void {
     const v = config.retention[key];
     if (v !== null && v <= 0) out.error(pointer("retention", key), "config.retentionNotPositive");
   }
+  // AUD-1 (D-M2P2-2): Better Auth's fixed expiry must never beat the live limits, so the sweeper
+  // always expires a session first, with its audit row.
+  const { absoluteMinutes, idleMinutes } = config.auth.session;
+  if (absoluteMinutes > SESSION_CEILING_MINUTES)
+    out.error(pointer("auth", "session", "absoluteMinutes"), "config.sessionCeilingExceeded", {
+      max: SESSION_CEILING_MINUTES,
+    });
+  if (idleMinutes > absoluteMinutes)
+    out.error(pointer("auth", "session", "idleMinutes"), "config.sessionIdleOverAbsolute", {
+      absoluteMinutes,
+    });
 }
 
 export function checkWarnings(config: SiteConfig, out: DiagnosticSink): void {

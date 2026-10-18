@@ -27,9 +27,10 @@ use placeholder values.
   validate routes take up to 256 KiB, because a whole config document can pass 32 KiB.
 - **No cache.** Every `/api/*` response carries `Cache-Control: no-store`.
 - **Errors.** Every non-2xx answer that carries a body uses the `ApiError` shape (below).
-- **Feature gates.** The admin routes sit behind site features (`adminConfig`, `adminUsers`). With
-  the feature off the route answers `404 notFound` to every caller, although the route table below
-  (from `openapi.json`) does not list that 404 per route. The shipped default site turns both on.
+- **Feature gates.** The admin routes sit behind site features (`adminConfig`, `adminUsers`, and
+  `adminAudit` for the audit log, its export and the admin request view). With the feature off the
+  route answers `404 notFound` to every caller, although the route table below (from
+  `openapi.json`) does not list that 404 per route. The shipped default site turns all three on.
 - **Forced password change.** A user created by an admin holds a temporary password. Until they
   change it, every session route answers `403 passwordChangeRequired`, and the WebSocket upgrade is
   refused with HTTP 403. Only the auth routes work (D-A26).
@@ -89,7 +90,7 @@ What each route does:
 | `GET /queries` | The caller's own requests, newest first, `cursor` and `limit` (default 25, at most 100); parts nested with per-source status and no values or payloads. See "Reading queries". |
 | `GET /queries/{correlationId}` | One of the caller's requests with its submitted values and, for each `returned` source, its payload; anyone else's request, an unknown id, or a malformed id is `404 notFound` (the id's shape is no oracle); a shredded part or result answers `purged: true` with no values or payload. See "Reading queries". |
 | `GET /admin/audit` | Planned, admin. Filters `user` (actor or credential owner), `correlationId`, `type`; `from` and `to` required, at most 31 days apart; `cursor`; `limit` at most 200. Rows go through a tolerant read schema so rows written before later fields still parse. |
-| `GET /admin/audit/export` | Planned, admin. The same filters as NDJSON, one audit row per line. |
+| `GET /admin/audit/export` | Planned, admin. The same filters as NDJSON (`application/x-ndjson`), one audit row per line. Each line is one JSON object in the `AuditExportLineSchema` shape, the same tolerant row the page returns: `id`, `type`, `at` (epoch ms), optional `correlationId` and `partId`, `actor { id, email, role }`, optional `credentialUserId`, `identitySource`, optional `hostSubject`, and `details` (identifiers and metadata only). |
 | `GET /admin/queries/{correlationId}` | Planned, admin. A request with payloads; `includeHidden=true` adds hidden results. |
 | `GET /me/preferences` | The caller's own preference row: `themeMode`, `personaOverride`, `layout`. Each is `null` when unset. |
 | `PUT /me/preferences` | Replaces the caller's own row. |

@@ -7,7 +7,7 @@
     "credentials": false,
     "delegation": false,
     "resultHide": false,
-    "adminAudit": false,
+    "adminAudit": true,
     "adminConfig": true,
     "adminUsers": true
   },
