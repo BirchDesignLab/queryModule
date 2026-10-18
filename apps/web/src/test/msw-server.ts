@@ -123,6 +123,46 @@ export function adminConfigBody(
   };
 }
 
+/**
+ * GET /api/v1/admin/audit: `count` synthetic rows (identifiers and metadata only; mock data) and
+ * the cursor to the next page (null on the last).
+ */
+export function auditPage(count: number, nextCursor: string | null, firstId = 1) {
+  return {
+    events: Array.from({ length: count }, (_, i) => ({
+      id: firstId + i,
+      type: "acknowledged",
+      at: FIXTURE_TIME + (firstId + i) * 1000,
+      correlationId: FIXTURE_ID,
+      partId: 1,
+      actor: { id: "user-0001", email: "tester@querymodule.test", role: "user" },
+      identitySource: "local",
+      details: { queryType: "VEH", sourceCount: 2 },
+    })),
+    nextCursor,
+  };
+}
+
+/**
+ * GET /api/v1/admin/queries/:correlationId for the canned request: the user detail plus the
+ * admin-only `hidden` flag on each result and a full-length config hash (mock data only).
+ */
+export function adminDetail202(over: { hidden?: boolean } = {}) {
+  const base = detail202();
+  return {
+    ...base,
+    configHash: "b".repeat(64),
+    parts: base.parts.map((part) => ({
+      ...part,
+      sources: part.sources.map((source, i) => ({
+        ...source,
+        resultId: `0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b0${i}`,
+        hidden: over.hidden ?? false,
+      })),
+    })),
+  };
+}
+
 /** The contract shape of GET/PUT /api/v1/me/preferences (openapi.json getMePreferences200). */
 export const PREFERENCES = {
   layout: { orientation: "horizontal", terminal: "toggle" },
