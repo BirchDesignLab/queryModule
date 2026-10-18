@@ -622,7 +622,11 @@ strict parse, the referential checks (duplicate and unresolved ids, field and pi
 literals that do not fit their field, command and shortcut checks, contrast per theme mode, locale
 coverage) and the mock coverage. Each problem prints on one line as
 `ERROR <file> <json-pointer> <key> <params>`; a warning prints as `WARN`. The command exits 1 when
-any file has an error and 2 on bad usage. `--diff <tag>` is refused until M2 P2.
+any file has an error and 2 on bad usage.
+For a site with mock sources it also resolves every response mapping path (and table column path)
+against the mock answers, and prints a `WARN` `config.mappingPathUnresolved` for an element no mock
+answer of that source and query type resolves (a path may resolve in only some answers, since a
+no-record answer lacks fields). Warnings never fail the command. `--diff <tag>` is refused until M2 P2.
 
 `config:migrate` applies the migration steps in order and writes the file in place, printing one
 `migrated <file>: <from> -> <to>` line per step. With nothing to do it says the file is already at

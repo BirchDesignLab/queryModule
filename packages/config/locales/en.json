@@ -772,6 +772,7 @@
   "fixture.freeTextDigits": "This mock text holds digits the fixture policy does not allow.",
   "config.mockSiteMismatch": "The mock data file belongs to site {siteId}.",
   "config.missingMock": "Source {sourceId} has no mock data.",
+  "config.mappingPathUnresolved": "No mock answer for {sourceId} {queryType} has this mapping path ({scenario}). A real source may still send it.",
   "config.missingMockResponse": "Source {sourceId} has no mock response for query type {queryType}.",
   "config.severityContrast": "The {severity} keyword style lacks enough contrast in {mode} mode.",
   "config.themeContrast": "The theme colors {fg} on {bg} lack enough contrast.",
