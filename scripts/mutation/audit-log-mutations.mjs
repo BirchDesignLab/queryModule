@@ -219,10 +219,8 @@ const MUTATIONS = [
   {
     name: "feature check runs before the role check",
     file: LOG,
-    from: 'if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;
-  if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;',
-    to: 'if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;
-  if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;',
+    from: 'if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;\n  if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;',
+    to: 'if (adminAuditOff(features)) return <AuditNoAccess kind="off" />;\n  if (!canViewAudit(role)) return <AuditNoAccess kind="forbidden" />;',
   },
   {
     name: "a missing request still says it was recorded",
