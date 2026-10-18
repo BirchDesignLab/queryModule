@@ -45,7 +45,12 @@ describe("BR-001 config:validate over shipped files (spec 7, 9.3 step 3)", () =>
       expect(r.errors).toEqual([]);
       // The shipped sites mark their form-only fields formOnly (VEH plateType and plateColor, PRO
       // make, caliber and description), so no required-without-position warning remains.
-      expect(r.warnings).toEqual([]);
+      // example-ok keeps a thin mock (it demos fewer scenarios), so its card paths that no mock
+      // answer carries warn (spec 4.5); the other shipped sites resolve every path.
+      const own = r.warnings.filter(
+        (w) => !(rel === "sites/example-ok.json" && w.key === "config.mappingPathUnresolved"),
+      );
+      expect(own).toEqual([]);
     });
   }
 
@@ -247,6 +252,29 @@ describe("config:validate failures carry JSON paths", () => {
       key: "fixture.realPlate",
       params: { file: "packages/config/mock/default.json" },
     });
+  });
+
+  it("a mapping path that no mock payload resolves is a warning, not an error (spec 4.5, 7)", () => {
+    const site = defaultSite();
+    const mapping = (site.responseMappings as Json[])[0] as { elements: Json[] };
+    (mapping.elements[0] as Json).path = "zzTypoPath";
+    const r = checkConfigFile(
+      cfg("sites/default.json"),
+      layered({ [cfg("sites/default.json")]: site }),
+    );
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toContainEqual(
+      expect.objectContaining({
+        level: "warning",
+        path: "/responseMappings/0/elements/0",
+        key: "config.mappingPathUnresolved",
+      }),
+    );
+  });
+
+  it("the shipped default config has no mapping path warnings", () => {
+    const r = checkConfigFile(cfg("sites/default.json"), fsIo);
+    expect(r.warnings.filter((w) => w.key === "config.mappingPathUnresolved")).toEqual([]);
   });
 
   it("the shipped mock files pass the fixture policy", () => {

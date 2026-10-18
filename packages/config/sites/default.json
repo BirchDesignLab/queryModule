@@ -727,12 +727,6 @@
         },
         {
           "kind": "value",
-          "path": "remarks",
-          "labelKey": "mapping.remarks",
-          "view": "summary"
-        },
-        {
-          "kind": "value",
           "path": "last",
           "labelKey": "field.last",
           "view": "detail",

@@ -1,6 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type ConfigChange, type DiffPath, diffConfig } from "@querymodule/core/config";
 import { isMainModule, toPosixRel } from "./cli-io";
 import {
   type ConfigIo,
@@ -14,22 +16,27 @@ import {
 // implementation now lives in cli-io.ts (review Q1/C6).
 export { toPosixRel } from "./cli-io";
 
-export const VALIDATE_USAGE = "usage: config:validate [--resolved] [--] [<file> ...]";
-export const DIFF_MESSAGE = "config:validate: --diff arrives with M2 P2 (spec 7, 9.5)";
+export const VALIDATE_USAGE =
+  "usage: config:validate [--resolved] [--diff <tag>] [--] [<file> ...]";
+
+/** A tag or sha for --diff. It never starts with "-" (git would read it as an option). */
+const TAG_PATTERN = /^[A-Za-z0-9._/][A-Za-z0-9._/-]{0,99}$/;
 
 export type ParsedValidateArgs =
-  | { ok: true; resolved: boolean; files: string[] }
+  | { ok: true; resolved: boolean; files: string[]; diff?: string }
   | { ok: false; message: string };
 
 /**
- * Strict CLI parse: `--resolved` and file args. `--` ends option parsing, so a file whose
- * name starts with `--` can be named. `--diff` is an explicit reject until M2 P2 (#220 M3).
+ * Strict CLI parse: `--resolved`, `--diff <tag>` and file args. `--` ends option parsing, so a
+ * file whose name starts with `--` can be named. The tag is checked here, before any git call.
  */
 export function parseValidateArgs(args: string[]): ParsedValidateArgs {
   let resolved = false;
   let optionsDone = false;
+  let diff: string | undefined;
   const files: string[] = [];
-  for (const a of args) {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] as string;
     if (!optionsDone && a === "--") {
       optionsDone = true;
       continue;
@@ -38,7 +45,17 @@ export function parseValidateArgs(args: string[]): ParsedValidateArgs {
       resolved = true;
       continue;
     }
-    if (!optionsDone && a === "--diff") return { ok: false, message: DIFF_MESSAGE };
+    if (!optionsDone && a === "--diff") {
+      const tag = args[++i];
+      if (tag === undefined || !TAG_PATTERN.test(tag))
+        return {
+          ok: false,
+          message: `--diff needs a tag or sha of letters, digits and ._/-
+${VALIDATE_USAGE}`,
+        };
+      diff = tag;
+      continue;
+    }
     if (!optionsDone && a.startsWith("--"))
       return {
         ok: false,
@@ -46,7 +63,123 @@ export function parseValidateArgs(args: string[]): ParsedValidateArgs {
       };
     files.push(a);
   }
-  return { ok: true, resolved, files };
+  if (diff === undefined) return { ok: true, resolved, files };
+  if (resolved)
+    return {
+      ok: false,
+      message: `--resolved has no effect with --diff
+${VALIDATE_USAGE}`,
+    };
+  return { ok: true, resolved, files, diff };
+}
+
+/** Reads `<tag>:<path>` (a git object spec) as text; undefined when the file is absent at the tag. */
+export type ShowFile = (spec: string) => string | undefined;
+
+/** A ConfigIo that serves every file as it was at `tag`, by its repo-relative posix path. */
+export function tagIo(tag: string, root: string, show: ShowFile): ConfigIo {
+  return {
+    readJson: (p) => {
+      const text = show(`${tag}:${toPosixRel(relative(root, p))}`);
+      return text === undefined ? undefined : JSON.parse(text);
+    },
+  };
+}
+
+/** `git show` through execFile with an argument array: the spec is never seen by a shell. */
+export function gitShow(root: string): ShowFile {
+  return (spec) => {
+    try {
+      return execFileSync("git", ["show", spec], {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        maxBuffer: 64 * 1024 * 1024,
+      });
+    } catch (e) {
+      // Only "the path is not in that commit" reads as absent; any other git failure is unreadable.
+      const stderr = String((e as { stderr?: unknown }).stderr ?? "");
+      if (/does not exist in|exists on disk, but not in/.test(stderr)) return undefined;
+      throw new ConfigUnreadableError();
+    }
+  };
+}
+
+const renderPath = (path: DiffPath): string =>
+  path.length === 0
+    ? "/"
+    : path.map((s) => `/${typeof s === "object" ? `[${s.by}=${s.is}]` : s}`).join("");
+
+const renderValue = (v: unknown): string => {
+  const t = JSON.stringify(v) ?? "undefined";
+  return t.length > 200 ? `${t.slice(0, 200)}...` : t;
+};
+
+function renderChange(c: ConfigChange): string {
+  const at = renderPath(c.path);
+  switch (c.kind) {
+    case "added":
+      return `+ ${at} ${renderValue(c.after)}`;
+    case "removed":
+      return `- ${at} ${renderValue(c.before)}`;
+    case "changed":
+      return `~ ${at} ${renderValue(c.before)} -> ${renderValue(c.after)}`;
+    case "moved":
+      return `~ ${at} order by ${c.by}: ${c.order.join(", ")}`;
+  }
+}
+
+/**
+ * The --diff output for each target: one line per change from the tag to the working tree
+ * (`+` added, `-` removed, `~` changed or reordered), "new file" for a target absent at the tag,
+ * and an ERROR line for any side that does not validate.
+ */
+export function diffLines(
+  tag: string,
+  targets: readonly string[],
+  root: string,
+  show: ShowFile,
+  headIo: ConfigIo = configIo(),
+): string[] {
+  const out: string[] = [];
+  const old = tagIo(tag, root, show);
+  for (const file of targets) {
+    const rel = toPosixRel(relative(root, file));
+    if (rel === ".." || rel.startsWith("../")) {
+      out.push(`ERROR ${rel} / config.targetOutsideRepo {}`);
+      continue;
+    }
+    let atTag = true;
+    try {
+      atTag = old.readJson(file) !== undefined;
+    } catch {
+      // Present but unreadable or invalid at the tag: checkConfigFile reports it below.
+    }
+    if (!atTag) {
+      out.push(`${rel}: new file`);
+      for (const d of checkConfigFile(file, headIo).errors)
+        out.push(`ERROR ${rel} head ${d.path || "/"} ${d.key} ${JSON.stringify(d.params)}`);
+      continue;
+    }
+    const before = checkConfigFile(file, old);
+    const after = checkConfigFile(file, headIo);
+    const bad = [
+      ...before.errors.map((d) => ["tag", d] as const),
+      ...after.errors.map((d) => ["head", d] as const),
+    ];
+    if (bad.length > 0) {
+      for (const [side, d] of bad)
+        out.push(`ERROR ${rel} ${side} ${d.path || "/"} ${d.key} ${JSON.stringify(d.params)}`);
+      continue;
+    }
+    const changes = diffConfig(before.resolved, after.resolved);
+    if (changes.length === 0) out.push(`${rel}: no changes`);
+    else {
+      out.push(`${rel}: ${changes.length} change${changes.length === 1 ? "" : "s"} since ${tag}`);
+      for (const c of changes) out.push(renderChange(c));
+    }
+  }
+  return out;
 }
 
 /**
@@ -97,6 +230,21 @@ function main(): void {
     process.exit(1);
   }
   const targets = found.targets;
+
+  if (parsed.diff !== undefined) {
+    try {
+      execFileSync("git", ["rev-parse", "--verify", "--quiet", `${parsed.diff}^{commit}`], {
+        cwd: root,
+        stdio: "ignore",
+      });
+    } catch {
+      console.error(`config:validate: unknown tag or sha ${parsed.diff}`);
+      process.exit(2);
+    }
+    const lines = diffLines(parsed.diff, targets, root, gitShow(root));
+    for (const l of lines) (l.startsWith("ERROR ") ? console.error : console.log)(l);
+    process.exit(lines.some((l) => l.startsWith("ERROR ")) ? 1 : 0);
+  }
 
   const io = configIo();
 
