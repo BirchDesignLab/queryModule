@@ -181,3 +181,16 @@ describe("gh-setup-project: Status options drop the unused Ready column (#244)",
     expect(source).toMatch(/\{ review: "In Review", ready: "Todo", todo: "Todo" \}\[w\.state\]/);
   });
 });
+
+describe("gh-setup-project: phase parents keep text added below the generated body (#743)", () => {
+  it("syncs a phase parent's body through phaseBodyUpdate, never the full-replace bodyUpdate", () => {
+    const start = source.indexOf("function ensureIssue(spec) {");
+    const end = source.indexOf("const subCache = new Map();");
+    const block = source.slice(start, end);
+    expect(block).toMatch(/spec\.keepBelow\s*\?\s*phaseBodyUpdate\(/);
+    expect(block).toMatch(/:\s*bodyUpdate\(/);
+    // Only the phase parent's ensureIssue call opts in.
+    expect(source.match(/keepBelow: true/g)).toHaveLength(1);
+    expect(source).toMatch(/keepBelow: true,\s*body: `Phase parent for/);
+  });
+});

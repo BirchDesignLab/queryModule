@@ -56,6 +56,7 @@ import {
   leafDates,
   matchParent,
   parentStatus,
+  phaseBodyUpdate,
   phaseLabel,
   phasePlanLine,
   rollUp,
@@ -483,7 +484,10 @@ function ensureIssue(spec) {
     // Body edits to the data below (for example wording fixed after review) never
     // reached GitHub before; sync them here, compared after normalising line
     // endings so an unchanged rerun plans 0 writes (#79 item 3).
-    const nextBody = bodyUpdate(issue.body ?? "", spec.body ?? "");
+    // A phase parent keeps hand-added text (checklists) below its generated body (#743).
+    const nextBody = spec.keepBelow
+      ? phaseBodyUpdate(issue.body ?? "", spec.body ?? "")
+      : bodyUpdate(issue.body ?? "", spec.body ?? "");
     if (nextBody !== null) {
       write(`update body of #${issue.number} "${spec.title}"`, () =>
         rest(`repos/${REPO}/issues/${issue.number}`, "PATCH", { body: nextBody }),
@@ -557,6 +561,7 @@ for (const p of PHASES) {
     title: p.title,
     labels: ["epic", phaseLabel(p.phase)],
     milestone: p.milestone,
+    keepBelow: true,
     body: `Phase parent for ${name} (${p.milestone} ${p.phase}). Progress comes from its sub-issues.\n\n**Gate:** ${p.gate}.\n\n${planLine} Grid and handoffs: ${statusDocs}.`,
   });
   phaseIssue.set(p.number, issue);

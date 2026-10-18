@@ -7,6 +7,8 @@ import { ConfigUnreadableError } from "./config-files";
 import {
   configIo,
   diffLines,
+  gitShow,
+  outsideRepo,
   parseValidateArgs,
   tagIo,
   toPosixRel,
@@ -191,5 +193,26 @@ describe("config:validate --diff <tag> (spec 7, 9.5, D-M2P2-8)", () => {
     const lines = diffLines("m1", [outside], repo, () => undefined);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^ERROR .*config.targetOutsideRepo/);
+  });
+
+  it("outsideRepo catches parent, win32 drive, UNC and posix-absolute relative results", () => {
+    for (const rel of ["..", "../x.json", "D:/x.json", "//srv/share/x.json", "/etc/x.json"])
+      expect(outsideRepo(rel), rel).toBe(true);
+    for (const rel of ["x.json", "packages/config/sites/a.json", "..hidden/x.json"])
+      expect(outsideRepo(rel), rel).toBe(false);
+  });
+
+  it("gitShow runs git with a C locale so the absent-path text is English", () => {
+    const calls: { file: string; args: readonly string[]; env: NodeJS.ProcessEnv | undefined }[] =
+      [];
+    const show = gitShow("/repo", (file, args, o) => {
+      calls.push({ file, args, env: (o as { env?: NodeJS.ProcessEnv }).env });
+      return "ok";
+    });
+    expect(show("m1:a.json")).toBe("ok");
+    expect(calls[0]?.file).toBe("git");
+    expect(calls[0]?.args).toEqual(["show", "m1:a.json"]);
+    expect(calls[0]?.env?.LC_ALL).toBe("C");
+    expect(calls[0]?.env?.LANGUAGE).toBe("C");
   });
 });

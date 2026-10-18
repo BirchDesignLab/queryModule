@@ -151,4 +151,5 @@ export const KNOWN_LABELS = [
   "enhancement",
   "question",
   "accessibility",
+  "design",
 ];

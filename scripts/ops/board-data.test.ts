@@ -48,6 +48,8 @@ describe("validateBoardData: the shipped docs/board/board-data.json", () => {
       milestone: "M2 Results and audit",
     });
     expect(KNOWN_LABELS).toContain("p0-5");
+    // Design issues (for example #724) carry the "design" label and must fit the board data.
+    expect(KNOWN_LABELS).toContain("design");
     // Carried into the P0.5 plans and linked under #519 by the planning PR (#557).
     const followUps = (
       loadBoardData() as { followUps: Array<{ number: number; parent: number; phase: string }> }
