@@ -26,6 +26,7 @@ import { useItemName } from "./FormTab.js";
 import { mockPointer } from "./mock-edit.js";
 import { parseMock } from "./mock-model.js";
 import {
+  cardsAddPointer,
   cardsTypePointer,
   HIDDEN_KEYS,
   isRootIssue,
@@ -59,6 +60,13 @@ interface TreeNode {
    * so rows that share a short name are still told apart (a mock response by its source).
    */
   short?: string;
+  /**
+   * Text the row shows beside its label that is not part of its name (a type's code, the keyword
+   * count): `near` keeps it next to the label, else it sits at the row's end.
+   */
+  decor?: { text: string; near?: boolean };
+  /** The "+ Add <Type> card" row: selecting it adds a card instead of showing an item. */
+  add?: boolean;
   children: TreeNode[];
   errors: number;
   warnings: number;
@@ -152,28 +160,41 @@ function useTreeNodes(
     const typeLabels = new Map(
       asObjects(doc.queryTypes).map((q) => [str(q.code), str(q.labelKey)]),
     );
-    const cards = [...cardsByType(cardsSiteOf(doc)).entries()].map(([code, entries]) =>
-      node(
+    const cards = [...cardsByType(cardsSiteOf(doc)).entries()].map(([code, entries]) => {
+      const typeName = labelText(typeLabels.get(code)) || code;
+      const add: TreeNode = {
+        ...node(cardsAddPointer(code), t("admin.cards.addCard", { type: typeName }), ""),
+        add: true,
+      };
+      // The row is named "<type> cards" (a lookup by name finds it apart from the Query types row);
+      // it shows the type's name and its code, as the mockup does.
+      const row = node(
         cardsTypePointer(code),
-        t("admin.cards.typeRow", { type: labelText(typeLabels.get(code)) || code }),
-        // No code in mono: the Query types row already ends in it, and a lookup by code is that row.
+        t("admin.cards.typeRow", { type: typeName }),
         "",
-        entries.map(({ index, mapping }, k) =>
-          node(
-            toPointer(["responseMappings", index]),
-            t("admin.cards.cardRow", { n: k + 1, name: cardName(mapping) }),
-            str(mapping.id),
+        [
+          ...entries.map(({ index, mapping }, k) =>
+            node(
+              toPointer(["responseMappings", index]),
+              t("admin.cards.cardRow", { n: k + 1, name: cardName(mapping) }),
+              str(mapping.id),
+            ),
           ),
-        ),
+          add,
+        ],
         true,
-      ),
-    );
+        "",
+        typeName,
+      );
+      return { ...row, decor: { text: code, near: true } };
+    });
     if ("keywords" in doc) {
       // The row also counts the issues of the severity styles it edits (contrast, Task 11).
-      const row = node("/keywords", t("admin.cards.keywordsRow"), "keywords");
+      const row = node("/keywords", t("admin.cards.keywordsRow"), "");
       const styles = under("/keywordSeverityStyles");
       cards.push({
         ...row,
+        decor: { text: String(asObjects(doc.keywords).length) },
         errors: row.errors + styles.errors,
         warnings: row.warnings + styles.warnings,
       });
@@ -283,7 +304,13 @@ function useLabelResolver(): LabelText {
 function TreeLabel({
   node,
 }: {
-  node: { label: string; labelKey?: string; key?: string; short?: string };
+  node: {
+    label: string;
+    labelKey?: string;
+    key?: string;
+    short?: string;
+    decor?: { text: string; near?: boolean };
+  };
 }) {
   count("labels");
   const translator = useTranslator();
@@ -315,6 +342,14 @@ function TreeLabel({
             {node.key}
           </span>
         </>
+      )}
+      {node.decor !== undefined && (
+        <span
+          className={`qm-tree__key${node.decor.near === true ? " qm-tree__key--near" : ""}`}
+          aria-hidden="true"
+        >
+          {node.decor.text}
+        </span>
       )}
     </>
   );
@@ -788,7 +823,7 @@ const TreeRows = memo(
                   aria-expanded={n.children.length > 0 ? open : undefined}
                   aria-owns={open ? groupId : undefined}
                   aria-labelledby={`${id}-name`}
-                  className="qm-tree__row"
+                  className={n.add === true ? "qm-tree__row qm-tree__row--add" : "qm-tree__row"}
                   onFocus={() => onItemFocus(n.pointer)}
                   onBlur={onItemBlur}
                   onKeyDown={(e) => onItemKeyDown(e, n.pointer)}
@@ -801,6 +836,7 @@ const TreeRows = memo(
                   {top && n.children.length > 0 && (
                     <span className="qm-tree__toggle" aria-hidden="true" data-open={open} />
                   )}
+                  {n.add === true && <span className="qm-tree__plus" aria-hidden="true" />}
                   <span id={`${id}-name`} className="qm-tree__name">
                     <TreeLabel node={n} />
                     {n.errors + n.warnings > 0 && (

@@ -12,12 +12,14 @@ import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { BuilderTree } from "./BuilderTree.js";
 import { existingPointer } from "./builder-helpers.js";
-import { configDraftStore, useDraft } from "./builder-store.js";
+import { applyCardsEdit, cardsSiteOf, configDraftStore, useDraft } from "./builder-store.js";
 import { CardPreview } from "./CardPreview.js";
+import { useTypeName } from "./card-names.js";
+import { addCard, cardsByType } from "./cards-model.js";
 import { ChangesView } from "./ChangesView.js";
 import { ChecksContext, useDraftChecks, withServerIssues } from "./checks.js";
 import { asObjects } from "./controls.js";
-import type { JsonObject } from "./draft.js";
+import { type JsonObject, toPointer } from "./draft.js";
 import { FormTab } from "./FormTab.js";
 import { HistoryDrawer } from "./HistoryDrawer.js";
 import { LeaveGuard } from "./LeaveGuard.js";
@@ -30,6 +32,7 @@ import { PublishButtons, PublishDialogs, PublishNotices } from "./PublishControl
 import { usePublishFlow } from "./PublishFlow.js";
 import { type RawState, RawTab } from "./RawTab.js";
 import {
+  cardsAddOf,
   cardsTypePointer,
   defaultPointer,
   editorItem,
@@ -104,6 +107,39 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
       ...(focus === undefined ? {} : { focus }),
     }));
   }, []);
+  // "+ Add <Type> card" in the tree: add the card, select it and say so. Focus stays on the row, so
+  // the keyboard can keep browsing the tree (the tree's own rule).
+  // Read through a ref: the tree's rows are memoized on this callback, and the name lookup is new
+  // on every render.
+  const typeName = useTypeName(doc);
+  const typeNameRef = useRef(typeName);
+  typeNameRef.current = typeName;
+  const addCardTo = useCallback(
+    (code: string) => {
+      let added = -1;
+      applyCardsEdit(store, (site) => {
+        const r = addCard(site, code);
+        added = r.index;
+        return r.site;
+      });
+      if (added < 0) return;
+      onSelect(toPointer(["responseMappings", added]));
+      const now = store.getState().doc;
+      const count = now === null ? 1 : (cardsByType(cardsSiteOf(now)).get(code)?.length ?? 1);
+      announcer.announce(
+        t("admin.cards.added", { type: typeNameRef.current(code), n: count, count }),
+      );
+    },
+    [store, onSelect, announcer, t],
+  );
+  const onTreeSelect = useCallback(
+    (pointer: string) => {
+      const code = cardsAddOf(pointer);
+      if (code === null) onSelect(pointer);
+      else addCardTo(code);
+    },
+    [onSelect, addCardTo],
+  );
   // An entry of the Changes view: open its item and focus it (the click is the user's action).
   const onOpen = useCallback((pointer: string) => {
     setTab("form");
@@ -362,7 +398,7 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
             </button>
           </div>
           <div ref={panesRef} className="qm-builder__panes">
-            <BuilderTree doc={doc} mock={mock} selected={shown.pointer} onSelect={onSelect} />
+            <BuilderTree doc={doc} mock={mock} selected={shown.pointer} onSelect={onTreeSelect} />
             <div
               ref={panelRef}
               className="qm-builder__editor"

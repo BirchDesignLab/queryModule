@@ -57,7 +57,7 @@ describe("builder tree (A-D1 A2, FR-060, UX-004)", () => {
     expect(item(/^Terminal settings terminal$/)).toBeInTheDocument();
     // The keyword styles are edited with the keywords, under Result cards (Task 11).
     expect(within(tree()).queryByRole("treeitem", { name: /keywordSeverityStyles/ })).toBeNull();
-    expect(item(/^Keywords and severity keywords$/)).toBeInTheDocument();
+    expect(item(/^Keywords and severity$/)).toBeInTheDocument();
     expect(within(tree()).queryByRole("treeitem", { name: /schemaVersion/ })).toBeNull();
     expect(
       within(tree()).getByText(/^Sign-in, data retention and source server settings/),

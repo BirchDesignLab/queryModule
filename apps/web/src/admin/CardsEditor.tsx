@@ -157,7 +157,6 @@ function CardEditor({
   const cardName = useCardName(doc);
   const code = str(card.queryType);
   const typeName = useTypeName(doc)(code);
-  const add = useAddCard({ idPrefix, focus, select });
   const type = asObjects(doc.queryTypes).find((q) => str(q.code) === code) ?? {};
   const info = useFieldInfo(type);
   const id = str(card.id);
@@ -312,39 +311,38 @@ function CardEditor({
       crumb={t("admin.tree.cards")}
       focusOwner={`${idPrefix}-card-heading`}
     >
-      <div className="qm-mock__scenario-head">
+      <div className="qm-card-head">
         <p>
-          {t("admin.cards.position", { n: position + 1, count: siblings.length, type: typeName })}
+          {t("admin.cards.position", {
+            id,
+            n: position + 1,
+            count: siblings.length,
+            type: typeName,
+          })}
         </p>
-        <div className="qm-mock__scenario-tools">
-          {position > 0 && (
-            <button
-              type="button"
-              className="qm-button"
-              data-owner={owner}
-              data-role="up"
-              onClick={() => moveTo(siblings[position - 1]?.index)}
-            >
-              {t("admin.cards.moveUp")}
-            </button>
-          )}
-          {position < siblings.length - 1 && (
-            <button
-              type="button"
-              className="qm-button"
-              data-owner={owner}
-              data-role="down"
-              onClick={() => moveTo(siblings[position + 1]?.index)}
-            >
-              {t("admin.cards.moveDown")}
-            </button>
-          )}
-          <button type="button" className="qm-button qm-button--danger" onClick={remove}>
+        <div className="qm-card-head__tools">
+          {(["up", "down"] as const).map((kind) => {
+            const target = siblings[kind === "up" ? position - 1 : position + 1]?.index;
+            return (
+              <button
+                key={kind}
+                type="button"
+                className="qm-button qm-button--ghost qm-mock__icon"
+                aria-disabled={target === undefined ? "true" : undefined}
+                aria-label={t(kind === "up" ? "admin.cards.moveUp" : "admin.cards.moveDown")}
+                data-owner={owner}
+                data-role={kind}
+                onClick={() => {
+                  if (target !== undefined) moveTo(target);
+                }}
+              >
+                <span aria-hidden="true">{kind === "up" ? "↑" : "↓"}</span>
+              </button>
+            );
+          })}
+          <button type="button" className="qm-button qm-button--ghost qm-button--danger" onClick={remove}>
             {t("admin.cards.remove")}
             <VisuallyHidden> {name}</VisuallyHidden>
-          </button>
-          <button type="button" className="qm-button" onClick={() => add(code)}>
-            {t("admin.cards.addCard", { type: typeName })}
           </button>
         </div>
       </div>

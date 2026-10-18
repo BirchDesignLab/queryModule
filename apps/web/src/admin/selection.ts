@@ -33,6 +33,19 @@ export const cardsTypeOf = (pointer: string): string | null =>
     : null;
 
 /**
+ * The "+ Add <Type> card" row under a type in the Result cards tree. It is never a selection: the
+ * tree's select on it adds a card and selects that one (#698).
+ */
+export const CARDS_ADD_PREFIX = "#cards-add/";
+export const cardsAddPointer = (code: string): string =>
+  `${CARDS_ADD_PREFIX}${encodeURIComponent(code)}`;
+/** The query type code of a type's Add card row, else null. */
+export const cardsAddOf = (pointer: string): string | null =>
+  pointer.startsWith(CARDS_ADD_PREFIX)
+    ? decodeURIComponent(pointer.slice(CARDS_ADD_PREFIX.length))
+    : null;
+
+/**
  * The item that edits a pointer. The keyword styles are edited with the keywords (Task 11, #604),
  * so a pointer into them selects the keywords item; the pointer itself still names the control
  * (an issue's pointer travels as the selection's focus).

@@ -48,7 +48,7 @@ const doc = (t: Opened) =>
 async function openKeywords(t: Opened) {
   const cards = await screen.findByRole("tree", { name: "Result cards" });
   await t.user.click(
-    within(cards).getByRole("treeitem", { name: /^Keywords and severity keywords/ }),
+    within(cards).getByRole("treeitem", { name: /^Keywords and severity$/ }),
   );
   return within(editor()).findByRole("heading", { level: 3, name: /^Keywords and severity/ });
 }

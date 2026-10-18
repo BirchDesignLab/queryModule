@@ -1117,6 +1117,29 @@ main[tabindex="-1"]:focus {
   white-space: nowrap;
 }
 
+/* A type's code sits next to its name, small and in mono (mockup v5); the keyword count stays at the end. */
+.qm-tree__key--near {
+  margin-inline-start: 0;
+}
+
+/* The "+ Add <Type> card" row: accent text and a plus in the toggle's column. */
+.qm-tree [role="treeitem"].qm-tree__row--add {
+  color: var(--qm-color-accent);
+}
+
+.qm-tree__plus {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--qm-space-4);
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-tree__plus::before {
+  content: "+";
+}
+
 /* Issue count per row: the number is visual only; the words are visually hidden in the row name. */
 .qm-tree__issues {
   flex: none;
@@ -2182,6 +2205,27 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-mock__scenario-tools--row [data-role="remove"] {
   grid-column: 4;
+}
+
+/* A card's header (mockup v5): the sentence that says where it sits and what it is for, then its
+   order arrows and Remove on a line of their own. */
+.qm-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  margin-block-end: var(--qm-space-3);
+}
+
+.qm-card-head > p {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+}
+
+.qm-card-head__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-1);
 }
 
 .qm-mock__scenario-body {
