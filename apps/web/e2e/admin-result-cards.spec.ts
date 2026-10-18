@@ -342,7 +342,7 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   await tabTo(page, plate, 150);
   await page.keyboard.type("ZZ-0001");
   const outcome = pane.getByTestId("outcome-head");
-  await expect(outcome).toContainText("Scenario 1 matches");
+  await expect(outcome).toContainText("Scenario 1 of Vehicle");
   await expect(outcome.locator(".qm-badge")).toHaveText("Returns a record");
   // The answer opens as the production Result card; the Payload view is one key press away.
   await expect(pane.getByRole("region", { name: "State system: returned" })).toBeVisible();
@@ -350,14 +350,14 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   const showPayload = pane.getByRole("button", { name: "Payload" });
   await showPayload.press("Enter");
   await expect(pane.getByTestId("try-payload")).toContainText('"status": "STOLEN"');
-  await expect(pane.getByText("Takes 50 to 400 ms to answer.")).toBeVisible();
+  await expect(pane.getByText("Answers after 50 to 400 ms.")).toBeVisible();
   // Typed values stay in the pane: they are in no link, and a plate with no scenario takes the default.
   expect(page.url()).not.toContain("ZZ-0001");
   await plate.fill("ZZ-0099");
-  await expect(outcome).toContainText("No scenario matches, so the default answers");
+  await expect(outcome).toContainText("Default of Vehicle");
   await expect(outcome.locator(".qm-badge")).toHaveText("No record");
   await plate.fill("ZZ-0001");
-  await expect(pane.getByTestId("outcome-head")).toContainText("Scenario 1 matches");
+  await expect(pane.getByTestId("outcome-head")).toContainText("Scenario 1 of Vehicle");
 
   // Desktop controls are 36 px or more.
   expect(
@@ -378,7 +378,7 @@ test("[#605] Try a match controls and its answer toggle are 36 px at 1024x768", 
   const plate = pane.getByLabel("Plate", { exact: true });
   await plate.focus();
   await page.keyboard.type("ZZ-0001");
-  await expect(pane.getByTestId("outcome-head")).toContainText("Scenario 1 matches");
+  await expect(pane.getByTestId("outcome-head")).toContainText("Scenario 1 of Vehicle");
   expect(
     await tooShort(36, {
       source: pane.getByLabel("Source", { exact: true }),
@@ -639,7 +639,7 @@ test("[#642] Values is a 36 px segmented control, the outcome is one badge row, 
   // The outcome: a badge with the words, then which entry matched, never the badge colour alone.
   const head = pane.getByTestId("outcome-head");
   await expect(head.locator(".qm-badge")).toHaveText(/\S/);
-  await expect(head).toContainText(/(Scenario \d+ matches|No scenario matches)/);
+  await expect(head).toContainText(/(Scenario \d+ of |Default of )/);
   await expectNoSeriousAxeViolations(page);
 
   await selectRow(page, /^Mock response: Vehicle, State system/);
@@ -687,9 +687,15 @@ test("[#605] removing a keyword, a row or a card by keyboard leaves focus on a s
   await expect(rows.last()).toBeFocused();
   expect(await onBody()).toBe(false);
 
-  // A card: the added card goes, and focus moves to the query type's cards heading.
-  await form.getByRole("button", { name: "Add Vehicle card" }).first().press("Enter");
-  await expect(form.getByRole("heading", { level: 3, name: /^Vehicle: / })).toBeFocused();
+  // A card: the Add row of the tree adds one and keeps focus on itself; the added card goes, and focus
+  // moves to the query type's cards heading.
+  const add = page
+    .getByRole("navigation", { name: "Configuration items" })
+    .getByRole("treeitem", { name: "Add Vehicle card" });
+  await add.focus();
+  await add.press("Enter");
+  await expect(form.getByRole("heading", { level: 3, name: /^Vehicle: / })).toBeVisible();
+  await expect(add).toBeFocused();
   await form.getByRole("button", { name: /^Remove card/ }).press("Enter");
   await expect(form.getByRole("heading", { level: 3, name: /^Vehicle cards/ })).toBeFocused();
   expect(await onBody()).toBe(false);
