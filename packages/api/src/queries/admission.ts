@@ -7,7 +7,7 @@ import {
   SubmitQueryResponseSchema,
 } from "@querymodule/core/contracts";
 import { and, eq } from "drizzle-orm";
-import type { Context } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Db } from "../db/client";
 import { auditEvent, queryRequest, sourceResult } from "../db/schema";
@@ -39,13 +39,27 @@ const SourceIdsSchema = z.array(BoundedIdSchema);
 const SkipReasonsSchema = z.array(AuditValidationErrorSchema).min(1);
 
 /**
+ * Marks request receipt for POST /api/v1/queries (spec 11, NFR-004): app.ts runs it ahead of the
+ * body cap, the X-Requested-With check and requireSession, so the acknowledgment span (the 202's
+ * Server-Timing and the acknowledged row's ackLatencyMs) starts when the request arrives.
+ */
+export const markReceipt =
+  (d: AppDeps): MiddlewareHandler<AppEnv> =>
+  async (c, next) => {
+    c.set("receivedMono", d.monotonic.nowMs());
+    await next();
+  };
+
+/**
  * Submit admission (spec 5.2 step 1), after requireSession, the X-Requested-With check and the
  * 32 KB body cap: parse JSON, per-value cap, per-user limit, Idempotency-Key, then replay.
  * Nothing but `values` string lengths is read from the body here, and nothing is logged from it.
  */
 export async function admitSubmit(c: Context<AppEnv>, d: AppDeps): Promise<Admission> {
   const receivedAt = d.clock.now();
-  const receivedMono = d.monotonic.nowMs();
+  // markReceipt's mark; a mount without it is a wiring bug and fails as 500, never a 0 ms span
+  const receivedMono = c.get("receivedMono");
+  if (receivedMono === undefined) throw new Error("admission: receipt mark missing");
   const text = await c.req.text();
   let raw: unknown;
   try {

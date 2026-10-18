@@ -30,6 +30,14 @@ export function lostIdempotencyRace(e: unknown): boolean {
   return false;
 }
 
+/**
+ * The 202's Server-Timing (spec 11, NFR-004): request receipt (markReceipt) to after T1 commits,
+ * or to the stored body's read on a replay, in ms with one decimal. Only a 202 carries it.
+ */
+export function serverTiming(receivedMono: number, endMono: number): string {
+  return `ack;dur=${Math.max(0, endMono - receivedMono).toFixed(1)};desc="receipt to commit"`;
+}
+
 /** The dispatcher refused jobs whose T1 has committed (intake stopped or aborted). */
 export class DispatchRefusedError extends Error {
   constructor() {
@@ -135,7 +143,10 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
     if (!mayQuery(c.get("principal").role)) return apiError(c, "forbidden");
     const a = await admitSubmit(c, d);
     if (a.kind === "reject") return a.response;
-    if (a.kind === "replay") return c.json(a.body, 202);
+    if (a.kind === "replay") {
+      c.header("Server-Timing", serverTiming(c.get("receivedMono"), d.monotonic.nowMs()));
+      return c.json(a.body, 202);
+    }
     // SIGTERM drain (spec 5.2) or fatal close (spec 8.1): a new submit is refused before T1, so no
     // row is written.
     if (d.lifecycle.draining || d.lifecycle.failed) return apiError(c, "unavailable");
@@ -182,6 +193,7 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       });
       d.fatal(e);
     }
+    c.header("Server-Timing", serverTiming(a.receivedMono, acknowledgedMonoMs));
     return c.json(ack.body, 202);
   });
 

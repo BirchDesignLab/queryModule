@@ -183,6 +183,13 @@ Two rules are enforced by the server's schema but are not visible in `openapi.js
 `.refine`): a part is `skipped` exactly when `skipReasons` is non-empty, and `parentPartId` is
 `null` exactly for the primary. A replayed Idempotency-Key returns the same body.
 
+Every 202, a replay included, carries `Server-Timing: ack;dur=<ms>;desc="receipt to commit"`
+(NFR-004, spec 11): milliseconds with one decimal from the moment the server received the request,
+before the body cap and the session check, to after the request's transaction commits (on a
+replay, to the read of the stored answer). The `acknowledged` audit row's `ackLatencyMs` runs from
+the same moment to that row's write inside the transaction, so it stops short of the commit. No
+error response carries `Server-Timing`.
+
 **Dispatch.** The 202 is the acknowledgment (FR-064); the request, its parts, one `pending` row per
 source and the audit row are recorded first, then each source is queried in the background (the
 mock adapter today, ADR-0012). Each source settles once, to `returned`, `failed`, `timedOut`,
@@ -411,7 +418,7 @@ internal, 4000 idle) and all mean the same thing: reconnect with backoff and sen
 | `welcome` | server to client, `{ latestSeq }` | live. `latestSeq` is the owner's newest `event_log` seq (0 when none), read live at each `hello`, in the same read as the replay. |
 | `ping` | client to server, `{ nonce }` (1 to 64 characters) | live. |
 | `pong` | server to client, `{ nonce, serverTime }` | live. |
-| `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The metric (and a `Server-Timing` header on the 202) arrives in M2 P2. |
+| `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The server's own acknowledgment time rides on the 202 as `Server-Timing` (see Submitting a query). |
 | `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | live. Published after each source outcome commits, to the owner's sockets only (never another user's). Each also lands in `event_log` and is replayable by `lastSeq`. |
 | `resultHidden` | server to client, `{ seq, at, correlationId, resultIds }` | planned (contract since M2 P0). Sent after a delete from view so the owner's other devices drop the results; replayable (M3 P2). |
 | `resync` | server to client, `{ reason: "tooOld" or "tooMany" or "unknownCursor", latestSeq }` | live. Replay refused: the client refetches over HTTP and sets its mark to `latestSeq`. |
