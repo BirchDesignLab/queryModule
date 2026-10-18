@@ -8,6 +8,7 @@ import {
   leafDates,
   matchParent,
   parentStatus,
+  phaseBodyUpdate,
   phaseLabel,
   phasePlanLine,
   rollUp,
@@ -58,6 +59,29 @@ describe("bodyUpdate: rewrite existing issue bodies (#79)", () => {
 
   it("returns the desired body when the text differs", () => {
     expect(bodyUpdate("old text", "new text")).toBe("new text");
+  });
+});
+
+describe("phaseBodyUpdate: keep text added below a phase parent's generated body (#743)", () => {
+  const gen = "Phase parent for X.\n\n**Gate:** g.\n\nPlan: p. Grid and handoffs: docs/STATUS.md.";
+  const added = "\n\n## Carry\n- [ ] one\n- [ ] two";
+
+  it("plans no update when the body is the generated text", () => {
+    expect(phaseBodyUpdate(gen, gen)).toBeNull();
+  });
+
+  it("plans no update when hand-added text sits below an unchanged generated body", () => {
+    expect(phaseBodyUpdate(gen + added, gen)).toBeNull();
+    expect(phaseBodyUpdate((gen + added).replaceAll("\n", "\r\n"), gen)).toBeNull();
+  });
+
+  it("rewrites only the generated part when it changed and keeps the added text", () => {
+    const next = gen.replace("**Gate:** g.", "**Gate:** h.");
+    expect(phaseBodyUpdate(gen + added, next)).toBe(next + added);
+  });
+
+  it("replaces the whole body when the old one has no generated trailer to cut at", () => {
+    expect(phaseBodyUpdate("something else entirely", gen)).toBe(gen);
   });
 });
 
