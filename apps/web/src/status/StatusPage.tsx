@@ -8,6 +8,7 @@ import { useCachedConfigState } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
+import { APP_VERSION } from "../app/version.js";
 import { useStatusChecks } from "./use-status-checks.js";
 
 export { heartbeatUrl } from "./use-status-checks.js";
@@ -155,6 +156,11 @@ export function StatusPage() {
             </Row>
           )}
           <Row label={t("status.session.layout.label")}>{layoutText}</Row>
+        </dl>
+      </Tile>
+      <Tile title={t("status.app.title")}>
+        <dl className="qm-status__rows">
+          <Row label={t("status.app.version.label")}>{APP_VERSION}</Row>
         </dl>
       </Tile>
       <Link to="/">{t("nav.home")}</Link>

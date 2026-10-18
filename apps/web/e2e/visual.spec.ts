@@ -344,6 +344,49 @@ test.describe("D0.3 officer touch density (1024x768)", () => {
     });
   }
 
+  // #479 / #651: the "fields shown" cue on a closed More details toggle, officer layout, three themes:
+  // body-colored text with an accent edge, static (no animation), inside the toggle, and the toggle
+  // keeps the touch height (no shrinking under the 48 px target).
+  for (const mode of MODES) {
+    test(`${mode}: the fields-shown cue on More details has an accent edge, is static and sits inside the touch toggle`, async ({
+      page,
+    }) => {
+      await asUser(page, "officer@example.test", mode, async () => {
+        const state = page.getByLabel("State", { exact: true });
+        await state.selectOption("OK");
+        const more = page.getByRole("button", { name: /More details/ });
+        await expect(more).toHaveAttribute("aria-expanded", "true");
+        await more.click();
+        await expect(more).toHaveAttribute("aria-expanded", "false");
+        const cue = more.locator(".qm-disclosure-toggle__cue");
+        await expect(cue).toHaveText(/1 field shown/i);
+        const look = await cue.evaluate((el) => {
+          const s = getComputedStyle(el);
+          const toggle = el.closest("button") as HTMLElement;
+          const t = toggle.getBoundingClientRect();
+          const c = el.getBoundingClientRect();
+          return {
+            color: s.color,
+            edge: s.borderTopColor,
+            animation: s.animationName,
+            toggleHeight: t.height,
+            inside:
+              c.left >= t.left && c.right <= t.right && c.top >= t.top && c.bottom <= t.bottom,
+          };
+        });
+        // The officer reads body-colored text (D0.3: no muted or accent text); the edge is the accent.
+        expect(look.color).toBe(rgb(mode, "color.text.body"));
+        expect(look.edge).toBe(rgb(mode, "color.accent"));
+        expect(look.animation).toBe("none");
+        expect(look.toggleHeight).toBeGreaterThanOrEqual(48);
+        expect(look.inside).toBe(true);
+        await more.click();
+        await expect(more.locator(".qm-disclosure-toggle__cue")).toHaveCount(0);
+        await state.selectOption("TX");
+      });
+    });
+  }
+
   // A multi-part request ("..., also run from Person") shows a part label per part; on the officer layout it
   // must not be muted either (D0.3). PER runs WNT beside it when a name and a date of birth are given.
   test("night: a two-part request's part labels are not muted on the officer layout", async ({
@@ -1419,10 +1462,10 @@ test.describe("parity: officer surfaces, skip link and account menu (1024x768)",
   }
 });
 
-// The status page (Connection, Configuration, Session) in three themes and both layouts, as numbers:
+// The status page (Connection, Configuration, Session, App) in three themes and both layouts, as numbers:
 // the sunken page, the ruled tiles, chips by text plus their semantic tokens, control and text
 // sizes per persona, stacked rows for the officer, no overflow.
-test.describe("Status page (three tiles)", () => {
+test.describe("Status page (four tiles)", () => {
   for (const persona of [
     { name: "dispatcher", email: "dispatcher@example.test", officer: false },
     { name: "officer", email: "officer@example.test", officer: true },
@@ -1485,7 +1528,7 @@ test.describe("Status page (three tiles)", () => {
           const ok = await read();
           expect(ok.overflowX, "page overflow").toBeLessThanOrEqual(0);
           expect(ok.body, "sunken page").toBe(rgb(mode, "color.surface.sunken"));
-          expect(ok.h2).toEqual(["Connection", "Configuration", "Session"]);
+          expect(ok.h2).toEqual(["Connection", "Configuration", "Session", "App"]);
           expect(ok.rule.every((w) => w === "1px")).toBe(true);
           // Chips: Connected and Loaded in the ok colour, text always present; Session has none.
           expect(ok.chips[0]?.text).toBe("Connected");

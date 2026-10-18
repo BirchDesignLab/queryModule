@@ -1,6 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
+import {
+  editor,
+  openSiteConfiguration,
+  preview,
+  selectCard,
+  selectRow,
+  tree,
+} from "./builder-helpers.js";
 import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
@@ -21,31 +29,10 @@ test.use({ emptyQueryList: true });
 
 const WIDTHS = [1366, 1024] as const;
 
-const tree = (page: Page) => page.getByRole("navigation", { name: "Configuration items" });
-const editor = (page: Page) => page.getByTestId("form-tab");
-const preview = (page: Page) => page.getByRole("region", { name: "Card preview" });
-
 async function openBuilder(page: Page, width: number): Promise<void> {
   await page.setViewportSize({ width, height: 768 });
   await signIn(page, ADMIN);
-  await page.getByRole("link", { name: "Admin" }).press("Enter");
-  await page.getByRole("link", { name: "Site configuration" }).press("Enter");
-  await expect(page.getByRole("heading", { name: "Site configuration", level: 2 })).toBeVisible();
-}
-
-async function selectRow(page: Page, name: RegExp): Promise<void> {
-  const item = tree(page).getByRole("treeitem", { name }).first();
-  await item.scrollIntoViewIfNeeded();
-  await item.click();
-  await expect(item).toHaveAttribute("aria-selected", "true");
-}
-
-/** The first card of a query type by the type row's name, opening the type row when needed. */
-async function selectCard(page: Page, type: RegExp, card: RegExp): Promise<void> {
-  await selectRow(page, type);
-  if ((await tree(page).getByRole("treeitem", { name: card }).count()) === 0)
-    await tree(page).getByRole("treeitem", { name: type }).first().press("ArrowRight");
-  await selectRow(page, card);
+  await openSiteConfiguration(page);
 }
 
 async function shot(page: Page, frame: string, width: number, top = false): Promise<void> {

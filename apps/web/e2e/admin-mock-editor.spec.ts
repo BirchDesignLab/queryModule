@@ -17,7 +17,7 @@ const ADMIN = seededUser("admin@example.test");
 
 type Obj = Record<string, unknown>;
 interface Doc {
-  queryTypes: { code: string; sources: Obj[]; allowPlateOnly?: boolean }[];
+  queryTypes: { code: string; labelKey?: string; sources: Obj[]; allowPlateOnly?: boolean }[];
   sources: Obj[];
 }
 
@@ -52,9 +52,34 @@ test.afterAll(async ({ browser }) => {
   }
 });
 
+/**
+ * An e2e-only label overlay: the new query type and source get names of their own, so the specs
+ * never read the shipped Vehicle and State system names for something else. It lives in the draft's
+ * label overlay (`locales.en`), saved through the API, and ships no string (#651, ruling on #572).
+ */
+const BOAT_LABELS = { "queryType.BOAT": "Boat" };
+const COUNTY_LABELS = { "source.countySource": "County system" };
+
+async function seedLabels(page: Page, labels: Record<string, string>): Promise<void> {
+  const origin = new URL(page.url()).origin;
+  const headers = { "X-Requested-With": "querymodule", Origin: origin };
+  const body = (await (await page.request.get(`${origin}/api/v1/admin/config`)).json()) as {
+    live: { version: number; document: { locales: Record<string, Record<string, string>> } };
+    draft: { document: { locales: Record<string, Record<string, string>> } } | null;
+  };
+  const document = structuredClone((body.draft ?? body.live).document);
+  document.locales.en = { ...document.locales.en, ...labels };
+  const put = await page.request.put(`${origin}/api/v1/admin/config/draft`, {
+    headers,
+    data: { baseVersion: body.live.version, document },
+  });
+  expect(put.ok(), `draft saved: ${put.status()}`).toBe(true);
+}
+
 /** The admin opens the builder from the header by keyboard, as a real admin would. */
-async function openBuilder(page: Page): Promise<void> {
+async function openBuilder(page: Page, labels: Record<string, string> = {}): Promise<void> {
   await signIn(page, ADMIN);
+  if (Object.keys(labels).length > 0) await seedLabels(page, labels);
   await page.getByRole("link", { name: "Admin" }).press("Enter");
   await page.getByRole("link", { name: "Site configuration" }).press("Enter");
   await expect(page.getByRole("heading", { name: "Site configuration", level: 2 })).toBeVisible();
@@ -83,8 +108,8 @@ async function editDraft(page: Page, mutate: (doc: Doc) => void): Promise<void> 
 }
 
 /**
- * A copy of the Vehicle type under a new code, asking the State system (a plate field is already
- * there). Review saves the shared draft on the server, so a later test may open with BOAT already in
+ * A copy of the Vehicle type under a new code and name, asking the State system (a plate field is
+ * already there). Review saves the shared draft on the server, so a later test may open with BOAT already in
  * the draft: add it once.
  */
 const addBoatType = (doc: Doc): void => {
@@ -94,6 +119,7 @@ const addBoatType = (doc: Doc): void => {
   doc.queryTypes.push({
     ...structuredClone(vehicle),
     code: "BOAT",
+    labelKey: "queryType.BOAT",
     allowPlateOnly: false,
     sources: [{ sourceId: "stateSource", selectedByDefault: true }],
   });
@@ -138,14 +164,14 @@ async function liveMock(page: Page): Promise<{
 test("[#551] a new query type on a mock site shows its gap where the admin works, and publishing waits", async ({
   page,
 }) => {
-  await openBuilder(page);
+  await openBuilder(page, BOAT_LABELS);
   await editDraft(page, addBoatType);
   await selectRow(page, /BOAT/);
   const group = typeMockGroup(page);
   await expect(group).toBeVisible();
   await expect(group.getByText("Missing")).toBeVisible();
   await expect(
-    group.getByRole("button", { name: /Add mock response for State system, Vehicle/ }),
+    group.getByRole("button", { name: /Add mock response for State system, Boat/ }),
   ).toBeVisible();
   // Publishing waits for the gap: Review asks the server (config.missingMockResponse), says so, and
   // opens no dialog.
@@ -163,20 +189,20 @@ test("[#551] a new query type on a mock site shows its gap where the admin works
 test("[#551] the gap is filled by keyboard, one scenario added, reviewed and published; the server stores the mock", async ({
   page,
 }) => {
-  await openBuilder(page);
+  await openBuilder(page, BOAT_LABELS);
   await editDraft(page, addBoatType);
   await selectRow(page, /BOAT/);
   const group = typeMockGroup(page);
   // Add the no-record response: focus stays in the section, on the row's Open button.
   await group
-    .getByRole("button", { name: /Add mock response for State system, Vehicle/ })
+    .getByRole("button", { name: /Add mock response for State system, Boat/ })
     .press("Enter");
-  const open = group.getByRole("button", { name: /Open mock response for State system, Vehicle/ });
+  const open = group.getByRole("button", { name: /Open mock response for State system, Boat/ });
   await expect(open).toBeFocused();
   await expect(group.getByText("Missing")).toHaveCount(0);
   await expectNoSeriousAxeViolations(page);
   await open.press("Enter");
-  await expect(page.getByRole("heading", { name: /Vehicle/ }).first()).toBeFocused();
+  await expect(page.getByRole("heading", { name: /Boat/ }).first()).toBeFocused();
 
   // One scenario: trigger plate = ZZ-0002, returns a record with status STOLEN.
   await page.getByRole("button", { name: "Add scenario" }).press("Enter");
@@ -194,8 +220,9 @@ test("[#551] the gap is filled by keyboard, one scenario added, reviewed and pub
   // Review lists the changes by source, query type and scenario, never a value; publish goes through
   // the server's fixture policy (#532).
   const { version, review } = await publish(page);
-  // The copy keeps Vehicle's name; its code BOAT is in the tree. Names, never values.
-  expect(review).toContain("State system, Vehicle");
+  // The copy has a name of its own (the e2e label overlay), its code BOAT is in the tree. Names,
+  // never values.
+  expect(review).toContain("State system, Boat");
   expect(review).toContain("Response added");
   // The scenario belongs to the new response: one line, no trigger value, no payload.
   expect(review).not.toContain("ZZ-0002");
@@ -211,11 +238,11 @@ test("[#551] the gap is filled by keyboard, one scenario added, reviewed and pub
 test("[#551] a new source offers a no-record response for each query type that asks it", async ({
   page,
 }) => {
-  await openBuilder(page);
+  await openBuilder(page, COUNTY_LABELS);
   await editDraft(page, (doc) => {
     doc.sources.push({
       id: "countySource",
-      labelKey: "source.stateSource",
+      labelKey: "source.countySource",
       scope: "state",
       kind: "mock",
       timeoutMs: 10000,
@@ -228,6 +255,8 @@ test("[#551] a new source offers a no-record response for each query type that a
   await selectRow(page, /^Sources/);
   const panel = page.getByRole("group", { name: "Mock responses to add" });
   await expect(panel).toBeVisible();
+  // The new source has its own name (the e2e label overlay), not the State system's.
+  await expect(panel.getByText(/County system/).first()).toBeVisible();
   const add = panel.getByRole("button", { name: /Add a no-record response for each query type/ });
   await expectNoSeriousAxeViolations(page);
   await add.press("Enter");

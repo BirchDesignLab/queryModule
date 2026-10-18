@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLIENT_CONFIG } from "../test/msw-server.js";
-import { rowSummary } from "./row-summary.js";
+import { formToTerminal } from "./form-to-terminal.js";
+import { rowSummary, savedEntryCommand } from "./row-summary.js";
 
 const NOW = Date.UTC(2026, 9, 14);
 
@@ -53,5 +54,52 @@ describe("polish 8: a rebuilt command never adds a default the user did not type
       NOW,
     );
     expect(text).toBe("DL.ZZDLTEST");
+  });
+});
+
+describe("#680 N1: one canonical form in the saved entry", () => {
+  it("a fresh entry typed with 26 and the same request rebuilt after a reload read the same", () => {
+    const typed = { plate: "ZZ-0001", year: "26" };
+    const fresh = savedEntryCommand(CLIENT_CONFIG, "VEH", typed, NOW);
+    const reloaded = rowSummary(CLIENT_CONFIG, "VEH", "", { plate: "ZZ-0001", year: "2026" }, NOW);
+    expect(fresh).toBe(reloaded);
+    expect(fresh).toContain("..2026");
+  });
+
+  it("a fresh entry with the default State typed and the reloaded row read the same", () => {
+    const fresh = savedEntryCommand(
+      CLIENT_CONFIG,
+      "VEH",
+      { plate: "ZZ-0001", state: "TX", year: "26" },
+      NOW,
+    );
+    const reloaded = rowSummary(
+      CLIENT_CONFIG,
+      "VEH",
+      "",
+      { plate: "ZZ-0001", state: "TX", year: "2026" },
+      NOW,
+    );
+    expect(fresh).toBe(reloaded);
+    expect(fresh).not.toContain("TX");
+  });
+
+  it("a request typed with the NAM alias and the same request rebuilt after a reload read the same (ruling B)", () => {
+    const values = { last: "TESTERSON", first: "SAMPLE" };
+    const fresh = savedEntryCommand(CLIENT_CONFIG, "PER", values, NOW);
+    expect(fresh).toBe("PER.TESTERSON.SAMPLE");
+    expect(rowSummary(CLIENT_CONFIG, "PER", "", values, NOW)).toBe(fresh);
+  });
+
+  it("a State that is not the default stays in the fresh entry", () => {
+    expect(savedEntryCommand(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", state: "OK" }, NOW)).toBe(
+      "VEH.ZZ-0001.OK",
+    );
+  });
+
+  it("the command echo of the form still keeps the year as typed (R11, input only)", () => {
+    expect(
+      formToTerminal(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", year: "26" }, NOW).text,
+    ).toContain("..26");
   });
 });

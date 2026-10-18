@@ -29,8 +29,8 @@ import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
 import { firstField } from "./first-field.js";
-import { formToTerminal } from "./form-to-terminal.js";
 import { revealLastInvalid } from "./reveal-invalid.js";
+import { savedEntryCommand } from "./row-summary.js";
 import { valuesToSend } from "./send-values.js";
 
 export type PanelViewMode = "live" | "preview";
@@ -63,6 +63,11 @@ export interface ReadyQueryPanel {
   /** Fields a rule revealed since the type opened: each shows a Shown tag until focused or edited. */
   revealed: ReadonlySet<string>;
   dismissRevealed(key: string): void;
+  /**
+   * A draft was loaded whole (Edit as new query): clears every Shown tag, and the fields the loaded
+   * values reveal are not tagged or announced as rule reveals.
+   */
+  markLoaded(): void;
   setSources(sourceIds: readonly string[]): void;
   onSubmitAttempt(): void;
   /**
@@ -88,7 +93,10 @@ export interface CheckedRequest {
   values: Readonly<Record<string, DraftValue>>;
   sourceIds: readonly string[];
   state: FormState;
-  /** The command as typed (terminal mode): the list shows it as typed, so NAM stays NAM (G31). */
+  /**
+   * The command as typed (terminal mode): the entry's fallback when the type has no command. The
+   * list shows the canonical command, so NAM reads PER there (#680 ruling B; G31 is the input's).
+   */
   typed?: string;
   /**
    * Shows a server 400's errors where the request came from. The terminal lists them under its
@@ -227,6 +235,9 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   const [serverErrors, setServerErrors] = useState<readonly ValidationError[]>([]);
   // Fields a rule revealed since the type opened (the Shown tag): cleared by focus, an edit or a reset.
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(NO_KEYS);
+  // A whole draft was loaded (Edit as new query): the reveal effect skips tags and announcements once.
+  const [loadSeq, setLoadSeq] = useState(0);
+  const seenLoad = useRef(0);
   const dismissRevealed = useCallback(
     (key: string): void =>
       setRevealed((prev) => {
@@ -372,7 +383,10 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const configChanged = revealHash.current !== config.configHash;
     revealHash.current = config.configHash;
     const current = values ?? NO_VALUES;
-    if (previous !== null && previous.queryType !== formState.queryType) setRevealed(NO_KEYS);
+    const loaded = seenLoad.current !== loadSeq;
+    seenLoad.current = loadSeq;
+    if (loaded || (previous !== null && previous.queryType !== formState.queryType))
+      setRevealed(NO_KEYS);
     // A key a rule hid again leaves the set, so a later config that shows it is not a "reveal".
     setRevealed((prev) => {
       const kept = [...prev].filter((key) => visible.has(key));
@@ -382,19 +396,20 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       const shown = formState.fields.filter((f) => f.visible && !previous.visible.has(f.key));
       // Tagged only in the live panel (a builder edit in preview is not a dispatcher's reveal) and
       // only when the same edit did not also fill the field (a terminal merge sets both).
-      const tagged = preview
-        ? []
-        : shown.filter((f) => previous.values[f.key] === current[f.key]).map((f) => f.key);
+      const tagged =
+        preview || loaded
+          ? []
+          : shown.filter((f) => previous.values[f.key] === current[f.key]).map((f) => f.key);
       if (tagged.length > 0) setRevealed((prev) => new Set([...prev, ...tagged]));
       const messages = shown.map((f) =>
         t(f.required ? "form.fieldRevealedRequired" : "form.fieldRevealed", {
           label: t(f.labelKey),
         }),
       );
-      if (messages.length > 0) announcer.announce(messages.join(" "));
+      if (messages.length > 0 && !loaded) announcer.announce(messages.join(" "));
     }
     seen.current = { queryType: formState.queryType, visible, values: current };
-  }, [formState, config.configHash, announcer, t, preview, values]);
+  }, [formState, config.configHash, announcer, t, preview, values, loadSeq]);
 
   // Errors render on the commit that follows a blocked submit, so focus moves after it.
   useEffect(() => {
@@ -533,9 +548,12 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       ? null
       : requests.getState().begin({
           queryType: request.queryType,
+          // The saved entry says the canonical command (a four-digit year), the one a reload
+          // rebuilds; what was typed stays in the input (#680 N1). The typed text is the fallback
+          // for a type with no command.
           summary:
-            request.typed?.trim() ||
-            formToTerminal(config, request.queryType, request.values, Date.now()).text,
+            savedEntryCommand(config, request.queryType, request.values, Date.now()) ||
+            (request.typed?.trim() ?? ""),
           submitted,
           idempotencyKey,
         });
@@ -589,6 +607,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     setValue: (key, value) => drafts.getState().setValue(key, value),
     revealed,
     dismissRevealed,
+    markLoaded: () => setLoadSeq((n) => n + 1),
     setSources: (sourceIds) => drafts.getState().setSources(sourceIds),
     onSubmitAttempt() {
       if (submitGated()) return;

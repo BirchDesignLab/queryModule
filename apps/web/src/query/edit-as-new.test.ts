@@ -2,7 +2,7 @@ import type { RequestEntry, SubmittedQuery } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import { describe, expect, it } from "vitest";
 import { CLIENT_CONFIG } from "../test/msw-server.js";
-import { editAsNewNote, planEditAsNew, submittedOf } from "./edit-as-new.js";
+import { editAsNewNote, humanizeKey, planEditAsNew, submittedOf } from "./edit-as-new.js";
 
 // Edit as new query (#477): what a 409 row kept is loaded into the form under the config the panel
 // has now. Whatever that config no longer has is dropped and named, never sent.
@@ -114,6 +114,7 @@ describe("editAsNewNote", () => {
     "editAsNew.item.choice": "{label} (that choice is no longer offered)",
     "editAsNew.item.type": "the {type} query type",
     "editAsNew.item.source": "a source",
+    "editAsNew.item.sources": "{count} sources",
   };
   const t = (key: string, params?: Readonly<Record<string, string | number | boolean>>) =>
     Object.entries(params ?? {}).reduce(
@@ -147,6 +148,43 @@ describe("editAsNewNote", () => {
     expect(note).toBe(
       "Not loaded, because the site configuration no longer has them: Year, State (that choice is no longer offered), a source, the Vehicle query type.",
     );
+  });
+});
+
+describe("editAsNewNote with several sources (#651 F6)", () => {
+  const t = (key: string, params?: Readonly<Record<string, string | number | boolean>>) =>
+    key === "editAsNew.dropped"
+      ? `Not loaded: ${String(params?.items)}.`
+      : key === "editAsNew.item.sources"
+        ? `${String(params?.count)} sources`
+        : key === "editAsNew.item.source"
+          ? "a source"
+          : key;
+  const note = (n: number) =>
+    editAsNewNote(
+      Array.from({ length: n }, (_, i) => ({ kind: "source" as const, key: `s${i}` })),
+      t,
+      (key) => key,
+      (code) => code,
+    );
+
+  it("counts them when there are several, and says 'a source' for one", () => {
+    expect(note(1)).toBe("Not loaded: a source.");
+    expect(note(3)).toBe("Not loaded: 3 sources.");
+  });
+});
+
+describe("humanizeKey (#651 F3)", () => {
+  it("turns a key into words for a field the config no longer labels", () => {
+    expect(humanizeKey("plateColor")).toBe("plate color");
+    expect(humanizeKey("owner.last")).toBe("owner last");
+    expect(humanizeKey("vin_number")).toBe("vin number");
+    expect(humanizeKey("VIN")).toBe("VIN");
+    expect(humanizeKey("year")).toBe("year");
+    expect(humanizeKey("plateVIN")).toBe("plate VIN");
+    expect(humanizeKey("VIN_NUMBER")).toBe("VIN number");
+    expect(humanizeKey("SERIAL")).toBe("serial");
+    expect(humanizeKey("VINNumber")).toBe("VIN number");
   });
 });
 

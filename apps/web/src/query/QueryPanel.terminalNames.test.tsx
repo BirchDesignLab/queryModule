@@ -8,7 +8,8 @@ import { ACK_202, API, server, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
 
 // G31 (demo dry run): in terminal mode the panel names the query the command line holds, and the
-// request is listed as it was typed (NAM stays NAM). The parser is untouched.
+// input keeps what was typed (NAM stays NAM); the saved request entry reads the canonical command
+// (#680 ruling B, 10-18-26). The parser is untouched.
 
 async function openTerminal() {
   const services = testServices();
@@ -55,7 +56,7 @@ describe("G31 terminal mode names what is typed", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Vehicle query" })).toBeVisible();
   });
 
-  it("a request typed as NAM is listed as NAM, not rebuilt as PER", async () => {
+  it("a request typed as NAM is listed as PER, the canonical code, as after a reload; the input kept NAM (#680 ruling B, G31 narrows to the input)", async () => {
     server.use(
       http.post(`${API}/api/v1/queries`, () => HttpResponse.json(ACK_202, { status: 202 })),
     );
@@ -65,6 +66,7 @@ describe("G31 terminal mode names what is typed", () => {
     await user.type(input, "NAM.TESTERSON.SAMPLE{Enter}");
     const region = await screen.findByRole("region", { name: "Requests this shift" });
     await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(1));
-    expect(within(region).getByText("NAM.TESTERSON.SAMPLE")).toBeInTheDocument();
+    expect(within(region).getByText("PER.TESTERSON.SAMPLE")).toBeInTheDocument();
+    expect(within(region).queryByText("NAM.TESTERSON.SAMPLE")).toBeNull();
   });
 });

@@ -112,6 +112,29 @@ export function planEditAsNew(config: ClientSiteConfig, submitted: SubmittedQuer
   };
 }
 
+/** An all-capitals word this short is an acronym (VIN, DOB, ID, SSN) and keeps its capitals. */
+const ACRONYM_MAX = 3;
+
+/**
+ * A key as words, for a dropped field the new config has no label for: "plateColor" reads "plate
+ * color", "owner.last" "owner last", "plateVIN" "plate VIN" and "VIN_NUMBER" "VIN number". Words
+ * split at separators and at a lower-to-upper step; an all-capitals word of up to three letters is
+ * kept, any other word is lower case.
+ */
+export function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[\s._-]+/)
+    .filter((word) => word !== "")
+    .map((word) =>
+      word.length <= ACRONYM_MAX && word === word.toUpperCase() && /[A-Z]/.test(word)
+        ? word
+        : word.toLowerCase(),
+    )
+    .join(" ");
+}
+
 /**
  * The sentence naming what was dropped, or null when nothing was. Names only: a field's label, a
  * type's label, never a value. `fieldName` and `typeName` turn a key into words; a field the
@@ -124,7 +147,9 @@ export function editAsNewNote(
   typeName: (code: string) => string,
 ): string | null {
   if (dropped.length === 0) return null;
-  // Several sources the config lost read as one item: the ids are not words a dispatcher knows.
+  // Source ids are not words a dispatcher knows, so sources the config lost are one item: named
+  // "a source" for one, counted for several.
+  const sourceCount = dropped.filter((d) => d.kind === "source").length;
   const named = dropped.filter(
     (item, index) =>
       item.kind !== "source" || dropped.findIndex((d) => d.kind === "source") === index,
@@ -138,7 +163,9 @@ export function editAsNewNote(
       case "type":
         return t("editAsNew.item.type", { type: typeName(item.key) });
       default:
-        return t("editAsNew.item.source");
+        return sourceCount > 1
+          ? t("editAsNew.item.sources", { count: sourceCount })
+          : t("editAsNew.item.source");
     }
   });
   return t("editAsNew.dropped", { items: items.join(", ") });

@@ -26,7 +26,7 @@ import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { useShortcutSheet } from "../app/shortcut-sheet-context.js";
 import { isDataField } from "./data-field.js";
-import { editAsNewNote, planEditAsNew, submittedOf } from "./edit-as-new.js";
+import { editAsNewNote, humanizeKey, planEditAsNew, submittedOf } from "./edit-as-new.js";
 import { firstField } from "./first-field.js";
 import { formToTerminal } from "./form-to-terminal.js";
 import { RequestsPane } from "./RequestsPane.js";
@@ -486,6 +486,9 @@ export function QueryPanelView({
       panel.selectQueryType(plan.queryType);
       drafts.getState().replaceValues(plan.queryType, plan.values);
       drafts.getState().setSources(plan.sourceIds);
+      // The loaded draft is a fresh form: no "Shown" tag from the draft it replaced, and none for
+      // fields the loaded values themselves show (#651 F5).
+      panel.markLoaded();
     }
     drafts.getState().setMode("form");
     const nameOf = (key: string): string => {
@@ -494,7 +497,7 @@ export function QueryPanelView({
           .find((q) => q.code === entry.queryType)
           ?.fields.find((f) => f.key === key)?.labelKey ?? `field.${key}`;
       const text = t(labelKey);
-      return text === labelKey ? key : text;
+      return text === labelKey ? humanizeKey(key) : text;
     };
     const typeName = (code: string): string => {
       const text = t(`queryType.${code}`);

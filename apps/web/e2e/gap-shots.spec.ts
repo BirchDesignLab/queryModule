@@ -199,7 +199,8 @@ for (const [email, width, height, who] of [
       await page.keyboard.press("Control+A");
       await page.keyboard.type("NAM.TESTERSON.SAMPLE");
       await page.keyboard.press("Enter");
-      await expect(requests(page)).toContainText("NAM.TESTERSON.SAMPLE", { timeout: 15_000 });
+      // The saved entry reads the canonical code (#680 ruling B); the input kept NAM.
+      await expect(requests(page)).toContainText("PER.TESTERSON.SAMPLE", { timeout: 15_000 });
       await save(page, `pr3-${tag}-04-typed-nam`);
     }
 
