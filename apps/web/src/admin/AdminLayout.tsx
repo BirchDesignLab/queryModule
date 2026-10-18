@@ -1,13 +1,20 @@
 import { useStore } from "@querymodule/client";
 import { visuallyHiddenStyle } from "@querymodule/web-ui";
 import { useEffect, useId, useRef } from "react";
-import { Link, Navigate, NavLink, useOutlet } from "react-router";
+import { Link, Navigate, NavLink, useMatch, useOutlet } from "react-router";
 import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
 import { useServices } from "../app/services-context.js";
 import { ConfigBuilder } from "./ConfigBuilder.js";
-import { adminConfigOff, adminUsersOff, canManageUsers, canOpenAdmin } from "./roles.js";
+import {
+  adminAuditOff,
+  adminConfigOff,
+  adminUsersOff,
+  canManageUsers,
+  canOpenAdmin,
+  canViewAudit,
+} from "./roles.js";
 import { UsersView } from "./Users.js";
 
 /**
@@ -32,6 +39,7 @@ export function AdminLayout() {
       <h1 style={visuallyHiddenStyle}>{t("admin.title")}</h1>
       <AdminRail
         users={canManageUsers(role) && !adminUsersOff(features)}
+        audit={canViewAudit(role) && !adminAuditOff(features)}
         back={role !== "implementer"}
       />
       <div className="qm-admin__main">{outlet}</div>
@@ -41,12 +49,14 @@ export function AdminLayout() {
 
 /**
  * The admin rail (design target, A1): the way back first (not for an implementer, who cannot
- * query), then the sections by group. The audit log has no page yet, so the rail does not list it
- * (demo dry run G15).
+ * query), then the sections by group; Oversight (the audit log) is admin only with `adminAudit`
+ * on (D-M2P2-B1).
  */
-function AdminRail({ users, back }: { users: boolean; back: boolean }) {
+function AdminRail({ users, audit, back }: { users: boolean; audit: boolean; back: boolean }) {
   const t = useT();
   const uid = useId();
+  // A request opened from the audit log keeps a quiet marker on its entry (design v6).
+  const onRequest = useMatch("/admin/queries/:correlationId") !== null;
   return (
     <nav className="qm-admin__rail" aria-label={t("admin.navLabel")}>
       {back && (
@@ -72,6 +82,24 @@ function AdminRail({ users, back }: { users: boolean; back: boolean }) {
           <ul aria-labelledby={`${uid}-people`}>
             <li>
               <NavLink to="/admin/users">{t("admin.nav.users")}</NavLink>
+            </li>
+          </ul>
+        </div>
+      )}
+      {audit && (
+        <div className="qm-admin__section">
+          <p className="qm-admin__group" id={`${uid}-oversight`}>
+            {t("admin.nav.oversight")}
+          </p>
+          <ul aria-labelledby={`${uid}-oversight`}>
+            <li>
+              {onRequest ? (
+                <Link to="/admin/audit" aria-current="true">
+                  {t("admin.nav.audit")}
+                </Link>
+              ) : (
+                <NavLink to="/admin/audit">{t("admin.nav.audit")}</NavLink>
+              )}
             </li>
           </ul>
         </div>

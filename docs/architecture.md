@@ -86,6 +86,7 @@ sequenceDiagram
 | `scripts/pm` | One-off scripts that created each phase's GitHub issues |
 | `scripts/board` | One-off GitHub board chores (milestone closes, follow-up sync) |
 | `scripts/migrations` | One-off data migrations |
+| `scripts/mutation` | Mutation checks that break one behavior at a time and confirm its tests go red |
 | `scripts/fonts` | Fetches the IBM Plex font files |
 | `.claude/workflows` | The saved workflow scripts that run plan tasks and reviews (see [contributing](../CONTRIBUTING.md)) |
 | `.claude/agents` | Model and effort role definitions for agent dispatch |

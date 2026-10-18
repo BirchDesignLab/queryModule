@@ -340,9 +340,10 @@ main[tabindex="-1"]:focus {
 .qm-admin__rail {
   flex: 0 0 auto;
   /* Beside the section it is one column; stacked above it (narrow window, 200% zoom) the way back
-     and each group sit side by side instead of taking the whole screen. */
+     and each group sit side by side instead of taking the whole screen: four items (back and three
+     groups, Oversight included) fit one row at 683 px. */
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3.5), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 3), 1fr));
   align-content: start;
   gap: var(--qm-space-1) var(--qm-space-4);
   padding: var(--qm-space-4) var(--qm-space-3);
@@ -1908,6 +1909,239 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   display: flex;
   flex-wrap: wrap;
   gap: var(--qm-space-2);
+}
+
+/* Audit log (Task 3, D-M2P2-B3): toolbar, filters, one table in a scroll region, paging. Below the
+   admin section width layout.toolbarRow (920) the Credential owner column folds under the Actor, so
+   the table never scrolls sideways. Event and status are words, never color alone. */
+.qm-audit {
+  display: grid;
+  gap: var(--qm-space-3);
+}
+
+.qm-audit__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+}
+
+.qm-audit__tag {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__recorded {
+  margin-inline-start: auto;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__form {
+  display: grid;
+  gap: var(--qm-space-3);
+}
+
+.qm-audit__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 4), 1fr));
+  gap: var(--qm-space-3);
+  align-items: start;
+}
+
+.qm-audit__bar,
+.qm-audit__pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  align-items: center;
+}
+
+.qm-audit__grow {
+  flex: 1 1 auto;
+}
+
+.qm-audit__export-line,
+.qm-audit__hint {
+  margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__export-line {
+  flex-basis: 100%;
+}
+
+.qm-audit__body {
+  display: grid;
+  gap: var(--qm-space-3);
+  min-inline-size: 0;
+}
+
+.qm-audit__state {
+  display: grid;
+  gap: var(--qm-space-2);
+  justify-items: start;
+  padding: var(--qm-space-4);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-audit__state--error {
+  border-style: solid;
+  border-color: var(--qm-color-border);
+}
+
+.qm-audit__state h3,
+.qm-audit__state p {
+  margin: 0;
+}
+
+.qm-audit__skeleton {
+  display: grid;
+  gap: var(--qm-space-2);
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-audit__skeleton i {
+  display: block;
+  block-size: var(--qm-control-height-dense);
+  background: var(--qm-color-surface-raised);
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-audit__scroll {
+  overflow-x: auto;
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-audit__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__caption {
+  padding: var(--qm-space-2) var(--qm-space-3);
+  color: var(--qm-color-text-muted);
+  text-align: start;
+}
+
+.qm-audit__cell {
+  padding: var(--qm-space-2) var(--qm-space-3);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  text-align: start;
+  vertical-align: top;
+}
+
+.qm-audit__head {
+  color: var(--qm-color-text-muted);
+  font-family: var(--qm-type-family-label);
+  font-size: var(--qm-type-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.qm-audit__time,
+.qm-audit__request,
+.qm-audit__mono {
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-audit__time {
+  white-space: nowrap;
+}
+
+.qm-audit__owner {
+  display: none;
+}
+
+.qm-audit__fold {
+  display: block;
+  color: var(--qm-color-text-muted);
+}
+
+@container (min-width: 920px) {
+  .qm-audit__owner {
+    display: table-cell;
+  }
+
+  .qm-audit__fold {
+    display: none;
+  }
+}
+
+.qm-audit__list {
+  margin: var(--qm-space-2) 0 0;
+}
+
+.qm-audit__key {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-audit__value {
+  margin: 0 0 var(--qm-space-1);
+  font-family: var(--qm-type-family-data);
+  overflow-wrap: anywhere;
+}
+
+.qm-audit__page-size {
+  flex-direction: row;
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+/* The rail's Audit log item keeps a quiet current marker while a request opened from it is shown. */
+.qm-admin__rail a[aria-current="true"] {
+  color: var(--qm-color-text-body);
+  font-weight: 600;
+}
+
+/* Admin request view (Task 4): breadcrumb, the recorded banner, the way back, the disabled
+   hidden-results control with its reason, then the request as the query screen draws it. */
+.qm-request-view {
+  display: grid;
+  gap: var(--qm-space-3);
+}
+
+.qm-request-view__crumbs {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-request-view__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  padding: var(--qm-space-2) var(--qm-space-3);
+  background: var(--qm-color-accent-subtle);
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-request-view__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-3);
+  align-items: center;
+}
+
+.qm-request-view__hidden {
+  display: inline-flex;
+  gap: var(--qm-space-2);
+  align-items: center;
+  color: var(--qm-color-text-muted);
+  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  padding: var(--qm-space-1) var(--qm-space-3);
+  cursor: not-allowed;
 }
 
 /* The one-time password: set in the data face and selectable, so it can be copied by hand. */
