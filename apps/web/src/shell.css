@@ -1895,6 +1895,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+.qm-publish-note__icon {
+  margin-inline-end: var(--qm-space-1);
+}
+
 .qm-publish-note__count--over {
   color: var(--qm-field-required);
   font-weight: 600;

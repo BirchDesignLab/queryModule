@@ -254,9 +254,14 @@ describe("the note count is announced once per state, never per key (spec 6.6)",
     const count = () => dialog.querySelector(".qm-publish-note__count") as HTMLElement;
     expect(count().querySelector(".qm-publish-note__icon")).toBeNull();
     fireEvent.change(noteField(dialog), { target: { value: "a".repeat(185) } });
-    expect(count().querySelector(".qm-publish-note__icon")).toHaveAttribute("aria-hidden", "true");
+    const warn = count().querySelector(".qm-publish-note__icon--warn");
+    expect(warn).toHaveAttribute("aria-hidden", "true");
+    expect(warn).toHaveTextContent("\u24D8");
     fireEvent.change(noteField(dialog), { target: { value: "a".repeat(205) } });
-    expect(count().querySelector(".qm-publish-note__icon")).toHaveAttribute("aria-hidden", "true");
+    const over = count().querySelector(".qm-publish-note__icon--over");
+    expect(over).toHaveAttribute("aria-hidden", "true");
+    expect(over).toHaveTextContent("\u26A0");
+    expect(count().querySelector(".qm-publish-note__icon--warn")).toBeNull();
     expect(count()).toHaveTextContent("5 over");
   });
 });

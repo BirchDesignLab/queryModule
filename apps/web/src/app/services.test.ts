@@ -483,7 +483,7 @@ describe("NFR-004 the composition root sends ackReceipt when a 202 lands (spec 6
     expect(sockets).toHaveLength(0);
   });
 
-  it("a feed that was open and then lost sends no receipt, now or after the reconnect", async () => {
+  it("a feed that was open and then lost sends no receipt", async () => {
     const { services, sockets } = openFeed();
     services.feed.open();
     const first = sockets[0] as FakeSocket;

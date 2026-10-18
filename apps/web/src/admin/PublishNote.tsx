@@ -80,7 +80,10 @@ export function PublishNoteField({
           }
         >
           {state === "plain" ? null : (
-            <span aria-hidden="true" className="qm-publish-note__icon">
+            <span
+              aria-hidden="true"
+              className={`qm-publish-note__icon qm-publish-note__icon--${state}`}
+            >
               {state === "over" ? "\u26A0\uFE0E" : "\u24D8"}
             </span>
           )}
