@@ -11,7 +11,7 @@ import { uuidv7 } from "../../src/ids";
 import { type AdminConfigApp, adminConfigApp, errorOf } from "../helpers/admin-config";
 
 /*
- * GET /api/v1/admin/audit (spec 5.1, 4.7; FR-064, SEC-010, SEC-011, SEC-012; #711, #561, #690 m1
+ * GET /api/v1/admin/audit (spec 5.1, 4.7; SEC-010, SEC-011, SEC-012; #711, #561, #690 m1
  * m3): admin only behind adminAudit; filters by user (actor OR credential owner), correlation id,
  * type and an inclusive window of at most 31 days; cursor paged newest first; every page writes
  * one auditViewed after the read, and an audit failure fails closed (500, no rows). Mock ids only.

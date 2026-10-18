@@ -43,7 +43,7 @@ const fieldError = (field: string): ValidationError[] => [
 ];
 
 /**
- * GET /api/v1/admin/audit (spec 5.1, 4.7; FR-064, SEC-010 to SEC-012; #711). In order: the admin
+ * GET /api/v1/admin/audit (spec 5.1, 4.7; SEC-010 to SEC-012; #711). In order: the admin
  * guard (adminAudit off 404 to every caller, 401, 403 passwordChangeRequired, 403 forbidden for
  * any role but admin); the query through AdminAuditQuerySchema, 400 validationFailed naming
  * parameters only (an empty from= or to= is 400: the epoch coercion would read it as 0, #561 Q2);
