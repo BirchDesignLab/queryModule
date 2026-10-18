@@ -40,7 +40,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
 | Windows 11 | A (`C:\git\queryModule-a3`, "M2P1 Track A 3") | M2 P1 feed | active (`docs/m2-overview-pdf`: design brief PDF re-shot on main 607e7df, release note "Since the first draft", this STATUS update; AW4b #655 merged) | 10-15-26 |
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A") | M2 P2 audit | active (`feat/m2-a-p2-wave-1`: AW1 Tasks 1, 2, #709, #710) | 10-18-26 |
-| Windows 11 | B (`C:\git\queryModule`, "M2 P2 Lane B") | M2 P2 audit | BW1 design done (mockup v6 approved 10-18-26, merged in #745); idle until BW2 ([handoff](../../handoffs/10-18-26-m2-p2-lane-b.md)) | 10-18-26 |
+| Windows 11 | B (`C:\git\queryModule`, "M2 P2 Lane B3") | M2 P2 audit | BW3 done (PR #762 open, ready); idle until BW4 ([handoff](../../handoffs/10-18-26-m2-p2-lane-b3.md)) | 10-18-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
 | Windows 11 | Planning (`C:\git\queryModule-plan`, "M2 P1 planning") | M2 P1 plans | done (#588 merged; issues #589 to #606) | 10-13-26 |
@@ -66,11 +66,11 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track B
 
 - Issue: #724 (BW1 design; closes with the rulings PR); BW2 to BW5 open (#725 to #731, #734, #735)
-- Branch / PR: #745 merged (mockup v6 design note and scripts); #749 merged (rulings D-M2P2-B1 to B8); `feat/b-p2-bw2` (BW2, push requested, merges after AW2)
-- Last green: `pnpm verify` and CI on main 3e85c2b (P0.5 promoted)
-- Next step: BW2 merges once Track A AW2 has; a fresh lane then takes BW3 (Tasks 5 to 7)
+- Branch / PR: #745 merged (mockup v6 design note and scripts); #749 merged (rulings D-M2P2-B1 to B8); #757 merged (BW2); `feat/b-p2-bw3` (BW3, PR #762, ready, mock-tested; the developer merges)
+- Last green: `pnpm verify` green at `2a3d6d2` (BW3 head, 5559 tests); CI on main per its PR
+- Next step: BW3 merges (#762); a fresh lane then takes BW4 (Task 8, terminal pane); the BW3 end-to-end checks run in BW5 Task 9 after Track A AW4
 - Blocked by: none
-- Latest handoff: [10-18-26-m2-p2-lane-b2.md](../../handoffs/10-18-26-m2-p2-lane-b2.md) (M2 P2 Lane B2: BW2 done on feat/b-p2-bw2, audit log page and admin request view, merge waits for AW2; next: a fresh lane takes BW3)
+- Latest handoff: [10-18-26-m2-p2-lane-b3.md](../../handoffs/10-18-26-m2-p2-lane-b3.md) (M2 P2 Lane B3: BW3 done on feat/b-p2-bw3, PR #762; next: a fresh lane takes BW4)
 - Notes: manager "M2 Manager 8"; Lane B is local in `C:\git\queryModule`, `E2E_PORT=3200`.
 
 
