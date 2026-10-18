@@ -59,7 +59,9 @@ describe("FR-051 positions fill in order after the command code", () => {
     };
     cost(5_000); // warm up
     expect(cost(20_000) / Math.max(cost(5_000), 0.05)).toBeLessThan(9);
-  });
+    // The work is about 40 ms; the 5 s default is hit only when the worker is starved under a full
+    // verify on Windows (#560), so the bound is explicit like the other wall-clock tests.
+  }, 30_000);
   it("a bare command code is a command with no values", () => {
     expect(t("veh")).toMatchObject({ commandCode: "VEH", userValues: {}, errors: [] });
   });
