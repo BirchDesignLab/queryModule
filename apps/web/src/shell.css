@@ -2026,6 +2026,59 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin-inline-start: auto;
 }
 
+/* Admin request view (Task 4): the recorded banner, the way back, the disabled hidden-results
+   control with its reason, then each part's values and source cards. */
+.qm-request-view {
+  display: grid;
+  gap: var(--qm-space-3);
+}
+
+.qm-request-view__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-3);
+  align-items: center;
+}
+
+.qm-request-view__hidden {
+  display: inline-flex;
+  gap: var(--qm-space-2);
+  align-items: center;
+  color: var(--qm-color-text-muted);
+  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+  padding: var(--qm-space-1) var(--qm-space-3);
+}
+
+.qm-request-view__part {
+  display: grid;
+  gap: var(--qm-space-2);
+}
+
+.qm-request-view__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qm-space-3);
+  margin: 0;
+}
+
+.qm-request-view__key {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-request-view__value {
+  margin: 0;
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-request-view__sources {
+  display: grid;
+  gap: var(--qm-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 /* The one-time password: set in the data face and selectable, so it can be copied by hand. */
 .qm-users__password {
   margin: 0 0 var(--qm-space-4);

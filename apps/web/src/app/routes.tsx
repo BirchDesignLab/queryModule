@@ -37,6 +37,12 @@ export function appRoutes(clientSupported: boolean): RouteObject[] {
                   }),
                 },
                 {
+                  path: "queries/:correlationId",
+                  lazy: async () => ({
+                    Component: (await import("../admin/AdminRequestView.js")).AdminRequestPage,
+                  }),
+                },
+                {
                   path: "audit",
                   lazy: async () => ({
                     Component: (await import("../admin/AuditLog.js")).AuditLogPage,

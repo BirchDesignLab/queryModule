@@ -147,13 +147,20 @@ export function auditPage(count: number, nextCursor: string | null, firstId = 1)
  * GET /api/v1/admin/queries/:correlationId for the canned request: the user detail plus the
  * admin-only `hidden` flag on each result and a full-length config hash (mock data only).
  */
-export function adminDetail202(over: { hidden?: boolean } = {}) {
-  const base = detail202();
+export function adminDetail202(
+  over: {
+    hidden?: boolean;
+    sources?: Parameters<typeof detail202>[0];
+    values?: Record<string, string>;
+  } = {},
+) {
+  const base = detail202(over.sources);
   return {
     ...base,
     configHash: "b".repeat(64),
     parts: base.parts.map((part) => ({
       ...part,
+      ...(over.values === undefined ? {} : { values: over.values }),
       sources: part.sources.map((source, i) => ({
         ...source,
         resultId: `0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b0${i}`,
