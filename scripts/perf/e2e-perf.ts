@@ -9,7 +9,13 @@ import { mkdtempSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { e2eTarget, probeHealth, runSeed, waitForReady } from "../dev/e2e-lib.ts";
+import {
+  e2eTarget,
+  probeHealth,
+  runSeed,
+  smokeCredentials,
+  waitForReady,
+} from "../dev/e2e-lib.ts";
 import { ensureDevSecrets } from "../dev/secrets.ts";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -18,6 +24,7 @@ const secrets = resolve(root, ".dev/secrets");
 ensureDevSecrets(secrets);
 const shell = process.platform === "win32";
 const target = e2eTarget(process.env);
+const smoke = smokeCredentials(process.env, resolve(secrets, "SEED_PASSWORD_SECRET"));
 
 const b = spawnSync("pnpm", ["--filter", "@querymodule/api", "build"], {
   cwd: root,
@@ -97,6 +104,7 @@ const pw = spawnSync(
     shell,
     env: {
       ...process.env,
+      ...smoke,
       QM_PERF: "1",
       QM_BASE_URL: target.origin,
       E2E_BASE_URL: target.origin,

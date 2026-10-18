@@ -124,6 +124,7 @@ const CONFIG_CHANGED_SETTLE_MS = 1000;
 
 const NO_VALUES: Readonly<Record<string, DraftValue>> = {};
 const NO_KEYS: ReadonlySet<string> = new Set();
+const NO_ERRORS: readonly ValidationError[] = [];
 
 function sameValues(
   a: Readonly<Record<string, DraftValue>>,
@@ -238,6 +239,18 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   // A whole draft was loaded (Edit as new query): the reveal effect skips tags and announcements once.
   const [loadSeq, setLoadSeq] = useState(0);
   const seenLoad = useRef(0);
+  // The effects below run on every edit and almost never change the tags. A setState call from an
+  // effect that changes nothing can still cost a second commit (React cannot always skip it before
+  // rendering), so an effect asks `updateRevealed`, which calls the setter only for a real change. The
+  // ref holds the value the effects of one flush are building on (#478).
+  const revealedNow = useRef(revealed);
+  revealedNow.current = revealed;
+  const updateRevealed = (change: (prev: ReadonlySet<string>) => ReadonlySet<string>): void => {
+    const next = change(revealedNow.current);
+    if (next === revealedNow.current) return;
+    revealedNow.current = next;
+    setRevealed(next);
+  };
   const dismissRevealed = useCallback(
     (key: string): void =>
       setRevealed((prev) => {
@@ -330,7 +343,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const before = lastValues.current;
     lastValues.current = values;
     if (before === values) return;
-    setRevealed((prev) => {
+    updateRevealed((prev) => {
       const edited = [...prev].filter((key) => before?.[key] !== values?.[key]);
       return edited.length === 0 ? prev : new Set([...prev].filter((k) => !edited.includes(k)));
     });
@@ -338,8 +351,11 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
 
   // Server validation errors describe the request that was sent (values and sources); any edit, a
   // source change or a type change drops them.
+  // Only when there are errors to drop: an edit with none costs no second commit (#478).
   // biome-ignore lint/correctness/useExhaustiveDependencies: values, draftSources and queryType are the triggers
-  useEffect(() => setServerErrors([]), [values, draftSources, queryType]);
+  useEffect(() => {
+    if (serverErrors.length > 0) setServerErrors(NO_ERRORS);
+  }, [values, draftSources, queryType]);
   // What the user has on screen now, for an answer that arrives after the request left (see
   // sameAsSent). Sources are the user's own choice (the draft's), not the resolved checked list: a
   // background config refresh can change which sources are eligible without the user doing anything.
@@ -386,9 +402,9 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
     const loaded = seenLoad.current !== loadSeq;
     seenLoad.current = loadSeq;
     if (loaded || (previous !== null && previous.queryType !== formState.queryType))
-      setRevealed(NO_KEYS);
+      updateRevealed(() => NO_KEYS);
     // A key a rule hid again leaves the set, so a later config that shows it is not a "reveal".
-    setRevealed((prev) => {
+    updateRevealed((prev) => {
       const kept = [...prev].filter((key) => visible.has(key));
       return kept.length === prev.size ? prev : new Set(kept);
     });
@@ -400,7 +416,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
         preview || loaded
           ? []
           : shown.filter((f) => previous.values[f.key] === current[f.key]).map((f) => f.key);
-      if (tagged.length > 0) setRevealed((prev) => new Set([...prev, ...tagged]));
+      if (tagged.length > 0) updateRevealed((prev) => new Set([...prev, ...tagged]));
       const messages = shown.map((f) =>
         t(f.required ? "form.fieldRevealedRequired" : "form.fieldRevealed", {
           label: t(f.labelKey),
