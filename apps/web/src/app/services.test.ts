@@ -473,7 +473,7 @@ describe("NFR-004 the composition root sends ackReceipt when a 202 lands (spec 6
     services.reset.resetAll();
   });
 
-  it("a 202 with the feed closed sends nothing and changes nothing for the user", async () => {
+  it("a 202 with the feed never opened sends nothing and changes nothing for the user", async () => {
     const { services, sockets } = openFeed();
     server.use(
       http.post(`${API}/api/v1/queries`, () => HttpResponse.json(ACK_202, { status: 202 })),
@@ -481,5 +481,21 @@ describe("NFR-004 the composition root sends ackReceipt when a 202 lands (spec 6
     const outcome = await services.submit.getState().submit(REQUEST);
     expect(outcome.kind).toBe("acknowledged");
     expect(sockets).toHaveLength(0);
+  });
+
+  it("a feed that was open and then lost sends no receipt, now or after the reconnect", async () => {
+    const { services, sockets } = openFeed();
+    services.feed.open();
+    const first = sockets[0] as FakeSocket;
+    first.onopen?.();
+    first.onmessage?.({ data: JSON.stringify({ v: 1, type: "welcome", latestSeq: 0 }) });
+    first.onclose?.({ code: 1006 });
+    server.use(
+      http.post(`${API}/api/v1/queries`, () => HttpResponse.json(ACK_202, { status: 202 })),
+    );
+    const outcome = await services.submit.getState().submit(REQUEST);
+    expect(outcome.kind).toBe("acknowledged");
+    expect(sockets.flatMap(receipts)).toEqual([]);
+    services.reset.resetAll();
   });
 });

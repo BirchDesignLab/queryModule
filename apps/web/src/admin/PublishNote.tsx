@@ -79,6 +79,11 @@ export function PublishNoteField({
               : "qm-publish-note__count"
           }
         >
+          {state === "plain" ? null : (
+            <span aria-hidden="true" className="qm-publish-note__icon">
+              {state === "over" ? "\u26A0\uFE0E" : "\u24D8"}
+            </span>
+          )}
           {count}
         </span>
       </div>

@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { findSetting, selectBuilderItem } from "../test/builder-tree.js";
 import {
   API,
@@ -225,5 +225,38 @@ describe("the history drawer shows publisher name and note (D-M2P0-4)", () => {
     await within(region).findByText("Version 2");
     expect(region.querySelector("b")).toBeNull();
     expect(row(region, 2)).toHaveTextContent("<b>bold</b> & more");
+  });
+});
+
+describe("the note count is announced once per state, never per key (spec 6.6)", () => {
+  it("says 'left' once on entering 180, nothing while typing on, then the error once over the limit", async () => {
+    const t = await openBuilder();
+    const dialog = await openReview(t);
+    const said = vi.spyOn(t.services.announcer, "announce");
+    const type = (n: number) =>
+      fireEvent.change(noteField(dialog), { target: { value: "a".repeat(n) } });
+    for (const n of [150, 170, 179]) type(n);
+    expect(said).not.toHaveBeenCalled();
+    for (const n of [180, 181, 182, 185, 199, 200]) type(n);
+    expect(said.mock.calls.map((c) => c[0])).toEqual(["20 left"]);
+    for (const n of [201, 205, 213]) type(n);
+    expect(said).toHaveBeenCalledTimes(2);
+    expect(said.mock.calls[1]?.[0]).toBe("Note can be at most 200 characters (1 over).");
+    // Back under the limit and over again says it again: a new state, not a repeat.
+    type(190);
+    type(210);
+    expect(said.mock.calls.filter((c) => /over\)/.test(String(c[0])))).toHaveLength(2);
+  });
+
+  it("marks the warn and over states with an icon as well as words", async () => {
+    const t = await openBuilder();
+    const dialog = await openReview(t);
+    const count = () => dialog.querySelector(".qm-publish-note__count") as HTMLElement;
+    expect(count().querySelector(".qm-publish-note__icon")).toBeNull();
+    fireEvent.change(noteField(dialog), { target: { value: "a".repeat(185) } });
+    expect(count().querySelector(".qm-publish-note__icon")).toHaveAttribute("aria-hidden", "true");
+    fireEvent.change(noteField(dialog), { target: { value: "a".repeat(205) } });
+    expect(count().querySelector(".qm-publish-note__icon")).toHaveAttribute("aria-hidden", "true");
+    expect(count()).toHaveTextContent("5 over");
   });
 });

@@ -1848,8 +1848,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-weight: 600;
 }
 
-.qm-history__when,
-.qm-history__of {
+.qm-history__when {
   color: var(--qm-color-text-muted);
 }
 
@@ -1870,6 +1869,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-history__note {
   flex-basis: 100%;
+  order: 1;
   overflow-wrap: anywhere;
 }
 

@@ -153,6 +153,23 @@ describe("a purged result", () => {
   });
 });
 
+describe("a request sent in this session", () => {
+  it("keeps a working Edit as new query from its in-memory values when the detail reports purged values", () => {
+    const { edits } = setup(
+      detail([{ sourceId: "nationalSource", purged: true }], {
+        purged: true,
+        typeValues: { plateType: "PASSENGER" },
+      }),
+      { sent: true },
+    );
+    const button = within(row()).getByRole("button", { name: /^Edit as new query/ });
+    expect(button).not.toHaveAttribute("aria-disabled");
+    expect(row()).not.toHaveTextContent(/values purged/i);
+    button.click();
+    expect(edits).toHaveLength(1);
+  });
+});
+
 describe("a request whose values were purged", () => {
   const purgedValues = () =>
     detail([{ sourceId: "nationalSource", purged: true }], {

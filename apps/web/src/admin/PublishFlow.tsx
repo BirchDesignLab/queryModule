@@ -250,7 +250,7 @@ export function usePublishFlow(): PublishFlow {
     () =>
       exclusive(async () => {
         const version = reviewing;
-        if (version === null || noteOver(note) > 0) return;
+        if (version === null) return;
         const result = await publishDraft(api, version, noteToSend(note) ?? undefined);
         if (!result.ok) {
           setReviewing(null);

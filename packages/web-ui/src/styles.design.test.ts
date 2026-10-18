@@ -50,6 +50,14 @@ describe("request entries match mockup v5 (G1, G25, G36)", () => {
   });
 });
 
+describe("officer density: purged values and the reason an action is off (BW3 critic, spec 6.3)", () => {
+  it.each([".qm-request__purged", ".qm-request__why"])("%s is 16 px in body color", (name) => {
+    const rule = decls(`.qm-layout--mobile-unit ${name}`);
+    expect(rule).toMatch(/font-size:\s*var\(--qm-type-body-size\)/);
+    expect(rule).toMatch(/color:\s*var\(--qm-color-text-body\)/);
+  });
+});
+
 describe("officer density: a table's caption is 16 px in body color (critic PR2)", () => {
   it("matches the mockup's .touch .tbl caption", () => {
     const caption = decls(".qm-layout--mobile-unit .qm-result-table caption");
