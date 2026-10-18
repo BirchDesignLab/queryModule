@@ -45,6 +45,9 @@ describe("FR-051 positions fill in order after the command code", () => {
     expect(t(`VEH.ZZ-0001${".".repeat(5000)}`)).toEqual(t("VEH.ZZ-0001"));
     expect(t(`VEH.ZZ-0001${".".repeat(5000)}`).userValues).toEqual({ plate: "ZZ-0001" });
   });
+  // The timeout argument at the end of this test is 30 s: the work is about 40 ms, so the 5 s default
+  // is hit only when the worker is starved under a full verify on Windows (#560), and the bound is
+  // explicit like the other wall-clock tests.
   it("delimiter runs tokenize in linear time (#323)", () => {
     // Ratio, not wall clock: 4x the input should cost about 4x; quadratic would be about 16x.
     const cost = (n: number) => {
@@ -59,8 +62,6 @@ describe("FR-051 positions fill in order after the command code", () => {
     };
     cost(5_000); // warm up
     expect(cost(20_000) / Math.max(cost(5_000), 0.05)).toBeLessThan(9);
-    // The work is about 40 ms; the 5 s default is hit only when the worker is starved under a full
-    // verify on Windows (#560), so the bound is explicit like the other wall-clock tests.
   }, 30_000);
   it("a bare command code is a command with no values", () => {
     expect(t("veh")).toMatchObject({ commandCode: "VEH", userValues: {}, errors: [] });
@@ -239,7 +240,7 @@ describe("FR-051 presets set user values before positions are read", () => {
   });
 });
 
-describe("FR-055 unrecognised input", () => {
+describe("FR-055 unrecognized input", () => {
   it.each([
     ["", [{ key: "terminal.emptyInput" }]],
     ["   ", [{ key: "terminal.emptyInput" }]],
