@@ -165,20 +165,33 @@ for (const size of SIZES) {
         expect(cut, "cut off").toEqual([]);
       });
 
-    test("[#698] Keywords: each sample badge stays on one line", async ({ page }) => {
+    // (b): the keyword count is on the Keywords row's own line, not dropped under the label.
+    test("[#698 (b)] the Keywords row keeps its count on the label's line", async ({ page }) => {
+      await selectRow(page, /^Keywords and severity/);
+      const row = tree(page).getByRole("treeitem", { name: /^Keywords and severity/ });
+      const label = await box(row.locator(".qm-tree__label"));
+      const count = await box(row.locator(".qm-tree__key--end"));
+      expect(count.y, "the count's top against the label's").toBeLessThan(label.y + label.height);
+    });
+
+    test("[#698 (g)] Keywords: no sample badge is clipped by the sample panel", async ({
+      page,
+    }) => {
       await selectRow(page, /^Keywords and severity/);
       const sample = page.locator(".qm-kw__sample");
       await sample.scrollIntoViewIfNeeded();
-      const marks = sample.locator("mark");
-      expect(await marks.count()).toBeGreaterThan(3);
-      // A badge that wraps inside itself is taller than one that does not.
-      const heights = await marks.evaluateAll((els) =>
-        els.map((el) => el.getBoundingClientRect().height),
+      const panel = await box(sample);
+      const marks = await sample.locator("mark").evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          return { right: r.right, spill: el.scrollWidth - el.clientWidth };
+        }),
       );
-      expect(
-        Math.max(...heights) - Math.min(...heights),
-        `badge heights ${heights}`,
-      ).toBeLessThanOrEqual(2);
+      expect(marks.length).toBeGreaterThan(3);
+      for (const m of marks) {
+        expect(m.spill, "a badge's text runs past its box").toBeLessThanOrEqual(1);
+        expect(m.right, "a badge ends inside the panel").toBeLessThanOrEqual(panel.x + panel.width);
+      }
     });
   });
 }

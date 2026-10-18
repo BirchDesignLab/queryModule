@@ -1098,6 +1098,12 @@ main[tabindex="-1"]:focus {
   min-inline-size: 0;
 }
 
+/* A row with a count at its end keeps the count on the label's line: the label wraps inside its own
+   box instead. */
+.qm-tree__name:has(> .qm-tree__key--end) {
+  flex-wrap: nowrap;
+}
+
 .qm-tree__label {
   flex: 0 1 auto;
   max-inline-size: 100%;
@@ -2254,6 +2260,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 /* An arrow at the end of the list is still focusable (it says why by its place), but reads as off. */
 .qm-card-head__tools [aria-disabled="true"] {
+  border-color: transparent;
   color: var(--qm-color-text-muted);
   cursor: default;
 }
@@ -2513,10 +2520,10 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border: 0;
 }
 
-/* A badge is one word or phrase: it never breaks inside itself, the sample wraps between badges. */
+/* The sample wraps between badges. A badge breaks inside itself only when it is wider than the
+   panel, and then between its words: nothing is clipped. */
 .qm-kw__sample .qm-mark {
-  white-space: nowrap;
-  overflow-x: clip;
+  white-space: normal;
 }
 
 .qm-kw__sample {
