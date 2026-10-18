@@ -556,7 +556,7 @@ const ROUTE_DEFS = [
       "A request with payloads; includeHidden=true adds hidden results; writes adminViewed with viewerBasis admin",
     access: "admin",
     since: "m2",
-    status: "planned",
+    status: "live",
     feature: "adminAudit",
     requiresRequestedWith: false,
     request: { params: QueryParamsSchema, query: AdminQueryQuerySchema },

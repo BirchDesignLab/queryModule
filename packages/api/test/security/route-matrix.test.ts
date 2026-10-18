@@ -42,9 +42,7 @@ const openapi = JSON.parse(
  * mounted until P1/P2. The matrix does not call them as an allowed caller; a named test below
  * asserts each answers 404. A route leaves this list when its handler mounts and gets a CALLS row.
  */
-const CONTRACT_ONLY: ReadonlyMap<string, string> = new Map([
-  ["getAdminQuery", "GET /api/v1/admin/queries/{correlationId}"],
-]);
+const CONTRACT_ONLY: ReadonlyMap<string, string> = new Map<string, string>([]);
 
 const OPERATIONS: Operation[] = Object.entries(openapi.paths)
   .flatMap(([path, methods]) =>
@@ -172,6 +170,8 @@ const CALLS: Record<string, Call> = {
     query: () => ({ from: String(Date.now() - 3_600_000), to: String(Date.now()) }),
     ok: 200,
   },
+  // #713: another user's request; an allowed caller reads it and writes adminViewed.
+  getAdminQuery: { params: { correlationId: "targetQuery" }, ok: 200 },
 };
 
 /**

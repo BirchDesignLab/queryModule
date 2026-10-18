@@ -107,7 +107,7 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["getQuery", "get", "/api/v1/queries/{correlationId}", "policy", "m2", "live"],
       ["listAdminAudit", "get", "/api/v1/admin/audit", "admin", "m2", "live"],
       ["exportAdminAudit", "get", "/api/v1/admin/audit/export", "admin", "m2", "live"],
-      ["getAdminQuery", "get", "/api/v1/admin/queries/{correlationId}", "admin", "m2", "planned"],
+      ["getAdminQuery", "get", "/api/v1/admin/queries/{correlationId}", "admin", "m2", "live"],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
@@ -164,7 +164,13 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       "exportAdminAudit",
       "getAdminQuery",
     ] as const;
-    const mounted = new Set(["listQueries", "getQuery", "listAdminAudit", "exportAdminAudit"]);
+    const mounted = new Set([
+      "listQueries",
+      "getQuery",
+      "listAdminAudit",
+      "exportAdminAudit",
+      "getAdminQuery",
+    ]);
     for (const id of ids) {
       const r = findRoute(id);
       expect(r.status, id).toBe(mounted.has(id) ? "live" : "planned");

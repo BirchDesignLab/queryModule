@@ -3,9 +3,11 @@ import {
   type AdminAuditPage,
   AdminAuditPageSchema,
   AdminAuditQuerySchema,
+  AdminQueryQuerySchema,
   type AuditDetails,
   AuditExportLineSchema,
   type AuditReadRow,
+  UUID7_PATTERN,
   type ValidationError,
 } from "@querymodule/core/contracts";
 import type { Hono } from "hono";
@@ -15,6 +17,7 @@ import type { AppDeps } from "../deps";
 import { apiError } from "../http/errors";
 import type { AppEnv } from "../http/types";
 import { errorFields } from "../log/error-fields";
+import { AdminViewedAuditError, readAdminQuery } from "../queries/admin-read";
 import { actorOf } from "../seams";
 import {
   AUDIT_EXPORT_BATCH,
@@ -30,6 +33,7 @@ import {
 
 const PATH = "/api/v1/admin/audit";
 const EXPORT_PATH = `${PATH}/export`;
+const QUERY_PATH = "/api/v1/admin/queries/:correlationId";
 
 /**
  * One error per top-level query parameter, in issue order, naming the parameter only. A
@@ -119,6 +123,14 @@ class AuditExportStreamError extends Error {
  * pull, so rows written meanwhile (the export's own row included) are absent and the streamed
  * set is the audited count. A failure reading the first batch is still a 500; after the first
  * byte a failure errors the stream and logs the class and the last id streamed.
+ *
+ * GET /api/v1/admin/queries/:correlationId (spec 5.1, 5.2 admin basis, 5.5; FR-063, SEC-012,
+ * SEC-014; #713): the same guard; a malformed correlation id or includeHidden (only "true" or
+ * "false", absent is false) answers 400 validationFailed naming the parameter, an unknown id 404
+ * notFound, both with no audit row. Then readAdminQuery commits adminViewed (viewerBasis admin)
+ * before any DEK is unwrapped and answers the request with values and payloads. An audit, read
+ * or decrypt failure answers 500 internal with no request data and logs the id, the stage and
+ * the error class only, never a value or a payload (spec 5.9).
  */
 export function mountAdminAuditRoutes(app: Hono<AppEnv>, d: AppDeps): void {
   const guard = adminGuard(d, "adminAudit", ["admin"]);
@@ -167,6 +179,32 @@ export function mountAdminAuditRoutes(app: Hono<AppEnv>, d: AppDeps): void {
       return apiError(c, "internal");
     }
     return c.json(body, 200);
+  });
+
+  app.get(QUERY_PATH, guard, async (c) => {
+    const correlationId = c.req.param("correlationId");
+    if (!UUID7_PATTERN.test(correlationId))
+      return apiError(c, "validationFailed", undefined, fieldError("correlationId"));
+    const q = AdminQueryQuerySchema.safeParse(c.req.query());
+    if (!q.success) return apiError(c, "validationFailed", undefined, queryErrors(q.error.issues));
+    try {
+      const detail = await readAdminQuery(
+        d,
+        c.get("principal"),
+        correlationId,
+        q.data.includeHidden === "true",
+      );
+      if (detail === null) return apiError(c, "notFound");
+      return c.json(detail, 200);
+    } catch (e) {
+      const audit = e instanceof AdminViewedAuditError;
+      d.logger.error("admin query read failed", {
+        correlationId,
+        stage: audit ? "audit" : "read",
+        error: { name: errorFields(audit ? e.cause : e).name },
+      });
+      return apiError(c, "internal");
+    }
   });
 
   app.get(EXPORT_PATH, guard, async (c) => {

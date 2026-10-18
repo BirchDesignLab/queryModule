@@ -1,4 +1,6 @@
 import {
+  type AdminQueryDetail,
+  AdminQueryDetailSchema,
   AuditValidationErrorSchema,
   BoundedIdSchema,
   EpochMsSchema,
@@ -109,14 +111,8 @@ function groupBy<R>(
 /**
  * The owner's read of one request (spec 5.1, 5.2, 5.5; FR-062 read half): null unless
  * the access policy answers basis "owner", so another user, an admin on this route and an unknown
- * or malformed id all get the same 404 (never 403). Parts in plan order, each part's sources in
- * selection order (as the 202 lists them), values opened under the values DEK and each returned
- * payload under the payload DEK; both DEKs are zeroed in finally. A scope whose request_key row is
- * gone (shredded by ops/lost-key.ts) answers purged: true with no values or payload for the parts
- * or results that held sealed data in it (spec 5.1). No hidden-result filter until
- * result_visibility lands (M3 P2), and no retention purge until M2 P2. Writes nothing: the
- * owner's read is not audited (spec 5.2). Decrypted values and payloads exist only in the
- * returned body; a decrypt or parse failure throws for the route to log by class and ids.
+ * or malformed id all get the same 404 (never 403). The body is loadDetail's. Writes nothing:
+ * the owner's read is not audited (spec 5.2); the admin route writes adminViewed (admin-read.ts).
  */
 export async function readQuery(
   d: AppDeps,
@@ -125,6 +121,36 @@ export async function readQuery(
 ): Promise<QueryDetail | null> {
   const access = await authorizeQueryAccess(d.db, principal, correlationId, "read", "own");
   if (!access.ok || access.basis !== "owner") return null;
+  return loadDetail(d, correlationId, { view: "owner" });
+}
+
+/**
+ * One request's detail, shared by the owner's read and the admin read (#713), for a correlation
+ * id the caller's access check already found. Parts in plan order, each part's sources in
+ * selection order (as the 202 lists them), values opened under the values DEK and each returned
+ * payload under the payload DEK; both DEKs are zeroed in finally. A scope whose request_key row is
+ * gone (shredded by ops/lost-key.ts) answers purged: true with no values or payload for the parts
+ * or results that held sealed data in it (spec 5.1). The admin view marks every result
+ * hidden: false: no hidden-result filter or flag until result_visibility lands (M3 P2). No
+ * retention purge until M2 P2. Writes nothing and checks no access. Decrypted values and payloads
+ * exist only in the returned body; a decrypt or parse failure throws for the route to log by
+ * class and ids.
+ */
+export function loadDetail(
+  d: AppDeps,
+  correlationId: string,
+  opts: { view: "owner" },
+): Promise<QueryDetail>;
+export function loadDetail(
+  d: AppDeps,
+  correlationId: string,
+  opts: { view: "admin" },
+): Promise<AdminQueryDetail>;
+export async function loadDetail(
+  d: AppDeps,
+  correlationId: string,
+  opts: { view: "owner" | "admin" },
+): Promise<QueryDetail | AdminQueryDetail> {
   const parts = await d.db
     .select()
     .from(queryRequest)
@@ -138,13 +164,14 @@ export async function readQuery(
     .select()
     .from(requestKey)
     .where(eq(requestKey.correlationId, correlationId));
-  // the policy found part 0, so head is there; were it not, the schema refuses the body (500)
+  // the access check found part 0, so head is there; were it not, the schema refuses the body (500)
   const head = parts[0];
   const deks: Partial<Record<RequestKeyScope, Buffer>> = {};
   const resultsByPart = groupBy(results, (r) => r.partId);
+  const hidden = opts.view === "admin" ? { hidden: false } : {};
   try {
     for (const row of keys) deks[row.scope] = unwrapRequestKey(d.dataKey, row);
-    return QueryDetailSchema.parse({
+    const body = {
       correlationId,
       submittedAt: head?.submittedAt,
       configHash: head?.configHash,
@@ -161,6 +188,7 @@ export async function readQuery(
             createdAt: r.createdAt,
             receivedAt: r.receivedAt,
             timedOutAt: r.timedOutAt,
+            ...hidden,
           };
           if (sealedPayload === null || !deks.payload) {
             return {
@@ -185,7 +213,10 @@ export async function readQuery(
           values: openPartValues(deks.values, correlationId, p.partId, sealedValues),
         };
       }),
-    });
+    };
+    return opts.view === "admin"
+      ? AdminQueryDetailSchema.parse(body)
+      : QueryDetailSchema.parse(body);
   } finally {
     deks.values?.fill(0);
     deks.payload?.fill(0);
