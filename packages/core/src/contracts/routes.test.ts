@@ -105,9 +105,9 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       ["revokeAdminSession", "delete", "/api/v1/admin/sessions/{sessionId}", "admin", "m1", "live"],
       ["listQueries", "get", "/api/v1/queries", "sessionOwn", "m2", "live"],
       ["getQuery", "get", "/api/v1/queries/{correlationId}", "policy", "m2", "live"],
-      ["listAdminAudit", "get", "/api/v1/admin/audit", "admin", "m2", "planned"],
-      ["exportAdminAudit", "get", "/api/v1/admin/audit/export", "admin", "m2", "planned"],
-      ["getAdminQuery", "get", "/api/v1/admin/queries/{correlationId}", "admin", "m2", "planned"],
+      ["listAdminAudit", "get", "/api/v1/admin/audit", "admin", "m2", "live"],
+      ["exportAdminAudit", "get", "/api/v1/admin/audit/export", "admin", "m2", "live"],
+      ["getAdminQuery", "get", "/api/v1/admin/queries/{correlationId}", "admin", "m2", "live"],
     ]);
     expect(findRoute("getConfig").responses[401]?.schema).toBe(ApiErrorSchema);
     expect(findRoute("getConfig").responses[200]?.schema).toBe(ClientSiteConfigSchema);
@@ -164,7 +164,13 @@ describe("BR-007 route contracts (spec 5.1)", () => {
       "exportAdminAudit",
       "getAdminQuery",
     ] as const;
-    const mounted = new Set(["listQueries", "getQuery"]);
+    const mounted = new Set([
+      "listQueries",
+      "getQuery",
+      "listAdminAudit",
+      "exportAdminAudit",
+      "getAdminQuery",
+    ]);
     for (const id of ids) {
       const r = findRoute(id);
       expect(r.status, id).toBe(mounted.has(id) ? "live" : "planned");
@@ -189,6 +195,10 @@ describe("BR-007 route contracts (spec 5.1)", () => {
     expect(findRoute("exportAdminAudit").responses[200]?.schema).toBeUndefined();
     expect(findRoute("exportAdminAudit").responses[200]?.description).toMatch(
       /AuditExportLineSchema.*docs\/api\.md/,
+    );
+    // The over-cap refusal is named in the contract, not only in docs/api.md (AW2 review T4 S1).
+    expect(findRoute("exportAdminAudit").responses[400]?.description).toMatch(
+      /audit\.exportTooLarge/,
     );
   });
 

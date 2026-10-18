@@ -438,7 +438,8 @@ export const AuditEventSchema = z
       ...partEnvelope,
       details: AUDIT_DETAILS_SCHEMAS.sourceResponded,
     }),
-    // interrupted keeps an optional owner: the startup sweep (M1 P3) copies source_result.credential_user_id.
+    // interrupted keeps an optional owner: the startup sweep (M1 P3) copies
+    // source_result.credential_user_id.
     z.strictObject({
       type: z.literal("interrupted"),
       ...partEnvelope,
@@ -522,7 +523,8 @@ export const AuditEventSchema = z
     }),
   ])
   .superRefine((e, ctx): void => {
-    // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they do.
+    // Spec 4.7: system rows carry exactly SYSTEM_ACTOR and identity_source system, and only they
+    // do.
     const systemRole = e.actor.role === "system";
     if (systemRole !== (e.identitySource === "system")) {
       ctx.addIssue({

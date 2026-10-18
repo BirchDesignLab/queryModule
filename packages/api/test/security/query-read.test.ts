@@ -57,7 +57,7 @@ async function setup() {
     t.request(`/api/v1/queries/${id}`, {
       headers: who === undefined ? {} : { cookie: cookies[who] ?? "" },
     });
-  return { t, correlationId, get };
+  return { t, correlationId, get, cookies };
 }
 type Setup = Awaited<ReturnType<typeof setup>>;
 
@@ -187,6 +187,55 @@ describe("GET /api/v1/queries/:correlationId access (spec 5.2, SEC-014; #561)", 
         args: [s.correlationId],
       });
     });
+  });
+
+  it("the admin route reads the owner's request as admin and writes one adminViewed (FR-063, #713)", async () => {
+    const { t, correlationId, get, cookies } = await setup();
+    // the owner's route still answers the admin 404 and writes nothing
+    expect((await get(correlationId, "admin")).status).toBe(404);
+    expect(await t.auditRows("adminViewed")).toEqual([]);
+    const r = await t.request(`/api/v1/admin/queries/${correlationId}`, {
+      headers: { cookie: cookies.admin ?? "" },
+    });
+    expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toBe("no-store");
+    expect((await t.auditRows("adminViewed")).map((v) => v.details)).toEqual([
+      { correlationId, viewerBasis: "admin", includeHidden: false },
+    ]);
+    // the owner's own read is never an adminViewed
+    expect((await get(correlationId, "owner")).status).toBe(200);
+    expect(await t.auditRows("adminViewed")).toHaveLength(1);
+  });
+
+  it("a tampered payload on the admin route is 500 internal with no value or payload logged (#713)", async () => {
+    const s = await setup();
+    const log = captureLogger();
+    s.t.deps.logger = { ...log, addRedactKeys: () => undefined, child: () => s.t.deps.logger };
+    await s.t.deps.db.$client.execute("DROP TRIGGER source_result_write_once");
+    await s.t.deps.db.$client.execute({
+      sql: "UPDATE source_result SET payload_ciphertext = zeroblob(length(payload_ciphertext)) WHERE correlation_id = ? AND source_id = 'stateSource'",
+      args: [s.correlationId],
+    });
+    const r = await s.t.request(`/api/v1/admin/queries/${s.correlationId}`, {
+      headers: { cookie: s.cookies.admin ?? "" },
+    });
+    expect(r.status).toBe(500);
+    const text = await r.text();
+    expect(ApiErrorSchema.parse(JSON.parse(text)).error.code).toBe("internal");
+    expect(log.entries.filter((e) => e.level === "error")).toEqual([
+      {
+        level: "error",
+        msg: "admin query read failed",
+        f: { correlationId: s.correlationId, stage: "read", error: { name: "AeadError" } },
+      },
+    ]);
+    const logged = JSON.stringify(log.entries) + s.t.logLines.join("\n");
+    for (const secret of [PLATE, "STOLEN", "TESTERSON"]) {
+      expect(text).not.toContain(secret);
+      expect(logged).not.toContain(secret);
+    }
+    // adminViewed committed before the decrypt was tried (SEC-012)
+    expect(await s.t.auditRows("adminViewed")).toHaveLength(1);
   });
 
   it.each([
