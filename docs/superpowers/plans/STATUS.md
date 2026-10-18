@@ -66,11 +66,11 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track B
 
 - Issue: #724 (BW1 design; closes with the rulings PR); BW2 to BW5 open (#725 to #731, #734, #735)
-- Branch / PR: #745 merged (mockup v6 design note and scripts); `feat/b-p2-bw1-rulings` (rulings D-M2P2-B1 to B8, handoff)
+- Branch / PR: #745 merged (mockup v6 design note and scripts); #749 merged (rulings D-M2P2-B1 to B8); `feat/b-p2-bw2` (BW2, push requested, merges after AW2)
 - Last green: `pnpm verify` and CI on main 3e85c2b (P0.5 promoted)
-- Next step: a fresh Lane B session starts BW2 (audit API helpers, audit log page, request view) once the rulings PR has merged (Track A AW1 #744 is merged); BW2 merges after AW2
+- Next step: BW2 merges once Track A AW2 has; a fresh lane then takes BW3 (Tasks 5 to 7)
 - Blocked by: none
-- Latest handoff: [10-18-26-m2-p2-lane-b.md](../../handoffs/10-18-26-m2-p2-lane-b.md) (M2 P2 Lane B: BW1 design done, mockup v6 approved, rulings D-M2P2-B1 to B8 recorded; next: BW2)
+- Latest handoff: [10-18-26-m2-p2-lane-b2.md](../../handoffs/10-18-26-m2-p2-lane-b2.md) (M2 P2 Lane B2: BW2 done on feat/b-p2-bw2, audit log page and admin request view, merge waits for AW2; next: a fresh lane takes BW3)
 - Notes: manager "M2 Manager 8"; Lane B is local in `C:\git\queryModule`, `E2E_PORT=3200`.
 
 
