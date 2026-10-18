@@ -188,7 +188,18 @@ Designed 10-13-26 (BW1 Task 1, #596; FR-060, UX-010, UX-011, UX-015, UX-016; spe
 
 ### Audit console, request view, publish note, purged results and terminal pane (Track B, M2 P2; v6 draft 10-18-26)
 
-Designed 10-18-26 (BW1 Task 1, #724; FR-050, FR-062, FR-063, FR-064, UX-004, UX-014, SEC-012, SEC-021). Mockup tabs "v6 draft: Audit log", "Request view", "Note and history", "Purged" and "Terminal pane"; decisions, states and open questions are in `docs/design/2026-10-18-audit-console.md`. Pending developer approval; the rulings go in a list here once made.
+Designed 10-18-26 (BW1 Task 1, #724; FR-050, FR-062, FR-063, FR-064, UX-004, UX-014, SEC-012, SEC-021). Mockup tabs "v6 draft: Audit log", "Request view", "Note and history", "Purged" and "Terminal pane"; decisions, states and open questions are in `docs/design/2026-10-18-audit-console.md`. Approved by the developer 10-18-26. Rulings below.
+
+**Developer rulings 10-18-26 (M2 P2 design, via the M2 manager):**
+
+1. Audit log sits under a new "Oversight" rail group below People (admin only, `features.adminAudit` on). (D-M2P2-B1)
+2. New layout constant `layout.terminalPane` = 1280 px: the terminal pane shows from that width, below it the Form and Terminal toggle returns and the draft is kept. Documented in the visual system and written literally in `shell.css` with the `shell.css.test.ts` rule, as `layout.toolbarRow` was (BW4). (D-M2P2-B2)
+3. The audit table folds Credential owner under Actor below an admin section width of 920 px (1024 viewport), reusing the value of `layout.toolbarRow`; no new constant. (D-M2P2-B3)
+4. Edit as new query on a request with purged values is disabled (`aria-disabled`, focusable) with the reason in text; no partial prefill. (D-M2P2-B4)
+5. A rollback has no note field; the system writes "Rolled back to version N" (from `rollbackOf`), shown with a Rollback tag apart from typed notes. (D-M2P2-B5)
+6. The publish note is a wrapping text area; control characters (Enter, tab, pasted line breaks) become spaces as typed; the count follows zod (UTF-16 units). (D-M2P2-B6)
+7. `configPublished` gets no note key (frozen critical audit contract). BW3 drops the sentence "The audit log records ... your note" from the existing publish dialogs (v4, v5 builder, mock responses) and uses the history-only hint. (D-M2P2-B7)
+8. `loginSucceeded` `clientIp` and `sessionId` show to admins as stored in the audit details disclosure (admin only; every view is audited by `auditViewed`; CJIS investigation need). (D-M2P2-B8)
 
 ## Revision 2 (design critic, 09-29-26)
 
