@@ -272,11 +272,18 @@ export type PublishResult =
   | { ok: false; reason: "conflict" | "error" }
   | { ok: false; reason: "invalid"; errors: ValidationError[] };
 
-/** POST /api/v1/admin/config/publish for the saved draft's version. */
-export async function publishDraft(api: ApiClient, draftVersion: number): Promise<PublishResult> {
+/**
+ * POST /api/v1/admin/config/publish for the saved draft's version. A change note is sent only when
+ * there is one (D-M2P0-4); the caller trims it.
+ */
+export async function publishDraft(
+  api: ApiClient,
+  draftVersion: number,
+  note?: string,
+): Promise<PublishResult> {
   try {
     const { data, error, response } = await api.POST("/api/v1/admin/config/publish", {
-      body: { draftVersion },
+      body: note === undefined ? { draftVersion } : { draftVersion, note },
     });
     if (response.status === 409) return { ok: false, reason: "conflict" };
     if (response.status === 400) {

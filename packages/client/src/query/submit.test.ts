@@ -588,3 +588,51 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(controller.getState().status).toBe("idle");
   });
 });
+
+describe("NFR-004 the controller reports each 202 so the feed can send ackReceipt (spec 6.7)", () => {
+  function withHook(hook?: (response: { correlationId: string }) => void) {
+    const seen: string[] = [];
+    const platform = createFakePlatform();
+    const api = createApiClient({ baseUrl: BASE, platform, onUnauthenticated: () => undefined });
+    const controller = createSubmitController({
+      api,
+      queryClient: new QueryClient(),
+      online: platform.online,
+      newKey: () => "key-1",
+      onAcknowledged:
+        hook ??
+        ((response) => {
+          seen.push(response.correlationId);
+        }),
+    });
+    return { controller, seen };
+  }
+
+  it("calls the hook once per 202 with the response, a replayed 202 included", async () => {
+    server.use(http.post(`${BASE}/api/v1/queries`, () => HttpResponse.json(ACK, { status: 202 })));
+    const { controller, seen } = withHook();
+    await controller.getState().submit(REQ);
+    await controller.getState().submit(REQ);
+    expect(seen).toEqual(["c-1", "c-1"]);
+  });
+
+  it.each([400, 403, 409, 429, 503, 500])("does not call it for a %i", async (status) => {
+    server.use(
+      http.post(`${BASE}/api/v1/queries`, () =>
+        HttpResponse.json({ error: { code: "x", requestId: "r", errors: [] } }, { status }),
+      ),
+    );
+    const { controller, seen } = withHook();
+    await controller.getState().submit(REQ);
+    expect(seen).toEqual([]);
+  });
+
+  it("a hook that throws does not change the outcome", async () => {
+    server.use(http.post(`${BASE}/api/v1/queries`, () => HttpResponse.json(ACK, { status: 202 })));
+    const { controller } = withHook(() => {
+      throw new Error("socket gone");
+    });
+    const outcome = await controller.getState().submit(REQ);
+    expect(outcome.kind).toBe("acknowledged");
+  });
+});

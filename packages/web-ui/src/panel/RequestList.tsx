@@ -72,6 +72,19 @@ export interface RequestRowView {
    * It sits beside Retry on a failed row that has both. A row still sending never shows it.
    */
   editable?: boolean;
+  /**
+   * Edit as new query is not possible for this settled row, and why (D-M2P2-B4: the values were
+   * purged under retention). The action shows as `aria-disabled` and focusable, does nothing, and
+   * the reason is its accessible description. Wins over `editable`.
+   */
+  editBlockedText?: string;
+  /**
+   * The request's values were purged (spec 5.5): the summary then holds only the type values that
+   * survive, and this words the rest ("Other values purged under retention"), beside them.
+   */
+  purgedValuesText?: string;
+  /** A line of small facts beside the time and reference, for example "2 of 2 sources done. 2 returned." */
+  statusLine?: string;
 }
 
 export interface RequestListProps {
@@ -95,8 +108,12 @@ export interface RequestListProps {
    * officer layout stacks it under the form, G11). Never moves focus.
    */
   revealOnSend?: boolean;
-  /** The list heading's level: 2 on the query screen, 3 where a page heading sits above it (admin request view). */
-  headingLevel?: 2 | 3;
+  /**
+   * The list heading's level: 2 on the query screen, 3 where a page heading sits above it. `null`
+   * where the page heading already names the one request (the admin request view): the section
+   * keeps `heading` as its accessible name and draws none.
+   */
+  headingLevel?: 2 | 3 | null;
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
 }
 
@@ -161,6 +178,7 @@ export function RequestList({
   t,
 }: RequestListProps): JSX.Element {
   const Heading = headingLevel === 2 ? "h2" : "h3";
+  const editWhy = useId();
   const headingId = useId();
   const sectionRef = useRef<HTMLElement>(null);
   const newest = rows[0];
@@ -262,16 +280,18 @@ export function RequestList({
   return (
     <section
       ref={sectionRef}
-      aria-labelledby={headingId}
+      {...(headingLevel === null ? { "aria-label": heading } : { "aria-labelledby": headingId })}
       className="qm-requests"
       data-shortcut-context="results"
     >
-      <div className="qm-requests__head">
-        <Heading id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
-          {heading}
-        </Heading>
-        {countText === undefined ? null : <p className="qm-requests__count">{countText}</p>}
-      </div>
+      {headingLevel === null ? null : (
+        <div className="qm-requests__head">
+          <Heading id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
+            {heading}
+          </Heading>
+          {countText === undefined ? null : <p className="qm-requests__count">{countText}</p>}
+        </div>
+      )}
       {rows.length === 0 ? (
         <p className="qm-requests__empty">{emptyText}</p>
       ) : (
@@ -289,8 +309,18 @@ export function RequestList({
               // Focus entering the row or anything in it (a click, Tab, an arrow) selects it.
               onFocus={() => setSelectedId(row.id)}
             >
-              <span className="qm-request__type">{row.typeLabel}</span>
-              <code className="qm-request__summary">{row.summary}</code>
+              {/* With no list heading the entry's own h3 keeps the page's heading order (h2, h3, h4 cards). */}
+              {headingLevel === null ? (
+                <h3 className="qm-request__type">{row.typeLabel}</h3>
+              ) : (
+                <span className="qm-request__type">{row.typeLabel}</span>
+              )}
+              {row.purgedValuesText !== undefined && row.summary === "" ? null : (
+                <code className="qm-request__summary">{row.summary}</code>
+              )}
+              {row.purgedValuesText === undefined ? null : (
+                <span className="qm-request__purged">{row.purgedValuesText}</span>
+              )}
               <span className="qm-request__badges">
                 <span className={BADGE_CLASS[row.status]}>
                   {t(`requests.status.${row.status}`)}
@@ -311,6 +341,7 @@ export function RequestList({
                       <span>
                         {t("submit.reference")} <code>{shortReference(row.reference)}</code>
                       </span>
+                      {row.statusLine === undefined ? null : <span>{row.statusLine}</span>}
                       <button
                         type="button"
                         className="qm-button qm-button--ghost"
@@ -341,7 +372,8 @@ export function RequestList({
                   so a 48 px officer button never stretches the line of small facts above it. */}
               {row.status !== "sending" &&
               ((row.status === "failed" && row.retryable === true && onRetry !== undefined) ||
-                (row.editable === true && onEditAsNew !== undefined)) ? (
+                ((row.editable === true || row.editBlockedText !== undefined) &&
+                  onEditAsNew !== undefined)) ? (
                 <div className="qm-request__actions">
                   {row.status === "failed" && row.retryable === true && onRetry !== undefined ? (
                     <button
@@ -360,7 +392,22 @@ export function RequestList({
                       {t("requests.retry")}
                     </button>
                   ) : null}
-                  {row.editable === true && onEditAsNew !== undefined ? (
+                  {row.editBlockedText !== undefined && onEditAsNew !== undefined ? (
+                    <>
+                      <button
+                        type="button"
+                        className="qm-button qm-button--secondary"
+                        aria-label={t("requests.editAsNewOf", { summary: row.name })}
+                        aria-disabled="true"
+                        aria-describedby={`${editWhy}-${row.id}`}
+                      >
+                        {t("requests.editAsNew")}
+                      </button>
+                      <span id={`${editWhy}-${row.id}`} className="qm-request__why">
+                        {row.editBlockedText}
+                      </span>
+                    </>
+                  ) : row.editable === true && onEditAsNew !== undefined ? (
                     <button
                       type="button"
                       className="qm-button qm-button--secondary"

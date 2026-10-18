@@ -11,6 +11,8 @@ import { TriggerMissingError } from "./db/migrate";
 import { withTransaction } from "./db/tx";
 import { type AppDeps, buildDeps } from "./deps";
 import { sweepPending } from "./dispatch/sweep";
+import { createSweeper } from "./dispatch/sweeper";
+import type { Timers } from "./dispatch/timers";
 import { DeployEnvError, readDeployEnv } from "./env";
 import { KeyCanaryError } from "./keys/canary";
 import { type ErrorFields, errorFields } from "./log/error-fields";
@@ -58,6 +60,13 @@ export function startupErrorFields(err: unknown): ErrorFields {
   return errorFields(err, FIXED_TEXT_STARTUP_ERRORS);
 }
 
+/** Injected time and log sink for a start; tests pass manual time (no Date.now, no setInterval). */
+export interface StartOptions {
+  clock?: Clock;
+  timers?: Timers;
+  logSink?: (line: string) => void;
+}
+
 /**
  * Fail closed (spec 8.1): nothing is served until the secrets load, the deploy env parses,
  * migrations are applied, both audit triggers exist, both key canaries decrypt and the site
@@ -66,7 +75,7 @@ export function startupErrorFields(err: unknown): ErrorFields {
  */
 export async function loadDeps(
   processEnv: NodeJS.ProcessEnv,
-  o: { clock?: Clock; logSink?: (line: string) => void } = {},
+  o: StartOptions = {},
 ): Promise<AppDeps> {
   const env = readDeployEnv(processEnv);
   const secrets = await loadSecrets(processEnv, env.secretsDir);
@@ -107,7 +116,7 @@ function refuse(deps: AppDeps, reason: string, e: unknown): StartupRefusedError 
  */
 export async function bootstrap(
   processEnv: NodeJS.ProcessEnv,
-  o: { clock?: Clock; logSink?: (line: string) => void } = {},
+  o: StartOptions = {},
 ): Promise<AppDeps> {
   const deps = await loadDeps(processEnv, o);
   try {
@@ -186,12 +195,20 @@ function trackRequests(server: Server): { idle(): Promise<void>; open(): number 
  * the next start's sweep; the route logs a refused enqueue during the drain without d.fatal),
  * wait for in-flight dispatch up to max(0, maxDeadline - now) + DRAIN_SLACK_MS, then abort what
  * is left (abortAll: no row written, no T2 started; the rows stay pending for the sweep, #574),
- * close the sockets and the DB and log stopped. The fatal path (AppDeps.fatal) never runs this
- * drain: once lifecycle.failed is set, at the start or after any wait, the drain logs "drain ended
- * by fatal error", never "stopped", and rejects with DrainAbortedError, leaving the sockets and the
- * DB to the fatal close (main.ts exits 1). Call right after the server listens.
+ * close the sockets and the DB and log stopped. The sweeper (spec 5.2, #717) stops first: its
+ * timer is cleared as the drain starts, and a tick in flight is awaited before the sockets and
+ * the DB close, so it commits or rolls back and no tick runs after closeDb. The fatal path
+ * (AppDeps.fatal) never runs this drain: once lifecycle.failed is set, at the start or after any
+ * wait, the drain logs "drain ended by fatal error", never "stopped", and rejects with
+ * DrainAbortedError, leaving the sockets and the DB to the fatal close (main.ts exits 1). Call
+ * right after the server listens.
  */
-export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): () => Promise<void> {
+export function createDrainStop(
+  deps: AppDeps,
+  server: Server,
+  ws: WsHandle,
+  sweeper: { stop(): Promise<void> },
+): () => Promise<void> {
   const requests = trackRequests(server);
   const endIfFailed = () => {
     if (!deps.lifecycle.failed) return;
@@ -201,6 +218,8 @@ export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): ()
   return async () => {
     endIfFailed();
     deps.lifecycle.draining = true;
+    // clears the sweeper's timer now; never rejects (a failed tick is logged inside it)
+    const sweeperStopped = sweeper.stop();
     ws.stopAccepting();
     server.close();
     server.closeIdleConnections();
@@ -229,6 +248,8 @@ export function createDrainStop(deps: AppDeps, server: Server, ws: WsHandle): ()
     // answer starts a T2 against the closing DB. abortAll writes no rows; they stay pending for
     // the next start's sweep. A T2 already open is cut off by closeDb and only warns (outcome.ts).
     deps.dispatcher.abortAll();
+    // a tick in flight finishes (an expiry closes its sockets with 4001) before the sockets close
+    await sweeperStopped;
     await ws.close();
     endIfFailed();
     closeDb(deps);
@@ -248,17 +269,19 @@ export interface RunningServer {
   stop(): Promise<void>;
   /**
    * The fatal path's close (spec 8.1), never the drain: sets lifecycle.failed, aborts every
-   * adapter call, then closes the sockets, the server (cutting open requests) and the DB without
-   * waiting on dispatch.
+   * adapter call and stops the sweeper (awaiting a tick in flight), then closes the sockets, the
+   * server (cutting open requests) and the DB without waiting on dispatch.
    */
   close(): Promise<void>;
 }
 
 export async function startServer(
   processEnv: NodeJS.ProcessEnv,
-  o: { clock?: Clock; logSink?: (line: string) => void } = {},
+  o: StartOptions = {},
 ): Promise<RunningServer> {
   const deps = await bootstrap(processEnv, o);
+  // spec 5.2: started only once the WebSocket attaches, since an expiry closes sockets
+  const sweeper = createSweeper(deps);
   const server = serve({
     fetch: createApp(deps).fetch,
     port: deps.env.port,
@@ -268,11 +291,14 @@ export async function startServer(
     // once() rejects on 'error', so a taken port refuses startup instead of crashing later
     if (!server.listening) await once(server, "listening");
   } catch (e) {
+    // never started on this path; stop() is idempotent and keeps no tick past the close
+    await sweeper.stop();
     deps.db.$client.close();
     throw e;
   }
   const ws = attachWebSocket(server, deps);
-  const stop = createDrainStop(deps, server, ws);
+  sweeper.start();
+  const stop = createDrainStop(deps, server, ws, sweeper);
   const port = (server.address() as AddressInfo).port;
   const live = deps.config.current();
   deps.logger.info("listening", {
@@ -287,7 +313,9 @@ export async function startServer(
     async close() {
       deps.lifecycle.failed = true;
       deps.dispatcher.abortAll();
+      const sweeperStopped = sweeper.stop();
       ws.stopAccepting();
+      await sweeperStopped;
       await ws.close();
       await new Promise<void>((r) => {
         server.close(() => r());

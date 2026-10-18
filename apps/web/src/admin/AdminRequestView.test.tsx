@@ -78,8 +78,11 @@ describe("a settled request", () => {
     await openView();
     await screen.findByRole("region", { name: "State system: returned" }, MAX_WAIT);
     expect(screen.getByRole("heading", { level: 2, name: /^Request 2e3f4a5b$/ })).toBeVisible();
-    // The list heading sits one level below the page heading, so the cards (h4) skip nothing.
-    expect(screen.getByRole("heading", { level: 3, name: "Request" })).toBeVisible();
+    // The page heading names the one request, so the list draws none of its own (#754): the list is
+    // still a named region, and the entry's own h3 stands between the page's h2 and the cards' h4.
+    expect(screen.queryByRole("heading", { level: 3, name: "Request" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Request" })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 3, name: "Vehicle" })).toBeVisible();
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(crumbs).getByRole("link", { name: "Audit log" })).toHaveAttribute(
       "href",
@@ -90,6 +93,8 @@ describe("a settled request", () => {
     // The entry head carries the request's highest severity, apart from each card's own badge.
     expect(entry.querySelector(".qm-request__severity")).toHaveTextContent("Critical");
     expect(within(entry).getByText("2e3f4a5b")).toBeVisible();
+    // The status line of the mockup (#754): done of total, then the counts.
+    expect(entry).toHaveTextContent("2 of 2 sources done. 2 returned.");
     expect(within(entry).getByRole("button", { name: /^Copy reference/ })).toBeVisible();
     expect(screen.getByText("Vehicle query as it was sent and answered. Read only.")).toBeVisible();
     expect(screen.getByText("Your filters are kept.")).toBeVisible();
@@ -198,7 +203,7 @@ describe("other states", () => {
       </StrictMode>,
     );
     await screen.findByText("This view is recorded in the audit log.", {}, MAX_WAIT);
-    await screen.findByRole("heading", { level: 3, name: "Request" }, MAX_WAIT);
+    await screen.findByRole("region", { name: "Request" }, MAX_WAIT);
     expect(seen).toHaveLength(1);
   });
 
@@ -230,5 +235,49 @@ describe("regulated data (spec 6.7)", () => {
     expect(screen.queryByText("STOLEN VEHICLE")).toBeNull();
     expect(screen.queryByText("ZZ-0001")).toBeNull();
     expect(setItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("a purged request (Task 6, #735; spec 5.5)", () => {
+  /** The canned detail with retention applied: payloads gone, and with them the values. */
+  const purged = (values: boolean) => () => {
+    const base = adminDetail202({
+      values: { plate: "ZZ-0001" },
+      sources: [
+        { sourceId: "stateSource", status: "returned", payload: STOLEN },
+        { sourceId: "nationalSource", status: "returned", payload: STOLEN },
+      ],
+    });
+    return HttpResponse.json({
+      ...base,
+      parts: base.parts.map((part) => ({
+        ...part,
+        ...(values
+          ? { purged: true, values: undefined, typeValues: { plateType: "PASSENGER" } }
+          : {}),
+        sources: part.sources.map((source) => ({ ...source, purged: true, payload: undefined })),
+      })),
+    });
+  };
+
+  it("draws each purged result as the purged card, with no badge and a status line that says purged", async () => {
+    await openView({ detail: purged(false) });
+    const card = await screen.findByRole("region", { name: "State system: returned" }, MAX_WAIT);
+    expect(card).toHaveTextContent("Purged under retention");
+    expect(within(card).queryByText("Critical")).toBeNull();
+    const entry = document.querySelector("li.qm-request") as HTMLElement;
+    expect(entry.querySelector(".qm-request__severity")).toBeNull();
+    expect(entry).toHaveTextContent("2 of 2 sources done. 2 returned, 2 purged.");
+    // The values survived this time: the command shows.
+    expect(entry.querySelector(".qm-request__summary")).toHaveTextContent("ZZ-0001");
+  });
+
+  it("with the values purged too it keeps the type values and says the rest are purged", async () => {
+    await openView({ detail: purged(true) });
+    await screen.findByRole("region", { name: "State system: returned" }, MAX_WAIT);
+    const entry = document.querySelector("li.qm-request") as HTMLElement;
+    expect(entry.querySelector(".qm-request__summary")).toHaveTextContent("PASSENGER");
+    expect(entry).toHaveTextContent("Other values purged under retention");
+    expect(entry).not.toHaveTextContent("ZZ-0001");
   });
 });

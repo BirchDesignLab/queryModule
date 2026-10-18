@@ -1,10 +1,11 @@
-import { PASSWORD_MIN_LENGTH } from "@querymodule/core/config";
+import { PASSWORD_MIN_LENGTH, SESSION_CEILING_MINUTES } from "@querymodule/core/config";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins";
 import type { Db } from "../db/client";
 import { authSchema } from "../db/schema";
+import { SWEEP_INTERVAL_MS } from "../dispatch/sweeper";
 import type { DeployEnv } from "../env";
 import { uuidv7 } from "../ids";
 import type { Logger } from "../log/logger";
@@ -183,13 +184,7 @@ export function toBetterAuthLogger(log: Logger) {
   };
 }
 
-export function createAuth(o: {
-  db: Db;
-  env: DeployEnv;
-  secret: string;
-  session: { absoluteMinutes: number; idleMinutes: number };
-  log?: Logger;
-}) {
+export function createAuth(o: { db: Db; env: DeployEnv; secret: string; log?: Logger }) {
   if (isTelemetryEnvTruthy(process.env.BETTER_AUTH_TELEMETRY)) {
     throw new Error(
       "BETTER_AUTH_TELEMETRY is set: refusing to start. This prototype never sends telemetry " +
@@ -215,8 +210,11 @@ export function createAuth(o: {
       minPasswordLength: PASSWORD_MIN_LENGTH,
     },
     session: {
-      // The idle clock is ours (Task 15); Better Auth only enforces the absolute limit.
-      expiresIn: o.session.absoluteMinutes * 60,
+      // AUD-1 (D-M2P2-2, #716): Better Auth's expiry is fixed one sweep interval past the session
+      // ceiling, strictly later than every absolute limit config:validate allows. Identity enforces
+      // the live absolute and idle limits on every request and the sweeper owns expiry with its
+      // sessionRevoked row, so Better Auth never deletes a session first, unaudited.
+      expiresIn: SESSION_CEILING_MINUTES * 60 + SWEEP_INTERVAL_MS / 1000,
       disableSessionRefresh: true,
       // Cookie cache off so a revoked session is rejected immediately, not after its cache TTL.
       cookieCache: { enabled: false },
