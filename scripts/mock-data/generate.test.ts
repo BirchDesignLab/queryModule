@@ -28,14 +28,10 @@ const DEFAULT_ROWS: Row[] = [
   ["nationalSource", "VEH", '{"plate":"ZZ-0010"}', "REGISTERED"],
   ["stateSource", "PER", '{"first":"SAMPLE","last":"EXAMPLESON"}', "RECORD FOUND"],
 ];
-const EXAMPLE_OK_ROWS: Row[] = DEFAULT_ROWS.filter(
-  ([, q, when]) =>
-    q !== "PRO" &&
-    q !== "DL" &&
-    q !== "PER" &&
-    !when.includes("MISSING") &&
-    !when.includes("ZZ-0010"),
-);
+// example-ok answers one hit per query type (every mapping path resolves, spec 4.5); only the
+// default site's ZZ-0010 plate scenario is left out.
+const EXAMPLE_OK_ROWS: Row[] = DEFAULT_ROWS.filter(([, , when]) => !when.includes("ZZ-0010"));
+
 const STATE_TYPES = ["VEH", "PER", "PRO", "DL"];
 const NATIONAL_TYPES = ["VEH", "PER", "PRO", "WNT", "DL"];
 
