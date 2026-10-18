@@ -139,7 +139,7 @@ describe("checkMappingPaths (spec 4.5)", () => {
     ]);
   });
 
-  it("a generic mapping only needs each path to resolve for some source (ruled relaxation)", () => {
+  it("a generic mapping only needs each path to resolve for some source (accepted relaxation, spec 4.5 per-pair wording relaxed)", () => {
     const mock: MockFile = {
       siteId: "default",
       sources: {
