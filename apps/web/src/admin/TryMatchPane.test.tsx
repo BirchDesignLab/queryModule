@@ -68,7 +68,7 @@ describe("Try a match", () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0099");
     const p = within(pane());
-    expect(p.getByText("Default of Vehicle")).toBeInTheDocument();
+    expect(p.getByText("Vehicle default response")).toBeInTheDocument();
     expect(p.getByText("No record")).toBeInTheDocument();
   });
 
@@ -202,7 +202,7 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     expect(live.textContent).not.toMatch(/ZZ-0001|STOLEN/);
     await t.user.clear(p.getByLabelText("Plate"));
     await t.user.type(p.getByLabelText("Plate"), "ZZ-0099");
-    await waitFor(() => expect(live).toHaveTextContent("No record. Default of Vehicle."));
+    await waitFor(() => expect(live).toHaveTextContent("No record. Vehicle default response."));
     expect(live.textContent).not.toMatch(/ZZ-0099/);
   });
 });
@@ -380,12 +380,12 @@ describe("Try a match: the head note and the outcome row", () => {
     ).toBeInTheDocument();
   });
 
-  it("the default answer reads Default of the type", async () => {
+  it("the default answer reads as the type's default response", async () => {
     const t = await openBuilder();
     await tryVehicle(t, "ZZ-0099");
     const head = within(pane()).getByTestId("outcome-head");
     expect(head.querySelector(".qm-badge")).toHaveTextContent("No record");
-    expect(head).toHaveTextContent("Default of Vehicle");
+    expect(head).toHaveTextContent("Vehicle default response");
   });
 
   it("a timeout row says the source never answers, with no wait", async () => {

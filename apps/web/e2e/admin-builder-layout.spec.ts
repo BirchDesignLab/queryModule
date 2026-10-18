@@ -66,9 +66,10 @@ for (const size of SIZES) {
           .getByRole("treeitem", { name: /^Vehicle cards/ })
           .press("ArrowRight");
       await selectRow(page, /^1\. All results/);
-      // "1. All results", "Keywords and severity", "Training delegation" read on one line each:
-      // the key drops under the label when both do not fit.
-      for (const name of [/^1\. All results/, /^Keywords and severity/, /^Training delegation/]) {
+      // "1. All results" and "Training delegation" read on one line each: the key drops under the
+      // label when both do not fit. The Keywords row keeps its count on its first line instead, so
+      // its label may wrap (admin-builder-polish.spec.ts, "keeps its count").
+      for (const name of [/^1\. All results/, /^Training delegation/]) {
         const label = tree(page).getByRole("treeitem", { name }).first().locator(".qm-tree__label");
         await label.scrollIntoViewIfNeeded();
         expect(await lines(label), `${name} on one line`).toBe(1);

@@ -303,7 +303,7 @@ describe("the card preview: the Values segmented control and the outcome row", (
     await screen.findByRole("region", { name: "Card preview" });
     await t.user.selectOptions(within(pane()).getByRole("combobox", { name: "Scenario" }), "0:d");
     expect(await within(pane()).findByTestId("outcome-head")).toHaveTextContent(
-      "Default of Vehicle",
+      "Vehicle default response",
     );
   });
 });

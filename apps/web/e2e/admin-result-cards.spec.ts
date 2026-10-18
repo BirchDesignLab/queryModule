@@ -354,7 +354,7 @@ test("[#605] Try a match shows the STOLEN scenario for ZZ-0001, its controls are
   // Typed values stay in the pane: they are in no link, and a plate with no scenario takes the default.
   expect(page.url()).not.toContain("ZZ-0001");
   await plate.fill("ZZ-0099");
-  await expect(outcome).toContainText("Default of Vehicle");
+  await expect(outcome).toContainText("Vehicle default response");
   await expect(outcome.locator(".qm-badge")).toHaveText("No record");
   await plate.fill("ZZ-0001");
   await expect(pane.getByTestId("outcome-head")).toContainText("Scenario 1 of Vehicle");
@@ -639,7 +639,7 @@ test("[#642] Values is a 36 px segmented control, the outcome is one badge row, 
   // The outcome: a badge with the words, then which entry matched, never the badge colour alone.
   const head = pane.getByTestId("outcome-head");
   await expect(head.locator(".qm-badge")).toHaveText(/\S/);
-  await expect(head).toContainText(/(Scenario \d+ of |Default of )/);
+  await expect(head).toContainText(/(Scenario \d+ of | default response)/);
   await expectNoSeriousAxeViolations(page);
 
   await selectRow(page, /^Mock response: Vehicle, State system/);
