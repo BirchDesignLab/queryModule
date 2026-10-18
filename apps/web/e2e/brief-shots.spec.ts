@@ -105,6 +105,8 @@ test("dispatcher shots: query panel, request status, critical card, detail table
   // seq it has seen (feed-socket.ts), so a held frame that is older than one already delivered
   // would be dropped when released (the national system answered first, #678). Then the release
   // closes the page's socket instead: the client reconnects and refetches what is pending over HTTP.
+  // `held`, `highSeq` and `release` are shared by every connection the page opens: a lower-seq frame
+  // from any of them takes the same path, so a reconnect while holding still ends right.
   const seqOf = (message: string): number => Number(/"seq":\s*(\d+)/.exec(message)?.[1] ?? 0);
   let holding = true;
   let highSeq = 0;
@@ -127,8 +129,11 @@ test("dispatcher shots: query panel, request status, critical card, detail table
     });
     release = () => {
       const frames = held.splice(0);
-      if (frames.some((m) => seqOf(m) <= highSeq)) void ws.close({ code: 1012 });
-      else for (const m of frames) ws.send(m);
+      if (frames.some((m) => seqOf(m) <= highSeq)) {
+        // Both sides: this route's own onClose turns off the automatic close of the server side.
+        void server.close({ code: 1000 });
+        void ws.close({ code: 1012 });
+      } else for (const m of frames) ws.send(m);
     };
     ws.onMessage((message) => server.send(message));
     ws.onClose((code, reason) => void server.close({ code, reason }));
