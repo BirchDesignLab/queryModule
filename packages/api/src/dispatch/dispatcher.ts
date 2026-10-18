@@ -164,7 +164,7 @@ export function createDispatcher(d: DispatcherDeps, onOutcome: OnOutcome): Dispa
       }
       // abortAll dropped the job (fatal path, or the drain past its bound): nothing more is said.
       if (aborted) return;
-      // An AbortError after our own abort is the adapter honouring it, not a late answer (AW3
+      // An AbortError after our own abort is the adapter honoring it, not a late answer (AW3
       // critic c).
       if (abortAck) return;
       d.logger.warn("dispatch late settlement", { resultId: job.resultId, sourceId: job.sourceId });
