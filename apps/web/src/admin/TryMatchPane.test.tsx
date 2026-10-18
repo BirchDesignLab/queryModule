@@ -371,7 +371,7 @@ describe("Try a match: the head note and the outcome row", () => {
   it("says so, with the coverage grid, when the source has no response for the type", async () => {
     const t = await openBuilder();
     const mock = draftMock(t);
-    const state = mock.sources.stateSource as { responses: { queryType: string }[] };
+    const state = mock.sources.stateSource as unknown as { responses: { queryType: string }[] };
     state.responses = state.responses.filter((r) => r.queryType !== "VEH");
     setMock(t, mock);
     await tryVehicle(t, "ZZ-0001");

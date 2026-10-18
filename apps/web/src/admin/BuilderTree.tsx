@@ -160,34 +160,36 @@ function useTreeNodes(
     const typeLabels = new Map(
       asObjects(doc.queryTypes).map((q) => [str(q.code), str(q.labelKey)]),
     );
-    const cards = [...cardsByType(cardsSiteOf(doc)).entries()].map(([code, entries]) => {
-      const typeName = labelText(typeLabels.get(code)) || code;
-      const add: TreeNode = {
-        ...node(cardsAddPointer(code), t("admin.cards.addCard", { type: typeName }), ""),
-        add: true,
-      };
-      // The row is named "<type> cards" (a lookup by name finds it apart from the Query types row);
-      // it shows the type's name and its code, as the mockup does.
-      const row = node(
-        cardsTypePointer(code),
-        t("admin.cards.typeRow", { type: typeName }),
-        "",
-        [
-          ...entries.map(({ index, mapping }, k) =>
-            node(
-              toPointer(["responseMappings", index]),
-              t("admin.cards.cardRow", { n: k + 1, name: cardName(mapping) }),
-              str(mapping.id),
+    const cards: TreeNode[] = [...cardsByType(cardsSiteOf(doc)).entries()].map(
+      ([code, entries]) => {
+        const typeName = labelText(typeLabels.get(code)) || code;
+        const add: TreeNode = {
+          ...node(cardsAddPointer(code), t("admin.cards.addCard", { type: typeName }), ""),
+          add: true,
+        };
+        // The row is named "<type> cards" (a lookup by name finds it apart from the Query types row);
+        // it shows the type's name and its code, as the mockup does.
+        const row = node(
+          cardsTypePointer(code),
+          t("admin.cards.typeRow", { type: typeName }),
+          "",
+          [
+            ...entries.map(({ index, mapping }, k) =>
+              node(
+                toPointer(["responseMappings", index]),
+                t("admin.cards.cardRow", { n: k + 1, name: cardName(mapping) }),
+                str(mapping.id),
+              ),
             ),
-          ),
-          add,
-        ],
-        true,
-        "",
-        typeName,
-      );
-      return { ...row, decor: { text: code, near: true } };
-    });
+            add,
+          ],
+          true,
+          "",
+          typeName,
+        );
+        return { ...row, decor: { text: code, near: true } };
+      },
+    );
     if ("keywords" in doc) {
       // The row also counts the issues of the severity styles it edits (contrast, Task 11).
       const row = node("/keywords", t("admin.cards.keywordsRow"), "");
