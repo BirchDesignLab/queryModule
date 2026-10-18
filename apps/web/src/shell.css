@@ -1859,6 +1859,50 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin-inline-start: auto;
 }
 
+/* The publisher and the change note (D-M2P0-4): the note wraps on its own line under the row. */
+.qm-history__by {
+  color: var(--qm-color-text-muted);
+}
+
+.qm-history__id {
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-history__note {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.qm-history__none {
+  color: var(--qm-color-text-muted);
+}
+
+/* The publish dialog's change note: label and count on one line over a wrapping text area. */
+.qm-publish-note {
+  margin-block-end: var(--qm-space-5);
+}
+
+.qm-publish-note__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--qm-space-2);
+}
+
+.qm-publish-note__count {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-publish-note__count--over {
+  color: var(--qm-field-required);
+  font-weight: 600;
+}
+
+.qm-publish-note textarea {
+  resize: vertical;
+}
 /* Users and roles (Task 34): one table in a scroll region, so a narrow window scrolls the table
    and not the page. Status is a badge with words, never colour alone. */
 .qm-users__toolbar {

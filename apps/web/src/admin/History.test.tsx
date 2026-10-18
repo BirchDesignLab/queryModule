@@ -151,13 +151,13 @@ describe("the history drawer", () => {
     expect(within(region).getByRole("heading", { name: "Version history" })).toBeInTheDocument();
   });
 
-  it("each row shows its status badge, its time, and the roll back it came from; no who and no note", async () => {
+  it("each row shows its status badge, its time, the roll back it came from, and who published it", async () => {
     const t = await openBuilder();
     const region = await openHistory(t);
     expect(row(region, 5)).toHaveTextContent("Draft");
     expect(row(region, 4)).toHaveTextContent("Live");
     expect(row(region, 3)).toHaveTextContent("Previous");
-    expect(row(region, 4)).toHaveTextContent("Roll back of version 2");
+    expect(row(region, 4)).toHaveTextContent("Rolled back to version 2");
     expect(row(region, 3)).not.toHaveTextContent(/roll back of/i);
     expect(row(region, 4)).toHaveTextContent("Published");
     expect(row(region, 5)).toHaveTextContent("Created");
@@ -166,8 +166,10 @@ describe("the history drawer", () => {
     // The query side's date style, MM-DD-YY HH:mm:ss (demo dry run G39), not "Sep 29, 2026".
     expect(when).toHaveTextContent(formatAckTime(T0 + 4000));
     expect(when?.textContent).toMatch(/^\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-    // Contract: user ids only and no note, so neither is shown in M1.
-    expect(region).not.toHaveTextContent("user-0001");
+    // No name from the server: the id shows with a notice, and "No note" (PublishNote.test.tsx has
+    // the named and noted rows).
+    expect(row(region, 3)).toHaveTextContent("Published by user-0001 (name not available)");
+    expect(row(region, 3)).toHaveTextContent("No note");
   });
 
   it("Escape closes it and focus returns to the History button", async () => {

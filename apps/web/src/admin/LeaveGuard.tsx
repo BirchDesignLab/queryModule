@@ -96,6 +96,7 @@ export function LeaveDialog({
   busy = false,
   busyReason,
   hideLeave = false,
+  blockedReason,
 }: {
   open: boolean;
   title: string;
@@ -116,6 +117,8 @@ export function LeaveDialog({
   busyReason?: string | undefined;
   /** Only the first button: there is nothing to confirm (the publish dialog with no changes). */
   hideLeave?: boolean;
+  /** Why the second button does nothing yet (a field to fix): it stays focusable, `aria-disabled`, with this read by it and shown. */
+  blockedReason?: string | undefined;
 }) {
   const id = useId();
   const stayRef = useRef<HTMLButtonElement>(null);
@@ -146,6 +149,11 @@ export function LeaveDialog({
           {busyReason}
         </p>
       )}
+      {!busy && blockedReason !== undefined && (
+        <p id={`${id}-blocked`} className="qm-builder__reason">
+          {blockedReason}
+        </p>
+      )}
       <div className="qm-leave-dialog__actions">
         <button
           ref={stayRef}
@@ -162,9 +170,15 @@ export function LeaveDialog({
             ref={leaveRef}
             type="button"
             className={leavePrimary ? "qm-button" : "qm-button qm-button--secondary"}
-            aria-disabled={busy ? "true" : undefined}
-            aria-describedby={busy && busyReason !== undefined ? `${id}-busy` : undefined}
-            onClick={busy ? undefined : onLeave}
+            aria-disabled={busy || blockedReason !== undefined ? "true" : undefined}
+            aria-describedby={
+              busy && busyReason !== undefined
+                ? `${id}-busy`
+                : !busy && blockedReason !== undefined
+                  ? `${id}-blocked`
+                  : undefined
+            }
+            onClick={busy || blockedReason !== undefined ? undefined : onLeave}
           >
             {leaveLabel}
           </button>

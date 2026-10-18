@@ -11,8 +11,10 @@ import { SCROLL_FOCUS } from "./scroll-focus.js";
  * Version history (Task 33 part 2b, #358, BR-001, UX-004): a named region opened from the toolbar's
  * History button. It lists GET /admin/config/versions newest first, with a roll back on each
  * previous version (the confirm and the request are the publish flow's) and an export on each. Esc
- * closes it; the builder returns focus to the History button. The contract carries user ids and no
- * change note, so neither is shown in M1.
+ * closes it; the builder returns focus to the History button. Each published version shows its
+ * publisher's name (the id when the server has none) and its change note, or "No note" (D-M2P0-4,
+ * M2 P2 BW3). A roll back shows a Rollback tag and the system's own line, apart from a typed note.
+ * Notes are plain text: React escapes them, nothing is rendered as markup.
  */
 
 /** The heading takes focus when the region opens; it is not in the tab order. */
@@ -136,6 +138,7 @@ export function HistoryDrawer({
           {t("admin.history.close")}
         </button>
       </div>
+      <p className="qm-diff__note">{t("admin.history.hint")}</p>
       {exportError !== null && (
         <p className="qm-builder__notice" role="alert">
           {t("admin.history.exportFailed", { version: exportError })}
@@ -176,11 +179,34 @@ export function HistoryDrawer({
                     {t(v.status === "draft" ? "admin.history.created" : "admin.history.published")}{" "}
                     <time dateTime={new Date(at).toISOString()}>{formatAckTime(at)}</time>
                   </span>
-                  {v.rollbackOf !== null && (
-                    <span className="qm-history__of">
-                      {t("admin.history.rollbackOf", { version: v.rollbackOf })}
+                  {v.status !== "draft" && (
+                    <span className="qm-history__by">
+                      {v.publishedByName !== undefined ? (
+                        t("admin.history.by", { name: v.publishedByName })
+                      ) : (
+                        <>
+                          {t("admin.history.byLead")}{" "}
+                          <span className="qm-history__id">{v.publishedBy}</span>{" "}
+                          {t("admin.history.nameMissing")}
+                        </>
+                      )}
                     </span>
                   )}
+                  {v.status !== "draft" &&
+                    (v.rollbackOf !== null ? (
+                      <span className="qm-history__note">
+                        <span className="qm-badge qm-badge--status">
+                          {t("admin.history.rollbackTag")}
+                        </span>{" "}
+                        {t("admin.history.rollbackOf", { version: v.rollbackOf })}
+                      </span>
+                    ) : (
+                      <span className="qm-history__note">
+                        {v.note ?? (
+                          <span className="qm-history__none">{t("admin.history.noNote")}</span>
+                        )}
+                      </span>
+                    ))}
                   <span className="qm-history__actions">
                     {/* No roll back on the live version or a draft: the button is not there at all. */}
                     {v.status === "superseded" && (

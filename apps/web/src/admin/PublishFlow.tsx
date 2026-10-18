@@ -16,6 +16,7 @@ import { configDraftStore, useDraft } from "./builder-store.js";
 import type { JsonObject, LabelOverlay } from "./draft.js";
 import type { DraftIssue } from "./issues.js";
 import { mockChangeCount } from "./mock-model.js";
+import { noteOver, noteToSend } from "./PublishNote.js";
 
 /**
  * Save, review and publish on the server draft (Task 33 part 2a, #358, BR-001, UX-004). The draft
@@ -47,6 +48,11 @@ export interface PublishFlow {
   issueSeq: number;
   /** The version the open review dialog would publish; null while it is closed. */
   reviewing: number | null;
+  /** The change note typed in the review dialog (control characters already turned to spaces). */
+  note: string;
+  /** Characters the trimmed note is over the limit by; 0 when it can be sent. */
+  noteOver: number;
+  setNote(next: string): void;
   /** The confirm before the latest version replaces the edits is open. */
   confirmingReload: boolean;
   /** The version whose roll back confirm is open; null while it is closed. */
@@ -95,6 +101,7 @@ export function usePublishFlow(): PublishFlow {
   const [found, setFound] = useState<ServerIssues | null>(null);
   const [issueSeq, setIssueSeq] = useState(0);
   const [reviewing, setReviewing] = useState<number | null>(null);
+  const [note, setNote] = useState("");
   const [rollingBack, setRollingBack] = useState<number | null>(null);
   const [historyStamp, setHistoryStamp] = useState(0);
   // Which reload failed after a publish ("replace": the draft) or a roll back ("live": the diff).
@@ -243,8 +250,8 @@ export function usePublishFlow(): PublishFlow {
     () =>
       exclusive(async () => {
         const version = reviewing;
-        if (version === null) return;
-        const result = await publishDraft(api, version);
+        if (version === null || noteOver(note) > 0) return;
+        const result = await publishDraft(api, version, noteToSend(note) ?? undefined);
         if (!result.ok) {
           setReviewing(null);
           if (result.reason === "conflict") setConflict(true);
@@ -280,8 +287,13 @@ export function usePublishFlow(): PublishFlow {
         setStale(reloaded ? null : "replace");
         setNotice({ kind: "info", text });
       }),
-    [announcer, api, exclusive, load, queryClient, reviewing, store, t],
+    [announcer, api, exclusive, load, note, queryClient, reviewing, store, t],
   );
+
+  // A note belongs to one open dialog: it starts empty each time (and is gone when it closes).
+  useEffect(() => {
+    if (reviewing === null) setNote("");
+  }, [reviewing]);
 
   const rollback = useCallback(
     () =>
@@ -345,6 +357,9 @@ export function usePublishFlow(): PublishFlow {
     serverIssues,
     issueSeq,
     reviewing,
+    note,
+    noteOver: noteOver(note),
+    setNote,
     confirmingReload: confirmReload,
     rollingBack,
     historyStamp,
