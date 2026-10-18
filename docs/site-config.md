@@ -625,8 +625,10 @@ coverage) and the mock coverage. Each problem prints on one line as
 any file has an error and 2 on bad usage.
 For a site with mock sources it also resolves every response mapping path (and table column path)
 against the mock answers, and prints a `WARN` `config.mappingPathUnresolved` for an element no mock
-answer of that source and query type resolves (a path may resolve in only some answers, since a
-no-record answer lacks fields). Warnings never fail the command. `--diff <tag>` is refused until M2 P2.
+answer resolves (a path may resolve in only some answers, since a no-record answer lacks fields).
+A mapping with a `sourceId` is checked against that source's answers; a mapping without one only
+needs each path to resolve for some source. Persona mappings are checked too, and a mapping no mock
+answer selects prints `WARN` `config.mappingNotExercised`. Warnings never fail the command. `--diff <tag>` is refused until M2 P2.
 
 `config:migrate` applies the migration steps in order and writes the file in place, printing one
 `migrated <file>: <from> -> <to>` line per step. With nothing to do it says the file is already at

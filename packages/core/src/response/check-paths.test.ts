@@ -93,4 +93,95 @@ describe("checkMappingPaths (spec 4.5)", () => {
     const other = { ...cfg, responseMappings: [] } as unknown as SiteConfig;
     expect(checkMappingPaths(other, mock)).toEqual([]);
   });
+
+  it("a persona mapping is checked: a typo path in it warns", () => {
+    const cfg = {
+      queryTypes: [],
+      keywords: [],
+      personas: [{ key: "mobile", labelKey: "p.m", layout: "mobile" }],
+      responseMappings: [
+        { queryType: "DL", elements: [value("person.last")] },
+        { queryType: "DL", persona: "mobile", elements: [value("person.lst")] },
+      ],
+    } as unknown as SiteConfig;
+    const out = checkMappingPaths(cfg, mockWith({ person: { last: "Testerson" } }));
+    expect(out.map((d) => [d.key, d.path])).toEqual([
+      ["config.mappingPathUnresolved", "/responseMappings/1/elements/0"],
+    ]);
+  });
+
+  it("a persona mapping with good paths gives no warning", () => {
+    const cfg = {
+      queryTypes: [],
+      keywords: [],
+      personas: [{ key: "mobile", labelKey: "p.m", layout: "mobile" }],
+      responseMappings: [{ queryType: "DL", persona: "mobile", elements: [value("person.last")] }],
+    } as unknown as SiteConfig;
+    expect(checkMappingPaths(cfg, mockWith({ person: { last: "Testerson" } }))).toEqual([]);
+  });
+
+  it("a mapping no mock pair selects warns once, with the index only", () => {
+    const cfg = {
+      queryTypes: [],
+      keywords: [],
+      responseMappings: [
+        { queryType: "DL", elements: [value("person.last")] },
+        { queryType: "DL", sourceId: "otherSource", elements: [value("person.last")] },
+      ],
+    } as unknown as SiteConfig;
+    expect(checkMappingPaths(cfg, mockWith({ person: { last: "Testerson" } }))).toEqual([
+      {
+        level: "warning",
+        path: "/responseMappings/1",
+        key: "config.mappingNotExercised",
+        params: { queryType: "DL" },
+      },
+    ]);
+  });
+
+  it("a generic mapping only needs each path to resolve for some source (ruled relaxation)", () => {
+    const mock: MockFile = {
+      siteId: "default",
+      sources: {
+        a: {
+          latencyMs: [0, 0],
+          responses: [{ queryType: "DL", default: { x: "1" }, scenarios: [] }],
+        },
+        b: {
+          latencyMs: [0, 0],
+          responses: [{ queryType: "DL", default: { y: "1" }, scenarios: [] }],
+        },
+      },
+    };
+    const generic = {
+      queryTypes: [],
+      keywords: [],
+      responseMappings: [{ queryType: "DL", elements: [value("x"), value("y")] }],
+    } as unknown as SiteConfig;
+    expect(checkMappingPaths(generic, mock)).toEqual([]);
+  });
+
+  it("a source-specific mapping is checked against its own source only", () => {
+    const mock: MockFile = {
+      siteId: "default",
+      sources: {
+        a: {
+          latencyMs: [0, 0],
+          responses: [{ queryType: "DL", default: { x: "1" }, scenarios: [] }],
+        },
+        b: {
+          latencyMs: [0, 0],
+          responses: [{ queryType: "DL", default: { y: "1" }, scenarios: [] }],
+        },
+      },
+    };
+    const specific = {
+      queryTypes: [],
+      keywords: [],
+      responseMappings: [{ queryType: "DL", sourceId: "b", elements: [value("x")] }],
+    } as unknown as SiteConfig;
+    const out = checkMappingPaths(specific, mock);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.params).toEqual({ sourceId: "b", queryType: "DL", scenario: "default" });
+  });
 });

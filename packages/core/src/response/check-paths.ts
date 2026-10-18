@@ -35,7 +35,16 @@ type Tally = { sourceId: string; queryType: string; mapping: number; seen: Map<n
 export function checkMappingPaths(config: SiteConfig, mock: MockFile): Diagnostic[] {
   const mapConfig: MapResponseConfig = config;
   // A mapping with a sourceId is checked per source; one without serves every source, so its
-  // paths only need to resolve for some source (the sources send different shapes).
+  // paths only need to resolve for some source (the sources send different shapes). This
+  // relaxation is a controller-pending deviation from the per-pair wording of spec 4.5 (review
+  // S1); it keeps the shipped default.json at zero warnings.
+  // Selection runs once with no persona and once per configured persona, so persona mappings are
+  // checked too. A mapping no mock pair selects is reported, never skipped silently (review S2).
+  const personas: (string | undefined)[] = [
+    undefined,
+    ...(config.personas ?? []).map((p) => p.key),
+  ];
+  const selected = new Set<number>();
   const tallies = new Map<string, Tally>();
   for (const [sourceId, source] of Object.entries(mock.sources)) {
     for (const response of source.responses) {
@@ -45,14 +54,15 @@ export function checkMappingPaths(config: SiteConfig, mock: MockFile): Diagnosti
       for (const s of response.scenarios) {
         if (s.respond !== undefined) payloads.push({ values: s.when, payload: s.respond });
       }
-      for (const p of payloads) {
+      for (const [p, persona] of payloads.flatMap((x) => personas.map((y) => [x, y] as const))) {
         const index = selectMapping(
           mapConfig,
-          { queryType: response.queryType, partValues: p.values, sourceId },
+          { queryType: response.queryType, partValues: p.values, sourceId, persona },
           NO_CLOCK,
         );
         const mapping = index === null ? undefined : config.responseMappings[index];
         if (index === null || mapping === undefined) continue;
+        selected.add(index);
         const key = `${index}/${mapping.sourceId === undefined ? "" : sourceId}`;
         const tally = tallies.get(key) ?? {
           sourceId,
@@ -68,6 +78,15 @@ export function checkMappingPaths(config: SiteConfig, mock: MockFile): Diagnosti
     }
   }
   const out: Diagnostic[] = [];
+  for (const [i, mapping] of config.responseMappings.entries()) {
+    if (selected.has(i)) continue;
+    out.push({
+      level: "warning",
+      path: pointer("responseMappings", i),
+      key: "config.mappingNotExercised",
+      params: { queryType: mapping.queryType },
+    });
+  }
   for (const t of tallies.values()) {
     for (const [j, ok] of t.seen) {
       if (ok) continue;
