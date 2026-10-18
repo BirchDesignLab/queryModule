@@ -168,16 +168,22 @@ describe("GET /api/v1/admin/queries/:correlationId (FR-063, spec 5.1, 5.2; #713)
 
   it("adminViewed commits before any DEK is unwrapped", async () => {
     const s = await setup();
-    const record = s.t.deps.audit.record.bind(s.t.deps.audit);
-    vi.spyOn(s.t.deps.audit, "record").mockImplementation(async (tx, e) => {
-      const out = await record(tx, e);
-      if (e.type === "adminViewed") seen.order.push("adminViewed");
+    // Mark at COMMIT, not at record: the audit write runs inside the transaction, so a mark at
+    // record would still pass if the unwrap moved into the same transaction (#755 T5 Q1).
+    const transaction = s.t.deps.db.transaction.bind(s.t.deps.db) as (
+      ...a: unknown[]
+    ) => Promise<unknown>;
+    vi.spyOn(s.t.deps.db, "transaction").mockImplementation((async (...a: unknown[]) => {
+      const out = await transaction(...a);
+      seen.order.push("committed");
       return out;
-    });
+    }) as typeof s.t.deps.db.transaction);
     seen.order.length = 0;
     await s.read(s.correlationId);
-    expect(seen.order[0]).toBe("adminViewed");
-    expect(seen.order.filter((x) => x === "unwrap").length).toBeGreaterThan(0);
+    const committed = seen.order.indexOf("committed");
+    const firstUnwrap = seen.order.indexOf("unwrap");
+    expect(committed).toBeGreaterThanOrEqual(0);
+    expect(firstUnwrap).toBeGreaterThan(committed);
   });
 
   it("an unknown id is 404 and a malformed id 400, each with no row", async () => {
