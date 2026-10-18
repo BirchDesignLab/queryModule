@@ -53,10 +53,18 @@ describe("config:validate arguments (#220 M3)", () => {
     expect(r.stdout).toContain("ok packages/config/sites/default.json");
   });
 
-  it("--diff is an explicit reject with exit 2", { timeout: 20000 }, () => {
-    const r = run(["--diff", "v1"]);
+  it("--diff with no tag is a usage error with exit 2", { timeout: 20000 }, () => {
+    const r = run(["--diff"]);
     expect(r.status).toBe(2);
-    expect(r.stderr).toContain("config:validate: --diff arrives with M2 P2 (spec 7, 9.5)");
+    expect(r.stderr).toContain("usage: config:validate");
+  });
+
+  it("--diff HEAD against the working tree prints a line per target and exits 0", {
+    timeout: 30000,
+  }, () => {
+    const r = run(["--diff", "HEAD", "packages/config/sites/default.json"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("packages/config/sites/default.json");
   });
 });
 
