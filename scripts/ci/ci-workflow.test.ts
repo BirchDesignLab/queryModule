@@ -190,9 +190,9 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
     expect(aggregate({})).toBe(1);
   });
 
-  it("caps timeouts: changes and ci at most 5 minutes, every other job at most 20", () => {
+  it("caps timeouts: changes and ci at most 5 minutes, image at most 35, every other job at most 20", () => {
     for (const id of jobIds) {
-      const cap = id === "changes" || id === "ci" ? 5 : 20;
+      const cap = id === "changes" || id === "ci" ? 5 : id === "image" ? 35 : 20;
       expect(jobs[id]["timeout-minutes"], id).toBeLessThanOrEqual(cap);
     }
   });

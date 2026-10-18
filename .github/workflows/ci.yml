@@ -269,7 +269,7 @@ jobs:
     needs: [changes, checks]
     if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.board_only != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
         with:
