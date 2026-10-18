@@ -406,7 +406,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
   });
 
-  it("read-back data is monospace by field properties: Plate and VIN, not a picklist or free text", async () => {
+  it("read-back data is monospace by the field's mono flag: Plate and VIN, not a picklist or free text", async () => {
     const { user } = await openPanel();
     expect(screen.getByLabelText("Plate")).toHaveClass("qm-field__input--data");
     expect(screen.getByLabelText("VIN")).toHaveClass("qm-field__input--data");

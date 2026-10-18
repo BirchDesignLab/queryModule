@@ -164,7 +164,7 @@ A field has these settings:
 | `defaultValue` | A configured default for this field. |
 | `visible`, `required` | Start state: visible `true`, required `false`. Rules change them. |
 | `formOnly` | `true` says the field is deliberately not positional in any terminal command (the form, or a named token, is the way to fill it); default `false`. It only silences the required-without-position warning below. |
-| `mono` | `true` sets the field's read-back values (the form, the request list and result cards) in the data typeface, so 0 and O or 1 and I differ: plates, VINs, serial numbers, dates. Default `false`. Names, makes and free text stay in the interface face. The builder has a "Show values in the data typeface" check on each field; a field added in the builder also allows the wider character set (`charset: "printable"`). The shipped default site flags its plate, year, VIN, serial, license number and date-of-birth fields. |
+| `mono` | `true` sets the field's input on the query form in the data typeface, so 0 and O or 1 and I differ: plates, VINs, serial numbers, dates. Default `false`. Names, makes and free text stay in the interface face. The builder has a "Show values in the data typeface" check on each field; a field added in the builder also allows the wider character set (`charset: "printable"`). The shipped default site flags its plate, year, VIN, serial, license number and date-of-birth fields. |
 | `section` | The section key; default `base`. `expanded` is the "More details" section. |
 | `custom` | `true` marks a site-added field; documentation and admin display only. |
 | `minLength`, `maxLength` | String length; `maxLength` default 64, at most 4096. |

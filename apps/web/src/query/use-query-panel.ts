@@ -242,7 +242,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
   // The effects below run on every edit and almost never change the tags. A setState call from an
   // effect that changes nothing can still cost a second commit (React cannot always skip it before
   // rendering), so an effect asks `updateRevealed`, which calls the setter only for a real change. The
-  // ref holds the value the effects of one flush are building on (#478).
+  // ref decides that and holds the value the effects of one flush are building on (#478).
   const revealedNow = useRef(revealed);
   revealedNow.current = revealed;
   const updateRevealed = useCallback(
@@ -250,7 +250,8 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
       const next = change(revealedNow.current);
       if (next === revealedNow.current) return;
       revealedNow.current = next;
-      setRevealed(next);
+      // The change itself is queued, not its result, so it composes with a dismiss queued before it.
+      setRevealed(change);
     },
     [],
   );
