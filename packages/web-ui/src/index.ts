@@ -47,6 +47,8 @@ export type { HighlightedProps } from "./results/Highlighted.js";
 export { Highlighted } from "./results/Highlighted.js";
 export type { MappedElementsProps } from "./results/MappedElements.js";
 export { MappedElements } from "./results/MappedElements.js";
+export type { PurgedResultCardProps } from "./results/PurgedResultCard.js";
+export { PurgedResultCard } from "./results/PurgedResultCard.js";
 export type { ResultCardProps } from "./results/ResultCard.js";
 export { ResultCard } from "./results/ResultCard.js";
 export type { ResultTableProps } from "./results/ResultTable.js";

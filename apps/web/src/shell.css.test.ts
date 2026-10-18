@@ -177,3 +177,11 @@ describe("D0.2 self-hosted IBM Plex (OFL, design system)", () => {
       expect(url, url).toMatch(/^\.\//);
   });
 });
+
+describe("BW3 history and note rules (critic)", () => {
+  it("a history row's note wraps under the head and sorts last, so the actions stay on the head line", () => {
+    const rule = /\.qm-history__note\s*\{([^}]*)\}/.exec(shellCss)?.[1] ?? "";
+    expect(rule).toMatch(/flex-basis:\s*100%/);
+    expect(rule).toMatch(/order:\s*1\b/);
+  });
+});

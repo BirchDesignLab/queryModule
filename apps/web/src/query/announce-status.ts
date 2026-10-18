@@ -5,7 +5,7 @@ import { shortReference } from "@querymodule/web-ui";
 type T = (key: string, params?: Record<string, string | number | boolean>) => string;
 
 /** Terminal statuses first, pending last, so the details lead with what has arrived. */
-const ORDER = [
+export const STATUS_ORDER = [
   "returned",
   "failed",
   "timedOut",
@@ -41,7 +41,7 @@ export function statusAnnouncementText(
   extras: StatusAnnouncementExtras = {},
 ): string {
   const { summary } = announcement;
-  const counts = ORDER.flatMap((status) => {
+  const counts = STATUS_ORDER.flatMap((status) => {
     const count = summary.byStatus[status];
     return count === undefined || count === 0
       ? []

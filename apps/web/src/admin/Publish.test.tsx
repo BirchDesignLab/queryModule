@@ -518,15 +518,21 @@ describe("while an action is in flight (round 1: C1, C2, C3)", () => {
     const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
     const list = within(dialog).getByRole("region", { name: "Changes to publish" });
     expect(list).toHaveAttribute("tabindex", "0");
+    const note = within(dialog).getByRole("textbox", { name: "Change note (optional)" });
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
     const publish = within(dialog).getByRole("button", { name: "Publish version 2" });
+    // Order: the list, the change note, Cancel, Publish; Tab wraps inside the dialog.
     expect(cancel).toHaveFocus();
+    await t.user.tab({ shift: true });
+    expect(note).toHaveFocus();
     await t.user.tab({ shift: true });
     expect(list).toHaveFocus();
     await t.user.tab({ shift: true });
     expect(publish).toHaveFocus();
     await t.user.tab();
     expect(list).toHaveFocus();
+    await t.user.tab();
+    expect(note).toHaveFocus();
     await t.user.tab();
     expect(cancel).toHaveFocus();
   });

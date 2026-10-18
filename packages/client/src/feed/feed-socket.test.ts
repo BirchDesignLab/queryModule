@@ -1,3 +1,4 @@
+import { AckReceiptMessageSchema } from "@querymodule/core/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeSocket } from "../testing/fake-socket.js";
 import { createFeedSocket, type FeedSocket, type SourceStatusEvent } from "./feed-socket.js";
@@ -711,5 +712,55 @@ describe("FR-065 feed socket: reconnect hooks (spec 6.8)", () => {
     t.feed.close();
     vi.advanceTimersByTime(60_000);
     expect(again).not.toHaveBeenCalled();
+  });
+});
+
+describe("NFR-004 ackReceipt (spec 4.7, 6.7)", () => {
+  const AT = 1_700_000_000_000;
+  const receipts = (socket: FakeSocket) =>
+    socket.sentMessages().filter((m) => m.type === "ackReceipt");
+
+  it("sends one receipt for the correlation ID on a welcomed socket, parsed by the contract schema", () => {
+    vi.setSystemTime(AT);
+    const t = setup();
+    t.feed.open();
+    const socket = t.connect();
+    t.feed.sendAckReceipt(CORRELATION_ID);
+    expect(receipts(socket)).toEqual([
+      { v: 1, type: "ackReceipt", correlationId: CORRELATION_ID, receivedAt: AT },
+    ]);
+    expect(AckReceiptMessageSchema.safeParse(receipts(socket)[0]).success).toBe(true);
+  });
+
+  it("sends nothing before hello is answered or on a closed feed, and throws nothing", () => {
+    const t = setup();
+    expect(() => t.feed.sendAckReceipt(CORRELATION_ID)).not.toThrow();
+    t.feed.open();
+    const socket = t.sockets[0] as FakeSocket;
+    socket.open();
+    expect(() => t.feed.sendAckReceipt(CORRELATION_ID)).not.toThrow();
+    expect(receipts(socket)).toEqual([]);
+  });
+
+  it("drops a receipt while the connection is down: never queued, never sent after the reconnect", () => {
+    const t = setup();
+    t.feed.open();
+    const first = t.connect();
+    first.serverClose(1006);
+    expect(t.feed.state()).toBe("stale");
+    expect(() => t.feed.sendAckReceipt(CORRELATION_ID)).not.toThrow();
+    vi.advanceTimersByTime(60_000);
+    const second = t.connect();
+    expect(receipts(first)).toEqual([]);
+    expect(receipts(second)).toEqual([]);
+  });
+
+  it("a socket that throws on send does not escape, and is treated as lost like any failed send", () => {
+    const t = setup();
+    t.feed.open();
+    const socket = t.connect();
+    socket.throwOnSend = true;
+    expect(() => t.feed.sendAckReceipt(CORRELATION_ID)).not.toThrow();
+    expect(t.feed.state()).toBe("stale");
   });
 });

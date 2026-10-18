@@ -4,6 +4,7 @@ import { ChangesView } from "./ChangesView.js";
 import type { JsonObject } from "./draft.js";
 import { LeaveDialog } from "./LeaveGuard.js";
 import type { PublishFlow } from "./PublishFlow.js";
+import { PublishNoteField } from "./PublishNote.js";
 import { SCROLL_FOCUS } from "./scroll-focus.js";
 
 /** The toolbar's Save draft and Review and publish, each with its visible reason when disabled. */
@@ -148,6 +149,7 @@ export function PublishDialogs({
         leavePrimary
         busy={flow.busy}
         busyReason={t("admin.publish.busy")}
+        blockedReason={flow.noteOver > 0 ? t("admin.publish.note.blocked") : undefined}
         fallback={fallback}
       >
         {/* Scrolls when the list is long: focusable so the keyboard can scroll it. */}
@@ -160,6 +162,7 @@ export function PublishDialogs({
             {open && <ChangesView doc={doc} />}
           </section>
         )}
+        {!nothing && <PublishNoteField value={flow.note} onChange={flow.setNote} />}
       </LeaveDialog>
       <LeaveDialog
         open={flow.rollingBack !== null}

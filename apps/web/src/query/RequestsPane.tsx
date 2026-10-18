@@ -7,6 +7,7 @@ import {
 } from "@querymodule/client";
 import type { ClientSiteConfig } from "@querymodule/core/config";
 import {
+  PurgedResultCard,
   RequestList,
   type RequestPartView,
   type RequestRowView,
@@ -20,7 +21,13 @@ import { useServices } from "../app/services-context.js";
 import { outcomeAnnouncement } from "./announce-outcome.js";
 import { submittedOf } from "./edit-as-new.js";
 import { requestAccessibleName } from "./request-name.js";
-import { assessEntry, highestSeverity, skipReasonText, sourceWhy } from "./result-view.js";
+import {
+  assessEntry,
+  highestSeverity,
+  purgedValuesSummary,
+  skipReasonText,
+  sourceWhy,
+} from "./result-view.js";
 import { rowSummary } from "./row-summary.js";
 import { SourceCard } from "./SourceCard.js";
 
@@ -116,12 +123,25 @@ export const RequestsPane = memo(function RequestsPane({
     }
     const highest = highestSeverity(assessEntry(entry, config.keywords));
     // The primary part is the one with no parent; a nested part says which type it was run from.
-    const primaryType = entry.parts.find((part) => part.parentPartId === null)?.queryType;
+    const primary = entry.parts.find((part) => part.parentPartId === null);
+    const primaryType = primary?.queryType;
+    // Retention took the values (spec 5.5): only the type values are left to show, and the request
+    // cannot start the next one (D-M2P2-B4).
+    const valuesPurged = entry.submitted === undefined && primary?.purged === true;
     return {
       ...base,
+      ...(valuesPurged && base.summary === ""
+        ? { summary: purgedValuesSummary(primary?.typeValues) }
+        : {}),
       status: "acknowledged",
       // Every request can start the next one (G32), once its values are known.
       editable: submittedOf(entry) !== undefined,
+      ...(valuesPurged
+        ? {
+            purgedValuesText: t("requests.purgedValues"),
+            editBlockedText: t("requests.editPurged"),
+          }
+        : {}),
       reference: entry.correlationId,
       acknowledgedAt: entry.acknowledgedAt,
       notes: [],
@@ -162,9 +182,12 @@ export const RequestsPane = memo(function RequestsPane({
           lines: [
             ...part.sources.map((source): SourceLineView => {
               const payload = source.status === "returned" ? source.result?.payload : undefined;
+              // Retention took the payload (spec 5.5): no payload will come, so no loading line;
+              // the purged card stands in the slot and the mapper never sees it.
+              const purged = source.status === "returned" && source.purged === true;
               // A source that returned owes its payload (spec 6.7): until the card arrives the line
               // says so, instead of "returned" with nothing under it (G6).
-              const loading = source.status === "returned" && payload === undefined;
+              const loading = source.status === "returned" && payload === undefined && !purged;
               // A source that did not return says why, in words (G5).
               const whyText = sourceWhy(source.status, config, source.sourceId, t);
               return {
@@ -184,6 +207,18 @@ export const RequestsPane = memo(function RequestsPane({
                       source: sourceLabel(source.sourceId),
                       status: t(`sourceStatus.status.${source.status}`),
                     }),
+                ...(purged
+                  ? {
+                      card: (
+                        <PurgedResultCard
+                          heading={sourceLabel(source.sourceId)}
+                          status={t("sourceStatus.status.returned")}
+                          headingLevel={part.parentPartId === null ? 4 : 5}
+                          t={t}
+                        />
+                      ),
+                    }
+                  : {}),
                 ...(payload === undefined
                   ? {}
                   : {

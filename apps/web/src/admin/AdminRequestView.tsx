@@ -3,6 +3,7 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { AdminQueryDetail } from "@querymodule/core/contracts";
 import { assessResult } from "@querymodule/core/response";
 import {
+  PurgedResultCard,
   RequestList,
   type RequestPartView,
   type RequestRowView,
@@ -16,7 +17,12 @@ import { useResolvedPersona } from "../app/AppChrome.js";
 import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { useServices } from "../app/services-context.js";
-import { highestSeverity, sourceWhy } from "../query/result-view.js";
+import {
+  highestSeverity,
+  purgedValuesSummary,
+  sourcesDoneLine,
+  sourceWhy,
+} from "../query/result-view.js";
 import { rowSummary } from "../query/row-summary.js";
 import { SourceCard } from "../query/SourceCard.js";
 import { SectionHeading } from "./AdminLayout.js";
@@ -92,11 +98,21 @@ function adminRow(
     ),
   );
   const highest = highestSeverity(assessed);
+  // Retention took the values (spec 5.5): the type values are all that is left to show.
+  const valuesPurged = primary?.purged === true;
+  const statusLine = sourcesDoneLine(
+    detail.parts.flatMap((part) => part.sources),
+    t,
+  );
   return {
     id: detail.correlationId,
     status: "acknowledged",
     typeLabel: typeLabel(primaryType),
-    summary: rowSummary(config, primaryType, "", primary?.values, Date.now()),
+    summary: valuesPurged
+      ? purgedValuesSummary(primary?.typeValues)
+      : rowSummary(config, primaryType, "", primary?.values, Date.now()),
+    ...(valuesPurged ? { purgedValuesText: t("requests.purgedValues") } : {}),
+    ...(statusLine === "" ? {} : { statusLine }),
     name,
     reference: detail.correlationId,
     acknowledgedAt: detail.submittedAt,
@@ -140,6 +156,18 @@ function adminRow(
                 source: sourceLabel(source.sourceId),
                 status: t(`sourceStatus.status.${source.status}`),
               }),
+              ...(source.status === "returned" && source.purged
+                ? {
+                    card: (
+                      <PurgedResultCard
+                        heading={sourceLabel(source.sourceId)}
+                        status={t("sourceStatus.status.returned")}
+                        headingLevel={part.parentPartId === null ? 4 : 5}
+                        t={t}
+                      />
+                    ),
+                  }
+                : {}),
               ...(source.status === "returned" && source.payload !== undefined
                 ? {
                     card: (
@@ -325,7 +353,7 @@ function AdminRequestView() {
           <RequestList
             rows={[row]}
             heading={t("admin.request.list")}
-            headingLevel={3}
+            headingLevel={null}
             emptyText=""
             t={t}
             onCopy={(id) => {

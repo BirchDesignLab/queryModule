@@ -45,6 +45,12 @@ export interface FeedSocket {
   onFirstWelcome(handler: () => void): () => void;
   /** Each backoff step while the socket is down, before the reconnect is attempted (spec 6.8). */
   onRetry(handler: () => void): () => void;
+  /**
+   * Tells the server a 202 arrived (`ackReceipt`, NFR-004, spec 6.7). A latency metric, never a
+   * promise: sent only on a socket that has answered hello with welcome, otherwise dropped, never
+   * queued or retried. Carries the correlation ID and the time, nothing else; never logged.
+   */
+  sendAckReceipt(correlationId: string): void;
   state(): FeedState;
 }
 
@@ -287,6 +293,10 @@ export function createFeedSocket(options: FeedSocketOptions): FeedSocket {
       return () => {
         retryHandlers.delete(handler);
       };
+    },
+    sendAckReceipt(correlationId) {
+      if (state !== "open" || !welcomed) return;
+      send({ type: "ackReceipt", correlationId, receivedAt: Date.now() });
     },
     state: () => state,
   };

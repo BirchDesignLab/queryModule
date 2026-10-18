@@ -3,7 +3,7 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import { type Assessment, SEVERITY_RANK } from "@querymodule/core/contracts";
 import { assessResult } from "@querymodule/core/response";
 import { evaluateForm } from "@querymodule/core/rules";
-import type { HighestSeverity } from "./announce-status.js";
+import { type HighestSeverity, STATUS_ORDER } from "./announce-status.js";
 
 type Acknowledged = Extract<RequestEntry, { status: "acknowledged" }>;
 
@@ -73,6 +73,45 @@ export function highestSeverity(assessed: readonly SourceAssessment[]): HighestS
     }
   }
   return best;
+}
+
+/**
+ * What is left of a purged request's values: its type values (role `type`, such as the property
+ * type), as the codes shown in mono. Empty when none survive. Display only; never logged.
+ */
+export function purgedValuesSummary(
+  typeValues: Readonly<Record<string, string>> | undefined,
+): string {
+  return Object.values(typeValues ?? {}).join(" ");
+}
+
+/**
+ * The request's visible status line under its head (design v6, #754): "2 of 2 sources done.
+ * 1 returned, 1 timed out." with the purged count when retention took some payloads. Counts and
+ * status words only, never a value. Empty when the request went to no source.
+ */
+export function sourcesDoneLine(
+  sources: readonly { status: string; purged?: boolean | undefined }[],
+  t: T,
+): string {
+  if (sources.length === 0) return "";
+  const done = sources.filter((s) => s.status !== "pending").length;
+  const counts = STATUS_ORDER.flatMap((status) => {
+    const count = sources.filter((s) => s.status === status).length;
+    return count === 0
+      ? []
+      : [t("sourceStatus.detail", { count, status: t(`sourceStatus.status.${status}`) })];
+  });
+  const purged = sources.filter((s) => s.purged === true).length;
+  const details = [
+    ...counts,
+    ...(purged === 0 ? [] : [t("sourceStatus.purgedDetail", { count: purged })]),
+  ];
+  return t(details.length === 0 ? "sourceStatus.doneLineBare" : "sourceStatus.doneLine", {
+    done,
+    count: sources.length,
+    details: details.join(", "),
+  });
 }
 
 /** A field label inside a sentence: "Last name" reads "last name"; an acronym ("VIN") keeps its case (G33). */
