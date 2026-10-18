@@ -1,12 +1,16 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: the patterns are source text, not templates
-// TDD repair for BW2 Task 3 (#726): the AuditLog tests were written after the components, so each
-// behavior they claim to cover is broken here, one at a time, and the suite must go red. The source
-// file is restored from git after every run. Run from the repo root:
+// TDD repair for BW2 Tasks 3 and 4 (#726, #727): the AuditLog tests were written after the
+// components, so each behavior they claim to cover is broken here, one at a time, and the named
+// test file must go red. The source file is restored from git after every run. Run from the repo
+// root:
 //   VITEST_MAX_WORKERS=3 node scripts/mutation/audit-log-mutations.mjs
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const LOG = "apps/web/src/admin/AuditLog.tsx";
+const VIEW = "apps/web/src/admin/AdminRequestView.tsx";
+const LOG_TEST = "src/admin/AuditLog.test.tsx";
+const VIEW_TEST = "src/admin/AdminRequestView.test.tsx";
 const MUTATIONS = [
   {
     name: "implementer may view the audit log",
@@ -19,6 +23,12 @@ const MUTATIONS = [
     file: "apps/web/src/admin/roles.ts",
     from: "features !== undefined && !features.adminAudit",
     to: "false && features !== undefined",
+  },
+  {
+    name: "the page fetches before the config says the feature is on",
+    file: LOG,
+    from: "if (features === undefined) return <SectionHeading>",
+    to: "if (false as boolean) return <SectionHeading>",
   },
   {
     name: "announcement carries row content",
@@ -41,8 +51,14 @@ const MUTATIONS = [
   {
     name: "Older loses focus (disabled instead of aria-disabled)",
     file: LOG,
-    from: 'aria-disabled={loading || page.nextCursor === null ? "true" : undefined}',
-    to: "disabled={loading || page.nextCursor === null}",
+    from: 'aria-disabled={loading || atOldest ? "true" : undefined}',
+    to: "disabled={loading || atOldest}",
+  },
+  {
+    name: "a disabled end has no reason",
+    file: LOG,
+    from: "aria-describedby={atOldest ? pagesWhy : undefined}",
+    to: "aria-describedby={undefined}",
   },
   {
     name: "Newer does not step back",
@@ -57,22 +73,34 @@ const MUTATIONS = [
     to: "if (true) store.set({ applied: result.filters ?? applied,",
   },
   {
+    name: "Apply with errors announces nothing",
+    file: LOG,
+    from: 'announcer.announce(\n        t("admin.audit.needAttention"',
+    to: 'void (\n        t("admin.audit.needAttention"',
+  },
+  {
     name: "typing a filter fetches at once",
     file: LOG,
     from: "onChange={(patch) => store.set({ form: { ...form, ...patch } })}",
     to: "onChange={(patch) => store.set({ form: { ...form, ...patch }, applied: validateAuditForm({ ...form, ...patch }).filters })}",
   },
   {
-    name: "403 shows the generic error",
+    name: "a server 403 shows the generic error",
     file: LOG,
-    from: 'failure === "forbidden"\n              ? t("admin.audit.error.forbidden")',
-    to: 'failure === "forbidden"\n              ? t("admin.audit.error.load")',
+    from: 'failure === "forbidden" ? "admin.audit.noAccess.title" : "admin.audit.notOn.title"',
+    to: '"admin.audit.failed.title"',
   },
   {
     name: "export is not blocked by a filter error",
     file: LOG,
-    from: 'aria-disabled={exportBlocked || applied === null ? "true" : undefined}',
+    from: 'aria-disabled={exportBlocked || exporting ? "true" : undefined}',
     to: "aria-disabled={undefined}",
+  },
+  {
+    name: "export has no in-flight guard",
+    file: LOG,
+    from: "if (applied === null || exportBlocked || exporting) return;",
+    to: "if (applied === null || exportBlocked) return;",
   },
   {
     name: "export ignores the applied filters",
@@ -95,20 +123,86 @@ const MUTATIONS = [
   {
     name: "unknown event type is hidden",
     file: "apps/web/src/admin/AuditTable.tsx",
-    from: "isAuditEventType(row.type) ? t(`admin.audit.type.${row.type}`) : row.type",
-    to: "isAuditEventType(row.type) ? t(`admin.audit.type.${row.type}`) : ''",
+    from: "isAuditEventType(row.type)\n              ? t(`admin.audit.type.${row.type}`)\n              : row.type",
+    to: "isAuditEventType(row.type)\n              ? t(`admin.audit.type.${row.type}`)\n              : ''",
   },
   {
-    name: "empty page has no Reset filters",
+    name: "request link has no hidden text",
+    file: "apps/web/src/admin/AuditTable.tsx",
+    from: '<VisuallyHidden>{t("admin.audit.openRequest")}</VisuallyHidden>',
+    to: "",
+  },
+  {
+    name: "empty state Reset does not hand focus to the form's Reset",
     file: LOG,
-    from: 't("admin.audit.empty")}</p>\n              <button type="button" className="qm-button qm-button--secondary" onClick={reset}>',
-    to: 't("admin.audit.empty")}</p>\n              <button hidden type="button" className="qm-button qm-button--secondary" onClick={reset}>',
+    from: "if (toResetButton) queueMicrotask(() => resetRef.current?.focus());",
+    to: "void toResetButton;",
   },
   {
     name: "Try again does not refetch",
     file: LOG,
-    from: "onClick={() => setAttempt((n) => n + 1)}",
-    to: "onClick={() => undefined}",
+    from: "setAttempt((n) => n + 1);\n    // The retry button",
+    to: "// The retry button",
+  },
+  {
+    name: "Try again does not move focus to the results",
+    file: LOG,
+    from: "queueMicrotask(() => resultsRef.current?.focus());",
+    to: "void resultsRef;",
+  },
+  {
+    name: "a StrictMode pass sends the audit page twice",
+    file: LOG,
+    from: "    )\n      return;\n    const key: FetchKey",
+    to: "    )\n      void 0;\n    const key: FetchKey",
+  },
+  {
+    name: "Back does not return focus to the request link",
+    file: LOG,
+    from: "    link.focus();\n  }, [page]);",
+    to: "  }, [page]);",
+  },
+  {
+    name: "request view fetches twice under StrictMode",
+    file: VIEW,
+    from: "if (lastFetch.current === key) return;",
+    to: "if (false as boolean) return;",
+    test: VIEW_TEST,
+  },
+  {
+    name: "request view asks for hidden results",
+    file: VIEW,
+    from: "fetchAdminQuery(api, correlationId, false)",
+    to: "fetchAdminQuery(api, correlationId, true)",
+    test: VIEW_TEST,
+  },
+  {
+    name: "Include hidden results is live",
+    file: VIEW,
+    from: 'aria-disabled="true"\n            aria-describedby="qm-request-hidden-why"',
+    to: 'aria-describedby="qm-request-hidden-why"',
+    test: VIEW_TEST,
+  },
+  {
+    name: "not found is an alert",
+    file: VIEW,
+    from: '<StateBox\n            title={t("admin.request.notFound.title")}',
+    to: '<StateBox\n            alert\n            title={t("admin.request.notFound.title")}',
+    test: VIEW_TEST,
+  },
+  {
+    name: "request view has no recorded banner",
+    file: VIEW,
+    from: '<b>{t("admin.request.recorded")}</b>',
+    to: "<b />",
+    test: VIEW_TEST,
+  },
+  {
+    name: "severity badge is dropped from the entry head",
+    file: VIEW,
+    from: "...(highest === null",
+    to: "...(true",
+    test: VIEW_TEST,
   },
 ];
 
@@ -123,7 +217,7 @@ for (const m of MUTATIONS) {
   try {
     const run = spawnSync(
       "pnpm",
-      ["--filter", "@querymodule/web", "exec", "vitest", "run", "src/admin/AuditLog.test.tsx"],
+      ["--filter", "@querymodule/web", "exec", "vitest", "run", m.test ?? LOG_TEST],
       { encoding: "utf8", shell: true, env: { ...process.env, NO_COLOR: "1" } },
     );
     results.push({ name: m.name, outcome: run.status === 0 ? "STAYED GREEN" : "red" });

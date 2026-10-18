@@ -18,6 +18,8 @@ export interface AuditViewState {
   /** The cursor of each page shown so far; index 0 is the first page (no cursor). */
   cursors: (string | undefined)[];
   pageSize: number;
+  /** The request link last used, so Back from the request view can return focus to it. */
+  focusRequest: string | null;
 }
 
 export const DEFAULT_AUDIT_PAGE_SIZE = 50;
@@ -28,6 +30,7 @@ const initial = (): AuditViewState => ({
   applied: null,
   cursors: [undefined],
   pageSize: DEFAULT_AUDIT_PAGE_SIZE,
+  focusRequest: null,
 });
 
 export interface AuditStore {

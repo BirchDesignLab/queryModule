@@ -70,8 +70,8 @@ export function validateAuditForm(form: AuditForm): {
   const from = parseWindowTime(form.from);
   const toMinute = parseWindowTime(form.to);
   const correlationId = form.correlationId.trim();
-  if (from === null) errors.from = "admin.audit.error.date";
-  if (toMinute === null) errors.to = "admin.audit.error.date";
+  if (from === null) errors.from = "admin.audit.error.dateFrom";
+  if (toMinute === null) errors.to = "admin.audit.error.dateTo";
   if (correlationId !== "" && !Uuid7Schema.safeParse(correlationId).success)
     errors.correlationId = "admin.audit.error.requestId";
   if (from !== null && toMinute !== null) {

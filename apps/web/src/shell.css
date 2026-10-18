@@ -1911,10 +1911,33 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   gap: var(--qm-space-2);
 }
 
-/* Audit log (Task 3, D-M2P2-B3): filters, one table in a scroll region, paging. Below the admin
-   section width layout.toolbarRow (920) the Credential owner column folds under the Actor, so the
-   table never scrolls sideways. Event and status are words, never colour alone. */
+/* Audit log (Task 3, D-M2P2-B3): toolbar, filters, one table in a scroll region, paging. Below the
+   admin section width layout.toolbarRow (920) the Credential owner column folds under the Actor, so
+   the table never scrolls sideways. Event and status are words, never color alone. */
 .qm-audit {
+  display: grid;
+  gap: var(--qm-space-3);
+}
+
+.qm-audit__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qm-space-2) var(--qm-space-3);
+}
+
+.qm-audit__tag {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__recorded {
+  margin-inline-start: auto;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__form {
   display: grid;
   gap: var(--qm-space-3);
 }
@@ -1926,17 +1949,69 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   align-items: start;
 }
 
-.qm-audit__filter-actions,
-.qm-audit__export,
-.qm-audit__paging {
+.qm-audit__bar,
+.qm-audit__pager {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--qm-space-3);
+  gap: var(--qm-space-2) var(--qm-space-3);
   align-items: center;
 }
 
-.qm-audit__export .qm-diff__note {
+.qm-audit__grow {
+  flex: 1 1 auto;
+}
+
+.qm-audit__export-line,
+.qm-audit__hint {
   margin: 0;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-audit__export-line {
+  flex-basis: 100%;
+}
+
+.qm-audit__body {
+  display: grid;
+  gap: var(--qm-space-3);
+  min-inline-size: 0;
+}
+
+.qm-audit__state {
+  display: grid;
+  gap: var(--qm-space-2);
+  justify-items: start;
+  padding: var(--qm-space-4);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-audit__state--error {
+  border-style: solid;
+  border-color: var(--qm-color-border);
+}
+
+.qm-audit__state h3,
+.qm-audit__state p {
+  margin: 0;
+}
+
+.qm-audit__skeleton {
+  display: grid;
+  gap: var(--qm-space-2);
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+}
+
+.qm-audit__skeleton i {
+  display: block;
+  block-size: var(--qm-control-height-dense);
+  background: var(--qm-color-surface-raised);
+  border-radius: var(--qm-radius-control);
 }
 
 .qm-audit__scroll {
@@ -1976,7 +2051,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-audit__time,
 .qm-audit__request,
-.qm-audit__owner {
+.qm-audit__mono {
   font-family: var(--qm-type-family-data);
 }
 
@@ -2017,21 +2092,38 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
 }
 
-.qm-audit__empty {
-  display: grid;
-  gap: var(--qm-space-2);
-  justify-items: start;
-}
-
 .qm-audit__page-size {
+  flex-direction: row;
+  align-items: center;
   margin-inline-start: auto;
 }
 
-/* Admin request view (Task 4): the recorded banner, the way back, the disabled hidden-results
-   control with its reason, then each part's values and source cards. */
+/* The rail's Audit log item keeps a quiet current marker while a request opened from it is shown. */
+.qm-admin__rail a[aria-current="true"] {
+  color: var(--qm-color-text-body);
+  font-weight: 600;
+}
+
+/* Admin request view (Task 4): breadcrumb, the recorded banner, the way back, the disabled
+   hidden-results control with its reason, then the request as the query screen draws it. */
 .qm-request-view {
   display: grid;
   gap: var(--qm-space-3);
+}
+
+.qm-request-view__crumbs {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-request-view__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--qm-space-2) var(--qm-space-3);
+  padding: var(--qm-space-2) var(--qm-space-3);
+  background: var(--qm-color-accent-subtle);
+  border-radius: var(--qm-radius-control);
 }
 
 .qm-request-view__bar {
@@ -2049,35 +2141,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-control);
   padding: var(--qm-space-1) var(--qm-space-3);
-}
-
-.qm-request-view__part {
-  display: grid;
-  gap: var(--qm-space-2);
-}
-
-.qm-request-view__values {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--qm-space-3);
-  margin: 0;
-}
-
-.qm-request-view__key {
-  color: var(--qm-color-text-muted);
-}
-
-.qm-request-view__value {
-  margin: 0;
-  font-family: var(--qm-type-family-data);
-}
-
-.qm-request-view__sources {
-  display: grid;
-  gap: var(--qm-space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  cursor: not-allowed;
 }
 
 /* The one-time password: set in the data face and selectable, so it can be copied by hand. */

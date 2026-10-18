@@ -1,7 +1,7 @@
 import { useStore } from "@querymodule/client";
 import { visuallyHiddenStyle } from "@querymodule/web-ui";
 import { useEffect, useId, useRef } from "react";
-import { Link, Navigate, NavLink, useOutlet } from "react-router";
+import { Link, Navigate, NavLink, useMatch, useOutlet } from "react-router";
 import { useCachedConfig } from "../app/cached-config.js";
 import { useT } from "../app/i18n-context.js";
 import { MAIN_LANDMARK } from "../app/main-landmark.js";
@@ -55,6 +55,8 @@ export function AdminLayout() {
 function AdminRail({ users, audit, back }: { users: boolean; audit: boolean; back: boolean }) {
   const t = useT();
   const uid = useId();
+  // A request opened from the audit log keeps a quiet marker on its entry (design v6).
+  const onRequest = useMatch("/admin/queries/:correlationId") !== null;
   return (
     <nav className="qm-admin__rail" aria-label={t("admin.navLabel")}>
       {back && (
@@ -91,7 +93,13 @@ function AdminRail({ users, audit, back }: { users: boolean; audit: boolean; bac
           </p>
           <ul aria-labelledby={`${uid}-oversight`}>
             <li>
-              <NavLink to="/admin/audit">{t("admin.nav.audit")}</NavLink>
+              {onRequest ? (
+                <Link to="/admin/audit" aria-current="true">
+                  {t("admin.nav.audit")}
+                </Link>
+              ) : (
+                <NavLink to="/admin/audit">{t("admin.nav.audit")}</NavLink>
+              )}
             </li>
           </ul>
         </div>

@@ -66,8 +66,8 @@ describe("validateAuditForm", () => {
     const r = validateAuditForm({ ...base, from: "x", to: "y", correlationId: "nope" });
     expect(r.filters).toBeNull();
     expect(r.errors).toEqual({
-      from: "admin.audit.error.date",
-      to: "admin.audit.error.date",
+      from: "admin.audit.error.dateFrom",
+      to: "admin.audit.error.dateTo",
       correlationId: "admin.audit.error.requestId",
     });
   });

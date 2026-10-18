@@ -1,9 +1,13 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
+import { StrictMode } from "react";
+import { createMemoryRouter } from "react-router";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { Root } from "../app/Root.js";
 import { API, auditPage, CLIENT_CONFIG, server, TEST_USER } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
+import { testServices } from "../test/render-routes.js";
 
 beforeAll(preloadAdminRoutes);
 afterEach(() => vi.restoreAllMocks());
@@ -80,11 +84,23 @@ describe("rail entry", () => {
     );
   });
 
-  it("a typed URL for an implementer or with the feature off lands on Config", async () => {
-    await openAudit("implementer");
-    expect(
-      await screen.findByRole("heading", { name: "Site configuration", level: 2 }),
-    ).toBeInTheDocument();
+  it("a typed URL for an implementer shows the full-page 403 state and fetches nothing", async () => {
+    const { seen } = await openAudit("implementer");
+    const message = await screen.findByText("You can't read the audit log", {}, MAX_WAIT);
+    expect(message.closest('[role="alert"]')).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Go to Site configuration" })).toHaveAttribute(
+      "href",
+      "/admin/config",
+    );
+    expect(screen.queryByRole("form", { name: "Audit filters" })).toBeNull();
+    expect(seen).toHaveLength(0);
+  });
+
+  it("a typed URL with the feature off shows the full-page 404 state and fetches nothing", async () => {
+    const { seen } = await openAudit("admin", { flags: { adminAudit: false } });
+    expect(await screen.findByText("The audit log is not turned on", {}, MAX_WAIT)).toBeVisible();
+    expect(document.querySelector(".qm-audit__state a")).toHaveAttribute("href", "/");
+    expect(seen).toHaveLength(0);
   });
 });
 
@@ -98,9 +114,9 @@ describe("loading and filters", () => {
     expect(to - from).toBeGreaterThanOrEqual(86_400_000 - 1);
     expect(to - from).toBeLessThanOrEqual(86_400_000 + 60_000);
     expect(within(table).getAllByRole("row")).toHaveLength(4);
-    expect(table).toHaveAccessibleName(/^Audit events from \d\d-\d\d-\d\d/);
+    expect(table).toHaveAccessibleName(/^Audit events, newest first, \d\d-\d\d-\d\d \d\d:\d\d to /);
     const polite = t.services.announcer.current().polite?.text ?? "";
-    expect(polite).toBe("3 audit events loaded.");
+    expect(polite).toBe("3 rows loaded.");
     expect(polite).not.toContain("example");
   });
 
@@ -114,7 +130,7 @@ describe("loading and filters", () => {
       "Request viewed by an admin",
     );
     expect(seen).toHaveLength(1);
-    await t.user.click(screen.getByRole("button", { name: "Apply" }));
+    await t.user.click(screen.getByRole("button", { name: "Apply filters" }));
     await waitFor(() => expect(seen).toHaveLength(2));
     expect(seen[1]?.searchParams.get("correlationId")).toBe(id);
     expect(seen[1]?.searchParams.get("type")).toBe("adminViewed");
@@ -126,7 +142,7 @@ describe("loading and filters", () => {
     const from = screen.getByRole("textbox", { name: "From" });
     await t.user.clear(from);
     await t.user.type(from, "01-01-26 00:00");
-    await t.user.click(screen.getByRole("button", { name: "Apply" }));
+    await t.user.click(screen.getByRole("button", { name: "Apply filters" }));
     const to = screen.getByRole("textbox", { name: /^To/ });
     expect(to).toBeInvalid();
     expect(screen.getByText("Window can span at most 31 days.")).toBeInTheDocument();
@@ -145,7 +161,7 @@ describe("loading and filters", () => {
     const { seen, t } = await openAudit();
     await screen.findByRole("table", {}, MAX_WAIT);
     await t.user.type(screen.getByRole("textbox", { name: "Request ID" }), "nope");
-    await t.user.click(screen.getByRole("button", { name: "Apply" }));
+    await t.user.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(screen.getByRole("textbox", { name: "Request ID" })).toBeInvalid();
     expect(seen).toHaveLength(1);
   });
@@ -165,18 +181,24 @@ describe("paging", () => {
     const older = screen.getByRole("button", { name: "Older" });
     const newer = screen.getByRole("button", { name: "Newer" });
     expect(newer).toHaveAttribute("aria-disabled", "true");
+    expect(newer).toHaveAccessibleDescription("This is the newest page.");
     await t.user.click(older);
     await waitFor(() => expect(seen).toHaveLength(2));
     expect(seen[1]?.searchParams.get("cursor")).toBe("c-2");
     expect(older).toHaveFocus();
-    await screen.findByText("Page 2");
     await t.user.click(older);
-    await screen.findByText("Page 3");
-    expect(older).toHaveAttribute("aria-disabled", "true");
+    await waitFor(() => expect(seen).toHaveLength(3));
+    expect(seen[2]?.searchParams.get("cursor")).toBe("c-3");
+    await waitFor(() => expect(older).toHaveAttribute("aria-disabled", "true"));
+    // The reason for a disabled end is read from a hidden line (design v6).
+    expect(older).toHaveAccessibleDescription("There are no older events in this window.");
     await t.user.click(newer);
-    await screen.findByText("Page 2");
-    expect(seen.at(-1)?.searchParams.get("cursor")).toBe("c-2");
+    await waitFor(() => expect(seen).toHaveLength(4));
+    expect(seen[3]?.searchParams.get("cursor")).toBe("c-2");
     expect(newer).toHaveFocus();
+    expect(screen.getByRole("navigation", { name: "Audit pages" })).toHaveTextContent(
+      "2 rows on this page, newest first.",
+    );
   });
 
   it("Rows per page reloads from the first page with the new limit", async () => {
@@ -201,9 +223,9 @@ describe("paging reset", () => {
     });
     await screen.findByRole("table", {}, MAX_WAIT);
     await t.user.click(screen.getByRole("button", { name: "Older" }));
-    await screen.findByText("Page 2");
+    await waitFor(() => expect(seen).toHaveLength(2));
     await t.user.selectOptions(screen.getByRole("combobox", { name: "Rows per page" }), "25");
-    await screen.findByText("Page 1");
+    await waitFor(() => expect(seen).toHaveLength(3));
     expect(seen.at(-1)?.searchParams.get("limit")).toBe("25");
     expect(seen.at(-1)?.searchParams.has("cursor")).toBe(false);
   });
@@ -235,24 +257,31 @@ describe("rows", () => {
     expect(summary.closest("details")).toHaveTextContent("VEH");
     const link = within(table).getAllByRole("link")[0];
     expect(link).toHaveAttribute("href", "/admin/queries/0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b");
+    // Each link and disclosure says which row it belongs to (design v6, hidden text).
+    expect(link).toHaveAccessibleName("2e3f4a5b, open this request");
+    expect(summary.closest("summary")).toHaveAccessibleName(
+      /^2 items for futureEvent at \d\d-\d\d-\d\d \d\d:\d\d:\d\d$/,
+    );
   });
 
-  it("an empty page says so and offers Reset filters", async () => {
-    await openAudit("admin", { pages: () => HttpResponse.json(auditPage(0, null)) });
-    expect(await screen.findByText("No audit events match.", {}, MAX_WAIT)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Reset filters" })).toHaveLength(2);
+  it("an empty page says so and offers Reset filters, which hands focus to the form's Reset", async () => {
+    const { t } = await openAudit("admin", { pages: () => HttpResponse.json(auditPage(0, null)) });
+    expect(await screen.findByText("No audit events match", {}, MAX_WAIT)).toBeInTheDocument();
+    await t.user.click(screen.getByRole("button", { name: "Reset filters" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Reset" })).toHaveFocus());
   });
 });
 
 describe("error states", () => {
   it.each([
-    [403, "You do not have access to the audit log."],
-    [404, "The audit log is not available."],
+    [403, "You can't read the audit log"],
+    [404, "The audit log is not turned on"],
     [400, "The server did not accept these filters. Check the window and the IDs."],
-  ])("a %i shows its state", async (status, text) => {
+  ])("a server %i shows its state", async (status, text) => {
     await openAudit("admin", { pages: () => HttpResponse.json({}, { status }) });
     const message = await screen.findByText(text, {}, MAX_WAIT);
-    expect(message.closest('[role="alert"]')).not.toBeNull();
+    // A 404 is a plain state; the others are alerts.
+    expect(message.closest('[role="alert"]') !== null).toBe(status !== 404);
   });
 
   it("a server error shows Try again, which fetches again with the filters kept", async () => {
@@ -263,10 +292,12 @@ describe("error states", () => {
           ? HttpResponse.json({}, { status: 500 })
           : HttpResponse.json(auditPage(1, null)),
     });
-    const message = await screen.findByText("The audit log could not be loaded.", {}, MAX_WAIT);
+    const message = await screen.findByText("The audit log did not load", {}, MAX_WAIT);
     const alert = message.closest<HTMLElement>('[role="alert"]') as HTMLElement;
     await t.user.click(within(alert).getByRole("button", { name: "Try again" }));
     await screen.findByRole("table", {}, MAX_WAIT);
+    // The button left with the error: focus goes to the results region (design v6).
+    expect(document.querySelector(".qm-audit__body")).toHaveFocus();
     expect(seen).toHaveLength(2);
     expect(seen[1]?.searchParams.get("from")).toBe(seen[0]?.searchParams.get("from"));
   });
@@ -293,7 +324,9 @@ describe("export", () => {
     const { seen, t } = await openAudit();
     await screen.findByRole("table", {}, MAX_WAIT);
     expect(
-      screen.getByText(/^Export uses the applied filters: \d\d-\d\d-\d\d/),
+      screen.getByText(
+        /^Exports every row for: any user, any event, \d\d-\d\d-\d\d \d\d:\d\d to \d\d-\d\d-\d\d \d\d:\d\d\. One JSON object per line\.$/,
+      ),
     ).toBeInTheDocument();
     await t.user.click(screen.getByRole("button", { name: "Export NDJSON" }));
     await screen.findByText("Export saved.");
@@ -301,6 +334,78 @@ describe("export", () => {
     expect(exported[0]?.searchParams.get("from")).toBe(seen[0]?.searchParams.get("from"));
     expect(exported[0]?.searchParams.get("to")).toBe(seen[0]?.searchParams.get("to"));
     expect(exported[0]?.searchParams.has("cursor")).toBe(false);
+  });
+});
+
+describe("StrictMode", () => {
+  it("opening sends one request (one auditViewed row)", async () => {
+    const seen: URL[] = [];
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user: { ...TEST_USER, role: "admin" } }),
+      ),
+      http.get(`${API}/api/v1/config`, () => HttpResponse.json(CLIENT_CONFIG)),
+      http.get(`${API}/api/v1/admin/users`, () => HttpResponse.json({ users: [] })),
+      http.get(AUDIT, ({ request }) => {
+        seen.push(new URL(request.url));
+        return HttpResponse.json(auditPage(1, null));
+      }),
+    );
+    render(
+      <StrictMode>
+        <Root
+          services={testServices()}
+          clientVersion="0.1.0"
+          createRouter={(routes) =>
+            createMemoryRouter(routes, { initialEntries: ["/admin/audit"] })
+          }
+        />
+      </StrictMode>,
+    );
+    await screen.findByRole("table", {}, MAX_WAIT);
+    expect(seen).toHaveLength(1);
+  });
+});
+
+describe("export in flight", () => {
+  it("a second click while an export runs sends nothing (one auditExported row)", async () => {
+    Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    server.use(
+      http.get(`${AUDIT}/export`, async () => {
+        calls += 1;
+        await gate;
+        return new HttpResponse("", { headers: { "content-type": "application/x-ndjson" } });
+      }),
+    );
+    const { t } = await openAudit();
+    await screen.findByRole("table", {}, MAX_WAIT);
+    const button = screen.getByRole("button", { name: "Export NDJSON" });
+    await t.user.click(button);
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    await t.user.click(button);
+    release();
+    await screen.findByText("Export saved.");
+    expect(calls).toBe(1);
+  });
+});
+
+describe("filter errors", () => {
+  it("announces the count and the first message, never typed text", async () => {
+    const { t } = await openAudit();
+    await screen.findByRole("table", {}, MAX_WAIT);
+    await t.user.type(screen.getByRole("textbox", { name: "Request ID" }), "secret-typed-text");
+    await t.user.click(screen.getByRole("button", { name: "Apply filters" }));
+    const polite = t.services.announcer.current().polite?.text ?? "";
+    expect(polite).toBe(
+      "1 filter needs attention. Enter a request ID like 0192f3a1-7c2e-7b10-9a4c-5d3e8f1a2b4c.",
+    );
+    expect(polite).not.toContain("secret");
   });
 });
 
@@ -313,7 +418,7 @@ describe("regulated data (spec 6.7)", () => {
       screen.getByRole("textbox", { name: "Request ID" }),
       "0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
     );
-    await t.user.click(screen.getByRole("button", { name: "Apply" }));
+    await t.user.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(setItem).not.toHaveBeenCalled();
     expect(
       screen.getByText("Viewing and exporting the audit log is recorded."),

@@ -1,6 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
+import { StrictMode } from "react";
+import { createMemoryRouter } from "react-router";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { Root } from "../app/Root.js";
 import {
   ACK_202,
   API,
@@ -12,6 +16,7 @@ import {
 } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
+import { testServices } from "../test/render-routes.js";
 
 beforeAll(preloadAdminRoutes);
 afterEach(() => vi.restoreAllMocks());
@@ -69,11 +74,24 @@ describe("a settled request", () => {
     expect(banner.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("names the request and shows the typed values the server holds", async () => {
+  it("draws the entry as the query screen does: heading, breadcrumb, command, badge, meta, Copy ID", async () => {
     await openView();
     await screen.findByRole("region", { name: "State system: returned" }, MAX_WAIT);
     expect(screen.getByRole("heading", { level: 2, name: /^Request 2e3f4a5b$/ })).toBeVisible();
-    expect(within(screen.getByLabelText("Values")).getByText("ZZ-0001")).toBeVisible();
+    // The list heading sits one level below the page heading, so the cards (h4) skip nothing.
+    expect(screen.getByRole("heading", { level: 3, name: "Request" })).toBeVisible();
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(crumbs).getByRole("link", { name: "Audit log" })).toHaveAttribute(
+      "href",
+      "/admin/audit",
+    );
+    const entry = document.querySelector("li.qm-request") as HTMLElement;
+    expect(entry.querySelector(".qm-request__summary")).toHaveTextContent("ZZ-0001");
+    expect(within(entry).getAllByText("Critical").length).toBeGreaterThan(0);
+    expect(within(entry).getByText("2e3f4a5b")).toBeVisible();
+    expect(within(entry).getByRole("button", { name: /^Copy reference/ })).toBeVisible();
+    expect(screen.getByText("Vehicle query as it was sent and answered. Read only.")).toBeVisible();
+    expect(screen.getByText("Your filters are kept.")).toBeVisible();
   });
 
   it("shows Include hidden results disabled with its reason", async () => {
@@ -104,17 +122,26 @@ describe("a settled request", () => {
 });
 
 describe("other states", () => {
-  it.each([404, 400])("a %i says there is no such request", async (status) => {
-    await openView({ detail: () => HttpResponse.json({}, { status }) });
-    expect(await screen.findByText("No such request.", {}, MAX_WAIT)).toBeVisible();
-    expect(screen.queryByRole("region", { name: /returned$/ })).toBeNull();
-  });
+  it.each([404, 400])(
+    "a %i says there is no such request, as a plain state with a way back",
+    async (status) => {
+      await openView({ detail: () => HttpResponse.json({}, { status }) });
+      const title = await screen.findByText("No such request", {}, MAX_WAIT);
+      expect(title.closest('[role="alert"]')).toBeNull();
+      expect(
+        screen.getByText(
+          "There is no request with this ID. It may be mistyped, or from another site.",
+        ),
+      ).toBeVisible();
+      expect(screen.queryByRole("region", { name: /returned$/ })).toBeNull();
+      expect(screen.getAllByRole("link", { name: "Back to audit log" }).length).toBeGreaterThan(0);
+    },
+  );
 
-  it("a 403 says access is missing", async () => {
+  it("a server 403 says access is missing", async () => {
     await openView({ detail: () => HttpResponse.json({}, { status: 403 }) });
-    expect(
-      await screen.findByText("You do not have access to the audit log.", {}, MAX_WAIT),
-    ).toBeVisible();
+    const title = await screen.findByText("You can't read the audit log", {}, MAX_WAIT);
+    expect(title.closest('[role="alert"]')).not.toBeNull();
   });
 
   it("a server error offers Try again, which fetches once more", async () => {
@@ -125,7 +152,7 @@ describe("other states", () => {
           ? HttpResponse.json({}, { status: 500 })
           : HttpResponse.json(adminDetail202({ values: {} })),
     });
-    const message = await screen.findByText("The request could not be loaded.", {}, MAX_WAIT);
+    const message = await screen.findByText("The request did not load", {}, MAX_WAIT);
     await t.user.click(
       within(message.closest('[role="alert"]') as HTMLElement).getByRole("button", {
         name: "Try again",
@@ -134,12 +161,56 @@ describe("other states", () => {
     await waitFor(() => expect(seen).toHaveLength(2));
   });
 
-  it("an implementer typing the URL lands on Config and fetches nothing", async () => {
+  it("an implementer typing the URL gets the full-page 403 state and fetches nothing", async () => {
     const { seen } = await openView({ role: "implementer" });
-    expect(
-      await screen.findByRole("heading", { name: "Site configuration", level: 2 }, MAX_WAIT),
-    ).toBeVisible();
+    expect(await screen.findByText("You can't read the audit log", {}, MAX_WAIT)).toBeVisible();
     expect(seen).toHaveLength(0);
+  });
+
+  it("opening under StrictMode still sends one request (one adminViewed row)", async () => {
+    const user = { ...TEST_USER, role: "admin" };
+    const seen: URL[] = [];
+    server.use(
+      http.get(`${API}/api/v1/auth/get-session`, () =>
+        HttpResponse.json({ session: { id: "s1" }, user }),
+      ),
+      http.get(`${API}/api/v1/config`, () => HttpResponse.json(CLIENT_CONFIG)),
+      http.get(`${API}/api/v1/admin/queries/:id`, ({ request }) => {
+        seen.push(new URL(request.url));
+        return HttpResponse.json(adminDetail202({ values: {} }));
+      }),
+    );
+    render(
+      <StrictMode>
+        <Root
+          services={testServices()}
+          clientVersion="0.1.0"
+          createRouter={(routes) =>
+            createMemoryRouter(routes, { initialEntries: [`/admin/queries/${ID}`] })
+          }
+        />
+      </StrictMode>,
+    );
+    await screen.findByText("This view is recorded in the audit log.", {}, MAX_WAIT);
+    await screen.findByRole("heading", { level: 3, name: "Request" }, MAX_WAIT);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("Back returns focus to the request link that was used", async () => {
+    const user = userEvent.setup();
+    const { t } = await openView({ id: ID });
+    await screen.findByRole("region", { name: "State system: returned" }, MAX_WAIT);
+    await t.user.click(screen.getByRole("link", { name: "Back to audit log" }));
+    await screen.findByRole("table", {}, MAX_WAIT);
+    // A first visit through the table: open a request from its row, then come back.
+    const link = screen.getAllByRole("link", { name: /open this request$/ })[0] as HTMLElement;
+    await user.click(link);
+    await screen.findByRole("heading", { level: 2, name: /^Request / }, MAX_WAIT);
+    await t.user.click(screen.getByRole("link", { name: "Back to audit log" }));
+    await screen.findByRole("table", {}, MAX_WAIT);
+    await waitFor(() =>
+      expect(screen.getAllByRole("link", { name: /open this request$/ })[0]).toHaveFocus(),
+    );
   });
 });
 

@@ -1,5 +1,5 @@
 import type { AuditReadRow } from "@querymodule/core/contracts";
-import { formatAckTime, shortReference } from "@querymodule/web-ui";
+import { formatAckTime, shortReference, VisuallyHidden } from "@querymodule/web-ui";
 import { Link } from "react-router";
 import { useT } from "../app/i18n-context.js";
 import { auditDetailRows, isAuditEventType } from "./audit-model.js";
@@ -15,10 +15,13 @@ export function AuditTable({
   rows,
   caption,
   busy,
+  onOpenRequest,
 }: {
   rows: readonly AuditReadRow[];
   caption: string;
   busy: boolean;
+  /** A request link was used: the page remembers it so Back can return focus to it. */
+  onOpenRequest(correlationId: string): void;
 }) {
   const t = useT();
   const none = t("admin.audit.none");
@@ -56,6 +59,9 @@ export function AuditTable({
         <tbody>
           {rows.map((row) => {
             const details = auditDetailRows(row.details);
+            const eventLabel = isAuditEventType(row.type)
+              ? t(`admin.audit.type.${row.type}`)
+              : row.type;
             return (
               <tr key={row.id}>
                 <td className="qm-audit__cell">
@@ -63,9 +69,7 @@ export function AuditTable({
                     {formatAckTime(row.at)}
                   </time>
                 </td>
-                <td className="qm-audit__cell">
-                  {isAuditEventType(row.type) ? t(`admin.audit.type.${row.type}`) : row.type}
-                </td>
+                <td className="qm-audit__cell">{eventLabel}</td>
                 <td className="qm-audit__cell">
                   <span>{row.actor.email ?? t("admin.audit.system")}</span>{" "}
                   <span className="qm-badge">{roleLabel(row.actor.role, t)}</span>
@@ -79,18 +83,34 @@ export function AuditTable({
                   {row.correlationId === undefined ? (
                     none
                   ) : (
-                    <Link className="qm-audit__request" to={`/admin/queries/${row.correlationId}`}>
+                    <Link
+                      className="qm-audit__request"
+                      to={`/admin/queries/${row.correlationId}`}
+                      data-request-id={row.correlationId}
+                      onClick={() => onOpenRequest(row.correlationId as string)}
+                    >
                       {shortReference(row.correlationId)}
+                      <VisuallyHidden>{t("admin.audit.openRequest")}</VisuallyHidden>
                     </Link>
                   )}
                 </td>
-                <td className="qm-audit__cell qm-audit__owner">{row.credentialUserId ?? none}</td>
+                <td className="qm-audit__cell qm-audit__owner qm-audit__mono">
+                  {row.credentialUserId ?? none}
+                </td>
                 <td className="qm-audit__cell">
                   {details.length === 0 ? (
                     t("admin.audit.noDetails")
                   ) : (
                     <details className="qm-audit__details">
-                      <summary>{t("admin.audit.details", { count: details.length })}</summary>
+                      <summary>
+                        {t("admin.audit.details", { count: details.length })}{" "}
+                        <VisuallyHidden>
+                          {t("admin.audit.detailsFor", {
+                            event: eventLabel,
+                            time: formatAckTime(row.at),
+                          })}
+                        </VisuallyHidden>
+                      </summary>
                       <dl className="qm-audit__list">
                         {details.map((d) => (
                           <div key={d.key}>

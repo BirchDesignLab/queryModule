@@ -95,6 +95,8 @@ export interface RequestListProps {
    * officer layout stacks it under the form, G11). Never moves focus.
    */
   revealOnSend?: boolean;
+  /** The list heading's level: 2 on the query screen, 3 where a page heading sits above it (admin request view). */
+  headingLevel?: 2 | 3;
   t(key: string, params?: Readonly<Record<string, string | number | boolean>>): string;
 }
 
@@ -155,8 +157,10 @@ export function RequestList({
   onRetry,
   onEditAsNew,
   revealOnSend = false,
+  headingLevel = 2,
   t,
 }: RequestListProps): JSX.Element {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   const headingId = useId();
   const sectionRef = useRef<HTMLElement>(null);
   const newest = rows[0];
@@ -263,9 +267,9 @@ export function RequestList({
       data-shortcut-context="results"
     >
       <div className="qm-requests__head">
-        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
+        <Heading id={headingId} ref={headingRef} tabIndex={-1} className="qm-requests__heading">
           {heading}
-        </h2>
+        </Heading>
         {countText === undefined ? null : <p className="qm-requests__count">{countText}</p>}
       </div>
       {rows.length === 0 ? (
