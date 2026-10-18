@@ -101,7 +101,15 @@ test("dispatcher shots: query panel, request status, critical card, detail table
   page,
 }) => {
   // Hold the national system's status back, so the request is shown with one source settled.
+  // The sources answer in a random order. The feed client drops an event at or below the highest
+  // seq it has seen (feed-socket.ts), so a held frame that is older than one already delivered
+  // would be dropped when released (the national system answered first, #678). Then the release
+  // closes the page's socket instead: the client reconnects and refetches what is pending over HTTP.
+  // `held`, `highSeq` and `release` are shared by every connection the page opens: a lower-seq frame
+  // from any of them takes the same path, so a reconnect while holding still ends right.
+  const seqOf = (message: string): number => Number(/"seq":\s*(\d+)/.exec(message)?.[1] ?? 0);
   let holding = true;
+  let highSeq = 0;
   const held: string[] = [];
   let release: (() => void) | undefined;
   await page.routeWebSocket("**/api/v1/ws", (ws) => {
@@ -116,10 +124,16 @@ test("dispatcher shots: query panel, request status, critical card, detail table
         held.push(message);
         return;
       }
+      if (typeof message === "string") highSeq = Math.max(highSeq, seqOf(message));
       ws.send(message);
     });
     release = () => {
-      for (const m of held.splice(0)) ws.send(m);
+      const frames = held.splice(0);
+      if (frames.some((m) => seqOf(m) <= highSeq)) {
+        // Both sides: this route's own onClose turns off the automatic close of the server side.
+        void server.close({ code: 1000 });
+        void ws.close({ code: 1012 });
+      } else for (const m of frames) ws.send(m);
     };
     ws.onMessage((message) => server.send(message));
     ws.onClose((code, reason) => void server.close({ code, reason }));

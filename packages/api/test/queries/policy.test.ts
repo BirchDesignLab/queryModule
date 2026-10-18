@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import type { Role } from "@querymodule/core/contracts";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "../../src/db/client";
 import { runMigrations } from "../../src/db/migrate";
 import { withTransaction } from "../../src/db/tx";
@@ -16,6 +16,9 @@ const ADMIN = "0199a0b0-0000-7000-8000-0000000000ad";
 const OFFICER = "0199a0b0-0000-7000-8000-0000000000cf";
 const RESULT_OWN = "0199a0b0-0000-7000-8000-0000000000e1";
 const RESULT_DELEGATED = "0199a0b0-0000-7000-8000-0000000000e2";
+// A second request: B's own, run on B's own stored credential (credential_user_id is B, not null).
+const CID_B = "01890a5d-ac96-774b-bcce-b302099a8059";
+const RESULT_B_OWN_CRED = "0199a0b0-0000-7000-8000-0000000000e3";
 
 function principal(userId: string, role: Role): Principal {
   return {
@@ -53,8 +56,26 @@ async function seeded(): Promise<Db> {
       args: [resultId, CID, sourceId, USER_A, credentialUserId],
     });
   }
+  await db.$client.execute({
+    sql: `INSERT INTO query_request (correlation_id, part_id, user_id, origin, query_type, type_values,
+      plate_only, selected_source_ids, dropped_source_ids, config_hash, idempotency_key, submitted_at)
+      VALUES (?, 0, ?, 'primary', 'vehicle', '{}', 0, '["s1"]', '[]', 'h1', 'idem-2', 2)`,
+    args: [CID_B, USER_B],
+  });
+  await db.$client.execute({
+    sql: `INSERT INTO source_result (result_id, correlation_id, part_id, source_id, user_id, status,
+      credential_user_id, adapter_kind, created_at) VALUES (?, ?, 0, 's1', ?, 'pending', ?, 'mock', 2)`,
+    args: [RESULT_B_OWN_CRED, CID_B, USER_B, USER_B],
+  });
   return db;
 }
+
+// The policy only reads, so one migrated database serves every case (a fresh one per case cost a
+// migration run each, #317).
+let shared: Db;
+beforeAll(async () => {
+  shared = await seeded();
+});
 
 type Case = [string, Principal, string, QueryAction, AccessRoute, unknown];
 const NO = { ok: false };
@@ -87,6 +108,30 @@ const cases: Case[] = [
   ["officer reads on own", O, CID, "read", "own", NO],
   ["owner without a credential row reads on delegated", A, CID, "read", "delegated", NO],
   ["admin reads on delegated", ADMIN_P, CID, "read", "delegated", NO],
+  [
+    "a user who ran on their own stored credential reads it on delegated",
+    B,
+    CID_B,
+    "read",
+    "delegated",
+    { ok: true, basis: "credentialOwner", resultIds: [RESULT_B_OWN_CRED] },
+  ],
+  [
+    "a user who ran on their own stored credential cannot hide on delegated",
+    B,
+    CID_B,
+    "hide",
+    "delegated",
+    NO,
+  ],
+  [
+    "another user cannot read an own-credential request on delegated",
+    A,
+    CID_B,
+    "read",
+    "delegated",
+    NO,
+  ],
   ["malformed id on own", A, "x", "read", "own", NO],
   ["malformed id on admin", ADMIN_P, "x", "read", "admin", NO],
   ["malformed id on delegated", O, "x", "read", "delegated", NO],
@@ -98,18 +143,17 @@ const cases: Case[] = [
 
 describe("SEC-014 one access policy (spec 5.2)", () => {
   it.each(cases)("%s", async (_name, p, cid, action, route, expected) => {
-    const db = await seeded();
-    expect(await authorizeQueryAccess(db, p, cid, action, route)).toEqual(expected);
+    expect(await authorizeQueryAccess(shared, p, cid, action, route)).toEqual(expected);
   });
 
   it("an unrecognized route is refused (FR-062)", async () => {
-    const db = await seeded();
+    const db = shared;
     const route = "public" as unknown as AccessRoute;
     expect(await authorizeQueryAccess(db, A, CID, "read", route)).toEqual(NO);
   });
 
   it("works inside a transaction and writes nothing (FR-063, SEC-011)", async () => {
-    const db = await seeded();
+    const db = shared;
     const count = async () =>
       (
         await db.$client.execute(
