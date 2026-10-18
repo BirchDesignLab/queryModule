@@ -3,7 +3,9 @@ import type * as Builders from "../builders";
 
 /**
  * Scenario table for the example-ok site (spec 5.4). It extends the default site, so it carries
- * the same mock sources, but demos fewer scenarios: no PRO serial trigger and no MISSING person.
+ * the same mock sources. It answers one hit per query type, so every mapping path resolves
+ * (`config:validate` warns for a path no mock answer carries, spec 4.5), but demos fewer triggers
+ * than the default site.
  */
 export const site = (b: typeof Builders): MockFile => {
   const none = { status: "NO RECORD" };
@@ -29,9 +31,30 @@ export const site = (b: typeof Builders): MockFile => {
               { when: { plate: "FAIL1" }, behavior: "error" },
             ],
           },
-          { queryType: "PER", default: none, scenarios: [] },
-          { queryType: "PRO", default: none, scenarios: [] },
-          { queryType: "DL", default: none, scenarios: [] },
+          {
+            queryType: "PER",
+            default: none,
+            scenarios: [
+              { when: { last: "EXAMPLESON", first: "SAMPLE" }, respond: b.personRecord({ n: 3 }) },
+            ],
+          },
+          {
+            queryType: "PRO",
+            default: none,
+            scenarios: [
+              { when: { serial: "ZZSTOLEN1" }, respond: b.propertyRecord({ serial: "ZZSTOLEN1" }) },
+            ],
+          },
+          {
+            queryType: "DL",
+            default: none,
+            scenarios: [
+              {
+                when: { licenseNumber: "ZZDLTEST" },
+                respond: b.licenseRecord({ licenseNumber: "ZZDLTEST", n: 1 }),
+              },
+            ],
+          },
         ],
       },
       nationalSource: {
@@ -49,11 +72,20 @@ export const site = (b: typeof Builders): MockFile => {
             ],
           },
           { queryType: "PER", default: none, scenarios: [] },
-          { queryType: "PRO", default: none, scenarios: [] },
+          {
+            queryType: "PRO",
+            default: none,
+            scenarios: [
+              { when: { serial: "ZZSTOLEN1" }, respond: b.propertyRecord({ serial: "ZZSTOLEN1" }) },
+            ],
+          },
           {
             queryType: "WNT",
             default: { status: "NO WANTS OR WARRANTS" },
-            scenarios: [{ when: { last: "WANTED" }, respond: b.warrantRecord({ n: 1 }) }],
+            scenarios: [
+              { when: { last: "WANTED" }, respond: b.warrantRecord({ n: 1 }) },
+              { when: { last: "MISSING" }, respond: b.missingRecord({ n: 3 }) },
+            ],
           },
           { queryType: "DL", default: none, scenarios: [] },
         ],

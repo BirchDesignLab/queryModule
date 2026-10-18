@@ -40,7 +40,20 @@
             "status": "NO RECORD"
           },
           "queryType": "PRO",
-          "scenarios": []
+          "scenarios": [
+            {
+              "respond": {
+                "description": "SAMPLE ELECTRONICS",
+                "propertyType": "ELECTRONICS",
+                "remarks": "STOLEN PROPERTY",
+                "serial": "ZZSTOLEN1",
+                "status": "STOLEN"
+              },
+              "when": {
+                "serial": "ZZSTOLEN1"
+              }
+            }
+          ]
         },
         {
           "default": {
@@ -65,6 +78,20 @@
               },
               "when": {
                 "last": "WANTED"
+              }
+            },
+            {
+              "respond": {
+                "remarks": "MISSING PERSON",
+                "status": "MISSING PERSON",
+                "subject": {
+                  "dob": "1901-01-03",
+                  "first": "TEST",
+                  "last": "EXAMPLESON"
+                }
+              },
+              "when": {
+                "last": "MISSING"
               }
             }
           ]
@@ -130,21 +157,65 @@
             "status": "NO RECORD"
           },
           "queryType": "PER",
-          "scenarios": []
+          "scenarios": [
+            {
+              "respond": {
+                "address": "3 Example Ave",
+                "remarks": "NO ALERTS",
+                "status": "RECORD FOUND",
+                "subject": {
+                  "dob": "1901-01-03",
+                  "first": "SAMPLE",
+                  "last": "EXAMPLESON"
+                }
+              },
+              "when": {
+                "first": "SAMPLE",
+                "last": "EXAMPLESON"
+              }
+            }
+          ]
         },
         {
           "default": {
             "status": "NO RECORD"
           },
           "queryType": "PRO",
-          "scenarios": []
+          "scenarios": [
+            {
+              "respond": {
+                "description": "SAMPLE ELECTRONICS",
+                "propertyType": "ELECTRONICS",
+                "remarks": "STOLEN PROPERTY",
+                "serial": "ZZSTOLEN1",
+                "status": "STOLEN"
+              },
+              "when": {
+                "serial": "ZZSTOLEN1"
+              }
+            }
+          ]
         },
         {
           "default": {
             "status": "NO RECORD"
           },
           "queryType": "DL",
-          "scenarios": []
+          "scenarios": [
+            {
+              "respond": {
+                "dob": "1901-01-01",
+                "first": "SAMPLE",
+                "last": "TESTERSON",
+                "licenseNumber": "ZZDLTEST",
+                "state": "TX",
+                "status": "VALID"
+              },
+              "when": {
+                "licenseNumber": "ZZDLTEST"
+              }
+            }
+          ]
         }
       ]
     }
