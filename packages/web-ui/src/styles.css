@@ -765,12 +765,16 @@ h1 {
   }
 
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-request__meta {
-    column-gap: var(--qm-space-2);
+    column-gap: var(--qm-space-1);
     font-size: var(--qm-type-size-xs);
   }
 
+  /* The button's inset shrinks with the gap and its pull-back follows, so its label still starts
+     where the text above it does (polish 2) and sent, reference and Copy reference share one row. */
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-request__meta .qm-button--ghost {
     font-size: var(--qm-type-size-sm);
+    padding-inline: var(--qm-space-1);
+    margin-inline-start: calc(-1 * (var(--qm-space-1) + var(--qm-border-width)));
   }
 }
 
@@ -1529,6 +1533,8 @@ h1 {
 .qm-mark {
   display: inline-flex;
   align-items: center;
+  /* Words after the badge sit on its middle, not a few pixels below it (#651). */
+  vertical-align: middle;
   /* The icon, the word and the marker read as one badge. */
   max-inline-size: 100%;
   gap: var(--qm-space-1);

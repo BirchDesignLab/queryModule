@@ -66,6 +66,37 @@ describe("#680 N1: one canonical form in the saved entry", () => {
     expect(fresh).toContain("..2026");
   });
 
+  it("a fresh entry with the default State typed and the reloaded row read the same", () => {
+    const fresh = savedEntryCommand(
+      CLIENT_CONFIG,
+      "VEH",
+      { plate: "ZZ-0001", state: "TX", year: "26" },
+      NOW,
+    );
+    const reloaded = rowSummary(
+      CLIENT_CONFIG,
+      "VEH",
+      "",
+      { plate: "ZZ-0001", state: "TX", year: "2026" },
+      NOW,
+    );
+    expect(fresh).toBe(reloaded);
+    expect(fresh).not.toContain("TX");
+  });
+
+  it("a request typed with the NAM alias and the same request rebuilt after a reload read the same (ruling B)", () => {
+    const values = { last: "TESTERSON", first: "SAMPLE" };
+    const fresh = savedEntryCommand(CLIENT_CONFIG, "PER", values, NOW);
+    expect(fresh).toBe("PER.TESTERSON.SAMPLE");
+    expect(rowSummary(CLIENT_CONFIG, "PER", "", values, NOW)).toBe(fresh);
+  });
+
+  it("a State that is not the default stays in the fresh entry", () => {
+    expect(savedEntryCommand(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", state: "OK" }, NOW)).toBe(
+      "VEH.ZZ-0001.OK",
+    );
+  });
+
   it("the command echo of the form still keeps the year as typed (R11, input only)", () => {
     expect(
       formToTerminal(CLIENT_CONFIG, "VEH", { plate: "ZZ-0001", year: "26" }, NOW).text,

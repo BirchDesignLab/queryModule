@@ -1,6 +1,5 @@
-import { type DraftValue, toCoreDraft } from "@querymodule/client";
+import type { DraftValue } from "@querymodule/client";
 import { type ClientSiteConfig, configuredDefault } from "@querymodule/core/config";
-import { formatCommand, tokenize } from "@querymodule/core/terminal";
 import { formToTerminal } from "./form-to-terminal.js";
 
 /**
@@ -19,6 +18,19 @@ export function rowSummary(
 ): string {
   if (kept !== "") return kept;
   if (values === undefined) return "";
+  return formToTerminal(config, queryType, userEntered(config, queryType, values), now, false).text;
+}
+
+/**
+ * What the user entered, from values that may include the site's defaults: a value equal to the
+ * site default is left out, and a value a command cannot show (an object) is skipped. Shared by a
+ * row rebuilt after a reload and the entry for what was just sent, so the two read the same.
+ */
+function userEntered(
+  config: ClientSiteConfig,
+  queryType: string,
+  values: Readonly<Record<string, unknown>>,
+): Record<string, DraftValue> {
   const draft: Record<string, DraftValue> = {};
   const type = config.queryTypes.find((q) => q.code === queryType);
   for (const [key, value] of Object.entries(values)) {
@@ -38,26 +50,20 @@ export function rowSummary(
       continue;
     draft[key] = text;
   }
-  return formToTerminal(config, queryType, draft, now, false).text;
+  return draft;
 }
 
 /**
  * The command a request entry shows for what this browser just sent: the canonical form, the same
- * one a row rebuilt after a reload shows (#680 N1). The input keeps what was typed; the saved entry
- * does not.
+ * one a row rebuilt after a reload shows. Canonical means the four-digit year (#680 N1) and the
+ * command code the config selects for the values (an alias typed as NAM reads PER), without the
+ * site defaults (ruled 10-18-26, N1 and its extension B). The input keeps what was typed.
  */
 export function savedEntryCommand(
   config: ClientSiteConfig,
   queryType: string,
   values: Readonly<Record<string, DraftValue>>,
   now: number,
-  /** The command line as typed (terminal mode): its command code is kept, so NAM stays NAM (G31). */
-  typed?: string,
 ): string {
-  const code = typed === undefined ? undefined : tokenize(config, typed).commandCode;
-  if (code !== undefined) {
-    const formatted = formatCommand(config, code, toCoreDraft(values), { now });
-    if (formatted.text !== "") return formatted.text;
-  }
-  return formToTerminal(config, queryType, values, now, false).text;
+  return formToTerminal(config, queryType, userEntered(config, queryType, values), now, false).text;
 }

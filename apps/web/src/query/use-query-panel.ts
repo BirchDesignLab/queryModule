@@ -549,13 +549,7 @@ export function useQueryPanel(source: QueryPanelSource): ReadyQueryPanel | null 
           // rebuilds; what was typed stays in the input (#680 N1). The typed text is the fallback
           // for a type with no command.
           summary:
-            savedEntryCommand(
-              config,
-              request.queryType,
-              request.values,
-              Date.now(),
-              request.typed,
-            ) ||
+            savedEntryCommand(config, request.queryType, request.values, Date.now()) ||
             (request.typed?.trim() ?? ""),
           submitted,
           idempotencyKey,

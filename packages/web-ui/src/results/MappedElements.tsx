@@ -17,18 +17,26 @@ export interface MappedElementsProps {
 
 /**
  * A keyword mark of this many characters or more does not fit one grid column of a card (140 px
- * tracks): its item spans two, so the badge keeps to one line (R8, "NO WANTS OR WARRANTS").
+ * tracks): its item spans two, so the badge keeps to one line (R8, "NO WANTS OR WARRANTS"). So does
+ * a shorter mark whose value carries more words after it ("STOLEN VEHICLE"): in one column the
+ * words would drop under the badge (#651).
  */
 const LONG_MARK_CHARS = 12;
 
 const hasLongMark = (
   e: { value: string; highlight: boolean },
   keywords: readonly KeywordStyle[],
-): boolean =>
-  e.highlight &&
-  segmentsOf(e.value, keywords).some(
-    (segment) => segment.severity !== undefined && segment.text.length >= LONG_MARK_CHARS,
+): boolean => {
+  if (!e.highlight) return false;
+  const segments = segmentsOf(e.value, keywords);
+  const marked = segments.some((segment) => segment.severity !== undefined);
+  return (
+    segments.some(
+      (segment) => segment.severity !== undefined && segment.text.length >= LONG_MARK_CHARS,
+    ) ||
+    (marked && e.value.trim().length >= LONG_MARK_CHARS)
   );
+};
 
 const labelOf = (label: { key: string } | { text: string }, t: ResultT): string =>
   "key" in label ? t(label.key) : label.text;

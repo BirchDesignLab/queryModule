@@ -22,5 +22,6 @@ shipped config back, see `admin-draft.ts`).
   sizes (1366x768 and 1024x768) so a clipped or wrapped control fails the run.
 - **Shot specs are not tests.** `visual-shots`, `gap-shots`, `polish-shots` and `brief-shots` skip
   unless their `*_SHOTS_DIR` variable is set (see each file's header); they only look.
-- **Builder helpers are shared** from `builder-helpers.ts` (`openBuilder`, `selectRow`, `tree`,
-  `editor`, `preview`): add to it instead of copying a helper into a spec.
+- **Builder helpers are shared** from `builder-helpers.ts` (`tree`, `editor`, `preview`,
+  `openSiteConfiguration`, `selectRow`, `selectCard`): add to it instead of copying a helper into a
+  spec.

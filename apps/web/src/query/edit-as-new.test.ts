@@ -181,6 +181,10 @@ describe("humanizeKey (#651 F3)", () => {
     expect(humanizeKey("vin_number")).toBe("vin number");
     expect(humanizeKey("VIN")).toBe("VIN");
     expect(humanizeKey("year")).toBe("year");
+    expect(humanizeKey("plateVIN")).toBe("plate VIN");
+    expect(humanizeKey("VIN_NUMBER")).toBe("VIN number");
+    expect(humanizeKey("SERIAL")).toBe("serial");
+    expect(humanizeKey("VINNumber")).toBe("VIN number");
   });
 });
 

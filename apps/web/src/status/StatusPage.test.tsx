@@ -96,7 +96,7 @@ async function statusReady() {
 }
 
 describe("the status page: Connection, Configuration, Session and App tiles", () => {
-  it("focuses the h1 on navigation and lays out three ruled sections with their own h2", async () => {
+  it("focuses the h1 on navigation and lays out four ruled sections with their own h2", async () => {
     await openStatus(autoHeartbeatSocket());
     const h1 = await screen.findByRole("heading", { level: 1, name: "Status" });
     expect(h1).toHaveFocus();

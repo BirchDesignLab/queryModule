@@ -232,6 +232,20 @@ describe("R8 a long keyword mark keeps its badge on one line", () => {
     );
   });
 
+  it("#651 a short mark followed by more words spans two columns, so the badge and its words share a line", () => {
+    render(
+      <MappedElements
+        elements={elements("WANTED SUBJECT")}
+        keywords={keywords}
+        styles={STYLES}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("Status").closest(".qm-result-list__item")).toHaveClass(
+      "qm-result-list__item--wide",
+    );
+  });
+
   it("a short mark and plain text take one column", () => {
     render(
       <MappedElements elements={elements("WANTED")} keywords={keywords} styles={STYLES} t={t} />,

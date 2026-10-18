@@ -112,17 +112,27 @@ export function planEditAsNew(config: ClientSiteConfig, submitted: SubmittedQuer
   };
 }
 
+/** An all-capitals word this short is an acronym (VIN, DOB, ID, SSN) and keeps its capitals. */
+const ACRONYM_MAX = 3;
+
 /**
- * A key as words, for a dropped field the new config has no label for ("plateColor" reads "plate
- * color", "owner.last" "owner last"). Runs of capitals (VIN) are kept whole.
+ * A key as words, for a dropped field the new config has no label for: "plateColor" reads "plate
+ * color", "owner.last" "owner last", "plateVIN" "plate VIN" and "VIN_NUMBER" "VIN number". Words
+ * split at separators and at a lower-to-upper step; an all-capitals word of up to three letters is
+ * kept, any other word is lower case.
  */
 export function humanizeKey(key: string): string {
-  if (key === key.toUpperCase()) return key;
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[._-]+/g, " ")
-    .trim()
-    .toLowerCase();
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[\s._-]+/)
+    .filter((word) => word !== "")
+    .map((word) =>
+      word.length <= ACRONYM_MAX && word === word.toUpperCase() && /[A-Z]/.test(word)
+        ? word
+        : word.toLowerCase(),
+    )
+    .join(" ");
 }
 
 /**

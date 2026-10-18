@@ -8,6 +8,13 @@ export const tree = (page: Page) => page.getByRole("navigation", { name: "Config
 export const editor = (page: Page) => page.getByTestId("form-tab");
 export const preview = (page: Page) => page.getByRole("region", { name: "Card preview" });
 
+/** From the signed-in admin's home to Site configuration, by keyboard as a user would. */
+export async function openSiteConfiguration(page: Page): Promise<void> {
+  await page.getByRole("link", { name: "Admin" }).press("Enter");
+  await page.getByRole("link", { name: "Site configuration" }).press("Enter");
+  await expect(page.getByRole("heading", { name: "Site configuration", level: 2 })).toBeVisible();
+}
+
 /** Selects a tree row by its name and waits until it is the selected one. */
 export async function selectRow(page: Page, name: RegExp): Promise<void> {
   const item = tree(page).getByRole("treeitem", { name }).first();

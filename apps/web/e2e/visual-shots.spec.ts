@@ -1,7 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import { editor, preview, selectCard, selectRow, tree } from "./builder-helpers.js";
+import {
+  editor,
+  openSiteConfiguration,
+  preview,
+  selectCard,
+  selectRow,
+  tree,
+} from "./builder-helpers.js";
 import { expect, test } from "./fixtures.js";
 import { seededUser, signIn } from "./helpers.js";
 
@@ -25,9 +32,7 @@ const WIDTHS = [1366, 1024] as const;
 async function openBuilder(page: Page, width: number): Promise<void> {
   await page.setViewportSize({ width, height: 768 });
   await signIn(page, ADMIN);
-  await page.getByRole("link", { name: "Admin" }).press("Enter");
-  await page.getByRole("link", { name: "Site configuration" }).press("Enter");
-  await expect(page.getByRole("heading", { name: "Site configuration", level: 2 })).toBeVisible();
+  await openSiteConfiguration(page);
 }
 
 async function shot(page: Page, frame: string, width: number, top = false): Promise<void> {
