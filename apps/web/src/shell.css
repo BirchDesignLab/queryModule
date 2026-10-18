@@ -872,7 +872,8 @@ main[tabindex="-1"]:focus {
 /* Where the three panes do not fit in a row (the section is 1024 px or narrower: a 1024 to 1079 px
    window), the tree takes the left column for the whole height and the editor and the preview share
    the right one, so the card preview is in view beside the tree instead of under it, below the fold
-   (re-walk R15). Below 1024 px the page flows as one column and the panes wrap as before. */
+   (re-walk R15). Below 1024 px the page flows as one column and the panes wrap as before. The rail
+   sits beside the section from 864 px, so this grid holds from a 1024 px window up to about 1280 px. */
 @media (min-width: 1024px) {
   @container (max-width: 1024px) {
     .qm-builder__panes {
@@ -880,7 +881,10 @@ main[tabindex="-1"]:focus {
       grid-template-columns: calc(var(--qm-space-12) * 4.25) minmax(0, 1fr);
       /* The editor is where the work happens: it takes the larger share of the column, the preview
          keeps enough for a card. The page does not scroll here (the panes area does): the split is
-         ratios inside the height the section has (re-walk N2, the editor was 240 px). */
+         ratios inside the height the section has (re-walk N2, the editor was 240 px). The two rows
+         need 240 + 168 px: in a window shorter than about 680 px at this width the panes area
+         scrolls inside the page (the preview is cut at its foot), which is accepted over a page
+         that scrolls at the sizes of the demo. */
       grid-template-rows:
         minmax(calc(var(--qm-space-12) * 5), 1.6fr)
         minmax(calc(var(--qm-space-12) * 3.5), 1fr);

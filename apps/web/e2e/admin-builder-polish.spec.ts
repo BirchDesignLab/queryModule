@@ -137,7 +137,11 @@ for (const viewport of [
     await openCard(page, /^Vehicle cards/);
     const editorEl = page.locator(".qm-builder__editor");
     const editor = await box(editorEl);
-    expect(editor.height, "editor height").toBeGreaterThanOrEqual(300);
+    // Not a pixel count that a font or a wrapped status line moves: the editor is usable and takes
+    // the larger share of the column, which is the design (re-walk N2).
+    const previewHeight = (await box(page.getByRole("region", { name: "Card preview" }))).height;
+    expect(editor.height, "editor height").toBeGreaterThanOrEqual(270);
+    expect(editor.height, "editor against the preview").toBeGreaterThan(previewHeight * 1.2);
     // The page does not scroll (the panes area does), and the editor is a bounded scroll area.
     const page_ = await page.evaluate(() => {
       const root = document.scrollingElement as Element;
