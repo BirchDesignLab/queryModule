@@ -5,7 +5,6 @@ import { createAuthMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins";
 import type { Db } from "../db/client";
 import { authSchema } from "../db/schema";
-import { SWEEP_INTERVAL_MS } from "../dispatch/sweeper";
 import type { DeployEnv } from "../env";
 import { uuidv7 } from "../ids";
 import type { Logger } from "../log/logger";
@@ -25,6 +24,14 @@ export function assertPasswordFloor(min: number): void {
 }
 
 assertPasswordFloor(PASSWORD_MIN_LENGTH);
+
+/**
+ * The margin Better Auth's fixed expiry keeps past the session ceiling (AUD-1, #716 G-M1 ruling):
+ * one day. Identity refuses a session at its live limit, and the sweeper then has a day, not one
+ * sweep interval, to delete it with its sessionRevoked row before Better Auth could delete it
+ * unaudited, so a stalled or failing sweeper still has room to catch up.
+ */
+export const SESSION_EXPIRY_MARGIN_SECONDS = 86_400;
 
 /**
  * bearer()'s own `after` hook (better-auth/dist/plugins/bearer/index.mjs) always copies the
@@ -210,11 +217,12 @@ export function createAuth(o: { db: Db; env: DeployEnv; secret: string; log?: Lo
       minPasswordLength: PASSWORD_MIN_LENGTH,
     },
     session: {
-      // AUD-1 (D-M2P2-2, #716): Better Auth's expiry is fixed one sweep interval past the session
-      // ceiling, strictly later than every absolute limit config:validate allows. Identity enforces
-      // the live absolute and idle limits on every request and the sweeper owns expiry with its
-      // sessionRevoked row, so Better Auth never deletes a session first, unaudited.
-      expiresIn: SESSION_CEILING_MINUTES * 60 + SWEEP_INTERVAL_MS / 1000,
+      // AUD-1 (D-M2P2-2, #716): Better Auth's expiry is fixed one day past the session ceiling,
+      // later than every absolute limit config:validate allows. Identity enforces the live
+      // absolute and idle limits on every request and the sweeper owns expiry with its
+      // sessionRevoked row; the day's margin gives it room to write that row before Better Auth
+      // could delete the session unaudited.
+      expiresIn: SESSION_CEILING_MINUTES * 60 + SESSION_EXPIRY_MARGIN_SECONDS,
       disableSessionRefresh: true,
       // Cookie cache off so a revoked session is rejected immediately, not after its cache TTL.
       cookieCache: { enabled: false },

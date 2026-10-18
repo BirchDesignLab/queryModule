@@ -70,17 +70,17 @@ describe("SEC-005 Better Auth", () => {
     expect(r.status).not.toBe(200);
   });
 
-  it("AUD-1: sets session expiry one sweep after the fixed ceiling and stores UUIDv7 ids", async () => {
+  it("AUD-1: sets session expiry one day after the fixed ceiling and stores UUIDv7 ids", async () => {
     const { signIn, db } = await setup();
     await signIn("correct-horse-battery-1");
     const row = (await db.$client.execute("SELECT id, created_at, expires_at FROM session"))
       .rows[0];
-    // Strictly later than every allowed absolute limit (D-M2P2-2, #716 ruling): the live limits
-    // and the sweeper always end a session first, with its sessionRevoked row.
-    expect(Number(row?.expires_at) - Number(row?.created_at)).toBeCloseTo(
-      SESSION_CEILING_MINUTES * 60_000 + SWEEP_INTERVAL_MS,
-      -4,
-    );
+    // A day past every allowed absolute limit (D-M2P2-2, #716 G-M1 ruling): the live limits end
+    // the session first and the sweeper has a day to write its sessionRevoked row, far more than
+    // one sweep interval, before Better Auth could delete the row unaudited.
+    const lifetimeMs = Number(row?.expires_at) - Number(row?.created_at);
+    expect(lifetimeMs).toBeCloseTo(SESSION_CEILING_MINUTES * 60_000 + 86_400_000, -4);
+    expect(lifetimeMs).toBeGreaterThan(SESSION_CEILING_MINUTES * 60_000 + SWEEP_INTERVAL_MS);
     expect(String(row?.id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
   });
 
