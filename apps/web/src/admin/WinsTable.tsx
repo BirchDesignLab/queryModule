@@ -98,7 +98,7 @@ export function WinsTable({
     return (
       <>
         <span className="qm-wins__score">{t("admin.cards.wins.score", { score: w.score })}</span>
-        {`, ${parts.join(", ")}`}
+        {t("admin.cards.wins.scoreWhy", { why: parts.join(", ") })}
       </>
     );
   };

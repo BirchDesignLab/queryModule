@@ -68,6 +68,16 @@ for (const size of SIZES) {
       await table.scrollIntoViewIfNeeded();
       for (const th of await table.locator("thead th").all())
         expect(await lines(th), `heading "${await th.innerText()}"`).toBe(1);
+      // The new heading style adds no sideways scroll to the table or the pane around it.
+      const overflow = await table.evaluate((el) => {
+        const pane = el.closest(".qm-builder__editor") ?? el;
+        return {
+          table: el.scrollWidth - el.clientWidth,
+          pane: pane.scrollWidth - pane.clientWidth,
+        };
+      });
+      expect(overflow.table, "the table scrolls sideways").toBeLessThanOrEqual(1);
+      expect(overflow.pane, "the editor scrolls sideways").toBeLessThanOrEqual(1);
       const score = table.locator("tbody .qm-wins__score").first();
       await expect(score).toHaveText(/^score \d+$/);
       expect(await family(score)).toMatch(/mono/i);
@@ -113,12 +123,24 @@ for (const size of SIZES) {
   });
 }
 
-test("[#680 N2] at 1024 the editor pane keeps a usable height", async ({ page }) => {
+test("[#680 N2] at 1024 the editor keeps a usable height, scrolls inside, and the preview stays in view", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await signIn(page, ADMIN);
   await page.goto("/admin/config");
   await expect(page.getByTestId("draft-status")).toContainText("Draft, based on version");
   await openCard(page, /^Vehicle cards/);
-  const editor = await box(page.locator(".qm-builder__editor"));
+  const editorEl = page.locator(".qm-builder__editor");
+  const editor = await box(editorEl);
   expect(editor.height, "editor height").toBeGreaterThanOrEqual(300);
+  // The pane is a bounded scroll area (a card's rows are longer than it): not grown to its content.
+  const scroll = await editorEl.evaluate((el) => ({
+    content: el.scrollHeight,
+    shown: el.clientHeight,
+  }));
+  expect(scroll.content, "the editor scrolls inside its pane").toBeGreaterThan(scroll.shown);
+  // The preview sits under the editor, with its top in the first screen (re-walk R15).
+  const preview = await box(page.getByRole("region", { name: "Card preview" }));
+  expect(preview.y, "preview top").toBeLessThan(768);
 });

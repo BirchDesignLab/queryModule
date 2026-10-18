@@ -887,9 +887,10 @@ main[tabindex="-1"]:focus {
       min-block-size: calc(var(--qm-space-12) * 11.5);
     }
 
+    /* The builder stays a definite height (the panes scroll inside it), with a floor high enough for
+       the heading, the toolbar and the panes' own floor: a short window scrolls the page. */
     .qm-builder {
-      block-size: auto;
-      min-block-size: max(
+      block-size: max(
         calc(
           100dvh -
           var(--qm-control-height-dense) -
@@ -898,7 +899,7 @@ main[tabindex="-1"]:focus {
           var(--qm-space-4) *
           2
         ),
-        calc(var(--qm-space-12) * 10)
+        calc(var(--qm-space-12) * 16)
       );
     }
 
@@ -2446,6 +2447,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 /* A badge is one word or phrase: it never breaks inside itself, the sample wraps between badges. */
 .qm-kw__sample .qm-mark {
   white-space: nowrap;
+  overflow-x: clip;
 }
 
 .qm-kw__sample {
