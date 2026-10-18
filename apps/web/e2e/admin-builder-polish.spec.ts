@@ -105,6 +105,55 @@ for (const size of SIZES) {
       ).toBeLessThanOrEqual(4);
     });
 
+    // (d): the controls of the toolbar are one row, as the mockup draws them; wrapping is a defect.
+    test("[#698 (d)] the toolbar's controls share one row, and it names the version it publishes", async ({
+      page,
+    }) => {
+      const bar = page.locator(".qm-builder__toolbar");
+      const centers = await bar.evaluate((el) =>
+        [...el.children]
+          .filter((c) => c.matches("button, [role=tablist]") && c.getClientRects().length > 0)
+          .map((c) => {
+            const r = c.getBoundingClientRect();
+            return Math.round(r.top + r.height / 2);
+          }),
+      );
+      expect(centers.length, "toolbar controls").toBeGreaterThanOrEqual(6);
+      expect(
+        Math.max(...centers) - Math.min(...centers),
+        `control centers ${centers}`,
+      ).toBeLessThanOrEqual(4);
+      // Nothing to publish yet: the line under the buttons says so. The version line is in a unit test.
+      await expect(bar.getByRole("button", { name: "Review and publish" })).toHaveAccessibleDescription(
+        /^(Nothing to publish|Publishes version \d+ to every open screen)/,
+      );
+    });
+
+    // (g): nothing in the builder is cut off by an ellipsis (or clipped), at the two demo sizes.
+    for (const [label, open] of [
+      ["a card", (page: Page) => openCard(page, /^Wanted check cards/)],
+      ["the keywords", (page: Page) => selectRow(page, /^Keywords and severity/)],
+      ["a mock response", (page: Page) => selectRow(page, /^Vehicle VEH|^Mock response: Vehicle/)],
+    ] as const)
+      test(`[#698 (g)] no text is cut off by an ellipsis: ${label}`, async ({ page }) => {
+        await open(page);
+        const cut = await page.locator(".qm-builder__scope, .qm-builder").first().evaluate((root) => {
+          const out: string[] = [];
+          for (const el of root.querySelectorAll<HTMLElement>("*")) {
+            const style = getComputedStyle(el);
+            // A visually hidden or clipped-away helper (the skip links, the words for a screen
+            // reader) is one pixel wide on purpose.
+            if (style.display === "none" || el.clientWidth <= 2) continue;
+            const clips = style.textOverflow === "ellipsis" || style.overflow === "hidden";
+            if (!clips || el.scrollWidth <= el.clientWidth + 1) continue;
+            const text = (el.textContent ?? "").trim();
+            if (text !== "") out.push(`${el.className || el.tagName}: ${text.slice(0, 40)}`);
+          }
+          return out;
+        });
+        expect(cut, "cut off").toEqual([]);
+      });
+
     test("[#698] Keywords: each sample badge stays on one line", async ({ page }) => {
       await selectRow(page, /^Keywords and severity/);
       const sample = page.locator(".qm-kw__sample");

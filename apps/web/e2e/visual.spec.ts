@@ -1827,7 +1827,7 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
     });
   });
 
-  // The heading and toolbar share a row once the section is layout.toolbar wide. The section is the
+  // The heading and toolbar share a row once the section is layout.toolbarRow wide. The section is the
   // window minus its padding (stacked rail) or minus the rail and its padding (rail beside).
   // The section's horizontal padding and the rail's outer width (content, padding, border). The
   // cases are 4 px either side of a threshold and assume no classic scrollbar, which headless
@@ -1835,10 +1835,10 @@ test.describe("Queries at the layout constants (cloud3 item 4)", () => {
   const PAD = 40;
   const RAIL = 241;
   for (const [width, shared] of [
-    [px("layout.toolbar") + PAD - 4, false],
-    [px("layout.toolbar") + PAD + 4, true],
-    [px("layout.toolbar") + PAD + RAIL - 4, false],
-    [px("layout.toolbar") + PAD + RAIL + 4, true],
+    [px("layout.toolbarRow") + PAD - 4, false],
+    [px("layout.toolbarRow") + PAD + 4, true],
+    [px("layout.toolbarRow") + PAD + RAIL - 4, false],
+    [px("layout.toolbarRow") + PAD + RAIL + 4, true],
   ] as const) {
     test(`${width}x768: the toolbar is ${shared ? "beside" : "under"} the heading`, async ({
       page,

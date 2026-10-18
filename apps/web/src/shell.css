@@ -418,7 +418,7 @@ main[tabindex="-1"]:focus {
 }
 
 /* The section is a size container: the builder's heading and toolbar share a row by the section's
-   own width (layout.toolbar), whichever way the rail sits. */
+   own width (layout.toolbarRow), whichever way the rail sits. */
 .qm-admin__main {
   container-type: inline-size;
   flex: 1 1 auto;
@@ -624,7 +624,8 @@ main[tabindex="-1"]:focus {
 /* Admin config builder (Task 32): the builder and the dispatcher preview side by side when there
    is room, stacked otherwise. */
 /* Builder (A2): the section h2 and the toolbar share the first row once the section is
-   layout.toolbar wide, else the toolbar sits under the heading; the panes take the rest.
+   layout.toolbarRow wide, else the toolbar sits under the heading and keeps its controls on one
+   row; the panes take the rest.
    From layout.wide up the section is as tall as the window under the app bar (never under
    a floor, so a short window scrolls the page instead of collapsing the panes); below it the page
    flows as one column (design lead). */
@@ -642,7 +643,7 @@ main[tabindex="-1"]:focus {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 
-@container (min-width: 720px) {
+@container (min-width: 920px) {
   .qm-builder {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
@@ -698,6 +699,13 @@ main[tabindex="-1"]:focus {
 
 .qm-builder__views {
   margin-inline-start: auto;
+}
+
+/* Undo and Redo are icon buttons, as narrow as they are tall, so the controls fit one row in the
+   1024 px section (#698 (d)). */
+.qm-builder__toolbar .qm-mock__icon {
+  inline-size: var(--qm-control-height-dense);
+  padding-inline: 0;
 }
 
 /* Form or JSON: WAI-ARIA tabs drawn as the segmented control (design lead 09-29-26). */
@@ -1085,36 +1093,33 @@ main[tabindex="-1"]:focus {
   font-weight: 600;
 }
 
-/* The row's own text: label, key and issue count share one line (they name the row together) and
-   stay on it: when the pane is narrow the key gives way first and ends in an ellipsis, then the
-   label does (re-walk R17: keys no longer drop to a second line). */
+/* The row's own text: label, key and issue count share one line when they fit. When the pane is
+   narrow the key drops under the label and a long label wraps: nothing ends in an ellipsis that
+   hides what the row is (#698 (g); the full key is also the key's title). */
 .qm-tree__name {
   display: flex;
   flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--qm-space-2);
   min-inline-size: 0;
 }
 
 .qm-tree__label {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   max-inline-size: 100%;
   min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .qm-tree__key {
   flex: 0 1 auto;
   min-inline-size: 0;
   margin-inline-start: auto;
-  overflow: hidden;
   color: var(--qm-color-text-muted);
   font-family: var(--qm-type-family-data);
   font-size: var(--qm-type-size-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* A type's code sits next to its name, small and in mono (mockup v5); the keyword count stays at the end. */
@@ -1140,10 +1145,18 @@ main[tabindex="-1"]:focus {
   content: "+";
 }
 
-/* Issue count per row: the number is visual only; the words are visually hidden in the row name. */
+/* Issue count per row, drawn as a dot (mockup v5): the number is visual only; the words are visually hidden in the row name. */
 .qm-tree__issues {
   flex: none;
-  min-inline-size: var(--qm-space-4);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--qm-space-5);
+  min-block-size: var(--qm-space-5);
+  padding: 0 var(--qm-space-1);
+  border-radius: var(--qm-space-8);
+  letter-spacing: 0;
   text-align: center;
 }
 

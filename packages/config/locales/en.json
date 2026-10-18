@@ -408,6 +408,7 @@
   "admin.config.saved": "Draft saved.",
   "admin.config.saveFailed": "The draft could not be saved. Try again.",
   "admin.config.review": "Review and publish",
+  "admin.config.reviewPublishes": "Publishes version {version} to every open screen.",
   "admin.config.reviewNone": "Nothing to publish: the draft matches the live version.",
   "admin.config.reviewJson": "Fix the Raw JSON before publishing: it does not parse.",
   "admin.config.skipEditor": "Skip to editor",

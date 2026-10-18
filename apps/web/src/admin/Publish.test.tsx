@@ -206,6 +206,17 @@ describe("review and publish", () => {
     );
   });
 
+  // #698 (d): with something to publish the button says which version goes live, in the line where
+  // the reason sits when it is disabled (mockup v5: "Publishes version 8 to every open screen.").
+  it("names the version it publishes once there is a change, and the button describes itself with it", async () => {
+    const t = await openBuilder();
+    await setDelimiter(t, ";");
+    const review = button("Review and publish");
+    expect(review).not.toHaveAttribute("aria-disabled");
+    expect(review).toHaveAccessibleDescription("Publishes version 2 to every open screen.");
+    expect(screen.getByText("Publishes version 2 to every open screen.")).toBeVisible();
+  });
+
   it("History is a working button now (part 2b): no reason text, not aria-disabled", async () => {
     await openBuilder();
     const history = button("History");

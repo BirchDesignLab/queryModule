@@ -309,23 +309,27 @@ export function BuilderBody({ doc }: { doc: JsonObject }) {
           {/* Undo and redo stay focusable when there is nothing to do, with the reason (spec 6.2). */}
           <button
             type="button"
-            className="qm-button qm-button--secondary"
+            className="qm-button qm-button--secondary qm-mock__icon"
             aria-disabled={undoCount === 0 ? "true" : undefined}
             aria-describedby={undoCount === 0 ? historyReasonId : undefined}
             aria-keyshortcuts="Control+Z Meta+Z"
+            aria-label={t("admin.config.undo")}
+            title={t("admin.config.undo")}
             onClick={() => step("undo")}
           >
-            {t("admin.config.undo")}
+            <span aria-hidden="true">{"↶"}</span>
           </button>
           <button
             type="button"
-            className="qm-button qm-button--secondary"
+            className="qm-button qm-button--secondary qm-mock__icon"
             aria-disabled={redoCount === 0 ? "true" : undefined}
             aria-describedby={redoCount === 0 ? historyReasonId : undefined}
             aria-keyshortcuts="Control+Shift+Z Control+Y Meta+Shift+Z"
+            aria-label={t("admin.config.redo")}
+            title={t("admin.config.redo")}
             onClick={() => step("redo")}
           >
-            {t("admin.config.redo")}
+            <span aria-hidden="true">{"↷"}</span>
           </button>
           <button
             ref={historyRef}
