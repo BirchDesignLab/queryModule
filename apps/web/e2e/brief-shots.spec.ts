@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
+import { editor, preview, selectRow, tree } from "./builder-helpers.js";
 import { expect, test } from "./fixtures.js";
 import { chooseQueryType, chooseTheme, seededUser, signIn } from "./helpers.js";
 
@@ -222,17 +223,6 @@ test("officer shot: a critical card at 1024x768", async ({ page }) => {
     clip: { x: 0, y: top, width: 1024, height: 768 - top },
   });
 });
-
-const tree = (page: Page) => page.getByRole("navigation", { name: "Configuration items" });
-const editor = (page: Page) => page.getByTestId("form-tab");
-const preview = (page: Page) => page.getByRole("region", { name: "Card preview" });
-
-async function selectRow(page: Page, name: RegExp): Promise<void> {
-  const row = tree(page).getByRole("treeitem", { name }).first();
-  await row.scrollIntoViewIfNeeded();
-  await row.click();
-  await expect(row).toHaveAttribute("aria-selected", "true");
-}
 
 async function openBuilder(page: Page): Promise<void> {
   await startAs(page, "admin@example.test", 1500, 1000);
