@@ -4,6 +4,7 @@
 // stay as they are, with the three builder rulings from #698 applied: "<Type> default response"
 // in Try a match and the card preview, and only the selected type expanded in the Result cards
 // tree. Mock data only. Run from the repo root.
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: the strings are v5 template source to patch
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
