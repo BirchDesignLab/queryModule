@@ -810,6 +810,8 @@
   "config.exceptWithoutKeyword": "The exception under keyword {keyword} has no matching keyword.",
   "config.purposeDurationTooLong": "The delegation duration cannot exceed {max} minutes.",
   "config.retentionNotPositive": "A retention period must be positive.",
+  "config.sessionCeilingExceeded": "The absolute session limit cannot exceed {max} minutes.",
+  "config.sessionIdleOverAbsolute": "The idle session limit cannot exceed the absolute limit of {absoluteMinutes} minutes.",
   "config.unusedSiteDefault": "The site default for {field} is never used.",
   "config.tooManySourcesPossible": "This query type may send more than {max} source queries.",
   "config.conditionallyRequiredWithoutPosition": "Field {field} can be required but has no position in command {command}.",
