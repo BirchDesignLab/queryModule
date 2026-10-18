@@ -22,7 +22,7 @@ export interface FieldRendererProps {
   numberKind?: "integer" | "decimal";
   /** Picklists: "seg" draws a short list as a segmented control (the subtype bar); default is a select. */
   presentation?: "seg";
-  /** Read-back data (a code-like string, a year or a date): the text input uses the monospace face. */
+  /** The field's `mono` flag in the site config (plates, VINs, IDs, dates): the text input uses the monospace face. */
   data?: boolean;
   /** A rule revealed this field: an aria-hidden "Shown" tag in the label (the announcement speaks). */
   revealed?: boolean;

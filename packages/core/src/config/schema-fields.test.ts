@@ -44,6 +44,7 @@ describe("FR-004 FR-008 FieldDef defaults (spec 4.1)", () => {
       formOnly: false,
       section: "base",
       custom: false,
+      mono: false,
       maxLength: 64,
       charset: "printableAscii",
       transform: "none",
@@ -52,6 +53,12 @@ describe("FR-004 FR-008 FieldDef defaults (spec 4.1)", () => {
       inputFormats: ["MMDDYYYY", "MM/DD/YYYY", "MM-DD-YYYY", "YYYY-MM-DD"],
       outputFormat: "MMDDYYYY",
     });
+  });
+  it("mono is an optional flag that defaults to false and takes a boolean only (#476)", () => {
+    const base = { key: "plate", labelKey: "field.plate", dataType: "string" };
+    expect(strict.FieldDef.parse({ ...base, mono: true }).mono).toBe(true);
+    expect(client.FieldDef.parse({ ...base, mono: true }).mono).toBe(true);
+    expect(strict.FieldDef.safeParse({ ...base, mono: "yes" }).success).toBe(false);
   });
   it("rejects an invalid date format and an unknown dataType", () => {
     expect(

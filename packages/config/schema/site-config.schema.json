@@ -556,6 +556,10 @@
                   "default": false,
                   "type": "boolean"
                 },
+                "mono": {
+                  "default": false,
+                  "type": "boolean"
+                },
                 "minLength": {
                   "type": "integer",
                   "minimum": 0,

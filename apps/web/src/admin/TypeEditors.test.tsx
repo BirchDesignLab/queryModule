@@ -232,6 +232,23 @@ describe("field editor (Task 31 part 2, FR-060, UX-004)", () => {
     expect(typeOf(t, "WNT").fields.map((f) => f.key)).not.toContain("dob");
   });
 
+  it("the data typeface flag is a check on the field, and a new text field allows the wider charset (#476)", async () => {
+    const t = await openBuilder();
+    await openSection(t, "queryTypes");
+    await openType(t, "WNT");
+    const flag = within(fieldBox("WNT", "first")).getByRole("checkbox", {
+      name: "Show values in the data typeface",
+    });
+    expect(flag).not.toBeChecked();
+    await t.user.click(flag);
+    expect(typeOf(t, "WNT").fields.find((f) => f.key === "first")).toMatchObject({ mono: true });
+    await t.user.click(within(typeBox("WNT")).getByRole("button", { name: "Add field" }));
+    expect(typeOf(t, "WNT").fields.at(-1)).toMatchObject({
+      dataType: "string",
+      charset: "printable",
+    });
+  });
+
   it("an invalid field key shows its diagnostic at the control", async () => {
     const t = await openBuilder();
     await openSection(t, "queryTypes");

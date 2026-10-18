@@ -2170,6 +2170,10 @@
                         "default": false,
                         "type": "boolean"
                       },
+                      "mono": {
+                        "default": false,
+                        "type": "boolean"
+                      },
                       "minLength": {
                         "type": "integer",
                         "minimum": 0,
@@ -2248,6 +2252,7 @@
                       "formOnly",
                       "section",
                       "custom",
+                      "mono",
                       "maxLength",
                       "charset",
                       "transform",

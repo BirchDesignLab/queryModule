@@ -26,7 +26,7 @@ function copy(): string {
  * step 6), so it changes with packages/config/sites/default.json and with any core schema
  * default; update it deliberately in the change that does that.
  */
-const DEFAULT_CONFIG_HASH = "d90b6d5b28d646c28f6b7bf7416abfd640df88fc13a39c5ae191bc34371ea9be";
+const DEFAULT_CONFIG_HASH = "fbac6694306e8cff46f0242349fe0761046d5218efa8f7c8ddafab3015649136";
 
 /*
  * configHash of example-ok, pinned the same way. It covers the extends-chain path: the hash is of
@@ -34,7 +34,7 @@ const DEFAULT_CONFIG_HASH = "d90b6d5b28d646c28f6b7bf7416abfd640df88fc13a39c5ae19
  * chain. It changes with packages/config/sites/default.json, example-ok.json and any core schema
  * default; update it deliberately in the change that does that.
  */
-const EXAMPLE_OK_CONFIG_HASH = "93840ee660dea187233831cfd1fe6ab30fd37a88aaff5ef041a657bdd83b5d6d";
+const EXAMPLE_OK_CONFIG_HASH = "5bd622afaa908b372a5e02c001b9b09318c37ca06948fe41a2bcc027459004c0";
 
 describe("BR-001 site config load", () => {
   it("loads the bundled default site", async () => {
