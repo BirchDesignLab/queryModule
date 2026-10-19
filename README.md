@@ -14,12 +14,12 @@ commands and result cards from an admin console, without a code change or a rebu
 [![Project board](https://img.shields.io/badge/board-Query_Module_2.0-3E4B9E?logo=github)](https://github.com/users/BirchDesignLab/projects/1)
 [![Open PRs](https://img.shields.io/github/issues-pr/BirchDesignLab/queryModule?label=open%20PRs)](https://github.com/BirchDesignLab/queryModule/pulls)
 
-## Where it stands (10-16-26)
+## Where it stands (10-19-26)
 
 | | |
 |---|---|
-| Built | M0 skeleton; M1 forms, terminal and admin console; M2 P0.5 dispatch to the mock sources with live per-source status; M2 P1 result cards, keyword severity and replay |
-| Next | M2 P0 last contract wave, M2 P2 audit viewer, M2 P3 hardening |
+| Built | M0 skeleton; M1 forms, terminal and admin console; M2 P0.5 dispatch to the mock sources with live per-source status; M2 P1 result cards, keyword severity and replay; M2 P2 audit log, admin request view, session sweeper and publish notes |
+| Next | M2 P3 hardening |
 | Planned | M3 credentials, MFA, multi-source and delegation; M4 mobile layouts, native app and host-page embedding |
 
 What each milestone delivered: [overview](docs/overview.md). What is planned and not built:

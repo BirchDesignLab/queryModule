@@ -190,6 +190,11 @@ replay, to the read of the stored answer). The `acknowledged` audit row's `ackLa
 the same moment to that row's write inside the transaction, so it stops short of the commit. No
 error response carries `Server-Timing`.
 
+The span and the stored submit time answer different questions. `Server-Timing` and `ackLatencyMs`
+are measured on the server's monotonic clock from receipt. A request's `submittedAt` (stored as
+`submitted_at`) is the audited admission time: the server's wall clock, taken once the body cap and
+the session check have passed.
+
 **Dispatch.** The 202 is the acknowledgment (FR-064); the request, its parts, one `pending` row per
 source and the audit row are recorded first, then each source is queried in the background (the
 mock adapter today, ADR-0012). Each source settles once, to `returned`, `failed`, `timedOut`,
@@ -419,7 +424,7 @@ internal, 4000 idle, 4029 frameLimit) and all mean the same thing: reconnect wit
 | `welcome` | server to client, `{ latestSeq }` | live. `latestSeq` is the owner's newest `event_log` seq (0 when none), read live at each `hello`, in the same read as the replay. |
 | `ping` | client to server, `{ nonce }` (1 to 64 characters) | live. |
 | `pong` | server to client, `{ nonce, serverTime }` | live. |
-| `ackReceipt` | client to server, `{ correlationId, receivedAt }` | accepted and ignored. The server's own acknowledgment time rides on the 202 as `Server-Timing` (see Submitting a query). |
+| `ackReceipt` | client to server, `{ correlationId, receivedAt }` | live, a metric and not audit (D-M2P2-4). After `hello`, for a request the socket's user owns, the server logs one `metric ackReceipt` line with the correlation id and `e2eMs` (server clock, from the `acknowledged` audit row to the receipt; `receivedAt` is not used, since client clocks skew), once per correlation id per process. Anything else is ignored silently, with no frame. `scripts/ops/ack-stats.ts` summarizes the lines ([deploying](deploy.md#runbooks)). The server's own acknowledgment time rides on the 202 as `Server-Timing` (see Submitting a query). |
 | `sourceStatus` | server to client, `{ seq, at, correlationId, partId, sourceId, resultId, status }` | live. Published after each source outcome commits, to the owner's sockets only (never another user's). Each also lands in `event_log` and is replayable by `lastSeq`. |
 | `resultHidden` | server to client, `{ seq, at, correlationId, resultIds }` | planned (contract since M2 P0). Sent after a delete from view so the owner's other devices drop the results; replayable (M3 P2). |
 | `resync` | server to client, `{ reason: "tooOld" or "tooMany" or "unknownCursor", latestSeq }` | live. Replay refused: the client refetches over HTTP and sets its mark to `latestSeq`. |

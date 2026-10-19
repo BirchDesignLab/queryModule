@@ -1,6 +1,6 @@
 # Roadmap: what is planned
 
-Last refreshed 10-16-26. Everything on this page is **planned and not built**, unless a line says
+Last refreshed 10-19-26. Everything on this page is **planned and not built**, unless a line says
 otherwise. What exists today is in the [overview](overview.md).
 
 The plan follows the [design spec v2](superpowers/specs/2026-09-25-query-module-2-design-v2.md),
@@ -29,12 +29,6 @@ every issue ([board guide](project-board.md)).
 
 ## M2 Results and audit: remaining phases
 
-- **P0 contracts, last wave.** P0-W3 and the full contract gate (P0-W1 and P0-W2 are merged).
-- **P2 audit.** An admin audit viewer with paging and NDJSON export; viewing the audit is itself
-  audited. `config:validate` resolves result-card paths against the mock answers and gains
-  `--diff <tag>`. A session sweeper, a retention setting, and an admin-only view that includes hidden results;
-  the acknowledgment-receipt metric and the 202 `Server-Timing` header
-  (moved here from P1). A summary and detail toggle and the terminal pane layout.
 - **P3 hardening.** A security test matrix for the M2 routes, a backup restore test, and browser
   tests at 1024x768 for a critical result shown only in detail, typing while a result arrives, and
   going offline. M2 exits with a screen-reader pass (NVDA with Chrome).
