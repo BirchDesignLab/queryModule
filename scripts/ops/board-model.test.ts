@@ -83,6 +83,24 @@ describe("phaseBodyUpdate: keep text added below a phase parent's generated body
   it("replaces the whole body when the old one has no generated trailer to cut at", () => {
     expect(phaseBodyUpdate("something else entirely", gen)).toBe(gen);
   });
+
+  it("keeps the added text byte for byte, CRLF and trailing spaces included (G-G-m2, G-G-m4)", () => {
+    const next = gen.replace("**Gate:** g.", "**Gate:** h.");
+    const tail = "\r\n\r\n## Carry  \r\n- [ ] one\r\n- [ ] two";
+    expect(phaseBodyUpdate(gen.replaceAll("\n", "\r\n") + tail, next)).toBe(next + tail);
+  });
+
+  it("never cuts at the trailer phrase quoted in the added text (G-G-m1, G-G-m2)", () => {
+    const quoting = "\n\nSee Grid and handoffs: elsewhere.\n- [ ] one";
+    expect(phaseBodyUpdate(gen + quoting, gen)).toBeNull();
+    const next = gen.replace("**Gate:** g.", "**Gate:** h.");
+    expect(phaseBodyUpdate(gen + quoting, next)).toBe(next + quoting);
+  });
+
+  it("replaces whole a body that does not start with the generated head, even if it quotes the phrase", () => {
+    const hand = "My notes\nGrid and handoffs: see docs.\n- [ ] item";
+    expect(phaseBodyUpdate(hand, gen)).toBe(gen);
+  });
 });
 
 describe("titleUpdate: rename parents and follow-ups by number, not by title (#80)", () => {
