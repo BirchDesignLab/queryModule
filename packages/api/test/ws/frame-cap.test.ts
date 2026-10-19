@@ -59,4 +59,21 @@ describe("per-socket client frame cap (AW4 C1)", () => {
     expect(capLines(c.t.logLines)).toHaveLength(0);
     a.ws.close();
   });
+
+  it("the window runs on the monotonic clock: a backward wall-clock step still refills it (G-G-m1)", async () => {
+    const c = await setupDispatchApp();
+    const a = await c.sock(c.cookieA);
+    sendHello(a.ws, null);
+    for (let i = 0; i < WS_CLIENT_FRAME_LIMIT.limit - 2; i++) a.ws.send(receipt(UNKNOWN_ID));
+    await barrier(a.ws, a.got);
+    // The wall clock steps back an hour (an NTP correction); monotonic time keeps going.
+    const wall = c.t.deps.clock.now;
+    c.t.deps.clock.now = () => wall() - 3_600_000;
+    c.time.clock.advance(WS_CLIENT_FRAME_LIMIT.windowMs);
+    for (let i = 0; i < WS_CLIENT_FRAME_LIMIT.limit - 1; i++) a.ws.send(receipt(UNKNOWN_ID));
+    await barrier(a.ws, a.got);
+    expect(a.ws.readyState).toBe(a.ws.OPEN);
+    expect(capLines(c.t.logLines)).toHaveLength(0);
+    a.ws.close();
+  });
 });

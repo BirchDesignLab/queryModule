@@ -136,15 +136,16 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
       else if (e.seq > floor) send(e);
     });
     let helloSeen = false;
-    // Per-socket frame budget (AW4 C1): a fixed window on the server clock; every client frame,
-    // parsed or not, spends one unit before any work or DB read. Past the limit the socket closes
-    // once with frameLimit and one log line that names the session only, never a frame value.
-    let windowStart = d.clock.now();
+    // Per-socket frame budget (AW4 C1): a fixed window on the monotonic clock, so a wall-clock
+    // step never stops it refilling (G-G-m1); every client frame, parsed or not, spends one unit
+    // before any work or DB read. Past the limit the socket closes once with frameLimit and one
+    // log line that names the session only, never a frame value.
+    let windowStart = d.monotonic.nowMs();
     let frames = 0;
     let capped = false;
     const overBudget = (): boolean => {
       if (capped) return true;
-      const now = d.clock.now();
+      const now = d.monotonic.nowMs();
       if (now - windowStart >= WS_CLIENT_FRAME_LIMIT.windowMs) {
         windowStart = now;
         frames = 0;
