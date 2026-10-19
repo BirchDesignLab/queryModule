@@ -404,10 +404,11 @@ same `nonce` and its own `serverTime`. A socket with no ping for 60 seconds is c
 | 1008 | A frame that does not parse as a client message. |
 | 1001 | The server is shutting down. |
 | 1011 | An internal error (for example the `welcome` or the replay could not be read). |
+| 4029 | The socket sent more than 120 client frames (any type) in one minute (`WS_CLIENT_FRAME_LIMIT` in `packages/api/src/ws/limits.ts`). |
 
 4001 is the only close code a client must act on. The others are server-local
 (`WS_LOCAL_CLOSE` in `packages/api/src/ws/server.ts`: 1001 shutdown, 1008 badMessage, 1011
-internal, 4000 idle) and all mean the same thing: reconnect with backoff and send `hello` with your
+internal, 4000 idle, 4029 frameLimit) and all mean the same thing: reconnect with backoff and send `hello` with your
 `lastSeq`; the server replays what you missed or answers `resync` (see Replay).
 
 **Messages.**

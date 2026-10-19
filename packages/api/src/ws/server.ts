@@ -17,6 +17,7 @@ import { eventsSince, latestSeq } from "../dispatch/event-log";
 import { DEV_ORIGINS } from "../env";
 import { authorizeQueryAccess } from "../queries/policy";
 import type { Principal } from "../seams";
+import { WS_CLIENT_FRAME_LIMIT } from "./limits";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
@@ -25,13 +26,15 @@ export { WS_UPGRADE_LIMIT } from "./limits";
 /**
  * Server-local close codes, RFC 6455 or local, outside the contract (WS_CLOSE_CODES): any close
  * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: the welcome.latestSeq or
- * replay read failed.
+ * replay read failed. frameLimit 4029: the socket sent more than WS_CLIENT_FRAME_LIMIT frames in one
+ * window (AW4 C1); the client may reconnect, within the upgrade limit.
  */
 export const WS_LOCAL_CLOSE = {
   idle: 4000,
   badMessage: 1008,
   shutdown: 1001,
   internal: 1011,
+  frameLimit: 4029,
 } as const;
 /** Correlation ids already counted as an ackReceipt metric in this process; oldest out. */
 const ACK_COUNTED_MAX = 1000;
@@ -133,6 +136,26 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
       else if (e.seq > floor) send(e);
     });
     let helloSeen = false;
+    // Per-socket frame budget (AW4 C1): a fixed window on the server clock; every client frame,
+    // parsed or not, spends one unit before any work or DB read. Past the limit the socket closes
+    // once with frameLimit and one log line that names the session only, never a frame value.
+    let windowStart = d.clock.now();
+    let frames = 0;
+    let capped = false;
+    const overBudget = (): boolean => {
+      if (capped) return true;
+      const now = d.clock.now();
+      if (now - windowStart >= WS_CLIENT_FRAME_LIMIT.windowMs) {
+        windowStart = now;
+        frames = 0;
+      }
+      frames += 1;
+      if (frames <= WS_CLIENT_FRAME_LIMIT.limit) return false;
+      capped = true;
+      d.logger.warn("ws client frame limit exceeded", { sessionId: p.sessionId });
+      ws.close(WS_LOCAL_CLOSE.frameLimit, "frame limit");
+      return true;
+    };
     async function answerHello(lastSeq: number | null): Promise<void> {
       const v = WS_PROTOCOL_VERSION;
       if (lastSeq === null) {
@@ -200,6 +223,7 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
       }
     }
     ws.on("message", async (raw) => {
+      if (overBudget()) return;
       const m = WsClientMessageSchema.safeParse(parse(String(raw)));
       if (!m.success) return ws.close(WS_LOCAL_CLOSE.badMessage, "bad message");
       if (m.data.type === "hello") {
