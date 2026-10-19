@@ -2392,27 +2392,27 @@
     {
       "number": 754,
       "milestone": "M2 Results and audit",
-      "parent": 45,
+      "parent": 46,
       "track": "Web (B)",
-      "phase": "P2",
+      "phase": "P3",
       "size": "S",
       "priority": "Medium",
       "reqIds": "FR-063",
       "title": "BW2 minors: admin request view meta line, short id length, duplicate heading, id in path",
-      "body": "From Lane B2's BW2 (feat/b-p2-bw2, re-critic reviewed 932d807, 10-18-26). Rulings by M2 Manager 8 the same day.\n\n- [ ] The admin request entry lacks the mockup v6 meta line (\"n of n sources done. 1 returned, 1 timed out.\"). Add it in BW3 or the BW5 gap list (ordinary, `apps/web`).\n- [ ] Short id: the design and mockup say 18 characters; the app's `shortReference` shows the last 8. **Ruling:** the app wins (8, as everywhere else); fix the design note and mockup text at the next design touch.\n- [ ] The request page shows RequestList's own h3 \"Request\" under the h2; the mockup has only the entry's h3. Drop the extra heading (BW3, ordinary).\n- [ ] The request id is in the `/admin/queries/:id` path, which the plan allows. The mockup rule says no ids in the URL. **Ruling:** keep the path. The correlation id is an opaque system id, not a typed query value or filter, and the rule targets filters and values (spec 6.6). Reword the mockup and design-note rule to say so.\n\nPlus a note for the record: `RequestList` gained an optional `headingLevel` prop.\n- [ ] Mockup v4/v5 publish dialog tabs still say the audit log records the note (the app never did; D-M2P2-B7). Fix the mockup text at the next design touch.\n- [ ] The v6 Purged mockup shows the \"n of n sources done\" meta line on the dispatcher request list too; not built in BW3. BW5 gap list.\n",
+      "body": "From Lane B2's BW2 (feat/b-p2-bw2, re-critic reviewed 932d807, 10-18-26). Rulings by M2 Manager 8 the same day.\n\n- [x] The admin request entry lacks the mockup v6 meta line (\"n of n sources done. 1 returned, 1 timed out.\"). Add it in BW3 or the BW5 gap list (ordinary, `apps/web`).\n- [ ] Short id: the design and mockup say 18 characters; the app's `shortReference` shows the last 8. **Ruling:** the app wins (8, as everywhere else); fix the design note and mockup text at the next design touch.\n- [x] The request page shows RequestList's own h3 \"Request\" under the h2; the mockup has only the entry's h3. Drop the extra heading (BW3, ordinary).\n- [ ] The request id is in the `/admin/queries/:id` path, which the plan allows. The mockup rule says no ids in the URL. **Ruling:** keep the path. The correlation id is an opaque system id, not a typed query value or filter, and the rule targets filters and values (spec 6.6). Reword the mockup and design-note rule to say so.\n\nPlus a note for the record: `RequestList` gained an optional `headingLevel` prop.\n- [ ] Mockup v4/v5 publish dialog tabs still say the audit log records the note (the app never did; D-M2P2-B7). Fix the mockup text at the next design touch.\n- [ ] The v6 Purged mockup shows the \"n of n sources done\" meta line on the dispatcher request list too; not built in BW3. BW5 gap list.\n\n",
       "labels": ["web", "p2", "follow-up"]
     },
     {
       "number": 755,
       "milestone": "M2 Results and audit",
-      "parent": 45,
+      "parent": 46,
       "track": "Platform (A)",
-      "phase": "P2",
+      "phase": "P3",
       "size": "M",
       "priority": "Medium",
       "reqIds": "none",
       "title": "AW2 minors: audit limit parse, export test weight, order spy, route mount, duplicated errors",
-      "body": "From AW2 (feat/m2-a-p2-wave-2, reviewed bf69854, wave-review approve, 10-18-26). Not fixed in AW2, because the critical files changed after review would void the artifact.\n\n- [ ] C-m1 (critical, `packages/api/src/audit/routes.ts:344-361`): `limit` still uses `z.coerce.number`, so `limit=0x10` and `1e1` are accepted (page size only, not audited). Extend the plain-digit check to `limit`, with hex and exponent test rows. Ride the next critical touch of `audit/routes.ts` (AW3 or AW4).\n- [ ] T4 Q3 (ordinary, `packages/api/test/audit/export.test.ts`): the 100k-row cap test is heavy on Windows (passes, 120 s timeout). Lighten it: lower the cap through a test seam, or move it to a CI-only tag.\n- [ ] T5 Q1 (critical test, `packages/api/test/queries/admin-read.test.ts:649-661`): the order spy marks at record, not at commit, so it would not catch `loadDetail` moved into the transaction. Spy on commit.\n- [ ] T5 Q3 (critical, design): `audit/routes.ts` also mounts the admin query route (the plan allowed it). Move it to `queries/route.ts` at the next touch.\n- [ ] T3 Q1 (critical): `queryErrors` in `audit/routes.ts` duplicates `bodyErrors` in `packages/api/src/queries/prepare.ts:109-124`. Share one helper.\n\nPolicy notes the reviewer declined to judge (accepted by the manager, as planned): an over-cap export writes no audit row; `adminViewed` stays committed when decrypt later fails (over-records, fails closed on data); `includeHidden` has no effect until M3 P2. T5 Q2 (credentialOwner delegation validation) stays deferred to M3.",
+      "body": "From AW2 (feat/m2-a-p2-wave-2, reviewed bf69854, wave-review approve, 10-18-26). Not fixed in AW2, because the critical files changed after review would void the artifact.\n\n- [x] C-m1 (critical, `packages/api/src/audit/routes.ts:344-361`): `limit` still uses `z.coerce.number`, so `limit=0x10` and `1e1` are accepted (page size only, not audited). Extend the plain-digit check to `limit`, with hex and exponent test rows. Ride the next critical touch of `audit/routes.ts` (AW3 or AW4).\n- [x] T4 Q3 (ordinary, `packages/api/test/audit/export.test.ts`): the 100k-row cap test is heavy on Windows (passes, 120 s timeout). Lighten it: lower the cap through a test seam, or move it to a CI-only tag.\n- [x] T5 Q1 (critical test, `packages/api/test/queries/admin-read.test.ts:649-661`): the order spy marks at record, not at commit, so it would not catch `loadDetail` moved into the transaction. Spy on commit.\n- [ ] T5 Q3 (critical, design): `audit/routes.ts` also mounts the admin query route (the plan allowed it). Move it to `queries/route.ts` at the next touch.\n- [ ] T3 Q1 (critical): `queryErrors` in `audit/routes.ts` duplicates `bodyErrors` in `packages/api/src/queries/prepare.ts:109-124`. Share one helper.\n\nPolicy notes the reviewer declined to judge (accepted by the manager, as planned): an over-cap export writes no audit row; `adminViewed` stays committed when decrypt later fails (over-records, fails closed on data); `includeHidden` has no effect until M3 P2. T5 Q2 (credentialOwner delegation validation) stays deferred to M3.\n",
       "labels": ["platform", "p2", "sensitive", "follow-up"]
     },
     {
@@ -2438,8 +2438,73 @@
       "priority": "Medium",
       "reqIds": "none",
       "title": "AW3 minors: sweeper lag and drain bounds, fatal close order, comments, test hygiene",
-      "body": "From AW3 (feat/m2-a-p2-wave-3, reviewed 18af9b5, wave-review approve, 10-18-26). Not fixed in AW3, because the files are reviewed sensitive files. G-M1 is ruled on #716 and rides AW4.\n\n**Sweeper and drain (critical)**\n- [ ] C-m1 / T9 Q1: drain waits for a full in-flight tick (up to 500 transactions, each bounded by the 5000 ms lock timeout); with many due sessions and a slow DB it can pass the spec 8.3 bound and end in SIGKILL (no data or audit loss). Check a stop flag between sessions. `startup.ts:252`, `sweeper.ts:168-196`.\n- [ ] C-m2 / T7 C1: if 500 due sessions fail on every tick, the sweep starves (lag only; identity still refuses). Exclude, or order last, the ids that already failed. `sweeper.ts:160-168`.\n- [ ] C-m3: fatal `close()` awaits the sweeper before `server.close()`. Move it after `server.close` resolves, before `closeDb` (bounded by FATAL_DRAIN_MS 10 s). `startup.ts:316-321`.\n- [ ] T7 C2: `endSession` sits inside the try after commit (cannot throw today); move it out.\n**Comments and docs**\n- [ ] T7 S1: `sweeper.ts:35-36` omits step c (delegation revoke, M3).\n- [ ] T7 S2: SEC-005 is cited for expiry, but it is the MFA ID; fix the mapping.\n- [ ] C-m4: the `mountAdminAuditRoutes` docstring (`audit/routes.ts:121`) should name `limit=` (#755).\n**Tests**\n- [ ] T7 Q1: the endSession-after-commit test relies on read isolation; make it explicit.\n- [ ] T9 Q2: `drain.test.ts:386` overwrites `deps.audit.record` without restoring it.\n- [ ] T9 Q3: the expired-session insert helper is duplicated in `drain.test.ts` and `startup.test.ts`; share it.\n\nRide the next critical touch of the sweeper (M2 P3 Hardening is the natural home).\n\n**Rides AW4 (ruling on #716, which #761 closes)**\n- [ ] G-M1: Better Auth `expiresIn = SESSION_CEILING_MINUTES * 60 + 86400`; reword the `auth/auth.ts:212-215` and `core/config/session-limits.ts:3-6` comments to describe the margin.\n",
+      "body": "From AW3 (feat/m2-a-p2-wave-3, reviewed 18af9b5, wave-review approve, 10-18-26). Not fixed in AW3, because the files are reviewed sensitive files. G-M1 is ruled on #716 and rides AW4.\n\n**Sweeper and drain (critical)**\n- [ ] C-m1 / T9 Q1: drain waits for a full in-flight tick (up to 500 transactions, each bounded by the 5000 ms lock timeout); with many due sessions and a slow DB it can pass the spec 8.3 bound and end in SIGKILL (no data or audit loss). Check a stop flag between sessions. `startup.ts:252`, `sweeper.ts:168-196`.\n- [ ] C-m2 / T7 C1: if 500 due sessions fail on every tick, the sweep starves (lag only; identity still refuses). Exclude, or order last, the ids that already failed. `sweeper.ts:160-168`.\n- [ ] C-m3: fatal `close()` awaits the sweeper before `server.close()`. Move it after `server.close` resolves, before `closeDb` (bounded by FATAL_DRAIN_MS 10 s). `startup.ts:316-321`.\n- [ ] T7 C2: `endSession` sits inside the try after commit (cannot throw today); move it out.\n**Comments and docs**\n- [ ] T7 S1: `sweeper.ts:35-36` omits step c (delegation revoke, M3).\n- [ ] T7 S2: SEC-005 is cited for expiry, but it is the MFA ID; fix the mapping.\n- [ ] C-m4: the `mountAdminAuditRoutes` docstring (`audit/routes.ts:121`) should name `limit=` (#755).\n**Tests**\n- [x] T7 Q1: the endSession-after-commit test relies on read isolation; make it explicit.\n- [x] T9 Q2: `drain.test.ts:386` overwrites `deps.audit.record` without restoring it.\n- [x] T9 Q3: the expired-session insert helper is duplicated in `drain.test.ts` and `startup.test.ts`; share it.\n\nRide the next critical touch of the sweeper (M2 P3 Hardening is the natural home).\n\n**Rides AW4 (ruling on #716, which #761 closes)**\n- [x] G-M1: Better Auth `expiresIn = SESSION_CEILING_MINUTES * 60 + 86400`; reword the `auth/auth.ts:212-215` and `core/config/session-limits.ts:3-6` comments to describe the margin.\n\n\n",
       "labels": ["platform", "p2", "sensitive", "follow-up"]
+    },
+    {
+      "number": 767,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "BW4 terminal pane minors: width priority, officer layout, reference height, announcements, preference save race",
+      "body": "From BW4 (feat/b-p2-bw4, #729, reviewed 81849b7, 10-18-26). For the BW5 gap list (Task 9 v6 comparison) unless marked.\n\n- [ ] Width priority: at 1366 the results get about 485 px against the mockup's 566 (form 480, pane 320, gaps). Task 9's v6 comparison decides whether the form shrinks (spec: results keep width priority).\n- [ ] The officer layout (mobileUnit) never shows the pane, and the compact account bar has no Terminal control. The design is silent; confirm or design it.\n- [ ] The command reference lists all 7 site commands, so the pane is taller than the form and has no scroll of its own.\n- [ ] The pane's announcement reuses \"1 problem with the command.\" rather than the design note's \"Unrecognized command\" wording (S4).\n- [ ] The `terminalSaveFailed` alert stays until the next pick, and reopening the menu announces it again.\n- [x] **Bug (pre-existing, `packages/client` preferences-api.ts):** concurrent theme and terminal saves each GET then PUT the whole row, so the later PUT can drop the other change. Send only the changed field, or serialize the saves.\n- [ ] Entering pane mode rewrites the pane text from the form once, in canonical form (the remount normalizes a typed command).\n",
+      "labels": ["web", "p2", "follow-up"]
+    },
+    {
+      "number": 770,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "Board script phaseBodyUpdate edge cases: quoted trailer without generated part, text on the trailer line, orphaned JSDoc",
+      "body": "From the #758 review (chore/m2-c-board-minors, reviewed d7fbe5b, 10-18-26). Gate tier (`scripts/ops/board-model.mjs`), low priority: no live body has these shapes today.\n\n- [ ] G-m-1: a body with the generated head but no generated trailer, whose added text quotes the trailer phrase, loses the text above the quote; the docstring promises it is never cut.\n- [ ] G-m-2: hand-typed text on the trailer line itself is dropped on a rewrite. Document it (or keep it).\n- [ ] G-m-3: the `bodyUpdate` JSDoc sits orphaned above `titleUpdate`'s; move it.\n\nRide any later gate touch of the board scripts.\n",
+      "labels": ["platform", "p3", "follow-up"]
+    },
+    {
+      "number": 771,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "AW4 minors: Server-Timing race test, per-socket read serialization, ack-stats home, publish answer name",
+      "body": "From AW4 (feat/m2-a-p2-wave-4, review 2 approve at 503ef39, 10-18-26). Review stop rule: filed, not fixed.\n\n- [ ] C-C-m1 (critical test): no test pins Server-Timing on the lost-idempotency-race 202 (`queries/route.ts:162-168, 196`).\n- [x] G-G-m2 (gate, `ws/server.ts`): ping and ackReceipt reads are not serialized per socket (up to 120 concurrent per socket per minute, bounded by the frame cap). Recorded; serialize if DB load ever shows it. **Won't fix (M2 Manager 9, 10-19-26):** closed as recorded; file a new issue if DB load shows it.\n- [ ] T12 Q2 (gate): the ack-stats logic lives in `scripts/ops/ack-stats.ts`, not in `packages/api/src/ops` like login-stats and audit-stats. Move it for consistency.\n- [ ] T10 Q1 (critical): the publish and rollback answers omit `publishedByName` (the list and GET config serve it). Add it, or document why not.\n- [x] Docs (AW5, `docs/api.md`): `submitted_at` is the audited admission time (wall clock, after the body cap and session check); the Server-Timing ack span runs from receipt on the monotonic clock. **Ruling (M2 Manager 8, 10-18-26):** both stay as they are; only document the difference. Done in #778.\n",
+      "labels": ["platform", "p3", "sensitive", "follow-up"]
+    },
+    {
+      "number": 773,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "E2E flakes: admin-columns-layout Show-in segments wrap, admin-config axe color-contrast",
+      "body": "Found by Lane B4 in BW5 full e2e runs (10-18-26), not caused by BW5.\n\n- [ ] `apps/web/e2e/admin-columns-layout.spec.ts:42` (1366 and 1024): the \"Show in\" segments wrap (measured 54 against 41.5). It fails when the spec runs alone at origin/main 725984d, 0f5affd and 67b1b0a, yet passes in some full runs: order or state dependent. Find the dependency (fonts loaded, a shared fixture, viewport timing) and make the spec deterministic.\n- [ ] `apps/web/e2e/admin-config.spec.ts:304`: axe color-contrast on `#qp-submit` / `.qm-kbd` failed once in a full run and passes alone 2 of 2. Check for a hover or focus state captured mid-transition.\n\nCI retries once, so these may show as flaky passes; do not raise retries to hide them.\n",
+      "labels": ["bug", "web", "p3", "follow-up"]
+    },
+    {
+      "number": 774,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Web (B)",
+      "phase": "P3",
+      "size": "M",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "BW5 deferred gaps against mockup v6: history drawer, publish copy, 1024 pane, icons, uncovered frames",
+      "body": "From BW5 (feat/b-p2-bw5, Task 9 comparison against mockup v6, 10-18-26). Refs #767. For M2 P3 or a later UI wave.\n\n- [ ] History is an inline panel, not the mockup's 380 px drawer.\n- [ ] Publish dialog title and body copy differ from v6.\n- [ ] At 1024 the pane toggle has no icons and no Ctrl+backtick hint; the panel is 584 px against the mockup's 480.\n- [ ] Export and eye icons missing; the banner start border, the Back link arrow, and \"10 items\" wrapping at 1024.\n- [ ] Request view meta line: \"Copy ID\" and the full UUID; consider a shared RequestHeader.\n- [ ] Frames with no shots: account-menu preference and save-failed; audit empty, 403, 404, filter error and pager.\n- [ ] The purged card has no e2e path (only the lost-key runbook; age retention is not implemented). Documented.\n- [ ] The 540 px results width is about 525 px with a classic scrollbar (the code comment says so). Decide whether it counts.\n",
+      "labels": ["web", "p3", "follow-up"]
     }
   ]
 }
