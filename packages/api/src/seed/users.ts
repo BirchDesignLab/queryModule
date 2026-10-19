@@ -28,4 +28,14 @@ export const DEMO_USERS: readonly {
   // ADR-0011 item 6: edits and publishes site config only.
   { email: "implementer@example.test", name: "Demo Implementer", role: "implementer" },
   { email: "smoke@example.test", name: "Smoke Test", role: "user" },
+  // #781: a second account per role, so the audit console has a second actor to show.
+  { email: "dispatcher2@example.test", name: "Demo Dispatcher 2", role: "user" },
+  {
+    email: "officer2@example.test",
+    name: "Demo Training Officer 2",
+    role: "trainingOfficer",
+    persona: "mobileUnit",
+  },
+  { email: "implementer2@example.test", name: "Demo Implementer 2", role: "implementer" },
+  { email: "admin2@example.test", name: "Demo Admin 2", role: "admin" },
 ];

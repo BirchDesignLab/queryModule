@@ -82,7 +82,7 @@ ops_checks() {
   chmod 777 "$backup_out"
 
   # --- existence: every compiled ops CLI is in the image at its documented path ---
-  for cli in audit-stats backup check-triggers grant-role login-stats lost-data-key lost-key seed; do
+  for cli in add-demo-users audit-stats backup check-triggers grant-role login-stats lost-data-key lost-key seed; do
     code=0
     docker run --rm --entrypoint sh "$image" -c "test -f /app/scripts/ops/$cli.js" || code=$?
     assert_exit "ops CLI present: $cli.js" 0 "$code"
@@ -138,6 +138,11 @@ ops_checks() {
   code=0
   ops_run "$ops_vol" "$sec" node scripts/ops/grant-role.js || code=$?
   assert_exit "grant-role (bad args)" 2 "$code"
+
+  # --- add-demo-users: 2 on any argument (#781) ---
+  code=0
+  ops_run "$ops_vol" "$sec" node scripts/ops/add-demo-users.js --all || code=$?
+  assert_exit "add-demo-users (bad args)" 2 "$code"
 
   # --- drop one audit_event trigger directly, with the image's own @libsql/client, then re-check ---
   docker run --rm -v "$ops_vol:/data" -v "$sec:/run/secrets:ro" \

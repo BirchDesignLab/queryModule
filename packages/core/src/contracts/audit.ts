@@ -296,8 +296,16 @@ export const AUDIT_DETAILS_SCHEMAS = {
       path: ["rollbackOf"],
       message: "rollbackOf names an older version than version",
     }),
-  /** ADR-0011 item 8: an admin created a user (the one-time password is never audited). */
-  userCreated: z.strictObject({ targetUserId: BoundedIdSchema, role: RoleSchema }),
+  /**
+   * ADR-0011 item 8: an admin created a user (the one-time password is never audited). via
+   * "add-demo-users" (#781) marks a demo account the ops command created, written by SYSTEM_ACTOR
+   * like roleChanged via grant-role; an admin's row has no via.
+   */
+  userCreated: z.strictObject({
+    targetUserId: BoundedIdSchema,
+    role: RoleSchema,
+    via: z.literal("add-demo-users").optional(),
+  }),
   /** Spec 4.7, ADR-0011 item 8: one disable transaction and what it ended (counts only). */
   userDisabled: z.strictObject({
     targetUserId: BoundedIdSchema,
@@ -402,7 +410,8 @@ const systemEnvelope = {
  * types, except adminViewed, whose envelope correlationId is required and equals details (#690
  * m2, adminViewEnvelope below). The actor is bound to the type (AuditEventSchema superRefine;
  * ADR-0011 items 6 to 8; AUDIT_TYPE_RULES): configPublished by an admin or implementer;
- * userCreated and userDisabled by an admin; sessionRevoked expired by SYSTEM_ACTOR only (the
+ * userCreated by an admin, or via add-demo-users by SYSTEM_ACTOR (#781); userDisabled by an
+ * admin; sessionRevoked expired by SYSTEM_ACTOR only (the
  * spec 5.2 sweeper) and any other reason by an admin; roleChanged via grant-role by SYSTEM_ACTOR
  * and via adminConsole by an admin; auditViewed and auditExported by an admin; adminViewed by an
  * admin (viewerBasis admin) or by the credential owner (viewerBasis credentialOwner).
@@ -642,7 +651,13 @@ export const AUDIT_TYPE_RULES: { readonly [T in AuditEventType]: AuditTypeRule<T
         ? undefined
         : "written by an admin or implementer",
   },
-  userCreated: { scope: "nonQuery", actor: byAdmin },
+  userCreated: {
+    scope: "nonQuery",
+    actor: (e) =>
+      e.details.via === "add-demo-users"
+        ? bySystem("add-demo-users writes as the system actor")(e)
+        : byAdmin(e),
+  },
   userDisabled: { scope: "nonQuery", actor: byAdmin },
   // The sweeper writes reason expired as SYSTEM_ACTOR (spec 5.2); an admin writes the others.
   sessionRevoked: {

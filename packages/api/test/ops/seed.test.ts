@@ -51,11 +51,26 @@ describe("SEC-005 seed", () => {
     const changed = await t.auditRows("roleChanged");
     expect(changed.map((r) => r.details.role).sort()).toEqual([
       "admin",
+      "admin",
       "implementer",
+      "implementer",
+      "trainingOfficer",
       "trainingOfficer",
     ]);
     // ADR-0011 item 6 (#363): the config-only demo account.
     expect(out.find((u) => u.email === "implementer@example.test")?.role).toBe("implementer");
+  });
+  it("#781: a second account per role for the audit console stories", () => {
+    const byEmail = new Map(DEMO_USERS.map((u) => [u.email, u]));
+    expect(byEmail.get("dispatcher2@example.test")?.role).toBe("user");
+    expect(byEmail.get("officer2@example.test")).toMatchObject({
+      role: "trainingOfficer",
+      persona: "mobileUnit",
+    });
+    expect(byEmail.get("implementer2@example.test")?.role).toBe("implementer");
+    expect(byEmail.get("admin2@example.test")?.role).toBe("admin");
+    expect(byEmail.size).toBe(DEMO_USERS.length);
+    for (const u of DEMO_USERS) expect(u.email).toMatch(/^[a-z0-9]+@example\.test$/);
   });
   it("UX-012 D-A33: the officer demo accounts get the mobileUnit persona, the others none", async () => {
     const t = await createTestApp();
@@ -67,6 +82,7 @@ describe("SEC-005 seed", () => {
     expect(rows.sort((a, b) => a.email.localeCompare(b.email))).toEqual([
       { email: "mobileunit@example.test", personaOverride: "mobileUnit" },
       { email: "officer@example.test", personaOverride: "mobileUnit" },
+      { email: "officer2@example.test", personaOverride: "mobileUnit" },
     ]);
   });
   it("#363 M1, #339 m3: every seeded persona is a persona key of every shipped site", async () => {

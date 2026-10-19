@@ -11,6 +11,14 @@ The live demo at https://querymodule.birchdesignlab.com uses these accounts. Pas
 | admin@example.test | admin |
 | implementer@example.test | implementer (site config only; its header has no Queries link) |
 | smoke@example.test | user (smoke tests only) |
+| dispatcher2@example.test | user (a second dispatcher, #781) |
+| officer2@example.test | trainingOfficer (mobile-unit layout) |
+| implementer2@example.test | implementer |
+| admin2@example.test | admin |
+
+The second account per role gives the audit log a second actor to show (story below). A fresh
+database gets every account from the seed; a database seeded before #781 gets the missing ones from
+`add-demo-users` (see [Add missing demo accounts](#add-missing-demo-accounts)).
 
 All data behind these accounts is mock data (spec 5.4 fixture policy). No real person, vehicle or property record exists in this system.
 
@@ -359,6 +367,37 @@ Audit log.
    "Purged under retention" in place of its card. Age-based retention is not implemented yet and the
    demo site sets no retention period, so nothing purges on its own and this state is not part of the
    walk-through. The unit tests (`ResultCard`) cover it.
+
+### Two admins, one request
+
+1. Sign in as `dispatcher2@example.test` and run `VEH.ZZ-0001` (or any query from the tables above).
+2. Sign in as `admin2@example.test` (another browser or a private window). Admin, Oversight, Audit
+   log. Near the top are the submit and its responses, with `dispatcher2@example.test` as the
+   actor.
+3. Open the row's request reference. The request opens read only, and the view is recorded.
+4. Sign in as `admin@example.test`, open the audit log and filter Event "Request viewed by an
+   admin": the row names `admin2@example.test` as the actor. One admin's read is visible to the
+   other, and neither can remove it.
+
+## Add missing demo accounts
+
+The live demo is never reset, so the seed (which runs once, on an empty database) cannot add
+accounts that were added to the list later. `add-demo-users` creates only the demo accounts the
+database lacks, with the same derived passwords the seed would have given them:
+
+```bash
+cd ~/git/queryModule/deploy
+docker compose run --rm app node scripts/ops/add-demo-users.js   # store the printed passwords in a password manager
+```
+
+- An account that already exists is left exactly as it is: password, role, preferences and state.
+  A rerun creates nothing.
+- Only `@example.test` accounts are ever created.
+- Each new account writes "User created" (system actor) to the audit log, and each role grant
+  "Role changed" (via grant-role).
+- New passwords print once to this command's stdout, never to the service log. If a role grant
+  fails, the command prints the accounts it did create, names the account whose grant failed and
+  exits non-zero; finish that grant with `scripts/ops/grant-role.js <email> <role>`.
 
 ## Recovery
 

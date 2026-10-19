@@ -944,6 +944,10 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
   it.each([
     ["userDisabled by the system actor", sys("userDisabled", samples.userDisabled)],
     ["userCreated by the system actor", sys("userCreated", samples.userCreated)],
+    [
+      "userCreated add-demo-users by an admin",
+      human("userCreated", admin, { ...samples.userCreated, via: "add-demo-users" }),
+    ],
     ["configPublished by the system actor", sys("configPublished", samples.configPublished)],
     ["userCreated by an implementer", human("userCreated", implementer, samples.userCreated)],
     ["userDisabled by an implementer", human("userDisabled", implementer, samples.userDisabled)],
@@ -982,6 +986,11 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
       human("configPublished", implementer, samples.configPublished),
     ],
     ["userCreated by an admin", human("userCreated", admin, samples.userCreated)],
+    // #781: the add-demo-users ops command writes as the system actor, as grant-role does.
+    [
+      "userCreated add-demo-users by the system actor",
+      sys("userCreated", { ...samples.userCreated, via: "add-demo-users" }),
+    ],
     ["userDisabled by an admin", human("userDisabled", admin, samples.userDisabled)],
     ["sessionRevoked admin by an admin", human("sessionRevoked", admin, samples.sessionRevoked)],
     [
@@ -1002,6 +1011,13 @@ describe("SEC-010 admin console audit types (ADR-0011 item 7, spec 4.7)", () => 
       human("roleChanged", admin, roleChange("adminConsole")),
     ],
   ])("C-I1 accepts %s", (_n, e) => expect(AuditEventSchema.safeParse(e).success).toBe(true));
+
+  it("#781: userCreated via names only the add-demo-users ops command", () => {
+    const s = AUDIT_DETAILS_SCHEMAS.userCreated;
+    expect(s.safeParse({ ...samples.userCreated, via: "add-demo-users" }).success).toBe(true);
+    expect(s.safeParse({ ...samples.userCreated, via: "grant-role" }).success).toBe(false);
+    expect(s.safeParse({ ...samples.userCreated, via: "adminConsole" }).success).toBe(false);
+  });
 
   // C-m2: a rollback republishes an older version (ADR-0011 item 5).
   it.each([
