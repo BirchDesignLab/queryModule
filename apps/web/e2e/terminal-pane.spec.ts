@@ -106,10 +106,14 @@ test.describe("[FR-050] terminal beside the results (UX-014)", () => {
     expect(form.x + form.width).toBeLessThanOrEqual(requests.x);
     expect(requests.x + requests.width).toBeLessThanOrEqual(terminal.x);
     expect(Math.round(terminal.width)).toBe(320);
-    expect(form.width).toBeGreaterThanOrEqual(448);
-    expect(form.width).toBeLessThanOrEqual(480 + 1);
-    expect(requests.width).toBeGreaterThanOrEqual(384);
+    // Width priority (mockup v6, #767): the form gives way to its 448 px floor, the results get the
+    // rest: 540 px or more here (headless Chromium draws no scrollbar; a classic one takes ~17 px).
+    expect(Math.round(form.width)).toBe(448);
+    expect(requests.width).toBeGreaterThanOrEqual(540);
     expect(terminal.x + terminal.width).toBeLessThanOrEqual(WIDE.width);
+    // The command reference is a compact list: the last command is above the fold at 1366x768 (#767).
+    const lastCommand = await pane(page).getByRole("listitem").last().boundingBox();
+    expect((lastCommand?.y ?? 0) + (lastCommand?.height ?? 0)).toBeLessThanOrEqual(WIDE.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       WIDE.width,
     );

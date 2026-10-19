@@ -177,8 +177,10 @@ export function AppHeader() {
     setTerminalSaveFailed(false);
     preferences.getState().setLayout(next);
     const revert = () => {
-      // Only if nothing newer replaced this pick while the save was in flight.
-      if (preferences.getState().layout === next) preferences.getState().setLayout(before);
+      // Only if nothing newer replaced this pick while the save was in flight: after a newer pick,
+      // or a session change that reset the store, the failure is not this user's to be told.
+      if (preferences.getState().layout !== next) return;
+      preferences.getState().setLayout(before);
       setTerminalSaveFailed(true);
     };
     void savePreferences(api, { layout: next }).then((saved) => {

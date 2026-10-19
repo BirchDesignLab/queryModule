@@ -1,3 +1,4 @@
+import { resetPreferenceSaves } from "@querymodule/client";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -594,6 +595,33 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
         "aria-pressed",
         "false",
       );
+    });
+
+    it("a save cut off by a session change shows no failure to whoever is signed in next", async () => {
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${API}/api/v1/me/preferences`, async () => {
+          await held;
+          return HttpResponse.json({ ...PREFERENCES, layout: null });
+        }),
+      );
+      const { user, services } = await signIn();
+      const panel = await openAccount(user);
+      await user.click(within(panel).getByRole("button", { name: "Beside results" }));
+      // The user changes in place (the chrome stays mounted): the stores reset, the save is cut off.
+      act(() => {
+        services.preferences.getState().reset();
+        resetPreferenceSaves(services.api);
+      });
+      release();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(within(panel).queryByRole("alert")).toBeNull();
     });
 
     it("a network failure reverts the same way", async () => {

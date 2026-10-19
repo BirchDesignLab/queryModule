@@ -1992,9 +1992,21 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-audit__filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 4), 1fr));
+  /* At most three columns at any width (mockup v6: User, Request ID and Event, then From and To). */
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(max(calc(var(--qm-space-12) * 4), calc((100% - var(--qm-space-3) * 2) / 3)), 1fr)
+    );
   gap: var(--qm-space-3);
   align-items: start;
+}
+
+/* Two rows from the section width where the table shows its Credential owner column (mockup v6):
+   User, Request ID and Event, then From and To. Narrower, the fields wrap as they fit. */
+@container (min-width: 920px) {
+  .qm-audit__filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .qm-audit__bar,
@@ -3144,16 +3156,19 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 /* Terminal beside the results (FR-050, UX-014, D-M2P2-B2; mockup v6 "Terminal pane"). From
    layout.terminalPane (1280 px) a dispatcher who chose "Beside results" gets three columns: the
-   form in its panel (448 to 480 px), the results in the middle (they take the rest, 384 px at
-   least), the terminal on the right (320 px). The page script renders the pane only from this
+   form in its panel (448 px), the results in the middle (they take the rest, 384 px at least and
+   540 px at 1366), the terminal on the right (320 px). The page script renders the pane only from this
    width, so below it the Form and Terminal toggle is back and these rules do not apply. Widths are
    multiples of the spacing tokens (no literal lengths outside a query condition). */
 @media (min-width: 1280px) {
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes.qm-panes--terminal {
+    /* The results have width priority (mockup v6): the form takes its 448 px floor, not its
+       480 px ceiling, and the gaps are 12 px, so the results keep 540 px or more at 1366 (about 525 px where a classic scrollbar takes 17 px). */
     grid-template-columns:
-      minmax(calc(var(--qm-space-8) * 14), calc(var(--qm-space-8) * 15))
+      calc(var(--qm-space-8) * 14)
       minmax(calc(var(--qm-space-12) * 8), 1fr)
       calc(var(--qm-space-8) * 10);
+    column-gap: var(--qm-space-3);
   }
 }
 
@@ -3177,9 +3192,15 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-family: var(--qm-type-family-data);
 }
 
+.qm-terminal-pane__note {
+  margin: 0 0 var(--qm-space-2);
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
 .qm-terminal-pane__reference {
-  margin-block-start: var(--qm-space-4);
-  padding-block-start: var(--qm-space-3);
+  margin-block-start: var(--qm-space-3);
+  padding-block-start: var(--qm-space-2);
   border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
 
@@ -3192,16 +3213,15 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-terminal-pane__list {
   display: flex;
   flex-direction: column;
-  gap: var(--qm-space-2);
+  gap: var(--qm-space-1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* The syntax and its query type run on in one line of text (a long syntax wraps; its type follows
+   it), so seven commands fit the fold at 1366x768 (mockup v6: a compact list). */
 .qm-terminal-pane__row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--qm-space-1);
   min-inline-size: 0;
 }
 
@@ -3212,6 +3232,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-terminal-pane__type {
+  margin-inline-start: var(--qm-space-2);
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-sm);
 }

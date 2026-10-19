@@ -25,6 +25,7 @@ import {
   type RequestsStore,
   type ResetController,
   registerQueryCacheReset,
+  resetPreferenceSaves,
   type SessionController,
   type SignOutMarker,
   type SocketLike,
@@ -142,6 +143,7 @@ export function createServices(options: ServicesOptions): Services {
   reset.register(() => authStore.getState().setSignedOut());
   reset.register(() => announcer.clear());
   reset.register(() => preferences.getState().reset());
+  reset.register(() => resetPreferenceSaves(api));
   reset.register(() => drafts.getState().reset());
   reset.register(() => submit.getState().reset());
   reset.register(() => results.reset());

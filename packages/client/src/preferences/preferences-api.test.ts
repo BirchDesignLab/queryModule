@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../api/create-api-client.js";
 import { createFakePlatform } from "../testing/fake-platform.js";
-import { loadPreferences, savePreferences } from "./preferences-api.js";
+import { loadPreferences, resetPreferenceSaves, savePreferences } from "./preferences-api.js";
 import { createPreferencesStore } from "./preferences-store.js";
 
 /** The contract shape of GET/PUT /api/v1/me/preferences (openapi.json getMePreferences200). */
@@ -58,5 +58,130 @@ describe("UX-014 preference saved to the user profile (spec 5.1, 5.5)", () => {
     const put = seen.find((r) => r.method === "PUT");
     expect(put?.headers.get("x-requested-with")).toBe("querymodule");
     expect(await put?.json()).toEqual({ ...SERVER, themeMode: "redShift" });
+  });
+  it("keeps both changes when a theme save and a layout save overlap", async () => {
+    // A stateful server that answers each call on a later tick: two saves that each read the row
+    // before the other wrote it would send the stale half back (the GET-then-PUT race).
+    let row: Record<string, unknown> = { ...SERVER };
+    const client = createApiClient({
+      baseUrl: "http://api.test",
+      platform: createFakePlatform(),
+      onUnauthenticated: () => undefined,
+      fetch: async (request) => {
+        const body = request.method === "PUT" ? await request.json() : null;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        if (body !== null) row = body as Record<string, unknown>;
+        return Response.json(row);
+      },
+    });
+    const layout = { orientation: "horizontal", terminal: "pane" } as const;
+    const results = await Promise.all([
+      savePreferences(client, { themeMode: "redShift" }),
+      savePreferences(client, { layout }),
+    ]);
+    expect(results).toEqual([true, true]);
+    expect(row).toMatchObject({ themeMode: "redShift", layout });
+  });
+  it("a failed save does not hold up the next one", async () => {
+    let fail = true;
+    const client = createApiClient({
+      baseUrl: "http://api.test",
+      platform: createFakePlatform(),
+      onUnauthenticated: () => undefined,
+      fetch: async () => {
+        if (fail) {
+          fail = false;
+          throw new Error("offline");
+        }
+        return Response.json(SERVER);
+      },
+    });
+    await expect(savePreferences(client, { themeMode: "day" })).rejects.toThrow();
+    expect(await savePreferences(client, { themeMode: "day" })).toBe(true);
+  });
+  describe("a request that never answers", () => {
+    afterEach(() => vi.useRealTimers());
+    it("is given up after 10 s, so a later save is not held behind it", async () => {
+      vi.useFakeTimers();
+      let calls = 0;
+      const client = createApiClient({
+        baseUrl: "http://api.test",
+        platform: createFakePlatform(),
+        onUnauthenticated: () => undefined,
+        fetch: (request) => {
+          calls += 1;
+          if (calls > 1) return Promise.resolve(Response.json(SERVER));
+          return new Promise<Response>((_resolve, reject) => {
+            request.signal.addEventListener("abort", () => reject(request.signal.reason));
+          });
+        },
+      });
+      const hung = savePreferences(client, { themeMode: "day" });
+      const hungResult = hung.then(
+        () => "settled",
+        () => "rejected",
+      );
+      const next = savePreferences(client, { themeMode: "night" });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await hungResult).toBe("rejected");
+      expect(await next).toBe(true);
+    });
+  });
+  describe("a session change (sign-out, 401, another user)", () => {
+    function slowClient(seen: Request[]) {
+      let release: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const client = createApiClient({
+        baseUrl: "http://api.test",
+        platform: createFakePlatform(),
+        onUnauthenticated: () => undefined,
+        fetch: async (request) => {
+          seen.push(request.clone());
+          if (seen.length === 1) {
+            // The first call (the first save's GET) waits, so a second save is queued behind it.
+            await new Promise<void>((resolve, reject) => {
+              request.signal.addEventListener("abort", () => reject(request.signal.reason));
+              void gate.then(resolve);
+            });
+          }
+          return Response.json(SERVER);
+        },
+      });
+      return { client, release: () => release?.() };
+    }
+
+    it("drops a save still queued: nothing is written under the next session", async () => {
+      const seen: Request[] = [];
+      const { client } = slowClient(seen);
+      const first = savePreferences(client, { themeMode: "day" });
+      const queued = savePreferences(client, { themeMode: "night" });
+      resetPreferenceSaves(client);
+      expect(await first).toBe(false);
+      expect(await queued).toBe(false);
+      expect(seen.filter((r) => r.method === "PUT")).toHaveLength(0);
+    });
+
+    it("aborts the save in flight", async () => {
+      const seen: Request[] = [];
+      const { client } = slowClient(seen);
+      const first = savePreferences(client, { themeMode: "day" });
+      await vi.waitFor(() => expect(seen).toHaveLength(1));
+      resetPreferenceSaves(client);
+      expect(await first).toBe(false);
+      expect(seen[0]?.signal.aborted).toBe(true);
+    });
+
+    it("lets a save made after the reset through", async () => {
+      const seen: Request[] = [];
+      const { client } = slowClient(seen);
+      void savePreferences(client, { themeMode: "day" });
+      await vi.waitFor(() => expect(seen).toHaveLength(1));
+      resetPreferenceSaves(client);
+      // The first call was the held one; every later call answers at once.
+      expect(await savePreferences(client, { themeMode: "night" })).toBe(true);
+      expect(seen.filter((r) => r.method === "PUT")).toHaveLength(1);
+    });
   });
 });
