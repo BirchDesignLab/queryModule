@@ -92,6 +92,8 @@ export const LAYOUT_CONSTANTS = {
   "layout.toolbar": "720px",
   /** At or above this section width the builder's heading shares a row with its toolbar; below it the toolbar has the whole width, so its controls stay on one row. */
   "layout.toolbarRow": "920px",
+  /** At or above this window width the terminal can sit in its own pane beside the results (layout.terminal "pane"); below it the Form and Terminal toggle returns and the draft is kept. */
+  "layout.terminalPane": "1280px",
 } as const;
 
 export type ColorTokenName = keyof typeof COLOR_TOKENS;

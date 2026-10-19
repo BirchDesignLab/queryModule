@@ -3141,3 +3141,113 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-builder__editor[data-tab="raw"] textarea {
   flex: 1 0 auto;
 }
+
+/* Terminal beside the results (FR-050, UX-014, D-M2P2-B2; mockup v6 "Terminal pane"). From
+   layout.terminalPane (1280 px) a dispatcher who chose "Beside results" gets three columns: the
+   form in its panel (448 to 480 px), the results in the middle (they take the rest, 384 px at
+   least), the terminal on the right (320 px). The page script renders the pane only from this
+   width, so below it the Form and Terminal toggle is back and these rules do not apply. Widths are
+   multiples of the spacing tokens (no literal lengths outside a query condition). */
+@media (min-width: 1280px) {
+  .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes.qm-panes--terminal {
+    grid-template-columns:
+      minmax(calc(var(--qm-space-8) * 14), calc(var(--qm-space-8) * 15))
+      minmax(calc(var(--qm-space-12) * 8), 1fr)
+      calc(var(--qm-space-8) * 10);
+  }
+}
+
+/* The pane is a card of its own on the sunken page, like the panel and the requests. */
+.qm-terminal-pane {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  padding: var(--qm-space-4) var(--qm-space-5);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-panel);
+  background: var(--qm-color-surface-base);
+}
+
+.qm-terminal-pane h2 {
+  margin: 0 0 var(--qm-space-3);
+  font-size: var(--qm-type-size-lg);
+  font-weight: 600;
+}
+
+.qm-terminal-pane .qm-terminal__input {
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-terminal-pane__reference {
+  margin-block-start: var(--qm-space-4);
+  padding-block-start: var(--qm-space-3);
+  border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
+}
+
+.qm-terminal-pane__subheading {
+  margin: 0 0 var(--qm-space-2);
+  font-size: var(--qm-type-size-md);
+  font-weight: 600;
+}
+
+.qm-terminal-pane__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qm-terminal-pane__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-1);
+  min-inline-size: 0;
+}
+
+.qm-terminal-pane__syntax {
+  font-family: var(--qm-type-family-data);
+  font-size: var(--qm-type-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.qm-terminal-pane__type {
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+/* The account menu's terminal choice (UX-014): a legend over the segmented control, then the width
+   hint and, after a failed save, the alert. */
+.qm-account__terminal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qm-space-1);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.qm-account__terminal-label {
+  padding: 0;
+  font-size: var(--qm-type-size-sm);
+  font-weight: 600;
+}
+
+/* Dispatcher controls are 36 px: the segments of this choice, not the 28 px segment default. */
+.qm-account__terminal .qm-seg > button {
+  min-height: var(--qm-control-height-dense);
+}
+
+.qm-account__hint {
+  margin: 0;
+  max-inline-size: 36ch;
+  color: var(--qm-color-text-muted);
+  font-size: var(--qm-type-size-sm);
+}
+
+.qm-account__terminal .qm-form-error {
+  margin: 0;
+  max-inline-size: 36ch;
+}

@@ -66,3 +66,78 @@ describe("focus repair B: the Keyboard shortcuts item leaves while it has focus 
     outside.remove();
   });
 });
+
+describe("UX-014 the terminal layout control under Theme (FR-050, spec 6.2)", () => {
+  async function open(props: Partial<AccountMenuProps>) {
+    const user = userEvent.setup();
+    render(menu(props));
+    await user.click(screen.getByRole("button", { name: EMAIL }));
+    return { user, panel: screen.getByRole("group", { name: "Account" }) };
+  }
+
+  it("is not offered where the page has no terminal pane (no handler)", async () => {
+    const { panel } = await open({});
+    expect(within(panel).queryByRole("group", { name: "Terminal" })).toBeNull();
+  });
+
+  it("offers In the panel and Beside results, the stored one pressed, with the width hint", async () => {
+    const { panel } = await open({ terminal: "pane", onTerminalChange: vi.fn() });
+    const group = within(panel).getByRole("group", { name: "Terminal" });
+    expect(within(group).getByRole("button", { name: "In the panel" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    const beside = within(group).getByRole("button", { name: "Beside results" });
+    expect(beside).toHaveAttribute("aria-pressed", "true");
+    expect(beside).toHaveAccessibleDescription(
+      "Beside results needs a window 1280 px wide or more.",
+    );
+    expect(
+      within(panel).getByText("Beside results needs a window 1280 px wide or more."),
+    ).toBeVisible();
+  });
+
+  it("an unset layout reads In the panel", async () => {
+    const { panel } = await open({ terminal: "toggle", onTerminalChange: vi.fn() });
+    expect(within(panel).getByRole("button", { name: "In the panel" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("a press reports the new choice, and the pressed one again reports nothing", async () => {
+    const onTerminalChange = vi.fn();
+    const { user, panel } = await open({ terminal: "toggle", onTerminalChange });
+    await user.click(within(panel).getByRole("button", { name: "In the panel" }));
+    expect(onTerminalChange).not.toHaveBeenCalled();
+    await user.click(within(panel).getByRole("button", { name: "Beside results" }));
+    expect(onTerminalChange).toHaveBeenCalledExactlyOnceWith("pane");
+  });
+
+  it("a failed save shows an alert in the menu", async () => {
+    const { panel } = await open({
+      terminal: "toggle",
+      onTerminalChange: vi.fn(),
+      terminalSaveFailed: true,
+    });
+    expect(within(panel).getByRole("alert")).toHaveTextContent(
+      "Could not save the layout. It stays on In the panel.",
+    );
+  });
+
+  it("a failed save that leaves the layout on Beside results says so (S2)", async () => {
+    const { panel } = await open({
+      terminal: "pane",
+      onTerminalChange: vi.fn(),
+      terminalSaveFailed: true,
+    });
+    expect(within(panel).getByRole("alert")).toHaveTextContent(
+      "Could not save the layout. It stays on Beside results.",
+    );
+  });
+
+  it("shows no alert when the save did not fail", async () => {
+    const { panel } = await open({ terminal: "toggle", onTerminalChange: vi.fn() });
+    expect(within(panel).queryByRole("alert")).toBeNull();
+  });
+});

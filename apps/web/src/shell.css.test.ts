@@ -68,6 +68,25 @@ describe("shell.css uses token variables only (spec 6.5)", () => {
   });
 });
 
+describe("terminal beside the results (FR-050, D-M2P2-B2)", () => {
+  it("lays out three columns only from layout.terminalPane, in a media condition at the constant", () => {
+    const width = LAYOUT_CONSTANTS["layout.terminalPane"];
+    const block = new RegExp(
+      String.raw`@media \(min-width: ${width}\)\s*\{\s*\.qm-query-panel:not\([^)]*\) \.qm-panes\.qm-panes--terminal\s*\{([^}]*)\}`,
+    ).exec(shellCss);
+    expect(block, "a media block at layout.terminalPane for .qm-panes--terminal").not.toBeNull();
+    // Form panel, results, pane: the results are the flexible column.
+    expect(block?.[1]).toMatch(/grid-template-columns:[\s\S]*1fr[\s\S]*\)\s*;/);
+  });
+});
+
+describe("account menu terminal choice (CV1)", () => {
+  it("its segments are dispatcher controls, 36 px (control-height-dense), not the 28 px segment default", () => {
+    const rule = /\.qm-account__terminal \.qm-seg > button\s*\{([^}]*)\}/.exec(shellCss)?.[1] ?? "";
+    expect(rule).toContain("min-height: var(--qm-control-height-dense)");
+  });
+});
+
 describe("admin warnings (BW3 polish, T12-14)", () => {
   it("a mock warning uses the severity warning token pair, apart from the error style", () => {
     const start = shellCss.indexOf(".qm-mock__warning {");

@@ -264,8 +264,13 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     await user.tab();
     await user.tab();
     await user.tab();
+    // The terminal choice (In the panel, Beside results) sits under the theme.
     await user.tab();
-    // The design's order: theme, then Keyboard shortcuts, then Sign out.
+    expect(within(panel).getByRole("button", { name: "In the panel" })).toHaveFocus();
+    await user.tab();
+    expect(within(panel).getByRole("button", { name: "Beside results" })).toHaveFocus();
+    await user.tab();
+    // The design's order: theme, terminal, then Keyboard shortcuts, then Sign out.
     expect(within(panel).getByRole("button", { name: "Keyboard shortcuts" })).toHaveFocus();
     await user.tab();
     expect(within(panel).getByRole("button", { name: "Sign out" })).toHaveFocus();
@@ -495,6 +500,115 @@ describe("BR-002 signed-in chrome: header on the query panel (D-B4, design B1)",
     const panel = await openAccount(user);
     await user.click(within(panel).getByRole("button", { name: "Red shift" }));
     await waitFor(() => expect(puts).toEqual([{ ...PREFERENCES, themeMode: "redShift" }]));
+  });
+
+  describe("FR-050 the terminal layout choice in the account menu (UX-014)", () => {
+    const record = () => {
+      const puts: unknown[] = [];
+      server.use(
+        http.put(`${API}/api/v1/me/preferences`, async ({ request }) => {
+          const body = await request.json();
+          puts.push(body);
+          return HttpResponse.json(body);
+        }),
+      );
+      return puts;
+    };
+
+    it("an unset layout reads In the panel; the first pick stores horizontal with it", async () => {
+      server.use(
+        http.get(`${API}/api/v1/me/preferences`, () =>
+          HttpResponse.json({ ...PREFERENCES, layout: null }),
+        ),
+      );
+      const puts = record();
+      const { user, services } = await signIn();
+      expect(services.preferences.getState().layout).toBeNull();
+      const panel = await openAccount(user);
+      expect(within(panel).getByRole("button", { name: "In the panel" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await user.click(within(panel).getByRole("button", { name: "Beside results" }));
+      await waitFor(() =>
+        expect(puts).toEqual([
+          { ...PREFERENCES, layout: { orientation: "horizontal", terminal: "pane" } },
+        ]),
+      );
+      expect(services.preferences.getState().layout).toEqual({
+        orientation: "horizontal",
+        terminal: "pane",
+      });
+      expect(within(panel).getByRole("button", { name: "Beside results" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(within(panel).queryByRole("alert")).toBeNull();
+    });
+
+    it("a later pick keeps the stored orientation", async () => {
+      server.use(
+        http.get(`${API}/api/v1/me/preferences`, () =>
+          HttpResponse.json({
+            ...PREFERENCES,
+            layout: { orientation: "vertical", terminal: "pane" },
+          }),
+        ),
+      );
+      const puts = record();
+      const { user } = await signIn();
+      const panel = await openAccount(user);
+      expect(within(panel).getByRole("button", { name: "Beside results" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await user.click(within(panel).getByRole("button", { name: "In the panel" }));
+      await waitFor(() =>
+        expect(puts).toEqual([
+          { ...PREFERENCES, layout: { orientation: "vertical", terminal: "toggle" } },
+        ]),
+      );
+    });
+
+    it("a failed save puts the control back and says so", async () => {
+      server.use(
+        http.get(`${API}/api/v1/me/preferences`, () =>
+          HttpResponse.json({ ...PREFERENCES, layout: null }),
+        ),
+        http.put(`${API}/api/v1/me/preferences`, () =>
+          HttpResponse.json({ error: "boom" }, { status: 500 }),
+        ),
+      );
+      const { user, services } = await signIn();
+      const panel = await openAccount(user);
+      await user.click(within(panel).getByRole("button", { name: "Beside results" }));
+      expect(await within(panel).findByRole("alert")).toHaveTextContent(
+        "Could not save the layout. It stays on In the panel.",
+      );
+      expect(services.preferences.getState().layout).toBeNull();
+      expect(within(panel).getByRole("button", { name: "In the panel" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(within(panel).getByRole("button", { name: "Beside results" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    });
+
+    it("a network failure reverts the same way", async () => {
+      server.use(
+        http.get(`${API}/api/v1/me/preferences`, () =>
+          HttpResponse.json({ ...PREFERENCES, layout: null }),
+        ),
+        http.put(`${API}/api/v1/me/preferences`, () => HttpResponse.error()),
+      );
+      const { user, services } = await signIn();
+      const panel = await openAccount(user);
+      await user.click(within(panel).getByRole("button", { name: "Beside results" }));
+      expect(await within(panel).findByRole("alert")).toBeVisible();
+      expect(services.preferences.getState().layout).toBeNull();
+    });
   });
 });
 

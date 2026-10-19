@@ -29,6 +29,24 @@ describe("UX-014 preference saved to the user profile (spec 5.1, 5.5)", () => {
     await loadPreferences(api([]), store);
     expect(store.getState()).toMatchObject({ themeMode: "night", personaOverride: null });
   });
+  it("loads the layout; a null or malformed layout stays unset", async () => {
+    const store = createPreferencesStore();
+    await loadPreferences(
+      api([], { ...SERVER, layout: { orientation: "vertical", terminal: "pane" } }),
+      store,
+    );
+    expect(store.getState().layout).toEqual({ orientation: "vertical", terminal: "pane" });
+    await loadPreferences(api([], { ...SERVER, layout: null }), store);
+    expect(store.getState().layout).toBeNull();
+    await loadPreferences(api([], { ...SERVER, layout: { terminal: "pane" } }), store);
+    expect(store.getState().layout).toBeNull();
+  });
+  it("saves a layout patch with the rest of the server copy", async () => {
+    const seen: Request[] = [];
+    const layout = { orientation: "horizontal", terminal: "pane" } as const;
+    expect(await savePreferences(api(seen), { layout })).toBe(true);
+    expect(await seen.find((r) => r.method === "PUT")?.json()).toEqual({ ...SERVER, layout });
+  });
   it("ignores an unknown theme value from the server", async () => {
     const store = createPreferencesStore();
     await loadPreferences(api([], { ...SERVER, themeMode: "sepia" }), store);

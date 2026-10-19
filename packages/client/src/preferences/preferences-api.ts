@@ -1,5 +1,6 @@
 import type { ApiClient } from "../api/create-api-client.js";
 import {
+  isPreferenceLayout,
   isThemeModePreference,
   type PreferencesSnapshot,
   type PreferencesStore,
@@ -11,6 +12,7 @@ export async function loadPreferences(api: ApiClient, store: PreferencesStore): 
   store.getState().hydrate({
     themeMode: isThemeModePreference(data.themeMode) ? data.themeMode : null,
     personaOverride: typeof data.personaOverride === "string" ? data.personaOverride : null,
+    layout: isPreferenceLayout(data.layout) ? data.layout : null,
   });
 }
 

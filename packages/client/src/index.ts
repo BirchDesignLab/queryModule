@@ -62,6 +62,7 @@ export type { AuthTransport, ClientPlatform, PlatformSignal, TokenStore } from "
 export { noTokenStore } from "./platform.js";
 export { loadPreferences, savePreferences } from "./preferences/preferences-api.js";
 export type {
+  PreferenceLayout,
   PreferencesSnapshot,
   PreferencesState,
   PreferencesStore,
@@ -69,6 +70,7 @@ export type {
 } from "./preferences/preferences-store.js";
 export {
   createPreferencesStore,
+  isPreferenceLayout,
   isThemeModePreference,
   THEME_PREFERENCES,
 } from "./preferences/preferences-store.js";

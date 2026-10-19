@@ -1,3 +1,6 @@
+import { useStore } from "@querymodule/client";
+import { LAYOUT_CONSTANTS } from "@querymodule/tokens";
+import { useMediaQuery } from "@querymodule/web-ui";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useIsFreshLoad, usePersonaLayout } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
@@ -8,12 +11,20 @@ import { useLiveConfig } from "./use-query-panel.js";
 
 const ID_PREFIX = "qp";
 
+/** The window width from which the terminal can sit beside the results (D-M2P2-B2). */
+const TERMINAL_PANE_QUERY = `(min-width: ${LAYOUT_CONSTANTS["layout.terminalPane"]})`;
+
 /** The main screen (spec 6.2): the query panel view over GET /api/v1/config, no per-query-type code (BR-001). */
 export function QueryPanel() {
   const t = useT();
-  const { drafts } = useServices();
+  const { drafts, preferences } = useServices();
   const live = useLiveConfig();
   const layout = usePersonaLayout();
+  // The terminal beside the results (FR-050, UX-014): the stored choice, at a window wide enough,
+  // on the dispatch layout (the officer layout is one column). Narrower, the toggle returns.
+  const wantsPane = useStore(preferences, (s) => s.layout?.terminal === "pane");
+  const wideEnough = useMediaQuery(TERMINAL_PANE_QUERY);
+  const terminalPane = wantsPane && wideEnough && layout !== "mobileUnit";
   const headingRef = useRef<HTMLHeadingElement>(null);
   // Focus follows a navigation (sign-in, a link back, browser Back), spec 6.4; a fresh load keeps
   // it at the top of the page, so the first Tab is the skip link.
@@ -92,6 +103,7 @@ export function QueryPanel() {
           idPrefix={ID_PREFIX}
           onConfigChanged={() => live.refetch()}
           requests={layout === "mobileUnit" ? "last" : "list"}
+          terminalPane={terminalPane}
         />
       ) : null}
     </main>
