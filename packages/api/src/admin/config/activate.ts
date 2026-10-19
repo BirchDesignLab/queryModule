@@ -25,13 +25,15 @@ import { documentHashOf, parseStored } from "./store";
  * event from. So the event's previousConfigHash, configHash and changedPointers cannot go stale
  * between the caller's read and the commit (an in-place draft save in between, critic:C1).
  * Returns the row as published (the UPDATE's RETURNING), so a caller needs no read after the
- * commit that could fail a change that already happened (C-m1).
+ * commit that could fail a change that already happened (C-m1). `note` (publish only, D-M2P0-4)
+ * is stored on the row as it publishes; without one the row has none (rollback takes no note).
  */
 export async function activate(
   d: AppDeps,
   version: number,
   event?: AuditEvent,
   expected?: { live: number; document: string },
+  note?: string,
 ): Promise<typeof siteConfigVersion.$inferSelect> {
   const siteId = d.config.current().siteConfig.site.id;
   const label = `store site ${siteId} version ${version}`;
@@ -73,6 +75,7 @@ export async function activate(
         documentHash,
         publishedBy: event?.actor.id ?? SYSTEM_ACTOR.id,
         publishedAt: d.clock.now(),
+        note: note ?? null,
       })
       .where(
         and(

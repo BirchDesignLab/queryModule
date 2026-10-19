@@ -11,7 +11,7 @@ import {
 import { and, desc, eq, isNull, max } from "drizzle-orm";
 import { type ChainResult, checkConfigDocument, configDirOf } from "../../config/load";
 import type { Db } from "../../db/client";
-import { siteConfigVersion } from "../../db/schema";
+import { siteConfigVersion, user } from "../../db/schema";
 import { type Tx, withTransaction } from "../../db/tx";
 import type { AppDeps } from "../../deps";
 import { uuidv7 } from "../../ids";
@@ -22,8 +22,12 @@ export type VersionRow = typeof siteConfigVersion.$inferSelect;
 
 export const siteIdOf = (d: AppDeps): string => d.config.current().siteConfig.site.id;
 
-/** A row as the admin sees it (ConfigVersionSchema): metadata only, no document. */
-export function toConfigVersion(row: VersionRow): ConfigVersion {
+/**
+ * A row as the admin sees it (ConfigVersionSchema): metadata only, no document. D-M2P0-4: `note`
+ * when the publish stored one, and `publishedByName`, the publisher's user.name, when the caller
+ * read one (absent for the system actor or once the user row is gone).
+ */
+export function toConfigVersion(row: VersionRow, publishedByName?: string | null): ConfigVersion {
   return ConfigVersionSchema.parse({
     id: row.id,
     version: row.version,
@@ -35,7 +39,34 @@ export function toConfigVersion(row: VersionRow): ConfigVersion {
     publishedBy: row.publishedBy,
     publishedAt: row.publishedAt,
     rollbackOf: row.rollbackOf,
+    ...(row.note === null ? {} : { note: row.note }),
+    ...(publishedByName ? { publishedByName } : {}),
   });
+}
+
+/** One row with its publisher's name (D-M2P0-4), read from the user row by publishedBy. */
+export async function namedVersion(db: Db | Tx, row: VersionRow): Promise<ConfigVersion> {
+  if (row.publishedBy === null) return toConfigVersion(row);
+  const [publisher] = await db
+    .select({ name: user.name })
+    .from(user)
+    .where(eq(user.id, row.publishedBy));
+  return toConfigVersion(row, publisher?.name);
+}
+
+/**
+ * The site's version history, newest first, capped at 1000 (not paged), each row with its
+ * publisher's name from a left join on user (D-M2P0-4): a row whose user is gone stays listed.
+ */
+export async function versionHistory(db: Db | Tx, siteId: string): Promise<ConfigVersion[]> {
+  const rows = await db
+    .select({ row: siteConfigVersion, publishedByName: user.name })
+    .from(siteConfigVersion)
+    .leftJoin(user, eq(user.id, siteConfigVersion.publishedBy))
+    .where(eq(siteConfigVersion.siteId, siteId))
+    .orderBy(desc(siteConfigVersion.version))
+    .limit(1000);
+  return rows.map((r) => toConfigVersion(r.row, r.publishedByName));
 }
 
 /** The stored document; a parse failure names the site and version only (spec 5.9). */

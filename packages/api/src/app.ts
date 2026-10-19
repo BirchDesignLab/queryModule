@@ -16,7 +16,7 @@ import {
 import type { AppEnv } from "./http/types";
 import { mountWeb } from "./http/web";
 import { errorFields } from "./log/error-fields";
-import { ReplayIntegrityError } from "./queries/admission";
+import { markReceipt, ReplayIntegrityError } from "./queries/admission";
 import { SubmitTransactionError } from "./queries/errors";
 import { mountQueriesRoute } from "./queries/route";
 import { mountConfigRoute } from "./routes/config";
@@ -52,6 +52,9 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
       ],
     }),
   );
+  // The submit's receipt mark comes first, so its ack span includes the body cap, the
+  // X-Requested-With check and the session check (spec 11, NFR-004).
+  app.post("/api/v1/queries", markReceipt(d));
   // The admin config draft and validate routes apply their own larger cap (ADR-0011 item 2).
   const apiCap = bodyCap();
   app.use(

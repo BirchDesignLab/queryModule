@@ -7,6 +7,7 @@ import type { AppEnv } from "../../src/http/types";
 import {
   admitSubmit,
   MAX_VALUE_BYTES,
+  markReceipt,
   QUERY_LIMIT,
   ReplayIntegrityError,
   replayResponse,
@@ -44,7 +45,7 @@ async function stubApp(): Promise<{
 }> {
   const t = await createTestApp({ clock: frozenClock() });
   const sub = new Hono<AppEnv>();
-  sub.post("/", requireSession(t.deps.identity), async (c) => {
+  sub.post("/", markReceipt(t.deps), requireSession(t.deps.identity), async (c) => {
     const a = await admitSubmit(c, t.deps);
     if (a.kind === "reject") return a.response;
     if (a.kind === "replay") return c.json(a.body, 202);

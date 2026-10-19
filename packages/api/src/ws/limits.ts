@@ -6,3 +6,12 @@
  * from one IP.
  */
 export const WS_UPGRADE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
+
+/**
+ * The client frames one socket may send per window (AW4 C1, M2 Manager 8 ruling 10-18-26). Every
+ * frame (hello, ping, ackReceipt) spends one unit, and ping and ackReceipt each cost a DB read, so
+ * an authenticated client cannot flood the server through one socket. The web client pings every
+ * 20 s and sends one ackReceipt per acknowledged query, far below the limit. Past it the socket is
+ * closed with WS_LOCAL_CLOSE.frameLimit (ws/server.ts).
+ */
+export const WS_CLIENT_FRAME_LIMIT = { limit: 120, windowMs: 60_000 } as const;

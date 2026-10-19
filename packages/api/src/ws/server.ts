@@ -7,13 +7,17 @@ import {
   WsClientMessageSchema,
   type WsEvent,
 } from "@querymodule/core/contracts";
+import { and, eq } from "drizzle-orm";
 import { WebSocket, WebSocketServer } from "ws";
 import { BACKGROUND_HEADER } from "../auth/identity";
 import { trustedClientIp } from "../auth/rate-limit";
+import { auditEvent } from "../db/schema";
 import type { AppDeps } from "../deps";
 import { eventsSince, latestSeq } from "../dispatch/event-log";
 import { DEV_ORIGINS } from "../env";
+import { authorizeQueryAccess } from "../queries/policy";
 import type { Principal } from "../seams";
+import { WS_CLIENT_FRAME_LIMIT } from "./limits";
 
 export const WS_PATH = "/api/v1/ws";
 export const WS_IDLE_MS = 60_000;
@@ -22,14 +26,18 @@ export { WS_UPGRADE_LIMIT } from "./limits";
 /**
  * Server-local close codes, RFC 6455 or local, outside the contract (WS_CLOSE_CODES): any close
  * other than 4001 sessionEnded means reconnect (spec 5.3). internal 1011: the welcome.latestSeq or
- * replay read failed.
+ * replay read failed. frameLimit 4029: the socket sent more than WS_CLIENT_FRAME_LIMIT frames in one
+ * window (AW4 C1); the client may reconnect, within the upgrade limit.
  */
 export const WS_LOCAL_CLOSE = {
   idle: 4000,
   badMessage: 1008,
   shutdown: 1001,
   internal: 1011,
+  frameLimit: 4029,
 } as const;
+/** Correlation ids already counted as an ackReceipt metric in this process; oldest out. */
+const ACK_COUNTED_MAX = 1000;
 export interface WsHandle {
   stopAccepting(): void;
   close(): Promise<void>;
@@ -87,6 +95,7 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
   ]);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
   let accepting = true;
+  const counted = new Set<string>();
 
   function bind(ws: WebSocket, p: Principal): void {
     const send = (m: unknown) => {
@@ -127,6 +136,27 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
       else if (e.seq > floor) send(e);
     });
     let helloSeen = false;
+    // Per-socket frame budget (AW4 C1): a fixed window on the monotonic clock, so a wall-clock
+    // step never stops it refilling (G-G-m1); every client frame, parsed or not, spends one unit
+    // before any work or DB read. Past the limit the socket closes once with frameLimit and one
+    // log line that names the session only, never a frame value.
+    let windowStart = d.monotonic.nowMs();
+    let frames = 0;
+    let capped = false;
+    const overBudget = (): boolean => {
+      if (capped) return true;
+      const now = d.monotonic.nowMs();
+      if (now - windowStart >= WS_CLIENT_FRAME_LIMIT.windowMs) {
+        windowStart = now;
+        frames = 0;
+      }
+      frames += 1;
+      if (frames <= WS_CLIENT_FRAME_LIMIT.limit) return false;
+      capped = true;
+      d.logger.warn("ws client frame limit exceeded", { sessionId: p.sessionId });
+      ws.close(WS_LOCAL_CLOSE.frameLimit, "frame limit");
+      return true;
+    };
     async function answerHello(lastSeq: number | null): Promise<void> {
       const v = WS_PROTOCOL_VERSION;
       if (lastSeq === null) {
@@ -166,7 +196,35 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
       held = null;
       for (const e of due) if (e.seq > floor) send(e);
     }
+    async function recordReceipt(correlationId: string): Promise<void> {
+      if (counted.has(correlationId)) return;
+      try {
+        const access = await authorizeQueryAccess(d.db, p, correlationId, "read", "own");
+        if (!access.ok) return;
+        const [row] = await d.db
+          .select({ at: auditEvent.at })
+          .from(auditEvent)
+          .where(
+            and(eq(auditEvent.correlationId, correlationId), eq(auditEvent.type, "acknowledged")),
+          )
+          .limit(1);
+        if (!row) return;
+        // Check and add with no await between them, so two frames cannot both count.
+        if (counted.has(correlationId)) return;
+        counted.add(correlationId);
+        if (counted.size > ACK_COUNTED_MAX) {
+          const oldest = counted.values().next().value;
+          if (oldest !== undefined) counted.delete(oldest);
+        }
+        d.logger.info("metric ackReceipt", { correlationId, e2eMs: d.clock.now() - row.at });
+      } catch (err: unknown) {
+        d.logger.error("ws ackReceipt failed", {
+          errorName: err instanceof Error ? err.name : typeof err,
+        });
+      }
+    }
     ws.on("message", async (raw) => {
+      if (overBudget()) return;
       const m = WsClientMessageSchema.safeParse(parse(String(raw)));
       if (!m.success) return ws.close(WS_LOCAL_CLOSE.badMessage, "bad message");
       if (m.data.type === "hello") {
@@ -203,7 +261,9 @@ export function attachWebSocket(server: Server, d: AppDeps, o: { idleMs?: number
           serverTime: d.clock.now(),
         });
       }
-      // ackReceipt is accepted and ignored until M2 P1 records the metric.
+      // ackReceipt is a metric, not audit (spec 4.7, D-M2P2-4): anything not owned, not yet
+      // counted or sent before hello is ignored silently, with no frame and no log of the payload.
+      if (m.data.type === "ackReceipt" && helloSeen) await recordReceipt(m.data.correlationId);
     });
     ws.on("close", () => {
       clearTimeout(idle);

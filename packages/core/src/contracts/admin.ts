@@ -51,7 +51,7 @@ export const ConfigVersionSchema = z.strictObject({
   publishedBy: BoundedIdSchema.nullable(),
   publishedAt: EpochMsSchema.nullable(),
   rollbackOf: z.int().min(1).nullable(),
-  /** D-M2P0-4: optional until M2 P2 persists them (the store does not write them yet). */
+  /** D-M2P0-4: optional: absent when no note was given or the publisher's row is gone. */
   note: PublishNoteSchema.optional(),
   /** The publisher's display name, beside the publishedBy id (D-M2P0-4). */
   publishedByName: z.string().min(1).max(128).optional(),
@@ -94,7 +94,7 @@ export const ValidateConfigResponseSchema = z.strictObject({
  */
 export const PublishConfigBodySchema = z.strictObject({
   draftVersion: z.int().min(1),
-  /** D-M2P0-4: accepted and ignored until M2 P2 persists it. */
+  /** D-M2P0-4: optional; stored trimmed on the published version, never in its audit row. */
   note: PublishNoteSchema.optional(),
 });
 

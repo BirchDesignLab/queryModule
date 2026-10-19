@@ -1,5 +1,6 @@
 import {
   AdminConfigResponseSchema,
+  ConfigVersionListSchema,
   ConfigVersionSchema,
   MAX_CHANGED_POINTERS,
 } from "@querymodule/core/contracts";
@@ -332,5 +333,99 @@ describe("ADR-0011 item 7 changedPointers (writer rule)", () => {
     const out = changedPointers(many(1), many(2));
     expect(out.length).toBeLessThanOrEqual(MAX_CHANGED_POINTERS);
     expect(out).toEqual(["/g0", "/g1", "/g2"]);
+  });
+});
+
+describe("D-M2P0-4 the publish note and the publisher's name (#718, BR-001, UX-004)", () => {
+  const NOTE = "Added plate type";
+
+  async function versions(a: Awaited<ReturnType<typeof adminConfigApp>>) {
+    const r = await a.call("admin", "GET", `${API}/versions`);
+    expect(r.status).toBe(200);
+    return ConfigVersionListSchema.parse(await r.json()).versions;
+  }
+
+  async function nameOf(a: Awaited<ReturnType<typeof adminConfigApp>>, id: string) {
+    const r = await a.t.deps.db.$client.execute({
+      sql: "SELECT name FROM user WHERE id = ?",
+      args: [id],
+    });
+    return String(r.rows[0]?.name);
+  }
+
+  it("stores the note as parsed (trimmed) and serves it with the publisher's name", async () => {
+    const { a } = await publishedDraft();
+    const r = await a.call("implementer", "POST", `${API}/publish`, {
+      draftVersion: 2,
+      note: `  ${NOTE}  `,
+    });
+    expect(r.status).toBe(200);
+    expect(ConfigVersionSchema.parse(await r.json()).note).toBe(NOTE);
+    const implementer = await a.userId("implementer");
+    const name = await nameOf(a, implementer);
+    expect(name).toMatch(/.+/);
+
+    const list = await versions(a);
+    expect(list.map((v) => [v.version, v.note, v.publishedByName])).toEqual([
+      [2, NOTE, name],
+      // Version 1 is the system seed: no note, and no user row behind its publisher.
+      [1, undefined, undefined],
+    ]);
+    const config = AdminConfigResponseSchema.parse(
+      await (await a.call("admin", "GET", API)).json(),
+    );
+    expect(config.live).toMatchObject({ version: 2, note: NOTE, publishedByName: name });
+
+    // Spec 4.7: the note is free text, so the audit row never carries it.
+    const rows = await a.t.auditRows("configPublished");
+    expect(rows).toHaveLength(1);
+    expect(Object.keys(rows[0]?.details ?? {})).not.toContain("note");
+    expect(JSON.stringify(rows)).not.toContain(NOTE);
+    expect(a.t.logLines.join("\n")).not.toContain(NOTE);
+  });
+
+  it("a publish without a note serves no note", async () => {
+    const { a } = await publishedDraft();
+    const r = await a.call("implementer", "POST", `${API}/publish`, { draftVersion: 2 });
+    expect(r.status).toBe(200);
+    expect(await r.json()).not.toHaveProperty("note");
+    const [v2] = await versions(a);
+    expect(v2?.version).toBe(2);
+    expect(v2).not.toHaveProperty("note");
+    expect(v2?.publishedByName).toBe(await nameOf(a, await a.userId("implementer")));
+  });
+
+  it("publishedByName is absent once the publisher's user row is gone", async () => {
+    const { a } = await publishedDraft();
+    const r = await a.call("implementer", "POST", `${API}/publish`, {
+      draftVersion: 2,
+      note: NOTE,
+    });
+    expect(r.status).toBe(200);
+    const implementer = await a.userId("implementer");
+    await a.t.deps.db.$client.execute({
+      sql: "DELETE FROM user WHERE id = ?",
+      args: [implementer],
+    });
+    const [v2] = await versions(a);
+    expect(v2).toMatchObject({ version: 2, note: NOTE, publishedBy: implementer });
+    expect(v2).not.toHaveProperty("publishedByName");
+  });
+
+  it("a rollback takes no note: its version has none", async () => {
+    const { a } = await publishedDraft();
+    expect(
+      (await a.call("implementer", "POST", `${API}/publish`, { draftVersion: 2, note: NOTE }))
+        .status,
+    ).toBe(200);
+    const r = await a.call("admin", "POST", `${API}/versions/1/rollback`);
+    expect(r.status).toBe(200);
+    expect(await r.json()).not.toHaveProperty("note");
+    const list = await versions(a);
+    expect(list.map((v) => [v.version, v.note])).toEqual([
+      [3, undefined],
+      [2, NOTE],
+      [1, undefined],
+    ]);
   });
 });

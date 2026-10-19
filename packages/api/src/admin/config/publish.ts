@@ -188,13 +188,17 @@ async function activateRow(
   row: VersionRow,
   event: AuditEvent,
   live: VersionRow,
+  note?: string,
 ): Promise<PublishResult> {
   let published: VersionRow;
   try {
-    published = await activate(d, row.version, event, {
-      live: live.version,
-      document: row.document,
-    });
+    published = await activate(
+      d,
+      row.version,
+      event,
+      { live: live.version, document: row.document },
+      note,
+    );
   } catch (e) {
     if (!(e instanceof ConfigLoadError)) throw e;
     // The draft (saved in place, published or removed) or the live version moved between the
@@ -213,12 +217,15 @@ async function activateRow(
 
 /**
  * POST /admin/config/publish (ADR-0011 items 3 and 5): the shared draft, on the live base, fully
- * validated, activated through activate() with configPublished (BR-001; ADR-0011 item 7).
+ * validated, activated through activate() with configPublished (BR-001; ADR-0011 item 7). The
+ * note (D-M2P0-4), as PublishNoteSchema parsed it, is written in the same transaction; the
+ * configPublished details never carry it (free text, spec 4.7).
  */
 export async function publishDraft(
   d: AppDeps,
   principal: Principal,
   draftVersion: number,
+  note?: string,
 ): Promise<PublishResult> {
   const siteId = siteIdOf(d);
   const live = await liveRow(d.db, siteId);
@@ -227,7 +234,7 @@ export async function publishDraft(
   if (row.baseVersion !== live.version) return { ok: false, code: "draftConflict" };
   const p = await prepare(d, principal, live, row.document, `store site ${siteId} draft`);
   if (!p.ok) return p.result;
-  return activateRow(d, row, p.event(row), live);
+  return activateRow(d, row, p.event(row), live, note);
 }
 
 /**

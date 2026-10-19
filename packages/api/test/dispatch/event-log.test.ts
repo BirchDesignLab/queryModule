@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { SourceStatusEventSchema } from "@querymodule/core/contracts";
 import { sql } from "drizzle-orm";
@@ -153,6 +154,9 @@ describe("migrations", () => {
   it("check-audit-migrations passes with 0010_event_log", () => {
     const cli = resolve(import.meta.dirname, "../../../../scripts/ci/check-audit-migrations.ts");
     const out = execFileSync(process.execPath, [cli, drizzleDir], { encoding: "utf8" });
-    expect(out).toMatch(/audit_event migrations ok \(11 files\)/);
+    // Every migration, 0010_event_log among them; later migrations raise the count.
+    const files = readdirSync(drizzleDir).filter((f) => f.endsWith(".sql"));
+    expect(files).toContain("0010_event_log.sql");
+    expect(out).toContain(`audit_event migrations ok (${files.length} files)`);
   }, 20_000);
 });

@@ -143,6 +143,8 @@ export async function acknowledge(
         type: "acknowledged",
         details: {
           acknowledgedAt,
+          // From request receipt (markReceipt) to this write inside T1: the row cannot include
+          // its own COMMIT; the 202's Server-Timing runs on to after it (spec 11, NFR-004).
           ackLatencyMs: Math.max(0, Math.round(d.monotonic.nowMs() - a.receivedMono)),
           partCount: plan.parts.length,
         },

@@ -78,6 +78,13 @@
       "when": 1791215727613,
       "tag": "0010_event_log",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792363418579,
+      "tag": "0011_config_note",
+      "breakpoints": true
     }
   ]
 }
