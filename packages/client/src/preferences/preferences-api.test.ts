@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../api/create-api-client.js";
 import { createFakePlatform } from "../testing/fake-platform.js";
-import { loadPreferences, savePreferences } from "./preferences-api.js";
+import { loadPreferences, resetPreferenceSaves, savePreferences } from "./preferences-api.js";
 import { createPreferencesStore } from "./preferences-store.js";
 
 /** The contract shape of GET/PUT /api/v1/me/preferences (openapi.json getMePreferences200). */
@@ -125,6 +125,63 @@ describe("UX-014 preference saved to the user profile (spec 5.1, 5.5)", () => {
       await vi.advanceTimersByTimeAsync(10_000);
       expect(await hungResult).toBe("rejected");
       expect(await next).toBe(true);
+    });
+  });
+  describe("a session change (sign-out, 401, another user)", () => {
+    function slowClient(seen: Request[]) {
+      let release: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const client = createApiClient({
+        baseUrl: "http://api.test",
+        platform: createFakePlatform(),
+        onUnauthenticated: () => undefined,
+        fetch: async (request) => {
+          seen.push(request.clone());
+          if (seen.length === 1) {
+            // The first call (the first save's GET) waits, so a second save is queued behind it.
+            await new Promise<void>((resolve, reject) => {
+              request.signal.addEventListener("abort", () => reject(request.signal.reason));
+              void gate.then(resolve);
+            });
+          }
+          return Response.json(SERVER);
+        },
+      });
+      return { client, release: () => release?.() };
+    }
+
+    it("drops a save still queued: nothing is written under the next session", async () => {
+      const seen: Request[] = [];
+      const { client } = slowClient(seen);
+      const first = savePreferences(client, { themeMode: "day" });
+      const queued = savePreferences(client, { themeMode: "night" });
+      resetPreferenceSaves(client);
+      expect(await first).toBe(false);
+      expect(await queued).toBe(false);
+      expect(seen.filter((r) => r.method === "PUT")).toHaveLength(0);
+    });
+
+    it("aborts the save in flight", async () => {
+      const seen: Request[] = [];
+      const { client } = slowClient(seen);
+      const first = savePreferences(client, { themeMode: "day" });
+      await vi.waitFor(() => expect(seen).toHaveLength(1));
+      resetPreferenceSaves(client);
+      expect(await first).toBe(false);
+      expect(seen[0]?.signal.aborted).toBe(true);
+    });
+
+    it("lets a save made after the reset through", async () => {
+      const seen: Request[] = [];
+      const { client } = slowClient(seen);
+      void savePreferences(client, { themeMode: "day" });
+      await vi.waitFor(() => expect(seen).toHaveLength(1));
+      resetPreferenceSaves(client);
+      // The first call was the held one; every later call answers at once.
+      expect(await savePreferences(client, { themeMode: "night" })).toBe(true);
+      expect(seen.filter((r) => r.method === "PUT")).toHaveLength(1);
     });
   });
 });

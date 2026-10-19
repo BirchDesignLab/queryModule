@@ -1,4 +1,4 @@
-import type { QueryListEntry, SocketLike } from "@querymodule/client";
+import { type QueryListEntry, savePreferences, type SocketLike } from "@querymodule/client";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { heartbeatUrl } from "../status/use-status-checks.js";
@@ -52,6 +52,35 @@ describe("SEC-006 sign-out clears query cache, announcer and preferences (spec 6
     await services.api.GET("/api/v1/meta");
     expect(services.authStore.getState().status).toBe("signedOut");
     expect(services.queryClient.getQueryData(["probe"])).toBeUndefined();
+  });
+});
+
+describe("SEC-006 sign-out drops a preference save still queued (spec 6.7)", () => {
+  it("writes nothing under the next session", async () => {
+    const services = testServices();
+    await services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    let puts = 0;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${API}/api/v1/me/preferences`, async () => {
+        await held;
+        return HttpResponse.json({ layout: null, personaOverride: null, themeMode: "night" });
+      }),
+      http.put(`${API}/api/v1/me/preferences`, () => {
+        puts += 1;
+        return HttpResponse.json({ layout: null, personaOverride: null, themeMode: "night" });
+      }),
+    );
+    const first = savePreferences(services.api, { themeMode: "day" });
+    const queued = savePreferences(services.api, { themeMode: "redShift" });
+    await services.session.signOut();
+    release();
+    expect(await first).toBe(false);
+    expect(await queued).toBe(false);
+    expect(puts).toBe(0);
   });
 });
 
