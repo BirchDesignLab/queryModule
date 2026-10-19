@@ -60,7 +60,9 @@ async function chooseTerminal(page: Page, name: "In the panel" | "Beside results
 }
 
 test.describe("[FR-050] terminal beside the results (UX-014)", () => {
-  test.use({ viewport: WIDE });
+  // The e2e database is shared by the whole run: with the request history that earlier specs left
+  // behind, the Tab walks below would pass 60 stops before the pane (the image job runs them all).
+  test.use({ viewport: WIDE, emptyQueryList: true });
 
   let original: unknown = null;
 
