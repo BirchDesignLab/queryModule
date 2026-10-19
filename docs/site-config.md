@@ -75,13 +75,13 @@ key is a validation error. A feature that is off hides its UI and its routes ans
 | `credentials` | State-system credential entry | Not built yet; keep off. |
 | `delegation` | Delegated credentials | Not built yet; keep off. |
 | `resultHide` | Delete from view | Not built yet; keep off. |
-| `adminAudit` | The admin audit log, its export and the admin request view | On in the shipped default site (D-M2P2-1). The routes mount and the viewer ships during M2 P2; until then the routes answer `404`. |
+| `adminAudit` | The admin audit log, its export and the admin request view | On in the shipped default site (D-M2P2-1). Live since M2 P2: the routes and the viewer. |
 | `adminConfig` | The admin config routes and the builder | Live. On in the shipped default site. |
 | `adminUsers` | The admin user routes and the Users page | Live. On in the shipped default site. |
 
 A flag that gates unfinished work stays off in every shipped site until its acceptance tests pass
-on `main`. One exception: `adminAudit` ships on during M2 P2 (D-M2P2-1), and its routes answer
-`404` until they mount.
+on `main`. One exception: `adminAudit` shipped on from the start of M2 P2 (D-M2P2-1), before its routes
+mounted; it is live now.
 
 ## Example: the vehicle plate query
 
