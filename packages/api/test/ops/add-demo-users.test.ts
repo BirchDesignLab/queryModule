@@ -1,13 +1,13 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { user, userPreference } from "../../src/db/schema";
-import { grantRole } from "../../src/ops/grant-role";
 import {
   AddDemoUsersDomainError,
   AddDemoUsersPartialFailureError,
   addMissingDemoUsers,
   parseAddDemoUsersArgs,
 } from "../../src/ops/add-demo-users";
+import { grantRole } from "../../src/ops/grant-role";
 import { derivePassword } from "../../src/seed/password";
 import { DEMO_USERS } from "../../src/seed/users";
 import { createTestApp } from "../helpers/test-app";
@@ -34,7 +34,11 @@ describe("#781 add-demo-users", () => {
     // An existing database: two demo accounts made earlier, one with a changed password and role.
     const dispatcherId = await t.createUser("dispatcher@example.test", OTHER_PW);
     const adminId = await t.createUser("admin@example.test", OTHER_PW);
-    await grantRole(t.deps, { email: "admin@example.test", role: "implementer", change: "granted" });
+    await grantRole(t.deps, {
+      email: "admin@example.test",
+      role: "implementer",
+      change: "granted",
+    });
     const before = (await t.auditRows("roleChanged")).length;
 
     const out = await addMissingDemoUsers(t.deps, SECRET);
@@ -52,7 +56,9 @@ describe("#781 add-demo-users", () => {
     // A new account signs in with its derived password, holds its role and no forced change.
     const a2 = out.created.find((u) => u.email === "admin2@example.test");
     expect((await t.signIn("admin2@example.test", a2?.password ?? "")).status).toBe(200);
-    const row = (await t.deps.db.select().from(user).where(eq(user.email, "admin2@example.test")))[0];
+    const row = (
+      await t.deps.db.select().from(user).where(eq(user.email, "admin2@example.test"))
+    )[0];
     expect(row).toMatchObject({ role: "admin", mustChangePassword: false });
 
     // SEC-010: one userCreated per creation, by the system actor, none for the existing accounts.

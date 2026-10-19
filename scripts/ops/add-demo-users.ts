@@ -28,7 +28,9 @@ try {
   const r = await addMissingDemoUsers(deps, secret as string);
   process.stdout.write("email\trole\tpassword\n");
   for (const u of r.created) process.stdout.write(`${u.email}\t${u.role}\t${u.password}\n`);
-  process.stdout.write(`created ${r.created.length}, left ${r.existing.length} existing unchanged\n`);
+  process.stdout.write(
+    `created ${r.created.length}, left ${r.existing.length} existing unchanged\n`,
+  );
 } catch (e) {
   if (e instanceof AddDemoUsersPartialFailureError) {
     // The accounts already made keep these passwords; this stdout is their only copy.
