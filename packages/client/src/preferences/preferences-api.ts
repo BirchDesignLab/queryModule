@@ -37,11 +37,32 @@ export function savePreferences(
   return turn;
 }
 
+/** A save that gets no answer in this long is given up, so it cannot hold the queue for good. */
+const SAVE_TIMEOUT_MS = 10_000;
+
 async function putMerged(api: ApiClient, patch: Partial<PreferencesSnapshot>): Promise<boolean> {
-  const current = await api.GET("/api/v1/me/preferences");
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error("preferences save timed out")),
+    SAVE_TIMEOUT_MS,
+  );
+  try {
+    return await putMergedWith(api, patch, controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function putMergedWith(
+  api: ApiClient,
+  patch: Partial<PreferencesSnapshot>,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const current = await api.GET("/api/v1/me/preferences", { signal });
   if (current.data === undefined) return false;
   const { response } = await api.PUT("/api/v1/me/preferences", {
     body: { ...current.data, ...patch },
+    signal,
   });
   return response.ok;
 }

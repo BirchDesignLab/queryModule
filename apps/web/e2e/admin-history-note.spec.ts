@@ -37,14 +37,20 @@ test("[BR-001] a publish note and the publisher's name show in the history drawe
   await expect(dialog.getByText(`${NOTE.length} of 200`)).toBeVisible();
   await expectNoSeriousAxeViolations(page);
   await dialog.getByRole("button", { name: /^Publish version \d+$/ }).click();
-  await expect(page.getByText(/^Published version \d+\./).first()).toBeVisible();
+  const toast = page.getByText(/^Published version \d+\./).first();
+  await expect(toast).toBeVisible();
+  const version = Number(/\d+/.exec(await toast.innerText())?.[0]);
 
   await page.getByRole("button", { name: "History" }).click();
   const history = page.getByRole("region", { name: "Version history" });
   await expect(history).toBeVisible();
-  await expect(history.getByText(NOTE)).toBeVisible();
-  await expect(history.getByText(`Published by ${name}`)).toBeVisible();
+  // Other specs publish and roll back too, so every check is scoped to this publish's own entry
+  // (and a CI retry, which publishes again, finds its own version, not the first attempt's).
+  const entry = (n: number) =>
+    history.getByRole("listitem").filter({ hasText: new RegExp(`^Version ${n}(?!\\d)`) });
+  await expect(entry(version).getByText(NOTE)).toBeVisible();
+  await expect(entry(version).getByText(`Published by ${name}`)).toBeVisible();
   // The shipped first version was published by the system, which has no name to show.
-  await expect(history.getByText("Published by system (name not available)")).toBeVisible();
+  await expect(entry(1).getByText("Published by system (name not available)")).toBeVisible();
   await expectNoSeriousAxeViolations(page);
 });

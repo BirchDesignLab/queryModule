@@ -106,7 +106,8 @@ test.describe("[FR-050] terminal beside the results (UX-014)", () => {
     expect(form.x + form.width).toBeLessThanOrEqual(requests.x);
     expect(requests.x + requests.width).toBeLessThanOrEqual(terminal.x);
     expect(Math.round(terminal.width)).toBe(320);
-    // Width priority (mockup v6, #767): the form gives way to its 448 px floor, the results get the rest.
+    // Width priority (mockup v6, #767): the form gives way to its 448 px floor, the results get the
+    // rest: 540 px or more here (headless Chromium draws no scrollbar; a classic one takes ~17 px).
     expect(Math.round(form.width)).toBe(448);
     expect(requests.width).toBeGreaterThanOrEqual(540);
     expect(terminal.x + terminal.width).toBeLessThanOrEqual(WIDE.width);

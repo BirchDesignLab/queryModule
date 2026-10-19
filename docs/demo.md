@@ -355,7 +355,7 @@ Audit log.
 4. Open a row's request reference: the request opens read only, with "This view is recorded in the
    audit log." and "Include hidden results" shown off ("Hide arrives in M3."). Back to audit log
    keeps the filters. Filter by "Request viewed by an admin" to find the view you just made.
-5. A result whose data key was shredded by the lost-key runbook (`scripts/ops/lost-key`) reads
+5. A result whose data key was shredded by the lost-key runbook (`scripts/ops/lost-data-key`) reads
    "Purged under retention" in place of its card. Age-based retention is not implemented yet and the
    demo site sets no retention period, so nothing purges on its own and this state is not part of the
    walk-through. The unit tests (`ResultCard`) cover it.

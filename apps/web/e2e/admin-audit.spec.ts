@@ -52,8 +52,10 @@ test("[FR-064] filter by event, page once, export, open a request and find the v
   const older = page.getByRole("button", { name: "Older" });
   if (await older.isEnabled()) {
     await older.click();
+    await expect(older).toBeFocused();
     await expect(page.getByRole("button", { name: "Newer" })).toBeEnabled();
     await page.getByRole("button", { name: "Newer" }).click();
+    await expect(page.getByRole("button", { name: "Newer" })).toBeFocused();
   }
 
   // Export: one JSON object per line, each with the stored fields.

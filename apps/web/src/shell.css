@@ -1992,7 +1992,11 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-audit__filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(calc(var(--qm-space-12) * 4), 1fr));
+  /* At most three columns at any width, so From and To never split across rows (mockup v6). */
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(max(calc(var(--qm-space-12) * 4), calc((100% - var(--qm-space-3) * 2) / 3)), 1fr)
+    );
   gap: var(--qm-space-3);
   align-items: start;
 }
@@ -3159,7 +3163,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 @media (min-width: 1280px) {
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes.qm-panes--terminal {
     /* The results have width priority (mockup v6): the form takes its 448 px floor, not its
-       480 px ceiling, and the gaps are 12 px, so the results keep 540 px or more at 1366. */
+       480 px ceiling, and the gaps are 12 px, so the results keep 540 px or more at 1366 (about 525 px where a classic scrollbar takes 17 px). */
     grid-template-columns:
       calc(var(--qm-space-8) * 14)
       minmax(calc(var(--qm-space-12) * 8), 1fr)

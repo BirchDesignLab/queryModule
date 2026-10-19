@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../api/create-api-client.js";
 import { createFakePlatform } from "../testing/fake-platform.js";
 import { loadPreferences, savePreferences } from "./preferences-api.js";
@@ -98,5 +98,33 @@ describe("UX-014 preference saved to the user profile (spec 5.1, 5.5)", () => {
     });
     await expect(savePreferences(client, { themeMode: "day" })).rejects.toThrow();
     expect(await savePreferences(client, { themeMode: "day" })).toBe(true);
+  });
+  describe("a request that never answers", () => {
+    afterEach(() => vi.useRealTimers());
+    it("is given up after 10 s, so a later save is not held behind it", async () => {
+      vi.useFakeTimers();
+      let calls = 0;
+      const client = createApiClient({
+        baseUrl: "http://api.test",
+        platform: createFakePlatform(),
+        onUnauthenticated: () => undefined,
+        fetch: (request) => {
+          calls += 1;
+          if (calls > 1) return Promise.resolve(Response.json(SERVER));
+          return new Promise<Response>((_resolve, reject) => {
+            request.signal.addEventListener("abort", () => reject(request.signal.reason));
+          });
+        },
+      });
+      const hung = savePreferences(client, { themeMode: "day" });
+      const hungResult = hung.then(
+        () => "settled",
+        () => "rejected",
+      );
+      const next = savePreferences(client, { themeMode: "night" });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await hungResult).toBe("rejected");
+      expect(await next).toBe(true);
+    });
   });
 });

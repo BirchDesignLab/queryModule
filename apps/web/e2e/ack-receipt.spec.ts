@@ -16,7 +16,11 @@ test("[NFR-004] one ackReceipt per 202, naming its correlation id; the socket st
 }) => {
   const sent: { type?: string; correlationId?: string }[] = [];
   let closeCode: number | undefined;
+  let welcomed = false;
   page.on("websocket", (ws) => {
+    ws.on("framereceived", (frame) => {
+      if (String(frame.payload).includes('"type":"welcome"')) welcomed = true;
+    });
     ws.on("framesent", (frame) => {
       try {
         sent.push(JSON.parse(String(frame.payload)) as { type?: string });
@@ -31,6 +35,8 @@ test("[NFR-004] one ackReceipt per 202, naming its correlation id; the socket st
 
   await signIn(page);
   await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+  // A receipt is dropped unless the feed is up (welcome received): wait for it before submitting.
+  await expect.poll(() => welcomed).toBe(true);
   const field = page.getByLabel("Plate", { exact: true });
   await field.fill("ZZ-0031");
   const accepted = page.waitForResponse(
