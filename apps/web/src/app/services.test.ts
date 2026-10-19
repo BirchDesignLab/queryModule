@@ -1,4 +1,4 @@
-import { type QueryListEntry, savePreferences, type SocketLike } from "@querymodule/client";
+import { type QueryListEntry, type SocketLike, savePreferences } from "@querymodule/client";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { heartbeatUrl } from "../status/use-status-checks.js";
