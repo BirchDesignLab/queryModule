@@ -50,6 +50,12 @@ systemctl --user enable --now deploy-pull.timer
 systemctl --user list-timers deploy-pull.timer
 ```
 
+## Sessions and the sweeper
+
+The `app` process runs a sweeper every 60 seconds from startup (spec 5.2). Each tick reads the live session limits (`auth.session.absoluteMinutes` and `idleMinutes`; a publish applies on the next tick), deletes at most 500 sessions past either limit, each in its own transaction with a `sessionRevoked` audit row (reason `expired`, system actor), and closes their sockets with 4001. Once an hour it prunes `event_log` (each user's newest row is kept). A failed expiry is logged with the session id and error class and retried on the next tick; the session is already refused at its live limit, so nothing is granted meanwhile. The SIGTERM drain stops the sweeper and waits for a tick in flight before closing the database.
+
+Better Auth's own session expiry is fixed at the 7-day ceiling plus one day (`SESSION_CEILING_MINUTES` in `packages/core/src/config/session-limits.ts`, the margin in `packages/api/src/auth/auth.ts`). `config:validate` refuses an `absoluteMinutes` above the ceiling, so the sweeper always ends a session first, with its audit row, and has a day to catch up if it falls behind. A session created before an upgrade keeps the expiry it was stored with.
+
 ## Backups
 
 `scripts/ops/backup.sh` runs nightly from a systemd user timer: an online copy of the encrypted database into the `qm-backup-staging` volume (never `/data`), `age` encryption to a recipient key whose private half is not on the laptop, upload with `rclone` to the R2 bucket, prune after 30 days. Use a current `rclone` from rclone.org rather than the distribution package: Ubuntu's 1.60 gets a 501 on its first PUT to R2 and succeeds only on retry (host, 09-28-26; #487), so `backup.sh` refuses any rclone older than 1.65 before it starts. To replace the packaged one: download `rclone-current-linux-amd64.deb` from downloads.rclone.org, `sudo apt remove rclone`, `sudo dpkg -i` the download, then `rclone version` (the remote in `~/.config/rclone/rclone.conf` is kept). `qm-backup-staging` is declared external in `compose.yml`, so compose never creates a project-prefixed copy; after a backup run, `docker volume ls` shows a single unprefixed `qm-backup-staging`.

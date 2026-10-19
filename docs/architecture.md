@@ -47,12 +47,19 @@ sequenceDiagram
 
 1. The browser keeps the draft as the user's values; `packages/core` derives the form state from it.
 2. A submit is checked against the same rules on the server, planned into parts and sources, and
-   recorded with its audit rows in one transaction before the 202 acknowledgment.
+   recorded with its audit rows in one transaction before the 202 acknowledgment, which reports
+   its time from request receipt in a `Server-Timing` header.
 3. The dispatcher runs each source in parallel within its deadline. Each outcome is written once
    and never rewritten.
 4. The WebSocket tells the client which result changed; the client reads it over HTTP. A client that
    was offline catches up by replay from its last sequence number.
 5. On restart, a source still `pending` becomes `interrupted`; nothing is sent twice.
+6. A sweeper runs every minute in the same process: it ends sessions past their live limits, each
+   with a `sessionRevoked` audit row, and prunes `event_log` hourly. It stops in the shutdown
+   drain before the database closes ([deploying](deploy.md#sessions-and-the-sweeper)).
+7. An admin reads the audit trail page by page or exports it as NDJSON, and opens any request
+   with its payloads; each of those reads writes its own audit row (`auditViewed`, `auditExported`,
+   `adminViewed`) before anything is returned.
 
 ## Packages and apps
 
@@ -63,7 +70,7 @@ sequenceDiagram
 | `packages/tokens` | Design tokens for the day, night and red-shift modes | Built |
 | `packages/web-ui` | React DOM components | Built: query panel, fields and forms, terminal, result cards and tables, severity badge, keyword marks, shortcuts, announcer, themes, persona layouts |
 | `packages/config` | Shipped sites, locales, mock files, generated JSON Schema | Built: `default` and `example-ok` sites, `en` locale, mock files |
-| `packages/api` | HTTP and WebSocket API | Built: sign-in and sessions, query submit, dispatch with the mock adapter, read routes, WebSocket feed with replay, admin console routes and the versioned config store, audit, the encrypted database, key handling, log redaction |
+| `packages/api` | HTTP and WebSocket API | Built: sign-in and sessions, query submit, dispatch with the mock adapter, read routes, WebSocket feed with replay, admin console routes and the versioned config store, audit, the admin audit read and export and the admin request view, the session sweeper, the encrypted database, key handling, log redaction |
 | `packages/rn-ui` | React Native components for native hosts | Planned, M4; not created yet |
 | `apps/web` | Vite and React web app | Built: sign-in, query panel (form and terminal), requests with result cards, status page, admin console (site builder with cards, keywords, commands and rules; Try a match; mock editor; publish and history; users) |
 | `apps/host-simulator` | Test host page for embedded mode | Planned, M4 P1; holds a README and `package.json` only |
@@ -75,7 +82,7 @@ sequenceDiagram
 |---|---|
 | `deploy/` | `Dockerfile`, `compose.yml` (the app and its Cloudflare Tunnel service), `.env.example`, and systemd units for the deploy pull and the backup. See [deploying](deploy.md). |
 | `scripts/ci` | CI gates: contract and client generators, config validation, license check, story tags, sensitive-review check, migration and schema-write checks |
-| `scripts/ops` | Ops scripts: seed, smoke, backup, restore test, deploy pull, lost-key runbooks, roles, sign-in stats, GitHub board setup |
+| `scripts/ops` | Ops scripts: seed, smoke, backup, restore test, deploy pull, lost-key runbooks, roles, sign-in and acknowledgment stats, GitHub board setup |
 | `scripts/dev` | Dev server, end-to-end launcher, local smoke, demo seed |
 | `scripts/mock-data` | Generates the mock files under the fixture policy ([README](../scripts/mock-data/README.md)) |
 | `scripts/sdd` | Task briefs, ledger append and the test harness for the saved workflows |

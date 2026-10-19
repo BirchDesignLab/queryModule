@@ -44,7 +44,7 @@ A site config has these top-level keys. Unknown keys are errors.
 | `locales` | The site's locales. The first is the default. Default `["en"]`. |
 | `features` | Feature flags. See "Features". |
 | `personas` | Layout choices: each has a `key`, a `labelKey` and a `layout` (`dispatch`, `mobileUnit` or `mobile`). |
-| `auth` | Session limits (`absoluteMinutes` 720 and `idleMinutes` 30 by default), `mfaRequired`, embedded role claims. Server only. `absoluteMinutes` may not exceed 10080 (7 days, the fixed Better Auth ceiling; `config.sessionCeilingExceeded`) and `idleMinutes` may not exceed `absoluteMinutes` (`config.sessionIdleOverAbsolute`). |
+| `auth` | Session limits (`absoluteMinutes` 720 and `idleMinutes` 30 by default), `mfaRequired`, embedded role claims. Server only. `absoluteMinutes` may not exceed 10080 (7 days, the session ceiling; Better Auth's own fixed expiry sits one day past it, so the sweeper always ends a session first; `config.sessionCeilingExceeded`) and `idleMinutes` may not exceed `absoluteMinutes` (`config.sessionIdleOverAbsolute`). |
 | `delegation` | Delegated credentials: `maxDurationMinutes` and `purposes`. Used when the `delegation` feature is built (M3). |
 | `retention` | `payloadDays` and `valuesDays`; `null` keeps data. The prototype ships `null`. Server only. |
 | `terminal` | `delimiter`, one printable non-alphanumeric ASCII character, default `.`. |
