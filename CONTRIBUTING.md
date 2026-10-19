@@ -124,6 +124,9 @@ Every phase gate refreshes the reader-facing docs, alongside its release note in
    index, a package, app, scripts folder or root script is missing from the docs, or the mock-data
    statement is missing from the README, the overview or SECURITY.md; `packages/api/test/docs-reference.test.ts` does the same for the
    API and config references.
+5. Before the promote, refresh the showcase page (its own repository, outside this one): show what
+   the phase added, make its "Where it stands" status line current, and pass its checks. The
+   promote waits for it; publishing the page stays the developer's call.
 
 Milestone exits also refresh the product docs as a whole (spec 12.7, BR-005).
 
