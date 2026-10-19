@@ -13,11 +13,11 @@ import { auditEvent, session } from "../../src/db/schema";
 import { createDispatcher } from "../../src/dispatch/dispatcher";
 import { sweepPending } from "../../src/dispatch/sweep";
 import { createSweeper, SWEEP_INTERVAL_MS } from "../../src/dispatch/sweeper";
-import { uuidv7 } from "../../src/ids";
 import { createDrainStop, DRAIN_SLACK_MS, HTTP_DRAIN_MS } from "../../src/startup";
 import { attachWebSocket } from "../../src/ws/server";
 import { tempDbFile } from "../helpers/db";
 import { manualTime, settle } from "../helpers/manual-time";
+import { insertExpiredSession } from "../helpers/sessions";
 import { createTestApp } from "../helpers/test-app";
 
 // Spec 5.2 SIGTERM drain (NFR-003; spec 8.3, 10.4): the stop sequence refuses new submits with
@@ -380,11 +380,15 @@ describe("an outcome write still open at the drain bound (#574 closeDb, Manager 
 
   it("an outcome write that fails during the drain with the DB still open still fails closed", async () => {
     const s = await setup({ adapter: slowAdapter });
-    const record = s.t.deps.audit.record.bind(s.t.deps.audit);
+    const original = s.t.deps.audit.record;
+    const record = original.bind(s.t.deps.audit);
     s.t.deps.audit.record = async (tx, event) => {
       if (event.type === "sourceResponded") throw new Error("audit broken");
       return record(tx, event);
     };
+    onTestFinished(() => {
+      s.t.deps.audit.record = original;
+    });
     expect((await s.submit()).status).toBe(202);
     const stopping = s.startStop().then(
       () => "resolved",
@@ -489,25 +493,10 @@ describe("a fatal error and the drain (AW4 critic 2; spec 5.2, 8.1: the fatal pa
   }, 20_000);
 });
 
-/** A session past every live limit (older than the 7-day ceiling), so the next tick expires it. */
-async function insertExpiredSession(t: Awaited<ReturnType<typeof createTestApp>>, userId: string) {
-  const at = t.deps.clock.now() - 8 * 24 * 60 * 60_000;
-  const id = uuidv7(at);
-  await t.deps.db.insert(session).values({
-    id,
-    userId,
-    token: uuidv7(at),
-    expiresAt: new Date(t.deps.clock.now() + 60 * 60_000),
-    createdAt: new Date(at),
-    updatedAt: new Date(at),
-  });
-  return id;
-}
-
 describe("the sweeper and the drain (spec 5.2, 8.1; NFR-003; #717)", () => {
   it("a drain during a tick waits for it before the DB closes, and no tick runs after", async () => {
     const s = await setup({ adapter: slowAdapter });
-    const first = await insertExpiredSession(s.t, s.userId);
+    const first = await insertExpiredSession(s.t.deps.db, s.t.deps.clock.now(), s.userId);
     // hold the tick inside its transaction, at the sessionRevoked write
     const record = s.t.deps.audit.record.bind(s.t.deps.audit);
     let reached: () => void = () => {};
@@ -542,7 +531,7 @@ describe("the sweeper and the drain (spec 5.2, 8.1; NFR-003; #717)", () => {
       .where(eq(auditEvent.type, "sessionRevoked"));
     expect(revoked).toHaveLength(1);
     // no tick after the drain: a session expired now stays
-    const second = await insertExpiredSession(s.t, s.userId);
+    const second = await insertExpiredSession(s.t.deps.db, s.t.deps.clock.now(), s.userId);
     await s.time.run(3 * SWEEP_INTERVAL_MS);
     expect(await s.t.deps.db.select().from(session).where(eq(session.id, second))).toHaveLength(1);
     expect(s.t.logLines.some((l) => l.includes("sweeper tick failed"))).toBe(false);

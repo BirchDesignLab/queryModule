@@ -96,9 +96,19 @@ describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-005, SEC-010)
     });
     const ended: string[] = [];
     const seenAtEnd: Promise<{ rows: number; audits: number }>[] = [];
+    // Explicit order, not read isolation (the single connection would show uncommitted rows too):
+    // "commit" is pushed when a transaction resolves, "ended" when its sockets are told (#760 T7 Q1).
+    const order: string[] = [];
+    const transaction = d.db.transaction.bind(d.db) as (...a: unknown[]) => Promise<unknown>;
+    vi.spyOn(d.db, "transaction").mockImplementation((async (...a: unknown[]) => {
+      const out = await transaction(...a);
+      order.push("commit");
+      return out;
+    }) as typeof d.db.transaction);
     for (const id of [idle, absolute, live]) {
       d.eventBus.onSessionEnded(id, () => {
         ended.push(id);
+        order.push("ended");
         // runs after the commit: the row is gone and its audit row is there
         seenAtEnd.push(
           (async () => ({
@@ -121,6 +131,8 @@ describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-005, SEC-010)
       expect.arrayContaining([idle, absolute].map((id) => expiredRow(id, userId, NOW))),
     );
     expect(ended.sort()).toEqual([idle, absolute].sort());
+    // each endSession fires right after its own transaction committed, never inside it
+    expect(order.slice(0, 4)).toEqual(["commit", "ended", "commit", "ended"]);
     expect(await Promise.all(seenAtEnd)).toEqual([
       { rows: 0, audits: 1 },
       { rows: 0, audits: 1 },

@@ -27,6 +27,7 @@ import {
 } from "../src/startup";
 import { manualTime } from "./helpers/manual-time";
 import { seedResult } from "./helpers/results";
+import { insertExpiredSession } from "./helpers/sessions";
 import { removeTempDirs, sweepStaleTempDirs } from "./helpers/temp-dirs";
 
 // Wraps the real AuditService; with failAudit on, record() rejects AFTER the real insert of an
@@ -594,8 +595,6 @@ describe("spec 5.2 startup sweep: pending results become interrupted before the 
 // before the database closes on every path: the drain, the fatal close and a listen failure. A
 // refused startup never starts it. Time is manual; mock data only (spec 5.4, 10.8).
 describe("spec 5.2 the sweeper runs from startup and stops before the DB closes (#717)", () => {
-  const DAY = 24 * 60 * 60_000;
-
   async function startManual(env: NodeJS.ProcessEnv) {
     const time = manualTime();
     const lines: string[] = [];
@@ -618,19 +617,7 @@ describe("spec 5.2 the sweeper runs from startup and stops before the DB closes 
       updatedAt: new Date(time.clock.now()),
     });
     /** A session older than the 7-day ceiling: the next tick expires it. */
-    const expiredSession = async () => {
-      const at = time.clock.now() - 8 * DAY;
-      const id = uuidv7(at);
-      await s.deps.db.insert(session).values({
-        id,
-        userId,
-        token: uuidv7(at),
-        expiresAt: new Date(time.clock.now() + DAY),
-        createdAt: new Date(at),
-        updatedAt: new Date(at),
-      });
-      return id;
-    };
+    const expiredSession = () => insertExpiredSession(s.deps.db, time.clock.now(), userId);
     const present = async (id: string) =>
       (await s.deps.db.select().from(session).where(eq(session.id, id))).length === 1;
     return { s, time, lines, expiredSession, present };
