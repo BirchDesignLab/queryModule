@@ -1,6 +1,6 @@
 # Overview: what exists today
 
-Last refreshed 10-16-26, at the M2 P1 gate. This page lists only what is built and merged on `main`.
+Last refreshed 10-19-26, at the M2 P2 gate. This page lists only what is built and merged on `main`.
 Planned work is on the [roadmap](roadmap.md).
 
 > This runs on mock data only and is not connected to real state or national systems. It is still
@@ -29,9 +29,10 @@ in 1901, synthetic names). There is no adapter for a real system.
 |---|---|---|
 | M0 Skeleton | Done 09-28-26, tag `m0` | [m0.md](releases/m0.md) |
 | M1 Forms and terminal | Done 10-04-26, tag `m1` | [m1.md](releases/m1.md) |
-| M2 P0 Contracts | Demo-path gate passed 10-05-26; the last contract wave (P0-W3) is still open | none (no release note for a contracts phase) |
+| M2 P0 Contracts | Done; full contract gate 10-16-26 | none (no release note for a contracts phase) |
 | M2 P0.5 Dispatch | Done, promoted 10-07-26 | [m2-p0-5.md](releases/m2-p0-5.md) |
 | M2 P1 Feed | Done, promoted 10-15-26 | [m2-p1.md](releases/m2-p1.md) |
+| M2 P2 Audit | Gate run 10-19-26; promote is the developer's call | [m2-p2.md](releases/m2-p2.md) |
 
 ### M0 Skeleton
 
@@ -71,6 +72,21 @@ in 1901, synthetic names). There is no adapter for a real system.
 - "Edit as new query" loads a past request's values into the form under the current config.
 - A demo scenario pack, a one-time demo seed, and a keyboard-only dry run of the demo runbook.
 
+### M2 P2 Audit
+
+- An audit log in the admin console: filters, paging, and an NDJSON export. Reading or exporting
+  the log is itself audited.
+- An admin opens any request read-only from the log, with its values and answers; the view is
+  audited before anything is shown.
+- A session sweeper ends sessions at their live limits, each with an audit row, and prunes the
+  replay log hourly.
+- Each config publish can carry a short note; the history shows it with the publisher's name.
+- Acknowledgment timing: the 202 reports `Server-Timing` from request receipt, and the client's
+  receipt is logged as a metric with an ops summary script.
+- The terminal can sit beside the results, chosen in the account menu.
+- `config:validate` checks result-card paths against the mock answers and gains `--diff <tag>`;
+  bearer sign-in is tested on REST and the WebSocket.
+
 ## The live demo
 
 The latest promoted build runs at https://querymodule.birchdesignlab.com with demo accounts. The
@@ -78,12 +94,12 @@ accounts, the demo stories and the runbook are in the [demo guide](demo.md); the
 [M1 runbook](demo/m1-v1.md) is kept as the M1 record. The design brief for M2 P1 is in
 [docs/briefs](briefs/).
 
-## Quality and size, as of 10-16-26
+## Quality and size, as of 10-19-26
 
-- `pnpm verify` on Windows on 10-16-26, on this page's pull request: green, with 371 test
-  files and 5167 tests passed (3 files and 4 tests skipped on Windows; CI on Linux runs the process tests Windows skips) and
+- `pnpm verify` on Windows on 10-19-26, on this page's pull request: green, with 406 test
+  files and 5662 tests passed (3 files and 4 tests skipped on Windows; CI on Linux runs the process tests Windows skips) and
   156 of 156 workflow harness scenarios.
 - `pnpm audit --prod`: no new advisory (two high advisories, already reviewed, are ignored in
   `pnpm-workspace.yaml`).
 - Every end-to-end scenario runs axe with zero serious or critical findings.
-- 271 pull requests merged; 354 issues closed and 52 open.
+- 318 pull requests merged; 409 issues closed and 42 open.
