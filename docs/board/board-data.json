@@ -2505,6 +2505,32 @@
       "title": "BW5 deferred gaps against mockup v6: history drawer, publish copy, 1024 pane, icons, uncovered frames",
       "body": "From BW5 (feat/b-p2-bw5, Task 9 comparison against mockup v6, 10-18-26). Refs #767. For M2 P3 or a later UI wave.\n\n- [ ] History is an inline panel, not the mockup's 380 px drawer.\n- [ ] Publish dialog title and body copy differ from v6.\n- [ ] At 1024 the pane toggle has no icons and no Ctrl+backtick hint; the panel is 584 px against the mockup's 480.\n- [ ] Export and eye icons missing; the banner start border, the Back link arrow, and \"10 items\" wrapping at 1024.\n- [ ] Request view meta line: \"Copy ID\" and the full UUID; consider a shared RequestHeader.\n- [ ] Frames with no shots: account-menu preference and save-failed; audit empty, 403, 404, filter error and pager.\n- [ ] The purged card has no e2e path (only the lost-key runbook; age retention is not implemented). Documented.\n- [ ] The 540 px results width is about 525 px with a classic scrollbar (the code comment says so). Decide whether it counts.\n",
       "labels": ["web", "p3", "follow-up"]
+    },
+    {
+      "number": 781,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Medium",
+      "reqIds": "none",
+      "title": "Demo accounts: a second dispatcher, officer, implementer and admin, added to the live demo without a reset",
+      "body": "Developer 10-19-26: now that the audit console exists, the demo needs a second account per role, before the M2 P2 promote. Gate tier (`packages/api/src/seed/**`, `packages/api/src/ops/**`, `scripts/ops/**`).\n\n- [ ] `DEMO_USERS` gains `dispatcher2@example.test` (user), `officer2@example.test` (trainingOfficer, persona mobileUnit), `implementer2@example.test` (implementer) and `admin2@example.test` (admin), so a fresh database seeds them. The seed's run-once contract (spec 8.5, SeedRefusedError) stays unchanged.\n- [ ] An ops command adds only the missing `DEMO_USERS` to an existing database (the live demo has no reset, by ruling): passwords derived the same way (`derivePassword`), never touches an existing account's password, role or state, refuses anything outside `@example.test`, and records each creation and role grant in the audit trail. It prints what it created, with no password in any log line.\n- [ ] `docs/demo.md`: accounts table, a story that uses the audit console with a second account (for example, admin2 reads the dispatcher's request; the read is itself an audit row), and the host run step. `docs/deploy.md` or the ops reference where the command is listed.\n- [ ] After the promote, a host session runs the command once on the live demo (output on this issue).\n\nThe developer's own admin account is made by hand in the admin console (no personal data in the repo). No new role.\n",
+      "labels": ["platform", "p2", "follow-up"]
+    },
+    {
+      "number": 782,
+      "milestone": "M2 Results and audit",
+      "parent": 46,
+      "track": "Platform (A)",
+      "phase": "P3",
+      "size": "S",
+      "priority": "Low",
+      "reqIds": "none",
+      "title": "add-demo-users follow-ups: grant error cause, recovery pointer, hash after existence check, spec 4.7 row",
+      "body": "Follow-ups from the wave-review of feat/m2-demo-accounts (#781, artifact `docs/reviews/feat-m2-demo-accounts.md`, approve at de5230f). All minor, non-blocking; left off that PR because any sensitive edit there needs a fresh full mixed review (ruling: M2 Manager 9, 10-19-26). Tiers: G-M1 to G-M3 gate (`packages/api/src/ops/**`); C-m1 is the spec doc (ordinary).\n\n- [ ] **G-M1** `packages/api/src/ops/add-demo-users.ts:116-118`: the `catch` around `grantRole` drops the error, so the operator sees no cause for a failed grant. Pass `{ cause: e }` or append the underlying message (grantRole errors carry no secrets).\n- [ ] **G-M2** `packages/api/src/ops/add-demo-users.ts:42-43`: the partial-failure message names `scripts/ops/grant-role.ts` (the container runs `grant-role.js`) and links `docs/demo.md#recovery` (seed recovery); point to `#add-missing-demo-accounts`.\n- [ ] **G-M3** `packages/api/src/ops/add-demo-users.ts:70-71`: `derivePassword` and the scrypt hash run for every demo user, including existing ones. Hash only after the existence check.\n- [ ] **C-m1** `docs/superpowers/specs/2026-09-25-query-module-2-design-v2.md:692`: the spec 4.7 admin and ops table row for `userCreated` lists only the admin actor and `targetUserId`, `role`. Add `via?` (`add-demo-users`) written by the system actor (#781), mirroring the `roleChanged` grant-role wording (or fold into the phase docs refresh).\n",
+      "labels": ["platform", "p3", "follow-up"]
     }
   ]
 }
