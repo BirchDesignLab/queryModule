@@ -280,6 +280,8 @@
   "account.terminal.saveFailedPane": "Could not save the layout. It stays on Beside results.",
   "terminalPane.title": "Terminal",
   "terminalPane.referenceTitle": "Commands",
+  "terminalPane.hint": "Terminal is beside the results.",
+  "terminalPane.noProblems": "No problems.",
   "terminalPane.editInPane": "Edit in terminal pane",
   "status.title": "Status",
   "status.checking": "Checking connection",

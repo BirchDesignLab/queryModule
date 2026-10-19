@@ -197,7 +197,14 @@ E2E_PORT=3200 node scripts/demo/dry-run.ts
 5. Choose "Terminal mode", type `VEH.ZZ-0001..26` and press Enter: the same query, typed (the empty
    position is State, which keeps its default). `XYZ.1` shows "Unrecognized command XYZ." and sends
    nothing.
-6. Use the table below for more queries; each runs from the form, and from the terminal unless its row says otherwise.
+6. **Terminal beside the results** (window 1280 px wide or more). Account menu, Terminal,
+   "Beside results". The terminal moves to a pane on the right: a Command input, "No problems." or the
+   command's problems, and a list of the site's commands. The form stays in its panel and both edit
+   one draft: type `VEH.ZZ-0021` in the pane and the Plate field reads `ZZ-0021`; type in the Plate
+   field and the command follows. The Form and Terminal toggle is gone; "Edit in terminal pane" and
+   the `/` shortcut move focus to the pane's input. Below 1280 px the toggle returns and the draft is
+   kept. "In the panel" puts it back.
+7. Use the table below for more queries; each runs from the form, and from the terminal unless its row says otherwise.
 
 Each returned source then draws a result card inside the request (see "Result card scenarios"
 below). The mock data behind it is canned and synthetic ([site-config.md](site-config.md) has the fixture policy). The deploy smoke script
@@ -311,7 +318,11 @@ preview share the column beside it, so the preview stays in view.
    draft has reloaded; the toolbar then reads "No unpublished changes" under "Published version
    2"), then submit `VEH.ZZ-0001` in a dispatcher tab that was already open: Make
    is in the summary with a warning mark on `TESTMAKE`, and cards already on screen redraw at the
-   next config refresh. History, Roll back restores the old card.
+   next config refresh. The dialog also has an optional Note (up to 200 characters, one line of
+   text: Enter and tabs become spaces); History shows each version's note, or "No note", and who
+   published it ("Published by <name>"; version 1 reads "Published by system (name not available)").
+   A Roll back has no note field: its entry reads "Rolled back to version N", with a Rollback tag.
+   History, Roll back restores the old card.
 
 ### Site variations (example-ok)
 
@@ -326,6 +337,28 @@ example-ok extends the default site and changes behavior through config only (sp
 | Custom field | VEH shows Tag sticker under More details |
 
 An overlay replaces a query type's whole `rules` list, so example-ok restates the VEH rules it keeps before adding its own.
+
+## Audit log and request view
+
+Sign in as `admin@example.test`. Run one query first (any of the tables above), then Admin, Oversight,
+Audit log.
+
+1. The table lists the last 24 hours, newest first: time (MM-DD-YY HH:mm:ss, local), the event in
+   words, the actor with their role under the email, the short request reference, the credential
+   owner (folded under the actor below 920 px) and a Details disclosure with identifiers and
+   metadata only, never payloads. "Viewing and exporting the audit log is recorded."
+2. Filters: User, Request ID (a request ID only), Event, From and To (at most 31 days; a longer
+   window is refused with a field error before anything is sent). Apply filters keeps focus on the
+   button; Newer and Older page through the rows and keep focus on the button used.
+3. Export NDJSON saves one JSON object per line for the filters shown above it. The export is itself
+   recorded ("Audit log exported").
+4. Open a row's request reference: the request opens read only, with "This view is recorded in the
+   audit log." and "Include hidden results" shown off ("Hide arrives in M3."). Back to audit log
+   keeps the filters. Filter by "Request viewed by an admin" to find the view you just made.
+5. A result whose data key was shredded by the lost-key runbook (`scripts/ops/lost-data-key`) reads
+   "Purged under retention" in place of its card. Age-based retention is not implemented yet and the
+   demo site sets no retention period, so nothing purges on its own and this state is not part of the
+   walk-through. The unit tests (`ResultCard`) cover it.
 
 ## Recovery
 

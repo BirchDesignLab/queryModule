@@ -60,6 +60,7 @@ export function TerminalPane({
   return (
     <>
       <h2 id={terminalPaneTitleId(idPrefix)}>{t("terminalPane.title")}</h2>
+      <p className="qm-terminal-pane__note">{t("terminalPane.hint")}</p>
       <TerminalInput
         id={`${idPrefix}-terminal`}
         label={t("terminal.label")}
@@ -76,6 +77,9 @@ export function TerminalPane({
         errorsLabel={t("terminal.errorsLabel")}
         inputRef={terminal.inputRef}
       />
+      {terminal.errors.length === 0 ? (
+        <p className="qm-terminal-pane__note">{t("terminalPane.noProblems")}</p>
+      ) : null}
       {rows.length === 0 ? null : (
         <section className="qm-terminal-pane__reference">
           <h3 id={referenceId} className="qm-terminal-pane__subheading">

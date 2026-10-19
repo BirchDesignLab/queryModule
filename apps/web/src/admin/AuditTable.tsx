@@ -71,8 +71,10 @@ export function AuditTable({
                 </td>
                 <td className="qm-audit__cell">{eventLabel}</td>
                 <td className="qm-audit__cell">
-                  <span>{row.actor.email ?? t("admin.audit.system")}</span>{" "}
-                  <span className="qm-badge">{roleLabel(row.actor.role, t)}</span>
+                  <span>{row.actor.email ?? t("admin.audit.system")}</span>
+                  <div>
+                    <span className="qm-badge">{roleLabel(row.actor.role, t)}</span>
+                  </div>
                   {row.credentialUserId !== undefined && (
                     <span className="qm-audit__fold">
                       {t("admin.audit.credentials", { owner: row.credentialUserId })}

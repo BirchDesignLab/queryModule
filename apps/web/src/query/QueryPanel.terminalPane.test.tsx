@@ -108,6 +108,16 @@ describe("FR-050 terminal beside the results (layout.terminal pane, spec 6.2)", 
     expect(within(list).getAllByText(/^VEH\./)[0]).toBeVisible();
   });
 
+  it("says it is beside the results and that the command has no problems, until it has some", async () => {
+    const { user } = await openPanel({ wide: true, terminal: "pane" });
+    expect(within(pane()).getByText("Terminal is beside the results.")).toBeInTheDocument();
+    expect(within(pane()).getByText("No problems.")).toBeInTheDocument();
+    await typeCommand(user, "XYZ.1");
+    await user.keyboard("{Enter}");
+    expect(await within(pane()).findByText("Unrecognized command XYZ.")).toBeInTheDocument();
+    expect(within(pane()).queryByText("No problems.")).not.toBeInTheDocument();
+  });
+
   it("hides the Form and Terminal toggle in pane mode", async () => {
     await openPanel({ wide: true, terminal: "pane" });
     expect(modeToggle()).toBeNull();
