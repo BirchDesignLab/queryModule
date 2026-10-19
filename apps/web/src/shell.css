@@ -1992,7 +1992,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-audit__filters {
   display: grid;
-  /* At most three columns at any width, so From and To never split across rows (mockup v6). */
+  /* At most three columns at any width (mockup v6: User, Request ID and Event, then From and To). */
   grid-template-columns: repeat(
       auto-fit,
       minmax(max(calc(var(--qm-space-12) * 4), calc((100% - var(--qm-space-3) * 2) / 3)), 1fr)
