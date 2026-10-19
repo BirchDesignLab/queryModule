@@ -39,7 +39,8 @@ Read at session start. Update at session end, and in any task PR that changes a 
 |---|---|---|---|---|
 | Linux laptop (deploy host) | Host lane (host steps only) | M2 P0.5 | idle (m1 manual smoke done 10-06-26, #237; P0.5 promoted at 3e85c2b, smoke 1 to 5 ok 10-07-26, #545 comment) | 10-07-26 |
 | Windows 11 | A (`C:\git\queryModule-a3`, "M2P1 Track A 3") | M2 P1 feed | active (`docs/m2-overview-pdf`: design brief PDF re-shot on main 607e7df, release note "Since the first draft", this STATUS update; AW4b #655 merged) | 10-15-26 |
-| Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A") | M2 P2 audit | paused (AW1 #744, AW2 #756 merged; AW3 #761 merged; [handoff](../../handoffs/10-18-26-m2-p2-lane-a.md); next: Lane A2 takes AW4) | 10-18-26 |
+| Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A") | M2 P2 audit | done (AW1 #744, AW2 #756, AW3 #761 merged; [handoff](../../handoffs/10-18-26-m2-p2-lane-a.md)) | 10-18-26 |
+| Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A2") | M2 P2 audit | done (AW4 #772, AW5 #778 merged; [handoff](../../handoffs/10-19-26-lane-a2.md)) | 10-19-26 |
 | Windows 11 | B (`C:\git\queryModule`, "M2 P2 Lane B4") | M2 P2 audit | BW4 merged (#768); BW5 PR #775 open, ready; idle ([handoff](../../handoffs/10-18-26-m2-p2-lane-b4.md)) | 10-18-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 2 cross-lane checker") | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
@@ -60,7 +61,7 @@ Overwrite your track's note at pause using the seven-line format in the master p
 - Last green: main 1edeb1f merged into `feat/m2-a-p2-wave-5`; `pnpm verify`, `pnpm audit --prod`, local smoke 1 to 5 and `pnpm e2e` green on the branch
 - Next step: the developer merges the AW5 PR; the promote (`promote.yml` with the merge sha, no milestone tag, then host smoke, output on #732) waits for the developer to ask
 - Blocked by: none
-- Latest handoff: [10-18-26-m2-p2-lane-a.md](../../handoffs/10-18-26-m2-p2-lane-a.md) (M2 P2 Lane A: AW1 #744 and AW2 #756 merged, AW3 #761 open; next: a fresh Lane A2 takes AW4 with the #716 G-M1 margin change)
+- Latest handoff: [10-19-26-lane-a2.md](../../handoffs/10-19-26-lane-a2.md) (M2 P2 Lane A2: AW4 #772 and AW5 #778 merged; Track A P2 done; promote of 0b354da pending the developer)
 - Notes: manager "M2 Manager 8", then "M2 Manager 9" (its push approvals count as the developer's for Track A); P2 follow-ups #773, #774 and the AW4 review minors issue.
 
 ### Track B
