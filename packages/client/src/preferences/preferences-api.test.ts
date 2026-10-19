@@ -59,4 +59,44 @@ describe("UX-014 preference saved to the user profile (spec 5.1, 5.5)", () => {
     expect(put?.headers.get("x-requested-with")).toBe("querymodule");
     expect(await put?.json()).toEqual({ ...SERVER, themeMode: "redShift" });
   });
+  it("keeps both changes when a theme save and a layout save overlap", async () => {
+    // A stateful server that answers each call on a later tick: two saves that each read the row
+    // before the other wrote it would send the stale half back (the GET-then-PUT race).
+    let row: Record<string, unknown> = { ...SERVER };
+    const client = createApiClient({
+      baseUrl: "http://api.test",
+      platform: createFakePlatform(),
+      onUnauthenticated: () => undefined,
+      fetch: async (request) => {
+        const body = request.method === "PUT" ? await request.json() : null;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        if (body !== null) row = body as Record<string, unknown>;
+        return Response.json(row);
+      },
+    });
+    const layout = { orientation: "horizontal", terminal: "pane" } as const;
+    const results = await Promise.all([
+      savePreferences(client, { themeMode: "redShift" }),
+      savePreferences(client, { layout }),
+    ]);
+    expect(results).toEqual([true, true]);
+    expect(row).toMatchObject({ themeMode: "redShift", layout });
+  });
+  it("a failed save does not hold up the next one", async () => {
+    let fail = true;
+    const client = createApiClient({
+      baseUrl: "http://api.test",
+      platform: createFakePlatform(),
+      onUnauthenticated: () => undefined,
+      fetch: async () => {
+        if (fail) {
+          fail = false;
+          throw new Error("offline");
+        }
+        return Response.json(SERVER);
+      },
+    });
+    await expect(savePreferences(client, { themeMode: "day" })).rejects.toThrow();
+    expect(await savePreferences(client, { themeMode: "day" })).toBe(true);
+  });
 });
