@@ -3437,7 +3437,7 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 /* Each position is a box: the row breaks between them, and only a label wider than the column
    breaks inside itself. */
-.qm-terminal-pane__positions > span {
+.qm-terminal-pane__position {
   display: inline-block;
   max-inline-size: 100%;
   overflow-wrap: anywhere;
