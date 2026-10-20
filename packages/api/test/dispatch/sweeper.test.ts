@@ -253,8 +253,11 @@ describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-020, SEC-010)
 
     expect(await sweeper.tick(NOW)).toEqual({ expired: cap, pruned: 0, failed: 0 });
     expect(await sessionIds(d)).toHaveLength(1);
+    // one sessionRevoked row per expired session, none for the one left (SEC-010)
+    expect(await revokedRows(d)).toHaveLength(cap);
     expect((await sweeper.tick(NOW + MIN)).expired).toBe(1);
     expect(await sessionIds(d)).toEqual([]);
+    expect(await revokedRows(d)).toHaveLength(cap + 1);
   }, 180_000);
 
   it("removes an orphan session (its loginSucceeded row failed, its delete failed, never used) at idle expiry (D-M2P2-3)", async () => {
