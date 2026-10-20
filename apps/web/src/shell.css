@@ -3406,3 +3406,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin: 0;
   max-inline-size: 36ch;
 }
+
+/* At a narrow window (320 px reflow, 200% zoom) the entry mode toggle drops v6's icons and keycap
+   hint, so it fits the panel; the labels and aria-keyshortcuts stay (issue 774). */
+@media (max-width: 720px) {
+  .qm-mode-seg .qm-line-icon,
+  .qm-mode-seg kbd {
+    display: none;
+  }
+}
