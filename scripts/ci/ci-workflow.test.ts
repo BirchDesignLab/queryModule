@@ -193,6 +193,19 @@ describe("ci.yml aggregate and caps (task 605 critic M2, quality Q1)", () => {
 
   it("a failed e2e shard fails the aggregate: a matrix job's result is failure when any leg fails (#748)", () => {
     expect(aggregate({ ...all("success"), e2e: { result: "failure" } })).toBe(1);
+    // ci is the same job on a pull request and on main, and publish runs only on its success.
+    expect(jobs.ci.if).toBe("always()");
+    expect(jobs.publish.if).toContain("needs.ci.result == 'success'");
+  });
+
+  it("a docs-only or board-only change skips image and e2e and still passes, as before (#748)", () => {
+    const docsOnly = {
+      ...all("skipped"),
+      changes: { result: "success", outputs: {} },
+      board: { result: "skipped", outputs: {} },
+    };
+    expect(aggregate(docsOnly)).toBe(0);
+    expect(aggregate({ ...docsOnly, board: { result: "success", outputs: {} } })).toBe(0);
   });
 
   it("caps timeouts: changes and ci at most 5 minutes, image and each e2e shard at most 35, every other job at most 20", () => {
@@ -419,6 +432,17 @@ describe("ci.yml e2e shards (#748)", () => {
         s.uses?.startsWith("docker/"),
     );
     expect(builds).toEqual([]);
+  });
+
+  it("each shard and publish download this run's artifact only, never another run's (#748)", () => {
+    for (const id of ["e2e", "publish"]) {
+      const download = (jobs[id].steps as WorkflowStep[]).find((s) =>
+        s.uses?.startsWith("actions/download-artifact"),
+      );
+      expect(download?.with?.name, id).toBe("querymodule-image");
+      expect(download?.with?.["run-id"], id).toBeUndefined();
+      expect(download?.with?.["github-token"], id).toBeUndefined();
+    }
   });
 
   it("the shard index reaches Playwright through env, never interpolated into the run body", () => {
