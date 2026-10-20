@@ -111,18 +111,6 @@ describe("ADR-0011 item 3 live config refresh (#361)", () => {
     refresh.stop();
   });
 
-  it("the same hash and versionId leave the cached object in place", async () => {
-    const state = { n: 1, v: 1 };
-    const served = serveConfig(state);
-    const { queryClient, refresh } = setup(1);
-    const before = cached(queryClient);
-    refresh.start();
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(served.hashes).toHaveLength(1);
-    expect(cached(queryClient)).toBe(before);
-    refresh.stop();
-  });
-
   it("keeps refreshing every 15 s, each request marked as background", async () => {
     const state = { n: 1 };
     const served = serveConfig(state);

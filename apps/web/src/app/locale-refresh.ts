@@ -19,20 +19,20 @@ export function useLocaleRefresh(
 ): void {
   const services = useServices();
   const config = useCachedConfig();
-  const hash = config === undefined ? undefined : `${config.configHash}:${config.versionId}`;
+  const configKey = config === undefined ? undefined : `${config.configHash}:${config.versionId}`;
   const seen = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!enabled || hash === undefined) return;
+    if (!enabled || configKey === undefined) return;
     if (seen.current === undefined) {
-      seen.current = hash;
+      seen.current = configKey;
       return;
     }
-    if (seen.current === hash) return;
+    if (seen.current === configKey) return;
     let live = true;
     fetchLocaleBundle(services.api, locale).then(
       (bundle) => {
         if (!live) return;
-        seen.current = hash;
+        seen.current = configKey;
         services.queryClient.setQueryData(["locale", locale], bundle);
         onBundle(bundle);
       },
@@ -41,5 +41,5 @@ export function useLocaleRefresh(
     return () => {
       live = false;
     };
-  }, [enabled, hash, locale, services, onBundle]);
+  }, [enabled, configKey, locale, services, onBundle]);
 }

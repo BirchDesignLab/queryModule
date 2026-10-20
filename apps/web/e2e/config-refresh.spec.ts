@@ -131,6 +131,9 @@ test.describe("[#46 CFG-1] a label-only publish reaches an open tab", () => {
       await dispatcher.evaluate(() => {
         (window as unknown as { __qmOpenSince: number }).__qmOpenSince = Date.now();
       });
+      // Read before the admin acts, so an announcement from an early poll cannot hide in it.
+      const polite = dispatcher.getByTestId("announcer-polite");
+      const politeBefore = await polite.textContent();
 
       // The admin changes one label in the builder and publishes it.
       await signIn(page, seededUser("admin@example.test"));
@@ -161,8 +164,6 @@ test.describe("[#46 CFG-1] a label-only publish reaches an open tab", () => {
       expect(after.configHash).toBe(before.configHash);
       expect(after.versionId).not.toBe(before.versionId);
 
-      const polite = dispatcher.getByTestId("announcer-polite");
-      const politeBefore = await polite.textContent();
       await dispatcher.clock.fastForward(16_000);
       const relabeled = dispatcher.getByLabel("Plate number", { exact: true });
       await expect(relabeled).toBeVisible();
