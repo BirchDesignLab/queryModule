@@ -68,7 +68,7 @@ sections 5.5 to 5.9; the requirement IDs (SEC-) are in the
 | Email and password sign-in, with a minimum password length and a forced change of an admin-set temporary password | Built |
 | Session limits: 30 minutes idle and 12 hours absolute by default, set per site | Built |
 | Auth rate limits: an account locks for 15 minutes after 10 failures in 15 minutes; 100 requests per IP per 15 minutes | Built |
-| A required `X-Requested-With` header on state-changing requests, a CORS origin allowlist (the sign-in routes also check Origin), and an Origin allowlist on the WebSocket upgrade | Built |
+| A required `X-Requested-With` header on state-changing requests, an Origin allowlist on every REST route (a present, foreign Origin is refused 403, sign-in included; a missing Origin passes), and an Origin allowlist on the WebSocket upgrade | Built |
 | A strict Content Security Policy with per-request nonces, `frame-ancestors 'none'`, a 32 KiB body cap (larger for admin config documents, ADR-0011) and `no-store` on every API response | Built |
 | Role-based access (user, training officer, implementer, admin) checked by a route-by-caller test matrix | Built |
 | A query's results are visible only to its owner | Built |

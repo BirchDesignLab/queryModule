@@ -13,6 +13,8 @@ const MIN = 60_000;
 export const AUTH_LIMITS = {
   accountFailures: { limit: 10, windowMs: 15 * MIN, lockMs: 15 * MIN },
   ipRequests: { limit: 100, windowMs: 15 * MIN },
+  // D-M2P3-3: wrong currentPassword on change-password, per user. Blocks change-password only.
+  changePasswordFailures: { limit: 5, windowMs: 15 * MIN, lockMs: 15 * MIN },
 } as const;
 
 export interface RateLimiter {

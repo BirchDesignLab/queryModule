@@ -245,6 +245,15 @@ async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response>
   const gated = await d.identity.resolveGated(c.req.raw);
   if (!gated) return apiError(c, "unauthenticated");
   const p = gated.principal;
+  // D-M2P3-3: five wrong current passwords in 15 minutes block change-password for this user
+  // (429 with Retry-After). Sign-in is untouched; a wrong guess and the block write no audit row
+  // (spec 4.7), and only the user id is logged.
+  const limitKey = `changePassword:${p.userId}`;
+  const blockedUntil = await d.limiter.lockedUntil(limitKey);
+  if (blockedUntil !== null) {
+    d.logger.warn("change-password blocked by account limit", { userId: p.userId });
+    return rateLimited(c, (blockedUntil - d.clock.now()) / 1000);
+  }
   const body = (await c.req.raw
     .clone()
     .json()
@@ -274,8 +283,10 @@ async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response>
     .from(account)
     .where(and(eq(account.userId, p.userId), eq(account.providerId, "credential")));
   if (!credential?.hash) return passwordRefusal(c, "CREDENTIAL_ACCOUNT_NOT_FOUND");
-  if (!(await pw.verify({ hash: credential.hash, password: currentPassword })))
+  if (!(await pw.verify({ hash: credential.hash, password: currentPassword }))) {
+    await d.limiter.recordFailure(limitKey, AUTH_LIMITS.changePasswordFailures);
     return passwordRefusal(c, "INVALID_PASSWORD");
+  }
   const hash = await pw.hash(newPassword);
   const now = new Date(d.clock.now());
   try {
@@ -305,6 +316,13 @@ async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response>
     });
     return apiError(c, "internal");
   }
+  // The change committed: a failure to clear the count must not turn it into an error answer.
+  await d.limiter.reset(limitKey).catch((e: unknown) =>
+    d.logger.warn("change-password limit not cleared", {
+      userId: p.userId,
+      errorName: e instanceof Error ? e.name : typeof e,
+    }),
+  );
   return c.json({ token: null }, 200);
 }
 

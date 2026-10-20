@@ -145,6 +145,19 @@ describe("GET /api/v1/queries/:correlationId access (spec 5.2, SEC-014; #561)", 
     expect((await get(correlationId, "owner")).status).toBe(200);
   });
 
+  it("GET /api/v1/queries lists only the caller's own requests: another user and an admin see an empty list", async () => {
+    const { correlationId, t, cookies } = await setup();
+    const ids = async (who: string) => {
+      const r = await t.request("/api/v1/queries", { headers: { cookie: cookies[who] ?? "" } });
+      expect(r.status, who).toBe(200);
+      const body = (await r.json()) as { requests: { correlationId: string }[] };
+      return body.requests.map((q) => q.correlationId);
+    };
+    expect(await ids("owner")).toEqual([correlationId]);
+    expect(await ids("other")).toEqual([]);
+    expect(await ids("admin")).toEqual([]);
+  });
+
   it("no session is 401 unauthenticated", async () => {
     const { correlationId, get } = await setup();
     const r = await get(correlationId);
