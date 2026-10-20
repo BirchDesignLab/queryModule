@@ -82,7 +82,7 @@ ops_checks() {
   chmod 777 "$backup_out"
 
   # --- existence: every compiled ops CLI is in the image at its documented path ---
-  for cli in add-demo-users audit-stats backup check-triggers grant-role login-stats lost-data-key lost-key seed; do
+  for cli in add-demo-users audit-stats backup check-triggers config-import grant-role login-stats lost-data-key lost-key seed; do
     code=0
     docker run --rm --entrypoint sh "$image" -c "test -f /app/scripts/ops/$cli.js" || code=$?
     assert_exit "ops CLI present: $cli.js" 0 "$code"
@@ -143,6 +143,19 @@ ops_checks() {
   code=0
   ops_run "$ops_vol" "$sec" node scripts/ops/add-demo-users.js --all || code=$?
   assert_exit "add-demo-users (bad args)" 2 "$code"
+
+  # --- config-import: 2 on an unknown argument; 0 and unchanged on a dry run of the image's own
+  # bundled site config against the store it seeded (#792) ---
+  code=0
+  ops_run "$ops_vol" "$sec" node scripts/ops/config-import.js --force || code=$?
+  assert_exit "config-import (bad args)" 2 "$code"
+  code=0
+  ci_out=$(ops_run "$ops_vol" "$sec" node scripts/ops/config-import.js --dry-run) || code=$?
+  echo "$ci_out"
+  assert_exit "config-import (--dry-run, fresh db)" 0 "$code"
+  grep -q "config:import: unchanged" <<<"$ci_out" ||
+    { echo "ops check failed: config-import dry run on a fresh db was not unchanged"; exit 1; }
+  echo "ops check ok: config-import dry run on a fresh db is unchanged"
 
   # --- drop one audit_event trigger directly, with the image's own @libsql/client, then re-check ---
   docker run --rm -v "$ops_vol:/data" -v "$sec:/run/secrets:ro" \

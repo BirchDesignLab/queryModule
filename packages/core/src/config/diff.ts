@@ -326,3 +326,32 @@ export function applyChanges(live: unknown, changes: readonly ConfigChange[]): u
     changes.map((change) => ({ change, rest: change.path })),
   );
 }
+
+const renderPath = (path: DiffPath): string =>
+  path.length === 0
+    ? "/"
+    : path.map((s) => `/${typeof s === "object" ? `[${s.by}=${s.is}]` : s}`).join("");
+
+const renderValue = (v: unknown): string => {
+  const t = JSON.stringify(v) ?? "undefined";
+  return t.length > 200 ? `${t.slice(0, 200)}...` : t;
+};
+
+/**
+ * One change as one text line (`+` added, `-` removed, `~` changed or reordered), at its live
+ * path with keyed items as `[by=is]`, values as JSON cut at 200 characters: the lines of
+ * config:validate --diff and config:import.
+ */
+export function renderChange(c: ConfigChange): string {
+  const at = renderPath(c.path);
+  switch (c.kind) {
+    case "added":
+      return `+ ${at} ${renderValue(c.after)}`;
+    case "removed":
+      return `- ${at} ${renderValue(c.before)}`;
+    case "changed":
+      return `~ ${at} ${renderValue(c.before)} -> ${renderValue(c.after)}`;
+    case "moved":
+      return `~ ${at} order by ${c.by}: ${c.order.join(", ")}`;
+  }
+}

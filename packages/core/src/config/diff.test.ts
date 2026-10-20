@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { applyChanges, type ConfigChange, diffConfig, VALUE_IDENTITY } from "./diff";
+import { applyChanges, type ConfigChange, diffConfig, renderChange, VALUE_IDENTITY } from "./diff";
 
 /** Small alphabets, so two independent documents share keys and items and the diff has matches. */
 // "" is a new item whose code or key is not typed yet: several may exist at once.
@@ -453,5 +453,38 @@ describe("diffConfig entries", () => {
     const out = applyChanges({}, changes) as Record<string, unknown>;
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expect(Object.hasOwn(out, "__proto__")).toBe(true);
+  });
+});
+
+describe("renderChange (config:validate --diff and config:import lines)", () => {
+  it("renders each kind as one line: + added, - removed, ~ changed or reordered", () => {
+    const live = {
+      features: { adminAudit: true },
+      queryTypes: [{ code: "VEH" }, { code: "PER" }],
+      gone: 1,
+    };
+    const draft = {
+      features: { adminAudit: false },
+      queryTypes: [{ code: "PER" }, { code: "VEH" }],
+      added: "x".repeat(250),
+    };
+    const lines = diffConfig(live, draft).map(renderChange).sort();
+    expect(lines).toEqual(
+      [
+        `+ /added "${"x".repeat(199)}...`,
+        "- /gone 1",
+        "~ /features/adminAudit true -> false",
+        "~ /queryTypes order by code: PER, VEH",
+      ].sort(),
+    );
+  });
+
+  it("renders a keyed item by its identity and the root as /", () => {
+    const keyed = diffConfig(
+      { queryTypes: [{ code: "VEH", label: "a" }] },
+      { queryTypes: [{ code: "VEH", label: "b" }] },
+    ).map(renderChange);
+    expect(keyed).toEqual(['~ /queryTypes/[code=VEH]/label "a" -> "b"']);
+    expect(diffConfig(1, 2).map(renderChange)).toEqual(["~ / 1 -> 2"]);
   });
 });

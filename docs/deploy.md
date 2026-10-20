@@ -28,6 +28,27 @@ bash scripts/ops/smoke.sh https://querymodule.birchdesignlab.com
 
 Rollback is a promote of an older sha. Migrations are expand-then-contract, so an older image runs on a newer schema.
 
+## Apply the image's site config to a seeded deploy
+
+After the first boot the config store is the live site config (ADR-0011): a new image's site and mock files are compared, logged as "site config file ignored" (with `fix: "config:import (docs/deploy.md)"`) and not used. To publish the image's site config after a promote, as the next version with the normal `configPublished` audit row by a named admin (#792, CFG-4):
+
+```bash
+cd ~/git/queryModule/deploy
+docker compose run --rm app node scripts/ops/config-import.js --dry-run
+docker compose run --rm app node scripts/ops/config-import.js --admin admin@example.test
+docker compose restart app
+```
+
+Then check it: the next smoke run passes (`bash ../scripts/ops/smoke.sh https://querymodule.birchdesignlab.com`), and with `adminAudit` on the admin console's audit page loads.
+
+- The dry run prints one line per change (`~ /siteConfig/features/adminAudit false -> true`) and writes nothing. If it prints `unchanged`, the store already holds the image's config: stop there.
+- The import validates the file as boot does (the mock gate and the fixture policy apply) and as a publish does, saves it as the shared draft and publishes it with the note "Imported from the image". `--admin` names an active user who holds `admin`.
+- Labels keep the published overlay: the image carries none, so label edits published in the builder stay.
+- One shared draft exists per site. If the dry run reports one, the import refuses; add `--replace-draft` to the import line only when that draft can be discarded (the output names its version and the user who last saved it). A replaced draft is not restored.
+- A refused import changes nothing: it exits non-zero (1 refused, 2 usage error) and prints the message keys and pointers to stderr, never document content or passwords.
+- The command runs in its own process, so the running `app` keeps serving the old version until `docker compose restart app`. Open clients then see the new `configHash`.
+- `--file <path>` imports another site file in the image; the default is the one boot reads (`SITE_CONFIG`, else the bundled `config/sites/default.json`). Off the host, with the environment the app runs with: `pnpm config:import --dry-run`.
+
 ## First deploy
 
 ```bash
