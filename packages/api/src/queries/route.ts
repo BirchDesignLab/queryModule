@@ -1,5 +1,11 @@
-import { ListQueriesQuerySchema, type Role } from "@querymodule/core/contracts";
+import {
+  AdminQueryQuerySchema,
+  ListQueriesQuerySchema,
+  type Role,
+  UUID7_PATTERN,
+} from "@querymodule/core/contracts";
 import type { Hono } from "hono";
+import { adminGuard } from "../admin/access";
 import type { AppDeps } from "../deps";
 import type { DispatchJob } from "../dispatch/dispatcher";
 import { apiError } from "../http/errors";
@@ -8,9 +14,10 @@ import type { AppEnv } from "../http/types";
 import { errorFields } from "../log/error-fields";
 import { actorOf, type Principal } from "../seams";
 import { type Acknowledged, acknowledge } from "./acknowledge";
+import { AdminViewedAuditError, readAdminQuery } from "./admin-read";
 import { admitSubmit, replayResponse } from "./admission";
 import { sanitizeSubmitError } from "./errors";
-import { type PreparedSubmit, prepareSubmit } from "./prepare";
+import { type PreparedSubmit, prepareSubmit, queryStringErrors } from "./prepare";
 import { decodeListCursor, listQueries, readQuery } from "./read";
 
 export { SubmitTransactionError, sanitizeSubmitError } from "./errors";
@@ -37,6 +44,9 @@ export function lostIdempotencyRace(e: unknown): boolean {
 export function serverTiming(receivedMono: number, endMono: number): string {
   return `ack;dur=${Math.max(0, endMono - receivedMono).toFixed(1)};desc="receipt to commit"`;
 }
+
+/** The admin read of any user's request (#713), mounted beside the owner's read (#755 T5 Q3). */
+export const ADMIN_QUERY_PATH = "/api/v1/admin/queries/:correlationId";
 
 /** The dispatcher refused jobs whose T1 has committed (intake stopped or aborted). */
 export class DispatchRefusedError extends Error {
@@ -236,6 +246,45 @@ export function mountQueriesRoute(app: Hono<AppEnv>, d: AppDeps): void {
       d.logger.error("query read failed", {
         correlationId,
         error: { name: errorFields(e).name },
+      });
+      return apiError(c, "internal");
+    }
+  });
+
+  /**
+   * GET /api/v1/admin/queries/:correlationId (spec 5.1, 5.2 admin basis, 5.5; FR-063, SEC-012,
+   * SEC-014; #713): the admin console guard (adminAudit off 404 to every caller, 401, 403
+   * passwordChangeRequired, 403 forbidden for any role but admin); a malformed correlation id or
+   * includeHidden (only "true" or "false", absent is false) answers 400 validationFailed naming the
+   * parameter, an unknown id 404 notFound, both with no audit row. Then readAdminQuery commits
+   * adminViewed (viewerBasis admin) before any DEK is unwrapped and answers the request with values
+   * and payloads. An audit, read or decrypt failure answers 500 internal with no request data and
+   * logs the id, the stage and the error class only, never a value or a payload (spec 5.9).
+   */
+  app.get(ADMIN_QUERY_PATH, adminGuard(d, "adminAudit", ["admin"]), async (c) => {
+    const correlationId = c.req.param("correlationId");
+    if (!UUID7_PATTERN.test(correlationId))
+      return apiError(c, "validationFailed", undefined, [
+        { key: "validation.invalidBody", params: { field: "correlationId" } },
+      ]);
+    const q = AdminQueryQuerySchema.safeParse(c.req.query());
+    if (!q.success)
+      return apiError(c, "validationFailed", undefined, queryStringErrors(q.error.issues));
+    try {
+      const detail = await readAdminQuery(
+        d,
+        c.get("principal"),
+        correlationId,
+        q.data.includeHidden === "true",
+      );
+      if (detail === null) return apiError(c, "notFound");
+      return c.json(detail, 200);
+    } catch (e) {
+      const audit = e instanceof AdminViewedAuditError;
+      d.logger.error("admin query read failed", {
+        correlationId,
+        stage: audit ? "audit" : "read",
+        error: { name: errorFields(audit ? e.cause : e).name },
       });
       return apiError(c, "internal");
     }

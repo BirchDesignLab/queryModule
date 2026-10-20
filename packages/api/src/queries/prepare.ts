@@ -40,7 +40,7 @@ export function prepareSubmit(
   principal: Principal,
 ): Prepared {
   const parsed = SubmitQueryRequestSchema.safeParse(raw);
-  if (!parsed.success) return invalid(c, bodyErrors(parsed.error.issues));
+  if (!parsed.success) return invalid(c, queryStringErrors(parsed.error.issues));
   const request = parsed.data;
   // Controller ruling #284: a repeated source id is a malformed body, not something to dedupe.
   if (new Set(request.sourceIds).size !== request.sourceIds.length)
@@ -103,22 +103,19 @@ function invalid(c: Context<AppEnv>, errors: ValidationError[]): Prepared {
 }
 
 /**
- * One error per top-level key, in issue order. A root-level issue (not an object, or an
- * unrecognized key) names no field: an unrecognized key is client text and is not echoed.
+ * One error per top-level field, in issue order, naming the field only: the submit body's keys and
+ * the admin routes' query parameters alike (#755 T3 Q1). A root-level issue (not an object, an
+ * unrecognized key, the audit window rule) names no field: an unrecognized key is client text, and
+ * no value is ever echoed (#561).
  */
-function bodyErrors(issues: readonly { path: readonly PropertyKey[] }[]): ValidationError[] {
-  const out: ValidationError[] = [];
-  const seen = new Set<string>();
-  for (const issue of issues) {
-    const top = issue.path[0];
-    const field = typeof top === "string" ? top : "";
-    if (seen.has(field)) continue;
-    seen.add(field);
-    out.push(
-      field === ""
-        ? { key: "validation.invalidBody" }
-        : { key: "validation.invalidBody", params: { field } },
-    );
-  }
-  return out;
+export function queryStringErrors(
+  issues: readonly { path: readonly PropertyKey[] }[],
+): ValidationError[] {
+  // A Set keeps first-seen order, so each field is named once, in issue order.
+  const fields = new Set(issues.map((i) => (typeof i.path[0] === "string" ? i.path[0] : "")));
+  return [...fields].map((field) =>
+    field === ""
+      ? { key: "validation.invalidBody" }
+      : { key: "validation.invalidBody", params: { field } },
+  );
 }
