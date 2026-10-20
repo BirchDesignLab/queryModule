@@ -106,6 +106,8 @@ test.describe("[FR-050] terminal beside the results (UX-014)", () => {
     expect(form.x + form.width).toBeLessThanOrEqual(requests.x);
     expect(requests.x + requests.width).toBeLessThanOrEqual(terminal.x);
     expect(Math.round(terminal.width)).toBe(320);
+    // The form column narrows from its 448 px two-column floor to 424 px while the pane shows.
+    expect(Math.round(form.width)).toBe(424);
     // Width priority (D-M2P3-B2, mockup v6 566 px, spec 6.2): the form column narrows while the
     // pane shows and the results get the rest: 560 px or more here (headless Chromium draws no
     // scrollbar; a classic one takes ~17 px).
