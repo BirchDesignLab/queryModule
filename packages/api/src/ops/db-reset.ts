@@ -34,6 +34,10 @@ export interface DbResetOptions {
   clock: Clock;
   out: (s: string) => void;
   err: (s: string) => void;
+  /** Test seams for the steps after the delete; the CLI uses the real ones. */
+  removeDatabase?: (dbFile: string) => void;
+  seed?: typeof seedUsers;
+  addDemoUsers?: typeof addMissingDemoUsers;
 }
 
 /** The health route of the app service as `docker compose run` resolves it (ruling 1). */
@@ -197,7 +201,7 @@ export async function runDbReset(argv: readonly string[], o: DbResetOptions): Pr
     return 1;
   };
   try {
-    removeDatabase(o.env.dbFile);
+    (o.removeDatabase ?? removeDatabase)(o.env.dbFile);
   } catch (e) {
     return failed("could not remove the old database", e);
   }
@@ -210,23 +214,23 @@ export async function runDbReset(argv: readonly string[], o: DbResetOptions): Pr
   try {
     o.out("email\trole\tpassword\n");
     try {
-      printAccounts(o.out, await seedUsers(d, secret));
+      printAccounts(o.out, await (o.seed ?? seedUsers)(d, secret));
     } catch (e) {
       if (e instanceof SeedPartialFailureError) {
         printAccounts(o.out, e.created);
-        o.err(`db-reset: ${e.message}\n`);
+        o.err(`db-reset: ${e.message}; restore from ${backupFile} (docs/deploy.md)\n`);
         return 1;
       }
       return failed("the seed failed", e);
     }
     try {
-      const added = await addMissingDemoUsers(d, secret);
+      const added = await (o.addDemoUsers ?? addMissingDemoUsers)(d, secret);
       printAccounts(o.out, added.created);
       o.out(`added ${added.created.length} missing demo accounts\n`);
     } catch (e) {
       if (e instanceof AddDemoUsersPartialFailureError) {
         printAccounts(o.out, e.created);
-        o.err(`db-reset: ${e.message}\n`);
+        o.err(`db-reset: ${e.message}; restore from ${backupFile} (docs/deploy.md)\n`);
         return 1;
       }
       return failed("add-demo-users failed", e);

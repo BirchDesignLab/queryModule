@@ -9,10 +9,11 @@ import { checkAuditTriggers } from "../../src/db/migrate";
 import { withTransaction } from "../../src/db/tx";
 import { type AppDeps, buildDeps } from "../../src/deps";
 import type { DeployEnv } from "../../src/env";
+import { AddDemoUsersPartialFailureError } from "../../src/ops/add-demo-users";
 import { type DbResetOptions, probeApp, runDbReset } from "../../src/ops/db-reset";
 import { grantRole } from "../../src/ops/grant-role";
 import { derivePassword } from "../../src/seed/password";
-import { seedUsers } from "../../src/seed/seed";
+import { SeedPartialFailureError, seedUsers } from "../../src/seed/seed";
 import { DEMO_USERS } from "../../src/seed/users";
 import { TEST_DB_KEY, tempDbFile } from "../helpers/db";
 import { createTestClock, TEST_SECRETS, type TestClock, testEnv } from "../helpers/fixture";
@@ -340,6 +341,50 @@ describe("#821 db:reset guards (ADR-0015)", () => {
     expect(s.err.join("")).toContain("backup failed; nothing was deleted");
     expect(await s.snapshot()).toEqual(before);
   });
+});
+
+describe("#821 db:reset failures after the delete name the backup (CW3 review Q6)", () => {
+  // The old file is kept (removeDatabase is a no-op) so this runs on Windows too; the seed and
+  // add-demo-users stubs throw after the delete step, where the backup is the only way back.
+  const PW = derivePassword(SECRET, "dispatcher@example.test");
+  const created = [{ email: "dispatcher@example.test", role: "user" as const, password: PW }];
+  const cases: [string, Partial<DbResetOptions>][] = [
+    ["a seed error", { seed: async () => Promise.reject(new Error(PW)) }],
+    [
+      "a partial seed",
+      { seed: async () => Promise.reject(new SeedPartialFailureError(created, new Error(PW))) },
+    ],
+    [
+      "an add-demo-users error",
+      { seed: async () => [], addDemoUsers: async () => Promise.reject(new Error(PW)) },
+    ],
+    [
+      "a partial add-demo-users",
+      {
+        seed: async () => [],
+        addDemoUsers: async () =>
+          Promise.reject(
+            new AddDemoUsersPartialFailureError(created, created[0]?.email ?? "", new Error(PW)),
+          ),
+      },
+    ],
+  ];
+  for (const [name, over] of cases) {
+    it(`${name}: stderr names the backup file and the restore steps, and no password`, async () => {
+      const s = await seededSite();
+      const code = await runDbReset(
+        ["--confirm", "default"],
+        await s.opts({ removeDatabase: () => {}, ...over }),
+      );
+      expect(code).toBe(1);
+      const err = s.err.join("");
+      const backup = /backup written: (\S+)/.exec(s.out.join(""))?.[1] ?? "";
+      expect(backup).not.toBe("");
+      expect(err).toContain(backup);
+      expect(err).toContain("docs/deploy.md");
+      expect(err).not.toContain(PW);
+    });
+  }
 });
 
 describe("#821 health probe", () => {
