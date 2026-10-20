@@ -23,8 +23,10 @@ export interface ResultFetcher {
   /**
    * After a reconnect, or at a backoff step while the socket is down (spec 6.8): schedules the detail
    * fetch of every entry that still has a pending source, or a returned one without its payload.
+   * With `now` (back online, spec 10.4), an entry waiting out a failed fetch's backoff is fetched
+   * at once instead, and its backoff starts over.
    */
-  refetchPending(): void;
+  refetchPending(options?: { now?: boolean }): void;
   /** On logout, a 401 or a change of user (spec 6.7): cancels every fetch and timer, drops state. */
   reset(): void;
 }
@@ -288,9 +290,18 @@ export function createResultFetcher(options: ResultFetcherOptions): ResultFetche
       schedule(event.correlationId);
     },
     loadList,
-    refetchPending() {
+    refetchPending(options) {
       for (const item of store.getState().items) {
-        if (item.status === "acknowledged" && owesFetch(item)) schedule(item.correlationId);
+        if (item.status !== "acknowledged" || !owesFetch(item)) continue;
+        if (options?.now === true) {
+          const slot = slotOf(item.correlationId);
+          if (slot.retry !== null) {
+            timers.clearTimeout(slot.retry);
+            slot.retry = null;
+            slot.attempts = 0;
+          }
+        }
+        schedule(item.correlationId);
       }
     },
     reset() {

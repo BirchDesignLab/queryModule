@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { recordPolite, signIn } from "./helpers.js";
+import { politeMutations, recordPolite, signIn } from "./helpers.js";
 
 // Live per-source status (FR-043, FR-044, FR-065; spec 6.2, 6.6, 5.4). The local build serves mock
 // sources (ALLOW_MOCK_SOURCES) and the real dispatcher, so each plate below is a canned scenario:
@@ -102,8 +102,8 @@ test("typing into Plate while statuses arrive keeps focus, value and the live re
   page,
 }) => {
   const list = await openList(page);
-  await runPlate(page, "ZZ-0001");
   const said = await recordPolite(page);
+  await runPlate(page, "ZZ-0001");
   const row = list.getByRole("listitem").first();
   const field = page.getByLabel("Plate", { exact: true });
   const polite = page.getByTestId("announcer-polite");
@@ -117,11 +117,13 @@ test("typing into Plate while statuses arrive keeps focus, value and the live re
   // D-M2P3-B7: keystrokes never change the region. A burst typed after the arrival leaves the
   // recording exactly as it was.
   const before = await said();
+  const changes = await politeMutations(page);
   await field.pressSequentially("123", { delay: 100 });
   await expect(field).toBeFocused();
   await expect(field).toHaveValue("ABC123");
   await expect(polite).toContainText(summary);
   expect(await said()).toEqual(before);
+  expect(await politeMutations(page)).toBe(changes);
   // The arrival is announced once, coalesced: no text is said twice, the summary included, and
   // nothing typed is ever said.
   const spoken = (await said()).filter((text) => text !== "");

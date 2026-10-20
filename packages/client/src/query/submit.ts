@@ -238,6 +238,8 @@ export function createSubmitController(options: SubmitControllerOptions): Submit
     if (options.online !== undefined) {
       unsubscribeOnline = options.online.subscribe((online) => {
         if (!online && get().status !== "submitting") enterNoConnection();
+        // Back online (spec 10.4): ask the server now; the poll may be backed off to 30 s.
+        if (online && get().status === "noConnection") void recheck();
       });
     }
 

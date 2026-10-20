@@ -381,7 +381,7 @@ describe("FR-065 replay cursor, resync and the list load in the composition root
     t.services.reset.resetAll();
   });
 
-  it("coming back online refetches entries with a pending source at once, once each (spec 10.4)", async () => {
+  it("coming back online refetches the entries with a pending source (spec 10.4)", async () => {
     const platform = createFakePlatform();
     const sockets: FakeSocket[] = [];
     const services = testServices({

@@ -129,9 +129,9 @@ export function createServices(options: ServicesOptions): Services {
   feed.onFirstWelcome(() => results.refetchPending());
   feed.onRetry(() => results.refetchPending());
   // Back online (spec 10.4): what settled while the page was offline is refetched now, not at the
-  // socket's next backoff step, which can be up to 30 s away.
+  // socket's next backoff step or a failed fetch's own retry, either of which can be 30 s away.
   options.platform.online.subscribe((online) => {
-    if (online) results.refetchPending();
+    if (online) results.refetchPending({ now: true });
   });
   // Sign-in (Q1) loads the list: the last requests of the user's other sessions and devices. A session
   // still owing a password change loads nothing until it is changed (D-A26); a reset empties it all.

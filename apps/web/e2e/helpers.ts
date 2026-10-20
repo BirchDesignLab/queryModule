@@ -300,20 +300,37 @@ export async function expectEvenActionBar(page: Page, minTarget: number): Promis
 }
 
 /**
- * Records every text the polite announcer region holds, in order, from a MutationObserver in the
- * page; an empty region is recorded as "" so a repeat (text, "", text) shows as two entries.
- * Consecutive identical texts collapse into one. Returns a reader for the recording so far.
+ * Records every text the polite announcer region holds, in order; an empty region is recorded as ""
+ * so a repeat (text, "", text) shows as two entries, and consecutive identical texts collapse into
+ * one. The observer watches the whole body and re-reads the region on each change, so a remounted
+ * region is still heard; every mutation inside it is also counted (`politeMutations`), which
+ * catches a node swapped for one with the same text. Returns a reader for the recording so far.
  */
 export async function recordPolite(page: Page): Promise<() => Promise<string[]>> {
   await page.evaluate(() => {
-    const region = document.querySelector('[data-testid="announcer-polite"]');
-    if (region === null) throw new Error("no polite announcer");
-    const said: string[] = [region.textContent?.trim() ?? ""];
-    (window as unknown as { __said: string[] }).__said = said;
-    new MutationObserver(() => {
+    const select = () => document.querySelector('[data-testid="announcer-polite"]');
+    if (select() === null) throw new Error("no polite announcer");
+    const w = window as unknown as { __said: string[]; __mutations: number };
+    w.__said = [select()?.textContent?.trim() ?? ""];
+    w.__mutations = 0;
+    new MutationObserver((records) => {
+      const region = select();
+      if (region === null) return;
+      const inside = records.some(
+        (r) =>
+          region.contains(r.target) ||
+          [...r.addedNodes].some((n) => n === region || n.contains(region)),
+      );
+      if (!inside) return;
+      w.__mutations += 1;
       const text = region.textContent?.trim() ?? "";
-      if (said.at(-1) !== text) said.push(text);
-    }).observe(region, { childList: true, characterData: true, subtree: true });
+      if (w.__said.at(-1) !== text) w.__said.push(text);
+    }).observe(document.body, { childList: true, characterData: true, subtree: true });
   });
   return () => page.evaluate(() => [...(window as unknown as { __said: string[] }).__said]);
+}
+
+/** How many changes the polite region has had since `recordPolite` started. */
+export async function politeMutations(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __mutations: number }).__mutations);
 }

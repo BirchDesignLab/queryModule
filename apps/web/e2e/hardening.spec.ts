@@ -1,6 +1,6 @@
 import type { Browser, Page } from "@playwright/test";
 import { expect, test } from "./fixtures.js";
-import { expectEvenActionBar, seededUser, signIn } from "./helpers.js";
+import { expectEvenActionBar, seededUser, shortReference, signIn } from "./helpers.js";
 
 // M1 P3 hardening (query surfaces): the dispatcher panel and the officer layout under the
 // conditions the requirements name (spec 6.3, 6.6; WCAG 2.2 1.4.4, 1.4.10, 2.3.3, 2.4.11, 2.5.8).
@@ -410,8 +410,11 @@ async function personaAndMapping(
       // The dispatcher lists the shift, the officer shows the last request.
       .getByRole("region", { name: /^(Requests this shift|Last request)$/ })
       .getByRole("listitem")
-      .filter({ has: page.getByRole("button", { name: /Copy reference/ }) })
-      .first();
+      .filter({
+        has: page.getByRole("button", {
+          name: new RegExp(`Copy reference ${shortReference(correlationId)}`),
+        }),
+      });
     const card = row.getByRole("region", { name: "State system: returned" });
     await expect(card).toBeVisible({ timeout: 5000 });
     return {

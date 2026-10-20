@@ -70,8 +70,9 @@ test("offline: submit is held with a visible reason, Enter sends nothing, values
   await expect(command).toHaveValue("VEH.QQ-0421");
   expect(posts).toEqual([]);
 
+  // Back online probes the server at once (submit.ts recheck), not at the backed-off poll.
   await context.setOffline(false);
-  await expect(page.getByTestId("announcer-polite")).toContainText(RESTORED, { timeout: 15_000 });
+  await expect(page.getByTestId("announcer-polite")).toContainText(RESTORED, { timeout: 3000 });
   await expect(submit).not.toHaveAttribute("aria-disabled");
   await expect(reason).toHaveCount(0);
   await expectNoSeriousAxeViolations(page);
@@ -128,6 +129,9 @@ test("offline: a request pending when the connection dropped is refetched once i
       r.request().method() === "GET" &&
       r.url().endsWith(`/api/v1/queries/${correlationId}`) &&
       r.ok(),
+    // Back online refetches at once (results.refetchPending with now, unit-tested in
+    // packages/client): well inside the feed's and the fetch's own backoff.
+    { timeout: 3000 },
   );
   await context.setOffline(false);
   await refetched;
