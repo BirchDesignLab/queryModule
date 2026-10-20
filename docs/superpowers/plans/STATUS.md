@@ -43,6 +43,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A2") | M2 P2 audit | done (AW4 #772, AW5 #778 merged; [handoff](../../handoffs/10-19-26-lane-a2.md)) | 10-19-26 |
 | Windows 11 | B (`C:\git\queryModule`, "M2 P2 Lane B4") | M2 P2 audit | done (BW4 #768, BW5 #775 merged; [handoff](../../handoffs/10-18-26-m2-p2-lane-b4.md)) | 10-18-26 |
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P3 Lane A") | M2 P3 hardening | done for AW1 #818 and AW2 #826 (merged); AW3 to a fresh session ([handoff](../../handoffs/10-20-26-m2-p3-lane-a.md)) | 10-20-26 |
+| Windows 11 | A (`C:\git\queryModule-a`, "M2 P3 Lane A2") | M2 P3 hardening | done (#833 merged: #817, #825, #829, ADR-0016; AW3 to a fresh session; [handoff](../../handoffs/10-20-26-m2-p3-lane-a2.md)) | 10-20-26 |
 | Windows 11 | B (`C:\git\queryModule`, "M2 P3 Lane B") | M2 P3 hardening | paused (BW1 #820 and BW2 #824 merged; BW3 next in a fresh session; [handoff](../../handoffs/10-20-26-m2-p3-lane-b.md)) | 10-20-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 10"; [Manager 9 handoff](../../handoffs/10-19-26-m2-manager-9.md)) | 10-19-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
@@ -60,12 +61,12 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: AW3 next: #801 (Task 17 host steps), #802 (Task 18 ADR-0014), #813 (Task 19 release note, gate, promote); follow-ups #817, #825 (critical, not yet homed)
-- Branch / PR: none open; AW1 #818 and AW2 #826 merged (main ac047ab)
-- Last green: AW2 head 569363c: `pnpm verify`, `pnpm audit --prod`, full `pnpm e2e` (one Windows socket fault, rerun green), two-slice `wave-review` approve
-- Next step: a fresh Lane A session takes AW3 once lane C's CW3 and Track B's BW3 to BW5 have merged; the developer's no-milestone promote and the host `config:import` come first (runbook in the handoff)
-- Blocked by: CW3, BW3 to BW5 merges
-- Latest handoff: [10-20-26-m2-p3-lane-a.md](../../handoffs/10-20-26-m2-p3-lane-a.md) (M2 P3 Lane A: AW1 #818 and AW2 #826 merged; AW3 entry conditions; follow-ups #817, #825)
+- Issue: AW3 next: #801 (Task 17 host steps), #802 (Task 18 ADR-0014), #813 (Task 19 release note, gate, promote); follow-up #832 (#833 review minors)
+- Branch / PR: none open; #833 merged (main e2c11fc at handoff)
+- Last green: #833 head e6107bd: `pnpm verify`, `pnpm audit --prod`, full `pnpm e2e`, two-slice `wave-review` approve
+- Next step: a fresh Track A lane takes AW3 once BW3, BW3b (#835) and BW5 have merged; it starts with Task 18, and Task 17 waits for the developer's no-milestone promote and a host window (runbook in the handoff)
+- Blocked by: BW3, BW3b, BW5 merges
+- Latest handoff: [10-20-26-m2-p3-lane-a2.md](../../handoffs/10-20-26-m2-p3-lane-a2.md) (M2 P3 Lane A2: #833 merged; AW3 entry conditions and host steps; follow-ups #832, #836)
 - Notes: manager "M2 Manager 10" (its push approvals count as the developer's for Track A); Lane A is `C:\git\queryModule-a`, `E2E_PORT=3100`.
 
 ### Track B
