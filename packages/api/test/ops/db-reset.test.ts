@@ -416,6 +416,55 @@ describe("#821 health probe", () => {
   it("an answer means running", async () => {
     expect(await probeApp(await healthServer())).toBe("running");
   });
+  // #829 note, ruling M2 Manager 10 10-20-26: the name is resolved first with its own budget, since
+  // Docker's DNS answers "not found" for a stopped compose service only after about 4 s
+  // (scripts/ops/probe-stopped-app-dns.sh); EAI_AGAIN is a temporary failure, so it refuses.
+  const notFound = () =>
+    Object.assign(new Error("getaddrinfo ENOTFOUND app"), { code: "ENOTFOUND" });
+  const tryAgain = () =>
+    Object.assign(new Error("getaddrinfo EAI_AGAIN app"), { code: "EAI_AGAIN" });
+  it("a name that does not resolve means stopped, without an HTTP request", async () => {
+    const url = await healthServer();
+    const lookup = vi.fn(async () => {
+      throw notFound();
+    });
+    expect(await probeApp(url, 3000, { lookup })).toBe("stopped");
+    expect(lookup).toHaveBeenCalledWith("127.0.0.1");
+  });
+  it("a temporary DNS failure (EAI_AGAIN) is unknown (fail closed)", async () => {
+    const lookup = async () => {
+      throw tryAgain();
+    };
+    expect(await probeApp(await healthServer(), 3000, { lookup })).toBe("unknown");
+  });
+  it("a lookup that outlasts its budget is unknown", async () => {
+    const lookup = () => new Promise<never>(() => {});
+    expect(await probeApp(await healthServer(), 3000, { lookup, dnsTimeoutMs: 50 })).toBe(
+      "unknown",
+    );
+  });
+  it("a slow lookup does not use up the HTTP budget: a slow 'not found' is stopped, a slow answer running", async () => {
+    const url = await healthServer();
+    const slowNotFound = () =>
+      new Promise<never>((_, reject) => setTimeout(() => reject(notFound()), 300));
+    const slowFound = () =>
+      new Promise<{ address: string }>((resolve) =>
+        setTimeout(() => resolve({ address: "127.0.0.1" }), 300),
+      );
+    expect(await probeApp(url, 200, { lookup: slowNotFound })).toBe("stopped");
+    expect(await probeApp(url, 200, { lookup: slowFound })).toBe("running");
+  });
+  it("EAI_AGAIN on the HTTP request is unknown, not stopped", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(Object.assign(new TypeError("fetch failed"), { cause: tryAgain() }));
+    onTestFinished(() => fetchSpy.mockRestore());
+    expect(
+      await probeApp("http://app:3000/api/v1/health", 3000, {
+        lookup: async () => ({ address: "10.0.0.2" }),
+      }),
+    ).toBe("unknown");
+  });
   it("any other failure is unknown (fail closed)", async () => {
     // a server that accepts and never answers: the probe times out
     const s = createServer(() => {});
