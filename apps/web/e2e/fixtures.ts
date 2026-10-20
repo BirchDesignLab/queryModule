@@ -80,16 +80,26 @@ export { expect };
 
 /** Fails on serious or critical axe violations (spec 9.3 step 12, 10.6). */
 export async function expectNoSeriousAxeViolations(page: Page): Promise<void> {
-  // Scan the settled page: a button's background-color transition (focus returning after a
-  // dialog) read mid-way gives a false color-contrast failure (#507, 1 in 4 runs of admin-users).
-  await page.waitForFunction(() =>
-    document.getAnimations().every((a) => a.playState !== "running"),
+  // The tokens collapse every transition to 0 ms under prefers-reduced-motion. A button flipping
+  // between aria-disabled and enabled jumps its color at once but fades its background over 120 ms,
+  // so a scan that lands inside the fade reads white on white (#507, #773). Switch motion off first,
+  // so no transition can start during the scan, then let any running one finish.
+  const reducedBefore = await page.evaluate(
+    () => matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
-  const serious = results.violations
-    .filter((v) => v.impact === "serious" || v.impact === "critical")
-    .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
-  expect(serious).toEqual([]);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  try {
+    await page.waitForFunction(() =>
+      document.getAnimations().every((a) => a.playState !== "running"),
+    );
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .analyze();
+    const serious = results.violations
+      .filter((v) => v.impact === "serious" || v.impact === "critical")
+      .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
+    expect(serious).toEqual([]);
+  } finally {
+    await page.emulateMedia({ reducedMotion: reducedBefore ? "reduce" : "no-preference" });
+  }
 }
