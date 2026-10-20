@@ -139,7 +139,7 @@ const typeMockGroup = (page: Page) =>
 /** Review and publish by keyboard; returns the version that went live and the dialog's text. */
 async function publish(page: Page): Promise<{ version: number; review: string }> {
   await page.getByRole("button", { name: "Review and publish" }).press("Enter");
-  const dialog = page.getByRole("dialog", { name: "Review and publish" });
+  const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
   await expect(dialog).toBeVisible();
   const confirm = dialog.getByRole("button", { name: /^Publish version \d+$/ });
   await expectNoSeriousAxeViolations(page);
@@ -177,7 +177,7 @@ test("[#551] a new query type on a mock site shows its gap where the admin works
   // opens no dialog.
   await page.getByRole("button", { name: "Review and publish" }).press("Enter");
   await expect(page.getByText(/Not published: \d+ errors? to fix first/).first()).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Review and publish" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: /^Publish version \d+$/ })).toHaveCount(0);
   // The gap is the only error, so the builder goes to it at the Coverage item.
   await expect(
     page.getByRole("table", { name: "Mock response coverage: query types by mock source" }),

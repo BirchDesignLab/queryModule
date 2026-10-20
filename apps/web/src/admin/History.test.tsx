@@ -151,6 +151,15 @@ describe("the history drawer", () => {
     expect(within(region).getByRole("heading", { name: "Version history" })).toBeInTheDocument();
   });
 
+  it("is a drawer over the builder with the v6 hint (D-M2P3-B1, #774)", async () => {
+    const t = await openBuilder();
+    const region = await openHistory(t);
+    expect(region).toHaveClass("qm-history--drawer");
+    expect(region).toHaveTextContent(
+      "Every publish is a version. Rolling back publishes an earlier version again. A note and a name are what the publisher entered; they can be wrong. A rollback line is written by the system.",
+    );
+  });
+
   it("each row shows its status badge, its time, the roll back it came from, and who published it", async () => {
     const t = await openBuilder();
     const region = await openHistory(t);
@@ -214,7 +223,7 @@ describe("the history drawer", () => {
     await setDelimiter(t, ",");
     const versions = calls.versions;
     await t.user.click(screen.getByRole("button", { name: "Review and publish" }));
-    await screen.findByRole("dialog", { name: "Review and publish" });
+    await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await waitFor(() => expect(calls.versions).toBeGreaterThan(versions));
   });
 
@@ -310,7 +319,7 @@ describe("roll back", () => {
     await setDelimiter(t, ",");
     const opener = screen.getByRole("button", { name: "Review and publish" });
     await t.user.click(opener);
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     opener.remove();
     await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.getByRole("tab", { selected: true })).toHaveFocus());

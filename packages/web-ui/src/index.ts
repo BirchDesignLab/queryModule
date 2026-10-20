@@ -19,6 +19,8 @@ export { SelectField } from "./field/SelectField.js";
 export type { TextFieldProps } from "./field/TextField.js";
 export { TextField } from "./field/TextField.js";
 export { useMediaQuery } from "./hooks/useMediaQuery.js";
+export type { LineIconName } from "./icons.js";
+export { LineIcon } from "./icons.js";
 export type { ActionBarProps } from "./panel/ActionBar.js";
 export { ActionBar } from "./panel/ActionBar.js";
 export type { CommandEchoProps } from "./panel/CommandEcho.js";
@@ -67,7 +69,7 @@ export {
 } from "./shortcuts/engine.js";
 export { ShortcutProvider, useShortcutAction } from "./shortcuts/ShortcutProvider.js";
 export type { ShortcutSheetProps } from "./shortcuts/ShortcutSheet.js";
-export { ShortcutSheet } from "./shortcuts/ShortcutSheet.js";
+export { ShortcutSheet, shortcutLabel } from "./shortcuts/ShortcutSheet.js";
 export type { ModeSegProps } from "./terminal/ModeSeg.js";
 export { ModeSeg } from "./terminal/ModeSeg.js";
 export type { TerminalInputProps } from "./terminal/TerminalInput.js";

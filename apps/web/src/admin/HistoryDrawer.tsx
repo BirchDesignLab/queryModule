@@ -9,7 +9,7 @@ import { SCROLL_FOCUS } from "./scroll-focus.js";
 
 /**
  * Version history (Task 33 part 2b, #358, BR-001, UX-004): a named region opened from the toolbar's
- * History button. It lists GET /admin/config/versions newest first, with a roll back on each
+ * History button, drawn as mockup v6's 380 px drawer over the builder's end edge (D-M2P3-B1). It lists GET /admin/config/versions newest first, with a roll back on each
  * previous version (the confirm and the request are the publish flow's) and an export on each. Esc
  * closes it; the builder returns focus to the History button. Each published version shows its
  * publisher's name (the id when the server has none) and its change note, or "No note" (D-M2P0-4,
@@ -129,7 +129,12 @@ export function HistoryDrawer({
   );
 
   return (
-    <section ref={regionRef} id={id} className="qm-history" aria-labelledby={headingId}>
+    <section
+      ref={regionRef}
+      id={id}
+      className="qm-history qm-history--drawer"
+      aria-labelledby={headingId}
+    >
       <div className="qm-history__head">
         <h3 ref={headingRef} className="qm-editor__title" id={headingId} {...PROGRAMMATIC_FOCUS}>
           {t("admin.history.title")}

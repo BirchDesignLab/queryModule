@@ -135,12 +135,12 @@ export function PublishDialogs({
     <>
       <LeaveDialog
         open={open}
-        title={t("admin.publish.title")}
-        body={
+        title={
           nothing
-            ? t("admin.publish.nothing")
-            : t("admin.publish.body", { version: flow.reviewing ?? 0 })
+            ? t("admin.publish.title")
+            : t("admin.publish.confirm", { version: flow.reviewing ?? 0 })
         }
+        body={nothing ? t("admin.publish.nothing") : t("admin.publish.body")}
         stayLabel={nothing ? t("admin.publish.close") : t("admin.publish.cancel")}
         leaveLabel={t("admin.publish.confirm", { version: flow.reviewing ?? 0 })}
         hideLeave={nothing}

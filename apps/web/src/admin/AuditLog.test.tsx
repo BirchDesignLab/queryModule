@@ -494,6 +494,18 @@ describe("regulated data (spec 6.7)", () => {
     ).toBeInTheDocument();
   });
 
+  it("draws the download icon on Export and the eye on the recorded line, hidden from the reader (mockup v6, #774)", async () => {
+    await openAudit();
+    await screen.findByRole("table", {}, MAX_WAIT);
+    const exportButton = screen.getByRole("button", { name: "Export NDJSON" });
+    expect(exportButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    const recorded = screen.getByText("Viewing and exporting the audit log is recorded.");
+    expect(recorded.closest(".qm-audit__recorded")?.querySelector("svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
+
   it("a sign-out empties the filters and the rows", async () => {
     const { t } = await openAudit();
     await screen.findByRole("table", {}, MAX_WAIT);

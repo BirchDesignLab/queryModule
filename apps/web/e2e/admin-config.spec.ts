@@ -118,7 +118,7 @@ async function selectInTree(page: Page, name: RegExp): Promise<void> {
 /** Review and publish by keyboard; returns the version that went live. */
 async function publish(page: Page, scanDialog = false): Promise<number> {
   await page.getByRole("button", { name: "Review and publish" }).press("Enter");
-  const dialog = page.getByRole("dialog", { name: "Review and publish" });
+  const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
   await expect(dialog).toBeVisible();
   const confirm = dialog.getByRole("button", { name: /^Publish version \d+$/ });
   if (scanDialog) await expectNoSeriousAxeViolations(page);

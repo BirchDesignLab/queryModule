@@ -765,6 +765,7 @@ main[tabindex="-1"]:focus {
 
 /* The panes' column: what the row leaves, never more, so the panes inside can scroll. */
 .qm-builder__body {
+  position: relative;
   grid-column: 1 / -1;
   align-self: stretch;
   display: flex;
@@ -1808,6 +1809,26 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   border-radius: var(--qm-radius-panel);
 }
 
+/* The drawer of mockup v6 (D-M2P3-B1): 380 px over the builder's end edge, from the top of the
+   builder body to its bottom, on the overlay surface. The panes keep their place under it; the list
+   scrolls inside it. 380 px is 19 steps of the 20 px space token. */
+.qm-history--drawer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qm-space-3);
+  inline-size: min(calc(var(--qm-space-5) * 19), 100%);
+  margin: 0;
+  padding: var(--qm-space-5);
+  background: var(--qm-color-surface-overlay);
+  border-radius: 0;
+  border-block: 0;
+  border-inline-end: 0;
+}
+
 .qm-history__head {
   display: flex;
   flex-wrap: wrap;
@@ -1823,6 +1844,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 .qm-history__scroll {
   max-block-size: calc(var(--qm-space-12) * 5);
   overflow-y: auto;
+}
+
+.qm-history--drawer .qm-history__scroll {
+  flex: 1 1 0;
+  min-block-size: 0;
+  max-block-size: none;
 }
 
 .qm-history__list {
@@ -1980,6 +2007,9 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-audit__recorded {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qm-space-2);
   margin-inline-start: auto;
   color: var(--qm-color-text-muted);
   font-size: var(--qm-type-size-sm);
@@ -2176,13 +2206,16 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+/* The recorded note of mockup v6: an info start edge and an eye, on the base surface (issue 774). */
 .qm-request-view__banner {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--qm-space-2) var(--qm-space-3);
   padding: var(--qm-space-2) var(--qm-space-3);
-  background: var(--qm-color-accent-subtle);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-inline-start: calc(var(--qm-border-width) * 4) solid var(--qm-color-severity-info-bg);
   border-radius: var(--qm-radius-control);
 }
 

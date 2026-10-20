@@ -281,7 +281,7 @@ describe("review and publish", () => {
     const t = await openBuilder();
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     expect(dialog).toHaveTextContent(/version 2/);
     expect(await within(dialog).findByText(/Terminal settings/)).toBeInTheDocument();
     // The list in the dialog is for reading: no entry opens an item from here.
@@ -311,7 +311,7 @@ describe("review and publish", () => {
     await setDelimiter(t, ",");
     expect(status()).toHaveTextContent("1 unpublished change.");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     // The reload after a publish is slow: the notice must not run ahead of it.
     server.use(
       http.get(`${API}/api/v1/admin/config`, async () => {
@@ -354,7 +354,7 @@ describe("review and publish", () => {
     const t = await openBuilder();
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(calls.publishes).toHaveLength(0);
     await waitFor(() => expect(button("Review and publish")).toHaveFocus());
@@ -364,7 +364,7 @@ describe("review and publish", () => {
     const t = await openBuilder({ publish: conflict });
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
     const alert = await conflictAlert();
     expect(within(alert).getByRole("button", { name: "Load the latest" })).toBeInTheDocument();
@@ -391,7 +391,7 @@ describe("review and publish", () => {
     });
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByTestId("draft-summary")).toHaveTextContent("Draft checks: 1 errors");
@@ -417,8 +417,8 @@ describe("review and publish", () => {
     const t = await openBuilder();
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
-    expect(dialog).toHaveAccessibleDescription(/dispatchers/i);
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
+    expect(dialog).toHaveAccessibleDescription(/dispatcher and officer screens/i);
     await t.user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(calls.publishes).toHaveLength(0);
@@ -445,12 +445,12 @@ describe("while an action is in flight (round 1: C1, C2, C3)", () => {
     });
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
     await waitFor(() => expect(calls.publishes).toHaveLength(1));
     await t.user.keyboard("{Escape}");
     fireEvent(dialog, new Event("cancel", { cancelable: true }));
-    expect(screen.getByRole("dialog", { name: "Review and publish" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /^Publish version \d+$/ })).toBeInTheDocument();
     expect(configDraftStore(t.services).getState().doc).not.toBeNull();
     g.release();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -473,7 +473,7 @@ describe("while an action is in flight (round 1: C1, C2, C3)", () => {
     });
     expect(save).toHaveAccessibleDescription(/Working/);
     g.release();
-    await screen.findByRole("dialog", { name: "Review and publish" });
+    await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
   });
 
   it("C2: Save draft says why it is disabled while the Raw JSON does not parse", async () => {
@@ -499,7 +499,7 @@ describe("while an action is in flight (round 1: C1, C2, C3)", () => {
     });
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await t.user.click(within(dialog).getByRole("button", { name: "Publish version 2" }));
     await waitFor(() => expect(calls.publishes).toHaveLength(1));
     for (const name of ["Cancel", "Publish version 2"]) {
@@ -515,8 +515,8 @@ describe("while an action is in flight (round 1: C1, C2, C3)", () => {
     const t = await openBuilder();
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
-    const list = within(dialog).getByRole("region", { name: "Changes to publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
+    const list = within(dialog).getByRole("region", { name: "What changes" });
     expect(list).toHaveAttribute("tabindex", "0");
     const note = within(dialog).getByRole("textbox", { name: "Change note (optional)" });
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
@@ -543,7 +543,7 @@ describe("part 2a minors (M1, M2, M3, M6)", () => {
     const t = await openBuilder();
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await within(dialog).findByText(/Terminal settings/);
     expect(within(dialog).queryByText(/Select an entry to open it/)).not.toBeInTheDocument();
     expect(
@@ -607,7 +607,7 @@ describe("part 2a minors (M1, M2, M3, M6)", () => {
     });
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await within(dialog).findByText(/Terminal settings/);
     await waitFor(() =>
       expect(within(dialog).queryByText("Checking the live version.")).toBeNull(),
@@ -639,7 +639,7 @@ describe("part 2a minors (M1, M2, M3, M6)", () => {
     });
     await setDelimiter(t, ",");
     await t.user.click(button("Review and publish"));
-    const dialog = await screen.findByRole("dialog", { name: "Review and publish" });
+    const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await within(dialog).findByText(/Terminal settings/);
     await waitFor(() =>
       expect(within(dialog).queryByText("Checking the live version.")).toBeNull(),

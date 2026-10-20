@@ -3,6 +3,7 @@ import type { ClientSiteConfig } from "@querymodule/core/config";
 import type { AdminQueryDetail } from "@querymodule/core/contracts";
 import { assessResult } from "@querymodule/core/response";
 import {
+  LineIcon,
   PurgedResultCard,
   RequestList,
   type RequestPartView,
@@ -272,6 +273,7 @@ function AdminRequestView() {
 
   const back = (
     <Link className="qm-button qm-button--secondary" to="/admin/audit">
+      <LineIcon name="back" />
       {t("admin.request.back")}
     </Link>
   );
@@ -291,6 +293,7 @@ function AdminRequestView() {
       {!missing && (
         <>
           <div className="qm-request-view__banner" role="note">
+            <LineIcon name="eye" />
             <b>{t("admin.request.recorded")}</b>
             <span className="qm-diff__note">{t("admin.request.recordedHint")}</span>
           </div>
@@ -354,6 +357,7 @@ function AdminRequestView() {
             rows={[row]}
             heading={t("admin.request.list")}
             headingLevel={null}
+            fullReference
             emptyText=""
             t={t}
             onCopy={(id) => {
