@@ -169,10 +169,19 @@ export function useTerminal(
     return merged;
   };
 
-  /** Lists errors under the input, announces the count and keeps focus there (FR-055). */
+  /**
+   * Lists errors under the input, announces them and keeps focus there (FR-055). The announcement
+   * is the count; in the pane an unknown command code is said as "Unrecognized command" with no
+   * typed text (design note "Terminal pane", spec 6.7). The list under the input keeps the code.
+   */
   const showProblems = (found: readonly ValidationError[]): void => {
     setProblems(found);
-    announcer.announce(t("terminal.problems", { count: found.length }));
+    const unknownCode = pane && found.some((e) => e.key === "terminal.unknownCommand");
+    announcer.announce(
+      unknownCode
+        ? t("terminalPane.unknownCommandAnnouncement")
+        : t("terminal.problems", { count: found.length }),
+    );
     // Enter keeps focus and text; a click on Submit brings focus back to the input.
     inputRef.current?.focus();
   };

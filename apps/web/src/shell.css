@@ -3154,26 +3154,40 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   flex: 1 0 auto;
 }
 
-/* Terminal beside the results (FR-050, UX-014, D-M2P2-B2; mockup v6 "Terminal pane"). From
-   layout.terminalPane (1280 px) a dispatcher who chose "Beside results" gets three columns: the
-   form in its panel (448 px), the results in the middle (they take the rest, 384 px at least and
-   540 px at 1366), the terminal on the right (320 px). The page script renders the pane only from this
-   width, so below it the Form and Terminal toggle is back and these rules do not apply. Widths are
-   multiples of the spacing tokens (no literal lengths outside a query condition). */
+/* Terminal beside the results (FR-050, UX-014, D-M2P2-B2, D-M2P3-B2; mockup v6 "Terminal pane").
+   From layout.terminalPane (1280 px) a dispatcher who chose "Beside results" gets three columns:
+   the form in its panel (424 px), the results in the middle (they take the rest, 384 px at least
+   and 566 px at 1366), the terminal on the right (320 px). The page script renders the pane only
+   from this width, so below it the Form and Terminal toggle is back and these rules do not apply.
+   Widths are multiples of the spacing tokens (no literal lengths outside a query condition). */
 @media (min-width: 1280px) {
   .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes.qm-panes--terminal {
-    /* The results have width priority (mockup v6): the form takes its 448 px floor, not its
-       480 px ceiling, and the gaps are 12 px, so the results keep 540 px or more at 1366 (about 525 px where a classic scrollbar takes 17 px). */
+    /* The results have width priority (spec 6.2, mockup v6): the form column narrows while the
+       pane shows, below its 448 px floor of the two-column layout, and the gaps are 12 px, so the
+       results keep 566 px at 1366 (about 549 px where a classic scrollbar takes 17 px). */
     grid-template-columns:
-      calc(var(--qm-space-8) * 14)
+      calc(var(--qm-space-8) * 13 + var(--qm-space-2))
       minmax(calc(var(--qm-space-12) * 8), 1fr)
       calc(var(--qm-space-8) * 10);
     column-gap: var(--qm-space-3);
   }
+
+  /* The pane is as tall as its row, which the form sets, and not taller for its content: the
+     command reference scrolls inside it (a site lists every command). It never makes the row
+     taller than the form, so the page does not grow with the list (issue 767). The floor keeps the
+     input and its problems whole beside a short form. */
+  .qm-query-panel:not(.qm-layout--mobile-unit) .qm-panes--terminal > .qm-terminal-pane {
+    align-self: stretch;
+    contain: size;
+    min-block-size: calc(var(--qm-space-8) * 10);
+  }
 }
 
-/* The pane is a card of its own on the sunken page, like the panel and the requests. */
+/* The pane is a card of its own on the sunken page, like the panel and the requests. A column, so
+   the reference takes the height that is left and scrolls (see the three-column rule above). */
 .qm-terminal-pane {
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   min-inline-size: 0;
   padding: var(--qm-space-4) var(--qm-space-5);
@@ -3199,7 +3213,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 }
 
 .qm-terminal-pane__reference {
-  margin-block-start: var(--qm-space-3);
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-block-size: 0;
+  /* In a column the margins do not collapse: 4 px with the note's 8 px above is the 12 px gap. */
+  margin-block-start: var(--qm-space-1);
   padding-block-start: var(--qm-space-2);
   border-block-start: var(--qm-border-width) solid var(--qm-color-border-subtle);
 }
@@ -3208,6 +3227,14 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   margin: 0 0 var(--qm-space-2);
   font-size: var(--qm-type-size-md);
   font-weight: 600;
+}
+
+/* The scroll region of the reference: a keyboard stop with a name (spec 6.4); the heading above
+   it stays in view. */
+.qm-terminal-pane__scroll {
+  flex: 1 1 0;
+  min-block-size: 0;
+  overflow-y: auto;
 }
 
 .qm-terminal-pane__list {

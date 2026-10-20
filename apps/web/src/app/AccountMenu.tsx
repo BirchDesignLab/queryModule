@@ -45,6 +45,9 @@ export function AccountMenu({
   const panelId = useId();
   const terminalHintId = useId();
   const [open, setOpen] = useState(false);
+  // The failure alerts once (spec 6.6): after the menu has shown it and closed, the message stays as
+  // plain text until the next pick clears it, and reopening the menu does not alert again.
+  const [failureSpoken, setFailureSpoken] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const shortcutsRef = useRef<HTMLButtonElement>(null);
@@ -73,6 +76,17 @@ export function AccountMenu({
     },
     [],
   );
+
+  // The cleanup runs when the menu closes (or unmounts) after it showed the alert; a pick that
+  // clears the failure starts the next one over.
+  useEffect(() => {
+    if (!terminalSaveFailed) {
+      setFailureSpoken(false);
+      return;
+    }
+    if (!open) return;
+    return () => setFailureSpoken(true);
+  }, [open, terminalSaveFailed]);
 
   // While open: Esc closes and returns focus to the button; a pointer press or focus moving
   // outside closes without touching focus.
@@ -151,7 +165,7 @@ export function AccountMenu({
                 {t("account.terminal.hint")}
               </p>
               {terminalSaveFailed ? (
-                <p role="alert" className="qm-form-error">
+                <p role={failureSpoken ? undefined : "alert"} className="qm-form-error">
                   {t(
                     terminal === "pane"
                       ? "account.terminal.saveFailedPane"

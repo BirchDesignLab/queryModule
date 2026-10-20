@@ -136,6 +136,51 @@ describe("UX-014 the terminal layout control under Theme (FR-050, spec 6.2)", ()
     );
   });
 
+  it("alerts once: closing and reopening the menu does not announce the failure again (#767)", async () => {
+    const { user, panel } = await open({
+      terminal: "toggle",
+      onTerminalChange: vi.fn(),
+      terminalSaveFailed: true,
+    });
+    expect(within(panel).getByRole("alert")).toBeVisible();
+    // Close with Esc and open again: the message is still there as text, but no alert is inserted.
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "Account" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: EMAIL }));
+    const reopened = screen.getByRole("group", { name: "Account" });
+    expect(within(reopened).queryByRole("alert")).toBeNull();
+    expect(
+      within(reopened).getByText("Could not save the layout. It stays on In the panel."),
+    ).toBeVisible();
+  });
+
+  it("a failure that arrives after the menu was closed alerts when the menu opens, once (#767)", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(menu({ terminal: "toggle", onTerminalChange: vi.fn() }));
+    rerender(menu({ terminal: "toggle", onTerminalChange: vi.fn(), terminalSaveFailed: true }));
+    await user.click(screen.getByRole("button", { name: EMAIL }));
+    expect(within(screen.getByRole("group", { name: "Account" })).getByRole("alert")).toBeVisible();
+  });
+
+  it("a later successful pick removes the message, and a new failure alerts again (#767)", async () => {
+    const user = userEvent.setup();
+    const onTerminalChange = vi.fn();
+    const { rerender } = render(
+      menu({ terminal: "toggle", onTerminalChange, terminalSaveFailed: true }),
+    );
+    await user.click(screen.getByRole("button", { name: EMAIL }));
+    expect(screen.getByRole("alert")).toBeVisible();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: EMAIL }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    // The pick succeeded: the chrome clears the flag.
+    rerender(menu({ terminal: "pane", onTerminalChange, terminalSaveFailed: false }));
+    expect(screen.queryByText(/Could not save the layout/)).toBeNull();
+    // The next failure is new: it alerts.
+    rerender(menu({ terminal: "pane", onTerminalChange, terminalSaveFailed: true }));
+    expect(screen.getByRole("alert")).toHaveTextContent("It stays on Beside results");
+  });
+
   it("shows no alert when the save did not fail", async () => {
     const { panel } = await open({ terminal: "toggle", onTerminalChange: vi.fn() });
     expect(within(panel).queryByRole("alert")).toBeNull();

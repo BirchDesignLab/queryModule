@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { liveResponse, signIn } from "./helpers.js";
 
 /**
  * FR-050, UX-014 (spec 6.2, 6.4): the terminal beside the results, chosen in the account menu.
@@ -106,10 +106,10 @@ test.describe("[FR-050] terminal beside the results (UX-014)", () => {
     expect(form.x + form.width).toBeLessThanOrEqual(requests.x);
     expect(requests.x + requests.width).toBeLessThanOrEqual(terminal.x);
     expect(Math.round(terminal.width)).toBe(320);
-    // Width priority (mockup v6, #767): the form gives way to its 448 px floor, the results get the
-    // rest: 540 px or more here (headless Chromium draws no scrollbar; a classic one takes ~17 px).
-    expect(Math.round(form.width)).toBe(448);
-    expect(requests.width).toBeGreaterThanOrEqual(540);
+    // Width priority (D-M2P3-B2, mockup v6 566 px, spec 6.2): the form column narrows while the
+    // pane shows and the results get the rest: 560 px or more here (headless Chromium draws no
+    // scrollbar; a classic one takes ~17 px).
+    expect(requests.width).toBeGreaterThanOrEqual(560);
     expect(terminal.x + terminal.width).toBeLessThanOrEqual(WIDE.width);
     // The command reference is a compact list: the last command is above the fold at 1366x768 (#767).
     const lastCommand = await pane(page).getByRole("listitem").last().boundingBox();
@@ -135,6 +135,84 @@ test.describe("[FR-050] terminal beside the results (UX-014)", () => {
     // The same shortcut goes back to the form.
     await page.keyboard.press("Control+Backquote");
     await expect(plate(page)).toBeFocused();
+  });
+
+  test("the command reference scrolls inside the pane, which stays within the form's height (#767)", async ({
+    page,
+  }) => {
+    await chooseTerminal(page, "Beside results");
+    // A real site lists dozens of commands: the served config gets thirty more of the first one.
+    await page.route("**/api/v1/config", async (route) => {
+      const response = await liveResponse(route);
+      const body = (await response.json()) as {
+        commands: { code: string; queryType: string; positions: unknown[] }[];
+      };
+      const first = body.commands[0];
+      if (first === undefined) throw new Error("the served config has no commands");
+      for (let i = 0; i < 30; i++)
+        body.commands.push({
+          ...first,
+          code: `Z${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`,
+        });
+      await route.fulfill({ response, json: body });
+    });
+    await page.reload();
+    await expect(pane(page)).toBeVisible();
+    const reference = pane(page).getByRole("region", { name: "Command reference" });
+    await expect(reference).toBeVisible();
+    expect(await reference.getByRole("listitem").count()).toBeGreaterThan(30);
+
+    // The pane ends where the form ends, not below it; the reference scrolls within it.
+    const form = await page.locator(".qm-panes__panel").boundingBox();
+    const terminal = await pane(page).boundingBox();
+    expect(form && terminal).toBeTruthy();
+    if (form === null || terminal === null) return;
+    expect(terminal.y + terminal.height).toBeLessThanOrEqual(form.y + form.height + 1);
+    const scrolls = await reference.evaluate((el) => ({
+      scroll: el.scrollHeight,
+      client: el.clientHeight,
+      overflowY: getComputedStyle(el).overflowY,
+    }));
+    expect(scrolls.scroll).toBeGreaterThan(scrolls.client);
+    expect(scrolls.overflowY).toBe("auto");
+
+    // Keyboard reachable by name: Tab from the command input lands on it, and the arrow keys scroll.
+    await tabTo(page, command(page));
+    await page.keyboard.press("Tab");
+    await expect(reference).toBeFocused();
+    await page.keyboard.press("PageDown");
+    await expect.poll(() => reference.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    await expectNoSeriousAxeViolations(page);
+  });
+
+  test("the command text typed in the panel's terminal is kept as typed when the pane appears (#767)", async ({
+    page,
+  }) => {
+    await toggle(page).focus();
+    await page.keyboard.press("Enter");
+    const panelCommand = page.getByRole("textbox", { name: "Command" });
+    await panelCommand.focus();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("VEH.ZZ-0031.state=OK");
+    await chooseTerminal(page, "Beside results");
+    await expect(pane(page)).toBeVisible();
+    // One draft: the form has the value; the command is the text the user typed, not rewritten.
+    await expect(plate(page)).toHaveValue("ZZ-0031");
+    await expect(command(page)).toHaveValue("VEH.ZZ-0031.state=OK");
+  });
+
+  test("an unknown command is announced politely without the typed text (#767, spec 6.7)", async ({
+    page,
+  }) => {
+    await chooseTerminal(page, "Beside results");
+    await tabTo(page, command(page));
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type("XYZ.123");
+    await page.keyboard.press("Enter");
+    await expect(pane(page).getByRole("list", { name: "Command problems" })).toHaveText(
+      "Unrecognized command XYZ.",
+    );
+    await expect(page.getByTestId("announcer-polite")).toHaveText("Unrecognized command");
   });
 
   test("an unrecognized command lists its problem in the pane and sends nothing", async ({
