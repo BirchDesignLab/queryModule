@@ -55,6 +55,17 @@ describe("BR-001 client config (spec 4.1 client view, 6.7)", () => {
     expect("futureThing" in got).toBe(false);
   });
 
+  // #46 CFG-1: the server now answers versionId; this client still parses the base view and
+  // tolerates the key (stripped) until Track B switches the fetch to the wire schema.
+  it("tolerates the versionId the server answers and strips it", async () => {
+    serve(() =>
+      HttpResponse.json({ ...CONFIG, versionId: "01890a5d-ac96-774b-bcce-b302099a8057" }),
+    );
+    const got = await fetchClientConfig(makeApi());
+    expect(got).toEqual(CONFIG);
+    expect("versionId" in got).toBe(false);
+  });
+
   it("strips an unknown feature key from a newer server", async () => {
     serve(() =>
       HttpResponse.json({ ...CONFIG, features: { ...CONFIG.features, futureFlag: true } }),

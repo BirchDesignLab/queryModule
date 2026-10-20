@@ -716,6 +716,7 @@ export interface components {
                 timeoutMs: number;
                 requiresCredentials: boolean;
             }[];
+            versionId: string;
         };
         Condition: {
             field: string;

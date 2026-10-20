@@ -1,4 +1,4 @@
-import { type ClientSiteConfig, ClientSiteConfigSchema } from "@querymodule/core/config";
+import { type ClientSiteConfig, ClientSiteConfigBaseSchema } from "@querymodule/core/config";
 import type { ApiClient } from "../api/create-api-client.js";
 
 /** network: the request never completed; status: a non-2xx answer; parse: a 2xx body that is not the config. */
@@ -14,7 +14,10 @@ export class ConfigFetchError extends Error {
   }
 }
 
-/** GET /api/v1/config, parsed with the forward-tolerant client schema (unknown keys are stripped). */
+/**
+ * GET /api/v1/config, parsed with the forward-tolerant base client schema (unknown keys are
+ * stripped, including the versionId the server answers since #46 CFG-1; Track B reads it later).
+ */
 export async function fetchClientConfig(
   api: ApiClient,
   options: { background?: boolean } = {},
@@ -38,7 +41,7 @@ export async function fetchClientConfig(
   if (data === undefined) {
     throw new ConfigFetchError("status", `config fetch failed: ${status}`);
   }
-  const parsed = ClientSiteConfigSchema.safeParse(data);
+  const parsed = ClientSiteConfigBaseSchema.safeParse(data);
   if (!parsed.success) throw new ConfigFetchError("parse", "config response invalid");
   return parsed.data;
 }

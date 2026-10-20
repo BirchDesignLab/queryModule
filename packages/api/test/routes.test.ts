@@ -45,6 +45,7 @@ describe("BR-007 public routes", () => {
     expect(r.status).toBe(200);
     const body = (await r.json()) as Record<string, unknown>;
     ClientSiteConfigSchema.parse(body);
+    expect(body.versionId).toBe(t.deps.config.current().versionId);
     expect(body.configHash).toBe(t.deps.config.current().configHash);
     for (const k of ["auth", "retention", "extends"]) expect(body).not.toHaveProperty(k);
     expect(JSON.stringify(body.sources)).not.toMatch(/"kind"|"server"|"maxConcurrent"/);
