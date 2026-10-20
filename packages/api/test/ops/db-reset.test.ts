@@ -416,9 +416,11 @@ describe("#821 health probe", () => {
   it("an answer means running", async () => {
     expect(await probeApp(await healthServer())).toBe("running");
   });
-  // #829 note, ruling M2 Manager 10 10-20-26: the name is resolved first with its own budget, since
-  // Docker's DNS answers "not found" for a stopped compose service only after about 4 s
-  // (scripts/ops/probe-stopped-app-dns.sh); EAI_AGAIN is a temporary failure, so it refuses.
+  // #829 note, ruling M2 Manager 10 10-20-26: the name is resolved first with its own budget.
+  // Observed on local Docker Desktop with compose (scripts/ops/probe-stopped-app-dns.sh, 10-20-26):
+  // `docker compose run --rm app` gets ENOTFOUND for a stopped or removed app service, after about
+  // 3,970 ms, never EAI_AGAIN; a running one resolves in under 10 ms. EAI_AGAIN is a temporary
+  // failure, so it refuses (fail closed).
   const notFound = () =>
     Object.assign(new Error("getaddrinfo ENOTFOUND app"), { code: "ENOTFOUND" });
   const tryAgain = () =>
@@ -453,6 +455,14 @@ describe("#821 health probe", () => {
       );
     expect(await probeApp(url, 200, { lookup: slowNotFound })).toBe("stopped");
     expect(await probeApp(url, 200, { lookup: slowFound })).toBe("running");
+  });
+  it("a slow lookup that finds the name, then a refused connection, is stopped", async () => {
+    const slowFound = () =>
+      new Promise<{ address: string }>((resolve) =>
+        setTimeout(() => resolve({ address: "127.0.0.1" }), 300),
+      );
+    const url = `http://127.0.0.1:${await refusedPort()}/api/v1/health`;
+    expect(await probeApp(url, 200, { lookup: slowFound })).toBe("stopped");
   });
   it("EAI_AGAIN on the HTTP request is unknown, not stopped", async () => {
     const fetchSpy = vi

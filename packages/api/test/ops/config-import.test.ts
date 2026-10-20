@@ -544,6 +544,8 @@ describe("#825 config:import draft races, cleanup and attribution", () => {
 
   it("the configPublished row takes identitySource and hostSubject from the admin's user row (C-M4, SEC-010)", async () => {
     const { a, adminId } = await adminApp();
+    // a local admin (every demo admin) gives exactly the values the import wrote before C-M4
+    expect((await run(a, imageFile(auditOff))).kind).toBe("published");
     await a.t.deps.db
       .update(user)
       .set({
@@ -552,12 +554,13 @@ describe("#825 config:import draft races, cleanup and attribution", () => {
         hostSubject: "host-sub-1",
       })
       .where(eq(user.id, adminId));
-    expect((await run(a, imageFile(auditOff))).kind).toBe("published");
+    expect((await run(a, ALL_ON)).kind).toBe("published");
     const rows = await a.t.deps.db.$client.execute(
-      "SELECT identity_source, host_subject FROM audit_event WHERE type = 'configPublished'",
+      "SELECT actor_user_id, identity_source, host_subject FROM audit_event WHERE type = 'configPublished' ORDER BY id",
     );
-    expect(rows.rows.map((r) => [r.identity_source, r.host_subject])).toEqual([
-      ["host", "host-sub-1"],
+    expect(rows.rows.map((r) => [r.actor_user_id, r.identity_source, r.host_subject])).toEqual([
+      [adminId, "local", null],
+      [adminId, "host", "host-sub-1"],
     ]);
   });
 
