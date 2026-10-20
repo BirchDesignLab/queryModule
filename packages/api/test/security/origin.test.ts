@@ -102,13 +102,23 @@ describe("foreign Origin on the assembled app", () => {
   });
 
   it("a foreign-Origin submit is 403 before the receipt mark and the body cap", async () => {
-    const t = await createTestApp();
-    const r = await t.request("/api/v1/queries", {
-      method: "POST",
-      headers: { origin: FOREIGN, "content-type": "application/json" },
-      body: "x".repeat(40 * 1024),
-    });
-    expect(r.status).toBe(403);
+    // markReceipt reads the monotonic clock; count the reads per request (CW1 review m3).
+    let reads = 0;
+    const t = await createTestApp({ monotonic: { nowMs: () => ++reads } });
+    const submit = (origin: string) =>
+      t.request("/api/v1/queries", {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: "x".repeat(40 * 1024),
+      });
+    reads = 0;
+    expect((await submit(FOREIGN)).status).toBe(403);
+    expect(reads).toBe(0);
+    expect(await t.auditRows("submitted")).toHaveLength(0);
+    // Control: the own Origin reaches the receipt mark, then the body cap refuses it.
+    reads = 0;
+    expect((await submit(t.env.publicOrigin)).status).toBe(413);
+    expect(reads).toBeGreaterThan(0);
   });
 
   it("a foreign-Origin preflight is 403; an own-Origin preflight is not", async () => {
