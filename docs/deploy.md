@@ -39,6 +39,8 @@ docker compose run --rm app node scripts/ops/seed.js    # once; store the printe
 bash ../scripts/ops/smoke.sh https://querymodule.birchdesignlab.com
 ```
 
+`CORS_ORIGINS` in `.env` lists the browser origins the API accepts, comma-separated, each an origin like `https://host` (no path, no trailing slash); empty means `PUBLIC_ORIGIN` only. A REST request carrying any other `Origin` gets 403 (D-M2P3-1), and a malformed entry stops the app at boot with a `CORS_ORIGINS` error that does not echo the value.
+
 Install the pull timer once (systemd user units keep running without a login session):
 
 ```bash
