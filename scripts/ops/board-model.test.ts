@@ -114,6 +114,18 @@ describe("phaseBodyUpdate: keep text added below a phase parent's generated body
     expect(phaseBodyUpdate(crlf, next)).toBe(next + typed + added.replaceAll("\n", "\r\n"));
   });
 
+  it("drops text typed on the trailer line when the generated tail itself changed (#822 G-m3)", () => {
+    const typed = " Also see the wiki.";
+    const next = gen.replace("docs/STATUS.md.", "docs/handoffs/.");
+    expect(phaseBodyUpdate(gen + typed + added, next)).toBe(next + added);
+  });
+
+  it("plans no update when the new generated body is a strict prefix of the old one (#822 G-m2)", () => {
+    // The old trailer's extra characters read as typed text: nothing is lost, the stale tail stays.
+    const shorter = gen.replace("docs/STATUS.md.", "docs/STATUS");
+    expect(phaseBodyUpdate(gen + added, shorter)).toBeNull();
+  });
+
   it("replaces whole a body that does not start with the generated head, even if it quotes the phrase", () => {
     const hand = "My notes\nGrid and handoffs: see docs.\n- [ ] item";
     expect(phaseBodyUpdate(hand, gen)).toBe(gen);

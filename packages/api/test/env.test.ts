@@ -83,6 +83,13 @@ describe("readDeployEnv", () => {
       "a.example.test",
       "ftp://a.example.test",
       "https://ok.example.test, null",
+      // #822 G-m4: anything after the host and port is not an origin.
+      "https://a.example.test?x=1",
+      "https://a.example.test#top",
+      "https://a.example test",
+      "https://user@a.example.test",
+      "https://a.example.test:99999",
+      "https://A.example.test",
     ]) {
       let msg = "";
       try {

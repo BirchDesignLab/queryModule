@@ -218,7 +218,9 @@ const PHASE_BODY_TRAILER = "Grid and handoffs:";
  * added text is never a cut. A body that does not start with the head, or has no trailer line, has
  * no known cut and is replaced whole. Text typed on the trailer line after the generated trailer is
  * kept when the line still begins with the new generated trailer tail; if the generated tail itself
- * changed, the old line is replaced whole, typed text included.
+ * changed, the old line is replaced whole, typed text included. A new generated body that is a strict
+ * prefix of the old one plans no update: the old tail's extra characters read as typed text, so the
+ * stale tail stays and nothing is lost (#822 G-m2).
  * @param {string} existing
  * @param {string} desired
  * @returns {string | null}
