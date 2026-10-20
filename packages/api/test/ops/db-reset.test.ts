@@ -363,7 +363,9 @@ describe("#821 db:reset failures after the delete name the backup (CW3 review Q6
       {
         seed: async () => [],
         addDemoUsers: async () =>
-          Promise.reject(new AddDemoUsersPartialFailureError(created, created[0]?.email ?? "")),
+          Promise.reject(
+            new AddDemoUsersPartialFailureError(created, created[0]?.email ?? "", new Error(PW)),
+          ),
       },
     ],
   ];
