@@ -10,6 +10,7 @@ import {
   bodyCap,
   noStore,
   requestId,
+  requireKnownOrigin,
   requireRequestedWith,
   securityHeaders,
 } from "./http/security";
@@ -39,6 +40,8 @@ export function createApp(d: AppDeps): Hono<AppEnv> {
   app.use(
     "/api/*",
     noStore(),
+    // D-M2P3-1: a foreign Origin is refused before CORS, the receipt mark, the body cap and Better Auth.
+    requireKnownOrigin(d.env.corsOrigins, (f) => d.logger.warn("request refused", f)),
     cors({
       origin: d.env.corsOrigins,
       credentials: true,

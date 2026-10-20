@@ -44,14 +44,16 @@ export function toConfigVersion(row: VersionRow, publishedByName?: string | null
   });
 }
 
+/** A user's name by id (D-M2P0-4); undefined once the user row is gone. */
+export async function publisherName(db: Db | Tx, userId: string): Promise<string | undefined> {
+  const [publisher] = await db.select({ name: user.name }).from(user).where(eq(user.id, userId));
+  return publisher?.name;
+}
+
 /** One row with its publisher's name (D-M2P0-4), read from the user row by publishedBy. */
 export async function namedVersion(db: Db | Tx, row: VersionRow): Promise<ConfigVersion> {
   if (row.publishedBy === null) return toConfigVersion(row);
-  const [publisher] = await db
-    .select({ name: user.name })
-    .from(user)
-    .where(eq(user.id, row.publishedBy));
-  return toConfigVersion(row, publisher?.name);
+  return toConfigVersion(row, await publisherName(db, row.publishedBy));
 }
 
 /**

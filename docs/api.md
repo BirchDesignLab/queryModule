@@ -21,6 +21,10 @@ use placeholder values.
 - **`X-Requested-With: querymodule`.** Required on every state-changing request (POST, PUT, DELETE)
   except the Better Auth sign-in routes. Without it the answer is `403 forbidden`. GET requests do
   not need it. (Spec 5.9.)
+- **`Origin`.** A request whose `Origin` header is present and not one of the site's allowed
+  origins (`CORS_ORIGINS`, default the public origin; the dev origins in development) is refused
+  `403 forbidden` on every route and method, cookie or bearer, including preflights and the sign-in
+  routes. A missing or empty `Origin` passes (native clients). `Origin: null` is foreign. (SEC-005.)
 - **`X-Background: 1`.** Optional. A request that carries it does not extend the session idle clock.
   The web app sets it on its 15 second config refresh and its health poll.
 - **Body cap.** 32 KiB for every route, `413 payloadTooLarge` above it. The admin draft save and
@@ -115,7 +119,9 @@ The auth routes are under `/api/v1/auth/` and are not part of `openapi.json`. Th
 uses are `POST /auth/sign-in/email`, `POST /auth/sign-out`, `GET /auth/get-session` and
 `POST /auth/change-password`. Sign-out and change-password need `X-Requested-With: querymodule`.
 Sign-in is rate limited per account and per client address (see the demo runbook, "If something goes
-wrong"). Authentication is by session cookie; there are no tokens in query strings.
+wrong"). Change-password also counts wrong `currentPassword` values per user: after 5 in 15 minutes it
+answers `429 rateLimited` with `Retry-After` until the window passes. Sign-in is not affected, and a
+success clears the count. Authentication is by session cookie; there are no tokens in query strings.
 
 ### Submitting a query
 
@@ -316,7 +322,9 @@ A version row (`ConfigVersion`) has `id`, `version`, `status` (`draft`, `publish
 `publishedBy`, `publishedAt` and `rollbackOf`, and two optional fields: `note`, the publisher's
 change note (`POST /admin/config/publish` takes an optional `note`, 1 to 200 characters, stored
 trimmed; a rollback has none), and `publishedByName`, the publisher's display name (absent for the
-system seed or once that user row is gone). The note is never written to the audit row. A publish
+system seed or once that user row is gone). The 200 answers of `POST /admin/config/publish` and
+`POST .../rollback` carry `publishedByName` the same way: the publisher's display name, absent once
+that user row is gone. The note is never written to the audit row. A publish
 takes effect for open dispatcher forms within 15 seconds: clients refetch `GET /config` on that
 interval and on window focus.
 
@@ -372,7 +380,7 @@ payload text.
 | `unauthenticated` | 401 | No live session. |
 | `stepUpRequired` | 403 | Reserved for step-up authentication; no route returns it yet. |
 | `mfaEnrollmentRequired` | 403 | Reserved for MFA (M3); no route returns it yet. |
-| `forbidden` | 403 | Role not allowed, or `X-Requested-With` missing on a write. |
+| `forbidden` | 403 | Role not allowed, `X-Requested-With` missing on a write, or a foreign `Origin`. |
 | `notFound` | 404 | No such resource, or the route's feature is off for the site. |
 | `configHashMismatch` | 409 | The submit was built from an older config; `params.currentConfigHash` names the live one. |
 | `delegationCredentialsMissing` | 409 | Reserved for delegated credentials; no route returns it yet. |

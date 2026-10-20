@@ -8,13 +8,14 @@ import {
   createSweeper,
   EVENT_LOG_PRUNE_EVERY_MS,
   SWEEP_INTERVAL_MS,
+  SWEEP_MAX_BATCHES_PER_TICK,
   SWEEP_SESSION_BATCH,
 } from "../../src/dispatch/sweeper";
 import { uuidv7 } from "../../src/ids";
 import { manualTime, settle } from "../helpers/manual-time";
 import { createTestApp } from "../helpers/test-app";
 
-// Spec 5.2 sweeper steps c and d, 5.3 (close on expiry), 5.6 (SEC-005), 4.7 sessionRevoked
+// Spec 5.2 sweeper steps c and d, 5.3 (close on expiry), 5.6 (SEC-020), 4.7 sessionRevoked
 // (SEC-010), #511 AUD-1, D-M2P2-3, D-A14: every tick expires the sessions past their live limits,
 // each in its own transaction with one sessionRevoked row by the system actor, closes their
 // sockets after commit, and once an hour prunes event_log.
@@ -51,6 +52,22 @@ async function insertSession(
   return id;
 }
 
+/** n idle-expired sessions, oldest first, in one insert. */
+async function insertDue(d: AppDeps, userId: string, n: number): Promise<void> {
+  const values = Array.from({ length: n }, (_, i) => ({
+    id: uuidv7(NOW - 60 * MIN + i),
+    userId,
+    token: uuidv7(NOW - 60 * MIN + i),
+    expiresAt: new Date(NOW + 60 * MIN),
+    createdAt: new Date(NOW - 60 * MIN + i),
+    updatedAt: new Date(NOW - 40 * MIN),
+  }));
+  // SQLite caps bound parameters per statement: insert in slices
+  for (let i = 0; i < values.length; i += 500) {
+    await d.db.insert(session).values(values.slice(i, i + 500));
+  }
+}
+
 async function sessionIds(d: AppDeps): Promise<string[]> {
   const rows = await d.db.select({ id: session.id }).from(session).orderBy(asc(session.id));
   return rows.map((r) => r.id);
@@ -79,7 +96,7 @@ function expiredRow(sessionId: string, userId: string, at: number) {
   };
 }
 
-describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-005, SEC-010)", () => {
+describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-020, SEC-010)", () => {
   it("deletes an idle-expired and an absolute-expired session, one sessionRevoked each, endSession after commit; a live session is untouched", async () => {
     const { t, d, userId } = await setup();
     const idle = await insertSession(d, userId, {
@@ -195,25 +212,53 @@ describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-005, SEC-010)
     expect(ended).toEqual([id]);
   });
 
-  it(`expires at most ${SWEEP_SESSION_BATCH} sessions per tick: one more takes a second tick`, async () => {
+  it(`a full batch of ${SWEEP_SESSION_BATCH} failures does not starve the rest: the next session expires in the same tick, and the failed ones are retried on the next tick (#760 C-m2, T7 C1)`, async () => {
     const { d, userId } = await setup();
-    const values = Array.from({ length: SWEEP_SESSION_BATCH + 1 }, (_, i) => ({
-      id: uuidv7(NOW - 60 * MIN + i),
-      userId,
-      token: uuidv7(NOW - 60 * MIN + i),
-      expiresAt: new Date(NOW + 60 * MIN),
-      createdAt: new Date(NOW - 60 * MIN + i),
-      updatedAt: new Date(NOW - 40 * MIN),
-    }));
-    await d.db.insert(session).values(values);
+    await insertDue(d, userId, SWEEP_SESSION_BATCH + 1);
+    const last = (await sessionIds(d)).at(-1);
+    const real = d.audit;
+    let calls = 0;
+    d.audit = {
+      record: async (tx, e) => {
+        calls += 1;
+        if (calls <= SWEEP_SESSION_BATCH) throw new TypeError("audit down");
+        return real.record(tx, e);
+      },
+    };
     const sweeper = createSweeper(d);
 
-    expect((await sweeper.tick(NOW)).expired).toBe(SWEEP_SESSION_BATCH);
-    expect(await sessionIds(d)).toHaveLength(1);
-    expect((await sweeper.tick(NOW + MIN)).expired).toBe(1);
+    expect(await sweeper.tick(NOW)).toEqual({
+      expired: 1,
+      pruned: 0,
+      failed: SWEEP_SESSION_BATCH,
+    });
+    const left = await sessionIds(d);
+    expect(left).toHaveLength(SWEEP_SESSION_BATCH);
+    expect(left).not.toContain(last);
+    // the skip set lives for one tick: every failed id is tried again
+    expect(await sweeper.tick(NOW + MIN)).toEqual({
+      expired: SWEEP_SESSION_BATCH,
+      pruned: null,
+      failed: 0,
+    });
     expect(await sessionIds(d)).toEqual([]);
     expect(await revokedRows(d)).toHaveLength(SWEEP_SESSION_BATCH + 1);
-  }, 60_000);
+  }, 120_000);
+
+  it(`expires at most ${SWEEP_MAX_BATCHES_PER_TICK} batches of ${SWEEP_SESSION_BATCH} per tick: one more takes a second tick`, async () => {
+    const { d, userId } = await setup();
+    const cap = SWEEP_MAX_BATCHES_PER_TICK * SWEEP_SESSION_BATCH;
+    await insertDue(d, userId, cap + 1);
+    const sweeper = createSweeper(d);
+
+    expect(await sweeper.tick(NOW)).toEqual({ expired: cap, pruned: 0, failed: 0 });
+    expect(await sessionIds(d)).toHaveLength(1);
+    // one sessionRevoked row per expired session, none for the one left (SEC-010)
+    expect(await revokedRows(d)).toHaveLength(cap);
+    expect((await sweeper.tick(NOW + MIN)).expired).toBe(1);
+    expect(await sessionIds(d)).toEqual([]);
+    expect(await revokedRows(d)).toHaveLength(cap + 1);
+  }, 180_000);
 
   it("removes an orphan session (its loginSucceeded row failed, its delete failed, never used) at idle expiry (D-M2P2-3)", async () => {
     const { time, d, userId } = await setup();
@@ -230,6 +275,95 @@ describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-005, SEC-010)
     expect((await revokedRows(d)).map(({ id: _id, ...x }) => x)).toEqual([
       expiredRow(id, userId, NOW + MIN),
     ]);
+  });
+
+  it("stop() mid-tick ends the tick before the next session and skips the prune: a drain waits for one session transaction (#760 C-m1)", async () => {
+    const { t, d, userId } = await setup();
+    await insertDue(d, userId, 3);
+    // uuidv7 ids sort by creation time, the sweeper's order
+    const ids = await sessionIds(d);
+    await withTransaction(d.db, (tx) =>
+      appendEvent(tx, {
+        userId: "user-stop-a",
+        type: "sourceStatus",
+        correlationId: "0199a0b0-0000-7000-8000-0000000000e1",
+        partId: 0,
+        sourceId: "stateSource",
+        resultId: "0199a0b0-0000-7000-8000-0000000000f1",
+        status: "returned",
+        createdAt: NOW - EVENT_LOG_RETENTION_MS - 1,
+      }),
+    );
+    await withTransaction(d.db, (tx) =>
+      appendEvent(tx, {
+        userId: "user-stop-a",
+        type: "sourceStatus",
+        correlationId: "0199a0b0-0000-7000-8000-0000000000e2",
+        partId: 0,
+        sourceId: "stateSource",
+        resultId: "0199a0b0-0000-7000-8000-0000000000f2",
+        status: "returned",
+        createdAt: NOW - EVENT_LOG_RETENTION_MS - 1,
+      }),
+    );
+    const sweeper = createSweeper(d);
+    let stopping: Promise<void> | null = null;
+    // the first session's commit is done when its sockets are told: stop the sweeper there
+    d.eventBus.onSessionEnded(ids[0] as string, () => {
+      stopping = sweeper.stop();
+    });
+
+    expect(await sweeper.tick(NOW)).toEqual({ expired: 1, pruned: null, failed: 0 });
+    await stopping;
+    expect(await sessionIds(d)).toEqual([ids[1], ids[2]]);
+    expect(await revokedRows(d)).toHaveLength(1);
+    expect(await d.db.select().from(eventLog)).toHaveLength(2);
+    expect(t.fatals).toEqual([]);
+  });
+
+  it("a transaction whose commit fails calls no endSession, keeps the session and counts it failed", async () => {
+    const { d, userId } = await setup();
+    const id = await insertSession(d, userId, {
+      createdAt: NOW - 60 * MIN,
+      updatedAt: NOW - 45 * MIN,
+    });
+    const ended: string[] = [];
+    d.eventBus.onSessionEnded(id, () => ended.push(id));
+    const original = d.db.transaction.bind(d.db);
+    // the body runs (delete and audit row), then the commit fails: everything rolls back
+    vi.spyOn(d.db, "transaction").mockImplementationOnce(async (fn, config) =>
+      original(async (tx) => {
+        await fn(tx);
+        throw new RangeError("commit failed");
+      }, config),
+    );
+
+    expect(await createSweeper(d).tick(NOW)).toEqual({ expired: 0, pruned: 0, failed: 1 });
+    vi.mocked(d.db.transaction).mockRestore();
+    expect(ended).toEqual([]);
+    expect(await sessionIds(d)).toEqual([id]);
+    expect(await revokedRows(d)).toEqual([]);
+  });
+
+  it("an endSession that throws after commit is logged by error class, and the session counts as expired, not failed", async () => {
+    const { t, d, userId } = await setup();
+    await insertDue(d, userId, 2);
+    const ids = await sessionIds(d);
+    const endSession = vi.spyOn(d.eventBus, "endSession").mockImplementationOnce(() => {
+      throw new TypeError("socket close zz-secret-text");
+    });
+
+    expect(await createSweeper(d).tick(NOW)).toEqual({ expired: 2, pruned: 0, failed: 0 });
+    expect(endSession.mock.calls.map((c) => c[0])).toEqual(ids);
+    expect(await sessionIds(d)).toEqual([]);
+    expect(await revokedRows(d)).toHaveLength(2);
+    expect(t.logLines.filter((l) => l.includes("session expiry failed"))).toEqual([]);
+    const lines = t.logLines.filter((l) => l.includes("session close failed"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(ids[0]);
+    expect(lines[0]).toContain("TypeError");
+    expect(t.logLines.join("\n")).not.toContain("zz-secret-text");
+    expect(t.fatals).toEqual([]);
   });
 
   it("a session signed out between the select and the delete gets no sessionRevoked row and is not counted", async () => {

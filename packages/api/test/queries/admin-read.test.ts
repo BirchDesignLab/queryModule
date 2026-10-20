@@ -7,12 +7,16 @@ import {
   CreateUserResponseSchema,
   SubmitQueryResponseSchema,
 } from "@querymodule/core/contracts";
+import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
+import { mountAdminAuditRoutes } from "../../src/audit/routes";
 import { sourceResult } from "../../src/db/schema";
 import { withTransaction } from "../../src/db/tx";
+import type { AppEnv } from "../../src/http/types";
 import { uuidv7 } from "../../src/ids";
 import { grantRole } from "../../src/ops/grant-role";
 import { recordAdminViewed } from "../../src/queries/admin-read";
+import { ADMIN_QUERY_PATH, mountQueriesRoute } from "../../src/queries/route";
 import type { Principal } from "../../src/seams";
 import { manualTime } from "../helpers/manual-time";
 import { openResults } from "../helpers/results";
@@ -373,5 +377,19 @@ describe("recordAdminViewed with basis credentialOwner (#561 binding box)", () =
       viewerBasis: "credentialOwner",
       includeHidden: false,
     });
+  });
+});
+
+describe("#755 T5 Q3 the admin query read mounts beside the owner's read", () => {
+  it("mountQueriesRoute registers the admin read; mountAdminAuditRoutes does not", async () => {
+    const t = await createTestApp();
+    const paths = (mount: (app: Hono<AppEnv>, d: typeof t.deps) => void) => {
+      const app = new Hono<AppEnv>();
+      mount(app, t.deps);
+      return app.routes.filter((r) => r.method === "GET").map((r) => r.path);
+    };
+    expect(ADMIN_QUERY_PATH).toBe("/api/v1/admin/queries/:correlationId");
+    expect(paths(mountQueriesRoute)).toContain(ADMIN_QUERY_PATH);
+    expect(paths(mountAdminAuditRoutes)).not.toContain(ADMIN_QUERY_PATH);
   });
 });

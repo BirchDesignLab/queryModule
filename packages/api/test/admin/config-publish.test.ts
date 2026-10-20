@@ -6,8 +6,9 @@ import {
 } from "@querymodule/core/contracts";
 import { describe, expect, it } from "vitest";
 import { activate } from "../../src/admin/config/activate";
-import { changedPointers } from "../../src/admin/config/publish";
+import { changedPointers, publishDraft, rollbackTo } from "../../src/admin/config/publish";
 import { uuidv7 } from "../../src/ids";
+import type { Principal } from "../../src/seams";
 import { API, adminConfigApp, errorOf, withSiteConfig } from "../helpers/admin-config";
 
 /*
@@ -427,5 +428,56 @@ describe("D-M2P0-4 the publish note and the publisher's name (#718, BR-001, UX-0
       [2, NOTE],
       [1, undefined],
     ]);
+  });
+
+  // #789 (#771 T10 Q1): the publish and rollback answers name the publisher as the list does.
+  it("the publish answer carries the publisher's name", async () => {
+    const { a } = await publishedDraft();
+    const r = await a.call("admin", "POST", `${API}/publish`, { draftVersion: 2 });
+    expect(r.status).toBe(200);
+    const published = ConfigVersionSchema.parse(await r.json());
+    const admin = await a.userId("admin");
+    expect(published).toMatchObject({ version: 2, publishedBy: admin });
+    expect(published.publishedByName).toBe(await nameOf(a, admin));
+  });
+
+  it("the rollback answer carries the publisher's name", async () => {
+    const { a } = await publishedDraft();
+    expect(
+      (await a.call("implementer", "POST", `${API}/publish`, { draftVersion: 2 })).status,
+    ).toBe(200);
+    const r = await a.call("admin", "POST", `${API}/versions/1/rollback`);
+    expect(r.status).toBe(200);
+    const rolled = ConfigVersionSchema.parse(await r.json());
+    const admin = await a.userId("admin");
+    expect(rolled).toMatchObject({ version: 3, rollbackOf: 1, publishedBy: admin });
+    expect(rolled.publishedByName).toBe(await nameOf(a, admin));
+  });
+
+  it("publish and rollback answers carry no publishedByName when the publisher's row is gone", async () => {
+    // Deleting the user row cascades its sessions, so no HTTP caller remains: the principal the
+    // session carried calls publishDraft and rollbackTo directly.
+    const { a } = await publishedDraft();
+    const implementer = await a.userId("implementer");
+    const principal: Principal = {
+      userId: implementer,
+      email: "implementer@example.test",
+      role: "implementer",
+      sessionId: "session-gone",
+      identitySource: "local",
+      authenticatedAt: a.t.deps.clock.now(),
+    };
+    await a.t.deps.db.$client.execute({
+      sql: "DELETE FROM user WHERE id = ?",
+      args: [implementer],
+    });
+    const published = await publishDraft(a.t.deps, principal, 2);
+    if (!published.ok) throw new Error(`publish refused: ${published.code}`);
+    expect(published.version).toMatchObject({ version: 2, publishedBy: implementer });
+    expect(published.version).not.toHaveProperty("publishedByName");
+    const rolled = await rollbackTo(a.t.deps, principal, 1);
+    if (!rolled.ok) throw new Error(`rollback refused: ${rolled.code}`);
+    expect(rolled.version).toMatchObject({ version: 3, rollbackOf: 1, publishedBy: implementer });
+    expect(rolled.version).not.toHaveProperty("publishedByName");
   });
 });
