@@ -1,8 +1,8 @@
-import type { ClientSiteConfig } from "@querymodule/core/config";
+import type { ClientSiteConfigResponse } from "@querymodule/core/config";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ApiClient } from "../api/create-api-client.js";
 import type { ClientPlatform } from "../platform.js";
-import { fetchClientConfig } from "./config-api.js";
+import { configChanged, fetchClientConfig } from "./config-api.js";
 
 export interface ConfigRefreshOptions {
   api: ApiClient;
@@ -28,7 +28,8 @@ const DEFAULT_INTERVAL_MS = 15_000;
 /**
  * Keeps the cached GET /api/v1/config current while the user is signed in (ADR-0011 item 3): it
  * refetches every `intervalMs` and at once when the platform becomes visible, marks the request as
- * background, and replaces the cached config only when the hash differs. Failures are silent: the
+ * background, and replaces the cached config only when the hash or the published versionId differs
+ * (a label-only publish keeps the hash, #46 CFG-1). Failures are silent: the
  * config in hand stays and the next interval tries again. Nothing is logged.
  */
 export function createConfigRefresh(options: ConfigRefreshOptions): ConfigRefresh {
@@ -60,7 +61,7 @@ export function createConfigRefresh(options: ConfigRefreshOptions): ConfigRefres
     if (inFlight) return;
     const gen = generation;
     inFlight = true;
-    let next: ClientSiteConfig | undefined;
+    let next: ClientSiteConfigResponse | undefined;
     try {
       next = await fetchClientConfig(api, { background: true });
     } catch {
@@ -71,8 +72,8 @@ export function createConfigRefresh(options: ConfigRefreshOptions): ConfigRefres
     }
     if (gen !== generation) return;
     if (next !== undefined) {
-      const current = queryClient.getQueryData<ClientSiteConfig>(["config"]);
-      if (current === undefined || current.configHash !== next.configHash) {
+      const current = queryClient.getQueryData<ClientSiteConfigResponse>(["config"]);
+      if (configChanged(current, next)) {
         queryClient.setQueryData(["config"], next);
       }
     }

@@ -13,6 +13,8 @@ import { ServicesProvider } from "./services-context.js";
 // refresh brings a new config, not only after a reload.
 
 const NEXT = { ...CLIENT_CONFIG, configHash: "b".repeat(64) };
+/** A label-only publish (#46 CFG-1): a new versionId, the same configHash (CFG-3). */
+const RELABELED = { ...CLIENT_CONFIG, versionId: "01890a5d-ac96-7000-8000-000000000002" };
 
 function setup(enabled = true) {
   const services = testServices();
@@ -38,6 +40,28 @@ describe("useLocaleRefresh", () => {
       "Query Module (updated)",
     );
     expect(services.queryClient.getQueryData(["locale", "en"])).toEqual(served);
+  });
+
+  it("fetches the bundle once for a label-only publish: a new versionId with the same hash", async () => {
+    let fetches = 0;
+    server.use(
+      http.get(`${API}/api/v1/locales/en`, () => {
+        fetches += 1;
+        return HttpResponse.json({ ...EN_BUNDLE, "app.title": "Query Module (relabeled)" });
+      }),
+    );
+    const { services, onBundle } = setup();
+    act(() => services.queryClient.setQueryData(["config"], CLIENT_CONFIG));
+    act(() => services.queryClient.setQueryData(["config"], RELABELED));
+    await waitFor(() => expect(onBundle).toHaveBeenCalledTimes(1));
+    expect(createTranslator("en", onBundle.mock.calls[0]?.[0]).t("app.title")).toBe(
+      "Query Module (relabeled)",
+    );
+    // The same versionId again (the next poll) fetches nothing more.
+    act(() => services.queryClient.setQueryData(["config"], { ...RELABELED }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetches).toBe(1);
+    expect(onBundle).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing for the same config, or before the app is ready", async () => {

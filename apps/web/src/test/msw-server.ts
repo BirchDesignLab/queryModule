@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SiteConfigSchema, toClientSiteConfig } from "@querymodule/core/config";
+import {
+  type ClientSiteConfigResponse,
+  SiteConfigSchema,
+  toClientSiteConfig,
+} from "@querymodule/core/config";
 import type { ConfigVersion } from "@querymodule/core/contracts";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -23,11 +27,14 @@ const defaultSitePath = join(
   dirname(fileURLToPath(import.meta.url)),
   "../../../../packages/config/sites/default.json",
 );
-/** ClientSiteConfig of the parsed default site, with a fixed hash. */
-export const CLIENT_CONFIG = toClientSiteConfig(
-  SiteConfigSchema.parse(JSON.parse(readFileSync(defaultSitePath, "utf8"))),
-  META.configHash,
-);
+/** The GET /api/v1/config body of the parsed default site: a fixed hash and published versionId. */
+export const CLIENT_CONFIG: ClientSiteConfigResponse = {
+  ...toClientSiteConfig(
+    SiteConfigSchema.parse(JSON.parse(readFileSync(defaultSitePath, "utf8"))),
+    META.configHash,
+  ),
+  versionId: "01890a5d-ac96-7000-8000-000000000001",
+};
 
 /** The raw default site file: what an empty config store seeds as version 1 (ADR-0011 item 1). */
 export const RAW_SITE: Record<string, unknown> = JSON.parse(readFileSync(defaultSitePath, "utf8"));
