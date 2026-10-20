@@ -53,7 +53,13 @@ describe("ack-stats CLI (runAckStats, behind scripts/ops/ack-stats.ts)", () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
   const sink = () => {
     let text = "";
-    return { write: (s: string) => ((text += s), true), text: () => text };
+    return {
+      write: (s: string) => {
+        text += s;
+        return true;
+      },
+      text: () => text,
+    };
   };
   const run = async (args: string[], input = "") => {
     const out = sink();
