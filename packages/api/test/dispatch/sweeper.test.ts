@@ -260,6 +260,32 @@ describe("createSweeper: session expiry (spec 5.2 step c, 5.6, SEC-020, SEC-010)
     expect(await revokedRows(d)).toHaveLength(cap + 1);
   }, 180_000);
 
+  it(`a later batch's select failure keeps the tick's counts and still prunes; the error class only is logged (#817 C-M1)`, async () => {
+    const { t, d, userId } = await setup();
+    await insertDue(d, userId, SWEEP_SESSION_BATCH + 1);
+    const realSelect = d.db.select.bind(d.db);
+    let selects = 0;
+    vi.spyOn(d.db, "select").mockImplementation(((...a: Parameters<typeof d.db.select>) => {
+      selects += 1;
+      if (selects === 2) throw new TypeError("select down zz-secret-text");
+      return realSelect(...a);
+    }) as typeof d.db.select);
+    const sweeper = createSweeper(d);
+
+    const r = await sweeper.tick(NOW);
+    vi.mocked(d.db.select).mockRestore();
+    expect(r).toEqual({ expired: SWEEP_SESSION_BATCH, pruned: 0, failed: 0 });
+    expect(await sessionIds(d)).toHaveLength(1);
+    expect(await revokedRows(d)).toHaveLength(SWEEP_SESSION_BATCH);
+    const lines = t.logLines.filter((l) => l.includes("session select failed"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("TypeError");
+    expect(t.logLines.join("\n")).not.toContain("zz-secret-text");
+    expect(t.fatals).toEqual([]);
+    // the one left waits for the next tick
+    expect((await sweeper.tick(NOW + MIN)).expired).toBe(1);
+  }, 120_000);
+
   it("removes an orphan session (its loginSucceeded row failed, its delete failed, never used) at idle expiry (D-M2P2-3)", async () => {
     const { time, d, userId } = await setup();
     // created and never refreshed, with no loginSucceeded row
@@ -535,6 +561,40 @@ describe("createSweeper: start and stop (spec 5.2)", () => {
     expect(await sessionIds(d)).toEqual([]);
     expect(await revokedRows(d)).toHaveLength(1);
     expect(t.fatals).toEqual([]);
+  });
+  it("start() while a stop() is pending is a no-op: the in-flight tick stays halted; start works again once stop resolves (#817 C-M2)", async () => {
+    const { time, d, userId } = await setup();
+    await insertDue(d, userId, 2);
+    const real = d.audit;
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    d.audit = {
+      record: async (tx, e) => {
+        await gate;
+        return real.record(tx, e);
+      },
+    };
+    const sweeper = createSweeper(d);
+    sweeper.start();
+    await time.run(SWEEP_INTERVAL_MS);
+
+    const stopped = sweeper.stop();
+    sweeper.start();
+    expect(time.timerCount()).toBe(0);
+    release();
+    await stopped;
+    // the halted tick ended after its first session: the second is still there
+    expect(await sessionIds(d)).toHaveLength(1);
+    expect(await revokedRows(d)).toHaveLength(1);
+    expect(time.timerCount()).toBe(0);
+
+    sweeper.start();
+    expect(time.timerCount()).toBe(1);
+    await time.run(SWEEP_INTERVAL_MS);
+    await sweeper.stop();
+    expect(await sessionIds(d)).toEqual([]);
   });
   it("stop before start is a no-op, and a second start schedules no second timer", async () => {
     const { time, d } = await setup();

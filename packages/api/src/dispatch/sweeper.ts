@@ -42,9 +42,14 @@ export type SweepTick = { expired: number; pruned: number | null; failed: number
  *
  * Step d (D-A14): once per pruneEveryMs, pruneEventLog in its own transaction.
  *
+ * A select that fails on a later batch ends the session pass with the counts so far, logged by
+ * error class only; the prune still runs (#817 C-M1). Only the first select failing fails the tick.
+ *
  * Drain (#760 C-m1): stop() sets a flag the tick checks before each session and before the prune,
  * so a drain waits for at most one session transaction. The flag is separate from the timer state:
- * a direct tick() on a sweeper that was never started runs every batch.
+ * a direct tick() on a sweeper that was never started runs every batch. start() while a stop() is
+ * still waiting does nothing, so the halted tick never resumes (#817 C-M2); once every stop() has
+ * resolved, start() schedules again.
  *
  * Time comes from d.clock and d.timers only; one tick runs at a time, and an interval that fires
  * while a tick still runs is skipped.
@@ -61,6 +66,8 @@ export function createSweeper(
   // set only by stop() and cleared by start(): the tick checks it between sessions
   let halted = false;
   let running: Promise<unknown> | null = null;
+  // stop() calls still waiting for the running tick; start() refuses while any is (#817 C-M2)
+  let pendingStops = 0;
 
   async function expireSessions(now: number): Promise<{ expired: number; failed: number }> {
     const { absoluteMinutes, idleMinutes } = d.config.current().siteConfig.auth.session;
@@ -72,12 +79,21 @@ export function createSweeper(
     let expired = 0;
     let failed = 0;
     for (let batch = 0; batch < SWEEP_MAX_BATCHES_PER_TICK && !halted; batch += 1) {
-      const rows = await d.db
-        .select({ id: session.id })
-        .from(session)
-        .where(skip.size === 0 ? due : and(due, notInArray(session.id, [...skip])))
-        .orderBy(asc(session.createdAt), asc(session.id))
-        .limit(SWEEP_SESSION_BATCH);
+      let rows: { id: string }[];
+      try {
+        rows = await d.db
+          .select({ id: session.id })
+          .from(session)
+          .where(skip.size === 0 ? due : and(due, notInArray(session.id, [...skip])))
+          .orderBy(asc(session.createdAt), asc(session.id))
+          .limit(SWEEP_SESSION_BATCH);
+      } catch (e) {
+        // the first select failing fails the tick (fire() logs it); a later one keeps the counts
+        // of the sessions already committed, so the prune still runs (#817 C-M1)
+        if (batch === 0) throw e;
+        d.logger.error("session select failed", { error: { name: errorFields(e).name } });
+        break;
+      }
       for (const { id } of rows) {
         if (halted) break;
         let gone: boolean;
@@ -150,7 +166,7 @@ export function createSweeper(
     if (running) return;
     running = tick(d.clock.now())
       .catch((e: unknown) => {
-        // the session select failed: nothing changed, the next tick tries again
+        // the first session select failed before any session was touched; the next tick tries again
         d.logger.error("sweeper tick failed", { error: { name: errorFields(e).name } });
       })
       .finally(() => {
@@ -160,7 +176,7 @@ export function createSweeper(
 
   return {
     start() {
-      if (!stopped) return;
+      if (!stopped || pendingStops > 0) return;
       stopped = false;
       halted = false;
       timer = d.timers.setTimeout(fire, intervalMs);
@@ -170,7 +186,12 @@ export function createSweeper(
       halted = true;
       if (timer !== null) d.timers.clearTimeout(timer);
       timer = null;
-      await running;
+      pendingStops += 1;
+      try {
+        await running;
+      } finally {
+        pendingStops -= 1;
+      }
     },
     tick,
   };
