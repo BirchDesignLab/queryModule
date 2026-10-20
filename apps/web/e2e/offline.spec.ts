@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { recordPolite, signIn } from "./helpers.js";
 
 // Offline (spec 10.4; NFR-003, FR-064; spec 6.6, 6.7). The browser context goes offline with
 // context.setOffline: submit stays focusable with aria-disabled and a visible reason, Enter in the
@@ -12,21 +12,6 @@ import { signIn } from "./helpers.js";
 const NATIONAL = "National system";
 const OFFLINE = "No connection to server";
 const RESTORED = "Connection restored";
-
-/** Every text the polite announcer speaks, in order, read by a MutationObserver in the page. */
-async function recordPolite(page: Page): Promise<() => Promise<string[]>> {
-  await page.evaluate(() => {
-    const region = document.querySelector('[data-testid="announcer-polite"]');
-    const said: string[] = [];
-    (window as unknown as { __said: string[] }).__said = said;
-    if (region === null) throw new Error("no polite announcer");
-    new MutationObserver(() => {
-      const text = region.textContent?.trim() ?? "";
-      if (text !== "" && said.at(-1) !== text) said.push(text);
-    }).observe(region, { childList: true, characterData: true, subtree: true });
-  });
-  return () => page.evaluate(() => [...(window as unknown as { __said: string[] }).__said]);
-}
 
 async function openForm(page: Page) {
   await signIn(page);

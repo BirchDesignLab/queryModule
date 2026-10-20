@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Browser, Page } from "@playwright/test";
 import { expect, test } from "./fixtures.js";
 import { expectEvenActionBar, seededUser, signIn } from "./helpers.js";
 
@@ -15,6 +15,11 @@ const CONDITIONS = [
   { name: "1366x768", viewport: { width: 1366, height: 768 }, scale: 1 },
   { name: "800x600", viewport: { width: 800, height: 600 }, scale: 1 },
   { name: "200% zoom (640x400 CSS px)", viewport: { width: 640, height: 400 }, scale: 2 },
+  {
+    name: "1920x1080 at 200% zoom (960x540 CSS px)",
+    viewport: { width: 960, height: 540 },
+    scale: 2,
+  },
   { name: "320 px reflow (320x256 CSS px)", viewport: { width: 320, height: 256 }, scale: 4 },
 ] as const;
 
@@ -376,5 +381,64 @@ for (const [width, panelWidth, maxRows, minRequests] of [
       expect(overflow.overflow, "horizontal overflow").toBeLessThanOrEqual(0);
       expect(overflow.outside, "outside the viewport").toEqual([]);
     });
+  });
+}
+
+// Spec 10.6 named case, 6.1: zoom never changes who the user is or how a response is mapped. The
+// same persona at 1920x1080 and at 200% of it (960x540 CSS px at twice the density) keeps its
+// layout and shows the same card for the same canned response (ZZ-0001, mock data only).
+async function personaAndMapping(
+  browser: Browser,
+  email: string,
+  viewport: { width: number; height: number },
+  scale: number,
+) {
+  const context = await browser.newContext({ viewport, deviceScaleFactor: scale });
+  const page = await context.newPage();
+  try {
+    await signIn(page, seededUser(email));
+    await expect(page.getByRole("group", { name: "Quick access" })).toBeVisible();
+    const plate = page.getByLabel("Plate", { exact: true });
+    await plate.focus();
+    await page.keyboard.type("ZZ-0001");
+    const sent = page.waitForResponse(
+      (r) => r.url().endsWith("/api/v1/queries") && r.request().method() === "POST",
+    );
+    await page.keyboard.press("Enter");
+    const { correlationId } = (await (await sent).json()) as { correlationId: string };
+    const row = page
+      // The dispatcher lists the shift, the officer shows the last request.
+      .getByRole("region", { name: /^(Requests this shift|Last request)$/ })
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("button", { name: /Copy reference/ }) })
+      .first();
+    const card = row.getByRole("region", { name: "State system: returned" });
+    await expect(card).toBeVisible({ timeout: 5000 });
+    return {
+      correlationId,
+      persona: await page.locator("html").getAttribute("data-persona"),
+      mobileUnit: await page.locator(".qm-layout--mobile-unit").count(),
+      heading: await card.getByRole("heading").first().innerText(),
+      terms: await card.locator("dt").allInnerTexts(),
+      values: await card.locator("dd").allInnerTexts(),
+      badges: await card.locator(".qm-badge").allInnerTexts(),
+    };
+  } finally {
+    await context.close();
+  }
+}
+
+for (const persona of PERSONAS) {
+  test(`${persona.name}: 1920x1080 at 200% zoom keeps the persona and the response mapping (spec 6.1, 10.6)`, async ({
+    browser,
+  }) => {
+    const full = await personaAndMapping(browser, persona.email, { width: 1920, height: 1080 }, 1);
+    const zoomed = await personaAndMapping(browser, persona.email, { width: 960, height: 540 }, 2);
+    expect(zoomed.persona).toBe(persona.name === "officer" ? "mobileUnit" : "dispatch");
+    expect(zoomed.correlationId).not.toBe(full.correlationId);
+    const { correlationId: _a, ...fullView } = full;
+    const { correlationId: _b, ...zoomedView } = zoomed;
+    expect(fullView.terms.length).toBeGreaterThan(0);
+    expect(zoomedView).toEqual(fullView);
   });
 }

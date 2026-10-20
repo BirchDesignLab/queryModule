@@ -298,3 +298,22 @@ export async function expectEvenActionBar(page: Page, minTarget: number): Promis
       run.top,
     );
 }
+
+/**
+ * Records every text the polite announcer region holds, in order, from a MutationObserver in the
+ * page; an empty region is recorded as "" so a repeat (text, "", text) shows as two entries.
+ * Consecutive identical texts collapse into one. Returns a reader for the recording so far.
+ */
+export async function recordPolite(page: Page): Promise<() => Promise<string[]>> {
+  await page.evaluate(() => {
+    const region = document.querySelector('[data-testid="announcer-polite"]');
+    if (region === null) throw new Error("no polite announcer");
+    const said: string[] = [region.textContent?.trim() ?? ""];
+    (window as unknown as { __said: string[] }).__said = said;
+    new MutationObserver(() => {
+      const text = region.textContent?.trim() ?? "";
+      if (said.at(-1) !== text) said.push(text);
+    }).observe(region, { childList: true, characterData: true, subtree: true });
+  });
+  return () => page.evaluate(() => [...(window as unknown as { __said: string[] }).__said]);
+}
