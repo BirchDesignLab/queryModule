@@ -1,6 +1,12 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { z } from "zod";
-import { type ClientSiteConfig, ClientSiteConfigSchema, toClientSiteConfig } from "./client-config";
+import {
+  type ClientSiteConfig,
+  ClientSiteConfigBaseSchema,
+  type ClientSiteConfigResponse,
+  ClientSiteConfigSchema,
+  toClientSiteConfig,
+} from "./client-config";
 import type { FeatureKey } from "./features";
 import { SiteConfigSchema } from "./schema";
 import { minimalSiteConfigInput } from "./test-fixtures";
@@ -135,13 +141,15 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
   it("types features by the closed catalogue and strips unknown feature keys", () => {
     expectTypeOf<ClientSiteConfig["features"]>().toEqualTypeOf<Record<FeatureKey, boolean>>();
     const client = toClientSiteConfig(serverConfig(), HASH);
-    const parsed = ClientSiteConfigSchema.parse({
+    const parsed = ClientSiteConfigBaseSchema.parse({
       ...client,
       features: { ...client.features, futureFeature: true },
     });
     expect(parsed.features).toEqual(client.features);
     const { adminAudit: _dropped, ...missing } = client.features;
-    expect(ClientSiteConfigSchema.safeParse({ ...client, features: missing }).success).toBe(false);
+    expect(ClientSiteConfigBaseSchema.safeParse({ ...client, features: missing }).success).toBe(
+      false,
+    );
   });
 
   it("keeps delegation purposes without delegatorRoles", () => {
@@ -203,7 +211,7 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
         })),
       })),
     };
-    const parsed = ClientSiteConfigSchema.parse(future);
+    const parsed = ClientSiteConfigBaseSchema.parse(future);
     expect(parsed).not.toHaveProperty("futureBlock");
     expect(parsed.queryTypes[0]).not.toHaveProperty("futureFlag");
     expect(parsed.queryTypes[0]?.fields[0]?.role).toBeUndefined();
@@ -403,6 +411,7 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
     "theme.tokens.day",
     "theme.tokens.night",
     "theme.tokens.redShift",
+    "versionId",
   ];
 
   it("never gains a key beyond this reviewed allowlist (spec 4.1 Client view)", () => {
@@ -413,10 +422,32 @@ describe("BR-001 ClientSiteConfig is an allowlist (spec 4.1 Client view)", () =>
 
   it("rejects a non-hex configHash", () => {
     expect(() =>
-      ClientSiteConfigSchema.parse({
+      ClientSiteConfigBaseSchema.parse({
         ...toClientSiteConfig(serverConfig(), HASH),
         configHash: "not-hex",
       }),
     ).toThrow();
+  });
+
+  // #46 CFG-1, D-M2P3-5: the wire answer of GET /api/v1/config names the published version, so a
+  // label-only publish (same configHash, CFG-3) still reaches open clients.
+  it("the wire schema requires a UUIDv7 versionId; the base view carries none", () => {
+    const VERSION_ID = "01890a5d-ac96-774b-bcce-b302099a8057";
+    const client = toClientSiteConfig(serverConfig(), HASH);
+    expect(client).not.toHaveProperty("versionId");
+    const wire: ClientSiteConfigResponse = ClientSiteConfigSchema.parse({
+      ...client,
+      versionId: VERSION_ID,
+    });
+    expect(wire.versionId).toBe(VERSION_ID);
+    expect(ClientSiteConfigSchema.safeParse(client).success).toBe(false);
+    for (const bad of ["", "not-a-uuid", "01890a5d-ac96-474b-bcce-b302099a8057"])
+      expect(ClientSiteConfigSchema.safeParse({ ...client, versionId: bad }).success, bad).toBe(
+        false,
+      );
+    expect(ClientSiteConfigBaseSchema.parse({ ...client, versionId: VERSION_ID })).toEqual(client);
+    expectTypeOf<ClientSiteConfigResponse["versionId"]>().toEqualTypeOf<string>();
+    const base: ClientSiteConfig = wire;
+    expect(base.configHash).toBe(HASH);
   });
 });

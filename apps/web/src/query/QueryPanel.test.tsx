@@ -1,4 +1,4 @@
-import { ClientSiteConfigSchema } from "@querymodule/core/config";
+import { ClientSiteConfigBaseSchema } from "@querymodule/core/config";
 import { shortReference } from "@querymodule/web-ui";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { delay, HttpResponse, http } from "msw";
@@ -63,7 +63,7 @@ describe("BR-001 config-driven query panel (spec 6.2)", () => {
     const { services } = await openPanel();
     expect(urls.filter((u) => u === "/api/v1/config")).toHaveLength(1);
     const cached = services.queryClient.getQueryData(["config"]);
-    expect(cached).toEqual(ClientSiteConfigSchema.parse(CLIENT_CONFIG));
+    expect(cached).toEqual(ClientSiteConfigBaseSchema.parse(CLIENT_CONFIG));
     expect(cached).toMatchObject({
       site: { id: "default" },
       quickAccess: ["VEH", "PER", "PRO", "WNT", "DL"],

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, posix, relative, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type ConfigChange, type DiffPath, diffConfig } from "@querymodule/core/config";
+import { diffConfig, renderChange } from "@querymodule/core/config";
 import { isMainModule, toPosixRel } from "./cli-io";
 import {
   type ConfigIo,
@@ -117,30 +117,6 @@ export function gitShow(root: string, exec: Exec = execFileSync as Exec): ShowFi
       throw new ConfigUnreadableError();
     }
   };
-}
-
-const renderPath = (path: DiffPath): string =>
-  path.length === 0
-    ? "/"
-    : path.map((s) => `/${typeof s === "object" ? `[${s.by}=${s.is}]` : s}`).join("");
-
-const renderValue = (v: unknown): string => {
-  const t = JSON.stringify(v) ?? "undefined";
-  return t.length > 200 ? `${t.slice(0, 200)}...` : t;
-};
-
-function renderChange(c: ConfigChange): string {
-  const at = renderPath(c.path);
-  switch (c.kind) {
-    case "added":
-      return `+ ${at} ${renderValue(c.after)}`;
-    case "removed":
-      return `- ${at} ${renderValue(c.before)}`;
-    case "changed":
-      return `~ ${at} ${renderValue(c.before)} -> ${renderValue(c.after)}`;
-    case "moved":
-      return `~ ${at} order by ${c.by}: ${c.order.join(", ")}`;
-  }
 }
 
 /**

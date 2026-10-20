@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MessageKeySchema, Sha256HexSchema } from "../contracts/primitives";
+import { MessageKeySchema, Sha256HexSchema, Uuid7Schema } from "../contracts/primitives";
 import { CONFIG_SCHEMA_VERSION } from "../contracts/version";
 import { FEATURES, type FeatureKey } from "./features";
 import { makeSiteConfigSchemas, type SiteConfig, SOURCE_SCOPES } from "./schema";
@@ -13,8 +13,11 @@ const C = makeSiteConfigSchemas("client");
  */
 export const ClientConditionSchema = C.Condition;
 
-/** Separate allowlist schema, never the server object with fields stripped (spec 4.1). */
-export const ClientSiteConfigSchema = z.object({
+/**
+ * Separate allowlist schema, never the server object with fields stripped (spec 4.1). The base view
+ * that toClientSiteConfig builds; the wire answer of GET /api/v1/config is ClientSiteConfigSchema.
+ */
+export const ClientSiteConfigBaseSchema = z.object({
   schemaVersion: z.literal(CONFIG_SCHEMA_VERSION),
   configHash: Sha256HexSchema,
   site: z.object({ id: z.string().min(1), labelKey: MessageKeySchema }),
@@ -59,7 +62,15 @@ export const ClientSiteConfigSchema = z.object({
     }),
   ),
 });
-export type ClientSiteConfig = z.infer<typeof ClientSiteConfigSchema>;
+export type ClientSiteConfig = z.infer<typeof ClientSiteConfigBaseSchema>;
+
+/**
+ * The wire answer of GET /api/v1/config: the base view plus the published config version id
+ * (#46 CFG-1, D-M2P3-5). A label-only publish changes versionId while configHash, over siteConfig
+ * only (CFG-3), stays, so open clients can tell a new label overlay is live.
+ */
+export const ClientSiteConfigSchema = ClientSiteConfigBaseSchema.extend({ versionId: Uuid7Schema });
+export type ClientSiteConfigResponse = z.infer<typeof ClientSiteConfigSchema>;
 
 export function toClientSiteConfig(config: SiteConfig, configHash: string): ClientSiteConfig {
   const view = {
@@ -96,5 +107,5 @@ export function toClientSiteConfig(config: SiteConfig, configHash: string): Clie
       requiresCredentials: s.requiresCredentials,
     })),
   };
-  return ClientSiteConfigSchema.parse(view);
+  return ClientSiteConfigBaseSchema.parse(view);
 }
