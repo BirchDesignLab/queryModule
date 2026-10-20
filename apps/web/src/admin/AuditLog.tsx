@@ -344,6 +344,7 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
                   aria-describedby={atNewest ? newestWhy : undefined}
                   onClick={newer}
                 >
+                  <LineIcon name="up" />
                   {t("admin.audit.newer")}
                 </button>
                 <button
@@ -354,6 +355,7 @@ function AuditLog({ usersPicker }: { usersPicker: boolean }) {
                   onClick={older}
                 >
                   {t("admin.audit.older")}
+                  <LineIcon name="down" trailing />
                 </button>
                 <VisuallyHidden>
                   <span id={newestWhy}>{t("admin.audit.newestPage")}</span>

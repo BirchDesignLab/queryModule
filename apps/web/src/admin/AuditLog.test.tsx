@@ -110,6 +110,16 @@ describe("rail entry", () => {
     expect(document.querySelector(".qm-audit__state a")).toHaveAttribute("href", "/");
     expect(seen).toHaveLength(0);
   });
+
+  it("state boxes draw v6's icon, hidden from the reader, and an outline action (#774)", async () => {
+    await openAudit("implementer");
+    await screen.findByText("You can't read the audit log", {}, MAX_WAIT);
+    const box = document.querySelector(".qm-audit__state") as HTMLElement;
+    expect(box.querySelector("svg[data-icon='lock']")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByRole("link", { name: "Go to Site configuration" })).toHaveClass(
+      "qm-button--secondary",
+    );
+  });
 });
 
 describe("loading and filters", () => {
@@ -188,6 +198,9 @@ describe("paging", () => {
     await screen.findByRole("table", {}, MAX_WAIT);
     const older = screen.getByRole("button", { name: "Older" });
     const newer = screen.getByRole("button", { name: "Newer" });
+    // v6 draws an up arrow on Newer and a down arrow on Older, hidden from the reader (#774).
+    expect(newer.querySelector("svg[data-icon='up']")).toHaveAttribute("aria-hidden", "true");
+    expect(older.querySelector("svg[data-icon='down']")).toHaveAttribute("aria-hidden", "true");
     expect(newer).toHaveAttribute("aria-disabled", "true");
     expect(newer).toHaveAccessibleDescription("This is the newest page.");
     await t.user.click(older);

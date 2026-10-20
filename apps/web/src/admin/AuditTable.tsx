@@ -69,11 +69,11 @@ export function AuditTable({
                     {formatAckTime(row.at)}
                   </time>
                 </td>
-                <td className="qm-audit__cell">{eventLabel}</td>
+                <td className="qm-audit__cell qm-audit__event">{eventLabel}</td>
                 <td className="qm-audit__cell">
                   <span>{row.actor.email ?? t("admin.audit.system")}</span>
                   <div>
-                    <span className="qm-badge">{roleLabel(row.actor.role, t)}</span>
+                    <span className="qm-badge qm-audit__role">{roleLabel(row.actor.role, t)}</span>
                   </div>
                   {row.credentialUserId !== undefined && (
                     <span className="qm-audit__fold">

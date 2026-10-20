@@ -1904,6 +1904,22 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   color: var(--qm-color-text-muted);
 }
 
+/* In the drawer each version is a card of its own, as v6 draws it (D-M2P3-B1). */
+.qm-history--drawer .qm-history__list {
+  gap: var(--qm-space-2);
+}
+
+.qm-history--drawer .qm-history__row {
+  padding: var(--qm-space-3);
+  background: var(--qm-color-surface-base);
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-radius-control);
+}
+
+.qm-history--drawer .qm-history__none {
+  font-style: italic;
+}
+
 /* The publish dialog's change note: label and count on one line over a wrapping text area. */
 .qm-publish-note {
   margin-block-end: var(--qm-space-5);
@@ -2047,6 +2063,14 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   align-items: center;
 }
 
+/* Rows per page: the label beside its select, as v6 draws it. */
+.qm-field.qm-audit__page-size {
+  margin-block-end: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--qm-space-2);
+}
+
 .qm-audit__grow {
   flex: 1 1 auto;
 }
@@ -2068,11 +2092,13 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   min-inline-size: 0;
 }
 
+/* v6: a centered box with its icon over the heading; an error has the invalid edge. */
 .qm-audit__state {
   display: grid;
   gap: var(--qm-space-2);
-  justify-items: start;
-  padding: var(--qm-space-4);
+  justify-items: center;
+  text-align: center;
+  padding: var(--qm-space-8) var(--qm-space-4);
   background: var(--qm-color-surface-base);
   border: var(--qm-border-width) dashed var(--qm-color-border-subtle);
   border-radius: var(--qm-radius-panel);
@@ -2080,7 +2106,12 @@ body:has(.qm-app-header--compact) .qm-skip-link {
 
 .qm-audit__state--error {
   border-style: solid;
-  border-color: var(--qm-color-border);
+  border-color: var(--qm-field-required);
+}
+
+.qm-audit__state > .qm-line-icon {
+  inline-size: calc(var(--qm-space-6) + var(--qm-space-1));
+  block-size: calc(var(--qm-space-6) + var(--qm-space-1));
 }
 
 .qm-audit__state h3,
@@ -2117,10 +2148,49 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   font-size: var(--qm-type-size-sm);
 }
 
+/* v6: the caption is the card's head bar; events read bold, the role is a pill, and the details
+   toggle reads "+ n items" in the accent (issue 774). */
 .qm-audit__caption {
-  padding: var(--qm-space-2) var(--qm-space-3);
-  color: var(--qm-color-text-muted);
+  padding: var(--qm-space-3) var(--qm-space-4);
+  background: var(--qm-color-surface-raised);
+  border-block-end: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  color: var(--qm-color-text-body);
+  font-weight: 600;
   text-align: start;
+}
+
+.qm-audit__event {
+  font-weight: 500;
+}
+
+.qm-badge.qm-audit__role {
+  background: transparent;
+  border: var(--qm-border-width) solid var(--qm-color-border-subtle);
+  border-radius: var(--qm-space-12);
+  color: var(--qm-color-text-muted);
+}
+
+.qm-audit__details > summary {
+  display: inline-flex;
+  gap: var(--qm-space-1);
+  color: var(--qm-color-accent);
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+
+.qm-audit__details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.qm-audit__details > summary::before {
+  content: "+";
+  inline-size: var(--qm-space-3);
+  font-family: var(--qm-type-family-data);
+}
+
+.qm-audit__details[open] > summary::before {
+  content: "2";
 }
 
 .qm-audit__cell {
@@ -2182,7 +2252,8 @@ body:has(.qm-app-header--compact) .qm-skip-link {
   overflow-wrap: anywhere;
 }
 
-.qm-audit__page-size {
+.qm-field.qm-audit__page-size {
+  margin-block-end: 0;
   flex-direction: row;
   align-items: center;
   margin-inline-start: auto;

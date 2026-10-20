@@ -1,3 +1,4 @@
+import { LineIcon, type LineIconName } from "@querymodule/web-ui";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useT } from "../app/i18n-context.js";
@@ -8,11 +9,14 @@ export function StateBox({
   title,
   body,
   alert = false,
+  icon = alert ? "error" : "log",
   children,
 }: {
   title: string;
   body: string;
   alert?: boolean;
+  /** v6's icon over the heading: an error circle for an alert, the log page otherwise. */
+  icon?: LineIconName;
   children?: ReactNode;
 }) {
   return (
@@ -20,6 +24,7 @@ export function StateBox({
       className={alert ? "qm-audit__state qm-audit__state--error" : "qm-audit__state"}
       role={alert ? "alert" : undefined}
     >
+      <LineIcon name={icon} />
       <h3>{title}</h3>
       <p>{body}</p>
       {children}
@@ -40,16 +45,17 @@ export function AuditNoAccess({ kind }: { kind: "forbidden" | "off" }) {
       {kind === "forbidden" ? (
         <StateBox
           alert
+          icon="lock"
           title={t("admin.audit.noAccess.title")}
           body={t("admin.audit.noAccess.body")}
         >
-          <Link className="qm-button" to="/admin/config">
+          <Link className="qm-button qm-button--secondary" to="/admin/config">
             {t("admin.audit.noAccess.action")}
           </Link>
         </StateBox>
       ) : (
         <StateBox title={t("admin.audit.notOn.title")} body={t("admin.audit.notOn.body")}>
-          <Link className="qm-button" to="/">
+          <Link className="qm-button qm-button--secondary" to="/">
             {t("admin.audit.notOn.action")}
           </Link>
         </StateBox>

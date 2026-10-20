@@ -1,7 +1,17 @@
 import type { JSX } from "react";
 
-/** The line icons of mockup v6 that sit beside text (#774): form, terminal, download, eye, back. */
-export type LineIconName = "form" | "terminal" | "download" | "eye" | "back";
+/** The line icons of mockup v6 that sit beside text (#774). */
+export type LineIconName =
+  | "form"
+  | "terminal"
+  | "download"
+  | "eye"
+  | "back"
+  | "lock"
+  | "log"
+  | "error"
+  | "up"
+  | "down";
 
 const PATHS: Readonly<Record<LineIconName, JSX.Element>> = {
   form: (
@@ -19,16 +29,44 @@ const PATHS: Readonly<Record<LineIconName, JSX.Element>> = {
     </>
   ),
   back: <path d="M15 6l-6 6 6 6" />,
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  log: (
+    <>
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M9 11h7M9 15h7M9 7h3" />
+    </>
+  ),
+  error: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v6M12 16.5v.01" />
+    </>
+  ),
+  up: <path d="M12 19V5M6 11l6-6 6 6" />,
+  down: <path d="M12 5v14M6 13l6 6 6-6" />,
 };
 
 /**
  * A 16 px line icon drawn with currentColor, so every theme and the focus ring apply. Always
  * decorative: the text beside it names the control, so it is hidden from the reader.
  */
-export function LineIcon({ name }: { name: LineIconName }): JSX.Element {
+export function LineIcon({
+  name,
+  trailing = false,
+}: {
+  name: LineIconName;
+  /** After the words (Older's down arrow): the gap goes before the icon. */
+  trailing?: boolean;
+}): JSX.Element {
   return (
     <svg
-      className="qm-line-icon"
+      className={trailing ? "qm-line-icon qm-line-icon--trailing" : "qm-line-icon"}
+      data-icon={name}
       viewBox="0 0 24 24"
       width="16"
       height="16"
