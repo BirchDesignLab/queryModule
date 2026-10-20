@@ -153,6 +153,29 @@ describe("UX-011 keyword highlight", () => {
     expect(container.textContent).toContain("Reported ");
     expect(container.textContent).toContain(" today");
   });
+  it("keeps punctuation right after a badge with the badge, so no line starts with it (#46)", () => {
+    const { container } = render(
+      <p>
+        <Highlighted
+          text="STOLEN, then STOLEN. Done"
+          keywords={KEYWORDS}
+          highlight
+          styles={STYLES}
+          t={t}
+        />
+      </p>,
+    );
+    const keeps = [...container.querySelectorAll(".qm-mark__keep")];
+    expect(keeps).toHaveLength(2);
+    expect(keeps[0]?.querySelector("mark")).toHaveTextContent("STOLEN");
+    expect(keeps[0]?.lastChild?.textContent).toBe(",");
+    expect(keeps[1]?.lastChild?.textContent).toBe(".");
+    // The words are unchanged, in order.
+    expect(container.textContent?.replace(/!!|\(critical\)/g, "")).toBe(
+      "STOLEN, then STOLEN. Done",
+    );
+  });
+
   it("renders plain text when highlight is false", () => {
     const { container } = render(
       <p>

@@ -26,6 +26,7 @@ import {
   highestSeverity,
   purgedValuesSummary,
   skipReasonText,
+  sourcesDoneLine,
   sourceWhy,
 } from "./result-view.js";
 import { rowSummary } from "./row-summary.js";
@@ -128,6 +129,11 @@ export const RequestsPane = memo(function RequestsPane({
     // Retention took the values (spec 5.5): only the type values are left to show, and the request
     // cannot start the next one (D-M2P2-B4).
     const valuesPurged = entry.submitted === undefined && primary?.purged === true;
+    // Where retention took a result or the values, the meta line says so in counts (mockup v6
+    // Purged, #754); a request with nothing purged keeps the query screen's line as it was.
+    const sources = entry.parts.flatMap((part) => part.sources);
+    const statusLine =
+      valuesPurged || sources.some((s) => s.purged === true) ? sourcesDoneLine(sources, t) : "";
     return {
       ...base,
       ...(valuesPurged && base.summary === ""
@@ -142,6 +148,7 @@ export const RequestsPane = memo(function RequestsPane({
             editBlockedText: t("requests.editPurged"),
           }
         : {}),
+      ...(statusLine === "" ? {} : { statusLine }),
       reference: entry.correlationId,
       acknowledgedAt: entry.acknowledgedAt,
       notes: [],

@@ -153,6 +153,34 @@ describe("a purged result", () => {
   });
 });
 
+describe("the purged meta line (mockup v6 Purged, #754)", () => {
+  it("a request with a purged result shows the sources done line with the purged count", () => {
+    setup(
+      detail(
+        [
+          { sourceId: "stateSource", payload: STOLEN },
+          { sourceId: "nationalSource", purged: true },
+        ],
+        { values: { plate: "ZZ-0001" } },
+      ),
+      { sent: true },
+    );
+    expect(row().querySelector(".qm-request__meta")).toHaveTextContent(
+      "2 of 2 sources done. 2 returned, 1 purged.",
+    );
+  });
+
+  it("a request with nothing purged keeps the query screen's meta line as it was", () => {
+    setup(
+      detail([{ sourceId: "stateSource", payload: STOLEN }], { values: { plate: "ZZ-0001" } }),
+      {
+        sent: true,
+      },
+    );
+    expect(row().querySelector(".qm-request__meta")).not.toHaveTextContent(/sources? done/);
+  });
+});
+
 describe("a request sent in this session", () => {
   it("keeps a working Edit as new query from its in-memory values when the detail reports purged values", () => {
     const { edits } = setup(
