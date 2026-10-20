@@ -123,7 +123,6 @@ export function midSentence(label: string): string {
     : label;
 }
 
-/** The reason a source did not return, in words; undefined for pending and returned (G5). */
 /** The line icon where it differs from the tone's (mockup v6): a clock for timed out, a dash for interrupted. */
 export function sourceIcon(status: string): SourceLineIcon | undefined {
   if (status === "timedOut") return "clock";
@@ -131,6 +130,7 @@ export function sourceIcon(status: string): SourceLineIcon | undefined {
   return undefined;
 }
 
+/** The reason a source did not return, in words; undefined for pending and returned (G5). */
 export function sourceWhy(
   status: string,
   config: ClientSiteConfig,

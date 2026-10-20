@@ -113,8 +113,8 @@ test.describe("[FR-050] terminal beside the results (UX-014)", () => {
     // scrollbar; a classic one takes ~17 px).
     expect(requests.width).toBeGreaterThanOrEqual(560);
     expect(terminal.x + terminal.width).toBeLessThanOrEqual(WIDE.width);
-    // The command reference is a compact list: the last command is above the fold at 1366x768 (#767).
-    const lastCommand = await pane(page).getByRole("listitem").last().boundingBox();
+    // The command reference is a compact table: the last row is above the fold at 1366x768 (#767, #835).
+    const lastCommand = await pane(page).getByRole("row").last().boundingBox();
     expect((lastCommand?.y ?? 0) + (lastCommand?.height ?? 0)).toBeLessThanOrEqual(WIDE.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       WIDE.width,
@@ -162,7 +162,13 @@ test.describe("[FR-050] terminal beside the results (UX-014)", () => {
     await expect(pane(page)).toBeVisible();
     const reference = pane(page).getByRole("region", { name: "Command reference" });
     await expect(reference).toBeVisible();
-    expect(await reference.getByRole("listitem").count()).toBeGreaterThan(30);
+    // The thirty share the first command's type and positions, so they join its row (mockup v6
+    // "PER, NAM"); the codes wrap after their commas and the row grows tall enough to scroll.
+    const codes = (await reference.getByRole("rowheader").allTextContents()).join(", ");
+    for (let i = 0; i < 30; i++)
+      expect(codes).toContain(
+        `Z${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`,
+      );
 
     // The pane ends where the form ends, not below it; the reference scrolls within it.
     const form = await page.locator(".qm-panes__panel").boundingBox();

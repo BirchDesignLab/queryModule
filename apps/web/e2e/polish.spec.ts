@@ -55,13 +55,15 @@ for (const layout of LAYOUTS) {
       const region = page.getByRole("region", { name: /Requests this shift|Last request/ });
       await expect(region.getByText("NO WANTS OR WARRANTS")).toBeVisible({ timeout: 15_000 });
 
-      // Show detail starts where the card's text does (the card's own left padding).
+      // Show detail starts where the card's text does (the card's own left padding): its chevron
+      // leads at that edge (mockup v6 .rc-tog, #835).
       const card = region.getByRole("listitem").first();
       const show = card.getByRole("button", { name: /^Show detail/ }).first();
       await expect(show).toBeVisible();
       const heading = card.getByText("State system: returned").first();
-      const delta = Math.abs((await textLeft(show)) - (await textLeft(heading)));
-      expect(delta, "Show detail text vs the card heading").toBeLessThanOrEqual(1);
+      const chevron = (await show.locator("svg").first().boundingBox())?.x ?? Number.NaN;
+      const delta = Math.abs(chevron - (await textLeft(heading)));
+      expect(delta, "Show detail chevron vs the card heading").toBeLessThanOrEqual(1);
 
       // Copy reference in the request row starts where the row's text does.
       const copy = card.getByRole("button", { name: /^Copy reference/ });

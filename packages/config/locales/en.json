@@ -838,7 +838,6 @@
   "admin.leave.leave": "Sign out",
   "admin.diff.title": "Changes from the live version",
   "admin.diff.note": "Compared with the version dispatchers see now. Select an entry to open it.",
-  "admin.diff.noteStatic": "Compared with the version dispatchers see now.",
   "admin.diff.checking": "Checking the live version.",
   "admin.diff.failed": "The live version could not be checked. Comparing with the last one loaded.",
   "admin.diff.noLive": "The live version has not loaded yet.",

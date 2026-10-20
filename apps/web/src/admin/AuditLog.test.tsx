@@ -541,6 +541,13 @@ describe("#835 the filter band and the rail (mockup v6 audit frame)", () => {
     expect(screen.getByText(hint).closest(".qm-field")).toBeNull();
   });
 
+  it("the no-access state keeps the title in the white strip (mockup v6 aud-forbidden)", async () => {
+    await openAudit("implementer");
+    await screen.findByText("You can't read the audit log", {}, MAX_WAIT);
+    const heading = screen.getByRole("heading", { name: "Audit log", level: 2 });
+    expect(heading.parentElement).toHaveClass("qm-audit__toolbar");
+  });
+
   it("the rail draws a line icon on each item and a chevron on the way back", async () => {
     await openAudit();
     await screen.findByLabelText("From", undefined, MAX_WAIT);

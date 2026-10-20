@@ -210,7 +210,8 @@ export function CreateUserDialog({
         <div className="qm-leave-dialog__actions">
           <button
             type="button"
-            className="qm-button qm-button--secondary"
+            // Beside the main action the way out is a ghost button, as on every dialog (#835).
+            className="qm-button qm-button--ghost"
             aria-disabled={submitting ? "true" : undefined}
             aria-describedby={submitting ? "create-user-busy" : undefined}
             onClick={submitting ? undefined : onClose}

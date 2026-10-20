@@ -1766,8 +1766,9 @@ h1 {
 }
 
 /* The chevron turns over when the detail is open (mockup v6 .rc-tog). */
+/* The flex gap is the only space after the chevron. */
 .qm-view-toggle > .qm-line-icon {
-  margin-inline-end: var(--qm-space-1);
+  margin-inline-end: 0;
 }
 
 .qm-view-toggle[aria-expanded="true"] > .qm-line-icon {

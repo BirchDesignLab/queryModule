@@ -96,7 +96,7 @@ describe("FR-043 the requests list shows per-source status (spec 6.2, 6.6)", () 
     act(() => driver.status("stateSource", "returned"));
     const list = sourceList();
     expect(within(list).getByText(lineText("State system: loading result"))).toBeInTheDocument();
-    expect(within(list).queryByText("State system: returned")).not.toBeInTheDocument();
+    expect(within(list).queryByText(lineText("State system: returned"))).not.toBeInTheDocument();
     services.feed.close();
   });
 
