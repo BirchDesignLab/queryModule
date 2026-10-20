@@ -18,6 +18,7 @@ import {
   documentOf,
   liveRow,
   nextVersion,
+  publisherName,
   siteIdOf,
   toConfigVersion,
   type VersionRow,
@@ -181,7 +182,9 @@ const SITE_CONFIG_REFUSALS: ReadonlySet<string> = new Set([
 /**
  * activate() refusals as API outcomes; a refusal leaves the old snapshot live. The answer is
  * built from the row activate() published (C-m1): no read after the commit, so a change that
- * committed never answers 500.
+ * committed never answers 500. The publisher's name (#789, D-M2P0-4) is read before activate()
+ * for the actor activate() writes as publishedBy, so a failed read publishes nothing; absent
+ * when that user row is gone, as in the versions list.
  */
 async function activateRow(
   d: AppDeps,
@@ -190,6 +193,7 @@ async function activateRow(
   live: VersionRow,
   note?: string,
 ): Promise<PublishResult> {
+  const name = await publisherName(d.db, event.actor.id);
   let published: VersionRow;
   try {
     published = await activate(
@@ -212,7 +216,7 @@ async function activateRow(
         : e.path;
     return refusal([{ key, path }]);
   }
-  return { ok: true, version: toConfigVersion(published) };
+  return { ok: true, version: toConfigVersion(published, name) };
 }
 
 /**
