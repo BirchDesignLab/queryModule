@@ -21,6 +21,10 @@ use placeholder values.
 - **`X-Requested-With: querymodule`.** Required on every state-changing request (POST, PUT, DELETE)
   except the Better Auth sign-in routes. Without it the answer is `403 forbidden`. GET requests do
   not need it. (Spec 5.9.)
+- **`Origin`.** A request whose `Origin` header is present and not one of the site's allowed
+  origins (`CORS_ORIGINS`, default the public origin; the dev origins in development) is refused
+  `403 forbidden` on every route and method, cookie or bearer, including preflights and the sign-in
+  routes. A missing or empty `Origin` passes (native clients). `Origin: null` is foreign. (SEC-005.)
 - **`X-Background: 1`.** Optional. A request that carries it does not extend the session idle clock.
   The web app sets it on its 15 second config refresh and its health poll.
 - **Body cap.** 32 KiB for every route, `413 payloadTooLarge` above it. The admin draft save and
@@ -372,7 +376,7 @@ payload text.
 | `unauthenticated` | 401 | No live session. |
 | `stepUpRequired` | 403 | Reserved for step-up authentication; no route returns it yet. |
 | `mfaEnrollmentRequired` | 403 | Reserved for MFA (M3); no route returns it yet. |
-| `forbidden` | 403 | Role not allowed, or `X-Requested-With` missing on a write. |
+| `forbidden` | 403 | Role not allowed, `X-Requested-With` missing on a write, or a foreign `Origin`. |
 | `notFound` | 404 | No such resource, or the route's feature is off for the site. |
 | `configHashMismatch` | 409 | The submit was built from an older config; `params.currentConfigHash` names the live one. |
 | `delegationCredentialsMissing` | 409 | Reserved for delegated credentials; no route returns it yet. |

@@ -56,6 +56,26 @@ export const requireRequestedWith = (): MiddlewareHandler<AppEnv> => async (c, n
   await next();
 };
 
+/**
+ * Refuses any request whose Origin header is present and not in `allowed` (D-M2P3-1, #753):
+ * every method, cookie or bearer, Better Auth paths and CORS preflights included. An absent or
+ * empty Origin passes (native clients, curl, scripts); `Origin: null` is foreign. The refusal
+ * logs the request id and the class "foreign origin", never the Origin value (spec 5.9).
+ */
+export const requireKnownOrigin =
+  (
+    allowed: readonly string[],
+    log: (fields: { requestId: string; class: string }) => void = () => {},
+  ): MiddlewareHandler<AppEnv> =>
+  async (c, next) => {
+    const origin = c.req.header("origin");
+    if (origin && !allowed.includes(origin)) {
+      log({ requestId: c.get("requestId"), class: "foreign origin" });
+      return apiError(c, "forbidden");
+    }
+    await next();
+  };
+
 export const bodyCap = (): MiddlewareHandler<AppEnv> =>
   bodyLimit({ maxSize: 32 * 1024, onError: (c) => apiError(c as never, "payloadTooLarge") });
 

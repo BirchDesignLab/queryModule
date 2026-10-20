@@ -139,13 +139,12 @@ describe("bearer on REST (spec 10.3, 10.7; SEC-005, SEC-014)", () => {
     expect((await bearer(t, "/api/v1/queries", "")).status).toBe(401);
   });
 
-  it("a bearer with a foreign Origin gets no CORS grant, and a foreign-Origin sign-in gets no token", async () => {
+  it("a bearer with a foreign Origin is refused 403, and a foreign-Origin sign-in gets no token", async () => {
     const { t, token } = await setup();
-    // A browser page on a foreign Origin cannot read the response: no allow-origin is granted.
+    // D-M2P3-1: a present, foreign Origin is refused before auth, CORS or any handler.
     const r = await bearer(t, "/api/v1/queries", token, { headers: { origin: FOREIGN } });
+    expect(r.status).toBe(403);
     expect(r.headers.get("access-control-allow-origin")).toBeNull();
-    // Authorization makes a cross-origin request non-simple, so a browser sends a preflight first:
-    // with no allow-origin for a foreign Origin the browser refuses to send the real request.
     const pre = await t.request("/api/v1/queries", {
       method: "OPTIONS",
       headers: {
@@ -154,13 +153,14 @@ describe("bearer on REST (spec 10.3, 10.7; SEC-005, SEC-014)", () => {
         "access-control-request-headers": "authorization",
       },
     });
+    expect(pre.status).toBe(403);
     expect(pre.headers.get("access-control-allow-origin")).toBeNull();
-    // A sign-in that carries any Origin is a web sign-in: no token is issued to it.
     const si = await t.request("/api/v1/auth/sign-in/email", {
       method: "POST",
       headers: { "content-type": "application/json", origin: FOREIGN },
       body: signInBody(EMAIL),
     });
+    expect(si.status).toBe(403);
     expect(si.headers.get("set-auth-token")).toBeNull();
   });
 });
