@@ -1,0 +1,45 @@
+# M2 security map
+
+Spec 12.7, M2 row, security items: "No cross-user events; replay excludes hidden; admin-only audit
+routes; bearer REST + WS", plus the spec 12.3 P3 hardening item "Security test matrix for M2
+routes" and the story tests A6 to A9. Each row names one test and what it asserts.
+`packages/api/test/security/m2-security-map.test.ts` fails if a row's file is gone or no longer
+holds the named test, so this page cannot drift from the suite.
+
+IDs: SEC-005, SEC-010, SEC-012, SEC-014, SEC-020; spec 5.1, 5.3, 10.3, 10.7. Mock data only
+(spec 5.4).
+
+| Spec 12.7 item | Case | Test file | Test name | Asserts |
+|---|---|---|---|---|
+| No cross-user events | REST `GET /api/v1/queries` (listQueries) | `packages/api/test/security/query-read.test.ts` | `lists only the caller's own requests: another user and an admin see an empty list` | The owner's list holds the request; another user and an admin get an empty list. |
+| No cross-user events | REST `GET /api/v1/queries/:correlationId` (getQuery) | `packages/api/test/security/query-read.test.ts` | `another user and an admin get the same 404 notFound as an unknown id, never 403` | Non-owner, admin and unknown id answer the identical 404 body; the owner gets 200. |
+| No cross-user events | WS live events | `packages/api/test/security/ws-events.test.ts` | `delivers sourceStatus only to the owner's sockets, matching event_log` | The owner's two sockets receive both events matching `event_log`; user B's socket receives none. |
+| No cross-user events | WS live events, cookie socket | `packages/api/test/security/ws-auth.test.ts` | `no event crosses users` | An event for one user never reaches another user's open socket. |
+| No cross-user events | WS replay | `packages/api/test/security/ws-events.test.ts` | `replay after a real dispatch sends each user only their own event_log rows` | Each user's replay holds only that user's rows (A seq 1 to 2, B seq 3 to 4); no foreign correlation id appears. |
+| No cross-user events | WS replay, foreign cursor | `packages/api/test/security/ws-events.test.ts` | `a lastSeq inside another user's seq range gets resync unknownCursor, never their rows` | A cursor that only exists in another user's range gets `resync` and no rows. |
+| No cross-user events | Bearer socket | `packages/api/test/security/bearer.test.ts` | `no event crosses users on a bearer socket` | A bearer socket receives its owner's events only. |
+| Replay excludes hidden | Hidden results (resultHide) | none yet | ADR-0014 | Not tested in M2: result hiding is flagged off and its replay filter moves to the M3 P2 gate (D-M2P3-2, ADR-0014, Task 18). Until then replay carries only `sourceStatus` rows (ids and statuses). |
+| Admin-only audit routes | Page (listAdminAudit) and export (exportAdminAudit): every role, no session | `packages/api/test/security/admin-audit.test.ts` | `implementer, trainingOfficer and user 403 forbidden; anonymous 401; no auditViewed` | Run for the page and the export (`describe.each`): non-admin roles 403, anonymous 401, no audit row written. |
+| Admin-only audit routes | Page and export: `mustChangePassword` | `packages/api/test/security/admin-audit.test.ts` | `a user who still holds a temporary password gets 403 passwordChangeRequired` | A user on a temporary password is refused with `passwordChangeRequired` on both routes. |
+| Admin-only audit routes | Page and export: `adminAudit` feature off | `packages/api/test/security/admin-audit.test.ts` | `adminAudit off: an admin and anonymous get 404 notFound` | With the feature off, an admin and anonymous both get 404 notFound. |
+| Admin-only audit routes | Admin query (getAdminQuery): every role, no session, `mustChangePassword` | `packages/api/test/security/route-matrix.test.ts` | `flags on: %s on every route` | Each caller is answered per contract access on `GET /api/v1/admin/queries/{correlationId}`: anonymous 401, non-admin roles 403, a temporary-password user 403, admin 200. |
+| Admin-only audit routes | Admin query: feature off | `packages/api/test/security/route-matrix.test.ts` | `flags off: %s gets 404 notFound on every admin route` | With `adminAudit` off, every role gets 404 notFound on the admin query route. |
+| Bearer REST + WS | Sign-in token issued with no Origin | `packages/api/test/security/bearer.test.ts` | `a sign-in with no Origin returns set-auth-token` | A native sign-in returns `set-auth-token`; a web sign-in never exposes it (`a web sign-in (with Origin) does not expose the token, header or CORS expose list`). |
+| Bearer REST + WS | Signed token on REST | `packages/api/test/security/bearer.test.ts` | `GET /api/v1/queries with a signed bearer and no cookie works` | A signed bearer alone authenticates REST. |
+| Bearer REST + WS | Tampered token on REST | `packages/api/test/security/bearer.test.ts` | `a tampered signature is 401` | A token with an altered signature is 401 (the raw session id is 401 in `an unsigned token (the raw session id) is 401`). |
+| Bearer REST + WS | Idle limit on REST | `packages/api/test/security/bearer.test.ts` | `a bearer session obeys the idle limit` | A bearer session ends at the idle limit (SEC-005). |
+| Bearer REST + WS | Foreign Origin on REST (D-M2P3-1) | `packages/api/test/security/bearer.test.ts` | `a bearer with a foreign Origin is refused 403, and a foreign-Origin sign-in gets no token` | A foreign Origin is 403 with no CORS header, and a foreign-Origin sign-in gets no token. |
+| Bearer REST + WS | Foreign Origin on every REST route (D-M2P3-1, #753; Task 9) | `packages/api/test/security/origin.test.ts` | `a foreign-Origin submit is 403 before the receipt mark and the body cap` | A foreign Origin is refused before any handler; `requireKnownOrigin matrix` covers each Origin and method. |
+| Bearer REST + WS | Signed token on the WS upgrade | `packages/api/test/security/bearer.test.ts` | `accepts a bearer with no Origin; hello is answered` | A signed bearer upgrades with no Origin and the socket answers hello. |
+| Bearer REST + WS | Unsigned or tampered token on the WS upgrade | `packages/api/test/security/bearer.test.ts` | `rejects an unsigned or tampered bearer (401)` | The upgrade is refused 401. |
+| Bearer REST + WS | Token in the query string | `packages/api/test/security/bearer.test.ts` | `rejects a token in the query string (400), even with a valid bearer header` | A query-string token is 400 even beside a valid header. |
+| Bearer REST + WS | Idle limit on the socket | `packages/api/test/security/bearer.test.ts` | `a bearer socket closes 4001 when the session idles out` | The socket closes 4001 when the session idles out. |
+| Bearer REST + WS | Sign-out closes the socket | `packages/api/test/security/bearer.test.ts` | `sign-out with the bearer ends the session and closes its socket with 4001` | Sign-out closes the socket with 4001. |
+| Bearer REST + WS | Foreign Origin on the WS upgrade (D-M2P3-1) | `packages/api/test/security/bearer.test.ts` | `rejects a bearer carried with a foreign Origin (403)` | The upgrade is refused 403. |
+| Security test matrix for M2 routes (12.3 P3) | submitQuery, listQueries, getQuery, listAdminAudit, exportAdminAudit, getAdminQuery | `packages/api/test/security/route-matrix.test.ts` | `covers every openapi.json operation, each one in ROUTES` | Every openapi operation, including the six M2 operations named here, has a caller row, and `flags on: %s on every route` calls each one as every caller. |
+| Security test matrix for M2 routes (12.3 P3) | Another user's request on policy routes | `packages/api/test/security/route-matrix.test.ts` | `flags on: %s on every route` | Every signed-in caller gets 404 notFound on another user's request. |
+| A6 | Acknowledgment after commit | `packages/api/test/queries/submit.a6.test.ts` | `the 202 carries correlationId and acknowledgedAt, and acknowledgedAt is the acknowledged audit row's` | The 202 matches the `acknowledged` audit row (e2e half: `apps/web/e2e/a6-ack.spec.ts`). |
+| A6 | Audit failure fails closed | `packages/api/test/queries/submit.a6.test.ts` | `an audit stub that throws gives 500 and no 202: no correlationId, nothing committed (SEC-012)` | A failed audit write gives 500, no 202, nothing committed. |
+| A7 | STOLEN and WANTED critical | `packages/core/src/response/assess-result.a7.test.ts` | `a detail-only nested STOLEN still assesses critical, with a path-language path` | A STOLEN only in the detail still assesses critical (e2e half: `apps/web/e2e/a7-highlight.spec.ts`). |
+| A8 | Mapped summary with generic fallback | `packages/core/src/response/map-response.a8.test.ts` | `DL with no mapping yields the generic dump in payload order` | An unmapped source falls back to the generic dump (e2e half: `apps/web/e2e/a8-mapping.spec.ts`). |
+| A9 | Per-part and per-source audit fields | `packages/api/test/audit/query-audit.a9.test.ts` | `submitted, acknowledged, sourceDispatched and sourceResponded carry every field` | Every story field is on the stored rows; `every field survives GET /api/v1/admin/audit?correlationId=` reads them back. |
