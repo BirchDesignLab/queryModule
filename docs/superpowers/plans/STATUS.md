@@ -50,6 +50,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Windows 11 | Planning (`C:\git\queryModule-b2`, "M2 P2 planning") | M2 P2 plans | done (#705 merged; issues #709 to #735) | 10-18-26 |
 | Windows 11 | Planning (`C:\git\queryModule-b2`, "M2 P3 planning") | M2 P3 plans | done (#785 merged; issues #786 to #815) | 10-19-26 |
 | Windows 11 | Lane C (`C:\git\queryModule-a3`, "M2 P3 Lane C") | M2 P3 hardening | done after CW3 (CW1 #819 and CW2 #823 merged; CW3 #821 `db:reset` and ADR-0015 on `feat/m2-c-p3-wave-3`; [handoff](../../handoffs/10-20-26-m2-p3-lane-c.md)) | 10-20-26 |
+| Windows 11 | Lane C2 (`C:\git\queryModule-a3`, "M2 P3 Lane C2") | M2 P3 hardening | done after BW4 (Track B Task 9, #810, CFG-1 client half, on `feat/m2-b-p3-bw4`; [handoff](../../handoffs/10-20-26-m2-p3-lane-c2.md)) | 10-20-26 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.
 

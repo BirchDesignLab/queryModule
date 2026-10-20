@@ -23,9 +23,12 @@ export type LabelOverlay = Readonly<Record<string, Readonly<Record<string, strin
 
 /** Sections the builder never edits: they are server-only or derived (ADR-0011, ruling 09-29-26). */
 
-/** The editable draft document: the client view without its hash. */
-export function docFromClient(config: ClientSiteConfig): JsonObject {
-  const { configHash: _hash, ...rest } = config;
+/**
+ * The editable draft document: the client view without its hash, and without the published
+ * versionId when it is the GET /config answer (#46 CFG-1): neither is part of a site config.
+ */
+export function docFromClient(config: ClientSiteConfig & { versionId?: string }): JsonObject {
+  const { configHash: _hash, versionId: _version, ...rest } = config;
   return structuredClone(rest) as JsonObject;
 }
 

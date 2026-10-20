@@ -223,19 +223,25 @@ async function activateRow(
  * POST /admin/config/publish (ADR-0011 items 3 and 5): the shared draft, on the live base, fully
  * validated, activated through activate() with configPublished (BR-001; ADR-0011 item 7). The
  * note (D-M2P0-4), as PublishNoteSchema parsed it, is written in the same transaction; the
- * configPublished details never carry it (free text, spec 4.7).
+ * configPublished details never carry it (free text, spec 4.7). expect (#825 C-M1, config:import):
+ * the draft row the caller saved, its id and stored document; a draft replaced or saved in place
+ * since answers draftConflict, so another author's document is never published under this
+ * principal. From this read to the commit, activate() refuses a draft row that changed.
  */
 export async function publishDraft(
   d: AppDeps,
   principal: Principal,
   draftVersion: number,
   note?: string,
+  expect?: { id: string; document: string },
 ): Promise<PublishResult> {
   const siteId = siteIdOf(d);
   const live = await liveRow(d.db, siteId);
   const row = await versionRow(d.db, siteId, draftVersion);
   if (row?.status !== "draft" || row.rollbackOf !== null) return { ok: false, code: "notFound" };
   if (row.baseVersion !== live.version) return { ok: false, code: "draftConflict" };
+  if (expect && (row.id !== expect.id || row.document !== expect.document))
+    return { ok: false, code: "draftConflict" };
   const p = await prepare(d, principal, live, row.document, `store site ${siteId} draft`);
   if (!p.ok) return p.result;
   return activateRow(d, row, p.event(row), live, note);

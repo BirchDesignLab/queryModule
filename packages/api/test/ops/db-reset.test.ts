@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join, relative } from "node:path";
@@ -8,9 +8,14 @@ import { openDatabase } from "../../src/db/client";
 import { checkAuditTriggers } from "../../src/db/migrate";
 import { withTransaction } from "../../src/db/tx";
 import { type AppDeps, buildDeps } from "../../src/deps";
-import type { DeployEnv } from "../../src/env";
+import { type DeployEnv, DeployEnvError, readDeployEnv } from "../../src/env";
 import { AddDemoUsersPartialFailureError } from "../../src/ops/add-demo-users";
-import { type DbResetOptions, probeApp, runDbReset } from "../../src/ops/db-reset";
+import {
+  type DbResetOptions,
+  dbResetFailureLine,
+  probeApp,
+  runDbReset,
+} from "../../src/ops/db-reset";
 import { grantRole } from "../../src/ops/grant-role";
 import { derivePassword } from "../../src/seed/password";
 import { SeedPartialFailureError, seedUsers } from "../../src/seed/seed";
@@ -163,7 +168,7 @@ describe("#821 db:reset usage", () => {
   });
 });
 
-describe("#821 db:reset guards (ADR-0015)", () => {
+describe("#821 db:reset guards (ADR-0016)", () => {
   it("refuses with the env gate off, before opening the database", async () => {
     const s = await seededSite();
     const before = await s.snapshot();
@@ -330,6 +335,20 @@ describe("#821 db:reset guards (ADR-0015)", () => {
     expect(await s.snapshot()).toEqual(before);
   });
 
+  it("a rerun in the same second refuses rather than overwrite the earlier backup (#829, ruling 10-20-26)", async () => {
+    const s = await seededSite();
+    const stamp = new Date(s.clock.now()).toISOString().replace(/[-:]/g, "").replace(/\..*$/, "Z");
+    const earlier = join(s.backupRoot, `db-reset-${stamp}`);
+    mkdirSync(earlier);
+    writeFileSync(join(earlier, "manifest.json"), "{}");
+    const before = await s.snapshot();
+    const code = await runDbReset(["--confirm", "default"], await s.opts());
+    expect(code).toBe(1);
+    expect(s.err.join("")).toContain(`db-reset refused: the backup directory ${earlier} exists`);
+    expect(await s.snapshot()).toEqual(before);
+    expect(readFileSync(join(earlier, "manifest.json"), "utf8")).toBe("{}");
+  });
+
   it("a backup into the data dir fails and deletes nothing", async () => {
     const s = await seededSite();
     const before = await s.snapshot();
@@ -396,6 +415,65 @@ describe("#821 health probe", () => {
   });
   it("an answer means running", async () => {
     expect(await probeApp(await healthServer())).toBe("running");
+  });
+  // #829 note, ruling M2 Manager 10 10-20-26: the name is resolved first with its own budget.
+  // Observed on local Docker Desktop with compose (scripts/ops/probe-stopped-app-dns.sh, 10-20-26):
+  // `docker compose run --rm app` gets ENOTFOUND for a stopped or removed app service, after about
+  // 3,970 ms, never EAI_AGAIN; a running one resolves in under 10 ms. EAI_AGAIN is a temporary
+  // failure, so it refuses (fail closed).
+  const notFound = () =>
+    Object.assign(new Error("getaddrinfo ENOTFOUND app"), { code: "ENOTFOUND" });
+  const tryAgain = () =>
+    Object.assign(new Error("getaddrinfo EAI_AGAIN app"), { code: "EAI_AGAIN" });
+  it("a name that does not resolve means stopped, without an HTTP request", async () => {
+    const url = await healthServer();
+    const lookup = vi.fn(async () => {
+      throw notFound();
+    });
+    expect(await probeApp(url, 3000, { lookup })).toBe("stopped");
+    expect(lookup).toHaveBeenCalledWith("127.0.0.1");
+  });
+  it("a temporary DNS failure (EAI_AGAIN) is unknown (fail closed)", async () => {
+    const lookup = async () => {
+      throw tryAgain();
+    };
+    expect(await probeApp(await healthServer(), 3000, { lookup })).toBe("unknown");
+  });
+  it("a lookup that outlasts its budget is unknown", async () => {
+    const lookup = () => new Promise<never>(() => {});
+    expect(await probeApp(await healthServer(), 3000, { lookup, dnsTimeoutMs: 50 })).toBe(
+      "unknown",
+    );
+  });
+  it("a slow lookup does not use up the HTTP budget: a slow 'not found' is stopped, a slow answer running", async () => {
+    const url = await healthServer();
+    const slowNotFound = () =>
+      new Promise<never>((_, reject) => setTimeout(() => reject(notFound()), 300));
+    const slowFound = () =>
+      new Promise<{ address: string }>((resolve) =>
+        setTimeout(() => resolve({ address: "127.0.0.1" }), 300),
+      );
+    expect(await probeApp(url, 200, { lookup: slowNotFound })).toBe("stopped");
+    expect(await probeApp(url, 200, { lookup: slowFound })).toBe("running");
+  });
+  it("a slow lookup that finds the name, then a refused connection, is stopped", async () => {
+    const slowFound = () =>
+      new Promise<{ address: string }>((resolve) =>
+        setTimeout(() => resolve({ address: "127.0.0.1" }), 300),
+      );
+    const url = `http://127.0.0.1:${await refusedPort()}/api/v1/health`;
+    expect(await probeApp(url, 200, { lookup: slowFound })).toBe("stopped");
+  });
+  it("EAI_AGAIN on the HTTP request is unknown, not stopped", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(Object.assign(new TypeError("fetch failed"), { cause: tryAgain() }));
+    onTestFinished(() => fetchSpy.mockRestore());
+    expect(
+      await probeApp("http://app:3000/api/v1/health", 3000, {
+        lookup: async () => ({ address: "10.0.0.2" }),
+      }),
+    ).toBe("unknown");
   });
   it("any other failure is unknown (fail closed)", async () => {
     // a server that accepts and never answers: the probe times out
@@ -469,5 +547,27 @@ describe.skipIf(process.platform === "win32")("#821 db:reset full run", () => {
       expect(s.logLines.join("\n")).not.toContain(pw);
     }
     expect(stdout).toContain("added 0 missing demo accounts");
+  });
+});
+
+describe("db-reset wrapper failure line (#829 G-m2)", () => {
+  it("names the class and a driver code, never the message; a deploy env error keeps its fixed text", () => {
+    const busy = Object.assign(new Error("SQLITE_BUSY: locked ZZSECRET /data/querymodule.db"), {
+      name: "LibsqlError",
+      code: "SQLITE_BUSY",
+    });
+    expect(dbResetFailureLine(busy)).toBe("db-reset: LibsqlError SQLITE_BUSY\n");
+    expect(dbResetFailureLine(new TypeError("value ZZSECRET"))).toBe("db-reset: TypeError\n");
+    expect(dbResetFailureLine("ZZSECRET")).toBe("db-reset: unknown\n");
+    let envError: unknown;
+    try {
+      readDeployEnv({});
+    } catch (e) {
+      envError = e;
+    }
+    expect(envError).toBeInstanceOf(DeployEnvError);
+    expect(dbResetFailureLine(envError)).toBe(
+      "db-reset: DeployEnvError: PUBLIC_ORIGIN must be an origin like https://host\n",
+    );
   });
 });

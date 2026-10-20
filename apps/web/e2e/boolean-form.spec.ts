@@ -18,8 +18,10 @@ const liveJson = async <T>(route: Route): Promise<T> =>
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/v1/config", async (route) => {
     if (route.request().method() !== "GET") return route.fallback();
-    const live = await liveJson<{ configHash: string }>(route);
-    return route.fulfill({ json: toClientSiteConfig(fixture, live.configHash) });
+    const live = await liveJson<{ configHash: string; versionId: string }>(route);
+    return route.fulfill({
+      json: { ...toClientSiteConfig(fixture, live.configHash), versionId: live.versionId },
+    });
   });
   await page.route("**/api/v1/locales/en", async (route) => {
     const live = await liveJson<Record<string, string>>(route);

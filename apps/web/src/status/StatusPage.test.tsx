@@ -250,6 +250,23 @@ describe("the status page: Connection, Configuration, Session and App tiles", ()
     expect(announce).toHaveBeenLastCalledWith("Connected, configuration loaded");
   });
 
+  // #46 CFG-1: a label-only publish keeps configHash; the check replaces the cache the way the
+  // background refresh does, so the new versionId (and its labels) reaches the tab.
+  it("Check again: a new versionId with the same hash replaces the cached config", async () => {
+    const relabeled = { ...CLIENT_CONFIG, versionId: "01890a5d-ac96-7000-8000-000000000002" };
+    let served: typeof CLIENT_CONFIG = CLIENT_CONFIG;
+    server.use(http.get(`${API}/api/v1/config`, () => HttpResponse.json(served)));
+    const t = await openStatus(autoHeartbeatSocket());
+    await statusReady();
+    served = relabeled;
+    await t.user.click(tile("Connection").getByRole("button", { name: "Check again" }));
+    await waitFor(() =>
+      expect(t.services.queryClient.getQueryData(["config"])).toMatchObject({
+        versionId: relabeled.versionId,
+      }),
+    );
+  });
+
   it("Check again: while a check runs the button is aria-disabled, focus stays, and a second press starts nothing", async () => {
     const sockets: FakeSocket[] = [];
     const t = await openStatus(() => {

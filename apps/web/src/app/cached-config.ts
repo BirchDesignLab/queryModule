@@ -1,10 +1,10 @@
-import type { ClientSiteConfig } from "@querymodule/core/config";
+import type { ClientSiteConfigResponse } from "@querymodule/core/config";
 import { useCallback, useSyncExternalStore } from "react";
 import { useServices } from "./services-context.js";
 
 export interface CachedConfigState {
   /** The cached GET /api/v1/config (key ["config"]), or undefined before sign-in, a first load and after reset. */
-  config: ClientSiteConfig | undefined;
+  config: ClientSiteConfigResponse | undefined;
   /** The fetch failed and left no config to show: a page stops saying "Loading". */
   unavailable: boolean;
 }
@@ -21,7 +21,7 @@ export function useCachedConfigState(): CachedConfigState {
     [queryClient],
   );
   const config = useSyncExternalStore(subscribe, () =>
-    queryClient.getQueryData<ClientSiteConfig>(["config"]),
+    queryClient.getQueryData<ClientSiteConfigResponse>(["config"]),
   );
   const failed = useSyncExternalStore(
     subscribe,
@@ -31,6 +31,6 @@ export function useCachedConfigState(): CachedConfigState {
 }
 
 /** Just the config, for callers that do not care why it is missing. */
-export function useCachedConfig(): ClientSiteConfig | undefined {
+export function useCachedConfig(): ClientSiteConfigResponse | undefined {
   return useCachedConfigState().config;
 }
