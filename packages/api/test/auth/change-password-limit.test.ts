@@ -64,6 +64,15 @@ describe("change-password per-account limit (D-M2P3-3)", () => {
     expect((await change(one, NEW_PW, "another-new-password-7")).status).toBe(200);
   });
 
+  it("answers 200 when clearing the count fails after the change committed", async () => {
+    const { t, one, change } = await setup();
+    t.deps.limiter.reset = async () => {
+      throw new Error("limiter down");
+    };
+    expect((await change(one, PW)).status).toBe(200);
+    expect(await t.auditRows("passwordChanged")).toHaveLength(1);
+  });
+
   it("writes no audit row for a wrong guess or the block, and logs no password", async () => {
     const { t, one, change } = await setup();
     for (let i = 0; i < 6; i++) await change(one, WRONG);

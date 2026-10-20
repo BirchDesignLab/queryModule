@@ -316,7 +316,13 @@ async function changePassword(c: Context<AppEnv>, d: AppDeps): Promise<Response>
     });
     return apiError(c, "internal");
   }
-  await d.limiter.reset(limitKey);
+  // The change committed: a failure to clear the count must not turn it into an error answer.
+  await d.limiter.reset(limitKey).catch((e: unknown) =>
+    d.logger.warn("change-password limit not cleared", {
+      userId: p.userId,
+      errorName: e instanceof Error ? e.name : typeof e,
+    }),
+  );
   return c.json({ token: null }, 200);
 }
 

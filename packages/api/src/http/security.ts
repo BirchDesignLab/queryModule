@@ -65,7 +65,7 @@ export const requireRequestedWith = (): MiddlewareHandler<AppEnv> => async (c, n
 export const requireKnownOrigin =
   (
     allowed: readonly string[],
-    log: (fields: { requestId: string; class: string }) => void = () => {},
+    log: (fields: { requestId: string; class: string }) => void,
   ): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
     const origin = c.req.header("origin");

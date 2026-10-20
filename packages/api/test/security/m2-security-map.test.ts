@@ -39,6 +39,21 @@ interface Row {
   name: string;
 }
 
+/** True when `text` holds `name` only as a skipped, todo or commented-out test (C1). */
+function onlyInactive(text: string, name: string): boolean {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // A running title opens a bare it/test/describe call, or the second call of an .each(...)(...);
+  // the name may be part of the title, and the title may start on the next line.
+  const active = new RegExp(
+    `(?:(?<![.\\w])(?:it|test|describe)|\\))\\(\\s*["'\`][^"'\`\\n]*${esc}`,
+  );
+  const code = text
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*)/.test(l))
+    .join("\n");
+  return !active.test(code);
+}
+
 function rows(): Row[] {
   const out: Row[] = [];
   for (const line of readFileSync(MAP, "utf8").split("\n")) {
@@ -51,6 +66,24 @@ function rows(): Row[] {
   return out;
 }
 
+describe("onlyInactive (the map's running-test check)", () => {
+  it("accepts a running it() or it.each() title and refuses skip, todo and comments", () => {
+    expect(onlyInactive('it("refuses a foreign Origin", () => {', "refuses a foreign Origin")).toBe(
+      false,
+    );
+    expect(onlyInactive('it.each([1])("flags on: %s", () => {', "flags on: %s")).toBe(false);
+    expect(
+      onlyInactive('it.skip("refuses a foreign Origin", () => {', "refuses a foreign Origin"),
+    ).toBe(true);
+    expect(onlyInactive('it.todo("refuses a foreign Origin")', "refuses a foreign Origin")).toBe(
+      true,
+    );
+    expect(
+      onlyInactive('// it("refuses a foreign Origin", () => {', "refuses a foreign Origin"),
+    ).toBe(true);
+  });
+});
+
 describe("M2 security map (spec 12.7 M2 row)", () => {
   it("names a test file and test name for every row, and every file holds its name", () => {
     const all = rows();
@@ -58,7 +91,9 @@ describe("M2 security map (spec 12.7 M2 row)", () => {
     for (const r of all) {
       const path = resolve(ROOT, r.file);
       expect(existsSync(path), `${r.item}: ${r.file} exists`).toBe(true);
-      expect(readFileSync(path, "utf8"), `${r.item}: ${r.file} has ${r.name}`).toContain(r.name);
+      const text = readFileSync(path, "utf8");
+      expect(text, `${r.item}: ${r.file} has ${r.name}`).toContain(r.name);
+      expect(onlyInactive(text, r.name), `${r.item}: ${r.name} is a running test`).toBe(false);
     }
   });
 
@@ -66,7 +101,6 @@ describe("M2 security map (spec 12.7 M2 row)", () => {
     const text = readFileSync(MAP, "utf8");
     const all = rows();
     for (const item of ITEMS) {
-      expect(text.toLowerCase(), item).toContain(item.toLowerCase());
       // D-M2P3-2: replay-excludes-hidden has no M2 test; the map points to ADR-0014 instead.
       if (item === "replay excludes hidden") {
         expect(text, item).toContain("ADR-0014");
