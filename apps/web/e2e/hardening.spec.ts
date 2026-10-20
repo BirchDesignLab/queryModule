@@ -146,8 +146,11 @@ async function tabThroughNotObscured(page: Page): Promise<{ obscured: string[]; 
       const top = Math.max(box.top, 0);
       const right = Math.min(box.right, innerWidth);
       const bottom = Math.min(box.bottom, innerHeight);
+      // Tab scrolls the focused control into view; a control left outside the viewport means something
+      // scrolled the page after the focus did (#645), which is not the same as being under the bar.
+      const inView = right > left && bottom > top;
       let seen = 0;
-      if (right > left && bottom > top) {
+      if (inView) {
         for (const [fx, fy] of [
           [0.5, 0.5],
           [0.15, 0.15],
@@ -163,13 +166,15 @@ async function tabThroughNotObscured(page: Page): Promise<{ obscured: string[]; 
       const cover = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
       return {
         name: `${el.tagName.toLowerCase()}#${el.id} box ${Math.round(box.top)}..${Math.round(box.bottom)} of ${innerHeight}`,
+        inView,
         seen,
         cover: cover === null ? "" : `${cover.tagName.toLowerCase()}.${String(cover.className)}`,
       };
     });
     if (state === null) break;
     stops++;
-    if (state.seen === 0) obscured.push(`${state.name} under ${state.cover}`);
+    if (!state.inView) obscured.push(`${state.name} outside the viewport after Tab`);
+    else if (state.seen === 0) obscured.push(`${state.name} under ${state.cover}`);
   }
   return { obscured, stops };
 }
