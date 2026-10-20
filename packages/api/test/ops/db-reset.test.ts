@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join, relative } from "node:path";
@@ -333,6 +333,20 @@ describe("#821 db:reset guards (ADR-0015)", () => {
     expect(code).toBe(1);
     expect(s.err.join("")).toContain("database is busy");
     expect(await s.snapshot()).toEqual(before);
+  });
+
+  it("a rerun in the same second refuses rather than overwrite the earlier backup (#829, ruling 10-20-26)", async () => {
+    const s = await seededSite();
+    const stamp = new Date(s.clock.now()).toISOString().replace(/[-:]/g, "").replace(/\..*$/, "Z");
+    const earlier = join(s.backupRoot, `db-reset-${stamp}`);
+    mkdirSync(earlier);
+    writeFileSync(join(earlier, "manifest.json"), "{}");
+    const before = await s.snapshot();
+    const code = await runDbReset(["--confirm", "default"], await s.opts());
+    expect(code).toBe(1);
+    expect(s.err.join("")).toContain(`db-reset refused: the backup directory ${earlier} exists`);
+    expect(await s.snapshot()).toEqual(before);
+    expect(readFileSync(join(earlier, "manifest.json"), "utf8")).toBe("{}");
   });
 
   it("a backup into the data dir fails and deletes nothing", async () => {

@@ -188,6 +188,9 @@ export async function runDbReset(argv: readonly string[], o: DbResetOptions): Pr
     }
     const stamp = new Date(o.clock.now()).toISOString().replace(/[-:]/g, "").replace(/\..*$/, "Z");
     const dir = join(o.backupRoot, `db-reset-${stamp}`);
+    // a rerun within the same second never writes over the earlier backup (#829, ruling 10-20-26)
+    if (existsSync(dir))
+      throw new Refused(`the backup directory ${dir} exists; wait a second and run it again`);
     let m: Awaited<ReturnType<typeof takeBackup>>;
     try {
       m = await takeBackup(old.db, o.env.dbFile, dir, o.clock);
