@@ -89,6 +89,43 @@ describe("NFR-004 Server-Timing on the 202 (spec 11, #719)", () => {
     expect(replay.headers.get("server-timing")).toBe('ack;dur=0.0;desc="receipt to commit"');
   });
 
+  it("puts the header on the loser's 202 of an idempotency race (#771 C-C-m1)", async () => {
+    const { t, mono, post } = await setup();
+    // Both requests pass the limiter before either reads for a replay, so both miss it and race
+    // into T1; the loser hits the idempotency guard and replays the winner's stored body.
+    const hit = t.deps.limiter.hit.bind(t.deps.limiter);
+    let arrived = 0;
+    let open: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      open = r;
+    });
+    t.deps.limiter.hit = async (...args) => {
+      const r = await hit(...args);
+      arrived += 1;
+      if (arrived === 2) open();
+      await gate;
+      return r;
+    };
+    // The loser's failed T1 takes 7 ms, so its span runs past the failure to the stored-body read.
+    let failures = 0;
+    const transaction = t.deps.db.transaction.bind(t.deps.db);
+    vi.spyOn(t.deps.db, "transaction").mockImplementation((fn, config) =>
+      transaction(fn, config).catch((e: unknown) => {
+        failures += 1;
+        mono.advance(7);
+        throw e;
+      }),
+    );
+    vi.spyOn(t.deps.dispatcher, "enqueue").mockImplementation(() => true);
+    const key = crypto.randomUUID();
+    const [a, b] = await Promise.all([post(key), post(key)]);
+    expect([a.status, b.status]).toEqual([202, 202]);
+    expect(failures).toBe(1);
+    const timings = [a, b].map((r) => r.headers.get("server-timing"));
+    for (const h of timings) expect(h).toMatch(/^ack;dur=\d+\.\d;desc="receipt to commit"$/);
+    expect(timings).toContain('ack;dur=7.0;desc="receipt to commit"');
+  });
+
   it("puts no Server-Timing on an error response", async () => {
     const { post } = await setup();
     const r = await post(crypto.randomUUID(), "{not json");
