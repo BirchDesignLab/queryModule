@@ -1,3 +1,4 @@
+import { ClientSiteConfigSchema } from "@querymodule/core/config";
 import {
   AdminConfigResponseSchema,
   ConfigVersionListSchema,
@@ -88,6 +89,37 @@ describe("BR-001 ADR-0011 items 3 and 5 publish", () => {
     const body = AdminConfigResponseSchema.parse(await (await a.call("admin", "GET", API)).json());
     expect(body.live.version).toBe(2);
     expect(body.draft).toBeNull();
+  });
+
+  // #46 CFG-1 and CFG-3, D-M2P3-5: a label-only publish keeps configHash (siteConfig only, so no
+  // 409 is ever raised) and changes versionId, which GET config carries so open clients see it.
+  it("a label-only publish keeps configHash and GET config answers the new versionId", async () => {
+    const a = await adminConfigApp();
+    const read = async () =>
+      ClientSiteConfigSchema.parse(await (await a.call("user", "GET", "/api/v1/config")).json());
+    const before = await read();
+    const live = a.t.deps.config.current();
+    expect(before.versionId).toBe(live.versionId);
+    expect(before.configHash).toBe(live.configHash);
+
+    const v1 = await a.exportVersion(1);
+    const [key] = Object.keys(live.locales.en ?? {});
+    const labels = { ...v1, locales: { en: { [String(key)]: "Overlay text" } } };
+    const put = await a.call("implementer", "PUT", `${API}/draft`, {
+      baseVersion: 1,
+      document: labels,
+    });
+    expect(put.status).toBe(200);
+    const r = await a.call("implementer", "POST", `${API}/publish`, { draftVersion: 2 });
+    expect(r.status).toBe(200);
+    const published = ConfigVersionSchema.parse(await r.json());
+    expect(a.t.deps.config.current().locales.en?.[String(key)]).toBe("Overlay text");
+
+    const after = await read();
+    expect(after.versionId).toBe(published.id);
+    expect(after.versionId).not.toBe(before.versionId);
+    expect(after.configHash).toBe(before.configHash);
+    expect(published.configHash).toBe(before.configHash);
   });
 
   it("a published or missing draft version is 404 notFound", async () => {

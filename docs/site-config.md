@@ -18,6 +18,12 @@ One site config document describes one site. It reaches the server in two steps 
    compared and ignored: edit it and nothing changes. A site is changed by publishing a new
    version from the admin builder, or by publishing an exported document (see "The admin builder
    and the config store").
+3. **A new image's file reaches a seeded store only through `config:import`.** The ops command
+   validates the image's site file as boot does, keeps the published label overlay, and publishes
+   it as the next version through the builder's publish path (`configPublished` by a named admin,
+   note "Imported from the image"); `--dry-run` prints the changes first. It never runs at boot.
+   The running app serves the new version after a restart. Steps: [deploy.md](deploy.md), "Apply
+   the image's site config to a seeded deploy".
 
 Next to the site file:
 

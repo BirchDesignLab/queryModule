@@ -333,6 +333,27 @@ describe("FR-064, SEC-014 submit controller (spec 6.7)", () => {
     expect(controller.getState().status).toBe("noConnection");
   });
 
+  it("back online probes health at once instead of waiting out the poll backoff (spec 10.4)", async () => {
+    const platform = createFakePlatform();
+    let up = false;
+    server.use(
+      http.get(`${BASE}/api/v1/health`, () =>
+        up ? HttpResponse.json({ status: "ok" }) : HttpResponse.error(),
+      ),
+    );
+    const { controller } = setup({ platform });
+    platform.setOnline(false);
+    // A long outage: the poll's ceiling has grown to 30 s.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(controller.getState().status).toBe("noConnection");
+    up = true;
+    platform.setOnline(true);
+    await vi.advanceTimersByTimeAsync(0);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.getState().status).toBe("idle");
+  });
+
   it("ignores a second submit while submitting and returns the same promise", async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => {

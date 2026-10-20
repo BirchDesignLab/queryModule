@@ -97,6 +97,23 @@ describe("phaseBodyUpdate: keep text added below a phase parent's generated body
     expect(phaseBodyUpdate(gen + quoting, next)).toBe(next + quoting);
   });
 
+  it("never cuts at a quoted trailer phrase when the body has the head but no generated trailer line (G-m-1)", () => {
+    const old =
+      "Phase parent for X.\n\n**Gate:** g.\n\nmy notes\nSee Grid and handoffs: elsewhere.\n- [ ] one";
+    // No generated trailer line means no known cut: replaced whole, not cut mid-text.
+    expect(phaseBodyUpdate(old, gen)).toBe(gen);
+  });
+
+  it("keeps text typed on the trailer line after the generated trailer (G-m-2)", () => {
+    const typed = " Also see the wiki.";
+    expect(phaseBodyUpdate(gen + typed + added, gen)).toBeNull();
+    const next = gen.replace("**Gate:** g.", "**Gate:** h.");
+    expect(phaseBodyUpdate(gen + typed + added, next)).toBe(next + typed + added);
+    expect(phaseBodyUpdate(gen + typed, next)).toBe(next + typed);
+    const crlf = (gen + typed + added).replaceAll("\n", "\r\n");
+    expect(phaseBodyUpdate(crlf, next)).toBe(next + typed + added.replaceAll("\n", "\r\n"));
+  });
+
   it("replaces whole a body that does not start with the generated head, even if it quotes the phrase", () => {
     const hand = "My notes\nGrid and handoffs: see docs.\n- [ ] item";
     expect(phaseBodyUpdate(hand, gen)).toBe(gen);

@@ -40,18 +40,6 @@ export function closedStatus(issue) {
 }
 
 /**
- * Whether an issue the setup script owns (a phase parent, wave parent or
- * follow-up in its data) needs its body rewritten to match the desired text.
- *
- * Comparison normalises CRLF to LF and strips trailing whitespace per line, so
- * a rerun against unchanged data plans zero body writes regardless of how
- * GitHub or a local edit happened to save line endings.
- *
- * @param {string} existing
- * @param {string} desired
- * @returns {string|null} the desired body to write, or null when no write is needed
- */
-/**
  * Whether a parent or follow-up issue the setup script owns needs its title
  * rewritten to the desired human-readable title (developer decision, #80:
  * codes live in fields, not titles). A stale live title is a planned rename,
@@ -198,6 +186,18 @@ function normaliseBody(s) {
     .join("\n");
 }
 
+/**
+ * Whether an issue the setup script owns (a phase parent, wave parent or
+ * follow-up in its data) needs its body rewritten to match the desired text.
+ *
+ * Comparison normalises CRLF to LF and strips trailing whitespace per line, so
+ * a rerun against unchanged data plans zero body writes regardless of how
+ * GitHub or a local edit happened to save line endings.
+ *
+ * @param {string} existing
+ * @param {string} desired
+ * @returns {string|null} the desired body to write, or null when no write is needed
+ */
 export function bodyUpdate(existing, desired) {
   return normaliseBody(existing) === normaliseBody(desired) ? null : desired;
 }
@@ -208,13 +208,17 @@ const PHASE_BODY_HEAD = "Phase parent for ";
 const PHASE_BODY_TRAILER = "Grid and handoffs:";
 
 /**
- * #743, #758: like bodyUpdate, but for a phase parent that carries hand-added text (checklists)
+ * #743, #758, #770: like bodyUpdate, but for a phase parent that carries hand-added text (checklists)
  * below its generated body. Returns null when the existing body is the generated text, with or
- * without added text after it. When the generated part changed, returns the new generated body
- * followed by the old added text byte for byte (its own line endings and trailing spaces), cut at
- * the end of the first trailer line of a body that starts with the generated head. A body that
- * does not start with the head, or has no trailer line, has no known cut and is replaced whole,
- * so a trailer phrase quoted in added text is never a cut.
+ * without added text after it (on later lines, or typed on the trailer line after the generated
+ * trailer). When the generated part changed, returns the new generated body followed by the old
+ * added text byte for byte (its own line endings and trailing spaces), cut at the end of the first
+ * trailer line of a body that starts with the generated head. The trailer line is a line that starts
+ * with a plan label ("Plan: " or "Plans: ") and carries the trailer phrase, so a phrase quoted in
+ * added text is never a cut. A body that does not start with the head, or has no trailer line, has
+ * no known cut and is replaced whole. Text typed on the trailer line after the generated trailer is
+ * kept when the line still begins with the new generated trailer tail; if the generated tail itself
+ * changed, the old line is replaced whole, typed text included.
  * @param {string} existing
  * @param {string} desired
  * @returns {string | null}
@@ -222,16 +226,24 @@ const PHASE_BODY_TRAILER = "Grid and handoffs:";
 export function phaseBodyUpdate(existing, desired) {
   const have = normaliseBody(existing);
   const want = normaliseBody(desired);
-  if (have === want || have.startsWith(`${want}\n`)) return null;
+  if (have === want || have.startsWith(want)) return null;
   if (!have.startsWith(PHASE_BODY_HEAD)) return desired;
+  // What the generated trailer line ends with, after the phrase.
+  const wantLast = want.slice(want.lastIndexOf("\n") + 1);
+  const wantTail = wantLast.includes(PHASE_BODY_TRAILER)
+    ? wantLast.slice(wantLast.indexOf(PHASE_BODY_TRAILER) + PHASE_BODY_TRAILER.length)
+    : "";
   // Walk the original text one line at a time (each keeps its own terminator) to the first
   // trailer line; everything after that line is the added text.
   let offset = 0;
   for (const line of existing.split(/(?<=\n)/)) {
     offset += line.length;
-    if (line.includes(PHASE_BODY_TRAILER)) {
+    if (/^Plans?: /.test(line) && line.includes(PHASE_BODY_TRAILER)) {
       const terminator = /\r?\n$/.exec(line)?.[0] ?? "";
-      return `${desired}${terminator}${existing.slice(offset)}`;
+      const body = line.slice(0, line.length - terminator.length);
+      const tail = body.slice(body.indexOf(PHASE_BODY_TRAILER) + PHASE_BODY_TRAILER.length);
+      const typed = tail.startsWith(wantTail) ? tail.slice(wantTail.length) : "";
+      return `${desired}${typed}${terminator}${existing.slice(offset)}`;
     }
   }
   return desired;

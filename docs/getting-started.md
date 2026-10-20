@@ -60,6 +60,7 @@ accounts and the demo stories are in the [demo guide](demo.md).
 | `gen:check` | Runs the generators, then fails if any generated file differs from the committed copy |
 | `config:validate` | Validates the site config files (see [site configuration](site-config.md)) |
 | `config:migrate` | Migrates a site config file to the current schema version |
+| `config:import` | Publishes the image's site config on a seeded store as a named admin; `--dry-run` writes nothing (see [deploy](deploy.md)) |
 | `sdd:harness` | Tests the saved workflow scripts in `.claude/workflows` against mocked agents |
 | `dev` | API and web dev servers together, with a first-run seed |
 | `dev:api` | API dev server only |

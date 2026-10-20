@@ -124,11 +124,13 @@ export async function buildDeps(o: {
     });
     const site = config.siteConfig.site.id;
     if (config.seeded) logger.info("config store seeded", { site, version: config.version });
+    // #792 CFG-4: the store stays the live source; config:import publishes the file on purpose.
     if (config.fileIgnored)
       logger.warn("site config file ignored", {
         file: o.env.siteConfigFile,
         site,
         version: config.version,
+        fix: "config:import (docs/deploy.md)",
       });
     for (const w of config.warnings) logger.warn("config warning", { key: w.key, path: w.path });
     const holder = createConfigHolder(config);

@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, expectNoSeriousAxeViolations, test } from "./fixtures.js";
-import { signIn } from "./helpers.js";
+import { politeMutations, recordPolite, signIn } from "./helpers.js";
 
 // Live per-source status (FR-043, FR-044, FR-065; spec 6.2, 6.6, 5.4). The local build serves mock
 // sources (ALLOW_MOCK_SOURCES) and the real dispatcher, so each plate below is a canned scenario:
@@ -98,24 +98,40 @@ test("TIMEOUT: the national source times out within its limit plus two seconds",
   await expectNoSeriousAxeViolations(page);
 });
 
-test("typing into Plate while statuses arrive keeps focus and value (spec 6.6)", async ({
+test("typing into Plate while statuses arrive keeps focus, value and the live region (spec 6.6, 10.6)", async ({
   page,
 }) => {
   const list = await openList(page);
+  const said = await recordPolite(page);
   await runPlate(page, "ZZ-0001");
   const row = list.getByRole("listitem").first();
   const field = page.getByLabel("Plate", { exact: true });
+  const polite = page.getByTestId("announcer-polite");
+  const summary = "Vehicle ZZ-0001: 2 of 2 sources done. 2 returned, critical: STOLEN.";
   // The form keeps its value after a submit; replace it, slowly, while the sources answer.
   await field.press("Control+A");
   await field.pressSequentially("ABC", { delay: 200 });
   await expect(statusLine(row, STATE, "returned")).toBeVisible({ timeout: 5000 });
   await expect(statusLine(row, NATIONAL, "returned")).toBeVisible({ timeout: 5000 });
+  await expect(polite).toContainText(summary, { timeout: 5000 });
+  // D-M2P3-B7: keystrokes never change the region. A burst typed after the arrival leaves the
+  // recording exactly as it was.
+  const before = await said();
+  const changes = await politeMutations(page);
   await field.pressSequentially("123", { delay: 100 });
   await expect(field).toBeFocused();
   await expect(field).toHaveValue("ABC123");
+  await expect(polite).toContainText(summary);
+  expect(await said()).toEqual(before);
+  expect(await politeMutations(page)).toBe(changes);
+  // The arrival is announced once, coalesced: no text is said twice, the summary included, and
+  // nothing typed is ever said.
+  const spoken = (await said()).filter((text) => text !== "");
+  expect(spoken).toHaveLength(new Set(spoken).size);
+  expect(spoken.filter((text) => text.includes(summary))).toHaveLength(1);
+  for (const text of spoken) expect(text).not.toMatch(/ABC|123/);
   // The status block is not a live region: only the shared announcer speaks.
   expect(await list.locator("[aria-live], [role=status], [role=alert]").count()).toBe(0);
-  await expect(page.getByTestId("announcer-polite")).toContainText("sources done");
   await expectNoSeriousAxeViolations(page);
 });
 

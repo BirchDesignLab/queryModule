@@ -76,6 +76,32 @@ describe("readDeployEnv", () => {
     expect(e.corsOrigins).toEqual(["https://a.example.test", "https://b.example.test"]);
     expect(e.port).toBe(8080);
   });
+  it("fails closed on a CORS_ORIGINS entry that is not an origin, naming the key, never the value", () => {
+    for (const bad of [
+      "https://a.example.test/",
+      "https://a.example.test/app",
+      "a.example.test",
+      "ftp://a.example.test",
+      "https://ok.example.test, null",
+    ]) {
+      let msg = "";
+      try {
+        readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, CORS_ORIGINS: bad }, defaults);
+      } catch (e) {
+        msg = e instanceof Error ? e.message : String(e);
+      }
+      expect(msg, bad).toMatch(/CORS_ORIGINS/);
+      for (const part of bad.split(",")) expect(msg, bad).not.toContain(part.trim());
+    }
+    // Empty keeps the public origin; http and a port are origins.
+    expect(
+      readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, CORS_ORIGINS: "" }, defaults).corsOrigins,
+    ).toEqual([ORIGIN]);
+    expect(
+      readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, CORS_ORIGINS: "http://localhost:5173" }, defaults)
+        .corsOrigins,
+    ).toEqual(["http://localhost:5173"]);
+  });
   it("fails closed on a PORT that is not an integer from 1 to 65535 (spec 8.1)", () => {
     for (const PORT of ["abc", "0", "65536", "80.5", "3000abc", ""]) {
       expect(() => readDeployEnv({ PUBLIC_ORIGIN: ORIGIN, PORT }, defaults)).toThrow(/PORT/);

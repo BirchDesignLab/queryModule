@@ -747,6 +747,26 @@ describe("FR-065 refetch after a reconnect (spec 6.8)", () => {
     expect(calls).toHaveLength(2);
   });
 
+  it("with now, an entry waiting to retry is fetched at once and the old retry is dropped (spec 10.4)", async () => {
+    let fail = true;
+    const calls = serve(() =>
+      fail
+        ? HttpResponse.error()
+        : HttpResponse.json(detailOf([source("state", "pending"), source("national", "pending")])),
+    );
+    const { fetcher, apply } = setup();
+    apply(event(1, "state", "returned"));
+    await pass(500);
+    expect(calls).toHaveLength(1);
+    // Back online: the retry is still about 600 ms away; the fetch goes now instead.
+    fail = false;
+    fetcher.refetchPending({ now: true });
+    await pass(300);
+    expect(calls).toHaveLength(2);
+    await pass(5000);
+    expect(calls).toHaveLength(2);
+  });
+
   it("reset after a refetch was scheduled cancels it", async () => {
     const calls = serve(() =>
       HttpResponse.json(detailOf([source("state", "pending"), source("national", "pending")])),

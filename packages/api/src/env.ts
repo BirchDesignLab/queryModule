@@ -42,6 +42,9 @@ const list = (v: string | undefined): string[] =>
     .map((s) => s.trim())
     .filter(Boolean);
 
+/** An origin: scheme and host (with an optional port), no path and no trailing slash. */
+const ORIGIN_RE = /^https?:\/\/[^/]+$/;
+
 /** Fail closed (spec 8.1): a malformed PORT is a startup error, never NaN. */
 function readPort(v: string | undefined): number {
   const raw = v ?? "3000";
@@ -70,7 +73,7 @@ export function readDeployEnv(env: NodeJS.ProcessEnv, defaults?: BundledPaths): 
   const nodeEnv =
     env.NODE_ENV === "development" || env.NODE_ENV === "test" ? env.NODE_ENV : "production";
   const publicOrigin = env.PUBLIC_ORIGIN?.trim();
-  if (!publicOrigin || !/^https?:\/\/[^/]+$/.test(publicOrigin)) {
+  if (!publicOrigin || !ORIGIN_RE.test(publicOrigin)) {
     throw new DeployEnvError("PUBLIC_ORIGIN must be an origin like https://host");
   }
   const modes = list(env.IDENTITY_MODES ?? "standalone");
@@ -81,6 +84,11 @@ export function readDeployEnv(env: NodeJS.ProcessEnv, defaults?: BundledPaths): 
   }
   const dataDir = env.DATA_DIR ?? "/data";
   const base = list(env.CORS_ORIGINS);
+  // The foreign-Origin 403 (D-M2P3-1) matches entries exactly, so a path or a trailing slash would
+  // refuse every browser request: fail at boot instead, naming the key, never the value.
+  if (base.some((o) => !ORIGIN_RE.test(o))) {
+    throw new DeployEnvError("CORS_ORIGINS entries must be origins like https://host");
+  }
   const corsOrigins = [
     ...new Set([
       ...(base.length ? base : [publicOrigin]),

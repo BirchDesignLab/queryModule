@@ -1,4 +1,5 @@
 import { type QueryListEntry, type SocketLike, savePreferences } from "@querymodule/client";
+import { createFakePlatform } from "@querymodule/client/testing";
 import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { heartbeatUrl } from "../status/use-status-checks.js";
@@ -378,6 +379,41 @@ describe("FR-065 replay cursor, resync and the list load in the composition root
     await pass(1000);
     expect(new Set(fetched)).toEqual(new Set([idOf(2)]));
     t.services.reset.resetAll();
+  });
+
+  it("coming back online refetches the entries with a pending source (spec 10.4)", async () => {
+    const platform = createFakePlatform();
+    const sockets: FakeSocket[] = [];
+    const services = testServices({
+      platform,
+      createSocket: (): SocketLike => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    await services.session.signIn(TEST_USER.email, TEST_PASSWORD);
+    await pass(50);
+    services.requests
+      .getState()
+      .applyList([request(2, ["pending", "returned"]), request(1, ["failed", "failed"])]);
+    services.feed.open();
+    const socket = sockets[0] as FakeSocket;
+    socket.onopen?.();
+    socket.onmessage?.({ data: JSON.stringify({ v: 1, type: "welcome", latestSeq: 0 }) });
+    await pass(1000);
+    const fetched = recordDetails();
+    platform.setOnline(false);
+    await pass(1000);
+    expect(fetched).toEqual([]);
+    platform.setOnline(true);
+    await pass(1000);
+    // Every entry with a pending source (the sign-in list adds one of its own), once each; never
+    // the settled one.
+    expect(fetched).toContain(idOf(2));
+    expect(fetched).not.toContain(idOf(1));
+    expect(fetched).toHaveLength(new Set(fetched).size);
+    services.reset.resetAll();
   });
 
   it("while the socket is down a pending entry is refetched at each backoff step", async () => {

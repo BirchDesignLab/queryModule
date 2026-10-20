@@ -22,7 +22,7 @@ vi.mock("../../src/ops/grant-role", async (importOriginal) => {
     ...actual,
     grantRole: async (...args: Parameters<typeof actual.grantRole>) => {
       if (args[1].email === grantRoleFailure.failEmail)
-        throw new Error("injected grantRole failure");
+        throw Object.assign(new Error("injected grantRole failure"), { code: "E_INJECTED" });
       return actual.grantRole(...args);
     },
   };
@@ -103,6 +103,19 @@ describe("#781 add-demo-users", () => {
     ).toBe(n);
   });
 
+  it("hashes a password only for an account it creates (#782 G-M3)", async () => {
+    const t = await createTestApp();
+    await addMissingDemoUsers(t.deps, SECRET);
+    const ctx = await t.deps.auth.$context;
+    const hash = vi.spyOn(ctx.password, "hash");
+    try {
+      await addMissingDemoUsers(t.deps, SECRET);
+      expect(hash).not.toHaveBeenCalled();
+    } finally {
+      hash.mockRestore();
+    }
+  });
+
   it("refuses any account outside @example.test before writing anything", async () => {
     const t = await createTestApp();
     const users = [
@@ -133,6 +146,13 @@ describe("#781 add-demo-users", () => {
         "officer@example.test",
       ]);
       expect(err.message).toContain("officer@example.test");
+      // #782 G-M1: the cause is kept, and the message names its class and code only.
+      expect((err.cause as Error).message).toBe("injected grantRole failure");
+      expect(err.message).toContain("cause: Error E_INJECTED");
+      expect(err.message).not.toContain("injected grantRole failure");
+      // #782 G-M2: the recovery pointer names the container script and the right anchor.
+      expect(err.message).toContain("node scripts/ops/grant-role.js");
+      expect(err.message).toContain("docs/demo.md#add-missing-demo-accounts");
       for (const u of err.created) expect(err.message).not.toContain(u.password);
     } finally {
       grantRoleFailure.failEmail = null;
