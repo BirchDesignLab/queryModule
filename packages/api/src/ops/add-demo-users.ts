@@ -37,14 +37,26 @@ export class AddDemoUsersDomainError extends Error {
  */
 export class AddDemoUsersPartialFailureError extends Error {
   readonly created: { email: string; role: Role; password: string }[];
-  constructor(created: { email: string; role: Role; password: string }[], email: string) {
+  constructor(
+    created: { email: string; role: Role; password: string }[],
+    email: string,
+    cause: unknown,
+  ) {
     super(
-      `role grant failed for ${email} after its account was created; ` +
-        "finish it with scripts/ops/grant-role.ts (see docs/demo.md#recovery)",
+      `role grant failed for ${email} after its account was created (cause: ${causeClass(cause)}); ` +
+        "finish it with node scripts/ops/grant-role.js (see docs/demo.md#add-missing-demo-accounts)",
+      { cause },
     );
     this.name = "AddDemoUsersPartialFailureError";
     this.created = created;
   }
+}
+
+/** The error's class and, when it has one, its code; never its message (it may carry values). */
+function causeClass(e: unknown): string {
+  if (!(e instanceof Error)) return typeof e;
+  const code = (e as { code?: unknown }).code;
+  return typeof code === "string" ? `${e.name} ${code}` : e.name;
 }
 
 /**
@@ -67,6 +79,13 @@ export async function addMissingDemoUsers(
   const existing: string[] = [];
   for (const u of users) {
     const email = u.email.trim().toLowerCase();
+    // #782 G-M3: the scrypt hash runs only for an account that does not exist yet; the
+    // transaction below checks again, so a race still skips rather than duplicates.
+    const known = await d.db.select({ id: user.id }).from(user).where(eq(user.email, email));
+    if (known.length > 0) {
+      existing.push(email);
+      continue;
+    }
     const password = derivePassword(secret, email);
     const hash = await ctx.password.hash(password);
     const now = new Date(d.clock.now());
@@ -113,8 +132,8 @@ export async function addMissingDemoUsers(
     if (u.role !== "user") {
       try {
         await grantRole(d, { email, role: u.role, change: "granted" });
-      } catch {
-        throw new AddDemoUsersPartialFailureError(created, email);
+      } catch (e) {
+        throw new AddDemoUsersPartialFailureError(created, email, e);
       }
     }
   }
