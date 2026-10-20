@@ -42,11 +42,11 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A") | M2 P2 audit | done (AW1 #744, AW2 #756, AW3 #761 merged; [handoff](../../handoffs/10-18-26-m2-p2-lane-a.md)) | 10-18-26 |
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A2") | M2 P2 audit | done (AW4 #772, AW5 #778 merged; [handoff](../../handoffs/10-19-26-lane-a2.md)) | 10-19-26 |
 | Windows 11 | B (`C:\git\queryModule`, "M2 P2 Lane B4") | M2 P2 audit | done (BW4 #768, BW5 #775 merged; [handoff](../../handoffs/10-18-26-m2-p2-lane-b4.md)) | 10-18-26 |
-| Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 9") | 10-19-26 |
+| Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 10"; [Manager 9 handoff](../../handoffs/10-19-26-m2-manager-9.md)) | 10-19-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
 | Windows 11 | Planning (`C:\git\queryModule-plan`, "M2 P1 planning") | M2 P1 plans | done (#588 merged; issues #589 to #606) | 10-13-26 |
 | Windows 11 | Planning (`C:\git\queryModule-b2`, "M2 P2 planning") | M2 P2 plans | done (#705 merged; issues #709 to #735) | 10-18-26 |
-| Windows 11 | Planning (`C:\git\queryModule-b2`, "M2 P3 planning") | M2 P3 plans | active (`docs/m2-p3-plans`; issues by `scripts/pm/gh-create-m2-p3-issues.mjs` after merge) | 10-19-26 |
+| Windows 11 | Planning (`C:\git\queryModule-b2`, "M2 P3 planning") | M2 P3 plans | done (#785 merged; issues #786 to #815) | 10-19-26 |
 | Windows 11 | Core lane C (`C:\git\queryModule-a3`, "M2 P2 Lane C") | M2 P2 audit | done (CW1 #751 merged; CW2 pushed; [handoff](../../handoffs/10-18-26-m2-p2-lane-c.md)) | 10-18-26 |
 
 From M4 add a row: Windows 11, D. State is `running`, `paused` or `idle`; time as `MM-DD-YY HH:mm`.

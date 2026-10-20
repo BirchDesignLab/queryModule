@@ -10,7 +10,8 @@
 //   --move 754,755          set parent and phase from --parent and --phase
 //   --add 767:S:Medium,...  append a follow-up from GitHub: title, body,
 //                           milestone and labels from the issue, track from its
-//                           web/platform/core label, reqIds "none"
+//                           web/platform/core label, reqIds from FR-/UX-/SEC-/NFR-/BR- IDs
+//                           in the title and body ("none" when there are none)
 //   --parent 46 --phase P3  target for --move and --add
 //
 // Reads GitHub with the active gh account; writes only the local file.
@@ -25,6 +26,8 @@ const argv = process.argv.slice(2);
 const args = Object.fromEntries(
   argv.flatMap((a, i) => (a.startsWith("--") ? [[a.slice(2), argv[i + 1]]] : [])),
 );
+const reqIdsOf = (text) =>
+  [...new Set(text.match(/\b(?:FR|UX|SEC|NFR|BR)-\d{3}\b/g) ?? [])].join(", ") || "none";
 const list = (v) => (v ? v.split(",").filter(Boolean) : []);
 const parent = args.parent ? Number(args.parent) : undefined;
 const phase = args.phase;
@@ -94,7 +97,7 @@ for (const spec of list(args.add)) {
     phase,
     size,
     priority,
-    reqIds: "none",
+    reqIds: reqIdsOf(`${gh.title}\n${gh.body}`),
     title: gh.title,
     body: gh.body.endsWith("\n") ? gh.body : `${gh.body}\n`,
     labels,
