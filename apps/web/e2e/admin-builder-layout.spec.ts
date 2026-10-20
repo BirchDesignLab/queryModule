@@ -160,23 +160,18 @@ for (const size of SIZES) {
       expect(await lines(source.locator(".qm-tree__label")), "mock source label lines").toBe(1);
     });
 
-    test("[G18] the review dialog's section heading is smaller than its title", async ({
+    test("[G18] the review dialog's What changes caption is smaller than its title (#835)", async ({
       page,
     }) => {
       await page.getByRole("button", { name: "Review and publish" }).click();
       const dialog = page.getByRole("dialog", { name: /^Publish version \d+$/ });
       await expect(dialog).toBeVisible();
-      const size = (name: string, level: number) =>
-        dialog
-          .getByRole("heading", { name, level })
-          .first()
-          .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
-      const title = await dialog
-        .locator("h1, h2")
-        .first()
-        .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
-      const section = await size("Changes from the live version", 3);
-      expect(section).toBeLessThan(title);
+      const fontSize = (el: Element) => Number.parseFloat(getComputedStyle(el).fontSize);
+      const title = await dialog.locator("h2").first().evaluate(fontSize);
+      const caption = await dialog.getByText("What changes", { exact: true }).evaluate(fontSize);
+      expect(caption).toBeLessThan(title);
+      // Mockup v6: 560 px wide where the window allows it.
+      expect(Math.round((await dialog.boundingBox())?.width ?? 0)).toBe(560);
     });
 
     // R17 (#698): the shipped site's rows read in at most two lines per cell at both sizes.

@@ -8,6 +8,8 @@ export interface ThemeModeSegProps {
   t(key: string): string;
   /** Icon-only buttons named by aria-label (the officer's bar); text buttons otherwise. */
   icons?: boolean;
+  /** The group's name shown as a caption above the track (the account menu, mockup v6 "THEME"). */
+  caption?: boolean;
 }
 
 /** One 24 px line icon per mode, drawn with currentColor so every theme and the focus ring apply. */
@@ -50,25 +52,39 @@ function ModeIcon({ mode }: { mode: ThemeModePreference }): JSX.Element {
 }
 
 /** The theme choice as a segmented control: aria-pressed buttons in a sunken track, one pressed. */
-export function ThemeModeSeg({ value, onChange, t, icons = false }: ThemeModeSegProps) {
+export function ThemeModeSeg({
+  value,
+  onChange,
+  t,
+  icons = false,
+  caption = false,
+}: ThemeModeSegProps) {
   const current = value ?? "auto";
+  const buttons = THEME_PREFERENCES.map((mode) => (
+    <button
+      key={mode}
+      type="button"
+      data-theme-mode={mode}
+      aria-pressed={mode === current}
+      aria-label={icons ? t(`theme.${mode}`) : undefined}
+      onClick={() => onChange(mode)}
+    >
+      {icons ? <ModeIcon mode={mode} /> : t(`theme.${mode}`)}
+    </button>
+  ));
+  if (caption)
+    return (
+      <fieldset className="qm-seg-group">
+        <legend className="qm-caption">{t("theme.label")}</legend>
+        <div className="qm-seg">{buttons}</div>
+      </fieldset>
+    );
   return (
     <fieldset className={icons ? "qm-seg qm-seg--icons" : "qm-seg"}>
       <legend>
         <VisuallyHidden>{t("theme.label")}</VisuallyHidden>
       </legend>
-      {THEME_PREFERENCES.map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          data-theme-mode={mode}
-          aria-pressed={mode === current}
-          aria-label={icons ? t(`theme.${mode}`) : undefined}
-          onClick={() => onChange(mode)}
-        >
-          {icons ? <ModeIcon mode={mode} /> : t(`theme.${mode}`)}
-        </button>
-      ))}
+      {buttons}
     </fieldset>
   );
 }

@@ -46,6 +46,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P3 Lane A2") | M2 P3 hardening | done (#833 merged: #817, #825, #829, ADR-0016; AW3 Task 18 ADR-0014; Task 17 host run, Task 19 to a fresh lane; [handoff](../../handoffs/10-20-26-m2-p3-lane-a2.md)) | 10-20-26 |
 | Windows 11 | B (`C:\git\queryModule`, "M2 P3 Lane B") | M2 P3 hardening | done (BW1 #820 and BW2 #824 merged; [handoff](../../handoffs/10-20-26-m2-p3-lane-b.md)) | 10-20-26 |
 | Windows 11 | B2 (`C:\git\queryModule`, "M2 P3 Lane B2") | M2 P3 hardening | done after BW3 (Tasks 6 to 8, `feat/m2-b-p3-bw3`); BW3b and BW5 to a fresh Lane B3 ([handoff](../../handoffs/10-20-26-m2-p3-lane-b2.md)) | 10-20-26 |
+| Windows 11 | B3 (`C:\git\queryModule`, "M2 P3 Lane B3") | M2 P3 hardening | done after BW3b (#835, PR #841); BW5 to a fresh lane ([handoff](../../handoffs/10-20-26-m2-p3-lane-b3.md)) | 10-20-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 11"; [Manager 10 handoff](../../handoffs/10-20-26-m2-manager-10.md)) | 10-20-26 |
 | Windows 11 | Planning (`C:\git\queryModule-a4`, "M2 planning 1") | M2 P0 and P0.5 plans | done (#557 merged) | 10-05-26 |
 | Windows 11 | Planning (`C:\git\queryModule-plan`, "M2 P1 planning") | M2 P1 plans | done (#588 merged; issues #589 to #606) | 10-13-26 |
@@ -73,11 +74,11 @@ Overwrite your track's note at pause using the seven-line format in the master p
 ### Track B
 
 - Issue: M2 P3 Track B, #46 (plan Tasks 1 to 11; #803 to #815); BW3 in review (#807 to #809), BW3b (#835) and BW5 (#811, #812) open
-- Branch / PR: BW1 #820 merged (#773, #610); BW2 #824 merged (#815, #806); BW4 merged (lane C2); BW3 on `feat/m2-b-p3-bw3` (PR open)
-- Last green: `pnpm verify` green at `11e6a0b` (BW2 head, 5751 tests; full `pnpm e2e` 340 passed)
-- Next step: after BW3 merges, BW3b (#835 "Visible" list) on `feat/m2-b-p3-bw3b`, then BW5 (NVDA pass, Tasks 10 and 11), in a fresh Lane B3
+- Branch / PR: BW1 #820 merged (#773, #610); BW2 #824 merged (#815, #806); BW3 #839 and BW4 merged; BW3b on `feat/m2-b-p3-bw3b` (PR #841, Closes #835)
+- Last green: `pnpm verify` green at `b28ab6a` (BW3b head, 5875 tests; full `pnpm e2e` 346 passed)
+- Next step: after #841 merges, BW5 (NVDA pass, Tasks 10 and 11) in a fresh lane
 - Blocked by: none
-- Latest handoff: [10-20-26-m2-p3-lane-b2.md](../../handoffs/10-20-26-m2-p3-lane-b2.md) (M2 P3 Lane B2: BW3 done; BW3b and BW5 next in a fresh Lane B3)
+- Latest handoff: [10-20-26-m2-p3-lane-b3.md](../../handoffs/10-20-26-m2-p3-lane-b3.md) (M2 P3 Lane B3: BW3b done, PR #841; BW5 next in a fresh lane)
 - Notes: manager "M2 Manager 11"; Lane B is local in `C:\git\queryModule`, `E2E_PORT=3200`.
 
 

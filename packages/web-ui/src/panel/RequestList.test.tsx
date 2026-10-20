@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { type ReactNode, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ShortcutProvider } from "../shortcuts/ShortcutProvider.js";
+import { lineText } from "../test/source-line-text.js";
 import {
   formatAckTime,
   RequestList,
@@ -481,7 +482,7 @@ describe("G5 a source line that did not return says why, in words", () => {
       ],
     };
     render(<RequestList {...base} rows={[row]} />);
-    const line = screen.getByText("State system: failed").closest(".qm-source");
+    const line = screen.getByText(lineText("State system: failed")).closest(".qm-source");
     expect(line).toHaveTextContent(/State system: failed the source reported an error/);
     expect(within(line as HTMLElement).getByText("the source reported an error")).toHaveClass(
       "qm-source__why",
@@ -532,7 +533,7 @@ describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
     expect(icons.length).toBe(4);
     for (const icon of icons) expect(icon).toHaveAttribute("aria-hidden", "true");
     // The accessible text carries the status without the icon's glyph.
-    expect(screen.getByText("State source: timed out")).toBeInTheDocument();
+    expect(screen.getByText(lineText("State source: timed out"))).toBeInTheDocument();
   });
 
   it("an update changes a line in place: same DOM node, and focus stays where it was", async () => {
@@ -544,7 +545,7 @@ describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
       </>,
     );
     await user.type(screen.getByLabelText("Plate"), "ABC");
-    const line = screen.getByText("State source: pending").closest(".qm-source");
+    const line = screen.getByText(lineText("State source: pending")).closest(".qm-source");
     const item = screen.getAllByRole("listitem")[0];
     const updated: RequestRowView = {
       ...WITH_PARTS,
@@ -586,7 +587,9 @@ describe("FR-043 per-source status lines (spec 6.2, 6.6)", () => {
       ],
     };
     render(<RequestList {...base} rows={[row]} />);
-    const line = screen.getByText("National system: not run (plate only)").closest(".qm-source");
+    const line = screen
+      .getByText(lineText("National system: not run (plate only)"))
+      .closest(".qm-source");
     expect(line).toHaveClass("qm-source--notRun");
     expect(line?.querySelector(".qm-source__icon")).toHaveAttribute("aria-hidden", "true");
   });
@@ -629,7 +632,7 @@ describe("FR-060 cards and the severity badge in the list (spec 6.2)", () => {
     const group = screen.getByRole("group", { name: /Source status/ });
     expect(within(group).getByRole("region", { name: "State card" })).toBeVisible();
     expect(within(group).queryByText("State system: returned")).toBeNull();
-    expect(within(group).getByText("National system: pending")).toBeVisible();
+    expect(within(group).getByText(lineText("National system: pending"))).toBeVisible();
   });
 
   it("the entry header carries the severity badge beside the status", () => {

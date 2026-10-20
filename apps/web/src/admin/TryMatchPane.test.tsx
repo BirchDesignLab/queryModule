@@ -11,6 +11,7 @@ import {
 } from "../test/msw-server.js";
 import { preloadAdminRoutes } from "../test/preload-admin.js";
 import { renderRoot } from "../test/render-root.js";
+import { lineText } from "../test/source-line-text.js";
 import { configDraftStore } from "./ConfigBuilder.js";
 import type { JsonObject } from "./draft.js";
 import { moveScenario, parseMock } from "./mock-model.js";
@@ -154,10 +155,10 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     const t = await openBuilder();
     await tryVehicle(t, "FAIL1");
     const p = within(pane());
-    expect(await p.findByText("State system: failed")).toBeInTheDocument();
+    expect(await p.findByText(lineText("State system: failed"))).toBeInTheDocument();
     expect(p.queryByRole("region", { name: /returned/ })).not.toBeInTheDocument();
     await t.user.click(p.getByRole("button", { name: "Payload" }));
-    expect(p.getByText("State system: failed")).toBeInTheDocument();
+    expect(p.getByText(lineText("State system: failed"))).toBeInTheDocument();
     expect(p.queryByTestId("try-payload")).not.toBeInTheDocument();
   });
 
@@ -187,7 +188,7 @@ describe("Try a match: the answer, the wait and the announcement", () => {
     setMock(t, mock);
     await tryVehicle(t, "FAIL1");
     const p = within(pane());
-    expect(await p.findByText("State system: timed out")).toBeInTheDocument();
+    expect(await p.findByText(lineText("State system: timed out"))).toBeInTheDocument();
     expect(p.queryByText(/^Answers after /)).toBeNull();
   });
 

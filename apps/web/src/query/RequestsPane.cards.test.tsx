@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ACK_CORRELATION_ID } from "../test/feed-driver.js";
 import { CLIENT_CONFIG, detail202, TEST_USER } from "../test/msw-server.js";
 import { renderRoutes, testServices } from "../test/render-routes.js";
+import { lineText } from "../test/source-line-text.js";
 import { RequestsPane } from "./RequestsPane.js";
 import { partValuesOf } from "./result-view.js";
 
@@ -221,7 +222,7 @@ describe("FR-060 a returned source with its payload is a card (spec 6.2)", () =>
   it("a source still pending stays a status line, with no card and no header badge", () => {
     setup(ACK, detail202());
     expect(screen.queryByRole("region", { name: /: returned$/ })).toBeNull();
-    expect(screen.getByText("State system: pending")).toBeVisible();
+    expect(screen.getByText(lineText("State system: pending"))).toBeVisible();
     expect(row().querySelector(".qm-request__severity")).toBeNull();
   });
 });

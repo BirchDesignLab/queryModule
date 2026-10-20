@@ -1,6 +1,6 @@
 import { useStore } from "@querymodule/client";
 import { LAYOUT_CONSTANTS } from "@querymodule/tokens";
-import { useMediaQuery } from "@querymodule/web-ui";
+import { useMediaQuery, visuallyHiddenStyle } from "@querymodule/web-ui";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useIsFreshLoad, usePersonaLayout } from "../app/AppChrome.js";
 import { useT } from "../app/i18n-context.js";
@@ -75,7 +75,9 @@ export function QueryPanel() {
       data-shortcut-context="panel"
       aria-busy={live.status === "loading"}
     >
-      <h1 ref={headingRef} tabIndex={-1}>
+      {/* With the terminal pane the columns start under the header (mockup v6): the title stays
+          for the outline and as the focus target, out of sight. */}
+      <h1 ref={headingRef} tabIndex={-1} style={terminalPane ? visuallyHiddenStyle : undefined}>
         {t("app.title")}
       </h1>
       {live.status === "loading" ? <p>{t("status.checking")}</p> : null}

@@ -41,7 +41,10 @@ export function AuditNoAccess({ kind }: { kind: "forbidden" | "off" }) {
   const t = useT();
   return (
     <section className="qm-audit">
-      <SectionHeading>{t("admin.audit.title")}</SectionHeading>
+      {/* The same white strip as the log itself (mockup v6 aud-forbidden, aud-notFound). */}
+      <div className="qm-audit__toolbar">
+        <SectionHeading>{t("admin.audit.title")}</SectionHeading>
+      </div>
       {kind === "forbidden" ? (
         <StateBox
           alert

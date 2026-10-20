@@ -131,6 +131,7 @@ export function PublishDialogs({
   if (open && latched === null) setLatched(flow.changeCount === 0);
   else if (!open && latched !== null) setLatched(null);
   const nothing = latched ?? flow.changeCount === 0;
+  const changesId = useId();
   return (
     <>
       <LeaveDialog
@@ -156,10 +157,13 @@ export function PublishDialogs({
         {!nothing && (
           <section
             className="qm-leave-dialog__content"
-            aria-label={t("admin.publish.changes")}
+            aria-labelledby={changesId}
             {...SCROLL_FOCUS}
           >
-            {open && <ChangesView doc={doc} />}
+            <p id={changesId} className="qm-caption qm-leave-dialog__caption">
+              {t("admin.publish.changes")}
+            </p>
+            {open && <ChangesView doc={doc} list />}
           </section>
         )}
         {!nothing && <PublishNoteField value={flow.note} onChange={flow.setNote} />}

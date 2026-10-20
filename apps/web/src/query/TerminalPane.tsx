@@ -1,5 +1,5 @@
 import type { ClientSiteConfig } from "@querymodule/core/config";
-import { TerminalInput } from "@querymodule/web-ui";
+import { TerminalInput, VisuallyHidden } from "@querymodule/web-ui";
 import { useT } from "../app/i18n-context.js";
 import { terminalExample } from "./terminal-example.js";
 import type { TerminalModel } from "./use-terminal.js";
@@ -10,33 +10,46 @@ export function terminalPaneTitleId(idPrefix: string): string {
 }
 
 interface ReferenceRow {
-  code: string;
-  /** The command as typed, from its code and the labels of its positions, joined by the site's delimiter. */
-  syntax: string;
+  /** The commands that run this query type with the same positions, for example "PER, NAM". */
+  codes: string;
+  /** The labels of the positions, each after the site's delimiter: ".Plate", ".State", ".Year". */
+  positions: readonly string[];
   typeLabel: string;
 }
 
 /**
- * One row per command the site defines (BR-001, FR-051): its code, the labels of its positions in
- * order, and the query type it runs. From the config alone, never from typed values.
+ * One row per query type and positions the site's commands share (BR-001, FR-051; mockup v6: codes
+ * left, positions right). From the config alone, never from typed values.
  */
 function referenceRows(
   config: ClientSiteConfig,
   t: (key: string) => string,
 ): readonly ReferenceRow[] {
-  return config.commands.map((command) => {
+  const rows: (ReferenceRow & { key: string; list: string[] })[] = [];
+  for (const command of config.commands) {
     const type = config.queryTypes.find((q) => q.code === command.queryType);
     const names = command.positions.map((position) => {
       const key = typeof position === "string" ? position : position.field;
       const labelKey = type?.fields.find((f) => f.key === key)?.labelKey;
       return labelKey === undefined ? key : t(labelKey);
     });
-    return {
-      code: command.code,
-      syntax: [command.code, ...names].join(config.terminal.delimiter),
+    const positions = names.map((name) => `${config.terminal.delimiter}${name}`);
+    const key = `${command.queryType}|${positions.join("")}`;
+    const row = rows.find((r) => r.key === key);
+    if (row !== undefined) {
+      row.list.push(command.code);
+      row.codes = row.list.join(", ");
+      continue;
+    }
+    rows.push({
+      key,
+      list: [command.code],
+      codes: command.code,
+      positions,
       typeLabel: type === undefined ? command.queryType : t(type.labelKey),
-    };
-  });
+    });
+  }
+  return rows;
 }
 
 /**
@@ -56,11 +69,10 @@ export function TerminalPane({
   const t = useT();
   const example = terminalExample(config, t);
   const rows = referenceRows(config, t);
-  const referenceId = `${idPrefix}-terminal-reference`;
-  // A site lists every command: the list scrolls inside the pane, so it is a named region a
-  // keyboard user can focus (spec 6.4), as the result table is. The heading stays outside it.
-  const list = (
-    // biome-ignore lint/a11y/useSemanticElements: the heading stays outside the scroll, so the region wraps only the list
+  // A site lists every command: the table scrolls inside the pane, so it is a named region a
+  // keyboard user can focus (spec 6.4), as the result table is.
+  const table = (
+    // biome-ignore lint/a11y/useSemanticElements: a scroll box around the table, not a landmark of its own
     <div
       className="qm-terminal-pane__scroll"
       role="region"
@@ -68,14 +80,38 @@ export function TerminalPane({
       tabIndex={0}
       aria-label={t("terminalPane.referenceRegion")}
     >
-      <ul aria-labelledby={referenceId} className="qm-terminal-pane__list">
-        {rows.map((row) => (
-          <li key={row.code} className="qm-terminal-pane__row">
-            <code className="qm-terminal-pane__syntax">{row.syntax}</code>
-            <span className="qm-terminal-pane__type">{row.typeLabel}</span>
-          </li>
-        ))}
-      </ul>
+      <table className="qm-terminal-pane__table">
+        <caption className="qm-caption">{t("terminalPane.referenceTitle")}</caption>
+        <thead>
+          <tr>
+            <th scope="col">
+              <VisuallyHidden>{t("terminalPane.referenceCommand")}</VisuallyHidden>
+            </th>
+            <th scope="col">
+              <VisuallyHidden>{t("terminalPane.referencePositions")}</VisuallyHidden>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.codes}>
+              <th scope="row" className="qm-terminal-pane__codes">
+                {row.codes}
+                <VisuallyHidden>{` (${row.typeLabel})`}</VisuallyHidden>
+              </th>
+              <td className="qm-terminal-pane__positions">
+                {/* A long row wraps between positions, never inside a label ("Date of birth"). */}
+                {row.positions.map((p, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: positions are ordered and fixed per row
+                  <span key={i} className="qm-terminal-pane__position">
+                    {p}
+                  </span>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
   return (
@@ -97,18 +133,12 @@ export function TerminalPane({
         unshown={terminal.unshown}
         errorsLabel={t("terminal.errorsLabel")}
         inputRef={terminal.inputRef}
+        prompt
       />
       {terminal.errors.length === 0 ? (
         <p className="qm-terminal-pane__note">{t("terminalPane.noProblems")}</p>
       ) : null}
-      {rows.length === 0 ? null : (
-        <section className="qm-terminal-pane__reference">
-          <h3 id={referenceId} className="qm-terminal-pane__subheading">
-            {t("terminalPane.referenceTitle")}
-          </h3>
-          {list}
-        </section>
-      )}
+      {rows.length === 0 ? null : <div className="qm-terminal-pane__reference">{table}</div>}
     </>
   );
 }

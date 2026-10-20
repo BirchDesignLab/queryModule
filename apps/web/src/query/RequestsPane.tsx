@@ -26,6 +26,7 @@ import {
   highestSeverity,
   purgedValuesSummary,
   skipReasonText,
+  sourceIcon,
   sourcesDoneLine,
   sourceWhy,
 } from "./result-view.js";
@@ -208,6 +209,10 @@ export const RequestsPane = memo(function RequestsPane({
                         ? "unknown"
                         : "problem",
                 ...(whyText === undefined ? {} : { why: whyText }),
+                source: sourceLabel(source.sourceId),
+                ...(sourceIcon(source.status) === undefined
+                  ? {}
+                  : { icon: sourceIcon(source.status) }),
                 text: loading
                   ? t("sourceStatus.loadingResult", { source: sourceLabel(source.sourceId) })
                   : t("sourceStatus.line", {
@@ -253,6 +258,7 @@ export const RequestsPane = memo(function RequestsPane({
               (sourceId): SourceLineView => ({
                 key: `${key}:${sourceId}:notRun`,
                 tone: "notRun",
+                source: sourceLabel(sourceId),
                 text: t("sourceStatus.notRun", { source: sourceLabel(sourceId) }),
               }),
             ),

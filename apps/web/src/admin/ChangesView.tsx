@@ -45,8 +45,14 @@ function servedText(served: ShippedBundles | null, locale: string, key: string):
 export function ChangesView({
   doc,
   onOpen,
+  list = false,
 }: {
   doc: JsonObject;
+  /**
+   * The publish dialog's short form (mockup v6 "What changes"): one bulleted line per change under
+   * the dialog's own caption, no title, no groups and no keys. For reading only.
+   */
+  list?: boolean;
   /**
    * Opens an item in the Form view and puts focus in it (a user action, so focus may move). Without
    * it the list is for reading only, as in the publish dialog.
@@ -116,14 +122,51 @@ export function ChangesView({
       ),
     [issues, doc, language, deps],
   );
+  const empty =
+    live !== null && groups.length === 0 && mockEntries.length === 0 && check !== "checking";
+  if (list)
+    return (
+      <div className="qm-diff qm-diff--list" aria-busy={check === "checking"}>
+        {check === "checking" && <p className="qm-diff__note">{t("admin.diff.checking")}</p>}
+        {check === "failed" && <p className="qm-diff__note">{t("admin.diff.failed")}</p>}
+        {live === null && <p>{t("admin.diff.noLive")}</p>}
+        {empty && <p data-testid="diff-empty">{t("admin.diff.noChanges")}</p>}
+        {(groups.length > 0 ||
+          mockEntries.length > 0 ||
+          (status === "ready" && missing.length > 0)) && (
+          <ul className="qm-diff__bullets">
+            {groups.flatMap((group) =>
+              group.sections.flatMap((s) =>
+                s.entries.map((entry) => (
+                  <li key={`${group.id}:${s.id}:${entry.id}`}>
+                    {s.title === null ? group.title : `${group.title}, ${s.title}`}:{" "}
+                    <EntrySentence entry={entry} />
+                  </li>
+                )),
+              ),
+            )}
+            {mockEntries.map((entry) => (
+              <li key={entry.id}>
+                {t("admin.diff.mock.title")}: {entry.what} {entry.text}
+              </li>
+            ))}
+            {status === "ready" &&
+              missing.map((row) => (
+                <li key={row.labelKey}>
+                  {t("admin.diff.missing.title")}: {row.owner}{" "}
+                  {t("admin.diff.missing.in", { languages: row.languages.join(", ") })}
+                </li>
+              ))}
+          </ul>
+        )}
+      </div>
+    );
   return (
     <section className="qm-diff" aria-labelledby={headingId} aria-busy={check === "checking"}>
       <h3 className="qm-editor__title" id={headingId}>
         {t("admin.diff.title")}
       </h3>
-      <p className="qm-diff__note">
-        {t(onOpen === undefined ? "admin.diff.noteStatic" : "admin.diff.note")}
-      </p>
+      <p className="qm-diff__note">{t("admin.diff.note")}</p>
       {check === "checking" && <p className="qm-diff__note">{t("admin.diff.checking")}</p>}
       {check === "failed" && <p className="qm-diff__note">{t("admin.diff.failed")}</p>}
       {live === null ? (

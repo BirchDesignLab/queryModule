@@ -15,6 +15,8 @@ export interface TextFieldProps {
   onChange(value: string): void;
   error?: string | undefined;
   description?: string | undefined;
+  /** Ids of a hint outside the field that describes it too (the audit window hint beside To). */
+  describedBy?: string | undefined;
   /** Visible text tag rendered after the input, e.g. "default" (spec 6.2). */
   tag?: ReactNode;
   /** Shown inside the label after its text, e.g. an aria-hidden "Shown" tag (not part of the name). */
@@ -37,12 +39,13 @@ export function TextField({
   onChange,
   error,
   description,
+  describedBy,
   tag,
   adornment,
   data = false,
   ref,
 }: TextFieldProps) {
-  const ids = fieldIds(id, tag, description, error);
+  const ids = fieldIds(id, tag, description, error, describedBy);
   return (
     <div className="qm-field">
       <label htmlFor={id} className="qm-field__label">

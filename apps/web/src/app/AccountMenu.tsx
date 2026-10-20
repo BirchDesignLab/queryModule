@@ -142,10 +142,12 @@ export function AccountMenu({
               })}
             </p>
           )}
-          {showTheme ? <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} /> : null}
+          {showTheme ? (
+            <ThemeModeSeg value={themeMode} onChange={onThemeChange} t={t} caption />
+          ) : null}
           {onTerminalChange === undefined ? null : (
             <fieldset className="qm-account__terminal">
-              <legend className="qm-account__terminal-label">{t("account.terminal.label")}</legend>
+              <legend className="qm-caption">{t("account.terminal.label")}</legend>
               <div className="qm-seg">
                 {(["toggle", "pane"] as const).map((choice) => (
                   <button

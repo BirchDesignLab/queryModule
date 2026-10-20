@@ -546,9 +546,14 @@ describe("part 2a minors (M1, M2, M3, M6)", () => {
     const dialog = await screen.findByRole("dialog", { name: /^Publish version \d+$/ });
     await within(dialog).findByText(/Terminal settings/);
     expect(within(dialog).queryByText(/Select an entry to open it/)).not.toBeInTheDocument();
-    expect(
-      within(dialog).getByText(/Compared with the version dispatchers see now/),
-    ).toBeInTheDocument();
+    // #835 (mockup v6): a short bulleted list under the What changes caption, for reading only.
+    const region = within(dialog).getByRole("region", { name: "What changes" });
+    const items = within(within(region).getByRole("list")).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent(/^Terminal settings.*: .*changed from \. to ,\.$/);
+    expect(within(region).queryByRole("button")).toBeNull();
+    expect(within(dialog).queryByRole("heading", { level: 3 })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveClass("qm-button--ghost");
     await t.user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     // The Changes tab keeps its entries openable, and the note.
     await t.user.click(screen.getByRole("tab", { name: "Changes" }));

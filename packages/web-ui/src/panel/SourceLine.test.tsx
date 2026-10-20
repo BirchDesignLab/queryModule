@@ -9,7 +9,7 @@ describe("SourceLine", () => {
     expect(screen.getByText("State system: timed out")).toBeInTheDocument();
     const icon = container.querySelector(".qm-source__icon");
     expect(icon).toHaveAttribute("aria-hidden", "true");
-    expect(icon).toHaveTextContent("!");
+    expect(icon?.querySelector("svg")).toHaveAttribute("data-icon", "cross");
     expect(container.firstElementChild).toHaveClass("qm-source", "qm-source--problem");
   });
 
@@ -20,6 +20,6 @@ describe("SourceLine", () => {
     expect(container.querySelector(".qm-source__why")).toHaveTextContent("no answer in 10 s");
     rerender(<SourceLine tone="ok" text="State system: returned" />);
     expect(container.querySelector(".qm-source__why")).toBeNull();
-    expect(container.querySelector(".qm-source__icon")).toHaveTextContent("✓");
+    expect(container.querySelector(".qm-source__icon svg")).toHaveAttribute("data-icon", "check");
   });
 });
