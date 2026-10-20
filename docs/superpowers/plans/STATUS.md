@@ -26,7 +26,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | M2 | P3 hardening | active (lane A: AW1 #818 merged, AW2) · [plan](2026-10-19-m2-track-a-p3.md) (lanes A and C; decisions D-M2P3-1 to -10 ruled 10-19-26) · [issues][m2-p3-a] | active (lane B, BW1 flakes) · [plan](2026-10-19-m2-track-b-p3.md) (decisions D-M2P3-B1 to -B7 ruled 10-19-26) · [issues][m2-p3-b] | n/a | n/a | planned · M2 exit (12.7 gate map in the Track A plan) · [all][m2-p3] |
 | M3 | P0 contracts | n/a | n/a | n/a | planned · `<date>-m3-p0-contracts.md` · [issues][m3-p0] | planned · Contracts frozen; flags off · [all][m3-p0] |
 | M3 | P1 credentials and MFA | planned · `<date>-m3-track-a-p1.md` · [issues][m3-p1-a] | planned · `<date>-m3-track-b-p1.md` · [issues][m3-p1-b] | n/a | n/a | planned · B4; raw-bytes and log-capture · [all][m3-p1] |
-| M3 | P2 multi-source, nested, hide | planned · `<date>-m3-track-a-p2.md` · [issues][m3-p2-a] | planned · `<date>-m3-track-b-p2.md` · [issues][m3-p2-b] | n/a | planned · in A and B plans · [issues][m3-p2-c] | planned · B1, B2, B5, B7 · [all][m3-p2] |
+| M3 | P2 multi-source, nested, hide | planned · `<date>-m3-track-a-p2.md` · [issues][m3-p2-a] | planned · `<date>-m3-track-b-p2.md` · [issues][m3-p2-b] | n/a | planned · in A and B plans · [issues][m3-p2-c] | planned · B1, B2, B5, B7; replay excludes hidden: the hidden case in `packages/api/test/ws/replay.test.ts` (spec 10.4, [ADR-0014](../../decisions/0014-m2-exit-replay-hidden.md)) · [all][m3-p2] |
 | M3 | P3 delegation | planned · `<date>-m3-track-a-p3.md` · [issues][m3-p3-a] | planned · `<date>-m3-track-b-p3.md` · [issues][m3-p3-b] | n/a | n/a | planned · M3 exit; flags on · [all][m3-p3] |
 | M4 | P0 contracts | planned · `<date>-m4-p0-contracts.md` · [issues][m4-p0] | n/a | planned · `<date>-m4-p0-contracts.md` · [issues][m4-p0] | planned · `<date>-m4-p0-contracts.md` · [issues][m4-p0] | planned · `expo export` green; contracts frozen · [all][m4-p0] |
 | M4 | P1 layouts and host | planned · `<date>-m4-track-a-p1.md` · [issues][m4-p1-a] | planned · `<date>-m4-track-b-p1.md` · [issues][m4-p1-b] | planned · `<date>-m4-track-d-p1.md` · [issues][m4-p1-d] | n/a | planned · C1 on web; host-simulator test · [all][m4-p1] |
@@ -43,6 +43,7 @@ Read at session start. Update at session end, and in any task PR that changes a 
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P2 Lane A2") | M2 P2 audit | done (AW4 #772, AW5 #778 merged; [handoff](../../handoffs/10-19-26-lane-a2.md)) | 10-19-26 |
 | Windows 11 | B (`C:\git\queryModule`, "M2 P2 Lane B4") | M2 P2 audit | done (BW4 #768, BW5 #775 merged; [handoff](../../handoffs/10-18-26-m2-p2-lane-b4.md)) | 10-18-26 |
 | Windows 11 | A (`C:\git\queryModule-a`, "M2 P3 Lane A") | M2 P3 hardening | done for AW1 #818 and AW2 #826 (merged); AW3 to a fresh session ([handoff](../../handoffs/10-20-26-m2-p3-lane-a.md)) | 10-20-26 |
+| Windows 11 | A (`C:\git\queryModule-a`, "M2 P3 Lane A2") | M2 P3 hardening | done (#833 merged: #817, #825, #829, ADR-0016; AW3 Task 18 ADR-0014; Task 17 host run, Task 19 to a fresh lane; [handoff](../../handoffs/10-20-26-m2-p3-lane-a2.md)) | 10-20-26 |
 | Windows 11 | B (`C:\git\queryModule`, "M2 P3 Lane B") | M2 P3 hardening | done (BW1 #820 and BW2 #824 merged; [handoff](../../handoffs/10-20-26-m2-p3-lane-b.md)) | 10-20-26 |
 | Windows 11 | B2 (`C:\git\queryModule`, "M2 P3 Lane B2") | M2 P3 hardening | done after BW3 (Tasks 6 to 8, `feat/m2-b-p3-bw3`); BW3b and BW5 to a fresh Lane B3 ([handoff](../../handoffs/10-20-26-m2-p3-lane-b2.md)) | 10-20-26 |
 | Windows 11 | Manager (`C:\git\queryModule-checker`, detached) | M2 | active ("M2 Manager 10"; [Manager 9 handoff](../../handoffs/10-19-26-m2-manager-9.md)) | 10-19-26 |
@@ -61,12 +62,12 @@ Overwrite your track's note at pause using the seven-line format in the master p
 
 ### Track A
 
-- Issue: AW3 next: #801 (Task 17 host steps), #802 (Task 18 ADR-0014), #813 (Task 19 release note, gate, promote); follow-ups #817, #825 (critical, not yet homed)
-- Branch / PR: none open; AW1 #818 and AW2 #826 merged (main ac047ab)
-- Last green: AW2 head 569363c: `pnpm verify`, `pnpm audit --prod`, full `pnpm e2e` (one Windows socket fault, rerun green), two-slice `wave-review` approve
-- Next step: a fresh Lane A session takes AW3 once lane C's CW3 and Track B's BW3 to BW5 have merged; the developer's no-milestone promote and the host `config:import` come first (runbook in the handoff)
-- Blocked by: CW3, BW3 to BW5 merges
-- Latest handoff: [10-20-26-m2-p3-lane-a.md](../../handoffs/10-20-26-m2-p3-lane-a.md) (M2 P3 Lane A: AW1 #818 and AW2 #826 merged; AW3 entry conditions; follow-ups #817, #825)
+- Issue: AW3 next: #801 (Task 17 host steps), #813 (Task 19 release note, gate, promote); follow-up #832 (#833 review minors)
+- Branch / PR: none open; #833 merged (main e2c11fc at handoff)
+- Last green: #833 head e6107bd: `pnpm verify`, `pnpm audit --prod`, full `pnpm e2e`, two-slice `wave-review` approve
+- Next step: after BW3, BW3b (#835) and BW5 merge, the developer promotes the exit candidate without a milestone tag and runs Task 17 on the host (the manager briefs the host session); then a fresh Track A lane takes Task 19. Task 18 (ADR-0014) is done on `docs/m2-p3-adr-0014-and-handoff`
+- Blocked by: BW3, BW3b, BW5 merges
+- Latest handoff: [10-20-26-m2-p3-lane-a2.md](../../handoffs/10-20-26-m2-p3-lane-a2.md) (M2 P3 Lane A2: #833 merged; Task 18 ADR-0014; AW3 entry conditions and host steps; follow-ups #832, #836)
 - Notes: manager "M2 Manager 10" (its push approvals count as the developer's for Track A); Lane A is `C:\git\queryModule-a`, `E2E_PORT=3100`.
 
 ### Track B

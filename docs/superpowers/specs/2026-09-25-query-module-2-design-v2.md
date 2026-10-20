@@ -1751,6 +1751,7 @@ Every milestone exits only when all of these hold: its story tests are green and
 | M4 | C1, C2 | Embedded JWT issuer, audience and JWKS rejections; frame-ancestors allowlist | VoiceOver + TalkBack at largest text; manual daylight check |
 
 Overridden by ADR-0012 (M1 row).
+Overridden by ADR-0014 (M2 row, replay excludes hidden).
 
 ## 13 Traceability
 
